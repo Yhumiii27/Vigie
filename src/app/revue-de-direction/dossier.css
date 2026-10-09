@@ -1,0 +1,77 @@
+/* Dossier de revue de direction : lisible à l'écran (thème sombre) et imprimable (fond blanc, texte noir).
+   Feuille globale : toutes les règles sont préfixées par .rd- pour ne rien affecter en dehors de cette page. */
+
+.rd-doc {
+  max-width: 980px; margin: 0 auto; padding: 24px 24px 48px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  font-size: 13px; line-height: 1.45; color: var(--color-text);
+}
+.rd-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.rd-muted { color: var(--color-neutral-500); }
+
+.rd-head, .rd-section {
+  background: var(--color-surface); border-radius: var(--radius-md); padding: 16px 18px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
+}
+.rd-head h1 { margin: 2px 0 0; font-size: 22px; letter-spacing: -.015em; line-height: 1.15; font-weight: 500; }
+.rd-meta { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 6px 14px; margin: 6px 0 0; font-size: 12.5px; }
+.rd-meta dt { color: var(--color-neutral-500); }
+.rd-meta dd { margin: 0; }
+
+.rd-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rd-section h2 { margin: 0; font-size: 15px; font-weight: 500; display: flex; align-items: baseline; gap: 8px; }
+.rd-num { color: var(--color-accent); font-variant-numeric: tabular-nums; }
+.rd-h3 { margin: 6px 0 0; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-500); }
+.rd-h4 { margin: 4px 0 0; font-size: 12.5px; font-weight: 500; }
+.rd-empty { margin: 0; font-size: 12px; }
+.rd-summary { margin: 0; font-size: 12.5px; color: var(--color-neutral-300); }
+
+.rd-doc .rd-table { font-size: 12px; }
+.rd-doc .rd-table td { vertical-align: top; }
+.rd-doc .rd-table th { white-space: nowrap; }
+.rd-doc .rd-table .rd-total td { font-weight: 600; }
+.rd-num-cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.rd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.rd-kpi { background: var(--color-bg); border-radius: var(--radius-md); padding: 10px 12px; display: grid; gap: 2px; }
+.rd-kpi-label { font-size: 11px; color: var(--color-neutral-400); }
+.rd-kpi-value { font-size: 24px; line-height: 1.1; font-weight: 500; font-variant-numeric: tabular-nums; }
+.rd-kpi-note { font-size: 11px; color: var(--color-neutral-500); }
+
+.rd-pyramid { display: grid; grid-template-columns: 170px minmax(0, 1fr) 32px; gap: 6px 10px; align-items: center; font-size: 12px; max-width: 640px; }
+.rd-bar { height: 8px; border-radius: 4px; }
+
+.rd-check { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.rd-blank { height: 24px; border-bottom: 1px dashed var(--color-divider); }
+.rd-blank-row td { height: 30px; }
+.rd-sign { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 6px; }
+.rd-sign > div { border: 1px dashed var(--color-divider); border-radius: var(--radius-md); min-height: 72px; padding: 8px 10px; font-size: 11.5px; color: var(--color-neutral-500); }
+.rd-foot { font-size: 11px; color: var(--color-neutral-500); text-align: center; padding-top: 4px; }
+
+@media (max-width: 760px) {
+  .rd-doc { padding: 16px 12px 32px; }
+  .rd-meta { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .rd-meta dd { margin-bottom: 6px; }
+  .rd-pyramid { grid-template-columns: 120px minmax(0, 1fr) 28px; }
+}
+
+@media print {
+  @page { size: A4; margin: 14mm 12mm 16mm; }
+  html:has(.rd-doc), body:has(.rd-doc) { background: #fff !important; color: #000 !important; }
+  .rd-noprint { display: none !important; }
+  .rd-doc { max-width: none; padding: 0; gap: 14px; font-size: 10pt; }
+  .rd-doc, .rd-doc * { color: #000 !important; }
+  .rd-doc .rd-muted, .rd-doc .rd-muted *, .rd-doc .rd-kpi-note, .rd-doc .rd-kpi-label, .rd-doc .rd-h3, .rd-doc .rd-meta dt, .rd-doc .rd-foot { color: #444 !important; }
+  .rd-head, .rd-section { background: none !important; border-radius: 0; padding: 0; }
+  .rd-section { padding-top: 8px; border-top: 1.5px solid #000; }
+  .rd-section-head, .rd-h3, .rd-h4 { break-after: avoid; }
+  .rd-doc tr, .rd-kpi, .rd-check, .rd-sign, .rd-pyramid { break-inside: avoid; }
+  .rd-doc .table thead tr, .rd-doc .table tbody tr, .rd-doc .table tbody tr:hover { background: none !important; }
+  .rd-doc .table th, .rd-doc .table td { border-bottom: 1px solid #bbb !important; padding: 4px 6px; }
+  .rd-doc .tag { background: none !important; border: 1px solid #888; padding: 1px 6px; }
+  .rd-kpi { background: none !important; border: 1px solid #bbb; }
+  .rd-bar, .rd-doc .vg-dot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rd-blank { border-bottom: 1px solid #999 !important; }
+  .rd-sign > div { border: 1px solid #999 !important; }
+  .rd-doc a { text-decoration: none; }
+}

@@ -1,0 +1,51 @@
+/* Écran Audits et certifications : états interactifs (survol, focus) des éléments éditables. */
+
+/* Cellule du programme annuel */
+.cell {
+  border: 0; font: inherit; cursor: pointer; width: 100%; min-width: 0; position: relative;
+}
+.cell:hover { box-shadow: inset 0 0 0 1px var(--color-neutral-600); }
+.cell:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.plus {
+  position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px;
+  color: var(--color-neutral-500); opacity: 0; transition: opacity .12s;
+}
+.cell:hover .plus, .cell:focus-visible .plus { opacity: 1; }
+
+/* Carte de certification modifiable */
+.clickCard { cursor: pointer; text-align: left; }
+.clickCard:hover { box-shadow: 0 0 0 1px var(--color-neutral-600); }
+.clickCard:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.hoverIcon { opacity: 0; color: var(--color-neutral-500); font-size: 13px; transition: opacity .12s; }
+.clickCard:hover .hoverIcon, .clickCard:focus-visible .hoverIcon { opacity: 1; }
+
+.addCard {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 104px;
+  padding: var(--space-3); border-radius: var(--radius-md); background: transparent; border: 1px dashed var(--color-divider); color: var(--color-neutral-400);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.addCard:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.addCard:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Texte cliquable (constat, élément de check-list) */
+.textBtn {
+  background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer;
+  border-radius: 3px;
+}
+.textBtn:hover { color: var(--color-accent-200); }
+.textBtn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Case à cocher de la check-list de revue */
+.check {
+  background: none; border: 0; padding: 0; margin: 0; display: grid; place-items: center; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 50%;
+}
+.check:hover > i { color: var(--color-accent) !important; }
+.check:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.check:disabled { cursor: default; }
+
+/* Pied des fenêtres : opérations secondaires sous le formulaire */
+.footer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 12px;
+  background: var(--rule-soft) no-repeat top / 100% 1px; font-size: 12px;
+}

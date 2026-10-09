@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-08af9e11-fa9b-4d10-b0bf-ef17d330333a/styles.css">
+<script src="_ds/nocturne-08af9e11-fa9b-4d10-b0bf-ef17d330333a/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text)} a{color:var(--color-accent)} a:hover{color:var(--color-accent-400)}</style>
+</helmet>
+<div data-screen-label="Vigie" style="display:flex; min-height:100vh; font-size:13px; line-height:1.45; color:var(--color-text); background:var(--color-bg)">
+  <aside style="width:236px; flex:none; display:flex; flex-direction:column; padding:14px 10px 12px; position:sticky; top:0; height:100vh; background:linear-gradient(to bottom, transparent, var(--color-divider) 48px, var(--color-divider) calc(100% - 48px), transparent) no-repeat right / 1px 100%">
+    <div style="display:flex; align-items:center; gap:9px; padding:2px 10px 12px">
+      <span style="width:22px; height:22px; border:1px solid var(--color-accent); border-radius:6px; display:grid; place-items:center; color:var(--color-accent); font-size:12px; font-weight:500">V</span>
+      <span style="font-size:17px; font-weight:500; letter-spacing:-.01em">Vigie</span>
+      <span class="tag tag-outline" style="font-size:10px; padding:1px 7px">QHSE</span>
+    </div>
+    <div style="position:relative; padding:0 2px">
+      <button type="button" onClick="{{ toggleSite }}" style="width:100%; display:flex; align-items:center; gap:8px; padding:7px 9px; background:var(--color-surface); border:1px solid var(--color-divider); border-radius:var(--radius-md); color:var(--color-text); font:inherit; font-size:12.5px; cursor:pointer; text-align:left" style-hover="border-color: color-mix(in srgb, var(--color-text) 45%, transparent)">
+        <i class="ph ph-factory" style="font-size:15px; color:var(--color-neutral-500)"></i>
+        <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ site }}</span>
+        <i class="ph ph-caret-down" style="font-size:12px; color:var(--color-neutral-500)"></i>
+      </button>
+      <sc-if value="{{ siteOpen }}">
+        <div class="elev-md" style="position:absolute; left:2px; right:2px; top:calc(100% + 4px); z-index:30; background:var(--color-surface); border-radius:var(--radius-md); padding:4px; display:grid; gap:2px">
+          <sc-for list="{{ sites }}" as="st" hint-placeholder-count="3">
+            <div onClick="{{ st.pick }}" style="padding:6px 8px; border-radius:var(--radius-sm); cursor:pointer; font-size:12.5px; color: {{ st.color }}" style-hover="background: color-mix(in srgb, var(--color-text) 7%, transparent)">{{ st.label }}</div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+    <nav style="flex:1; overflow:auto; display:grid; grid-template-columns:minmax(0,1fr); align-content:start; gap:2px; margin-top:6px">
+      <sc-for list="{{ nav }}" as="sec" hint-placeholder-count="4">
+        <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:1px; margin-top:12px">
+          <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600); padding:0 10px 4px">{{ sec.label }}</div>
+          <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="3">
+            <div onClick="{{ it.go }}" style="position:relative; display:flex; align-items:center; gap:9px; padding:6px 10px; border-radius:var(--radius-md); cursor:pointer; color: {{ it.color }}; background: {{ it.bg }}" style-hover="background: color-mix(in srgb, var(--color-text) 6%, transparent)">
+              <span style="position:absolute; left:-2px; top:8px; bottom:8px; width:2px; border-radius:1px; background: {{ it.mark }}"></span>
+              <i class="ph {{ it.icon }}" style="font-size:16px"></i>
+              <span style="flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ it.label }}</span>
+              <sc-if value="{{ it.badge }}"><span style="font-size:11px; line-height:16px; padding:0 6px; border-radius:6px; background:var(--color-accent-800); color:var(--color-accent-100)">{{ it.badge }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div onClick="{{ goMobile }}" style="display:flex; align-items:center; gap:9px; padding:7px 10px; margin-top:8px; border:1px dashed var(--color-divider); border-radius:var(--radius-md); cursor:pointer; color: {{ mobileColor }}; font-size:12px" style-hover="border-color: var(--color-accent)">
+      <i class="ph ph-device-mobile" style="font-size:15px"></i><span style="flex:1">Aperçu mobile · signalement terrain</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:9px; padding:12px 10px 0; margin-top:4px">
+      <span style="width:30px; height:30px; flex:none; border-radius:50%; background:var(--color-accent-900); color:var(--color-accent-200); display:grid; place-items:center; font-size:11px; font-weight:500">{{ userInitials }}</span>
+      <div style="min-width:0; display:grid; gap:1px">
+        <span style="font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ userName }}</span>
+        <span style="font-size:11px; color:var(--color-neutral-500)">{{ roleLabel }}</span>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; padding:6px 10px 0; font-size:10.5px; color:var(--color-neutral-600)"><i class="ph ph-windows-logo" style="font-size:12px"></i>Connecté via Microsoft Entra ID</div>
+  </aside>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <header style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:22px 28px 16px">
+      <div style="display:grid; gap:2px">
+        <h1 style="font-size:22px; margin:0; letter-spacing:-.015em">{{ page.title }}</h1>
+        <span style="font-size:12.5px; color:var(--color-neutral-500)">{{ page.sub }}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px">
+        <button type="button" class="btn btn-secondary btn-icon" aria-label="Notifications"><i class="ph ph-bell" style="font-size:16px"></i></button>
+        <button type="button" class="btn btn-primary" onClick="{{ goMobile }}"><i class="ph ph-plus" style="font-size:14px"></i>Nouveau signalement</button>
+      </div>
+    </header>
+    <sc-if value="{{ s.dashboard }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Tableau de bord" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:14px">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6">
+            <div class="card" style="gap:5px; padding:12px 14px">
+              <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-500)">{{ k.label }}</div>
+              <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap"><span style="font-size:28px; font-weight:500; letter-spacing:-.02em; line-height:1.1">{{ k.value }}</span><span style="font-size:12px; color: {{ k.subColor }}">{{ k.sub }}</span></div>
+              <div style="font-size:11px; color:var(--color-neutral-500)">{{ k.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px">
+          <div class="card" style="gap:10px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Pyramide des événements sécurité</span><span style="font-size:11px; color:var(--color-neutral-500)">12 mois glissants</span></div>
+            <div style="display:grid; gap:6px">
+              <sc-for list="{{ pyramid }}" as="p" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:150px 1fr 32px; align-items:center; gap:10px; font-size:12px">
+                  <span style="color:var(--color-neutral-400)">{{ p.label }}</span>
+                  <div style="display:flex; justify-content:center"><div style="height:16px; border-radius:3px; width: {{ p.w }}; background: {{ p.color }}"></div></div>
+                  <span style="text-align:right; font-weight:500">{{ p.n }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="card" style="gap:10px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Non-conformités par origine</span><span style="font-size:11px; color:var(--color-neutral-500)">23 ouvertes</span></div>
+            <div style="display:grid; gap:8px">
+              <sc-for list="{{ ncOrigins }}" as="o" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:140px 1fr 24px; align-items:center; gap:10px; font-size:12px">
+                  <span style="color:var(--color-neutral-400)">{{ o.label }}</span>
+                  <div style="height:8px; border-radius:2px; background:var(--color-neutral-900)"><div style="height:100%; border-radius:2px; width: {{ o.w }}; background:var(--color-accent-600)"></div></div>
+                  <span style="text-align:right; font-weight:500">{{ o.n }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <a href="#" onClick="{{ goEvents }}" style="font-size:12px; text-decoration:none; margin-top:auto">Voir les non-conformités →</a>
+          </div>
+          <div class="card" style="gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">À traiter dans les 15 jours</span><span style="font-size:11px; color:var(--color-neutral-500)">7 échéances</span></div>
+            <div style="display:grid; gap:7px">
+              <sc-for list="{{ todo }}" as="t" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:36px 1fr; gap:10px; align-items:start">
+                  <div style="text-align:center; line-height:1.1"><div style="font-size:15px; font-weight:500">{{ t.d }}</div><div style="font-size:10px; color:var(--color-neutral-500); text-transform:uppercase">{{ t.m }}</div></div>
+                  <div style="display:grid; gap:3px; min-width:0">
+                    <span style="font-size:12.5px">{{ t.title }}</span>
+                    <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--color-neutral-500)"><span style="display:inline-flex; align-items:center; gap:5px"><span style="width:6px; height:6px; border-radius:50%; background: {{ t.dot }}"></span>{{ t.kind }}</span><span>{{ t.who }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; align-items:start">
+          <div class="card" style="gap:8px; grid-column: span 2">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Derniers signalements</span><a href="#" onClick="{{ goEvents }}" style="font-size:12px; text-decoration:none">Tout voir →</a></div>
+            <div style="overflow-x:auto">
+              <table class="table" style="font-size:12.5px; min-width:640px">
+                <thead><tr><th>Réf.</th><th>Date</th><th>Type</th><th>Intitulé</th><th>Lieu</th><th>Gravité</th><th>Étape</th><th>Pilote</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ latest }}" as="e" hint-placeholder-count="6">
+                    <tr onClick="{{ e.open }}" style="cursor:pointer">
+                      <td style="color:var(--color-neutral-400); white-space:nowrap">{{ e.id }}</td>
+                      <td style="white-space:nowrap">{{ e.date }}</td>
+                      <td><span class="tag" style="background: {{ e.typeBg }}; color: {{ e.typeFg }}">{{ e.typeLabel }}</span></td>
+                      <td>{{ e.title }}</td>
+                      <td style="color:var(--color-neutral-400)">{{ e.lieu }}</td>
+                      <td><span style="display:inline-flex; align-items:center; gap:5px"><span style="width:7px; height:7px; border-radius:50%; background: {{ e.gDot }}"></span>{{ e.gLabel }}</span></td>
+                      <td><span class="tag tag-neutral">{{ e.status }}</span></td>
+                      <td>{{ e.pilote }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card" style="gap:8px; border:1px solid var(--color-accent-700)">
+            <div class="card-kicker">Veille réglementaire</div>
+            <div class="card-title" style="font-size:15px">Règlement (UE) 2023/1230 — machines</div>
+            <p class="card-body" style="opacity:1; color:var(--color-neutral-400)">Remplace la directive 2006/42/CE. Applicable au <strong style="font-weight:500; color:var(--color-text)">20 janvier 2027</strong>, dans 106 jours : toute machine mise sur le marché après cette date doit y être conforme.</p>
+            <div style="display:flex; align-items:baseline; gap:8px"><span style="font-size:30px; font-weight:500; letter-spacing:-.02em; color:var(--color-accent-300)">7</span><span style="font-size:12.5px">projets Keystone concernés<br><span style="color:var(--color-neutral-500); font-size:11.5px">livraison planifiée après le 20/01/2027</span></span></div>
+            <a href="#" onClick="{{ goWatch }}" style="font-size:12px; text-decoration:none">Voir l'exigence et l'analyse d'écart A-196 →</a>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.events }}">
+      <div data-screen-label="Signalements et événements" style="padding:0 28px 28px; display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:14px; align-items:start">
+        <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:10px; max-width:420px">
+          <div style="position:relative"><i class="ph ph-magnifying-glass" style="position:absolute; left:10px; top:10px; font-size:15px; color:var(--color-neutral-500)"></i><input class="input" placeholder="Référence, lieu, équipement…" style="font-size:12.5px; padding-left:32px"></div>
+          <div style="display:flex; flex-wrap:wrap; gap:5px">
+            <sc-for list="{{ evFilters }}" as="f" hint-placeholder-count="7">
+              <button type="button" onClick="{{ f.pick }}" style="display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:6px; font:inherit; font-size:11.5px; cursor:pointer; border:1px solid {{ f.border }}; color: {{ f.color }}; background: {{ f.bg }}">{{ f.label }}<span style="opacity:.6">{{ f.n }}</span></button>
+            </sc-for>
+          </div>
+          <div style="display:grid; gap:3px">
+            <sc-for list="{{ evList }}" as="e" hint-placeholder-count="8">
+              <div onClick="{{ e.open }}" style="position:relative; display:grid; gap:3px; padding:8px 12px; border-radius:var(--radius-md); cursor:pointer; background: {{ e.rowBg }}" style-hover="background: color-mix(in srgb, var(--color-text) 5%, transparent)">
+                <span style="position:absolute; left:0; top:10px; bottom:10px; width:2px; border-radius:1px; background: {{ e.rowMark }}"></span>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--color-neutral-500)"><span>{{ e.id }}</span><span>{{ e.when }}</span></div>
+                <div style="font-size:12.5px">{{ e.title }}</div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--color-neutral-500)">
+                  <span style="display:inline-flex; align-items:center; gap:5px; white-space:nowrap"><span style="width:6px; height:6px; border-radius:50%; background: {{ e.typeDot }}"></span>{{ e.typeLabel }}</span>
+                  <span style="color: {{ e.gDot }}; font-weight:500">{{ e.gShort }}</span>
+                  <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ e.lieu }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="gap:16px; padding:18px 20px; min-width:0">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap">
+            <span style="font-size:11.5px; color:var(--color-neutral-500)">{{ sel.id }}</span>
+            <span class="tag" style="background: {{ sel.typeBg }}; color: {{ sel.typeFg }}">{{ sel.typeLabel }}</span>
+            <span class="tag" style="background: {{ sel.gBg }}; color: {{ sel.gFg }}">{{ sel.gLabel }}</span>
+            <span style="font-size:11.5px; color:var(--color-neutral-500)">{{ sel.when }}</span>
+            <span style="margin-left:auto; display:flex; gap:6px"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px">Modifier</button><button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px">{{ sel.nextLabel }}</button></span>
+          </div>
+          <h2 style="font-size:18px; margin:0; letter-spacing:-.01em">{{ sel.title }}</h2>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(118px, 1fr)); gap:8px 4px">
+            <sc-for list="{{ steps }}" as="sp" hint-placeholder-count="6">
+              <div style="display:grid; gap:6px; min-width:0">
+                <div style="height:3px; border-radius:2px; background: {{ sp.bar }}"></div>
+                <div style="display:flex; align-items:center; gap:5px; font-size:11px; color: {{ sp.color }}"><i class="ph {{ sp.icon }}" style="font-size:12px"></i><span>{{ sp.label }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px 16px">
+            <sc-for list="{{ selFields }}" as="f" hint-placeholder-count="7">
+              <div style="display:grid; gap:2px"><span style="font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--color-neutral-600)">{{ f.k }}</span><span style="font-size:12.5px">{{ f.v }}</span></div>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px">
+            <div><h6 style="margin:0 0 4px; color:var(--color-neutral-500); font-size:10.5px">Description</h6><p style="margin:0; font-size:12.5px; color:var(--color-neutral-300); text-wrap:pretty">{{ sel.desc }}</p></div>
+            <div><h6 style="margin:0 0 4px; color:var(--color-neutral-500); font-size:10.5px">Mesures immédiates</h6><p style="margin:0; font-size:12.5px; color:var(--color-neutral-300); text-wrap:pretty">{{ sel.mesures }}</p></div>
+          </div>
+          <div style="display:grid; gap:10px">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px">
+              <h6 style="margin:0; color:var(--color-neutral-500); font-size:10.5px">Analyse des causes</h6>
+              <div class="seg">
+                <sc-for list="{{ methods }}" as="m" hint-placeholder-count="4"><label class="seg-opt" style="font-size:12px; padding:5px 10px"><input type="radio" name="method" checked="{{ m.checked }}" onChange="{{ m.pick }}">{{ m.label }}</label></sc-for>
+              </div>
+            </div>
+            <sc-if value="{{ mk.m5 }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:8px">
+                <sc-for list="{{ m5 }}" as="c" hint-placeholder-count="5"><div style="background:var(--color-bg); border-radius:var(--radius-md); padding:10px"><div style="font-size:11px; color:var(--color-accent-300); margin-bottom:4px">{{ c.k }}</div><div style="font-size:12px; color:var(--color-neutral-300)">{{ c.v }}</div></div></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ mk.tree }}">
+              <div style="display:grid; gap:6px; background:var(--color-bg); border-radius:var(--radius-md); padding:12px">
+                <sc-for list="{{ tree }}" as="n" hint-placeholder-count="6"><div style="display:flex; gap:8px; align-items:center; padding-left: {{ n.pad }}"><span style="width:8px; height:8px; flex:none; border-radius:50%; border:1px solid var(--color-accent); background: {{ n.fill }}"></span><span style="font-size:12px; color:var(--color-neutral-300)">{{ n.t }}</span></div></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ mk.why }}">
+              <div style="display:grid; gap:6px; background:var(--color-bg); border-radius:var(--radius-md); padding:12px">
+                <sc-for list="{{ whys }}" as="w" hint-placeholder-count="5"><div style="display:grid; grid-template-columns:24px 1fr; gap:8px; font-size:12px; color:var(--color-neutral-300)"><span style="color:var(--color-accent)">{{ w.n }}</span><span>{{ w.t }}</span></div></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ mk.d8 }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:6px 12px; background:var(--color-bg); border-radius:var(--radius-md); padding:12px">
+                <sc-for list="{{ d8 }}" as="d" hint-placeholder-count="8"><div style="display:flex; gap:7px; align-items:center; font-size:12px; color: {{ d.color }}"><i class="ph {{ d.icon }}" style="font-size:13px"></i><span>{{ d.t }}</span></div></sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:grid; gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><h6 style="margin:0; color:var(--color-neutral-500); font-size:10.5px">Actions correctives et préventives</h6><a href="#" onClick="{{ goActions }}" style="font-size:12px; text-decoration:none">Plan d'actions →</a></div>
+            <sc-if value="{{ selHasActions }}">
+              <table class="table" style="font-size:12.5px">
+                <thead><tr><th>Réf.</th><th>Action</th><th>Type</th><th>Pilote</th><th>Échéance</th><th>Statut</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ selActions }}" as="a" hint-placeholder-count="2">
+                    <tr><td style="color:var(--color-neutral-400); white-space:nowrap">{{ a.id }}</td><td>{{ a.title }}</td><td style="color:var(--color-neutral-400)">{{ a.kindLabel }}</td><td style="white-space:nowrap">{{ a.pilote }}</td><td style="white-space:nowrap; color: {{ a.dueColor }}">{{ a.due }}</td><td><span class="tag" style="background: {{ a.bg }}; color: {{ a.fg }}">{{ a.statusLabel }}</span></td></tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </sc-if>
+            <sc-if value="{{ selNoActions }}">
+              <div style="font-size:12px; color:var(--color-neutral-500); padding:10px 12px; border:1px dashed var(--color-divider); border-radius:var(--radius-md)">Aucune action liée — l'analyse des causes doit en produire au moins une avant le passage à l'étape « Actions ».</div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.actions }}">
+      <div data-screen-label="Plan d'actions" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+          <div class="seg">
+            <sc-for list="{{ views }}" as="v" hint-placeholder-count="3"><label class="seg-opt" style="font-size:12px; padding:5px 11px"><input type="radio" name="actview" checked="{{ v.checked }}" onChange="{{ v.pick }}"><i class="ph {{ v.icon }}" style="font-size:13px"></i>{{ v.label }}</label></sc-for>
+          </div>
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px"><i class="ph ph-funnel" style="font-size:13px"></i>Origine : toutes<i class="ph ph-caret-down" style="font-size:11px"></i></button>
+          <button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px">Pilote : tous<i class="ph ph-caret-down" style="font-size:11px"></i></button>
+          <span style="margin-left:auto; font-size:11.5px; color:var(--color-neutral-500)">Origines : événements, audits, risques, veille, clients, revue de direction</span>
+          <button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px"><i class="ph ph-plus" style="font-size:13px"></i>Nouvelle action</button>
+        </div>
+        <sc-if value="{{ av.kanban }}">
+          <div style="display:grid; grid-template-columns:repeat(5, minmax(200px, 1fr)); gap:10px; overflow-x:auto; padding-bottom:4px">
+            <sc-for list="{{ cols }}" as="c" hint-placeholder-count="5">
+              <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:8px; align-content:start">
+                <div style="display:flex; align-items:center; gap:7px; padding:2px 2px 4px"><span style="width:7px; height:7px; border-radius:50%; background: {{ c.dot }}"></span><span style="font-size:12px; font-weight:500">{{ c.label }}</span><span style="font-size:11px; color:var(--color-neutral-500)">{{ c.n }}</span></div>
+                <sc-for list="{{ c.cards }}" as="a" hint-placeholder-count="3">
+                  <div class="card elev-sm" style="gap:7px; padding:10px 12px; cursor:pointer; min-width:0" style-hover="box-shadow: 0 0 0 1px var(--color-neutral-600)">
+                    <div style="display:flex; align-items:center; gap:5px; font-size:10.5px; color:var(--color-neutral-500); min-width:0"><i class="ph {{ a.origIcon }}" style="font-size:12px; flex:none"></i><span style="white-space:nowrap">{{ a.origLabel }}</span><span style="flex:1; min-width:0; opacity:.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ a.refText }}</span><span style="margin-left:auto; flex:none; color:var(--color-neutral-600)">{{ a.id }}</span></div>
+                    <div style="font-size:12.5px; text-wrap:pretty">{{ a.title }}</div>
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:11px; color:var(--color-neutral-400)"><span style="display:inline-flex; align-items:center; gap:5px"><span style="width:18px; height:18px; border-radius:50%; background:var(--color-neutral-800); display:grid; place-items:center; font-size:9px; color:var(--color-neutral-200)">{{ a.ini }}</span>{{ a.pilote }}</span><span style="display:inline-flex; align-items:center; gap:4px; color: {{ a.dueColor }}"><i class="ph ph-calendar-blank" style="font-size:12px"></i>{{ a.due }}</span></div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ c.more }}"><div style="font-size:11.5px; color:var(--color-neutral-500); padding:2px 4px">{{ c.more }}</div></sc-if>
+                <sc-if value="{{ c.note }}"><div style="font-size:11px; color:var(--color-neutral-500); padding:8px 10px; border:1px dashed var(--color-divider); border-radius:var(--radius-md); text-wrap:pretty">{{ c.note }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ av.list }}">
+          <div class="card" style="padding:6px 14px 10px">
+            <table class="table" style="font-size:12.5px">
+              <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th>Statut</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ actList }}" as="a" hint-placeholder-count="10">
+                  <tr><td style="color:var(--color-neutral-400); white-space:nowrap">{{ a.id }}</td><td>{{ a.title }}</td><td style="color:var(--color-neutral-400); white-space:nowrap"><span style="display:inline-flex; align-items:center; gap:5px"><i class="ph {{ a.origIcon }}" style="font-size:12px"></i>{{ a.origLabel }}</span><span style="display:block; font-size:11px; color:var(--color-neutral-600)">{{ a.ref }}</span></td><td style="white-space:nowrap">{{ a.pilote }}</td><td style="white-space:nowrap; color: {{ a.dueColor }}">{{ a.due }}</td><td><span class="tag" style="background: {{ a.bg }}; color: {{ a.fg }}">{{ a.statusLabel }}</span></td></tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </sc-if>
+        <sc-if value="{{ av.pilot }}">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:10px; align-items:start">
+            <sc-for list="{{ byPilot }}" as="p" hint-placeholder-count="4">
+              <div class="card" style="gap:6px; padding:12px 14px">
+                <div style="display:flex; align-items:center; gap:9px; padding-bottom:4px"><span style="width:26px; height:26px; border-radius:50%; background:var(--color-accent-900); color:var(--color-accent-200); display:grid; place-items:center; font-size:10px; font-weight:500">{{ p.ini }}</span><span style="font-weight:500">{{ p.name }}</span><span style="font-size:11.5px; color: {{ p.lateColor }}">{{ p.summary }}</span></div>
+                <sc-for list="{{ p.items }}" as="a" hint-placeholder-count="3">
+                  <div style="display:grid; grid-template-columns:52px minmax(0,1fr) auto auto; gap:10px; align-items:center; font-size:12.5px; padding:3px 0"><span style="color:var(--color-neutral-500); font-size:11.5px">{{ a.id }}</span><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ a.title }}</span><span style="color: {{ a.dueColor }}; font-size:12px">{{ a.due }}</span><span class="tag" style="background: {{ a.bg }}; color: {{ a.fg }}; white-space:nowrap">{{ a.statusLabel }}</span></div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.risks }}">
+      <div data-screen-label="Évaluation des risques" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+        <div style="display:flex; align-items:center; gap:22px; flex-wrap:wrap; padding:10px 14px; background:var(--color-surface); border-radius:var(--radius-md)">
+          <div style="display:flex; align-items:center; gap:8px"><i class="ph ph-file-text" style="font-size:18px; color:var(--color-accent)"></i><span style="font-weight:500">DUERP</span></div>
+          <sc-for list="{{ riskBanner }}" as="b" hint-placeholder-count="4"><div style="display:grid; gap:1px"><span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--color-neutral-600)">{{ b.k }}</span><span style="font-size:12.5px">{{ b.v }}</span></div></sc-for>
+          <span style="margin-left:auto; display:flex; gap:6px"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px"><i class="ph ph-clock-counter-clockwise" style="font-size:13px"></i>Versions archivées</button><button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px">Nouvelle version</button></span>
+        </div>
+        <div style="display:grid; grid-template-columns:minmax(200px, 216px) minmax(0, 1fr); gap:12px; align-items:start">
+          <div style="display:grid; gap:2px">
+            <div style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600); padding:4px 10px 6px">Unités de travail</div>
+            <sc-for list="{{ units }}" as="u" hint-placeholder-count="8">
+              <div onClick="{{ u.pick }}" style="position:relative; display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:var(--radius-md); cursor:pointer; color: {{ u.color }}; background: {{ u.bg }}" style-hover="background: color-mix(in srgb, var(--color-text) 6%, transparent)"><span style="position:absolute; left:-2px; top:9px; bottom:9px; width:2px; border-radius:1px; background: {{ u.mark }}"></span><span style="flex:1; font-size:12.5px">{{ u.label }}</span><span style="font-size:11px; color:var(--color-neutral-500)">{{ u.n }}</span><span style="width:7px; height:7px; border-radius:50%; background: {{ u.dot }}"></span></div>
+            </sc-for>
+          </div>
+          <div style="display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px">
+              <div class="card" style="gap:10px; min-width:0">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap"><span class="card-title" style="font-size:14px">Matrice gravité × probabilité</span><div class="seg"><label class="seg-opt" style="font-size:11.5px; padding:3px 9px"><input type="radio" name="riskmode" checked="{{ rmBrut }}" onChange="{{ pickBrut }}">Brut</label><label class="seg-opt" style="font-size:11.5px; padding:3px 9px"><input type="radio" name="riskmode" checked="{{ rmRes }}" onChange="{{ pickRes }}">Résiduel</label></div></div>
+                <div style="display:grid; grid-template-columns:auto repeat(4, minmax(0, 1fr)); gap:4px; font-size:12px">
+                  <sc-for list="{{ matrix }}" as="c" hint-placeholder-count="25"><div style="min-height:40px; display:grid; place-items:center; border-radius:4px; background: {{ c.bg }}; color: {{ c.color }}; font-size: {{ c.fs }}; padding:0 6px">{{ c.t }}</div></sc-for>
+                </div>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; font-size:11px; color:var(--color-neutral-400)">
+                  <sc-for list="{{ levels }}" as="l" hint-placeholder-count="4"><span style="display:inline-flex; align-items:center; gap:5px"><span style="width:10px; height:10px; border-radius:2px; background: {{ l.bg }}"></span>{{ l.label }}</span></sc-for>
+                </div>
+              </div>
+              <div class="card" style="gap:10px">
+                <div class="card-kicker">{{ unitLabel }}</div>
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px">
+                  <sc-for list="{{ unitStats }}" as="k" hint-placeholder-count="3"><div style="display:grid; gap:2px"><span style="font-size:24px; font-weight:500; letter-spacing:-.02em; color: {{ k.color }}">{{ k.v }}</span><span style="font-size:11px; color:var(--color-neutral-500)">{{ k.k }}</span></div></sc-for>
+                </div>
+                <p class="card-body" style="opacity:1; color:var(--color-neutral-400); font-size:12px; text-wrap:pretty">Cotation gravité 1–4 × probabilité 1–4. À partir de 8, une action de réduction est obligatoire et suivie dans le plan d'actions unique ; le risque résiduel est recoté après vérification d'efficacité.</p>
+                <div style="display:flex; gap:6px; margin-top:auto"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px"><i class="ph ph-plus" style="font-size:13px"></i>Ajouter un risque</button><button type="button" class="btn btn-ghost" style="font-size:12px">Exporter l'unité</button></div>
+              </div>
+            </div>
+            <div class="card" style="padding:6px 14px 10px">
+              <div style="overflow-x:auto">
+                <table class="table" style="font-size:12.5px; min-width:760px">
+                  <thead><tr><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Mesures existantes</th><th>Risque résiduel</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ riskRows }}" as="r" hint-placeholder-count="5">
+                      <tr><td style="font-weight:500; white-space:nowrap">{{ r.danger }}</td><td style="color:var(--color-neutral-300)">{{ r.situation }}</td><td><span style="display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:6px; white-space:nowrap; background: {{ r.bBg }}">{{ r.bText }}</span></td><td style="color:var(--color-neutral-300)">{{ r.mesures }}</td><td><span style="display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:6px; white-space:nowrap; background: {{ r.rBg }}">{{ r.rText }}</span></td><td style="white-space:nowrap"><span style="color: {{ r.actColor }}">{{ r.actText }}</span></td></tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.watch }}">
+      <div data-screen-label="Veille et contrôles" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+        <div style="display:flex; align-items:flex-end; flex-wrap:wrap; gap:4px; background:linear-gradient(to right, transparent, var(--color-divider) 48px, var(--color-divider) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px">
+          <sc-for list="{{ watchTabs }}" as="t" hint-placeholder-count="2"><div onClick="{{ t.pick }}" style="display:flex; align-items:center; gap:7px; padding:8px 14px 10px; cursor:pointer; font-size:13px; color: {{ t.color }}; box-shadow: inset 0 -2px 0 {{ t.line }}"><span>{{ t.label }}</span><span style="font-size:11px; color:var(--color-neutral-500)">{{ t.n }}</span></div></sc-for>
+          <span style="margin-left:auto; display:flex; gap:6px; padding-bottom:6px"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px"><i class="ph ph-upload-simple" style="font-size:13px"></i>Importer (Excel)</button><button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px"><i class="ph ph-plus" style="font-size:13px"></i>{{ watchAdd }}</button></span>
+        </div>
+        <sc-if value="{{ wt.req }}">
+          <div class="card" style="padding:6px 14px 10px">
+            <div style="overflow-x:auto">
+              <table class="table" style="font-size:12.5px; min-width:900px">
+                <thead><tr><th>Texte</th><th>Domaine</th><th>Ce qu'il exige</th><th>Échéance</th><th>Évaluation</th><th>Pilote</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ reqs }}" as="r" hint-placeholder-count="7">
+                    <tr><td style="font-weight:500; min-width:160px">{{ r.text }}</td><td style="color:var(--color-neutral-400); min-width:130px">{{ r.domain }}</td><td style="color:var(--color-neutral-300); max-width:360px; text-wrap:pretty">{{ r.req }}</td><td style="white-space:nowrap">{{ r.due }}</td><td><span class="tag" style="background: {{ r.bg }}; color: {{ r.fg }}; white-space:nowrap">{{ r.eval }}</span></td><td style="white-space:nowrap">{{ r.pilote }}</td></tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ wt.ctrl }}">
+          <div class="card" style="padding:6px 14px 10px">
+            <div style="overflow-x:auto">
+              <table class="table" style="font-size:12.5px; min-width:900px">
+                <thead><tr><th>Équipement</th><th>Contrôle</th><th>Périodicité</th><th>Organisme</th><th>Dernier</th><th>Prochain</th><th>Statut</th><th>Réserves</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ ctrls }}" as="c" hint-placeholder-count="8">
+                    <tr><td style="font-weight:500">{{ c.equip }}</td><td style="color:var(--color-neutral-300)">{{ c.ctrl }}</td><td style="white-space:nowrap">{{ c.period }}</td><td style="color:var(--color-neutral-400); white-space:nowrap">{{ c.org }}</td><td style="white-space:nowrap; color:var(--color-neutral-400)">{{ c.last }}</td><td style="white-space:nowrap; color: {{ c.nextColor }}">{{ c.next }}</td><td><span class="tag" style="background: {{ c.bg }}; color: {{ c.fg }}; white-space:nowrap">{{ c.status }}</span></td><td style="color:var(--color-neutral-300); white-space:nowrap">{{ c.res }}</td></tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.skills }}">
+      <div data-screen-label="Habilitations et formations" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+        <div class="card" style="flex-direction:row; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 14px; border:1px solid {{ alertBorder }}">
+          <i class="ph ph-warning" style="font-size:22px; color: {{ alertBorder }}"></i>
+          <div style="display:grid; gap:2px; flex:1; min-width:240px">
+            <span style="font-weight:500">Salarié au titre expiré affecté à une activité Keystone</span>
+            <span style="font-size:12.5px; color:var(--color-neutral-300); text-wrap:pretty">[T. Nguyen] — travail en hauteur expiré depuis le 28/09/2026 — affecté à la mise en service K-2025-042 · [Client A] du 13 au 17 octobre (planning Keystone).</span>
+          </div>
+          <div style="display:flex; gap:6px; flex:none"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px">Voir l'affectation</button><button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px">Planifier le recyclage</button></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--color-neutral-400)">
+          <sc-for list="{{ skillLegend }}" as="l" hint-placeholder-count="5"><span style="display:inline-flex; align-items:center; gap:6px"><span style="width:18px; height:18px; border-radius:50%; display:inline-grid; place-items:center; background: {{ l.bg }}; color: {{ l.fg }}; border: {{ l.border }}"><i class="ph {{ l.icon }}" style="font-size:10px"></i></span>{{ l.label }}</span></sc-for>
+          <span style="margin-left:auto; display:flex; gap:6px"><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px"><i class="ph ph-upload-simple" style="font-size:13px"></i>Importer le personnel (Lucca · CSV)</button><button type="button" class="btn btn-secondary" style="font-size:12px; padding:5px 10px" title="Cursus est propriétaire des données personnelles des salariés"><i class="ph ph-plugs-connected" style="font-size:13px"></i>Connecteur Cursus · à venir</button><button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px"><i class="ph ph-plus" style="font-size:13px"></i>Enregistrer une formation</button></span>
+        </div>
+        <div class="card" style="padding:6px 14px 10px">
+          <div style="overflow-x:auto">
+            <table class="table" style="font-size:12.5px; min-width:880px">
+              <thead><tr><th>Salarié</th><sc-for list="{{ titles }}" as="t" hint-placeholder-count="8"><th style="text-align:center; white-space:nowrap">{{ t }}</th></sc-for></tr></thead>
+              <tbody>
+                <sc-for list="{{ emps }}" as="e" hint-placeholder-count="10">
+                  <tr><td style="white-space:nowrap"><span style="display:block">{{ e.name }}</span><span style="display:block; font-size:11px; color:var(--color-neutral-500)">{{ e.service }}</span></td><sc-for list="{{ e.cells }}" as="c" hint-placeholder-count="8"><td style="text-align:center"><span title="{{ c.title }}" style="width:22px; height:22px; border-radius:50%; display:inline-grid; place-items:center; background: {{ c.bg }}; color: {{ c.fg }}; border: {{ c.border }}"><i class="ph {{ c.icon }}" style="font-size:12px"></i></span></td></sc-for></tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.audits }}">
+      <div data-screen-label="Audits et certifications" style="padding:0 28px 28px; display:grid; grid-template-columns:minmax(0,1fr); gap:12px">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px">
+          <sc-for list="{{ certs }}" as="c" hint-placeholder-count="3">
+            <div class="card" style="gap:6px">
+              <div style="display:flex; justify-content:space-between; align-items:center"><span class="card-kicker">{{ c.k }}</span><span class="tag tag-outline" style="font-size:10px">À confirmer</span></div>
+              <div class="card-title" style="font-size:16px">{{ c.title }}</div>
+              <div style="display:flex; align-items:center; gap:6px; font-size:12.5px"><span style="width:7px; height:7px; border-radius:50%; background: {{ c.dot }}"></span>{{ c.status }}</div>
+              <div style="font-size:11.5px; color:var(--color-neutral-500)">{{ c.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="card" style="gap:10px">
+          <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Programme annuel 2026</span><span style="font-size:11px; color:var(--color-neutral-500)">Semaine 41 · octobre en cours</span></div>
+          <div style="overflow-x:auto">
+            <div style="display:grid; grid-template-columns:150px repeat(12, minmax(56px, 1fr)); gap:3px; min-width:820px; font-size:11px">
+              <sc-for list="{{ tlHead }}" as="h" hint-placeholder-count="13"><div style="text-align:center; padding:2px 0 6px; color: {{ h.color }}">{{ h.t }}</div></sc-for>
+              <sc-for list="{{ tlCells }}" as="c" hint-placeholder-count="65"><div title="{{ c.t }}" style="min-height:34px; display:flex; align-items:center; padding:0 6px; border-radius:4px; background: {{ c.bg }}; color: {{ c.color }}; min-width:0"><span style="display:block; width:100%; text-align: {{ c.jc }}; overflow:hidden; white-space:nowrap; text-overflow:ellipsis">{{ c.t }}</span></div></sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; align-items:start">
+          <div class="card" style="gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Constats du dernier audit</span><span style="font-size:11px; color:var(--color-neutral-500)">Audit interne production · juin 2026</span></div>
+            <sc-for list="{{ findings }}" as="f" hint-placeholder-count="4">
+              <div style="display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:start; padding:6px 0; background:linear-gradient(to right, transparent, color-mix(in srgb, var(--color-text) 8%, transparent) 48px, color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px), transparent) no-repeat bottom / 100% 1px">
+                <span class="tag" style="background: {{ f.bg }}; color: {{ f.fg }}; white-space:nowrap">{{ f.kind }}</span>
+                <span style="font-size:12.5px; text-wrap:pretty">{{ f.text }}</span>
+                <span style="font-size:12px; white-space:nowrap; color: {{ f.actColor }}">{{ f.act }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div class="card" style="gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span class="card-title" style="font-size:14px">Préparation de la revue de direction</span><span style="font-size:11px; color:var(--color-neutral-500)">10/12/2026 · {{ revDone }}</span></div>
+            <sc-for list="{{ review }}" as="r" hint-placeholder-count="8">
+              <div style="display:flex; align-items:center; gap:9px; padding:4px 0; font-size:12.5px"><i class="ph {{ r.icon }}" style="font-size:15px; color: {{ r.color }}"></i><span style="flex:1; color: {{ r.textColor }}">{{ r.t }}</span><span style="font-size:11px; color:var(--color-neutral-500); white-space:nowrap">{{ r.who }}</span></div>
+            </sc-for>
+            <button type="button" class="btn btn-primary" style="font-size:12px; padding:5px 10px; justify-self:start; margin-top:4px">Générer le dossier de revue</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.other }}">
+      <div data-screen-label="Écran secondaire" style="padding:0 28px 28px">
+        <div class="card" style="gap:8px; max-width:560px; border:1px dashed var(--color-divider); background:transparent">
+          <div class="card-kicker">Hors périmètre de cette itération</div>
+          <div class="card-title" style="font-size:15px">{{ page.title }}</div>
+          <p class="card-body" style="opacity:1; color:var(--color-neutral-400); text-wrap:pretty">{{ otherText }}</p>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ s.mobile }}">
+      <div data-screen-label="Signalement terrain (mobile)" style="padding:0 28px 40px; display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap">
+        <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ 390 }}" height="{{ 844 }}" dark="{{ true }}" hint-size="390px,844px">
+          <div style="min-height:100%; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body); padding:62px 18px 40px; display:grid; gap:16px; align-content:start; font-size:14px">
+            <sc-if value="{{ mFormOpen }}">
+              <div style="display:flex; align-items:center; justify-content:space-between"><span style="font-size:22px; font-weight:500; letter-spacing:-.015em">Signaler</span><span style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-neutral-500)"><i class="ph ph-factory"></i>Site de [Ville A]</span></div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+                <sc-for list="{{ mTypes }}" as="t" hint-placeholder-count="6"><button type="button" onClick="{{ t.pick }}" style="display:grid; gap:6px; justify-items:start; min-height:72px; padding:12px; border-radius:var(--radius-md); font:inherit; font-size:13px; text-align:left; cursor:pointer; color:var(--color-text); background:var(--color-surface); border:1px solid {{ t.border }}"><i class="ph {{ t.icon }}" style="font-size:20px; color: {{ t.iconColor }}"></i>{{ t.label }}</button></sc-for>
+              </div>
+              <div class="field"><label>Lieu</label><div style="display:flex; align-items:center; gap:8px; padding:9px 10px; background:var(--color-surface); border:1px solid var(--color-divider); border-radius:var(--radius-md)"><i class="ph ph-qr-code" style="font-size:16px; color:var(--color-accent)"></i><span style="flex:1; font-size:13.5px">Atelier montage · poste M3</span><span style="font-size:12px; color:var(--color-accent)">Modifier</span></div><span style="font-size:11px; color:var(--color-neutral-500)">Pré-rempli par le QR code du poste</span></div>
+              <div class="field"><label>Description</label><div style="position:relative"><textarea class="input" placeholder="Que s'est-il passé ?" style="min-height:84px; font-size:13.5px; padding-right:40px"></textarea><span style="position:absolute; right:8px; bottom:8px; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; border:1px solid var(--color-accent); color:var(--color-accent)"><i class="ph ph-microphone" style="font-size:15px"></i></span></div></div>
+              <button type="button" class="btn btn-secondary" style="justify-content:flex-start; min-height:44px; font-size:13.5px"><i class="ph ph-camera" style="font-size:18px"></i>Ajouter une photo</button>
+              <div class="field"><label>Ça aurait pu être grave ?</label><div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px"><sc-for list="{{ mGraves }}" as="g" hint-placeholder-count="3"><button type="button" onClick="{{ g.pick }}" style="min-height:44px; border-radius:var(--radius-md); font:inherit; font-size:13.5px; cursor:pointer; background:var(--color-surface); color: {{ g.color }}; border:1px solid {{ g.border }}">{{ g.label }}</button></sc-for></div></div>
+              <div onClick="{{ toggleAnon }}" style="display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:44px; cursor:pointer"><span style="display:flex; align-items:center; gap:8px; font-size:13.5px"><i class="ph ph-eye-slash" style="font-size:17px; color:var(--color-neutral-500)"></i>Rester anonyme</span><span style="width:40px; height:24px; border-radius:12px; position:relative; border:1px solid {{ anonBorder }}; background: {{ anonBg }}"><span style="position:absolute; top:3px; width:16px; height:16px; border-radius:50%; background: {{ anonKnob }}; left: {{ anonLeft }}"></span></span></div>
+              <button type="button" class="btn btn-primary btn-block" onClick="{{ sendReport }}" style="min-height:48px; font-size:15px"><i class="ph ph-paper-plane-right" style="font-size:17px"></i>Envoyer le signalement</button>
+            </sc-if>
+            <sc-if value="{{ mSent }}">
+              <div style="display:grid; gap:14px; justify-items:center; text-align:center; padding-top:120px"><span style="width:64px; height:64px; border-radius:50%; border:1px solid var(--color-accent); color:var(--color-accent); display:grid; place-items:center"><i class="ph ph-check" style="font-size:30px"></i></span><span style="font-size:20px; font-weight:500">Signalement envoyé</span><span style="font-size:13.5px; color:var(--color-neutral-400); text-wrap:pretty">Référence EV-2026-132. L'animateur QHSE le qualifie sous 48 h ; vous suivrez son avancement dans « Mes signalements ».</span><button type="button" class="btn btn-secondary" onClick="{{ resetReport }}" style="min-height:44px">Nouveau signalement</button></div>
+            </sc-if>
+          </div>
+        </x-import>
+        <div class="card" style="gap:8px; max-width:360px">
+          <div class="card-kicker">Parcours terrain</div>
+          <div class="card-title" style="font-size:15px">Signaler en moins d'une minute</div>
+          <p class="card-body" style="opacity:1; color:var(--color-neutral-400); text-wrap:pretty">Le QR code du poste ouvre ce formulaire avec le lieu pré-rempli. Le signalement crée l'événement à l'étape « Déclaré » dans Vigie, visible dans la liste des signalements et sur le tableau de bord.</p>
+          <p class="card-body" style="opacity:1; color:var(--color-neutral-400); text-wrap:pretty">Le mode anonyme masque le déclarant pour tous les rôles, animateur QHSE compris.</p>
+        </div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Animateur QHSE&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;Animateur QHSE&quot;,&quot;Direction&quot;,&quot;Chef de service&quot;,&quot;Chef de projet&quot;,&quot;Salarié&quot;],&quot;section&quot;:&quot;Prototype&quot;}}">
+const S = {
+  danger:{fg:'oklch(0.86 0.08 22)',bg:'oklch(0.33 0.07 22)',dot:'oklch(0.70 0.15 22)'},
+  warn:{fg:'oklch(0.88 0.08 78)',bg:'oklch(0.34 0.06 78)',dot:'oklch(0.78 0.13 78)'},
+  ok:{fg:'oklch(0.88 0.07 152)',bg:'oklch(0.32 0.05 152)',dot:'oklch(0.74 0.12 152)'},
+  neutral:{fg:'var(--color-neutral-100)',bg:'var(--color-neutral-800)',dot:'var(--color-neutral-500)'},
+  accent:{fg:'var(--color-accent-100)',bg:'var(--color-accent-800)',dot:'var(--color-accent)'}
+};
+const TYPES = {AT:['Accident','danger'],PA:['Presque-accident','warn'],SD:['Situation dangereuse','warn'],NC:['Non-conformité','accent'],RC:['Réclamation client','accent'],ENV:['Environnement','neutral']};
+const STEPS = ['Déclaré','Qualifié','Analyse des causes','Actions','Efficacité vérifiée','Clôturé'];
+const GRAV = ['','G1 · faible','G2 · modérée','G3 · grave','G4 · très grave'];
+const EV = [
+['EV-2026-131','03/10','PA',"Chute de charge lors du retournement d'un bâti",'Atelier montage · poste M3','[T. Nguyen]','K-2025-042 · [Client A]','Pont roulant 10 t','[S. Benali]',3,2,3,"Lors du retournement d'un bâti de 1,8 t au pont roulant, une élingue a glissé de l'oreille de levage. La charge a basculé et heurté le sol à 1,5 m d'un monteur.","Zone balisée, pont consigné, élingue isolée pour expertise, point sécurité équipe à 14 h.",'tree',['A-214','A-215']],
+['EV-2026-130','02/10','NC',"Cotes hors tolérance sur l'arbre de malaxeur",'Atelier usinage · CU-2','[P. Roux]','K-2025-042 · [Client A]',"Centre d'usinage CU-2",'[L. Moreau]',2,3,4,"Contrôle final : Ø45 h7 mesuré à 45,06 sur 3 arbres du lot. Dérive de l'outil non détectée en cours de série.","Lot bloqué en zone NC, 3 arbres repris, contrôle à 100 % du lot suivant.",'8d',['A-212'],'Fabrication'],
+['EV-2026-129','01/10','SD',"Flexible hydraulique endommagé sur le banc d'essais","Zone d'essais · BE-1",'[A. Martin]','K-2024-118 · [Client B]',"Banc d'essais BE-1",'[J. Petit]',3,1,5,"Gaine extérieure fendue sur le flexible HP du vérin principal, tresse apparente. Pression de service 250 bar.","Banc arrêté, flexible remplacé, essais reportés de 48 h.",'5m',['A-209']],
+['EV-2026-128','29/09','RC',"Fuite sur la presse à cartoucher livrée en juin",'Mise en service · [Client C]','[Client C]','K-2024-097 · [Client C]','Presse PC-400','[L. Moreau]',2,2,7,"Le client signale une fuite d'huile au bloc hydraulique après 400 h de fonctionnement. Production ralentie.","Intervention sous garantie planifiée, joints de rechange expédiés.",'5m',['A-186'],'Réclamation client'],
+['EV-2026-127','26/09','AT',"Coupure à la main lors de l'ébavurage",'Atelier usinage · T-4','[M. Girard]','—','Tour T-4','[S. Benali]',2,3,10,"Coupure superficielle à l'index gauche en ébavurant une bride ; gants anti-coupure non portés. Accident sans arrêt, soins à l'infirmerie.","Rappel du port des gants, outil d'ébavurage mis à disposition au poste.",'why',[]],
+['EV-2026-126','24/09','ENV',"Déversement d'huile sur rétention au magasin",'Magasin','[R. Fontaine]','—','Cuve huile hydraulique 1 000 L','[C. Lefèvre]',1,3,12,"Fuite d'un raccord de la cuve : 20 L retenus dans le bac de rétention, aucun rejet au sol.","Raccord resserré, huile pompée, absorbant utilisé et éliminé en déchet dangereux.",'5m',['A-176']],
+['EV-2026-125','22/09','NC',"Dossier technique incomplet à la revue de conception","Bureau d'études",'[E. Dubois]','K-2026-007 · [Client D]','—','[E. Dubois]',1,1,14,"Analyse de risques machine (EN ISO 12100) absente du dossier présenté à la revue de conception du 22/09.","Revue reportée au 06/10, analyse en cours.",'5m',[],'Conception BE'],
+['EV-2026-124','19/09','SD',"Bouteilles de gaz stockées sans arrimage",'Atelier montage','[T. Nguyen]','—','Poste soudure','[S. Benali]',2,4,17,"Quatre bouteilles d'argon debout sans chaîne ni râtelier, à proximité du passage des chariots.","Bouteilles arrimées immédiatement, zone balisée.",'why',['A-172','A-170']],
+['EV-2026-122','15/09','PA',"Démarrage intempestif d'un convoyeur en mise en service",'Mise en service · [Client B]','[J. Petit]','K-2024-118 · [Client B]','Convoyeur CV-12','[J. Petit]',4,2,21,"Redémarrage du convoyeur depuis le pupitre client pendant un réglage mécanique, technicien à 40 cm de la bande.","Consignation LOTO systématique, clé du pupitre retirée, point avec le chef de poste client.",'tree',[]],
+['EV-2026-121','12/09','NC',"Traitement de surface non conforme sur pièces fournisseur",'Magasin · réception','[R. Fontaine]','K-2025-042 · [Client A]','Lot [Fournisseur F] n° 4471','[L. Moreau]',1,3,24,"Épaisseur de zingage mesurée à 6 µm pour 12 µm spécifiés, sur 40 supports.","Lot refusé, dérogation refusée, relance du fournisseur.",'8d',['A-194'],'Fournisseurs'],
+['EV-2026-120','10/09','AT',"Projection dans l'œil lors du meulage",'Atelier usinage','[M. Girard]','—',"Meuleuse d'angle",'[S. Benali]',2,4,26,"Particule métallique dans l'œil droit malgré les lunettes ; écran facial non porté. Soins et retour au poste.","Écran facial rendu obligatoire au poste meulage, affichage mis à jour.",'why',[]],
+['EV-2026-119','08/09','AT',"Entorse en descendant de la plateforme PIRL","Zone d'essais",'[A. Martin]','—','Plateforme PIRL','[S. Benali]',2,4,28,"Faux pas sur la dernière marche de la plateforme, entorse de la cheville. Accident avec arrêt (3 jours).","Garde-corps et marche antidérapante vérifiés, sensibilisation de l'équipe.",'tree',['A-165']],
+['EV-2026-118','07/09','AT',"Pincement de doigt à la fermeture d'un carter",'Mise en service · [Client A]','[T. Nguyen]','K-2025-042 · [Client A]','—','[S. Benali]',1,4,29,"Pincement du majeur entre le carter et le bâti lors de la fermeture. Soins, sans arrêt.","Poignées de manutention ajoutées sur les carters.",'why',[]],
+['EV-2026-117','02/09','SD',"Éclairage défaillant dans l'allée centrale",'Atelier usinage','[P. Roux]','—','—','[C. Lefèvre]',1,3,34,"Trois luminaires hors service, éclairement mesuré à 90 lux pour 200 lux requis.","Éclairage d'appoint mobile installé.",'5m',['A-198']],
+['EV-2026-115','28/08','PA',"Chariot élévateur : angle mort au croisement",'Magasin','[R. Fontaine]','—','Chariot R489','[C. Lefèvre]',3,3,39,"Un piéton a surgi au croisement des allées B et C ; freinage d'urgence à moins d'un mètre.","Vitesse limitée à 5 km/h, rappel des règles de circulation.",'tree',['A-201']],
+['EV-2026-112','20/08','NC',"Jeu excessif après montage du réducteur",'Atelier montage','[T. Nguyen]','K-2024-097 · [Client C]','Réducteur RD-7','[L. Moreau]',2,4,47,"Jeu axial de 0,8 mm mesuré pour 0,2 mm maxi à la fiche de réglage. Détecté au contrôle final.","Réducteur démonté et re-réglé, fiche de réglage en révision.",'8d',['A-190'],'Fabrication'],
+['EV-2026-109','11/08','SD',"Prise électrique non conforme en zone ATEX","Zone d'essais",'[J. Petit]','—','Armoire zone 2','[C. Lefèvre]',3,3,56,"Prise standard installée dans la zone 2 du banc d'essais, hors matériel certifié ATEX.","Prise condamnée, alimentation reprise hors zone.",'5m',['A-203']]
+].map(r => ({id:r[0],date:r[1],type:r[2],title:r[3],lieu:r[4],declarant:r[5],projet:r[6],equip:r[7],pilote:r[8],g:r[9],step:r[10],days:r[11],desc:r[12],mesures:r[13],method:r[14],actions:r[15],origin:r[16]||''}));
+const KPIS = [
+  ['Jours sans accident avec arrêt','214','','Dernier AT avec arrêt le 6 mars 2026','ok'],
+  ['TF1 · 12 mois glissants','3,1','TG 0,04','Objectif 2026 : TF1 < 4','neutral'],
+  ['Événements ouverts','17','dont 4 > 30 j','4 déclarés sur les 7 derniers jours','warn'],
+  ['Actions en retard','9','sur 64 ouvertes','4 liées à des événements','danger'],
+  ['Contrôles réglementaires < 30 j','6','dont 1 dépassé','VGP pont roulant 10 t · +4 j','danger'],
+  ['Non-conformités','23','ouvertes','Fournisseurs 8 · Fabrication 6','neutral']];
+const PYR = [['Accidents avec arrêt',1,S.danger.dot],['Accidents sans arrêt',4,S.warn.dot],['Soins',11,'var(--color-accent-500)'],['Presque-accidents',38,'var(--color-accent-700)'],['Situations dangereuses',96,'var(--color-accent-800)']];
+const NCO = [['Fournisseurs',8],['Fabrication',6],['Conception BE',4],['Mise en service',3],['Réclamations client',2]];
+const TODO = [
+  ['09','oct','Contrôle','danger','VGP pont roulant 10 t — dépassée depuis le 02/10','[Apave] · [S. Benali]'],
+  ['10','oct','Action','accent',"A-212 · Gamme de contrôle de l'arbre de malaxeur",'[L. Moreau]'],
+  ['12','oct','Visite sécurité','neutral',"Visite trimestrielle — zone d'essais",'[S. Benali]'],
+  ['13','oct','Habilitation','danger','[T. Nguyen] · travail en hauteur expiré, affecté à K-2025-042','[C. Lefèvre]'],
+  ['15','oct','Contrôle','warn','VGP chariot élévateur R489','[Apave]'],
+  ['17','oct','Audit interne','neutral','Processus Conception BE','[E. Dubois]'],
+  ['20','oct','Efficacité','accent',"EV-2026-112 · vérification d'efficacité de A-190",'[L. Moreau]']];
+const NAV = [
+  ['Pilotage',[['dashboard','Tableau de bord','ph-gauge']]],
+  ['Terrain',[['events','Signalements et événements','ph-warning',17],['actions',"Plan d'actions",'ph-list-checks',9],['prevention','Plans de prévention et permis','ph-clipboard-text']]],
+  ['Prévention',[['risks','Évaluation des risques','ph-shield-check'],['skills','Habilitations et formations','ph-identification-badge',5]]],
+  ['Système',[['watch','Veille et contrôles','ph-scales',6],['audits','Audits et certifications','ph-certificate'],['docs','Documents maîtrisés','ph-files'],['env','Environnement et déchets','ph-leaf']]]];
+const PAGES = {dashboard:['Tableau de bord QHSE','Semaine 41 · données au 6 octobre 2026'],events:['Signalements et événements','17 événements ouverts · tous types'],actions:["Plan d'actions unique",'64 actions ouvertes · 9 en retard'],prevention:['Plans de prévention et permis',"Entreprises extérieures, permis de feu et permis d'essai"],risks:['Évaluation des risques','Document unique · 8 unités de travail'],skills:['Habilitations et formations','52 salariés · 8 titres suivis'],watch:['Veille réglementaire et contrôles','7 exigences · 8 contrôles périodiques'],audits:['Audits et certifications','Programme 2026 et revue de direction'],docs:['Documents maîtrisés','Procédures, instructions et enregistrements'],env:['Environnement et déchets','Registre des déchets et Trackdéchets'],mobile:['Signalement terrain','Aperçu mobile · 390 × 844']};
+const ROLES = {'Animateur QHSE':['[C. Lefèvre]',null],'Direction':['[H. Marchand]',null],'Chef de service':['[S. Benali]',['dashboard','events','actions','prevention','risks','skills','watch']],'Chef de projet':['[E. Dubois]',['dashboard','events','actions','prevention']],'Salarié':['[T. Nguyen]',['events','actions','skills']]};
+const SITES = ['Site de [Ville A] — siège et ateliers',"Site de [Ville B] — zone d'essais",'Tous les sites'];
+const gTone = g => g >= 3 ? 'danger' : g === 2 ? 'warn' : 'neutral';
+
+class Component extends DCLogic {
+  state = { screen:'dashboard', site:SITES[0], siteOpen:false, evFilter:'all', evSel:'EV-2026-131', method:null, actView:'kanban', riskUnit:'montage', riskMode:'brut', watchTab:'req', mType:null, mGrave:null, mAnon:false, mSent:false };
+  go(screen, extra) { this.setState({ screen, siteOpen:false, ...(extra||{}) }); }
+  evView(e) {
+    const t = TYPES[e.type], tt = S[t[1]], gt = S[gTone(e.g)];
+    return { ...e, typeLabel:t[0], typeBg:tt.bg, typeFg:tt.fg, typeDot:tt.dot, gLabel:GRAV[e.g], gShort:'G'+e.g, gDot:gt.dot, gBg:gt.bg, gFg:gt.fg, status:STEPS[e.step], open:(ev) => { if (ev && ev.preventDefault) ev.preventDefault(); this.go('events', {evSel:e.id, method:null}); } };
+  }
+  renderVals() {
+    const st = this.state, role = this.props.role ?? 'Animateur QHSE', rd = ROLES[role] || ROLES['Animateur QHSE'];
+    const allowed = rd[1];
+    const nav = NAV.map(([label, items]) => ({ label, items: items.filter(i => !allowed || allowed.includes(i[0])).map(([key,label,icon,badge]) => {
+      const active = st.screen === key;
+      return { key, label, icon, badge, color: active ? 'var(--color-accent)' : 'var(--color-neutral-300)', bg: active ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent', mark: active ? 'var(--color-accent)' : 'transparent', go: () => this.go(key) };
+    }) })).filter(s => s.items.length);
+    const page = PAGES[st.screen] || PAGES.dashboard;
+    return {
+      nav, page: { title: page[0], sub: page[1] }, s: { [st.screen]: true },
+      site: st.site, siteOpen: st.siteOpen, toggleSite: () => this.setState(s => ({ siteOpen: !s.siteOpen })),
+      sites: SITES.map(label => ({ label, color: label === st.site ? 'var(--color-accent)' : 'var(--color-text)', pick: () => this.setState({ site: label, siteOpen: false }) })),
+      userName: rd[0], userInitials: rd[0].replace(/[\[\]\.]/g,'').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase(), roleLabel: role,
+      mobileColor: st.screen === 'mobile' ? 'var(--color-accent)' : 'var(--color-neutral-400)',
+      goMobile: () => this.go('mobile', { mSent:false }), goEvents: (ev) => { ev.preventDefault(); this.go('events'); }, goWatch: (ev) => { ev.preventDefault(); this.go('watch', { watchTab:'req' }); },
+      kpis: KPIS.map(([label,value,sub,note,tone]) => ({ label, value, sub, note, subColor: tone === 'neutral' ? 'var(--color-neutral-400)' : S[tone].dot })),
+      pyramid: PYR.map(([label,n,color]) => ({ label, n, color, w: Math.max(5, Math.round(n/96*100)) + '%' })),
+      ncOrigins: NCO.map(([label,n]) => ({ label, n, w: Math.round(n/8*100) + '%' })),
+      todo: TODO.map(([d,m,kind,tone,title,who]) => ({ d, m, kind, title, who, dot: S[tone].dot })),
+      latest: EV.slice(0,6).map(e => this.evView(e)),
+      ...(this.moreVals ? this.moreVals(st) : {})
+    };
+  }
+}
+
+const ORIG = {ev:['Événement','ph-warning'],audit:['Audit','ph-certificate'],risk:['Risques','ph-shield-check'],watch:['Veille','ph-scales'],client:['Client','ph-chat-centered-text'],rev:['Revue de direction','ph-users-three']};
+const COLS = [['todo','À lancer',12],['doing','En cours',31],['late','En retard',9],['verify','Efficacité à vérifier',8],['done','Clôturées · 30 j',4]];
+const ASTAT = {todo:['À lancer','neutral'],doing:['En cours','accent'],late:['En retard','danger'],verify:['Efficacité à vérifier','warn'],done:['Clôturée','ok']};
+const ACT = [
+['A-214',"Remplacer les élingues textiles par des élingues à œillets, étiquetage CMU",'ev','EV-2026-131','[S. Benali]','17/10','doing','C'],
+['A-215',"Rédiger le mode opératoire de retournement des bâtis > 1 t",'ev','EV-2026-131','[T. Nguyen]','31/10','todo','P'],
+['A-212',"Mettre à jour la gamme de contrôle de l'arbre de malaxeur (Ø45 h7)",'ev','EV-2026-130','[L. Moreau]','10/10','doing','C'],
+['A-209',"Remplacer le flexible et contrôler les 12 flexibles du banc BE-1",'ev','EV-2026-129','[J. Petit]','08/10','doing','C'],
+['A-205',"Recyclage habilitation électrique BR pour 4 monteurs",'risk','DUERP · atelier montage','[C. Lefèvre]','30/09','late','P'],
+['A-203',"Mettre en conformité l'alimentation électrique de la zone ATEX",'ev','EV-2026-109','[C. Lefèvre]','15/09','late','C'],
+['A-201',"Plan de circulation magasin : miroir et marquage au sol",'ev','EV-2026-115','[R. Fontaine]','26/09','late','P'],
+['A-198',"Remplacer les luminaires de l'allée centrale usinage",'ev','EV-2026-117','[P. Roux]','20/09','late','C'],
+['A-196',"Analyse d'écart Règlement 2023/1230 sur les 7 projets concernés",'watch','Règlement (UE) 2023/1230','[E. Dubois]','30/11','doing','P'],
+['A-194',"Contrôle du traitement de surface par lot à la réception",'ev','EV-2026-121','[L. Moreau]','24/10','doing','P'],
+['A-190',"Corriger la fiche de réglage du réducteur RD-7 et former l'équipe",'ev','EV-2026-112','[L. Moreau]','05/09','verify','C'],
+['A-188',"Formaliser la revue des exigences client (écart mineur §8.2.3)",'audit','Audit interne juin 2026','[E. Dubois]','15/10','doing','C'],
+['A-186',"Remplacer les joints de la presse PC-400 sous garantie",'client','EV-2026-128 · [Client C]','[L. Moreau]','30/09','verify','C'],
+['A-184',"Objectifs QHSE 2027 et indicateurs pour la revue de direction",'rev','Revue de direction 10/12','[C. Lefèvre]','20/11','todo','P'],
+['A-181',"Visite sécurité trimestrielle zone d'essais",'audit','Programme 2026','[S. Benali]','12/10','todo','P'],
+['A-176',"Remplacer le kit absorbant et former au déversement",'ev','EV-2026-126','[R. Fontaine]','15/09','done','C'],
+['A-172',"Arrimer les bouteilles de gaz : râteliers et chaînes",'ev','EV-2026-124','[S. Benali]','30/09','verify','C'],
+['A-170',"Ranger les bouteilles vides sous l'abri extérieur",'ev','EV-2026-124','[S. Benali]','15/09','done','C'],
+['A-165',"Ajouter un garde-corps sur la plateforme PIRL",'ev','EV-2026-119','[S. Benali]','25/09','done','C']
+].map(r => ({id:r[0],title:r[1],orig:r[2],ref:r[3],pilote:r[4],due:r[5],col:r[6],kind:r[7]}));
+const METHODS = [['5m','5M'],['tree','Arbre des causes'],['why','5 pourquoi'],['8d','8D']];
+const M5 = [['Matière','Élingue textile usée, étiquette CMU illisible'],['Matériel','Oreille de levage sans linguet de sécurité'],['Méthode','Aucun mode opératoire pour le retournement'],["Main-d'œuvre",'Monteur seul, formation élingage à renouveler'],['Milieu','Zone encombrée, visibilité réduite']];
+const TREE = [[0,'Charge basculée à 1,5 m du monteur',1],[1,"L'élingue glisse de l'oreille de levage",0],[2,'Oreille sans linguet de sécurité',0],[2,"Angle d'élingage supérieur à 90°",0],[1,'Monteur présent dans la zone de basculement',0],[2,'Périmètre de levage non matérialisé',0]];
+const WHYS = ["Pourquoi la charge a-t-elle basculé ? — L'élingue a glissé de l'oreille.","Pourquoi a-t-elle glissé ? — Oreille sans linguet, angle trop ouvert.","Pourquoi cet angle ? — Élingue trop courte pour ce bâti.","Pourquoi cette élingue ? — La seule disponible au poste.","Pourquoi ? — Aucune dotation d'élingage définie par type de bâti."];
+const D8 = ['D1 · Équipe','D2 · Description','D3 · Actions immédiates','D4 · Causes racines','D5 · Actions correctives','D6 · Mise en œuvre','D7 · Prévention','D8 · Clôture'];
+Component.prototype.actView = function (a) {
+  const s = ASTAT[a.col], t = S[s[1]], o = ORIG[a.orig];
+  return { ...a, statusLabel: s[0], bg: t.bg, fg: t.fg, dot: t.dot, origLabel: o[0], origIcon: o[1], kindLabel: a.kind === 'C' ? 'Corrective' : 'Préventive', dueColor: a.col === 'late' ? S.danger.dot : 'var(--color-neutral-300)' };
+};
+Component.prototype.eventsVals = function (st) {
+  const counts = EV.reduce((m, e) => (m[e.type] = (m[e.type] || 0) + 1, m), {});
+  const filters = [['all','Tous',EV.length], ...Object.keys(TYPES).map(k => [k, TYPES[k][0], counts[k] || 0])].map(([key,label,n]) => {
+    const on = st.evFilter === key;
+    return { key, label, n, pick: () => this.setState({ evFilter: key }), border: on ? 'var(--color-accent)' : 'var(--color-divider)', color: on ? 'var(--color-accent)' : 'var(--color-neutral-300)', bg: on ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent' };
+  });
+  const list = EV.filter(e => st.evFilter === 'all' || e.type === st.evFilter).map(e => ({ ...this.evView(e), when: e.date + ' · J+' + e.days, rowBg: e.id === st.evSel ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent', rowMark: e.id === st.evSel ? 'var(--color-accent)' : 'transparent' }));
+  const raw = EV.find(e => e.id === st.evSel) || EV[0], sel = this.evView(raw);
+  sel.when = raw.date + '/2026 · ouvert depuis ' + raw.days + ' j';
+  sel.nextLabel = raw.step < 5 ? 'Passer à « ' + STEPS[raw.step + 1] + ' »' : 'Clôturé';
+  const method = st.method || raw.method;
+  const selActions = ACT.filter(a => raw.actions.includes(a.id)).map(a => this.actView(a));
+  return {
+    evFilters: filters, evList: list, sel,
+    steps: STEPS.map((label, i) => ({ label, bar: i < raw.step ? 'var(--color-accent-600)' : i === raw.step ? 'var(--color-accent)' : 'var(--color-neutral-800)', color: i < raw.step ? 'var(--color-neutral-300)' : i === raw.step ? 'var(--color-accent)' : 'var(--color-neutral-600)', icon: i < raw.step ? 'ph-check-circle' : i === raw.step ? 'ph-circle-half' : 'ph-circle' })),
+    selFields: [['Date', raw.date + '/2026'],['Lieu', raw.lieu],['Déclarant', raw.declarant],['Projet Keystone lié', raw.projet],['Équipement', raw.equip],['Pilote', raw.pilote],['Gravité potentielle', GRAV[raw.g]]].map(([k,v]) => ({ k, v })),
+    methods: METHODS.map(([key,label]) => ({ key, label, checked: method === key, pick: () => this.setState({ method: key }) })),
+    mk: { [method]: true },
+    m5: M5.map(([k,v]) => ({ k, v })), tree: TREE.map(([lvl,t,top]) => ({ t, pad: (lvl * 18) + 'px', fill: top ? 'var(--color-accent)' : 'transparent' })), whys: WHYS.map((t,i) => ({ n: (i+1) + '.', t })),
+    d8: D8.map((t,i) => ({ t, color: i < 3 ? 'var(--color-neutral-300)' : i === 3 ? 'var(--color-accent)' : 'var(--color-neutral-600)', icon: i < 3 ? 'ph-check-circle' : i === 3 ? 'ph-circle-half' : 'ph-circle' })),
+    selActions, selHasActions: selActions.length > 0, selNoActions: selActions.length === 0,
+    goActions: (ev) => { ev.preventDefault(); this.go('actions'); }
+  };
+};
+Component.prototype.moreVals = function (st) {
+  return Object.assign({}, this.eventsVals(st), this.actionsVals ? this.actionsVals(st) : {}, this.riskVals ? this.riskVals(st) : {}, this.watchVals ? this.watchVals(st) : {}, this.skillVals ? this.skillVals(st) : {}, this.auditVals ? this.auditVals(st) : {}, this.mobileVals ? this.mobileVals(st) : {});
+};
+const VIEWS = [['kanban','Kanban','ph-kanban'],['list','Liste','ph-list-bullets'],['pilot','Par pilote','ph-users-three']];
+const initials = n => n.replace(/[\[\]\.]/g,'').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+Component.prototype.actionsVals = function (st) {
+  const all = ACT.map(a => ({ ...this.actView(a), ini: initials(a.pilote), refText: '· ' + a.ref }));
+  const cols = COLS.map(([key,label,n]) => {
+    const cards = all.filter(a => a.col === key);
+    return { key, label, n, dot: S[ASTAT[key][1]].dot, cards, more: n > cards.length ? '+ ' + (n - cards.length) + ' autres actions' : '', note: key === 'done' ? "Une action n'est clôturée qu'après vérification de son efficacité par le pilote QHSE." : '' };
+  });
+  const order = COLS.map(c => c[0]);
+  const pil = {}; all.forEach(a => { (pil[a.pilote] = pil[a.pilote] || []).push(a); });
+  return {
+    av: { [st.actView]: true },
+    views: VIEWS.map(([key,label,icon]) => ({ key, label, icon, checked: st.actView === key, pick: () => this.setState({ actView: key }) })),
+    cols, actList: [...all].sort((a,b) => order.indexOf(a.col) - order.indexOf(b.col)),
+    byPilot: Object.keys(pil).sort((a,b) => pil[b].length - pil[a].length).map(name => { const items = pil[name], late = items.filter(a => a.col === 'late').length; return { name, ini: initials(name), items, summary: items.length + ' action' + (items.length > 1 ? 's' : '') + (late ? ' · ' + late + ' en retard' : ''), lateColor: late ? S.danger.dot : 'var(--color-neutral-500)' }; })
+  };
+};
+const UNITS = [['montage','Atelier montage'],['usinage','Atelier usinage'],['essais',"Zone d'essais"],['client','Mise en service chez le client'],['be',"Bureau d'études"],['magasin','Magasin'],['bureaux','Bureaux'],['deplacements','Déplacements']];
+const RISKS = [
+['montage','Manutention mécanique',"Levage et retournement de bâtis jusqu'à 3 t au pont roulant",4,2,'VGP semestrielle, élingues contrôlées, autorisation de conduite',4,1,['A-214','A-215']],
+['montage','Électricité','Essais sous tension des armoires en fin de montage',4,2,'Habilitation BR / B2V, consignation, EPI isolants',4,1,['A-205']],
+['montage','Bruit','Meulage et perçage, 87 dB(A) mesurés',2,4,'PICB, cloisonnement du poste',2,2,[]],
+['montage','Chute de plain-pied','Flexibles et câbles au sol en phase de montage',2,3,'Chemins de câbles provisoires, rangement en fin de poste',2,2,[]],
+['montage','Postures contraignantes','Montage sous châssis, bras en élévation',2,3,'Potence, table élévatrice',2,2,[]],
+['montage','Incendie / explosion','Stockage de bouteilles de gaz de soudage',4,1,'Râteliers, arrimage, détecteur de fuite',4,1,['A-172']],
+['usinage','Mécanique (rotation)','Usinage sur tour T-4, carter ouvert',3,2,'Carter asservi, formation au poste',3,1,[]],
+['usinage','Coupure','Ébavurage manuel des pièces',2,4,"Gants anti-coupure, outil d'ébavurage",2,2,[]],
+['usinage','Projection','Meulage sans écran facial',3,3,'Écran facial obligatoire, lunettes',3,1,[]],
+['usinage','Chimique',"Fluides de coupe, brouillards d'huile",2,3,'Aspiration à la source, FDS, suivi médical',2,2,[]],
+['usinage','Éclairage insuffisant','Allée centrale, 90 lux mesurés',1,3,"Éclairage d'appoint provisoire",1,2,['A-198']],
+['essais','Explosion / ATEX','Essais avec produits inertes simulant les explosifs, zone 2',4,2,"Matériel ATEX, permis d'essai, zonage",4,1,['A-203']],
+['essais','Hydraulique haute pression','Rupture de flexible à 250 bar',3,2,'Contrôle visuel hebdomadaire, remplacement à 5 ans',3,1,['A-209']],
+['essais','Chute de hauteur','Accès à la plateforme PIRL',3,2,'Garde-corps, formation travail en hauteur',3,1,['A-165']],
+['client','Co-activité','Intervention sur site client en production',3,3,'Plan de prévention, accueil site, permis',3,1,[]],
+['client','Démarrage intempestif','Mise sous tension des convoyeurs en réglage',4,2,"Consignation LOTO, arrêt d'urgence testé",4,1,[]],
+['client','Risque routier','Trajets longs vers les sites clients',3,2,'Politique déplacements, temps de repos',3,2,[]],
+['be','Travail sur écran','Postes prolongés sur écran, CAO',1,4,'Postes réglables, pauses',1,3,[]],
+['be','Risques psychosociaux','Pics de charge avant livraison',2,3,'Planification Keystone, entretiens',2,2,[]],
+['magasin','Circulation engins / piétons',"Chariot élévateur et piétons dans l'allée centrale",4,2,'Plan de circulation, CACES R489, gilets',4,1,['A-201']],
+['magasin','Chimique / environnement',"Déversement d'huile ou de solvant",2,2,'Rétentions, kit absorbant',2,1,['A-176']],
+['bureaux','Chute','Escaliers et sols',2,2,'Nez de marche, éclairage',2,1,[]],
+['bureaux','Incendie','Locaux techniques et serveurs',3,1,'Détection, extincteurs, exercice annuel',3,1,[]],
+['deplacements','Risque routier','Trajets en véhicule de service',4,2,'Entretien des véhicules, téléphone interdit au volant',4,1,[]],
+['deplacements','Fatigue','Longue distance, décalage horaire',2,3,'Repos obligatoire, hébergement sur place',2,2,[]]
+].map(r => ({unit:r[0],danger:r[1],situation:r[2],g:r[3],p:r[4],mesures:r[5],rg:r[6],rp:r[7],actions:r[8]}));
+const LV = [{bg:'oklch(0.30 0.03 152)',dot:S.ok.dot,label:'Faible 1–3'},{bg:'oklch(0.33 0.05 78)',dot:S.warn.dot,label:'Modéré 4–6'},{bg:'oklch(0.35 0.07 40)',dot:'oklch(0.72 0.14 40)',label:'Élevé 8–9'},{bg:'oklch(0.37 0.09 22)',dot:S.danger.dot,label:'Critique 12–16'}];
+const lvl = n => n >= 12 ? 3 : n >= 8 ? 2 : n >= 4 ? 1 : 0;
+Component.prototype.riskVals = function (st) {
+  const rows = RISKS.filter(r => r.unit === st.riskUnit);
+  const res = st.riskMode === 'res';
+  const cells = [];
+  for (let g = 4; g >= 1; g--) {
+    cells.push({ t:'G' + g, bg:'transparent', color:'var(--color-neutral-500)', fs:'11px' });
+    for (let p = 1; p <= 4; p++) {
+      const n = rows.filter(r => (res ? r.rg : r.g) === g && (res ? r.rp : r.p) === p).length;
+      cells.push({ t: n ? String(n) : '', bg: LV[lvl(g*p)].bg, color:'var(--color-text)', fs:'13px' });
+    }
+  }
+  cells.push({ t:'', bg:'transparent', color:'transparent', fs:'11px' });
+  for (let p = 1; p <= 4; p++) cells.push({ t:'P' + p, bg:'transparent', color:'var(--color-neutral-500)', fs:'11px' });
+  const high = rows.filter(r => r.g*r.p >= 8).length, resHigh = rows.filter(r => r.rg*r.rp >= 8).length;
+  return {
+    riskBanner: [['Version','2026.1'],['Mise à jour annuelle','15/03/2026 · prochaine le 15/03/2027'],['Conservation','40 ans · 12 versions archivées depuis 2015'],['Validation','[H. Marchand] · CSE consulté le 20/03/2026']].map(([k,v]) => ({ k, v })),
+    units: UNITS.map(([key,label]) => { const ur = RISKS.filter(r => r.unit === key), on = key === st.riskUnit; return { key, label, n: ur.length, dot: LV[Math.max(...ur.map(r => lvl(r.g*r.p)))].dot, color: on ? 'var(--color-accent)' : 'var(--color-neutral-300)', bg: on ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'transparent', mark: on ? 'var(--color-accent)' : 'transparent', pick: () => this.setState({ riskUnit: key }) }; }),
+    rmBrut: !res, rmRes: res, pickBrut: () => this.setState({ riskMode:'brut' }), pickRes: () => this.setState({ riskMode:'res' }),
+    matrix: cells, levels: LV,
+    unitLabel: (UNITS.find(u => u[0] === st.riskUnit) || UNITS[0])[1],
+    unitStats: [{ v: rows.length, k: 'risques évalués', color:'var(--color-text)' },{ v: high, k: 'élevés ou critiques (brut)', color: high ? LV[2].dot : 'var(--color-text)' },{ v: resHigh, k: 'résiduels ≥ 8', color: resHigh ? S.danger.dot : S.ok.dot }],
+    riskRows: rows.map(r => ({ ...r, bText: 'G' + r.g + ' × P' + r.p + ' = ' + (r.g*r.p), bBg: LV[lvl(r.g*r.p)].bg, rText: 'G' + r.rg + ' × P' + r.rp + ' = ' + (r.rg*r.rp), rBg: LV[lvl(r.rg*r.rp)].bg, actText: r.actions.length ? r.actions.join(', ') : (r.g*r.p >= 8 ? 'À définir' : '—'), actColor: r.actions.length ? 'var(--color-accent)' : (r.g*r.p >= 8 ? S.danger.dot : 'var(--color-neutral-600)') }))
+  };
+};
+const REQ = [
+['Règlement (UE) 2023/1230','Machines — conception et marquage CE',"Remplace la directive 2006/42/CE : cybersécurité, logiciels et IA, notice numérique, nouvelles procédures d'évaluation de la conformité.",'20/01/2027',"Analyse d'écart en cours",'accent','[E. Dubois]'],
+['Directive ATEX 2014/34/UE','Équipements en atmosphères explosives',"Conformité et marquage des matériels destinés aux zones ATEX, documentation technique, déclaration UE.",'Permanent','Conforme','ok','[J. Petit]'],
+['Code du travail — R. 4512-6','Plans de prévention',"Plan de prévention écrit pour toute intervention d'entreprise extérieure de plus de 400 h/an ou comportant des travaux dangereux.",'Permanent','Écart · 2 interventions sans plan signé','danger','[S. Benali]'],
+['Code du travail — R. 4121-1','Document unique (DUERP)',"Mise à jour au moins annuelle, conservation 40 ans, mise à disposition des salariés et du CSE.",'15/03/2027','Conforme','ok','[C. Lefèvre]'],
+['Arrêté du 1er mars 2004','Appareils de levage',"Vérifications générales périodiques des appareils et accessoires de levage, tous les 6 ou 12 mois selon l'équipement.",'02/10/2026','Écart · VGP pont roulant dépassée','danger','[S. Benali]'],
+["Code de l'environnement — R. 541-45 · Trackdéchets",'Déchets',"Traçabilité dématérialisée des déchets dangereux (BSD) et registre chronologique des déchets.",'Permanent','À évaluer · registre 2026 incomplet','warn','[R. Fontaine]'],
+['ISO 9001:2015','Management de la qualité',"Revue de direction, audits internes, maîtrise des non-conformités et des exigences client.",'17/11/2026 · audit de suivi','Conforme','ok','[E. Dubois]']];
+const CTRL = [
+['Pont roulant 10 t — atelier montage','VGP levage','6 mois','[Apave]','02/04/2026','02/10/2026','Dépassé · +4 j','danger','1 · fin de course à régler'],
+['Chariot élévateur R489','VGP','6 mois','[Apave]','15/04/2026','15/10/2026','Sous 30 j','warn','—'],
+['Installations électriques','Vérification périodique','12 mois','[Bureau Veritas]','20/10/2025','20/10/2026','Sous 30 j','warn','3 · 2 levées'],
+['Extincteurs (42)','Maintenance annuelle','12 mois','[Prestataire incendie]','28/10/2025','28/10/2026','Sous 30 j','warn','—'],
+['Portes et portails motorisés','Vérification','6 mois','Interne — maintenance','30/04/2026','30/10/2026','Sous 30 j','warn','—'],
+["Banc d'essais BE-1 — matériel ATEX",'Inspection ATEX','12 mois','[Organisme notifié]','03/11/2025','03/11/2026','Sous 30 j','warn','1 · presse-étoupe'],
+['Compresseur et réseau air comprimé','Requalification périodique','40 mois','[Apave]','12/06/2024','12/10/2027','Planifié','neutral','—'],
+['EPI antichute (harnais, longes)','Contrôle annuel','12 mois','Interne — QHSE','05/02/2026','05/02/2027','Planifié','neutral','—']];
+Component.prototype.watchVals = function (st) {
+  return {
+    watchTabs: [['req','Exigences',REQ.length],['ctrl','Contrôles périodiques',CTRL.length]].map(([key,label,n]) => ({ key, label, n, color: st.watchTab === key ? 'var(--color-accent)' : 'var(--color-neutral-400)', line: st.watchTab === key ? 'var(--color-accent)' : 'transparent', pick: () => this.setState({ watchTab: key }) })),
+    wt: { [st.watchTab]: true }, watchAdd: st.watchTab === 'req' ? 'Ajouter une exigence' : 'Ajouter un contrôle',
+    reqs: REQ.map(r => ({ text:r[0], domain:r[1], req:r[2], due:r[3], eval:r[4], bg:S[r[5]].bg, fg:S[r[5]].fg, pilote:r[6] })),
+    ctrls: CTRL.map(c => ({ equip:c[0], ctrl:c[1], period:c[2], org:c[3], last:c[4], next:c[5], status:c[6], bg:S[c[7]].bg, fg:S[c[7]].fg, res:c[8], nextColor: c[7] === 'neutral' ? 'var(--color-neutral-300)' : S[c[7]].dot }))
+  };
+};
+const TITLES = ['Accueil sécurité','Habilitation électrique','CACES R484','CACES R489','SST','Travail en hauteur','ATEX','Autorisation de conduite'];
+const SK = { v:{label:'Valide',icon:'ph-check',bg:S.ok.bg,fg:S.ok.fg,border:'1px solid transparent'}, s:{label:'Expire sous 60 jours',icon:'ph-clock',bg:S.warn.bg,fg:S.warn.fg,border:'1px solid transparent'}, x:{label:'Expiré',icon:'ph-x',bg:S.danger.bg,fg:S.danger.fg,border:'1px solid transparent'}, r:{label:'Requis, jamais suivi',icon:'ph-warning',bg:'transparent',fg:S.danger.dot,border:'1px dashed ' + S.danger.dot}, n:{label:'Non requis',icon:'ph-minus',bg:'transparent',fg:'var(--color-neutral-700)',border:'1px solid transparent'} };
+const EMP = [
+['[T. Nguyen]','Monteur · atelier montage','v','v','v','n','s','x','n','v'],
+['[M. Girard]','Usineur · atelier usinage','v','s','n','n','v','n','n','n'],
+['[P. Roux]','Usineur · atelier usinage','v','n','n','v','v','n','n','v'],
+['[A. Martin]',"Technicien · zone d'essais",'v','v','n','n','v','v','v','n'],
+['[J. Petit]',"Chef de zone · essais",'v','v','n','n','v','v','v','n'],
+['[R. Fontaine]','Magasinier','v','n','n','v','v','n','n','v'],
+['[E. Dubois]',"Ingénieur · bureau d'études",'v','n','n','n','v','n','n','n'],
+['[L. Moreau]','Responsable qualité','v','n','n','n','v','n','n','n'],
+['[S. Benali]',"Chef d'atelier montage",'v','v','v','v','v','v','v','v'],
+['[K. Bernard]','Monteur · arrivé le 28/09','r','n','n','n','n','r','n','n']];
+Component.prototype.skillVals = function (st) {
+  return {
+    alertBorder: S.danger.dot, titles: TITLES,
+    skillLegend: ['v','s','x','r','n'].map(k => SK[k]),
+    emps: EMP.map(e => ({ name:e[0], service:e[1], cells: e.slice(2).map((k,i) => ({ ...SK[k], title: TITLES[i] + ' — ' + SK[k].label })) }))
+  };
+};
+const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+const TL = [['Audits internes',{2:'Achats',4:'BE',6:'Production',10:'BE · 17/10',12:'Mise en serv.'}],['Certification',{11:'ISO 9001 17/11'}],['Fournisseurs',{3:'[Fourn. F]',9:'[Fourn. G]',11:'[Fourn. F] · NC'}],['Visites sécurité',{1:'Montage',4:'Usinage',7:'Magasin',10:'Essais 12/10'}],['Revues de direction',{6:'Interm.',12:'Annuelle 10/12'}]];
+const FIND = [['Écart mineur','danger','Revue des exigences client non formalisée pour 2 affaires (§8.2.3)','A-188'],['Piste de progrès','warn','Harmoniser les gammes de contrôle entre usinage et montage','A-212'],['Point fort','ok','Traçabilité des composants critiques via Keystone',''],['Écart mineur','danger','Enregistrements de formation incomplets pour 3 intérimaires (§7.2)','A-205']];
+const REV = [['Suivi des actions de la revue précédente',1,'Vigie'],['Résultats des audits internes et de certification',1,'[E. Dubois]'],['Satisfaction client et réclamations',1,'[L. Moreau]'],['Indicateurs sécurité : TF1, TG, pyramide',1,'Vigie · automatique'],['Performance des fournisseurs',0,'[L. Moreau] · 20/11'],['Veille réglementaire : impacts du règlement 2023/1230',0,'[E. Dubois] · 30/11'],['Adéquation des ressources et des compétences',0,'[C. Lefèvre] · 25/11'],["Opportunités d'amélioration et objectifs 2027",0,'A-184 · 20/11']];
+const OTHER = {prevention:"Plans de prévention (R. 4512-6) et permis de feu / d'essai, avec signature des entreprises extérieures et rattachement aux projets Keystone. À dessiner dans une prochaine itération.",docs:"Procédures, instructions et enregistrements avec version, approbation et diffusion contrôlée. À dessiner dans une prochaine itération.",env:"Registre des déchets, bordereaux Trackdéchets, consommations et rejets. À dessiner dans une prochaine itération."};
+const MTYPES = [['AT','Accident','ph-first-aid'],['PA','Presque-accident','ph-warning'],['SD','Situation dangereuse','ph-warning-octagon'],['NC','Non-conformité','ph-x-square'],['RC','Réclamation client','ph-chat-centered-text'],['ENV','Environnement','ph-leaf']];
+Component.prototype.auditVals = function (st) {
+  const cells = [];
+  TL.forEach(([label, items]) => { cells.push({ t: label, bg:'transparent', color:'var(--color-neutral-300)', jc:'left' }); for (let m = 1; m <= 12; m++) { const t = items[m]; const past = m < 10; cells.push({ t: t || '', bg: t ? (past ? 'var(--color-neutral-900)' : 'var(--color-accent-900)') : (m === 10 ? 'color-mix(in srgb, var(--color-accent) 6%, transparent)' : 'transparent'), color: t ? (past ? 'var(--color-neutral-400)' : 'var(--color-accent-200)') : 'transparent', jc:'center' }); } });
+  const done = REV.filter(r => r[1]).length;
+  return {
+    certs: [{ k:'Qualité', title:'ISO 9001:2015', status:'Certifié · suivi le 17/11/2026', dot:S.ok.dot, note:'[Organisme certificateur] · cycle 2025–2028' },{ k:'Santé-sécurité', title:'ISO 45001:2018', status:'Déploiement en cours', dot:S.warn.dot, note:'Certification visée au second semestre 2027' },{ k:'Environnement', title:'ISO 14001:2015', status:'Non engagé', dot:'var(--color-neutral-600)', note:"Étude d'opportunité à la revue de direction du 10/12" }],
+    tlHead: [{ t:'', color:'transparent' }, ...MONTHS.map((t,i) => ({ t, color: i === 9 ? 'var(--color-accent)' : 'var(--color-neutral-500)' }))], tlCells: cells,
+    findings: FIND.map(f => ({ kind:f[0], bg:S[f[1]].bg, fg:S[f[1]].fg, text:f[2], act: f[3] || '—', actColor: f[3] ? 'var(--color-accent)' : 'var(--color-neutral-600)' })),
+    review: REV.map(r => ({ t:r[0], who:r[2], icon: r[1] ? 'ph-check-circle' : 'ph-circle', color: r[1] ? S.ok.dot : 'var(--color-neutral-600)', textColor: r[1] ? 'var(--color-neutral-400)' : 'var(--color-text)' })), revDone: done + '/' + REV.length + ' éléments fournis'
+  };
+};
+Component.prototype.mobileVals = function (st) {
+  return {
+    otherText: OTHER[st.screen] || '',
+    mFormOpen: !st.mSent, mSent: st.mSent,
+    mTypes: MTYPES.map(([key,label,icon]) => ({ key, label, icon, border: st.mType === key ? 'var(--color-accent)' : 'var(--color-divider)', iconColor: st.mType === key ? 'var(--color-accent)' : 'var(--color-neutral-400)', pick: () => this.setState({ mType: key }) })),
+    mGraves: ['Non','Peut-être','Oui'].map(label => ({ label, color: st.mGrave === label ? 'var(--color-accent)' : 'var(--color-text)', border: st.mGrave === label ? 'var(--color-accent)' : 'var(--color-divider)', pick: () => this.setState({ mGrave: label }) })),
+    toggleAnon: () => this.setState(s => ({ mAnon: !s.mAnon })), anonBorder: st.mAnon ? 'var(--color-accent)' : 'var(--color-divider)', anonBg: st.mAnon ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'transparent', anonKnob: st.mAnon ? 'var(--color-accent)' : 'var(--color-neutral-600)', anonLeft: st.mAnon ? '19px' : '3px',
+    sendReport: () => this.setState({ mSent: true }), resetReport: () => this.setState({ mSent:false, mType:null, mGrave:null, mAnon:false })
+  };
+};
+Component.prototype.go = function (screen, extra) { this.setState({ screen, siteOpen:false, ...(extra || {}) }); };
+const _rv = Component.prototype.renderVals;
+Component.prototype.renderVals = function () { const v = _rv.call(this); if (OTHER[this.state.screen]) v.s = { other: true }; return v; };</script>
+</body>
+</html>

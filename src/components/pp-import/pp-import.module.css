@@ -1,0 +1,42 @@
+/* Import du formulaire de plan de prévention : zone de dépôt, étapes, contrôles compacts du tableau de correspondance. */
+
+.drop {
+  display: grid; justify-items: center; gap: 8px; padding: 28px 16px; text-align: center; cursor: pointer;
+  border: 1.5px dashed var(--color-divider); border-radius: var(--radius-md); background: var(--color-bg);
+  transition: border-color .15s, background-color .15s;
+}
+.drop:hover { border-color: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.drop:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.dragging, .dragging:hover { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg)); }
+.busy, .busy:hover { cursor: progress; border-color: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+
+.spin { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.step {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 8px 4px 4px; border: 0; border-radius: var(--radius-sm);
+  background: none; font: inherit; font-size: 12px; color: var(--color-neutral-500); cursor: default;
+}
+.stepNum {
+  width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid var(--color-divider); font-size: 10.5px;
+}
+.stepOn { color: var(--color-accent); }
+.stepOn .stepNum { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.stepDone { color: var(--color-neutral-300); cursor: pointer; }
+.stepDone .stepNum { border-color: transparent; background: var(--tone-ok-bg); color: var(--tone-ok-fg); }
+.stepDone:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.stepDone:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.stepSep { width: 18px; height: 1px; background: var(--color-divider); }
+
+.compact { font-size: 12px !important; line-height: 1.2; min-height: 0 !important; padding: 5px 8px !important; }
+select.compact { padding-right: 26px !important; }
+
+.mapRow > td { vertical-align: top; }
+.mapRowIgnored > td { opacity: .55; }
+.mapRowIgnored > td:last-child { opacity: 1; }
+
+.previewList { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.previewList > li { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; line-height: 1.35; }

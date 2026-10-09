@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>fr</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>fr</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>Vigie</string>
+	<key>CFBundleDisplayName</key>
+	<string>Vigie</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.epc2i.vigie</string>
+	<key>CFBundleExecutable</key>
+	<string>Vigie</string>
+	<key>CFBundleIconFile</key>
+	<string>Vigie</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.business</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>EPC2i</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Vigie enregistre les exports CSV et les pièces jointes dans Téléchargements.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>VigieProjectPath</key>
+	<string>(renseigné par build.sh)</string>
+	<key>VigieNodeDir</key>
+	<string>(renseigné par build.sh)</string>
+</dict>
+</plist>

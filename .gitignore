@@ -1,0 +1,91 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# ─── Secrets ────────────────────────────────────────────────────────────────
+# Variables d'environnement (ANTHROPIC_API_KEY, futures clés Entra ID…) : seuls les modèles sont versionnés.
+.env*
+!.env.example
+!.env.sample
+# Clés, certificats et magasins de clés
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+id_rsa*
+id_ecdsa*
+id_ed25519*
+# Fichiers d'identifiants et de mots de passe
+.npmrc
+.netrc
+*.kdbx
+secrets/
+.secrets/
+*.secret
+*.secrets
+credentials*.json
+service-account*.json
+password*.txt
+passwords*
+mots-de-passe*
+motdepasse*
+
+# ─── Dépendances ────────────────────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ─── Builds et caches ───────────────────────────────────────────────────────
+# next.js
+/.next/
+/out/
+# production
+/build
+/dist
+.turbo/
+.swc/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+# application Mac (desktop-app/build.sh)
+desktop-app/build/
+*.app/
+.build/
+DerivedData/
+# tests
+/coverage
+
+# ─── Données locales ────────────────────────────────────────────────────────
+# base PGlite et pièces jointes (.data/vigie, .data/uploads)
+/.data
+# archives sources de la maquette (extraites dans design/)
+/*.zip
+
+# ─── Journaux ───────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ─── Système et éditeurs ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*~
+
+# vercel
+.vercel
+
+# outils Claude Code : seule la configuration de prévisualisation est partagée
+/.claude/*
+!/.claude/launch.json

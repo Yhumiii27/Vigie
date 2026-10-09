@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Inter, system-ui, sans-serif">
+  <title>Site de [Ville A] — siège et ateliers · plan schématique</title>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#1f2232" stroke-width="1"/>
+    </pattern>
+    <pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="14" height="14" fill="#1e2130"/>
+      <line x1="0" y1="0" x2="0" y2="14" stroke="#2b2e3e" stroke-width="4"/>
+    </pattern>
+    <pattern id="asphalt" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <rect width="10" height="10" fill="#222535"/>
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#272a3a" stroke-width="3"/>
+    </pattern>
+  </defs>
+
+  <!-- Fond et emprise du site -->
+  <rect width="1600" height="1000" fill="#141622"/>
+  <rect x="40" y="40" width="1520" height="920" fill="#191b29"/>
+  <rect x="40" y="40" width="1520" height="920" fill="url(#grid)"/>
+  <text x="44" y="27" font-size="15" fill="#6c7084">Site de [Ville A] — siège et ateliers · plan schématique</text>
+
+  <!-- Espaces verts -->
+  <g fill="#1a2724">
+    <rect x="60" y="320" width="180" height="110" rx="6"/>
+    <rect x="60" y="540" width="80" height="300" rx="6"/>
+    <rect x="800" y="830" width="560" height="110" rx="6"/>
+  </g>
+
+  <!-- Voirie -->
+  <rect x="1380" y="540" width="150" height="300" fill="url(#asphalt)" stroke="#2e3141" stroke-width="2"/>
+  <g fill="#262938">
+    <rect x="150" y="450" width="60" height="510"/>
+    <rect x="60" y="450" width="1440" height="60"/>
+    <rect x="1410" y="240" width="60" height="480"/>
+    <rect x="1340" y="240" width="70" height="60"/>
+    <rect x="1360" y="660" width="50" height="60"/>
+  </g>
+  <g fill="none" stroke="#454959" stroke-width="2.5" stroke-dasharray="18 14">
+    <path d="M180 945V480H1440"/>
+    <path d="M1440 480V255"/>
+    <path d="M1440 480V690H1370"/>
+  </g>
+  <!-- Passage piéton sur l'allée centrale -->
+  <g fill="#3b3f50">
+    <rect x="815" y="455" width="30" height="6"/>
+    <rect x="815" y="467" width="30" height="6"/>
+    <rect x="815" y="479" width="30" height="6"/>
+    <rect x="815" y="491" width="30" height="6"/>
+    <rect x="815" y="503" width="30" height="5"/>
+  </g>
+  <path d="M700 880H830V512M830 448V426" fill="none" stroke="#33384a" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
+
+  <!-- Clôture et portail -->
+  <path d="M240 960H1560V40H40V960H120" fill="none" stroke="#5a5e71" stroke-width="3" stroke-dasharray="12 7"/>
+  <g fill="#6a6e82">
+    <rect x="112" y="952" width="16" height="16" rx="2"/>
+    <rect x="232" y="952" width="16" height="16" rx="2"/>
+  </g>
+  <text x="180" y="988" font-size="14" fill="#8a8ea3" text-anchor="middle">Portail · accès principal</text>
+  <rect x="60" y="870" width="55" height="60" rx="3" fill="#222433" stroke="#4d5160" stroke-width="2"/>
+  <text x="87" y="905" font-size="12" fill="#7d8196" text-anchor="middle">Garde</text>
+
+  <!-- Aire extérieure de découpe -->
+  <rect x="80" y="90" width="160" height="210" fill="url(#hatch)" stroke="#3f4252" stroke-width="2" stroke-dasharray="8 5"/>
+  <text x="92" y="116" font-size="14" fill="#8a8ea3">Aire extérieure</text>
+  <text x="92" y="134" font-size="14" fill="#8a8ea3">de découpe</text>
+
+  <!-- Atelier usinage -->
+  <rect x="260" y="90" width="500" height="330" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <path d="M262 255H758" stroke="#34374a" stroke-width="2" stroke-dasharray="10 8"/>
+  <g fill="#272a3a" stroke="#3d4152" stroke-width="1.5">
+    <rect x="300" y="135" width="100" height="70" rx="3"/>
+    <rect x="430" y="135" width="100" height="70" rx="3"/>
+    <rect x="300" y="315" width="80" height="55" rx="3"/>
+    <rect x="410" y="315" width="80" height="55" rx="3"/>
+    <rect x="560" y="315" width="70" height="55" rx="3"/>
+  </g>
+  <g font-size="12" fill="#6c7084" text-anchor="middle">
+    <text x="350" y="175">CU-1</text>
+    <text x="480" y="175">CU-2</text>
+    <text x="340" y="347">T-3</text>
+    <text x="450" y="347">T-4</text>
+    <text x="595" y="347">Meulage</text>
+  </g>
+  <rect x="585" y="416" width="30" height="8" fill="#3b3f50"/>
+  <text x="276" y="116" font-size="18" font-weight="500" fill="#9a9eb3">Atelier usinage</text>
+
+  <!-- Atelier montage -->
+  <rect x="800" y="90" width="540" height="330" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <g stroke="#454a5d" stroke-width="2" stroke-dasharray="16 6">
+    <path d="M810 112H1330"/>
+    <path d="M810 398H1330"/>
+  </g>
+  <rect x="872" y="112" width="12" height="286" fill="#2b2e3f" stroke="#505468" stroke-width="1.5"/>
+  <rect x="1052" y="112" width="16" height="286" fill="#2e3143" stroke="#5b5f72" stroke-width="1.5"/>
+  <g fill="#272a3a" stroke="#3d4152" stroke-width="1.5">
+    <rect x="830" y="290" width="80" height="70" rx="3"/>
+    <rect x="930" y="290" width="80" height="70" rx="3"/>
+    <rect x="1040" y="290" width="80" height="70" rx="3"/>
+    <rect x="1150" y="290" width="80" height="70" rx="3"/>
+    <rect x="1250" y="290" width="70" height="70" rx="3"/>
+    <rect x="920" y="140" width="100" height="70" rx="3"/>
+  </g>
+  <g font-size="12" fill="#6c7084" text-anchor="middle">
+    <text x="870" y="330">M1</text>
+    <text x="970" y="330">M2</text>
+    <text x="1080" y="330">M3</text>
+    <text x="1190" y="330">M4</text>
+    <text x="1285" y="330">M5</text>
+    <text x="970" y="171">Cabine</text>
+    <text x="970" y="186">soudage</text>
+  </g>
+  <text x="1076" y="262" font-size="12" fill="#7d8196">Pont roulant 10 t</text>
+  <text x="890" y="262" font-size="12" fill="#6c7084">Pont 5 t</text>
+  <g fill="#3b3f50">
+    <rect x="815" y="416" width="30" height="8"/>
+    <rect x="985" y="416" width="30" height="8"/>
+    <rect x="1336" y="255" width="8" height="30"/>
+  </g>
+  <text x="1150" y="150" font-size="18" font-weight="500" fill="#9a9eb3">Atelier montage</text>
+
+  <!-- Bennes et déchets -->
+  <rect x="1370" y="90" width="150" height="140" fill="#1e2130" stroke="#3f4252" stroke-width="2" stroke-dasharray="8 5"/>
+  <g fill="#272a3a" stroke="#45495b" stroke-width="1.5">
+    <rect x="1385" y="120" width="55" height="45" rx="2"/>
+    <rect x="1450" y="120" width="55" height="45" rx="2"/>
+    <rect x="1385" y="175" width="120" height="40" rx="2"/>
+  </g>
+  <text x="1384" y="110" font-size="13" fill="#8a8ea3">Bennes · déchets</text>
+
+  <!-- Bureaux et bureau d'études -->
+  <rect x="260" y="560" width="300" height="200" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <path d="M260 660H400M400 560V760M480 660H560" stroke="#34374a" stroke-width="1.5"/>
+  <text x="276" y="586" font-size="18" font-weight="500" fill="#9a9eb3">Bureaux</text>
+  <rect x="580" y="560" width="200" height="200" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <path d="M580 690H780" stroke="#34374a" stroke-width="1.5"/>
+  <text x="594" y="586" font-size="16" font-weight="500" fill="#9a9eb3">Bureau d'études</text>
+
+  <!-- Magasin, mezzanine et quai -->
+  <rect x="900" y="560" width="400" height="240" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <g fill="#282b3b" stroke="#3d4152" stroke-width="1.5">
+    <rect x="930" y="600" width="170" height="14"/>
+    <rect x="930" y="630" width="170" height="14"/>
+    <rect x="930" y="660" width="170" height="14"/>
+  </g>
+  <rect x="1120" y="580" width="170" height="120" fill="none" stroke="#5b5f72" stroke-width="2" stroke-dasharray="10 6"/>
+  <text x="1205" y="715" font-size="12" fill="#7d8196" text-anchor="middle">Mezzanine de stockage</text>
+  <rect x="930" y="730" width="160" height="50" fill="#262838" stroke="#3d4152" stroke-width="1.5"/>
+  <text x="1010" y="760" font-size="12" fill="#6c7084" text-anchor="middle">Préparation</text>
+  <rect x="985" y="556" width="30" height="8" fill="#3b3f50"/>
+  <text x="916" y="586" font-size="18" font-weight="500" fill="#9a9eb3" dy="-3">Magasin</text>
+  <rect x="1300" y="600" width="60" height="180" fill="#262938" stroke="#4d5160" stroke-width="2"/>
+  <g fill="#4a4e61">
+    <rect x="1296" y="615" width="8" height="30"/>
+    <rect x="1296" y="675" width="8" height="30"/>
+    <rect x="1296" y="735" width="8" height="30"/>
+  </g>
+  <text x="1338" y="690" font-size="13" fill="#8a8ea3" text-anchor="middle" transform="rotate(-90 1338 690)">Quai de chargement</text>
+  <text x="1455" y="812" font-size="12" fill="#7d8196" text-anchor="middle">Aire de manœuvre</text>
+  <text x="1455" y="828" font-size="12" fill="#7d8196" text-anchor="middle">poids lourds</text>
+
+  <!-- Parking -->
+  <rect x="260" y="820" width="500" height="120" fill="#1f2130" stroke="#3f4252" stroke-width="2"/>
+  <g stroke="#34374a" stroke-width="1.5">
+    <path d="M300 820V865M340 820V865M380 820V865M420 820V865M460 820V865M500 820V865M540 820V865M580 820V865M620 820V865M660 820V865M700 820V865"/>
+    <path d="M300 895V940M340 895V940M380 895V940M420 895V940M460 895V940M500 895V940M540 895V940M580 895V940M620 895V940M660 895V940M700 895V940"/>
+  </g>
+  <text x="510" y="886" font-size="14" fill="#8a8ea3" text-anchor="middle">Parking</text>
+
+  <!-- Nord -->
+  <g transform="translate(1515 905)">
+    <circle r="22" fill="none" stroke="#45495b" stroke-width="2"/>
+    <path d="M0 -16L6 4L0 0L-6 4Z" fill="#8a8ea3"/>
+    <text y="16" font-size="11" fill="#8a8ea3" text-anchor="middle">N</text>
+  </g>
+</svg>

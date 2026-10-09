@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" font-family="Inter, system-ui, sans-serif">
+  <title>Site de [Ville B] — zone d'essais · plan schématique</title>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#1f2232" stroke-width="1"/>
+    </pattern>
+    <pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="14" height="14" fill="#1e2130"/>
+      <line x1="0" y1="0" x2="0" y2="14" stroke="#2b2e3e" stroke-width="4"/>
+    </pattern>
+    <pattern id="atex" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <rect width="12" height="12" fill="#231f2c"/>
+      <line x1="0" y1="0" x2="0" y2="12" stroke="#33283a" stroke-width="3"/>
+    </pattern>
+  </defs>
+
+  <!-- Fond et emprise du site -->
+  <rect width="1600" height="1000" fill="#141622"/>
+  <rect x="40" y="40" width="1520" height="920" fill="#191b29"/>
+  <rect x="40" y="40" width="1520" height="920" fill="url(#grid)"/>
+  <text x="44" y="27" font-size="15" fill="#6c7084">Site de [Ville B] — zone d'essais · plan schématique</text>
+
+  <!-- Espaces verts et merlon de protection -->
+  <g fill="#1a2724">
+    <rect x="200" y="390" width="260" height="50" rx="6"/>
+    <rect x="1220" y="740" width="250" height="200" rx="6"/>
+  </g>
+  <rect x="560" y="760" width="640" height="70" rx="30" fill="#1d2a26" stroke="#2a3a34" stroke-width="2"/>
+  <text x="880" y="800" font-size="13" fill="#6f8a80" text-anchor="middle">Merlon de protection</text>
+
+  <!-- Voirie -->
+  <g fill="#262938">
+    <rect x="40" y="460" width="510" height="60"/>
+    <rect x="490" y="460" width="60" height="250"/>
+    <rect x="490" y="650" width="910" height="60"/>
+    <rect x="1340" y="620" width="60" height="90"/>
+  </g>
+  <path d="M55 490H520V680H1370V630" fill="none" stroke="#454959" stroke-width="2.5" stroke-dasharray="18 14"/>
+  <path d="M460 250H556" fill="none" stroke="#33384a" stroke-width="3" stroke-dasharray="2 6" stroke-linecap="round"/>
+
+  <!-- Clôture et portail -->
+  <path d="M40 440V40H1560V960H40V540" fill="none" stroke="#5a5e71" stroke-width="3" stroke-dasharray="12 7"/>
+  <g fill="#6a6e82">
+    <rect x="32" y="432" width="16" height="16" rx="2"/>
+    <rect x="32" y="532" width="16" height="16" rx="2"/>
+  </g>
+  <text x="26" y="490" font-size="13" fill="#8a8ea3" text-anchor="middle" transform="rotate(-90 26 490)">Portail ouest</text>
+  <rect x="70" y="560" width="80" height="60" rx="3" fill="#222433" stroke="#4d5160" stroke-width="2"/>
+  <text x="110" y="595" font-size="12" fill="#7d8196" text-anchor="middle">Garde</text>
+
+  <!-- Bureaux et vestiaires -->
+  <rect x="200" y="140" width="260" height="220" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <path d="M200 260H460M330 260V360" stroke="#34374a" stroke-width="1.5"/>
+  <text x="216" y="166" font-size="16" font-weight="500" fill="#9a9eb3">Bureaux et vestiaires</text>
+
+  <!-- Hall d'essais -->
+  <rect x="560" y="140" width="620" height="480" fill="#212332" stroke="#4d5160" stroke-width="2"/>
+  <rect x="590" y="170" width="270" height="250" fill="url(#atex)" stroke="#5e4552" stroke-width="2" stroke-dasharray="10 6"/>
+  <text x="600" y="412" font-size="12" fill="#a08593">Zone ATEX 2 · banc BE-1</text>
+  <g fill="#2a2c3c" stroke="#5b5f72" stroke-width="1.5">
+    <rect x="620" y="200" width="200" height="170" rx="4"/>
+    <rect x="900" y="200" width="200" height="170" rx="4"/>
+  </g>
+  <g fill="none" stroke="#454a5d" stroke-width="2">
+    <path d="M640 285H800M720 220V350"/>
+    <path d="M920 285H1080M1000 220V350"/>
+  </g>
+  <g font-size="14" fill="#9a9eb3" text-anchor="middle" font-weight="500">
+    <text x="720" y="236" dy="-6">Banc BE-1</text>
+    <text x="1000" y="236" dy="-6">Banc BE-2</text>
+  </g>
+  <rect x="880" y="430" width="110" height="80" fill="#272a3a" stroke="#4d5160" stroke-width="1.5"/>
+  <text x="935" y="475" font-size="12" fill="#7d8196" text-anchor="middle">PIRL</text>
+  <rect x="580" y="460" width="180" height="140" fill="#262838" stroke="#3d4152" stroke-width="1.5"/>
+  <text x="670" y="535" font-size="12" fill="#7d8196" text-anchor="middle">Salle de contrôle</text>
+  <rect x="1040" y="460" width="120" height="140" fill="url(#atex)" stroke="#5e4552" stroke-width="1.5"/>
+  <text x="1100" y="525" font-size="12" fill="#a08593" text-anchor="middle">Local des</text>
+  <text x="1100" y="541" font-size="12" fill="#a08593" text-anchor="middle">simulants</text>
+  <g fill="#3b3f50">
+    <rect x="556" y="235" width="8" height="30"/>
+    <rect x="1176" y="265" width="8" height="30"/>
+    <rect x="1000" y="616" width="30" height="8"/>
+  </g>
+  <text x="576" y="134" font-size="18" font-weight="500" fill="#9a9eb3" dy="-6">Hall d'essais</text>
+
+  <!-- Stockage et dépotage -->
+  <rect x="1240" y="160" width="260" height="240" fill="#1e2130" stroke="#4d5160" stroke-width="2" stroke-dasharray="8 5"/>
+  <g fill="#272a3a" stroke="#45495b" stroke-width="1.5">
+    <rect x="1265" y="200" width="60" height="40" rx="2"/>
+    <rect x="1340" y="200" width="60" height="40" rx="2"/>
+    <rect x="1415" y="200" width="60" height="40" rx="2"/>
+    <rect x="1265" y="320" width="60" height="40" rx="2"/>
+    <rect x="1415" y="320" width="60" height="40" rx="2"/>
+  </g>
+  <text x="1254" y="186" font-size="14" fill="#8a8ea3">Stockage produits inertes</text>
+  <rect x="1240" y="460" width="260" height="160" fill="url(#hatch)" stroke="#3f4252" stroke-width="2"/>
+  <text x="1370" y="545" font-size="14" fill="#8a8ea3" text-anchor="middle">Aire de dépotage</text>
+
+  <!-- Parking -->
+  <rect x="160" y="720" width="320" height="200" fill="#1f2130" stroke="#3f4252" stroke-width="2"/>
+  <g stroke="#34374a" stroke-width="1.5">
+    <path d="M200 720V770M240 720V770M280 720V770M320 720V770M360 720V770M400 720V770M440 720V770"/>
+    <path d="M200 870V920M240 870V920M280 870V920M320 870V920M360 870V920M400 870V920M440 870V920"/>
+  </g>
+  <text x="320" y="826" font-size="14" fill="#8a8ea3" text-anchor="middle">Parking</text>
+
+  <!-- Nord -->
+  <g transform="translate(1515 905)">
+    <circle r="22" fill="none" stroke="#45495b" stroke-width="2"/>
+    <path d="M0 -16L6 4L0 0L-6 4Z" fill="#8a8ea3"/>
+    <text y="16" font-size="11" fill="#8a8ea3" text-anchor="middle">N</text>
+  </g>
+</svg>

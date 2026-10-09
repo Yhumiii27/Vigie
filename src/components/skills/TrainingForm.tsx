@@ -1,0 +1,136 @@
+'use client';
+
+import { useState } from 'react';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
+import { addMonths, fmtDate } from '@/lib/dates';
+import type { SkillRow, TrainingTitle } from '@/lib/data/skills';
+import { saveQualification } from '@/server/skills';
+import { period } from './common';
+import { coversNeed, heldState, lapseFor, type Span } from './rules';
+
+type Props = {
+  rows: SkillRow[];
+  titles: TrainingTitle[];
+  /** Date de référence (serveur). */
+  today: string;
+  /** Salarié et titre imposés (ouverture depuis une case de la matrice). */
+  fixed?: { personId: string; titleId: string };
+  /** Valeurs initiales (correction d'une formation enregistrée). */
+  initial?: { obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null };
+  onDone: () => void;
+  onCancel?: () => void;
+};
+
+const expiryFor = (title: TrainingTitle | undefined, obtainedOn: string) =>
+  title && title.validityMonths > 0 && /^\d{4}-\d{2}-\d{2}$/.test(obtainedOn) ? addMonths(obtainedOn, title.validityMonths) : '';
+
+/** Pourquoi la formation saisie ne règle pas le besoin de recyclage. */
+function gapReason(expiresOn: string | null, assignments: readonly Span[], today: string) {
+  if (!expiresOn) return '';
+  const on = fmtDate(expiresOn);
+  const state = heldState(expiresOn, today);
+  if (state === 'x') return `Avec une échéance au ${on}, le titre resterait expiré`;
+  if (state === 's') return `Avec une échéance au ${on}, le titre expirerait sous 60 jours`;
+  const a = assignments.find((x) => lapseFor(state, expiresOn, x, today));
+  return `Avec une échéance au ${on}, le titre ne couvrirait pas l'affectation Keystone ${a ? period(a.startOn, a.endOn) : ''}`.trimEnd();
+}
+
+/** « Enregistrer une formation » : obtention d'un titre par un salarié, échéance calculée d'après la validité du titre. */
+export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCancel }: Props) {
+  const [personId, setPersonId] = useState(fixed?.personId ?? '');
+  const [titleId, setTitleId] = useState(fixed?.titleId ?? '');
+  const title = titles.find((t) => t.id === titleId);
+  const startOn = initial?.obtainedOn ?? today;
+  const [obtainedOn, setObtainedOn] = useState(startOn);
+  const [expiresOn, setExpiresOn] = useState(initial ? initial.expiresOn ?? '' : expiryFor(title, startOn));
+  // Échéance saisie à la main : conservée quand le titre choisi n'a pas de durée de validité.
+  const [expiryTyped, setExpiryTyped] = useState(false);
+
+  const cellOf = (pid: string, tid: string) => rows.find((r) => r.person.id === pid)?.cells.find((c) => c.title.id === tid);
+  const cell = cellOf(personId, titleId);
+  const renewal = cell?.renewal?.planned ? cell.renewal : null;
+  // Échéance retenue par le serveur (obtention + validité si laissée vide) : règle-t-elle le besoin de recyclage ?
+  const effectiveExpiry = expiresOn || expiryFor(title, obtainedOn) || null;
+  const assignments = rows.find((r) => r.person.id === personId)?.assignments ?? [];
+  const covers = coversNeed(effectiveExpiry, assignments, today);
+  const providers = [...new Set(rows.flatMap((r) => r.cells.map((c) => c.provider)).filter((p): p is string => !!p))].sort((a, b) => a.localeCompare(b, 'fr'));
+  // L'organisme reprend celui de la formation précédente tant que l'utilisateur ne l'a pas saisi.
+  const [provider, setProvider] = useState(initial ? initial.provider ?? '' : cell?.provider ?? '');
+  const [providerTyped, setProviderTyped] = useState(false);
+  const pick = (pid: string, tid: string) => { if (!providerTyped) setProvider(cellOf(pid, tid)?.provider ?? ''); };
+
+  const onPerson = (id: string) => {
+    setPersonId(id);
+    pick(id, titleId);
+  };
+  /** Échéance calculée (obtention + validité) ; un titre sans échéance garde la saisie manuelle, sinon la vide. */
+  const autoExpiry = (ti: TrainingTitle | undefined, d: string) => {
+    if (ti?.validityMonths) {
+      setExpiresOn(expiryFor(ti, d));
+      setExpiryTyped(false);
+    } else if (!expiryTyped) {
+      setExpiresOn('');
+    }
+  };
+  const onTitle = (id: string) => {
+    setTitleId(id);
+    autoExpiry(titles.find((t) => t.id === id), obtainedOn);
+    pick(personId, id);
+  };
+  const onObtained = (d: string) => {
+    setObtainedOn(d);
+    autoExpiry(title, d);
+  };
+
+  return (
+    <ActionForm action={saveQualification} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la formation"
+      hidden={fixed ? { personId: fixed.personId, titleId: fixed.titleId } : undefined}>
+      {!fixed && (
+        <FormRow>
+          <Field name="personId" label="Salarié">
+            <Select name="personId" options={rows.map((r) => [r.person.id, r.person.name] as const)} placeholder="Choisir…" value={personId} onChange={(e) => onPerson(e.target.value)} autoFocus />
+          </Field>
+          <Field name="titleId" label="Titre">
+            <Select name="titleId" options={titles.map((t) => [t.id, t.label] as const)} placeholder="Choisir…" value={titleId} onChange={(e) => onTitle(e.target.value)} />
+          </Field>
+        </FormRow>
+      )}
+      <FormRow>
+        <Field name="obtainedOn" label="Date d'obtention">
+          <Input name="obtainedOn" type="date" max={today} value={obtainedOn} onChange={(e) => onObtained(e.target.value)} autoFocus={!!fixed} />
+        </Field>
+        <Field name="expiresOn" label="Échéance"
+          hint={!title ? undefined : title.validityMonths ? `Obtention + ${title.validityMonths} mois, modifiable.` : 'Titre sans échéance.'}>
+          <Input name="expiresOn" type="date" min={obtainedOn || undefined} value={expiresOn} onChange={(e) => { setExpiresOn(e.target.value); setExpiryTyped(true); }} />
+        </Field>
+      </FormRow>
+      <Field name="provider" label="Organisme de formation" hint="Facultatif · ex. [Apave], [AFPA], formation interne.">
+        <Input name="provider" list="vg-training-providers" value={provider} onChange={(e) => { setProvider(e.target.value); setProviderTyped(true); }} maxLength={120} />
+        <datalist id="vg-training-providers">{providers.map((p) => <option key={p} value={p} />)}</datalist>
+      </Field>
+      {cell?.obtainedOn && !initial && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
+          <span>Remplace la formation du {fmtDate(cell.obtainedOn)}{cell.expiresOn ? ` (échéance ${fmtDate(cell.expiresOn)})` : ''}{cell.provider ? ` · ${cell.provider}` : ''}.</span>
+        </div>
+      )}
+      {cell && !cell.required && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
+          <span>Ce titre deviendra requis pour ce salarié.</span>
+        </div>
+      )}
+      {renewal && covers && (
+        <Checkbox key={`renewal-${renewal.id}`} name="closeRenewal" defaultChecked label={<>Passer l&apos;action {renewal.id} à « Efficacité à vérifier »</>} />
+      )}
+      {renewal && !covers && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+          <i className="ph ph-calendar-x" style={{ fontSize: 14, marginTop: 1 }} />
+          <span style={{ textWrap: 'pretty' }}>
+            {gapReason(effectiveExpiry, assignments, today)} : l&apos;action {renewal.id} reste à réaliser.
+          </span>
+        </div>
+      )}
+    </ActionForm>
+  );
+}
