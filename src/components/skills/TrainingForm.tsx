@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
+import { ATTACH_ACCEPT, MAX_FILE_BYTES } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import type { SkillRow, TrainingTitle } from '@/lib/data/skills';
 import { saveQualification } from '@/server/skills';
@@ -15,8 +16,8 @@ type Props = {
   today: string;
   /** Salarié et titre imposés (ouverture depuis une case de la matrice). */
   fixed?: { personId: string; titleId: string };
-  /** Valeurs initiales (correction d'une formation enregistrée). */
-  initial?: { obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null };
+  /** Valeurs initiales (correction de la formation `qualificationId`, la ligne de l'historique est modifiée). */
+  initial?: { qualificationId: number; obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null };
   onDone: () => void;
   onCancel?: () => void;
 };
@@ -35,7 +36,10 @@ function gapReason(expiresOn: string | null, assignments: readonly Span[], today
   return `Avec une échéance au ${on}, le titre ne couvrirait pas l'affectation Keystone ${a ? period(a.startOn, a.endOn) : ''}`.trimEnd();
 }
 
-/** « Enregistrer une formation » : obtention d'un titre par un salarié, échéance calculée d'après la validité du titre. */
+/**
+ * « Enregistrer une formation » : obtention d'un titre par un salarié, échéance calculée d'après la validité du titre.
+ * Chaque formation s'ajoute à l'historique de la case ; `initial` corrige la formation en cours. Attestation facultative.
+ */
 export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCancel }: Props) {
   const [personId, setPersonId] = useState(fixed?.personId ?? '');
   const [titleId, setTitleId] = useState(fixed?.titleId ?? '');
@@ -83,8 +87,8 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
   };
 
   return (
-    <ActionForm action={saveQualification} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la formation"
-      hidden={fixed ? { personId: fixed.personId, titleId: fixed.titleId } : undefined}>
+    <ActionForm action={saveQualification} onDone={onDone} onCancel={onCancel} submitLabel={initial ? 'Enregistrer la correction' : 'Enregistrer la formation'}
+      encType="multipart/form-data" hidden={{ personId: fixed?.personId, titleId: fixed?.titleId, qualificationId: initial?.qualificationId }}>
       {!fixed && (
         <FormRow>
           <Field name="personId" label="Salarié">
@@ -108,10 +112,13 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
         <Input name="provider" list="vg-training-providers" value={provider} onChange={(e) => { setProvider(e.target.value); setProviderTyped(true); }} maxLength={120} />
         <datalist id="vg-training-providers">{providers.map((p) => <option key={p} value={p} />)}</datalist>
       </Field>
+      <Field name="files" label="Attestation (facultatif)" hint={`PDF ou photo · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier.`}>
+        <Input name="files" type="file" multiple accept={ATTACH_ACCEPT} />
+      </Field>
       {cell?.obtainedOn && !initial && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
           <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
-          <span>Remplace la formation du {fmtDate(cell.obtainedOn)}{cell.expiresOn ? ` (échéance ${fmtDate(cell.expiresOn)})` : ''}{cell.provider ? ` · ${cell.provider}` : ''}.</span>
+          <span>La formation du {fmtDate(cell.obtainedOn)}{cell.expiresOn ? ` (échéance ${fmtDate(cell.expiresOn)})` : ''}{cell.provider ? ` · ${cell.provider}` : ''} reste consultable dans l&apos;historique.</span>
         </div>
       )}
       {cell && !cell.required && (

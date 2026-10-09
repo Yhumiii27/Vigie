@@ -8,6 +8,10 @@ import * as schema from './schema';
 import { seed } from './seed';
 
 export type Db = PgliteDatabase<typeof schema>;
+/** Transaction Drizzle (db.transaction(async (tx) => …)). */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+/** Base ou transaction : pour les helpers appelables dans les deux cas (logChange, rattachements d'actions). */
+export type DbOrTx = Db | Tx;
 
 // Une seule instance PGlite par processus (survit au rechargement à chaud).
 const g = globalThis as unknown as { __vigieDb?: Promise<Db> };

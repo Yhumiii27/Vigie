@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
@@ -56,6 +57,9 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
   doc: DocumentRow; canManage: boolean; canApprove: boolean; options: DocFormOptions; suggestedDueOn: string;
 }) {
   const [mode, setMode] = useState<Mode>('view');
+  // Action de revue (encadré « revue dépassée ») ou action libre (« Nouvelle action »).
+  const [reviewAction, setReviewAction] = useState(true);
+  const newAction = (review: boolean) => { setReviewAction(review); setMode('action'); };
   const back = () => setMode('view');
   const { current, pending } = doc;
   const obsolete = doc.status === 'obsolete';
@@ -109,8 +113,26 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
             {current ? '· ' : ''}{current ? 'révision' : 'version'} {pending.version} {pending.status === 'en_revue' ? `en revue depuis le ${pending.submittedOn ? fmtDate(pending.submittedOn) : '—'}` : 'en brouillon'}
           </span>
         )}
-        {buttons.length > 0 && <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>{buttons}</span>}
+        {(buttons.length > 0 || current?.file) && (
+          <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
+            {current?.file && mode === 'view' && (
+              <a href={`/fichiers/${current.file.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary vg-btn-sm" title={current.file.name}>
+                <Icon name="ph-file-arrow-down" size={13} />Ouvrir la version {current.version}
+              </a>
+            )}
+            {buttons}
+          </span>
+        )}
       </div>
+
+      {obsolete && doc.retired && mode === 'view' && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE.neutral.bg }}>
+          <Icon name="ph-prohibit" size={14} style={{ color: 'var(--color-neutral-400)', flex: 'none', alignSelf: 'center' }} />
+          <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+            Rendu obsolète le {fmtDate(doc.retired.on)} par {doc.retired.by}.{doc.retired.reason && <> Motif : {doc.retired.reason}</>}
+          </span>
+        </div>
+      )}
 
       {showReview && (
         <div className="vg-inset" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', boxShadow: `inset 2px 0 0 ${doc.overdue ? TONE.danger.dot : TONE.warn.dot}` }}>
@@ -126,7 +148,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               Action{doc.reviewActions.length > 1 ? 's' : ''} {doc.reviewActions.map((a) => <ActionLink key={a.id} action={a} />)}
             </span>
           ) : canManage && (
-            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setMode('action')}><Icon name="ph-list-plus" size={13} />Créer une action</button>
+            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => newAction(true)}><Icon name="ph-list-plus" size={13} />Créer une action</button>
           )}
         </div>
       )}
@@ -136,7 +158,12 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           <section style={{ display: 'grid', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <H6>Informations</H6>
-              {canManage && !obsolete && <button type="button" className="vg-text-btn" onClick={() => setMode('edit')}>Modifier</button>}
+              {canManage && !obsolete && (
+                <span style={{ display: 'flex', gap: 14 }}>
+                  <button type="button" className="vg-text-btn" onClick={() => newAction(false)}>Nouvelle action</button>
+                  <button type="button" className="vg-text-btn" onClick={() => setMode('edit')}>Modifier</button>
+                </span>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
               <Meta label="Référence">{doc.id}</Meta>
@@ -160,11 +187,15 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           )}
 
           <section style={{ display: 'grid', gap: 8 }}>
-            <H6>Historique des versions</H6>
+            {/* Consultation seule : la version en vigueur, sans l'historique ni les actions liées. */}
+            <H6>{canManage ? 'Historique des versions' : 'Version en vigueur'}</H6>
             <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ fontSize: 12, minWidth: 820 }}>
+              <table className="table" style={{ fontSize: 12, minWidth: canManage ? 820 : 640 }}>
                 <thead>
-                  <tr><th>Version</th><th>Statut</th><th>Objet de la modification</th><th>Auteur</th><th>Approbateur</th><th>Soumis le</th><th>Approuvé le</th><th>Fichier</th><th>Action liée</th></tr>
+                  <tr>
+                    <th>Version</th><th>Statut</th><th>Objet de la modification</th><th>Auteur</th><th>Approbateur</th>
+                    {canManage && <th>Soumis le</th>}<th>Approuvé le</th><th>Fichier</th>{canManage && <th>Action liée</th>}
+                  </tr>
                 </thead>
                 <tbody>
                   {doc.versions.map((v) => (
@@ -174,10 +205,10 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
                       <td style={{ minWidth: 220, textWrap: 'pretty' }}>{v.summary || '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{v.author}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{v.approver}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{v.submittedOn ? fmtDate(v.submittedOn) : '—'}</td>
+                      {canManage && <td style={{ whiteSpace: 'nowrap' }}>{v.submittedOn ? fmtDate(v.submittedOn) : '—'}</td>}
                       <td style={{ whiteSpace: 'nowrap' }}>{v.approvedOn ? fmtDate(v.approvedOn) : '—'}</td>
                       <td>{v.file ? <FileLink file={v.file} /> : <span className="vg-muted">—</span>}</td>
-                      <td>{v.action ? <ActionLink action={v.action} /> : <span className="vg-muted">—</span>}</td>
+                      {canManage && <td>{v.action ? <ActionLink action={v.action} /> : <span className="vg-muted">—</span>}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -212,13 +243,14 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
                 : <>Le brouillon {pending.version} est abandonné. Le document n&apos;ayant jamais été approuvé, il est classé « Abandonné » et conservé pour traçabilité ; il pourra être relancé par une nouvelle version.</>} />
           )}
           {mode === 'obsolete' && current && (
-            <ConfirmForm action={obsoleteDocument} hidden={{ documentId: doc.id }} submitLabel="Rendre obsolète" submitIcon="ph-prohibit" onDone={back} onCancel={back}
+            <ReasonForm action={obsoleteDocument} hidden={{ documentId: doc.id }} submitLabel="Rendre obsolète" submitIcon="ph-prohibit" onDone={back} onCancel={back}
+              reasonLabel="Motif du retrait" placeholder="Ex. remplacé par un autre document, activité arrêtée, exigence abrogée…"
               message={<>La version {current.version} est retirée de la diffusion et archivée{pending ? <> ; la révision {pending.version} {pending.status === 'en_revue' ? 'en revue' : 'en cours'} est abandonnée</> : null}. Le document est classé obsolète et reste consultable pour traçabilité ; pensez à retirer les exemplaires diffusés ({doc.distribution || 'diffusion non précisée'}).</>} />
           )}
           {mode === 'action' && (
             <ActionFields options={options} onDone={back} onCancel={back} defaults={{
-              title: doc.actionTitle, origin: 'docs', originRef: doc.id, lockOrigin: true, pilotId: doc.ownerId,
-              dueOn: doc.dueSoon && doc.nextReviewOn ? doc.nextReviewOn : suggestedDueOn, kind: 'P', siteId: doc.siteId,
+              title: reviewAction ? doc.actionTitle : undefined, origin: 'docs', originRef: doc.id, lockOrigin: true, pilotId: doc.ownerId,
+              dueOn: reviewAction && doc.dueSoon && doc.nextReviewOn ? doc.nextReviewOn : suggestedDueOn, kind: 'P', siteId: doc.siteId,
               // Rattachement à une version seulement si une révision en cours n'a pas encore d'action : la version en vigueur
               // garde l'action qui l'a fait naître. Sinon l'action est reliée par sa référence d'origine (doc.reviewActions)
               // et proposée d'office dans « Nouvelle révision », qui l'attache à la version créée.

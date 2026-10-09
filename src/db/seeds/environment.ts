@@ -5,6 +5,9 @@ import type { SeedTx } from './types';
 // Jeu de données initial du domaine « Environnement et déchets », relatif au 07/10/2026.
 // Registre 2026 incomplet : quatre enlèvements de déchets dangereux sans bordereau Trackdéchets
 // (exigence « Code de l'environnement — R. 541-45 · Trackdéchets » à évaluer dans la veille).
+// Deux bordereaux non finalisés plus de 30 jours après la collecte (FD-11 du 19/08, FD-04 du 27/08), un enlèvement
+// annulé (doublon du 08/07, motif conservé), le relevé de septembre 2026 manquant sur le site B, et les deux
+// enlèvements consécutifs au déversement EV-2026-126 rattachés à l'événement.
 
 // [id, site, libellé, code déchet, unité, code traitement, filière de traitement, collecteur, installation de destination]
 const STREAMS: [string, string, string, string, string, string, string, string, string][] = [
@@ -54,10 +57,11 @@ const ENTRIES: [string, string, number, string | null, string | null, string | n
   ['FD-12', '2026-07-01', 290, null, null, null, null],
   ['FD-09', '2026-07-08', 1340, null, null, '[Transports Benne Express]', null],
   ['FD-03', '2026-07-17', 210, null, null, null, 'Numéro de bordereau non communiqué par le collecteur — relance en cours.'],
+  ['FD-11', '2026-08-19', 240, 'BSD-20260818-M3QX7TBC', 'collecte', null, 'Certificat de traitement non reçu de la raffinerie.'],
   ['FD-05', '2026-08-26', 2450, null, null, null, 'Activité réduite (fermeture estivale).'],
+  ['FD-04', '2026-08-27', 1920, 'BSD-20260826-K5RW3HDN', 'emis', null, 'Signature du transporteur en attente dans Trackdéchets.'],
   ['FD-06', '2026-09-09', 580, null, null, null, null],
   ['FD-08', '2026-09-16', 1390, null, null, null, null],
-  ['FD-04', '2026-09-17', 1920, 'BSD-20260916-K5RW3HDN', 'emis', null, 'Signature du transporteur en attente dans Trackdéchets.'],
   ['FD-10', '2026-09-23', 110, 'BSD-20260922-R8DM2XWF', 'collecte', null, null],
   ['FD-01', '2026-09-29', 520, 'BSD-20260928-Q7TB4MZE', 'collecte', null, "Huile pompée dans la rétention après le déversement EV-2026-126 et vidange de la cuve 1 000 L du magasin."],
   ['FD-02', '2026-09-29', 85, null, null, null, 'Absorbants utilisés lors du déversement EV-2026-126 — BSD à créer.'],
@@ -93,13 +97,23 @@ export async function seedEnvironment(tx: SeedTx) {
       // Copies figées à l'inscription (cf. saveWasteEntry).
       ewcCode: s.ewcCode, treatmentCode: s.treatmentCode, destination: s.destination,
       transporter: transporter ?? s.collector, notes,
+      // Enlèvements consécutifs au déversement du magasin.
+      eventId: notes?.includes('EV-2026-126') ? 'EV-2026-126' : null,
     };
   }));
+  // Doublon saisi par erreur puis annulé (registre conservé : jamais de suppression).
+  const dib = byId.get('FD-09')!;
+  await tx.insert(t.wasteEntries).values({
+    siteId: dib.siteId, streamId: dib.id, removedOn: '2026-07-09', quantity: 1340, transporter: '[Transports Benne Express]',
+    ewcCode: dib.ewcCode, treatmentCode: dib.treatmentCode, destination: dib.destination, notes: null,
+    cancelledAt: new Date('2026-07-10T09:30:00+02:00'), cancelledById: 'clefevre', cancelReason: "Doublon de l'enlèvement du 08/07/2026 (saisie en double).",
+  });
 
-  // Janvier 2025 → septembre 2026, pour les deux sites (léger aléa déterministe de ±4 %).
+  // Janvier 2025 → septembre 2026 (août 2026 pour le site B : relevé de septembre manquant), léger aléa de ±4 %.
   const rows: (typeof t.consumptions.$inferInsert)[] = [];
   Object.entries(BASE).forEach(([siteId, kinds], si) => {
-    for (let i = 0; i < 21; i++) {
+    const months = siteId === 'ville-b' ? 20 : 21;
+    for (let i = 0; i < months; i++) {
       const y = 2025 + Math.floor(i / 12), m = (i % 12) + 1;
       (Object.keys(kinds) as (keyof typeof SEASON)[]).forEach((kind, ki) => {
         const jitter = 1 + (((m * 7 + y * 3 + si * 5 + ki * 2) % 9) - 4) / 100;

@@ -1,25 +1,32 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, count, eq, ne } from 'drizzle-orm';
+import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   BSD_NUMBER, BSD_STATUS_KEYS, CONSUMPTION_KINDS, TREATMENT_KEYS, WASTE_UNIT_KEYS, isHazardousCode, normalizeEwc,
 } from '@/components/environment/model';
 import { fmtDate, today } from '@/lib/dates';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
-import { canSee } from '@/lib/domain';
-import { requireManager } from '@/lib/guard';
+import { STEP_CLOSED, canEdit } from '@/lib/domain';
+import { requireInSite, requireManager } from '@/lib/guard';
+import { currentPersonId } from '@/lib/session';
+import { diffFields, logChange } from './changelog';
 
 const MAX_QUANTITY = 9_999_999_999;
 const MAX_CONSUMPTION = 999_999_999;
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
-/** Saisie réservée aux rôles qui ont accès à l'écran « Environnement et déchets » (hors salariés). */
+/** Saisie réservée aux rôles qui ont accès à l'écran « Environnement et déchets » (hors salariés et lecture seule). */
 async function requireEnvManager(): Promise<string | null> {
   const { session, error } = await requireManager();
-  return error ?? (canSee(session.role, 'env') ? null : 'Votre rôle ne permet pas cette modification.');
+  return error ?? (canEdit(session.role, 'env') ? null : 'Votre rôle ne permet pas cette modification.');
 }
+
+const ENTRY_LABELS = {
+  streamId: 'Filière', removedOn: "Date d'enlèvement", quantity: 'Quantité', transporter: 'Transporteur',
+  bsdNumber: 'N° de bordereau', bsdStatus: 'Statut du bordereau', notes: 'Observations', eventId: 'Événement lié',
+} as const;
 
 async function siteIds() {
   const db = await getDb();
@@ -32,7 +39,8 @@ async function siteIds() {
  * Inscrit ou modifie un enlèvement au registre chronologique. Le site est celui de la filière ;
  * le transporteur vaut par défaut le collecteur de la filière. Le code déchet, le code de traitement
  * et l'exutoire de la filière sont copiés à l'inscription (et à chaque changement de filière). Un numéro
- * de BSD ne peut figurer que sur un seul enlèvement.
+ * de BSD ne peut figurer que sur un seul enlèvement non annulé. L'événement lié est un événement environnemental
+ * ouvert du site de la filière (un lien existant est conservé tel quel, même si l'événement a été clôturé depuis).
  */
 export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<FormState> {
   const error = await requireEnvManager();
@@ -49,6 +57,7 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   const bsdNumber = f.str('bsdNumber', { max: 40 }).replace(/\s+/g, '').toUpperCase() || null;
   let bsdStatus = f.oneOf('bsdStatus', BSD_STATUS_KEYS);
   const notes = f.str('notes', { max: 1000 }) || null;
+  const eventId = f.opt('eventId');
 
   if (removedOn && removedOn > today()) f.fail('removedOn', "Le registre consigne les déchets sortis : date postérieure à aujourd'hui.");
   if (removedOn && removedOn < '2000-01-01') f.fail('removedOn', 'Date invalide.');
@@ -58,19 +67,33 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   if (bsdStatus && !bsdNumber) f.fail('bsdNumber', 'Numéro du bordereau requis pour indiquer son statut.');
   if (bsdNumber && !bsdStatus) bsdStatus = 'emis';
 
-  const [current] = id ? await db.select({ streamId: t.wasteEntries.streamId }).from(t.wasteEntries).where(eq(t.wasteEntries.id, id)) : [];
-  if (id && !current) return { error: 'Enlèvement introuvable (supprimé entre-temps ?).' };
+  const [current] = id ? await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.id, id)) : [];
+  if (id && !current) return { error: 'Enlèvement introuvable.' };
+  if (current?.cancelledAt) return { error: "Enlèvement annulé : il n'est plus modifiable." };
   const [stream] = streamId ? await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, streamId)) : [];
   if (streamId && !stream) f.fail('streamId', 'Filière inconnue.');
   if (stream && !transporter) transporter = stream.collector;
+  // Nouveau lien (ou enlèvement passé sur une filière d'un autre site) : mêmes règles que la liste proposée par le formulaire.
+  const relinked = eventId !== (current?.eventId ?? null);
+  if (eventId && (relinked || (stream && stream.siteId !== current?.siteId))) {
+    const [ev] = await db.select({ type: t.events.type, siteId: t.events.siteId, step: t.events.step, dismissedAt: t.events.dismissedAt })
+      .from(t.events).where(eq(t.events.id, eventId));
+    if (!ev) f.fail('eventId', 'Événement introuvable.');
+    else if (ev.type !== 'ENV') f.fail('eventId', 'Seul un événement environnemental peut être lié.');
+    else if (stream && ev.siteId !== stream.siteId) f.fail('eventId', "Événement d'un autre site que la filière.");
+    else if (relinked && (ev.dismissedAt || ev.step >= STEP_CLOSED)) f.fail('eventId', 'Événement clôturé ou classé sans suite.');
+  }
 
   if (bsdNumber) {
+    // Un enlèvement annulé (erreur de filière, doublon) libère son numéro pour l'inscription corrigée.
     const [dup] = await db.select({ id: t.wasteEntries.id, removedOn: t.wasteEntries.removedOn, streamId: t.wasteEntries.streamId })
       .from(t.wasteEntries)
-      .where(id ? and(eq(t.wasteEntries.bsdNumber, bsdNumber), ne(t.wasteEntries.id, id)) : eq(t.wasteEntries.bsdNumber, bsdNumber));
+      .where(and(eq(t.wasteEntries.bsdNumber, bsdNumber), isNull(t.wasteEntries.cancelledAt), id ? ne(t.wasteEntries.id, id) : undefined));
     if (dup) f.fail('bsdNumber', `Bordereau déjà inscrit pour l'enlèvement du ${fmtDate(dup.removedOn)}.`);
   }
   if (!f.ok) return f.state();
+  const siteError = (current && (await requireInSite(current.siteId))) || (await requireInSite(stream!.siteId, { create: !current || current.siteId !== stream!.siteId }));
+  if (siteError) return { error: siteError };
 
   // Copies figées du code déchet, du code de traitement et de l'exutoire : prises sur la filière à l'inscription,
   // reprises seulement si l'enlèvement change de filière (modifier la filière ne réécrit pas le registre).
@@ -79,29 +102,54 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
     : {};
   const values = {
     siteId: stream!.siteId, streamId: stream!.id, removedOn: removedOn!, quantity: quantity!,
-    transporter, bsdNumber, bsdStatus: bsdNumber ? bsdStatus : null, notes, ...frozen,
+    transporter, bsdNumber, bsdStatus: bsdNumber ? bsdStatus : null, notes, eventId, ...frozen,
   };
-  let savedId = id;
-  if (id) {
-    const [row] = await db.update(t.wasteEntries).set(values).where(eq(t.wasteEntries.id, id)).returning({ id: t.wasteEntries.id });
-    if (!row) return { error: 'Enlèvement introuvable (supprimé entre-temps ?).' };
-  } else {
-    const [row] = await db.insert(t.wasteEntries).values(values).returning({ id: t.wasteEntries.id });
-    savedId = row.id;
-  }
+  const label = `${stream!.label} du ${fmtDate(removedOn!)}`;
+  const savedId = await db.transaction(async (tx) => {
+    if (current) {
+      const [row] = await tx.update(t.wasteEntries).set(values).where(and(eq(t.wasteEntries.id, current.id), isNull(t.wasteEntries.cancelledAt)))
+        .returning({ id: t.wasteEntries.id });
+      if (!row) return null;
+      const details = diffFields(current, values, ENTRY_LABELS, (v) => (v == null || v === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtDate(String(v)) : String(v)));
+      if (details.length) await logChange(tx, { entityType: 'waste_entry', entityId: row.id, action: 'update', summary: 'Enlèvement modifié', details });
+      return row.id;
+    }
+    const [row] = await tx.insert(t.wasteEntries).values(values).returning({ id: t.wasteEntries.id });
+    await logChange(tx, { entityType: 'waste_entry', entityId: row.id, action: 'create', summary: `Inscription au registre : ${label}` });
+    return row.id;
+  });
+  if (savedId == null) return { error: 'Enlèvement annulé entre-temps : rouvrez le registre.' };
   revalidatePath('/', 'layout');
   return { ok: true, id: String(savedId) };
 }
 
-export async function deleteWasteEntry(id: number): Promise<{ error?: string }> {
+/**
+ * Annule un enlèvement inscrit par erreur (doublon, saisie erronée) : la ligne reste au registre avec qui, quand
+ * et pourquoi (R. 541-43, conservation 3 ans), mais sort des indicateurs, des échéances et de l'export.
+ */
+export async function cancelWasteEntry(_prev: FormState, fd: FormData): Promise<FormState> {
   const error = await requireEnvManager();
   if (error) return { error };
-  if (!Number.isInteger(id)) return { error: 'Enlèvement introuvable.' };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
   const db = await getDb();
-  const deleted = await db.delete(t.wasteEntries).where(eq(t.wasteEntries.id, id)).returning({ id: t.wasteEntries.id });
-  if (!deleted.length) return { error: 'Enlèvement introuvable (déjà supprimé ?).' };
+  const [entry] = await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.id, id!));
+  if (!entry) return { error: 'Enlèvement introuvable.' };
+  if (entry.cancelledAt) return { error: 'Cet enlèvement est déjà annulé.' };
+  const siteError = await requireInSite(entry.siteId);
+  if (siteError) return { error: siteError };
+  const done = await db.transaction(async (tx) => {
+    const [row] = await tx.update(t.wasteEntries).set({ cancelledAt: new Date(), cancelledById: await currentPersonId(), cancelReason: reason })
+      .where(and(eq(t.wasteEntries.id, entry.id), isNull(t.wasteEntries.cancelledAt))).returning({ id: t.wasteEntries.id });
+    if (!row) return false;
+    await logChange(tx, { entityType: 'waste_entry', entityId: entry.id, action: 'cancel', summary: 'Enlèvement annulé', reason });
+    return true;
+  });
+  if (!done) return { error: 'Cet enlèvement est déjà annulé.' };
   revalidatePath('/', 'layout');
-  return {};
+  return { ok: true, id: String(entry.id) };
 }
 
 // ─── Filières ───────────────────────────────────────────────────────────────
@@ -122,6 +170,8 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
   const id = f.opt('id');
   const [current] = id ? await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, id)) : [];
   if (id && !current) return { error: 'Filière introuvable (supprimée entre-temps ?).' };
+  const currentSiteError = current ? await requireInSite(current.siteId) : null;
+  if (currentSiteError) return { error: currentSiteError };
   const [{ n: used }] = current
     ? await db.select({ n: count() }).from(t.wasteEntries).where(eq(t.wasteEntries.streamId, current.id))
     : [{ n: 0 }];
@@ -143,6 +193,10 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
     if (same.some((s) => s.id !== id && s.label.toLocaleLowerCase('fr') === label.toLocaleLowerCase('fr'))) f.fail('label', 'Une filière porte déjà ce libellé sur ce site.');
   }
   if (!f.ok) return f.state();
+  if (!current || current.siteId !== siteId) {
+    const siteError = await requireInSite(siteId, { create: true });
+    if (siteError) return { error: siteError, fieldErrors: { siteId: 'Site non autorisé.' } };
+  }
 
   const values = {
     label, ewcCode: ewcCode!, hazardous: isHazardousCode(ewcCode!), treatmentCode: treatmentCode!, channel, collector, destination,
@@ -166,6 +220,11 @@ export async function deleteWasteStream(id: string): Promise<{ error?: string }>
   if (error) return { error };
   if (typeof id !== 'string' || !id) return { error: 'Filière introuvable.' };
   const db = await getDb();
+  const [stream] = await db.select({ siteId: t.wasteStreams.siteId }).from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
+  if (!stream) return { error: 'Filière introuvable (déjà supprimée ?).' };
+  const siteError = await requireInSite(stream.siteId);
+  if (siteError) return { error: siteError };
+  // Les enlèvements annulés comptent aussi : ils restent au registre et référencent la filière.
   const [{ n }] = await db.select({ n: count() }).from(t.wasteEntries).where(eq(t.wasteEntries.streamId, id));
   if (n > 0) return { error: `Cette filière porte ${n} enlèvement${n > 1 ? 's' : ''} au registre : elle ne peut pas être supprimée.` };
   const deleted = await db.delete(t.wasteStreams).where(eq(t.wasteStreams.id, id)).returning({ id: t.wasteStreams.id });
@@ -196,6 +255,8 @@ export async function saveConsumptionMonth(_prev: FormState, fd: FormData): Prom
   if (month && month < '2000-01-01') f.fail('month', 'Mois invalide.');
   values.forEach((v) => { if (v.value != null && v.value > MAX_CONSUMPTION) f.fail(v.kind, 'Valeur trop élevée.'); });
   if (!f.ok) return f.state();
+  const siteError = await requireInSite(siteId, { create: true });
+  if (siteError) return { error: siteError };
 
   const db = await getDb();
   const existing = await db.select({ kind: t.consumptions.kind }).from(t.consumptions)

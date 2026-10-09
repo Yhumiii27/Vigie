@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
-import { Icon, SegLinks, hrefWith } from '@/components/ui';
+import { Icon, MissingNotice, SegLinks, hrefWith } from '@/components/ui';
+import { ArchivePanel } from '@/components/risks/ArchivePanel';
 import { AddRiskButton } from '@/components/risks/RiskForm';
 import { RiskTable } from '@/components/risks/RiskTable';
 import { AddUnitButton, EditUnitButton } from '@/components/risks/UnitDialogs';
 import { ExportMenu } from '@/components/risks/ExportMenu';
 import { NewVersionButton, VersionsButton } from '@/components/risks/VersionDialogs';
 import { fmtDate } from '@/lib/dates';
-import { RISK_ACTION_THRESHOLD, RISK_LEVELS, SCREENS, TONE, canApprove, canManage, riskLevel } from '@/lib/domain';
+import { RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canManage, canSee, riskLevel } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { loadRisks } from '@/lib/data/risks';
@@ -19,12 +20,20 @@ export const metadata: Metadata = { title: SCREENS.risks.title };
 export default async function RisksPage({ searchParams }: PageProps<'/risques'>) {
   const session = await guard('risks');
   const sp = await searchParams;
-  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks }, options] = await Promise.all([loadRisks(), loadFormOptions()]);
+  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, duerpRequirement }, options] =
+    await Promise.all([loadRisks(), loadFormOptions()]);
   const manage = canManage(session.role);
   const approve = canApprove(session.role);
-  const unitId = typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : units[0]?.id;
+  // Lien profond ?risque=<id> (échéances, plan d'actions, événement) : ouvre la fiche du risque dans son unité,
+  // ou dans le filtre « Archivés » pour un risque archivé.
+  const riskParam = typeof sp.risque === 'string' ? Number(sp.risque) : null;
+  const deepRisk = riskParam == null ? undefined : risks.find((r) => r.id === riskParam);
+  const deepArchived = riskParam == null || deepRisk ? undefined : archivedRisks.find((r) => r.id === riskParam);
+  const archives = sp.archives === '1' || !!deepArchived;
+  const archivedCount = archivedRisks.length + archivedUnits.length;
+  const unitId = deepRisk?.unitId ?? (typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : units[0]?.id);
   const residual = sp.mode === 'residuel';
-  const params = { unite: unitId === units[0]?.id ? undefined : unitId, mode: residual ? 'residuel' : undefined };
+  const params = { unite: unitId === units[0]?.id ? undefined : unitId, mode: residual ? 'residuel' : undefined, archives: archives ? '1' : undefined };
   const rows = risks.filter((r) => r.unitId === unitId);
   const unit = units.find((u) => u.id === unitId);
   // Site affiché (null = « Tous les sites ») : une unité rattachée à un autre site n'apparaît pas dans la liste.
@@ -45,6 +54,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
   const high = rows.filter((r) => r.gravity * r.probability >= RISK_ACTION_THRESHOLD).length;
   const resHigh = rows.filter((r) => r.residualGravity * r.residualProbability >= RISK_ACTION_THRESHOLD).length;
+  const toReview = rows.filter((r) => r.flag === 'toReview').length;
   const stats = [
     { v: rows.length, k: 'risques évalués', color: 'var(--color-text)' },
     { v: high, k: 'élevés ou critiques (brut)', color: high ? RISK_LEVELS[2].dot : 'var(--color-text)' },
@@ -55,7 +65,8 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
     ? ` · dépassée de ${-version.daysToUpdate} j`
     : version.daysToUpdate === 0 ? " · aujourd'hui"
     : version.daysToUpdate <= 30 ? ` · dans ${version.daysToUpdate} j` : '';
-  const banner: { k: string; v: string; color?: string }[] = version ? [
+  const requirementLink = duerpRequirement && canSee(session.role, 'watch') ? duerpRequirement.href : null;
+  const banner: { k: string; v: string; color?: string; link?: { href: string; label: string } }[] = version ? [
     { k: 'Version', v: version.version },
     {
       k: 'Mise à jour annuelle',
@@ -67,6 +78,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
       k: 'Validation',
       v: [version.validatedBy, version.cseConsultedOn ? `CSE consulté le ${fmtDate(version.cseConsultedOn)}` : 'consultation du CSE à renseigner'].filter(Boolean).join(' · '),
       color: version.cseConsultedOn ? undefined : TONE.warn.fg,
+      link: requirementLink ? { href: requirementLink, label: 'Exigence R. 4121-1' } : undefined,
     },
   ] : [{ k: 'Version', v: 'Aucune version en vigueur', color: TONE.warn.fg }];
 
@@ -76,10 +88,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
       <div className="vg-page">
         <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="ph-file-text" size={18} style={{ color: 'var(--color-accent)' }} /><span style={{ fontWeight: 500 }}>DUERP</span></div>
-          {banner.map(({ k, v, color }) => (
+          {banner.map(({ k, v, color, link }) => (
             <div key={k} style={{ display: 'grid', gap: 1 }}>
               <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{k}</span>
               <span style={{ fontSize: 12.5, color }}>{v}</span>
+              {link && <Link href={link.href} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ph-scales" size={12} />{link.label}</Link>}
             </div>
           ))}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -89,21 +102,44 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           </span>
         </div>
 
+        {typeof sp.risque === 'string' && !deepRisk && !deepArchived && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
+
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 216px) minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
           <div style={{ display: 'grid', gap: 2 }}>
             <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>Unités de travail</div>
             {units.map((u) => (
-              <Link key={u.id} href={hrefWith('/risques', params, { unite: u.id === units[0].id ? undefined : u.id })} scroll={false} className={`vg-item${u.id === unitId ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
+              <Link key={u.id} href={hrefWith('/risques', params, { unite: u.id === units[0].id ? undefined : u.id, archives: undefined })} scroll={false} className={`vg-item${u.id === unitId && !archives ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
                 <span style={{ flex: 1, fontSize: 12.5 }}>{u.label}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{u.count}</span>
+                {u.alerts > 0 && (
+                  <span title={`${u.alerts} risque${u.alerts > 1 ? 's' : ''} ≥ ${RISK_ACTION_THRESHOLD} sans action de réduction ou au résiduel encore élevé`}
+                    style={{ fontSize: 10.5, fontWeight: 500, color: TONE.danger.fg, background: TONE.danger.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{u.alerts}</span>
+                )}
+                {u.toReview > 0 && (
+                  <span title={`${u.toReview} ${u.toReview > 1 ? 'résiduels' : 'résiduel'} à recoter (actions clôturées)`} style={{ display: 'inline-flex' }}>
+                    <Icon name="ph-arrows-clockwise" size={12} style={{ color: TONE.warn.dot }} />
+                  </span>
+                )}
                 <span className="vg-dot" style={{ width: 7, height: 7, background: u.count ? RISK_LEVELS[u.top].dot : 'var(--color-neutral-700)' }} />
               </Link>
             ))}
             {!units.length && <div style={{ padding: '4px 10px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune unité sur ce site.</div>}
+            {(archivedCount > 0 || archives) && (
+              <Link href={hrefWith('/risques', params, { archives: archives ? undefined : '1' })} scroll={false} className={`vg-item${archives ? ' is-on' : ''}`}
+                style={{ gap: 8, padding: '7px 10px', marginTop: 4, color: 'var(--color-neutral-400)' }} title="Unités et risques retirés du document unique, avec leur motif et leur historique">
+                <Icon name="ph-archive" size={13} />
+                <span style={{ flex: 1, fontSize: 12.5 }}>Archivés</span>
+                <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{archivedCount}</span>
+              </Link>
+            )}
             {manage && <AddUnitButton sites={options.sites} defaultSiteId={defaultSiteId} viewSite={viewSite} residual={residual} />}
           </div>
 
-          {unit ? (
+          {archives ? (
+            <ArchivePanel key={deepArchived?.id ?? 'archives'} risks={archivedRisks} units={units} archivedUnits={archivedUnits} canApprove={approve}
+              options={{ people: options.people, origins: options.origins, sites: options.sites }} linkableActions={linkableActions}
+              showSite={!viewSite} residual={residual} initialRiskId={deepArchived?.id} />
+          ) : unit ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
                 <div className="card" style={{ gap: 10, minWidth: 0 }}>
@@ -128,7 +164,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 <div className="card" style={{ gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 22 }}>
                     <div className="card-kicker">{unit.label}{units.some((u) => u.site !== unit.site) ? ` · ${unit.site}` : ''}</div>
-                    {manage && <EditUnitButton unit={unit} sites={options.sites} viewSite={viewSite} residual={residual} />}
+                    {manage && <EditUnitButton unit={unit} sites={options.sites} viewSite={viewSite} residual={residual} isFirst={units[0]?.id === unit.id} isLast={units.at(-1)?.id === unit.id} />}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                     {stats.map((k) => (
@@ -138,6 +174,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                       </div>
                     ))}
                   </div>
+                  {toReview > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TONE.warn.fg }} title={RISK_FLAGS.toReview.hint}>
+                      <Icon name="ph-arrows-clockwise" size={13} />{toReview} {toReview > 1 ? 'résiduels' : 'résiduel'} à recoter
+                    </div>
+                  )}
                   <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', fontSize: 12, textWrap: 'pretty' }}>
                     Cotation gravité 1–4 × probabilité 1–4. À partir de {RISK_ACTION_THRESHOLD}, une action de réduction est obligatoire et suivie dans le plan d&apos;actions unique ; le risque résiduel est recoté après vérification d&apos;efficacité.
                   </p>
@@ -150,8 +191,9 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
               <div className="card" style={{ padding: '6px 14px 10px' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <RiskTable rows={rows} unit={unit} units={unitOptions} canManage={manage}
-                    options={{ people: options.people, origins: options.origins, sites: options.sites }} />
+                  <RiskTable key={`${unit.id}:${deepRisk?.id ?? ''}`} rows={rows} unit={unit} units={unitOptions} canManage={manage}
+                    options={{ people: options.people, origins: options.origins, sites: options.sites }}
+                    linkableActions={linkableActions} initialRiskId={deepRisk?.id} />
                 </div>
               </div>
             </div>

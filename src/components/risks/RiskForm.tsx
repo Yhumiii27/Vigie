@@ -2,7 +2,7 @@
 
 import { useId, useState, type CSSProperties } from 'react';
 import { DialogButton } from '@/components/Dialog';
-import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { RISK_ACTION_THRESHOLD, RISK_LEVELS, SEVERITY, riskLevel } from '@/lib/domain';
 import type { RiskView, WorkUnitView } from '@/lib/data/risks';
 import { saveRisk } from '@/server/risks';
@@ -36,12 +36,17 @@ function LiveCotation({ label, g, p, hint }: { label: string; g: number; p: numb
   );
 }
 
+/** Valeurs initiales du formulaire (une RiskView convient : ses autres champs, dont residualReviewedOn, sont ignorés). */
 export type RiskFormDefaults = Partial<Pick<RiskView, 'id' | 'unitId' | 'hazard' | 'situation' | 'gravity' | 'probability' | 'existingMeasures' | 'residualGravity' | 'residualProbability'>>;
 
-/** Formulaire d'ajout / de modification d'un risque, avec cotation brute et résiduelle calculées en direct. */
-export function RiskFields({ units, defaults = {}, onDone, onCancel }: {
+/**
+ * Formulaire d'ajout / de modification d'un risque, avec cotation brute et résiduelle calculées en direct.
+ * `reviewPrompt` : actions clôturées, résiduel à recoter — la case enregistre la recotation même sans changement de cotation.
+ */
+export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCancel }: {
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];
   defaults?: RiskFormDefaults;
+  reviewPrompt?: boolean;
   onDone: () => void;
   onCancel?: () => void;
 }) {
@@ -84,6 +89,7 @@ export function RiskFields({ units, defaults = {}, onDone, onCancel }: {
         </Field>
         <LiveCotation label="Risque résiduel" g={rg} p={rp} hint={rg * rp >= RISK_ACTION_THRESHOLD ? `Résiduel ≥ ${RISK_ACTION_THRESHOLD} : réduction encore nécessaire.` : undefined} />
       </FormRow>
+      {reviewPrompt && <Checkbox name="residualReviewed" label="Résiduel recoté après vérification d'efficacité" defaultChecked />}
     </ActionForm>
   );
 }

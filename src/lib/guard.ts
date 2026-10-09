@@ -1,7 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { SCREENS, canApprove, canManage, canSee, homeOf, type ScreenKey } from './domain';
-import { getSession } from './session';
+import { ALL_SITES as ALL_SITES_ID, activeSiteIds, getSession, inSite } from './session';
 
 /** Redirige vers l'écran d'accueil du rôle si l'écran ne lui est pas ouvert. */
 export async function guard(screen: ScreenKey) {
@@ -20,4 +20,19 @@ export async function requireManager() {
 export async function requireApprover() {
   const session = await getSession();
   return canApprove(session.role) ? { session, error: null } : { session, error: "Réservé à l'animateur QHSE et à la direction." };
+}
+
+/**
+ * Contrôle du site sélectionné pour les server actions qui modifient une donnée portant un siteId.
+ * Renvoie un message d'erreur, ou null si la modification est permise :
+ * - la donnée appartient au site sélectionné (ou vaut pour tous les sites), ou « Tous les sites » est sélectionné ;
+ * - `create` : un nouvel enregistrement (ou un changement de site) ne peut viser qu'un site actif.
+ * À appeler après le chargement de l'enregistrement, avec son siteId (et le nouveau siteId en cas de changement).
+ */
+export async function requireInSite(siteId: string | null | undefined, opts: { create?: boolean } = {}): Promise<string | null> {
+  const { site } = await getSession();
+  const selected = site.id === ALL_SITES_ID ? null : site.id;
+  if (!inSite(selected, siteId)) return "Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.";
+  if (opts.create && siteId && !(await activeSiteIds()).includes(siteId)) return 'Site archivé ou inconnu : choisissez un site actif.';
+  return null;
 }

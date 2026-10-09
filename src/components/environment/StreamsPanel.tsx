@@ -1,14 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useState } from 'react';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
-import { ToneTag } from '@/components/ui';
+import { Icon, ToneTag, hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import type { StreamView } from '@/lib/data/environment';
 import { deleteWasteStream, saveWasteStream } from '@/server/environment';
 import { TREATMENT_CODES, WASTE_UNITS, fmtDelta, fmtQty, isHazardousCode, isRecovery, normalizeEwc, treatmentLabel } from './model';
-import { DeleteZone, Note, Suggestions, muted, rowOpener, shortSite } from './parts';
+import { DeleteZone, LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions } from './parts';
 
 type Opt = readonly (readonly [string, string])[];
 export type StreamSuggestions = { channels: string[]; collectors: string[]; destinations: string[] };
@@ -17,16 +18,21 @@ const TREATMENT_OPTIONS = TREATMENT_CODES.map(([c, l]) => [c, `${c} — ${l}`] a
 
 // ─── Catalogue des filières ─────────────────────────────────────────────────
 
-export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, sites, suggestions }: {
+export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showSite, sites, suggestions, actionOptions }: {
   streams: StreamView[];
   year: number;
+  /** Paramètre `annee` de l'URL (absent pour l'année en cours) : liens vers le registre filtré. */
+  annee?: string;
   /** Année en cours : la variation se compare à N-1 arrêtée à la même date. */
   isCurrent: boolean;
   canManage: boolean;
   showSite: boolean;
   sites: Opt;
   suggestions: StreamSuggestions;
+  /** Listes de choix du formulaire d'action (null : création d'action non permise). */
+  actionOptions: ActionOptions | null;
 }) {
+  const registerHref = (id: string) => hrefWith('/environnement', { annee }, { filiere: id });
   const [selId, setSelId] = useState<string | null>(null);
   const stream = selId ? streams.find((s) => s.id === selId) ?? null : null;
   const close = () => setSelId(null);
@@ -73,7 +79,7 @@ export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, si
                     {s.prevQty ? fmtQty(s.prevQty, s.unit) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {s.yearCount}
+                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={`Registre ${year} filtré sur cette filière`}>{s.yearCount}</Link> : 0}
                     {s.lastRemovedOn && <div style={muted}>dernier {fmtDate(s.lastRemovedOn)}</div>}
                   </td>
                 </tr>
@@ -86,8 +92,23 @@ export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, si
       <Dialog open={!!stream} onClose={close} width={640} kicker={stream ? `Filière ${stream.id} · ${shortSite(stream.site)}` : undefined} title={stream?.label ?? ''}>
         {stream && (
           <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--color-neutral-300)', marginBottom: 12 }}>
+              <Icon name="ph-list-numbers" size={14} />
+              {stream.yearCount ? (
+                <Link href={registerHref(stream.id)} scroll={false} className="vg-link" onClick={close}>
+                  Voir {stream.yearCount > 1 ? `les ${stream.yearCount} enlèvements` : "l'enlèvement"} de {year} au registre
+                </Link>
+              ) : <span>Aucun enlèvement en {year}.</span>}
+              {stream.entryCount > stream.yearCount && <span style={muted}>· {stream.entryCount} toutes années</span>}
+              {stream.cancelledCount > 0 && <span style={muted}>· {stream.cancelledCount} annulé{stream.cancelledCount > 1 ? 's' : ''}</span>}
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <LinkedActions actions={stream.actions} options={actionOptions} canAct={!!actionOptions}
+                defaults={{ originRef: stream.id, siteId: stream.siteId, kind: 'P', description: `Filière ${stream.id} · ${stream.label} (${stream.ewcCode}) · exutoire ${stream.destination}.` }} />
+            </div>
             <StreamForm key={stream.id} stream={stream} sites={sites} defaultSite={stream.siteId} suggestions={suggestions} onDone={close} onCancel={close} />
-            {stream.entryCount === 0 && (
+            {/* Les enlèvements annulés restent au registre et référencent la filière : elle n'est alors plus supprimable. */}
+            {stream.entryCount + stream.cancelledCount === 0 && (
               <DeleteZone label="Supprimer la filière" run={() => deleteWasteStream(stream.id)} onDone={close}
                 question={<>Supprimer la filière « {stream.label} » ? Aucun enlèvement n&apos;est inscrit au registre.</>} />
             )}
@@ -117,7 +138,9 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
   const [treatment, setTreatment] = useState(stream?.treatmentCode ?? '');
   const normalized = normalizeEwc(code);
   const hazardous = isHazardousCode(code);
-  const locked = !!stream && stream.entryCount > 0;
+  // Annulés compris : ils restent au registre chronologique (même règle que le serveur).
+  const registered = stream ? stream.entryCount + stream.cancelledCount : 0;
+  const locked = registered > 0;
   const lockHint = locked ? 'Verrouillé.' : undefined;
 
   return (
@@ -127,7 +150,7 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
       </Field>
       {locked && (
         <Note icon="ph-lock-simple">
-          {stream!.entryCount} enlèvement{stream!.entryCount > 1 ? 's' : ''} au registre : site et unité sont verrouillés
+          {registered} enlèvement{registered > 1 ? 's' : ''} au registre{stream!.cancelledCount ? ` (dont ${stream!.cancelledCount} annulé${stream!.cancelledCount > 1 ? 's' : ''})` : ''} : site et unité sont verrouillés
           pour ne pas réécrire le registre chronologique. Les enlèvements déjà inscrits conservent les codes et l&apos;exutoire enregistrés.
         </Note>
       )}

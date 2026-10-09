@@ -1,0 +1,86 @@
+import Link from 'next/link';
+import { MarkAllReadButton } from '@/components/MarkAllReadButton';
+import { PageHeader } from '@/components/PageHeader';
+import { Dot, Icon, SegLinks, hrefWith } from '@/components/ui';
+import { fmtDay, fmtMonthAbbr } from '@/lib/dates';
+import { CONTROL_HORIZON_DAYS, SCREENS, TODO_HORIZON_DAYS, TONE, isEmployee } from '@/lib/domain';
+import { guard } from '@/lib/guard';
+import { loadTodoPage } from '@/lib/data/dashboard';
+
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
+
+/** Liste complète des échéances visibles (dépassements, horizon 15 jours, contrôles à 30 jours), filtrable. */
+export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) {
+  const { role } = await guard('todo');
+  const sp = await searchParams;
+  // Un salarié ne voit que ses échéances : pas de bascule « Toutes / Mes échéances ».
+  const employee = isEmployee(role);
+  const mine = !employee && one(sp.mes) === '1';
+  const d = await loadTodoPage({ domain: one(sp.domaine), mine });
+  const domain = d.domain;
+  const params = { domaine: domain, mes: mine ? '1' : undefined };
+  const filtered = !!domain || mine;
+  const n = d.items.length;
+
+  return (
+    <>
+      <PageHeader title={SCREENS.todo.title}
+        sub={`${plural(n, 'échéance')} · ${d.counts.overdue} en retard · horizon ${TODO_HORIZON_DAYS} jours (contrôles ${CONTROL_HORIZON_DAYS} jours)`} />
+      <div className="vg-page" style={{ gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {!employee && (
+            <SegLinks options={[
+              { href: hrefWith('/a-faire', params, { mes: undefined }), label: `Toutes ${d.counts.all}`, on: !mine },
+              { href: hrefWith('/a-faire', params, { mes: '1' }), label: `Mes échéances ${d.counts.mine}`, on: mine },
+            ]} />
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+            {d.domains.map((x) => (
+              <Link key={x.key} href={hrefWith('/a-faire', params, { domaine: x.key === domain ? undefined : x.key })} scroll={false}
+                className={`vg-chip${x.key === domain ? ' is-on' : ''}`}>
+                <Icon name={x.icon} size={13} />{x.label}<span style={{ color: 'var(--color-neutral-500)' }}>{x.n}</span>
+              </Link>
+            ))}
+          </div>
+          {/* Portée : la liste affichée (filtres domaine et « Mes échéances » compris). */}
+          <MarkAllReadButton scope="todo" filter={{ domain, mine }} disabled={!d.counts.unread} />
+        </div>
+
+        {n === 0 && (
+          <div className="card" style={{ gap: 6 }}>
+            <span className="vg-muted" style={{ fontSize: 12.5 }}>{filtered ? 'Aucune échéance pour ce filtre.' : 'Aucune échéance.'}</span>
+            {filtered && <Link href="/a-faire" className="vg-link">Retirer les filtres</Link>}
+          </div>
+        )}
+
+        {d.groups.map(([label, rows]) => (
+          <section key={label} style={{ display: 'grid', gap: 6 }}>
+            <div className="vg-eyebrow">{label} · {rows.length}</div>
+            <div className="card" style={{ gap: 2, padding: 6 }}>
+              {rows.map((t) => {
+                const late = !!t.overdue;
+                return (
+                  <Link key={t.key} href={t.href ?? '/'} className="vg-row" style={{ gridTemplateColumns: '36px 1fr', gap: 12, alignItems: 'center', padding: '7px 10px' }}>
+                    <span style={{ textAlign: 'center', lineHeight: 1.1, color: late ? TONE.danger.dot : undefined }}>
+                      <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</span>
+                      <span style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>{fmtMonthAbbr(t.date)}</span>
+                    </span>
+                    <span style={{ display: 'grid', gap: 3, minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: t.read ? 400 : 500 }}>
+                        {!t.read && <span className="vg-unread" title="Non lue" />}{t.title}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', flexWrap: 'wrap' }}>
+                        <Dot color={TONE[t.tone].dot} size={6} />{[t.kind, t.who, SCREENS[t.screen].label].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}

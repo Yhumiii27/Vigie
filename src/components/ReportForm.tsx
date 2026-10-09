@@ -8,10 +8,14 @@ import { EVENT_TYPES, EVENT_TYPE_KEYS } from '@/lib/domain';
 
 type Props = {
   siteLabel: string;
+  /** Site du QR code de poste (sinon : site de la session, choisi par le serveur). */
+  siteId?: string;
   defaultLocation: string;
   topPadding?: number;
   /** Lien vers « Mes signalements » (en-tête et écran de confirmation). */
   myReportsHref?: string;
+  /** Type présélectionné (/signaler?type=ENV depuis l'écran Environnement). */
+  defaultType?: string;
 };
 
 type Recognition = { lang: string; interimResults: boolean; onresult: (e: { results: { 0: { transcript: string } }[] }) => void; onend: () => void; start: () => void; stop: () => void };
@@ -56,8 +60,8 @@ async function shrinkPhoto(file: File): Promise<Shrunk> {
 }
 
 /** Formulaire de signalement terrain (mobile) — crée l'événement à l'étape « Déclaré ». */
-export function ReportForm({ siteLabel, defaultLocation, topPadding = 62, myReportsHref }: Props) {
-  const [type, setType] = useState<string | null>(null);
+export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType }: Props) {
+  const [type, setType] = useState<string | null>(defaultType ?? null);
   const [location, setLocation] = useState(defaultLocation);
   const [editLocation, setEditLocation] = useState(!defaultLocation);
   const [description, setDescription] = useState('');
@@ -82,7 +86,7 @@ export function ReportForm({ siteLabel, defaultLocation, topPadding = 62, myRepo
 
   const release = (list: Photo[]) => list.forEach((p) => { URL.revokeObjectURL(p.url); urls.current.delete(p.url); });
 
-  const reset = () => { setSent(null); setType(null); setGrave(null); setAnonymous(false); setDescription(''); setError(null); };
+  const reset = () => { setSent(null); setType(defaultType ?? null); setGrave(null); setAnonymous(false); setDescription(''); setError(null); };
 
   const dictate = () => {
     if (listening) { rec.current?.stop(); return; }
@@ -157,6 +161,7 @@ export function ReportForm({ siteLabel, defaultLocation, topPadding = 62, myRepo
     const fd = new FormData();
     fd.set('type', type ?? '');
     fd.set('location', location);
+    if (siteId) fd.set('siteId', siteId);
     fd.set('description', description);
     if (grave) fd.set('gravity', grave);
     if (anonymous) fd.set('anonymous', '1');

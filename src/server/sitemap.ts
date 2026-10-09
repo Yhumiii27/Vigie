@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { planCovers, planStatus } from '@/components/prevention/model';
+import { isPlanEnded, planCovers, planStatus } from '@/components/prevention/model';
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/components/sitemap/coactivity';
 import { DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KIND_KEYS, SITE_MAP_ATTACHMENT, ZONE_KIND_KEYS, isRealDate } from '@/components/sitemap/model';
 import { findConflict, zoneAt } from '@/lib/data/sitemap';
@@ -12,6 +12,7 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';
 import { currentSiteId, inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { logChange } from './changelog';
 
 // Carte du site et coactivité : zones, voies, activités, plan de fond et échelle.
 
@@ -225,7 +226,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId }).from(t.mapZones),
     db.select({ id: t.mapRoutes.id, siteId: t.mapRoutes.siteId }).from(t.mapRoutes),
-    db.select({ id: t.contractors.id }).from(t.contractors),
+    db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.people.id }).from(t.people),
     db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
     preventionPlanId ? db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, preventionPlanId)).then((r) => r[0]) : undefined,
@@ -236,13 +237,16 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   if (!sites.some((s) => s.id === siteId)) return { error: 'Site inconnu.' };
   if (!(await visible(siteId))) return { error: OTHER_SITE };
   if (existing && existing.siteId !== siteId) return { error: "Une activité ne change pas de site : supprimez-la et créez-la sur l'autre site." };
-  if (contractorId && !contractors.some((c) => c.id === contractorId)) f.fail('contractorId', 'Entreprise introuvable.');
+  const contractor = contractors.find((c) => c.id === contractorId);
+  if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
+  else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.');
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
   if (keystoneProject && keystoneProject !== existing?.keystoneProject && !projects.some((p) => `${p.id} · ${p.client}` === keystoneProject)) f.fail('keystoneProject', 'Projet Keystone inconnu.');
   if (zoneId && !zones.some((z) => z.id === zoneId && z.siteId === siteId)) f.fail('zoneId', "Zone inconnue sur ce site.");
   if (routeIds.some((r) => !routes.some((x) => x.id === r && x.siteId === siteId))) f.fail('routeIds', 'Voie inconnue sur ce site.');
   if (preventionPlanId) {
     if (!plan || plan.siteId !== siteId) f.fail('preventionPlanId', 'Plan de prévention introuvable sur ce site.');
+    else if (isPlanEnded(plan) && plan.id !== existing?.preventionPlanId) f.fail('preventionPlanId', `Le plan ${plan.id} est ${plan.status === 'annule' ? 'annulé' : 'clos'} : établissez un nouveau plan de prévention.`);
     else if (team === 'interne') f.fail('preventionPlanId', "Un plan de prévention concerne une entreprise extérieure : choisissez « Entreprise extérieure ».");
     else if (contractorId && plan.contractorId !== contractorId) f.fail('preventionPlanId', 'Ce plan concerne une autre entreprise extérieure.');
     else if (startOn && endOn && endOn >= startOn && !planCovers(plan, startOn, endOn)) {
@@ -382,13 +386,21 @@ export async function addConflictToPlan(siteId: string, date: string, key: strin
   const db = await getDb();
   const [plan] = await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, planId));
   if (!plan) return { error: 'Plan de prévention introuvable.' };
-  if (plan.status === 'clos') return { error: `Le plan ${planId} est clos.` };
+  if (isPlanEnded(plan)) return { error: `Le plan ${planId} est ${plan.status === 'annule' ? 'annulé' : 'clos'}.` };
   const line = interferenceLine(found.conflict);
   const current = plan.interferenceRisks.trim();
   if (current.includes(line)) return { error: `Déjà reporté dans le plan ${planId}.` };
   const next = current ? `${current}\n${line}` : line;
   if (next.length > MAX_INTERFERENCE) return { error: `Les risques d'interférence du plan ${planId} dépasseraient ${MAX_INTERFERENCE.toLocaleString('fr-FR')} caractères : complétez le plan depuis sa fiche.` };
   const values = { interferenceRisks: next, signedEuOn: null, signedEeOn: null };
-  await db.update(t.preventionPlans).set({ ...values, status: planStatus({ ...plan, ...values }, today()) }).where(eq(t.preventionPlans.id, planId));
+  const unsigned = !!(plan.signedEuOn || plan.signedEeOn);
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans).set({ ...values, status: planStatus({ ...plan, ...values }, today()) }).where(eq(t.preventionPlans.id, planId));
+    await logChange(tx, {
+      entityType: 'prevention_plan', entityId: planId, action: 'update',
+      summary: `Coactivité du ${fmtDate(date)} reportée depuis la carte${unsigned ? ', signatures effacées' : ''}`,
+      details: [{ field: "Risques d'interférence", from: current || null, to: next }],
+    });
+  });
   return ok();
 }

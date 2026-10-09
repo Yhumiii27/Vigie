@@ -2,14 +2,18 @@ import 'server-only';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import type { ChangeEntry } from '@/components/ChangeLog';
 import {
-  BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, fmtQty, isBsdStatus, isHazardousCode, isRecovery, monthShort, shiftMonth, toTonnes, treatmentLabel,
+  BSD_PENDING, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, READING_DUE_DAY, entryRef, fmtQty, isBsdStatus, isHazardousCode, isRecovery,
+  monthLong, monthShort, shiftMonth, toTonnes, treatmentLabel,
   type BsdStatus, type ConsumptionKind,
 } from '@/components/environment/model';
+import { hrefWith } from '@/components/ui';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, today } from '../dates';
 import { EVENT_STEPS, REQUIREMENT_EVAL, canSee, columnOf, severityTone, type TodoItem, type Tone } from '../domain';
-import { actionColumn, isOpen, lcfirst, loadActions, loadEvents, loadPeople } from '../queries';
+import { actionColumn, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
 import { currentSiteId, getSession, inSite } from '../session';
+import { loadChangeLogs } from './changelog';
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
 // Registre chronologique des déchets sortants (C. env. R. 541-43, arrêté du 31 mai 2021),
@@ -32,6 +36,8 @@ export type StreamView = {
   destination: string;
   /** Enlèvements inscrits au registre, toutes années confondues. */
   entryCount: number;
+  /** Enlèvements annulés, restés au registre : avec entryCount, verrouillent le site et l'unité et empêchent la suppression. */
+  cancelledCount: number;
   /** Quantités (dans l'unité de la filière) de l'année affichée et de l'année précédente. */
   yearQty: number;
   prevQty: number;
@@ -39,7 +45,11 @@ export type StreamView = {
   prevPeriodQty: number;
   yearCount: number;
   lastRemovedOn: string | null;
+  /** Actions du plan rattachées à la filière ou à l'un de ses enlèvements (origine « Environnement »). */
+  actions: EnvAction[];
 };
+
+export type EnvAction = { id: string; title: string; statusLabel: string; tone: Tone; dueOn: string; pilot: string; ref: string };
 
 export type EntryView = {
   id: number;
@@ -68,8 +78,25 @@ export type EntryView = {
   bsdTone: Tone;
   /** Déchet dangereux sans bordereau Trackdéchets. */
   missingBsd: boolean;
+  /** Bordereau encore brouillon, émis ou collecté plus de BSD_STALE_DAYS jours après l'enlèvement. */
+  staleBsd: boolean;
+  /** Jours écoulés depuis l'enlèvement. */
+  age: number;
   notes: string | null;
+  /** Référence d'origine d'une nouvelle action rattachée (« FD-11 · 19/08/2026 », suffixée « · n° 42 » si la filière a plusieurs enlèvements ce jour-là). */
+  ref: string;
+  /** Références d'origine reconnues pour les actions rattachées (la forme courte reste au premier enlèvement inscrit du jour). */
+  refs: string[];
+  eventId: string | null;
+  /** Annulation tracée (doublon, erreur de saisie) : la ligne reste au registre, hors indicateurs et export. */
+  cancelled: { at: string; by: string; reason: string } | null;
 };
+
+/** Enlèvement de l'écran, avec ses actions, son événement d'origine et son historique. */
+export type EntryDetail = EntryView & { actions: EnvAction[]; event: { id: string; title: string } | null; history: ChangeEntry[] };
+
+/** Événement proposé dans le champ « Événement lié » d'un enlèvement. */
+export type EventOption = { id: string; label: string; siteId: string };
 
 export type ConsumptionRecord = { siteId: string; month: string; kind: ConsumptionKind; value: number };
 
@@ -79,18 +106,26 @@ const WASTE_REQUIREMENT = /R\.\s?541-4|déchet/i;
 /** Filières, registre et relevés du site sélectionné (« Tous les sites » consolide). */
 const loadEnvironmentBase = cache(async () => {
   const db = await getDb();
-  const [site, sites, streamRows, entryRows, consumptionRows] = await Promise.all([
+  const now = today();
+  const [site, sites, streamRows, entryRows, consumptionRows, people] = await Promise.all([
     currentSiteId(),
     db.select().from(t.sites).orderBy(asc(t.sites.sort)),
     db.select().from(t.wasteStreams),
     db.select().from(t.wasteEntries),
     db.select().from(t.consumptions),
+    loadPeople(),
   ]);
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const streams = streamRows.filter((s) => inSite(site, s.siteId));
   const streamById = new Map(streamRows.map((s) => [s.id, s]));
+  // Enlèvements d'une même filière le même jour (annulés compris) : la référence courte « FD-11 · 19/08/2026 » ne suffit plus.
+  const sameDay = new Map<string, number[]>();
+  [...entryRows].sort((a, b) => a.id - b.id).forEach((e) => {
+    const key = `${e.streamId}|${e.removedOn}`;
+    sameDay.set(key, [...(sameDay.get(key) ?? []), e.id]);
+  });
 
-  const entries: EntryView[] = entryRows
+  const all: EntryView[] = entryRows
     .filter((e) => inSite(site, e.siteId))
     .flatMap((e) => {
       const s = streamById.get(e.streamId);
@@ -100,7 +135,12 @@ const loadEnvironmentBase = cache(async () => {
       const treatmentCode = e.treatmentCode ?? s.treatmentCode;
       const hazardous = isHazardousCode(ewcCode) || s.hazardous;
       const status = isBsdStatus(e.bsdStatus) ? e.bsdStatus : null;
-      const missingBsd = hazardous && !e.bsdNumber;
+      const live = !e.cancelledAt;
+      const missingBsd = live && hazardous && !e.bsdNumber;
+      const age = daysBetween(e.removedOn, now);
+      const group = sameDay.get(`${e.streamId}|${e.removedOn}`) ?? [e.id];
+      const short = entryRef(s.id, e.removedOn);
+      const long = entryRef(s.id, e.removedOn, e.id);
       return [{
         id: e.id,
         siteId: e.siteId,
@@ -124,24 +164,39 @@ const loadEnvironmentBase = cache(async () => {
         bsdLabel: missingBsd ? 'BSD manquant' : status ? BSD_STATUS[status].label : null,
         bsdTone: missingBsd ? 'danger' : status ? BSD_STATUS[status].tone : 'neutral',
         missingBsd,
+        staleBsd: live && hazardous && !!e.bsdNumber && !!status && BSD_PENDING.includes(status) && age > BSD_STALE_DAYS,
+        age,
         notes: e.notes,
+        ref: group.length > 1 ? long : short,
+        refs: group[0] === e.id ? [short, long] : [long],
+        eventId: e.eventId,
+        cancelled: e.cancelledAt
+          ? { at: e.cancelledAt.toISOString(), by: e.cancelledById ? people.get(e.cancelledById)?.name ?? e.cancelledById : '—', reason: e.cancelReason ?? '' }
+          : null,
       } satisfies EntryView];
     })
     .sort((a, b) => b.removedOn.localeCompare(a.removedOn) || b.id - a.id);
+  const entries = all.filter((e) => !e.cancelled);
+  const cancelled = all.filter((e) => e.cancelled);
 
   const consumptions: ConsumptionRecord[] = consumptionRows
     .filter((c) => inSite(site, c.siteId) && KIND_KEYS.has(c.kind))
     .map((c) => ({ siteId: c.siteId, month: c.month, kind: c.kind as ConsumptionKind, value: c.value }));
 
-  const scopeSites = sites.filter((s) => inSite(site, s.id)).map((s) => ({ id: s.id, label: s.label }));
-  return { site, sites: scopeSites, siteLabel, streams, entries, consumptions };
+  // Sites archivés : plus de relevés attendus (leur registre reste consultable sous « Tous les sites »).
+  const scopeSites = sites.filter((s) => !s.archivedAt && inSite(site, s.id)).map((s) => ({ id: s.id, label: s.label }));
+  // Graphiques et tableaux : sites actifs, plus les sites archivés qui ont des relevés (mêmes données que les cumuls annuels).
+  const withReadings = new Set(consumptions.map((c) => c.siteId));
+  const consumptionSites = sites.filter((s) => inSite(site, s.id) && (!s.archivedAt || withReadings.has(s.id)))
+    .map((s) => ({ id: s.id, label: s.label, archived: !!s.archivedAt }));
+  return { now, site, sites: scopeSites, consumptionSites, siteLabel, streams, entries, cancelled, consumptions, people };
 });
 
-/** Exigences de la veille relatives aux déchets (R. 541-43 / R. 541-45…), toute l'entreprise. */
+/** Exigences en vigueur de la veille relatives aux déchets (R. 541-43 / R. 541-45…), toute l'entreprise ; un texte abrogé (archivé) est écarté. */
 const loadWasteRequirements = cache(async () => {
   const db = await getDb();
   const rows = await db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id));
-  return rows.filter((r) => WASTE_REQUIREMENT.test(r.text) || WASTE_REQUIREMENT.test(r.domain));
+  return rows.filter((r) => !r.archivedAt && (WASTE_REQUIREMENT.test(r.text) || WASTE_REQUIREMENT.test(r.domain)));
 });
 
 const sum = (values: number[]) => values.reduce((n, v) => n + v, 0);
@@ -152,8 +207,8 @@ const tonnesOf = (rows: EntryView[]) => sum(rows.map((e) => e.tonnes ?? 0));
 export async function loadEnvironment(requestedYear?: number) {
   const now = today();
   const currentYear = +now.slice(0, 4);
-  const [{ site, sites, siteLabel, streams, entries, consumptions }, events, people, actions, requirements] = await Promise.all([
-    loadEnvironmentBase(), loadEvents(), loadPeople(), loadActions(), loadWasteRequirements(),
+  const [{ site, sites, consumptionSites, siteLabel, streams, entries, cancelled, consumptions, people }, events, actions, requirements] = await Promise.all([
+    loadEnvironmentBase(), loadEvents(), loadActions(), loadWasteRequirements(),
   ]);
 
   const years = [...new Set([currentYear, ...entries.map((e) => e.year)])].filter((y) => y <= currentYear).sort((a, b) => b - a);
@@ -172,6 +227,16 @@ export async function loadEnvironment(requestedYear?: number) {
   const volumeCount = yearEntries.filter((e) => e.tonnes == null).length;
   const missing = yearEntries.filter((e) => e.missingBsd);
   const missingOther = entries.filter((e) => e.missingBsd && e.year !== year);
+  const stale = yearEntries.filter((e) => e.staleBsd);
+  const staleOther = entries.filter((e) => e.staleBsd && e.year !== year);
+
+  // ── Actions rattachées par leur référence d'origine : « FD-11 » (filière) ou « FD-11 · 19/08/2026 » (enlèvement)
+  const brief = (a: ActionRow): EnvAction => {
+    const c = columnOf(actionColumn(a, now));
+    return { id: a.id, title: a.title, statusLabel: c.status, tone: c.tone, dueOn: a.dueOn, pilot: people.get(a.pilotId)?.name ?? '—', ref: a.originRef };
+  };
+  const envActions = actions.filter((a) => a.origin === 'env').sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true })).map(brief);
+  const streamActions = (id: string) => envActions.filter((a) => a.ref === id || a.ref.startsWith(`${id} · `));
 
   // ── Filières avec cumuls annuels
   const streamViews: StreamView[] = streams.map((s) => {
@@ -182,11 +247,13 @@ export async function loadEnvironment(requestedYear?: number) {
       unit: s.unit, treatmentCode: s.treatmentCode, treatmentLabel: treatmentLabel(s.treatmentCode), recovery: isRecovery(s.treatmentCode),
       channel: s.channel, collector: s.collector, destination: s.destination,
       entryCount: mine.length,
+      cancelledCount: cancelled.filter((e) => e.streamId === s.id).length,
       yearQty: sum(inYear.map((e) => e.quantity)),
       prevQty: sum(mine.filter((e) => e.year === year - 1).map((e) => e.quantity)),
       prevPeriodQty: sum(mine.filter((e) => e.year === year - 1 && (!isCurrent || e.removedOn <= sameDayPrev)).map((e) => e.quantity)),
       yearCount: inYear.length,
       lastRemovedOn: mine[0]?.removedOn ?? null,
+      actions: streamActions(s.id),
     };
   }).sort((a, b) => a.siteId.localeCompare(b.siteId) || Number(b.hazardous) - Number(a.hazardous) || a.id.localeCompare(b.id, 'fr', { numeric: true }));
 
@@ -212,20 +279,21 @@ export async function loadEnvironment(requestedYear?: number) {
 
   const consumptionKinds = CONSUMPTION_KINDS.map((k) => {
     const bars = months.map((month) => {
-      const vals = sites.map((s) => value.get(`${s.id}|${month}|${k.key}`)).filter((v): v is number => v != null);
+      const vals = consumptionSites.map((s) => value.get(`${s.id}|${month}|${k.key}`)).filter((v): v is number => v != null);
       return { month, value: vals.length ? sum(vals) : null };
     });
     return { ...k, bars, total12: sum(bars.map((b) => b.value ?? 0)), ...compare(k.key) };
   });
-  const consumptionTables = sites.map((s) => {
+  const consumptionTables = consumptionSites.map((s) => {
     const rows = months.map((month) => ({
       month,
       values: Object.fromEntries(CONSUMPTION_KINDS.map((k) => [k.key, value.get(`${s.id}|${month}|${k.key}`) ?? null])) as Record<ConsumptionKind, number | null>,
     })).reverse();
     const totals = Object.fromEntries(CONSUMPTION_KINDS.map((k) => [k.key, sum(rows.map((r) => r.values[k.key] ?? 0))])) as Record<ConsumptionKind, number>;
-    const missingMonths = rows.filter((r) => CONSUMPTION_KINDS.every((k) => r.values[k.key] == null)).length;
-    return { siteId: s.id, site: s.label, rows, totals, missingMonths };
-  });
+    // Site archivé : plus de relevés attendus, les mois vides ne sont pas des manques.
+    const missingMonths = s.archived ? 0 : rows.filter((r) => CONSUMPTION_KINDS.every((k) => r.values[k.key] == null)).length;
+    return { siteId: s.id, site: s.label, archived: s.archived, rows, totals, missingMonths };
+  }).filter((tb) => !tb.archived || tb.rows.some((r) => CONSUMPTION_KINDS.some((k) => r.values[k.key] != null)));
   const electricity = consumptionKinds.find((k) => k.key === 'electricite')!;
 
   // ── Événements environnementaux ouverts
@@ -235,6 +303,22 @@ export async function loadEnvironment(requestedYear?: number) {
   }));
   const envClosed12 = events.filter((e) => e.type === 'ENV' && !isOpen(e) && daysBetween(e.occurredOn, now) <= 365).length;
 
+  // ── Enlèvements de l'année (annulés compris, pour le filtre « Annulés ») avec actions, événement et historique
+  const eventById = new Map(events.map((e) => [e.id, e]));
+  const shownEntries = [...yearEntries, ...cancelled.filter((e) => e.year === year)];
+  const history = await loadChangeLogs('waste_entry', shownEntries.map((e) => e.id));
+  const details: EntryDetail[] = shownEntries.map((e) => {
+    const ev = e.eventId ? eventById.get(e.eventId) : undefined;
+    return {
+      ...e,
+      actions: envActions.filter((a) => e.refs.includes(a.ref)),
+      event: e.eventId ? { id: e.eventId, title: ev?.title ?? '' } : null,
+      history: history.get(String(e.id)) ?? [],
+    };
+  });
+  // Événement lié (formulaire d'enlèvement) : événements environnementaux ouverts, proposés pour les filières de leur site.
+  const eventOptions: EventOption[] = events.filter((e) => e.type === 'ENV' && isOpen(e)).map((e) => ({ id: e.id, label: `${e.id} · ${e.title}`, siteId: e.siteId }));
+
   // ── Exigences de la veille et action « BSD manquants »
   const actionById = new Map(actions.map((a) => [a.id, a]));
   const reqViews = requirements.map((r) => {
@@ -243,11 +327,6 @@ export async function loadEnvironment(requestedYear?: number) {
   });
   const bsdRequirement = requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0];
   const originRef = `Registre des déchets ${year}`;
-  const brief = (a: (typeof actions)[number]) => {
-    const col = actionColumn(a, now);
-    const c = columnOf(col);
-    return { id: a.id, title: a.title, statusLabel: c.status, tone: c.tone, dueOn: a.dueOn, pilot: people.get(a.pilotId)?.name ?? '—' };
-  };
   const reqAction = bsdRequirement?.actionId ? actionById.get(bsdRequirement.actionId) : undefined;
   const existing = actions.find((a) => a.origin === 'env' && a.originRef === originRef && actionColumn(a, now) !== 'done')
     ?? (reqAction && actionColumn(reqAction, now) !== 'done' ? reqAction : undefined);
@@ -280,12 +359,13 @@ export async function loadEnvironment(requestedYear?: number) {
     hazardous: { share: totalT ? hazardousT / totalT : null, tonnes: hazardousT },
     recovery: { share: totalT ? recoveryT / totalT : null, tonnes: recoveryT },
     missing: { count: missing.length, other: missingOther.length, otherYears: [...new Set(missingOther.map((e) => e.year))].sort() },
+    stale: { count: stale.length, other: staleOther.length, otherYears: [...new Set(staleOther.map((e) => e.year))].sort() },
     electricity: { current: electricity.current, previous: electricity.previous, delta: electricity.delta, period: electricity.period },
   };
 
   return {
     now, year, years, currentYear, isCurrent, periodNote, showSite: site === null, sites,
-    streams: streamViews, entries: yearEntries, kpis, bsdStats,
+    streams: streamViews, entries: details, kpis, bsdStats, eventOptions,
     consumption: { maxMonth: currentMonth, kinds: consumptionKinds, tables: consumptionTables, records: consumptions },
     envEvents, envClosed12, requirements: reqViews,
     bsdAction: existing ? brief(existing) : null,
@@ -294,31 +374,73 @@ export async function loadEnvironment(requestedYear?: number) {
 }
 export type EnvironmentData = Awaited<ReturnType<typeof loadEnvironment>>;
 
-// ─── Signaux (badge de navigation, échéances) ───────────────────────────────
+// ─── Signaux (échéances, notifications, badge) ───────────────────────────────
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+/** Lien vers le registre filtré, sur l'année concernée. */
+const registerHref = (year: number, currentYear: number, vue: string) =>
+  hrefWith('/environnement', {}, { annee: year === currentYear ? undefined : String(year), vue });
+
+/** Années touchées, de la plus ancienne à la plus récente, avec leurs enlèvements. */
+const byYear = (rows: EntryView[]) => {
+  const map = new Map<number, EntryView[]>();
+  rows.forEach((e) => map.set(e.year, [...(map.get(e.year) ?? []), e]));
+  return [...map.entries()].sort(([a], [b]) => a - b);
+};
 
 /**
- * Badge = enlèvements de déchets dangereux sans BSD ; une échéance du jour tant qu'il en reste.
+ * Échéances du domaine (une par année du registre et par site, `count` = éléments concernés pour le badge) :
+ * - BSD manquants : déchets dangereux sans bordereau Trackdéchets (R. 541-45), en retard dès l'enlèvement ;
+ * - BSD non finalisés : bordereau brouillon, émis ou collecté plus de 30 j après l'enlèvement (traitement final non attesté) ;
+ * - relevés de consommation : mois échu sans aucun relevé, attendu avant le 15 du mois suivant.
  * Rien pour les rôles sans accès à l'écran : l'échéance les renverrait vers leur accueil.
  */
-export async function loadEnvironmentSignals(): Promise<{ badge: number; todo: TodoItem[] }> {
+export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const { role } = await getSession();
-  if (!canSee(role, 'env')) return { badge: 0, todo: [] };
-  const [{ entries }, requirements, people] = await Promise.all([loadEnvironmentBase(), loadWasteRequirements(), loadPeople()]);
-  const n = entries.filter((e) => e.missingBsd).length;
-  if (!n) return { badge: 0, todo: [] };
-  const pilotId = (requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0])?.pilotId;
-  return {
-    badge: n,
-    todo: [{
-      date: today(),
-      kind: 'Déchets',
-      tone: 'danger',
-      title: `Compléter les BSD manquants (${n})`,
-      who: pilotId ? people.get(pilotId)?.name ?? '' : '',
-      href: '/environnement',
-    }],
-  };
-}
+  if (!canSee(role, 'env')) return { todo: [] };
+  const [{ now, sites, entries, consumptions, people }, requirements] = await Promise.all([loadEnvironmentBase(), loadWasteRequirements()]);
+  const currentYear = +now.slice(0, 4);
+  const pilotId = (requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0])?.pilotId ?? null;
+  const owner = { who: pilotId ? people.get(pilotId)?.name ?? '' : '', ownerIds: pilotId ? [pilotId] : undefined };
+  const todo: TodoItem[] = [];
+
+  for (const [year, rows] of byYear(entries.filter((e) => e.missingBsd))) {
+    todo.push({
+      date: now, kind: 'Déchets', tone: 'danger', overdue: true, count: rows.length, ...owner,
+      title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD manquant', 'BSD manquants')}`,
+      href: registerHref(year, currentYear, 'bsd-manquants'),
+    });
+  }
+
+  for (const [year, rows] of byYear(entries.filter((e) => e.staleBsd))) {
+    const oldest = rows.reduce((a, b) => (a.removedOn <= b.removedOn ? a : b));
+    todo.push({
+      date: addDays(oldest.removedOn, BSD_STALE_DAYS), kind: 'Déchets', tone: 'warn', overdue: true, count: rows.length, ...owner,
+      title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD non finalisé', 'BSD non finalisés')} plus de ${BSD_STALE_DAYS} j après l'enlèvement`,
+      href: registerHref(year, currentYear, 'bsd-en-attente'),
+    });
+  }
+
+  // Relevés : sur les 12 derniers mois échus, à partir du premier relevé du site (un site sans relevé n'est pas suivi).
+  const currentMonth = `${now.slice(0, 7)}-01`;
+  const recorded = new Set(consumptions.map((c) => `${c.siteId}|${c.month}`));
+  for (const s of sites) {
+    const first = consumptions.filter((c) => c.siteId === s.id).map((c) => c.month).sort()[0];
+    if (!first) continue;
+    const missing = Array.from({ length: 12 }, (_, i) => shiftMonth(currentMonth, i - 12))
+      .filter((m) => m >= first && !recorded.has(`${s.id}|${m}`));
+    if (!missing.length) continue;
+    const due = `${shiftMonth(missing[0], 1).slice(0, 8)}${String(READING_DUE_DAY).padStart(2, '0')}`;
+    const site = s.label.split(' — ')[0];
+    todo.push({
+      date: due, kind: 'Consommations', tone: due < now ? 'danger' : 'warn', overdue: due < now, count: missing.length, who: '',
+      title: missing.length === 1 ? `Relevés de ${monthLong(missing[0])} · ${site}` : `Relevés manquants (${missing.length} mois depuis ${monthLong(missing[0])}) · ${site}`,
+      href: '/environnement?onglet=consommations',
+    });
+  }
+  return { todo };
+});
 
 // ─── Export du registre (CSV) ───────────────────────────────────────────────
 

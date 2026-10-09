@@ -15,6 +15,13 @@
       "when": 1791396331449,
       "tag": "0001_seveso_import_map",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791559512834,
+      "tag": "0002_traceability",
+      "breakpoints": true
     }
   ]
 }

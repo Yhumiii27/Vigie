@@ -8,7 +8,10 @@ import { ActionLink } from './ActionPlanProvider';
 
 const MAX_CARDS = 8;
 
+/** `label` : libellé de la colonne (« Clôturées · toutes » en historique complet). */
 export type KanbanColumnData = { key: ActionColumn; label: string; tone: Tone; cards: PlanAction[] };
+
+const NOTE = { fontSize: 11, color: 'var(--color-neutral-500)', padding: '8px 10px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)', textWrap: 'pretty' } as const;
 
 const dueColor = (a: PlanAction) => (a.late ? TONE.danger.dot : 'var(--color-neutral-300)');
 
@@ -38,8 +41,9 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
           {expanded ? 'Réduire' : hidden === 1 ? "Afficher l'autre action" : `Afficher les ${hidden} autres`}
         </button>
       )}
+      {c.cards.length === 0 && <div style={NOTE}>Aucune action</div>}
       {c.key === 'done' && (
-        <div style={{ fontSize: 11, color: 'var(--color-neutral-500)', padding: '8px 10px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)', textWrap: 'pretty' }}>
+        <div style={NOTE}>
           Une action n&apos;est clôturée qu&apos;après vérification de son efficacité par l&apos;animateur QHSE ou la direction.
         </div>
       )}
@@ -61,7 +65,16 @@ function KanbanCard({ a }: { a: PlanAction }) {
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--color-neutral-800)', display: 'grid', placeItems: 'center', fontSize: 9, color: 'var(--color-neutral-200)' }}>{a.pilotInitials}</span>{a.pilot}
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: dueColor(a) }}><Icon name="ph-calendar-blank" size={12} />{a.due}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+          <span title={`Réalisation prévue le ${a.dueLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: dueColor(a) }}>
+            <Icon name="ph-calendar-blank" size={12} />{a.due}
+          </span>
+          {a.col === 'verify' && a.verifyDue && (
+            <span title={`Vérification d'efficacité le ${a.verifyDueLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.verifyLate ? TONE.danger.dot : TONE.warn.dot }}>
+              <Icon name="ph-seal-check" size={12} />{a.verifyDue}
+            </span>
+          )}
+        </span>
       </div>
     </ActionLink>
   );

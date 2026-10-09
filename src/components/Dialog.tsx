@@ -14,7 +14,8 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="vg-dialog" onCancel={(e) => { e.preventDefault(); onClose(); }}
+    // stopPropagation : React remonte l'événement « cancel » aux fenêtres parentes ; Échap ne ferme que la fenêtre du dessus.
+    <dialog ref={ref} className="vg-dialog" onCancel={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
       onClick={(e) => { if (e.target === ref.current) onClose(); }}>
       {open && (
         <div className="dialog" style={{ width: `min(${width}px, calc(100vw - 32px))` }}>

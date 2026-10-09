@@ -1,0 +1,68 @@
+/* Documents imprimables de la prévention (plan de prévention, registre des permis) : lisibles à l'écran (thème sombre)
+   et imprimables (fond blanc, texte noir). Feuille globale : toutes les règles sont préfixées par .pp- ; les pages
+   s'ouvrent dans un nouvel onglet par un lien HTML simple, pour que cette feuille ne reste pas chargée dans l'application. */
+
+.pp-doc {
+  width: 100%; max-width: 1080px; margin: 0 auto; padding: 24px 24px 48px; box-sizing: border-box;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px;
+  font-size: 13px; line-height: 1.45; color: var(--color-text);
+}
+.pp-doc-narrow { max-width: 900px; }
+.pp-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.pp-muted { color: var(--color-neutral-500); }
+
+.pp-head, .pp-section {
+  background: var(--color-surface); border-radius: var(--radius-md); padding: 16px 18px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
+}
+.pp-head h1 { margin: 2px 0 0; font-size: 22px; letter-spacing: -.015em; line-height: 1.15; font-weight: 500; }
+.pp-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pp-section h2 { margin: 0; font-size: 14px; font-weight: 500; display: flex; align-items: baseline; gap: 8px; }
+.pp-num { color: var(--color-accent); font-variant-numeric: tabular-nums; }
+.pp-h3 { margin: 4px 0 0; font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-500); }
+
+.pp-meta { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 12.5px; }
+.pp-meta dt { color: var(--color-neutral-500); }
+.pp-meta dd { margin: 0; }
+.pp-parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.pp-text { margin: 0; font-size: 12.5px; white-space: pre-line; text-wrap: pretty; }
+.pp-empty { margin: 0; font-size: 12px; color: var(--color-neutral-500); }
+
+.pp-doc .pp-table { font-size: 11.5px; }
+.pp-doc .pp-table td { vertical-align: top; }
+.pp-doc .pp-table th { white-space: nowrap; }
+.pp-nowrap { white-space: nowrap; }
+
+.pp-sign { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.pp-sign > div { border: 1px dashed var(--color-divider); border-radius: var(--radius-md); min-height: 120px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; font-size: 12px; }
+.pp-sign-title { font-weight: 500; }
+.pp-blank { height: 22px; border-bottom: 1px dashed var(--color-divider); color: var(--color-neutral-500); font-size: 11px; display: flex; align-items: flex-end; }
+.pp-foot { font-size: 11px; color: var(--color-neutral-500); text-align: center; padding-top: 4px; }
+
+@media (max-width: 760px) {
+  .pp-doc { padding: 16px 12px 32px; }
+  .pp-meta { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .pp-meta dd { margin-bottom: 6px; }
+}
+
+@media print {
+  @page { size: A4; margin: 14mm 12mm 16mm; }
+  html:has(.pp-doc), body:has(.pp-doc) { background: #fff !important; color: #000 !important; }
+  body:has(.pp-doc) .vg-side { display: none !important; }
+  body:has(.pp-doc) .vg-main { padding: 0 !important; }
+  .pp-noprint { display: none !important; }
+  .pp-doc { max-width: none; padding: 0; gap: 14px; font-size: 10pt; }
+  .pp-doc, .pp-doc * { color: #000 !important; }
+  .pp-doc .pp-muted, .pp-doc .pp-h3, .pp-doc .pp-meta dt, .pp-doc .pp-foot, .pp-doc .pp-empty, .pp-doc .pp-blank { color: #444 !important; }
+  .pp-head, .pp-section { background: none !important; border-radius: 0; padding: 0; }
+  .pp-section { padding-top: 8px; border-top: 1.5px solid #000; }
+  .pp-section h2, .pp-h3 { break-after: avoid; }
+  .pp-doc tr, .pp-sign, .pp-meta { break-inside: avoid; }
+  .pp-doc thead { display: table-header-group; }
+  .pp-doc .table thead tr, .pp-doc .table tbody tr, .pp-doc .table tbody tr:hover { background: none !important; }
+  .pp-doc .table th, .pp-doc .table td { border-bottom: 1px solid #bbb !important; padding: 3px 5px; }
+  .pp-doc .tag { background: none !important; border: 1px solid #888; padding: 1px 6px; }
+  .pp-sign > div { border: 1px solid #999 !important; }
+  .pp-blank { border-bottom: 1px solid #999 !important; }
+  .pp-doc a { text-decoration: none; }
+}

@@ -2,11 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
 import { ContractorsTable, NewContractorButton } from '@/components/prevention/ContractorDialogs';
+import {
+  PERMIT_FILTERS, PERMIT_TYPE_FILTERS, PLAN_FILTERS, filterParam, pickFilter, pickType, shownFilters,
+} from '@/components/prevention/filters';
 import { NewPermitButton, PermitAlertActions, PermitsTable } from '@/components/prevention/PermitDialogs';
 import { NewPlanButton, PlanAlertActions, PlansTable } from '@/components/prevention/PlanDialogs';
 import { SiteRuleButton } from '@/components/prevention/SiteRuleDialogs';
-import type { PreventionOptions } from '@/components/prevention/parts';
-import { Icon, SegLinks, hrefWith } from '@/components/ui';
+import { ProcedureNote, type PreventionOptions } from '@/components/prevention/parts';
+import { Icon, MissingNotice, SegLinks, hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { SCREENS, TONE, canApprove, canManage } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -18,17 +21,6 @@ export const metadata: Metadata = { title: SCREENS.prevention.title };
 
 const TABS = [['plans', 'Plans de prévention'], ['permis', 'Permis'], ['entreprises', 'Entreprises extérieures']] as const;
 type Tab = (typeof TABS)[number][0];
-
-// [paramètre, libellé, phase (null = tous), message si vide]
-// « En cours » suit l'indicateur (début ≤ aujourd'hui ≤ fin) ; « À clore » (période échue, plan non clos) n'apparaît que s'il y a lieu.
-const FILTERS = [
-  ['en-cours', 'En cours', 'en_cours', 'Aucune intervention en cours sur ce site.'],
-  ['a-venir', 'À venir', 'a_venir', 'Aucune intervention à venir sur ce site.'],
-  ['a-clore', 'À clore', 'a_clore', 'Aucun plan à clore sur ce site.'],
-  ['clos', 'Clos', 'clos', 'Aucun plan clos sur ce site.'],
-  ['tous', 'Tous', null, 'Aucun plan de prévention sur ce site.'],
-] as const;
-const ALL_FILTER = FILTERS[FILTERS.length - 1];
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
@@ -65,11 +57,25 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   const openPlan = d.plans.find((p) => p.id === str(sp.plan));
   const openPermit = d.permits.find((p) => p.id === str(sp.permis));
   const tab: Tab = openPlan ? 'plans' : openPermit ? 'permis' : TABS.find(([k]) => k === str(sp.onglet))?.[0] ?? 'plans';
-  const requested = FILTERS.find(([k]) => k === str(sp.filtre)) ?? FILTERS[0];
-  const filter = openPlan && requested[2] && requested[2] !== openPlan.phase ? FILTERS.find((f) => f[2] === openPlan.phase) ?? ALL_FILTER : requested;
-  const plans = filter[2] ? d.plans.filter((p) => p.phase === filter[2]) : d.plans;
-  const phaseCount = (phase: string | null) => (phase ? d.plans.filter((p) => p.phase === phase).length : d.plans.length);
-  const shownFilters = FILTERS.filter(([key, , phase]) => phase !== 'a_clore' || phaseCount(phase) > 0 || filter[0] === key);
+
+  // Plans : filtre par phase (?filtre=) ; une fiche ouverte par lien direct bascule sur le filtre qui la contient.
+  const planFilter = pickFilter(PLAN_FILTERS, tab === 'plans' ? str(sp.filtre) : undefined, openPlan?.phase);
+  const plans = d.plans.filter((p) => planFilter.states.includes(p.phase));
+  const planCount = (f: (typeof PLAN_FILTERS)[number]) => d.plans.filter((p) => f.states.includes(p.phase)).length;
+
+  // Permis : filtre par état (?filtre=) puis par type (?type=), compteurs des types après le filtre d'état.
+  const permitFilter = pickFilter(PERMIT_FILTERS, tab === 'permis' ? str(sp.filtre) : undefined, openPermit?.state);
+  const permitType = pickType(str(sp.type), openPermit?.type);
+  const byState = d.permits.filter((p) => permitFilter.states.includes(p.state));
+  const permits = permitType ? byState.filter((p) => p.type === permitType) : byState;
+  const permitCount = (f: (typeof PERMIT_FILTERS)[number]) => d.permits.filter((p) => f.states.includes(p.state) && (!permitType || p.type === permitType)).length;
+  const permitParams = { filtre: filterParam(PERMIT_FILTERS, permitFilter), type: permitType ?? undefined };
+  const registerHref = hrefWith('/prevention/imprimer/permis', {}, permitParams);
+
+  // Entreprises : actives (par défaut) ou archivées.
+  const showArchived = tab === 'entreprises' && str(sp.filtre) === 'archivees';
+  const contractors = d.contractors.filter((c) => c.archived === showArchived);
+  const archivedCount = d.contractors.filter((c) => c.archived).length;
 
   const options: PreventionOptions = {
     people: formOptions.people,
@@ -83,9 +89,18 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
     recordSites: d.choices.recordSites,
     siteLocked: d.choices.siteLocked,
     today: d.now,
+    procedure: d.procedure,
   };
   const tabHref = (k: Tab) => (k === 'plans' ? '/prevention' : `/prevention?onglet=${k}`);
-  const tabCount: Record<Tab, number> = { plans: d.plans.length, permis: d.permits.length, entreprises: d.contractors.length };
+  // Lien direct (?plan=, ?permis=) sans fiche sur le site sélectionné (brouillon supprimé, autre site) : bandeau au-dessus de la liste.
+  const missingPlan = !!str(sp.plan) && !openPlan;
+  const missingPermit = !!str(sp.permis) && !openPermit;
+  // Annulés et archivés hors compteurs des onglets (visibles par leur filtre).
+  const tabCount: Record<Tab, number> = {
+    plans: d.plans.filter((p) => p.status !== 'annule').length,
+    permis: d.permits.filter((p) => p.state !== 'annule').length,
+    entreprises: d.counts.contractors,
+  };
 
   return (
     <>
@@ -104,6 +119,11 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               {approve && <SiteRuleButton site={r} />}
             </div>
           ))}
+          {d.procedure && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', minHeight: 26, alignItems: 'center' }}>
+              <ProcedureNote procedure={d.procedure} />
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
@@ -178,18 +198,25 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
             {manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
             {manage && tab === 'plans' && <NewPlanButton options={options} />}
+            {tab === 'permis' && (
+              // Lien HTML simple (nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application.
+              <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer le registre</a>
+            )}
             {manage && tab === 'permis' && <NewPermitButton options={options} />}
             {manage && tab === 'entreprises' && <NewContractorButton />}
           </span>
         </div>
 
+        {missingPlan && <MissingNotice text="Plan de prévention introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
+        {missingPermit && <MissingNotice text="Permis introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
+
         {tab === 'plans' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <SegLinks options={shownFilters.map(([key, label, phase]) => ({
-                href: hrefWith('/prevention', {}, { filtre: key === 'en-cours' ? undefined : key }),
-                label: <>{label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{phaseCount(phase)}</span></>,
-                on: filter[0] === key,
+              <SegLinks options={shownFilters(PLAN_FILTERS, planFilter, planCount).map((f) => ({
+                href: hrefWith('/prevention', {}, { filtre: filterParam(PLAN_FILTERS, f) }),
+                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{planCount(f)}</span></>,
+                on: f === planFilter,
               }))} />
               <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
                 {allRule
@@ -199,12 +226,24 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                     : "Plan écrit obligatoire (R. 4512-7) : 400 h sur 12 mois ou travaux dangereux (liste de l'arrêté du 19 mars 1993)"}
               </span>
             </div>
-            <PlansTable key={openPlan?.id ?? 'liste'} plans={plans} options={options} canManage={manage} openId={openPlan?.id} emptyLabel={filter[3]} />
+            <PlansTable key={openPlan?.id ?? 'liste'} plans={plans} options={options} canManage={manage} openId={openPlan?.id} emptyLabel={planFilter.empty} />
           </>
         )}
 
         {tab === 'permis' && (
           <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <SegLinks options={shownFilters(PERMIT_FILTERS, permitFilter, permitCount).map((f) => ({
+                href: hrefWith('/prevention', { onglet: 'permis', type: permitParams.type }, { filtre: filterParam(PERMIT_FILTERS, f) }),
+                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{permitCount(f)}</span></>,
+                on: f === permitFilter,
+              }))} />
+              <SegLinks options={PERMIT_TYPE_FILTERS.map((f) => ({
+                href: hrefWith('/prevention', { onglet: 'permis', filtre: permitParams.filtre }, { type: f.key ?? undefined }),
+                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{f.key ? byState.filter((p) => p.type === f.key).length : byState.length}</span></>,
+                on: f.key === permitType,
+              }))} />
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-fire" size={13} style={{ color: 'var(--tone-warn-dot)' }} />Permis de feu : travaux par points chauds, surveillance 2 h après la fin des travaux</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-flask" size={13} style={{ color: 'var(--color-accent)' }} />Permis d&apos;essai : zone d&apos;essais (ATEX zone 2), produits inertes simulant les explosifs</span>
@@ -215,11 +254,24 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                 </span>
               )}
             </div>
-            <PermitsTable key={openPermit?.id ?? 'liste'} permits={d.permits} options={options} canManage={manage} openId={openPermit?.id} />
+            <PermitsTable key={openPermit?.id ?? 'liste'} permits={permits} options={options} canManage={manage} openId={openPermit?.id}
+              emptyLabel={permitType ? `${permitFilter.empty.replace(/\.$/, '')} (${permitType === 'feu' ? 'permis de feu' : "permis d'essai"}).` : permitFilter.empty} />
           </>
         )}
 
-        {tab === 'entreprises' && <ContractorsTable contractors={d.contractors} canManage={manage} />}
+        {tab === 'entreprises' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <SegLinks options={[
+                { href: '/prevention?onglet=entreprises', label: <>Actives<span style={{ marginLeft: 6, opacity: 0.6 }}>{d.counts.contractors}</span></>, on: !showArchived },
+                { href: '/prevention?onglet=entreprises&filtre=archivees', label: <>Archivées<span style={{ marginLeft: 6, opacity: 0.6 }}>{archivedCount}</span></>, on: showArchived },
+              ]} />
+              <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Plans et permis comptés sur le site sélectionné</span>
+            </div>
+            <ContractorsTable contractors={contractors} canManage={manage}
+              emptyLabel={showArchived ? 'Aucune entreprise archivée.' : 'Aucune entreprise extérieure enregistrée.'} />
+          </>
+        )}
       </div>
     </>
   );

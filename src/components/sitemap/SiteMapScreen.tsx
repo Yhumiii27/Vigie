@@ -548,7 +548,7 @@ export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: P
                         <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', paddingLeft: 17 }}>
                           {noPlan && <ToneTag tone={site.ppFromFirstMinute ? 'danger' : 'warn'} style={{ fontSize: 10.5, padding: '1px 7px' }}>Sans plan de prévention</ToneTag>}
                           {gap && (
-                            <span title={gap === 'Plan clos' ? `${a.preventionPlanId} est clos` : `${a.preventionPlanId} · ${a.planStatusLabel ?? ''} : signatures EU et EE exigées avant toute intervention`}>
+                            <span title={gap === 'Plan clos ou annulé' ? `${a.preventionPlanId} est clos ou annulé` : `${a.preventionPlanId} · ${a.planStatusLabel ?? ''} : signatures EU et EE exigées avant toute intervention`}>
                               <ToneTag tone="danger" style={{ fontSize: 10.5, padding: '1px 7px' }}>{gap} · {a.preventionPlanId}</ToneTag>
                             </span>
                           )}
@@ -633,7 +633,7 @@ export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: P
 /** « Ajouter au plan de prévention » : ligne datée dans les risques d'interférence du plan lié. */
 function AddToPlan({ siteId, conflict, planId, single, linked }: { siteId: string; conflict: Conflict; planId: string; single: boolean; linked?: ActivityView }) {
   const { pending, error, run } = useRun();
-  if (linked?.planClosed) return <span style={muted}>{planId} clos</span>;
+  if (linked?.planClosed) return <span style={muted}>{planId} clos ou annulé</span>;
   if (linked?.planInterference?.includes(interferenceLine(conflict))) {
     return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--tone-ok-fg)' }}><Icon name="ph-check" size={12} />Reporté dans {planId}</span>;
   }

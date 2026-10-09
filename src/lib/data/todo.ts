@@ -1,56 +1,36 @@
 import 'server-only';
 import { cache } from 'react';
-import { getDb, schema as t } from '@/db';
-import { addDays, fmtDayMonth, today } from '../dates';
-import type { TodoItem } from '../domain';
-import { actionColumn, controlStatus, lcfirst, loadActions, loadControls, loadPeople } from '../queries';
+import { byUrgency, canOpen, isEmployee, isMine, type TodoItem } from '../domain';
+import { getSession } from '../session';
+import { loadActionSignals } from './actions';
+import { loadAuditSignals } from './audits';
 import { loadDocumentSignals } from './documents';
 import { loadEnvironmentSignals } from './environment';
+import { loadEventSignals } from './events';
 import { loadPreventionSignals } from './prevention';
+import { loadReviewSignals } from './review';
+import { loadRiskSignals } from './risks';
+import { loadSkillSignals } from './skills';
 import { loadCoactivitySignals } from './sitemap';
-import { loadSkillMatrix } from './skills';
+import { loadWatchSignals } from './watch';
 
-export const TODO_HORIZON_DAYS = 15;
+// Source unique des échéances : « À traiter » du tableau de bord, page À faire, notifications et badges.
+// Chaque domaine fournit `load<Domaine>Signals(): Promise<{ todo: TodoItem[] }>` (mémorisé avec cache()) ;
+// son horizon est TODO_HORIZON_DAYS (CONTROL_HORIZON_DAYS pour les contrôles), dépassements compris.
 
-const PLAN_KIND: Record<string, string> = { 'Audits internes': 'Audit interne', 'Visites sécurité': 'Visite sécurité', Certification: 'Certification', Fournisseurs: 'Audit fournisseur', 'Revues de direction': 'Revue de direction' };
-const equipShort = (e: string) => e.split(' — ')[0];
-
-/** Échéances des 15 prochains jours et dépassements, tous domaines confondus (tableau de bord, notifications). */
+/** Toutes les échéances du site sélectionné, avant filtre par rôle : dépassements d'abord, puis par date. */
 export const loadTodo = cache(async (): Promise<TodoItem[]> => {
-  const db = await getDb();
-  const now = today();
-  const [people, actions, controls, plan, skills, ...signals] = await Promise.all([
-    loadPeople(), loadActions(), loadControls(), db.select().from(t.auditPlanItems), loadSkillMatrix(),
-    loadPreventionSignals(), loadDocumentSignals(), loadEnvironmentSignals(), loadCoactivitySignals(),
+  const signals = await Promise.all([
+    loadEventSignals(), loadActionSignals(), loadWatchSignals(), loadSkillSignals(), loadRiskSignals(),
+    loadAuditSignals(), loadReviewSignals(), loadPreventionSignals(), loadCoactivitySignals(),
+    loadDocumentSignals(), loadEnvironmentSignals(),
   ]);
-  const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const inWindow = (d: string | null | undefined): d is string => !!d && d >= now && d <= horizon;
-  const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
-  const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
-  const todo: TodoItem[] = [];
+  return signals.flatMap((s) => s.todo).sort(byUrgency);
+});
 
-  controls.forEach((c) => {
-    const s = controlStatus(c, now);
-    const who = [c.organization, name(c.responsibleId)].filter(Boolean).join(' · ');
-    const title = `${c.controlType} · ${lcfirst(equipShort(c.equipment))}`;
-    const href = `/veille?onglet=controles&controle=${c.id}`;
-    if (s.days < 0) todo.push({ date: now, kind: 'Contrôle', tone: 'danger', title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}`, who, href });
-    else if (inWindow(c.nextOn)) todo.push({ date: c.nextOn, kind: 'Contrôle', tone: 'warn', title, who, href });
-  });
-  actions.forEach((a) => {
-    const col = actionColumn(a, now);
-    const href = `/actions?action=${a.id}`;
-    if ((col === 'todo' || col === 'doing') && inWindow(a.dueOn) && !planActions.has(a.id)) todo.push({ date: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${a.title}`, who: name(a.pilotId), href });
-    if (col === 'verify' && inWindow(a.verifyDueOn)) todo.push({ date: a.verifyDueOn, kind: 'Efficacité', tone: 'accent', title: `${a.eventId ?? a.originRef} · vérification d'efficacité de ${a.id}`, who: name(a.pilotId), href });
-  });
-  plan.forEach((p) => {
-    if (!p.done && inWindow(p.plannedOn)) todo.push({ date: p.plannedOn, kind: PLAN_KIND[p.track] ?? p.track, tone: 'neutral', title: p.detail ?? p.label, who: name(p.ownerId), href: '/audits' });
-  });
-  skills.alerts.forEach((al) => {
-    const d = al.assignment.startOn < now ? now : al.assignment.startOn;
-    if (d <= horizon) todo.push({ date: d, kind: 'Habilitation', tone: 'danger', title: `${al.person.name} · ${lcfirst(al.title)} ${al.state === 'x' ? 'expiré' : 'jamais suivi'}, affecté à ${al.assignment.project.split(' · ')[0]}`, who: name('clefevre'), href: '/habilitations' });
-  });
-
-  signals.forEach((s) => todo.push(...s.todo));
-  return todo.sort((a, b) => a.date.localeCompare(b.date));
+/** Échéances visibles par la personne connectée : écrans ouverts à son rôle ; pour un salarié, les siennes seulement. */
+export const loadVisibleTodo = cache(async (): Promise<TodoItem[]> => {
+  const [{ role, user }, todo] = await Promise.all([getSession(), loadTodo()]);
+  const reach = todo.filter((t) => canOpen(role, t.href));
+  return isEmployee(role) ? reach.filter((t) => isMine(t, user)) : reach;
 });

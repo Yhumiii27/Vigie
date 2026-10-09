@@ -1,9 +1,10 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import type { FormOptions } from '@/lib/data/options';
+import { ALL_SITES, EVENT_ORIGINS } from '@/lib/domain';
 import { saveAction } from '@/server/plan';
 
 export type ActionDefaults = {
@@ -15,6 +16,8 @@ export type ActionDefaults = {
   eventId?: string | null;
   siteId?: string | null;
   pilotId?: string;
+  /** Nom du pilote (modification) : conservé comme choix s'il a quitté l'effectif. */
+  pilotName?: string;
   dueOn?: string;
   kind?: 'C' | 'P';
   verifyDueOn?: string | null;
@@ -24,14 +27,33 @@ export type ActionDefaults = {
   lockOrigin?: boolean;
 };
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'events'>>;
 
-/** Formulaire de création / modification d'une action du plan d'actions unique. */
+/**
+ * Formulaire de création / modification d'une action du plan d'actions unique.
+ * Origine Événement ou Client (et liste `options.events` fournie) : sélecteur « Événement lié », qui rattache
+ * réellement l'action à l'événement (fiche événement, blocage de l'étape Actions).
+ */
 export function ActionFields({ options, defaults = {}, onDone, onCancel }: { options: Opts; defaults?: ActionDefaults; onDone: () => void; onCancel?: () => void }) {
   const editing = !!defaults.id;
+  const [origin, setOrigin] = useState(defaults.origin ?? 'ev');
+  const [eventId, setEventId] = useState(defaults.eventId ?? '');
+  const pickEvent = !defaults.lockOrigin && !!options.events && EVENT_ORIGINS.includes(origin);
+  // Événement déjà lié mais absent de la liste (clôturé, classé sans suite) : conservé comme choix.
+  const events = options.events && defaults.eventId && !options.events.some(([v]) => v === defaults.eventId)
+    ? [[defaults.eventId, defaults.eventId] as const, ...options.events]
+    : options.events ?? [];
+  // Site archivé encore porté par l'action modifiée : conservé comme choix (la modification envoie toujours une valeur).
+  const sites = defaults.siteId && !options.sites.some(([v]) => v === defaults.siteId)
+    ? [...options.sites, [defaults.siteId, defaults.siteId] as const]
+    : options.sites;
+  // Pilote sorti de l'effectif encore porté par l'action modifiée : conservé comme choix, signalé pour être remplacé.
+  const people = editing && defaults.pilotId && !options.people.some(([v]) => v === defaults.pilotId)
+    ? [...options.people, [defaults.pilotId, `${defaults.pilotName ?? defaults.pilotId} — a quitté l'effectif`] as const]
+    : options.people;
   return (
     <ActionForm action={saveAction} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : "Créer l'action"}
-      hidden={{ id: defaults.id, eventId: defaults.eventId, link: defaults.link, ...(defaults.lockOrigin ? { origin: defaults.origin, originRef: defaults.originRef } : {}) }}>
+      hidden={{ id: defaults.id, link: defaults.link, ...(defaults.lockOrigin ? { origin: defaults.origin, originRef: defaults.originRef, eventId: defaults.eventId } : {}) }}>
       <Field name="title" label="Action">
         <Input name="title" defaultValue={defaults.title} placeholder="Verbe d'action + objet (ex. Remplacer les élingues textiles…)" autoFocus />
       </Field>
@@ -41,16 +63,22 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel }: { opt
       {!defaults.lockOrigin && (
         <FormRow>
           <Field name="origin" label="Origine">
-            <Select name="origin" options={options.origins} defaultValue={defaults.origin ?? 'ev'} />
+            <Select name="origin" options={options.origins} defaultValue={defaults.origin ?? 'ev'} onChange={(e) => setOrigin(e.target.value)} />
           </Field>
-          <Field name="originRef" label="Référence d'origine" hint={defaults.eventId ? undefined : 'Ex. EV-2026-131, Audit interne juin 2026'}>
+          <Field name="originRef" label="Référence d'origine"
+            hint={pickEvent && eventId ? "Par défaut : référence de l'événement" : 'Ex. EV-2026-131, Audit interne juin 2026'}>
             <Input name="originRef" defaultValue={defaults.originRef} />
           </Field>
         </FormRow>
       )}
+      {pickEvent && (
+        <Field name="eventId" label="Événement lié" hint="L'action apparaîtra dans la fiche de l'événement.">
+          <Select name="eventId" options={events} defaultValue={defaults.eventId ?? ''} placeholder="Aucun" onChange={(e) => setEventId(e.target.value)} />
+        </Field>
+      )}
       <FormRow>
         <Field name="pilotId" label="Pilote">
-          <Select name="pilotId" options={options.people} defaultValue={defaults.pilotId} placeholder="Choisir…" />
+          <Select name="pilotId" options={people} defaultValue={defaults.pilotId} placeholder="Choisir…" />
         </Field>
         <Field name="dueOn" label="Échéance">
           <Input name="dueOn" type="date" defaultValue={defaults.dueOn} />
@@ -61,7 +89,9 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel }: { opt
           <Select name="kind" options={[['C', 'Corrective'], ['P', 'Préventive']]} defaultValue={defaults.kind ?? 'C'} />
         </Field>
         <Field name="siteId" label="Site">
-          <Select name="siteId" options={options.sites} defaultValue={defaults.siteId ?? ''} placeholder="Tous les sites" />
+          {/* '' = site sélectionné ; ALL_SITES = action valable pour tous les sites. */}
+          <Select name="siteId" options={[[ALL_SITES, 'Tous les sites'], ...sites]} placeholder="Site sélectionné"
+            defaultValue={defaults.siteId === null ? ALL_SITES : defaults.siteId ?? ''} />
         </Field>
       </FormRow>
       {editing && (

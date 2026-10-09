@@ -3,11 +3,9 @@ import { ClickRow } from '@/components/ClickRow';
 import { PageHeader } from '@/components/PageHeader';
 import { Aside, CardHead, Dot, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDay, fmtDayMonth, fmtLong, fmtMonthAbbr, isoWeek, today } from '@/lib/dates';
-import { SEVERITY, SCREENS, TONE, severityTone } from '@/lib/domain';
+import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, severityTone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
-import { loadDashboard } from '@/lib/data/dashboard';
-
-const MAX_TODO = 7;
+import { MAX_TODO, loadDashboard } from '@/lib/data/dashboard';
 
 export default async function DashboardPage() {
   await guard('dashboard');
@@ -19,55 +17,86 @@ export default async function DashboardPage() {
       <PageHeader title={SCREENS.dashboard.title} sub={`Semaine ${isoWeek(now)} · données au ${fmtLong(now)}`} />
       <div className="vg-page" style={{ gap: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-          {d.kpis.map((k) => (
-            <div key={k.label} className="card" style={{ gap: 5, padding: '12px 14px' }}>
-              <div className="vg-eyebrow" style={{ color: 'var(--color-neutral-500)' }}>{k.label}</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-.02em', lineHeight: 1.1 }}>{k.value}</span>
-                <span style={{ fontSize: 12, color: k.tone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.tone].dot }}>{k.sub}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
-            </div>
-          ))}
+          {d.kpis.map((k) => {
+            const body = (
+              <>
+                <div className="vg-eyebrow" style={{ color: 'var(--color-neutral-500)' }}>{k.label}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-.02em', lineHeight: 1.1 }}>{k.value}</span>
+                  <span style={{ fontSize: 12, color: k.tone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.tone].dot }}>{k.sub}</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
+              </>
+            );
+            const style = { gap: 5, padding: '12px 14px' } as const;
+            return k.href
+              ? <Link key={k.label} href={k.href} className="card vg-kcard" style={style}>{body}</Link>
+              : <div key={k.label} className="card" style={style}>{body}</div>;
+          })}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
           <div className="card" style={{ gap: 10 }}>
             <CardHead title="Pyramide des événements sécurité" aside={<Aside>12 mois glissants</Aside>} />
-            <div style={{ display: 'grid', gap: 6 }}>
-              {d.pyramid.map((p) => (
-                <div key={p.label} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 32px', alignItems: 'center', gap: 10, fontSize: 12 }}>
-                  <span style={{ color: 'var(--color-neutral-400)' }}>{p.label}</span>
-                  <div style={{ display: 'flex', justifyContent: 'center' }}><div style={{ height: 16, borderRadius: 3, width: p.w, background: p.color }} /></div>
-                  <span style={{ textAlign: 'right', fontWeight: 500 }}>{p.n}</span>
+            {d.pyramidTotal === 0
+              ? <span className="vg-muted" style={{ fontSize: 12 }}>Aucun événement sécurité sur 12 mois glissants.</span>
+              : (
+                <div style={{ display: 'grid', gap: 2 }}>
+                  {d.pyramid.map((p) => {
+                    const body = (
+                      <>
+                        <span style={{ color: 'var(--color-neutral-400)' }}>{p.label}</span>
+                        <div style={{ display: 'flex', justifyContent: 'center' }}><div style={{ height: 16, borderRadius: 3, width: p.w, background: p.color }} /></div>
+                        <span style={{ textAlign: 'right', fontWeight: 500 }}>{p.n}</span>
+                      </>
+                    );
+                    const style = { display: 'grid', gridTemplateColumns: '150px 1fr 32px', alignItems: 'center', gap: 10, fontSize: 12, padding: '2px 4px', textDecoration: 'none' } as const;
+                    return p.href
+                      ? <Link key={p.label} href={p.href} className="vg-row" style={style}>{body}</Link>
+                      : <div key={p.label} style={style}>{body}</div>;
+                  })}
                 </div>
-              ))}
-            </div>
+              )}
           </div>
 
           <div className="card" style={{ gap: 10 }}>
             <CardHead title="Non-conformités par origine" aside={<Aside>{d.ncOpen} ouverte{d.ncOpen > 1 ? 's' : ''}</Aside>} />
-            <div style={{ display: 'grid', gap: 8 }}>
-              {d.ncOrigins.map((o) => (
-                <div key={o.label} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 24px', alignItems: 'center', gap: 10, fontSize: 12 }}>
-                  <span style={{ color: 'var(--color-neutral-400)' }}>{o.label}</span>
-                  <div style={{ height: 8, borderRadius: 2, background: 'var(--color-neutral-900)' }}><div style={{ height: '100%', borderRadius: 2, width: o.w, background: 'var(--color-accent-600)' }} /></div>
-                  <span style={{ textAlign: 'right', fontWeight: 500 }}>{o.n}</span>
+            {d.ncOpen === 0
+              ? <span className="vg-muted" style={{ fontSize: 12 }}>Aucune non-conformité ni réclamation ouverte.</span>
+              : (
+                <div style={{ display: 'grid', gap: 2 }}>
+                  {d.ncOrigins.map((o) => {
+                    const body = (
+                      <>
+                        <span style={{ color: 'var(--color-neutral-400)' }}>{o.label}</span>
+                        <div style={{ height: 8, borderRadius: 2, background: 'var(--color-neutral-900)' }}><div style={{ height: '100%', borderRadius: 2, width: o.w, background: 'var(--color-accent-600)' }} /></div>
+                        <span style={{ textAlign: 'right', fontWeight: 500 }}>{o.n}</span>
+                      </>
+                    );
+                    const style = { display: 'grid', gridTemplateColumns: '140px 1fr 24px', alignItems: 'center', gap: 10, fontSize: 12, padding: '3px 4px', textDecoration: 'none' } as const;
+                    return o.href
+                      ? <Link key={o.label} href={o.href} className="vg-row" style={style}>{body}</Link>
+                      : <div key={o.label} style={style}>{body}</div>;
+                  })}
                 </div>
-              ))}
-            </div>
-            <Link href="/evenements?type=NC" className="vg-link" style={{ marginTop: 'auto' }}>Voir les non-conformités →</Link>
+              )}
+            {d.ncHref && <Link href={d.ncHref} className="vg-link" style={{ marginTop: 'auto' }}>Voir les non-conformités et réclamations →</Link>}
           </div>
 
           <div className="card" style={{ gap: 8 }}>
-            <CardHead title="À traiter dans les 15 jours" aside={<Aside>{d.todo.length} échéance{d.todo.length > 1 ? 's' : ''}</Aside>} />
+            <CardHead title={`À traiter dans les ${TODO_HORIZON_DAYS} jours`} aside={
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                <Link href="/a-faire" className="vg-link">Tout voir →</Link>
+                <Aside>{d.todo.length} échéance{d.todo.length > 1 ? 's' : ''}</Aside>
+              </span>
+            } />
             <div style={{ display: 'grid', gap: 7 }}>
-              {d.todo.length === 0 && <span className="vg-muted" style={{ fontSize: 12 }}>Aucune échéance dans les 15 prochains jours.</span>}
+              {d.todo.length === 0 && <span className="vg-muted" style={{ fontSize: 12 }}>Aucune échéance dans les {TODO_HORIZON_DAYS} prochains jours.</span>}
               {d.todo.slice(0, MAX_TODO).map((t, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'start' }}>
-                  <div style={{ textAlign: 'center', lineHeight: 1.1 }}>
+                  <div style={{ textAlign: 'center', lineHeight: 1.1, color: t.overdue ? TONE.danger.dot : undefined }}>
                     <div style={{ fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</div>
-                    <div style={{ fontSize: 10, color: 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
+                    <div style={{ fontSize: 10, color: t.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
                     {t.href
@@ -80,7 +109,7 @@ export default async function DashboardPage() {
                   </div>
                 </div>
               ))}
-              {d.todo.length > MAX_TODO && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)', paddingLeft: 46 }}>+ {d.todo.length - MAX_TODO} autres échéances</span>}
+              {d.todoMore > 0 && <Link href="/a-faire" className="vg-link" style={{ paddingLeft: 46 }}>Voir {d.todoMore > 1 ? `les ${d.todoMore} autres échéances` : "l'autre échéance"} →</Link>}
             </div>
           </div>
         </div>
@@ -92,6 +121,9 @@ export default async function DashboardPage() {
               <table className="table" style={{ fontSize: 12.5, minWidth: 640 }}>
                 <thead><tr><th>Réf.</th><th>Date</th><th>Type</th><th>Intitulé</th><th>Lieu</th><th>Gravité</th><th>Étape</th><th>Pilote</th></tr></thead>
                 <tbody>
+                  {d.latest.length === 0 && (
+                    <tr><td colSpan={8} className="vg-muted">Aucun signalement{d.scoped ? ' sur ce site' : ''}. <Link href="/apercu-mobile" className="vg-link">Nouveau signalement →</Link></td></tr>
+                  )}
                   {d.latest.map((e) => {
                     const href = `/evenements?sel=${e.id}`;
                     return (
@@ -127,7 +159,10 @@ export default async function DashboardPage() {
                   <span style={{ fontSize: 12.5 }}>projets Keystone concernés<br /><span style={{ color: 'var(--color-neutral-500)', fontSize: 11.5 }}>livraison planifiée après le {fmtDate(d.featured.dueOn)}</span></span>
                 </div>
               )}
-              <Link href={`/veille?exigence=${d.featured.id}`} className="vg-link">Voir l&apos;exigence{d.featured.actionId ? ` et l'analyse d'écart ${d.featured.actionId}` : ''} →</Link>
+              {d.featured.projectIds.length > 0 && (
+                <div style={{ fontSize: 11.5, color: 'var(--color-neutral-400)', fontVariantNumeric: 'tabular-nums', textWrap: 'pretty' }}>{d.featured.projectIds.join(' · ')}</div>
+              )}
+              {d.featured.href && <Link href={d.featured.href} className="vg-link">Voir l&apos;exigence{d.featured.actionId ? ` et l'analyse d'écart ${d.featured.actionId}` : ''} →</Link>}
             </div>
           )}
         </div>

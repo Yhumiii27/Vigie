@@ -197,3 +197,10 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
   .vg-header, .vg-page { padding-left: 16px; padding-right: 16px; }
   .vg-form-row { grid-template-columns: minmax(0, 1fr) !important; }
 }
+
+/* ─── Squelettes de chargement (loading.tsx) et état non lu ─────────────── */
+.vg-skel { display: block; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-text) 7%, transparent); animation: vg-pulse 1.4s ease-in-out infinite; }
+@keyframes vg-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .vg-skel { animation: none; } }
+.vg-unread { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); flex: none; }
+.vg-history > summary::-webkit-details-marker { display: none; }

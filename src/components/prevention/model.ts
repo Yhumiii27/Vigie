@@ -16,13 +16,20 @@ export const DANGEROUS_WORK_HINT =
 
 // ─── Plans de prévention ────────────────────────────────────────────────────
 
-export type PlanStatus = 'brouillon' | 'a_signer' | 'signe' | 'clos';
+export type PlanStatus = 'brouillon' | 'a_signer' | 'signe' | 'clos' | 'annule';
 export const PLAN_STATUS: Record<PlanStatus, { label: string; tone: Tone }> = {
   brouillon: { label: 'Brouillon', tone: 'neutral' },
   a_signer: { label: 'À signer', tone: 'warn' },
   signe: { label: 'Signé', tone: 'ok' },
   clos: { label: 'Clos', tone: 'neutral' },
+  annule: { label: 'Annulé', tone: 'neutral' },
 };
+
+/** Pièces jointes ajoutées en une fois sur un plan (dans la limite de MAX_BATCH_BYTES au total). */
+export const MAX_PLAN_FILES = 5;
+
+/** Plan terminé : clos, ou annulé avec motif (intervention n'ayant pas lieu). Il ne se modifie plus. */
+export const isPlanEnded = (p: { status: string }) => p.status === 'clos' || p.status === 'annule';
 
 type PlanLike = {
   status: string;
@@ -84,23 +91,42 @@ export const isFullySigned = (p: Pick<PlanLike, 'signedEuOn' | 'signedEeOn'>) =>
 /** Inspection commune préalable réalisée à la date `now`. */
 export const inspectionDone = (p: Pick<PlanLike, 'inspectionOn'>, now: string) => !!p.inspectionOn && p.inspectionOn <= now;
 
-/** Statut dérivé : brouillon → à signer (inspection commune réalisée) → signé (EU et EE) → clos. */
+/** Statut dérivé : brouillon → à signer (inspection commune réalisée) → signé (EU et EE) → clos ; ou annulé. */
 export function planStatus(p: PlanLike, now: string): PlanStatus {
+  if (p.status === 'annule') return 'annule';
   if (p.status === 'clos') return 'clos';
   if (isFullySigned(p)) return 'signe';
   if (inspectionDone(p, now)) return 'a_signer';
   return 'brouillon';
 }
 
-/** Intervention en cours : période commencée et non terminée, plan non clos. */
-export const isInProgress = (p: PlanLike, now: string) => p.status !== 'clos' && p.startOn <= now && now <= p.endOn;
+/** Intervention en cours : période commencée et non terminée, plan ni clos ni annulé. */
+export const isInProgress = (p: PlanLike, now: string) => !isPlanEnded(p) && p.startOn <= now && now <= p.endOn;
 
 /** Écart R. 4512-6 (ou règle Seveso du site) : intervention en cours sans plan obligatoire signé par les deux entreprises. */
 export const lacksSignedPlan = (p: PlanLike, now: string, rule: SiteRule | null | undefined) => isInProgress(p, now) && isMandatory(p, rule) && !isFullySigned(p);
 
-export type PlanPhase = 'en_cours' | 'a_venir' | 'a_clore' | 'clos';
-/** Regroupement des filtres : en cours (début ≤ aujourd'hui ≤ fin, comme l'indicateur), à venir, à clore (période échue non close), clos. */
+/**
+ * Motif empêchant de clore ou d'annuler un plan (même règle à l'écran et côté serveur), null sinon :
+ * jamais pendant une intervention sans le plan obligatoire signé ; après une intervention réalisée sans plan signé,
+ * seulement une fois l'écart tracé par une action ; jamais avec des permis rattachés encore actifs.
+ */
+export function planEndIssue(
+  p: PlanLike,
+  { mandatory, now, openPermitIds, actionCount, verb }: { mandatory: boolean; now: string; openPermitIds: string[]; actionCount: number; verb: 'clore' | 'annuler' },
+): string | null {
+  const unsigned = mandatory && !isFullySigned(p);
+  const what = verb === 'clore' ? 'de clore le plan' : "d'annuler le plan";
+  if (unsigned && p.startOn <= now && p.endOn >= now) return `Intervention en cours avec un plan obligatoire non signé : enregistrez les signatures des deux entreprises avant ${what}.`;
+  if (unsigned && p.startOn <= now && !actionCount) return `Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant ${what}.`;
+  if (openPermitIds.length) return `Permis rattachés encore actifs (${openPermitIds.join(', ')}) : clôturez-les ou annulez-les avant ${what}.`;
+  return null;
+}
+
+export type PlanPhase ='en_cours' | 'a_venir' | 'a_clore' | 'clos' | 'annule';
+/** Regroupement des filtres : en cours (début ≤ aujourd'hui ≤ fin, comme l'indicateur), à venir, à clore (période échue non close), clos, annulé. */
 export function planPhase(p: PlanLike, now: string): PlanPhase {
+  if (p.status === 'annule') return 'annule';
   if (p.status === 'clos') return 'clos';
   if (p.startOn > now) return 'a_venir';
   return p.endOn < now ? 'a_clore' : 'en_cours';
@@ -199,7 +225,7 @@ export const permitDays = (p: { validFrom: Date; validTo: Date }) => ({ from: to
 /** La période du plan couvre les jours `from` à `to`. */
 export const planCovers = (plan: Pick<PlanLike, 'startOn' | 'endOn'>, from: string, to: string) => plan.startOn <= from && to <= plan.endOn;
 
-/** Nature du défaut de plan d'un permis : aucun plan, plan clos, période ne couvrant pas la validité, plan non signé. */
+/** Nature du défaut de plan d'un permis : aucun plan, plan clos ou annulé, période ne couvrant pas la validité, plan non signé. */
 export type PermitPlanIssueKind = 'missing' | 'closed' | 'dates' | 'unsigned';
 
 /**
@@ -214,7 +240,7 @@ export const permitNeedsSignedPlan = (permit: Pick<PermitPlanLike, 'type' | 'con
 
 /**
  * Défaut du plan de prévention d'un permis (null s'il est en règle), selon la règle du site du permis :
- * - site « dès la première minute » : une entreprise extérieure doit avoir un plan rattaché, non clos, couvrant la validité et signé (EU et EE) ;
+ * - site « dès la première minute » : une entreprise extérieure doit avoir un plan rattaché, ni clos ni annulé, couvrant la validité et signé (EU et EE) ;
  * - sinon : le permis de feu d'une entreprise extérieure (travaux dangereux) exige de même un plan signé couvrant la validité ;
  *   pour les autres permis, un plan rattaché doit être non clos et couvrir la validité, et signé s'il est obligatoire (R. 4512-7).
  */
@@ -231,7 +257,7 @@ export function permitPlanCheck(permit: PermitPlanLike, plan: LinkedPlan | null 
         : "Aucun plan de prévention n'est rattaché à l'intervention de l'entreprise extérieure.",
     };
   }
-  if (plan.status === 'clos') return { kind: 'closed', message: `Le plan de prévention ${plan.id} est clos.` };
+  if (isPlanEnded(plan)) return { kind: 'closed', message: `Le plan de prévention ${plan.id} est ${plan.status === 'annule' ? 'annulé' : 'clos'}.` };
   const { from, to } = permitDays(permit);
   if (!planCovers(plan, from, to)) return { kind: 'dates', message: `Le plan de prévention ${plan.id} (${fmtPeriod(plan.startOn, plan.endOn)}) ne couvre pas la validité du permis.` };
   if ((required || isMandatory(plan, rule)) && !isFullySigned(plan)) {

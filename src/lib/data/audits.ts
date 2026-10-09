@@ -1,94 +1,219 @@
 import 'server-only';
-import { asc } from 'drizzle-orm';
+import { cache } from 'react';
+import { asc, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addDays, addMonths, fmtDate, today, yearOf } from '../dates';
-import { EVENT_STEPS, ORIGINS, REQUIREMENT_EVAL, ROLES, columnOf, type Tone } from '../domain';
-import { actionColumn, isOpen, loadActions, loadEvents, loadPeople, type ActionRow, type Person } from '../queries';
-import { getSession } from '../session';
-import { TF1_TARGET, loadDashboard } from './dashboard';
-import { loadSkillMatrix, type SkillAlert } from './skills';
+import { isReviewPlanItem } from '@/components/audits/shared';
+import type { ChangeEntry } from '@/components/ChangeLog';
+import { addDays, fmtDate, fmtDayMonth, monthName, today, yearOf } from '../dates';
+import { FINDING_KINDS, QHSE_LEAD, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type TodoItem, type Tone } from '../domain';
+import { actionBrief, certificationStatus, loadPeople, type ActionBrief } from '../queries';
+import { loadChangeLogs } from './changelog';
+import type { Option } from './options';
 
 // ─── Audits et certifications ───────────────────────────────────────────────
 
 export type Certification = typeof t.certifications.$inferSelect;
-export type ReviewItem = typeof t.reviewItems.$inferSelect;
 
-/** Action du plan d'actions rattachée à un élément d'audit (statut calculé). */
-export type ActionBrief = { id: string; title: string; status: string; tone: Tone; pilot: string; dueOn: string; closedOn: string | null; efficacyNote: string | null };
+// ActionBrief / actionBrief : déplacés dans src/lib/queries.ts (partagés avec la revue de direction).
+export type { ActionBrief } from '../queries';
+
+/** Pièce jointe affichée en lien (rapport d'audit, certificat). */
+export type AttachmentBrief = { id: string; fileName: string; createdAt: string };
 
 export type PlanItemView = {
   id: number; year: number; track: string; month: number; label: string;
   plannedOn: string | null; detail: string | null; ownerId: string | null; owner: string;
-  done: boolean; actionId: string | null; action: ActionBrief | null;
+  done: boolean; doneOn: string | null; auditor: string | null; scope: string | null; certificationId: string | null;
+  actionId: string | null; action: ActionBrief | null;
+  state: PlanItemState; reports: AttachmentBrief[]; findingCount: number;
+  /** Nature de l'élément selon sa ligne (Audit interne, Visite sécurité…). */
+  kind: string;
+  /** Échéance qui porte une revue de direction (ni auditeur ni constats). */
+  isReview: boolean;
+  /** Retrait possible : jamais réalisé, sans action, constat (même annulé) ni rapport. Sinon l'élément reste au programme. */
+  removable: boolean;
+  log: ChangeEntry[];
 };
 
-export type FindingView = { id: number; audit: string; kind: string; text: string; sort: number; actionId: string | null; action: ActionBrief | null };
-export type AuditGroup = { label: string; findings: FindingView[] };
+export type FindingView = {
+  id: number; audit: string; planItemId: number | null; clause: string | null; foundOn: string | null;
+  kind: string; text: string; sort: number; actionId: string | null; action: ActionBrief | null;
+  /** Annulation (constat saisi par erreur ou en double) : hors groupes et échéances, visible avec le filtre « Annulés ». */
+  cancelled: { on: string; by: string; reason: string } | null;
+  log: ChangeEntry[];
+};
+/** Constat annulé, avec le libellé de son audit (filtre « Annulés »). */
+export type CancelledFindingView = FindingView & { cancelled: NonNullable<FindingView['cancelled']>; groupLabel: string };
+/** Constats d'un même audit : élément du programme (clé p<id>) ou libellé libre hors programme (clé l<libellé>). */
+export type AuditGroup = {
+  key: string; label: string; planItemId: number | null; year: number | null; date: string | null; auditor: string | null;
+  reports: AttachmentBrief[]; findings: FindingView[];
+};
 
-/** Libellé proposé pour un nouveau constat quand aucun audit n'est encore saisi. */
-export const DEFAULT_AUDIT = 'Audit interne production · juin 2026';
+/** Référentiel avec son statut calculé, ses audits rattachés au programme et son certificat. */
+export type CertView = Certification & {
+  state: { label: string; tone: Tone };
+  nextAudit: { id: number; year: number; plannedOn: string } | null;
+  lastAudit: { id: number; year: number; doneOn: string | null; findingCount: number } | null;
+  files: AttachmentBrief[];
+  /** Suppression possible : jamais certifié (ni émission ni fin de validité), sans audit au programme ni certificat. */
+  removable: boolean;
+  log: ChangeEntry[];
+};
 
-function actionBrief(a: ActionRow | undefined, people: Map<string, Person>, now: string): ActionBrief | null {
-  if (!a) return null;
-  const c = columnOf(actionColumn(a, now));
-  return { id: a.id, title: a.title, status: c.status, tone: c.tone, pilot: people.get(a.pilotId)?.name ?? '—', dueOn: a.dueOn, closedOn: a.closedOn, efficacyNote: a.efficacyNote };
-}
+/** Libellé proposé pour un nouveau constat hors programme quand aucun audit n'est encore saisi. */
+export const DEFAULT_AUDIT = 'Processus Production · juin 2026';
 
-async function readAudits() {
+/** Borne de fin de mois pour les comparaisons de chaînes ISO (le « 31 » vaut pour tous les mois). */
+const monthEnd = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-31`;
+
+type PlanLike = { year: number; month: number; label: string; detail: string | null; plannedOn: string | null; done: boolean };
+
+/** Réalisé, échéance passée non confirmée (« à confirmer »), ou à venir. */
+export const planItemState = (p: PlanLike, now: string): PlanItemState =>
+  p.done ? 'done' : (p.plannedOn ?? monthEnd(p.year, p.month)) < now ? 'late' : 'upcoming';
+
+/** Libellé d'audit repris par les constats rattachés à un élément du programme (« Processus Production · juin 2026 »). */
+export const planItemAuditLabel = (p: Pick<PlanLike, 'year' | 'month' | 'label' | 'detail'>) => `${p.detail ?? p.label} · ${monthName(p.month)} ${p.year}`;
+
+// isReviewPlanItem : règle partagée avec le formulaire du programme (src/components/audits/shared.ts).
+export { isReviewPlanItem };
+
+/** Date de référence d'un élément du programme (tri, constats) : réalisation, date prévue, sinon fin du mois. */
+const planDate = (p: { year: number; month: number; plannedOn: string | null; doneOn: string | null }) => p.doneOn ?? p.plannedOn ?? monthEnd(p.year, p.month);
+
+const readAudits = cache(async () => {
   const db = await getDb();
-  const [certs, plan, findings, review, actions, people] = await Promise.all([
+  const [certs, plan, findings, actions, people, files] = await Promise.all([
     db.select().from(t.certifications).orderBy(asc(t.certifications.sort), asc(t.certifications.id)),
     db.select().from(t.auditPlanItems).orderBy(asc(t.auditPlanItems.id)),
     db.select().from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
-    db.select().from(t.reviewItems).orderBy(asc(t.reviewItems.sort), asc(t.reviewItems.id)),
     // Toutes les actions (sans filtre de site) : un constat ou une échéance garde son action liée quel que soit le site affiché.
     db.select().from(t.actions),
     loadPeople(),
+    db.select({ id: t.attachments.id, entityType: t.attachments.entityType, entityId: t.attachments.entityId, fileName: t.attachments.fileName, createdAt: t.attachments.createdAt })
+      .from(t.attachments).where(inArray(t.attachments.entityType, ['audit_plan_item', 'certification'])).orderBy(asc(t.attachments.createdAt)),
+  ]);
+  const [findingLogs, planLogs, certLogs] = await Promise.all([
+    loadChangeLogs('audit_finding', findings.map((f) => f.id)),
+    loadChangeLogs('audit_plan_item', plan.map((p) => p.id)),
+    loadChangeLogs('certification', certs.map((c) => c.id)),
   ]);
   const now = today();
   const actionsById = new Map(actions.map((a) => [a.id, a]));
   const brief = (id: string | null) => (id ? actionBrief(actionsById.get(id), people, now) : null);
+  const filesOf = (entityType: string, id: string | number) => files
+    .filter((f) => f.entityType === entityType && f.entityId === String(id))
+    .map((f) => ({ id: f.id, fileName: f.fileName, createdAt: f.createdAt.toISOString() }));
 
-  const planViews: PlanItemView[] = plan.map((p) => ({
-    id: p.id, year: p.year, track: p.track, month: p.month, label: p.label, plannedOn: p.plannedOn, detail: p.detail,
-    ownerId: p.ownerId, owner: p.ownerId ? people.get(p.ownerId)?.name ?? '' : '', done: p.done, actionId: p.actionId, action: brief(p.actionId),
+  const findingViews: FindingView[] = findings.map((f) => ({
+    id: f.id, audit: f.audit, planItemId: f.planItemId, clause: f.clause, foundOn: f.foundOn,
+    kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId),
+    cancelled: f.cancelledAt
+      ? { on: f.cancelledAt.toISOString().slice(0, 10), by: f.cancelledById ? people.get(f.cancelledById)?.name ?? '' : '', reason: f.cancelReason ?? '' }
+      : null,
+    log: findingLogs.get(String(f.id)) ?? [],
   }));
+  const active = findingViews.filter((f) => !f.cancelled);
 
-  // Constats regroupés par audit ; le dernier audit est celui dont le premier constat a été saisi le plus récemment.
-  const groups = new Map<string, FindingView[]>();
-  findings.forEach((f) => {
-    const list = groups.get(f.audit) ?? [];
-    list.push({ id: f.id, audit: f.audit, kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId) });
-    groups.set(f.audit, list);
+  const planViews: PlanItemView[] = plan.map((p) => {
+    const reports = filesOf('audit_plan_item', p.id);
+    return {
+      id: p.id, year: p.year, track: p.track, month: p.month, label: p.label, plannedOn: p.plannedOn, detail: p.detail,
+      ownerId: p.ownerId, owner: p.ownerId ? people.get(p.ownerId)?.name ?? '' : '',
+      done: p.done, doneOn: p.doneOn, auditor: p.auditor, scope: p.scope, certificationId: p.certificationId,
+      actionId: p.actionId, action: brief(p.actionId),
+      state: planItemState(p, now), reports, findingCount: active.filter((f) => f.planItemId === p.id).length,
+      kind: planTrackKind(p.track), isReview: isReviewPlanItem(p),
+      removable: !p.done && !p.actionId && !reports.length && !findings.some((f) => f.planItemId === p.id),
+      log: planLogs.get(String(p.id)) ?? [],
+    };
   });
-  const auditGroups: AuditGroup[] = [...groups.entries()]
-    .map(([label, list]) => ({ label, findings: list }))
-    .sort((a, b) => Math.min(...b.findings.map((f) => f.id)) - Math.min(...a.findings.map((f) => f.id)));
+  const planById = new Map(planViews.map((p) => [p.id, p]));
 
-  // Revue en préparation : la prochaine à venir, sinon la dernière tenue.
-  const dates = [...new Set(review.map((r) => r.reviewOn))].sort();
-  const reviewOn = dates.find((d) => d >= now) ?? dates.at(-1) ?? null;
+  // Constats regroupés par élément du programme, sinon par libellé libre ; le plus récent d'abord. Les annulés n'y entrent pas.
+  const groups = new Map<string, AuditGroup>();
+  active.forEach((f) => {
+    const item = f.planItemId != null ? planById.get(f.planItemId) : undefined;
+    const key = item ? `p${item.id}` : `l${f.audit}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = item
+        ? { key, label: planItemAuditLabel(item), planItemId: item.id, year: item.year, date: item.doneOn ?? item.plannedOn, auditor: item.auditor, reports: item.reports, findings: [] }
+        : { key, label: f.audit, planItemId: null, year: null, date: null, auditor: null, reports: [], findings: [] };
+      groups.set(key, g);
+    }
+    g.findings.push(f);
+  });
+  const auditGroups = [...groups.values()].map((g) => {
+    const lastFound = g.findings.map((f) => f.foundOn).filter((d): d is string => !!d).sort().at(-1) ?? null;
+    return { ...g, date: g.date ?? lastFound };
+  });
+  const firstId = (g: AuditGroup) => Math.min(...g.findings.map((f) => f.id));
+  auditGroups.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || firstId(b) - firstId(a));
+  const cancelledFindings: CancelledFindingView[] = findingViews
+    .filter((f): f is FindingView & { cancelled: NonNullable<FindingView['cancelled']> } => !!f.cancelled)
+    .map((f) => {
+      const item = f.planItemId != null ? planById.get(f.planItemId) : undefined;
+      return { ...f, groupLabel: item ? planItemAuditLabel(item) : f.audit };
+    })
+    .sort((a, b) => b.cancelled.on.localeCompare(a.cancelled.on) || b.id - a.id);
 
-  return { now, people, certs, plan: planViews, auditGroups, review: { reviewOn, items: review.filter((r) => r.reviewOn === reviewOn) }, actionsById };
-}
+  const certViews: CertView[] = certs.map((c) => {
+    const linked = planViews.filter((p) => p.certificationId === c.id);
+    const next = linked.filter((p) => !p.done)
+      .map((p) => ({ id: p.id, year: p.year, plannedOn: p.plannedOn ?? monthEnd(p.year, p.month) }))
+      .sort((a, b) => a.plannedOn.localeCompare(b.plannedOn))[0] ?? null;
+    const last = linked.filter((p) => p.done).sort((a, b) => planDate(b).localeCompare(planDate(a)))[0];
+    const files = filesOf('certification', c.id);
+    return {
+      ...c,
+      state: certificationStatus(c, next?.plannedOn ?? null, now),
+      nextAudit: next,
+      lastAudit: last ? { id: last.id, year: last.year, doneOn: last.doneOn, findingCount: last.findingCount } : null,
+      files,
+      removable: !linked.length && !files.length && !c.issuedOn && !c.validUntil,
+      log: certLogs.get(c.id) ?? [],
+    };
+  });
+
+  return { now, people, certs: certViews, plan: planViews, findings: findingViews, active, auditGroups, cancelledFindings };
+});
 
 /** Lignes du programme dans l'ordre de leur première apparition. */
 const tracksOf = (items: { track: string }[]) => [...new Set(items.map((p) => p.track))];
 
-/** Écran « Audits et certifications ». `year` vient du paramètre ?annee=. */
-export async function loadAudits({ year: askedYear }: { year?: string | string[] }) {
-  const { now, certs, plan, auditGroups, review } = await readAudits();
+/** Paramètre d'URL numérique (?element=, ?constat=). */
+const numParam = (v: string | string[] | undefined) => (typeof v === 'string' && /^\d{1,9}$/.test(v) ? +v : null);
+
+/**
+ * Écran « Audits et certifications ». `year` vient du paramètre ?annee= ; `element` (élément du programme) et
+ * `constat` sont les liens profonds des échéances : sans ?annee=, l'année affichée est celle de l'élément.
+ */
+export async function loadAudits({ year: askedYear, element, constat }: { year?: string | string[]; element?: string | string[]; constat?: string | string[] }) {
+  const { now, certs, plan, findings, active, auditGroups, cancelledFindings } = await readAudits();
   const nowYear = yearOf(now);
   const years = [...new Set(plan.map((p) => p.year))];
   const asked = typeof askedYear === 'string' && /^\d{4}$/.test(askedYear) && +askedYear >= 2000 && +askedYear <= 2100 ? +askedYear : null;
-  const year = asked ?? (years.includes(nowYear) || !years.length ? nowYear : Math.max(...years));
+  const elementId = numParam(element);
+  const target = elementId != null ? plan.find((p) => p.id === elementId) : undefined;
+  const year = asked ?? target?.year ?? (years.includes(nowYear) || !years.length ? nowYear : Math.max(...years));
   const yearOptions = [...new Set([...years, nowYear, nowYear + 1, year])].sort((a, b) => a - b);
+  const findingId = numParam(constat);
+  const openFinding = findingId != null && findings.some((f) => f.id === findingId) ? findingId : undefined;
 
   // Lignes affichées : celles de l'année précédente (programme reconduit) puis celles propres à l'année.
   const prevYears = years.filter((y) => y < year);
   const refYear = prevYears.length ? Math.max(...prevYears) : null;
   const items = plan.filter((p) => p.year === year);
   const tracks = [...new Set([...(refYear ? tracksOf(plan.filter((p) => p.year === refYear)) : []), ...tracksOf(items)])];
+  const itemIds = new Set(items.map((p) => p.id));
+
+  // Audits proposés pour rattacher un constat : tout le programme hors revues, le plus récent d'abord.
+  const auditOptions: Option[] = plan
+    .filter((p) => !p.isReview)
+    .sort((a, b) => planDate(b).localeCompare(planDate(a)) || b.id - a.id)
+    .map((p) => [String(p.id), planItemAuditLabel(p)] as Option);
 
   return {
     now,
@@ -98,175 +223,71 @@ export async function loadAudits({ year: askedYear }: { year?: string | string[]
     tracks,
     allTracks: tracksOf(plan),
     plan: items,
+    planFindings: active.filter((f) => f.planItemId != null && itemIds.has(f.planItemId)),
     auditGroups,
-    review,
+    cancelledFindings,
+    auditOptions,
+    openElement: target && target.year === year ? target.id : undefined,
+    openFinding,
   };
 }
 
-// ─── Dossier de revue de direction ──────────────────────────────────────────
+// ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 
-const monthStart = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-01`;
-/** Borne de fin de mois pour les comparaisons de chaînes ISO (le « 31 » vaut pour tous les mois). */
-const monthEnd = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-31`;
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-/** État d'un titre au regard de l'affectation (même formulation que les alertes de l'écran Compétences). */
-function lapseState(al: SkillAlert): { label: string; tone: Tone } {
-  const on = al.expiresOn ? fmtDate(al.expiresOn) : '';
-  switch (al.lapse) {
-    case 'missing': return { label: 'Requis, jamais suivi', tone: 'danger' };
-    case 'expired': return { label: `Expiré depuis le ${on}`, tone: 'danger' };
-    case 'before': return { label: `Expire le ${on}, avant l'affectation`, tone: 'danger' };
-    case 'during': return { label: `Expire le ${on}, pendant l'affectation`, tone: 'warn' };
-  }
-}
-
-/** Données consolidées du dossier imprimable de revue de direction (/revue-de-direction). */
-export async function loadReviewDossier() {
+/**
+ * Échéances du domaine : programme en retard (à confirmer) ou à venir sous 15 jours, constats sans action,
+ * certificats expirés, proches de la fin de validité ou sans audit de suivi programmé.
+ */
+export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const db = await getDb();
-  const [audits, siteActions, events, dashboard, skills, session, reqs] = await Promise.all([
+  const [{ now, people, certs, plan, active }, reviews] = await Promise.all([
     readAudits(),
-    loadActions(),
-    loadEvents(),
-    loadDashboard(),
-    loadSkillMatrix(),
-    getSession(),
-    db.select().from(t.requirements).orderBy(asc(t.requirements.sort)),
+    db.select({ reviewOn: t.reviews.reviewOn, status: t.reviews.status }).from(t.reviews),
   ]);
-  const { now, people, certs, plan, auditGroups, review, actionsById } = audits;
-  const from = addDays(now, -364);
-  const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '—' : '—');
-  const brief = (a: ActionRow) => actionBrief(a, people, now)!;
+  const horizon = addDays(now, TODO_HORIZON_DAYS);
+  // Revue planifiée passée : loadReviewSignals signale déjà « compte rendu à saisir » (src/lib/data/review.ts), pas de doublon.
+  // Une échéance de revue sans revue planifiée à cette date (revue annulée, saisie au seul programme) reste « à confirmer ».
+  const pendingReviews = new Set(reviews.filter((r) => r.status === 'planifiee').map((r) => r.reviewOn));
+  const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
+  const planHref = (p: { id: number; year: number }) => `/audits?annee=${p.year}&element=${p.id}`;
+  const planById = new Map(plan.map((p) => [p.id, p]));
+  const todo: TodoItem[] = [];
 
-  // 1. Actions issues de la revue précédente
-  const reviewActions = siteActions
-    .filter((a) => a.origin === 'rev')
-    .map((a) => ({ ...brief(a), originRef: a.originRef }))
-    .sort((a, b) => Number(!!a.closedOn) - Number(!!b.closedOn) || a.dueOn.localeCompare(b.dueOn));
-
-  // 2. Indicateurs sécurité (calculés par le tableau de bord)
-  const tfKpi = dashboard.kpis.find((k) => k.label.startsWith('TF1'));
-  const daysKpi = dashboard.kpis.find((k) => k.label.startsWith('Jours sans'));
-  const safety = {
-    tf1: tfKpi?.value ?? '—',
-    tg: tfKpi?.sub.replace(/^TG\s*/, '') || '—',
-    target: TF1_TARGET,
-    daysWithout: daysKpi?.value ?? '—',
-    daysNote: daysKpi?.note ?? '',
-    pyramid: dashboard.pyramid,
-  };
-
-  // 3. Audits et certifications
-  // Programme : échéances de la période examinée (12 mois glissants jusqu'à la revue) puis celles à venir
-  // jusqu'à la revue suivante (un an après), quelle que soit l'année civile de la revue.
-  const progFrom = from;
-  const reviewDay = review.reviewOn && review.reviewOn > now ? review.reviewOn : now;
-  const progTo = addMonths(reviewDay, 12);
-  const trackOrder = tracksOf(plan);
-  const programme = plan
-    .filter((p) => (p.plannedOn
-      ? p.plannedOn >= progFrom && p.plannedOn <= progTo
-      : monthEnd(p.year, p.month) >= progFrom && monthStart(p.year, p.month) <= progTo))
-    .map((p) => {
-      const state: { label: string; tone: Tone } = p.done
-        ? { label: 'Réalisé', tone: 'ok' }
-        : (p.plannedOn ?? monthEnd(p.year, p.month)) < now ? { label: 'À confirmer', tone: 'warn' } : { label: 'À venir', tone: 'neutral' };
-      return { ...p, state };
-    })
-    .sort((a, b) => a.year - b.year || a.month - b.month || trackOrder.indexOf(a.track) - trackOrder.indexOf(b.track));
-  const programmeCounts = {
-    done: programme.filter((p) => p.state.tone === 'ok').length,
-    pending: programme.filter((p) => p.state.tone === 'warn').length,
-    upcoming: programme.filter((p) => p.state.tone === 'neutral').length,
-  };
-
-  // 4. Réclamations clients (12 mois glissants)
-  const allActions = [...actionsById.values()];
-  const complaints = events
-    .filter((e) => e.type === 'RC' && e.occurredOn >= from)
-    .map((e) => ({
-      id: e.id, occurredOn: e.occurredOn, title: e.title, project: e.keystoneProject, step: EVENT_STEPS[e.step], open: isOpen(e), pilot: name(e.pilotId),
-      actions: allActions.filter((a) => a.eventId === e.id).map(brief),
-    }));
-
-  // 5. Plan d'actions par origine
-  const cols = siteActions.map((a) => ({ a, col: actionColumn(a, now) }));
-  const byOrigin = Object.entries(ORIGINS)
-    .map(([key, o]) => {
-      const list = cols.filter((x) => x.a.origin === key);
-      return {
-        key,
-        label: o.label,
-        open: list.filter((x) => x.col !== 'done').length,
-        late: list.filter((x) => x.col === 'late').length,
-        verify: list.filter((x) => x.col === 'verify').length,
-        closed: list.filter((x) => x.col === 'done' && (x.a.closedOn ?? x.a.dueOn) >= from).length,
-      };
-    })
-    .filter((r) => r.open + r.closed > 0);
-  const totals = byOrigin.reduce((s, r) => ({ open: s.open + r.open, late: s.late + r.late, verify: s.verify + r.verify, closed: s.closed + r.closed }), { open: 0, late: 0, verify: 0, closed: 0 });
-  const lateActions = cols
-    .filter((x) => x.col === 'late')
-    .map((x) => ({ ...brief(x.a), origin: ORIGINS[x.a.origin]?.label ?? x.a.origin, originRef: x.a.originRef }))
-    .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
-
-  // 6. Veille réglementaire
-  const requirements = reqs.map((r) => {
-    const ev = REQUIREMENT_EVAL[r.evaluation] ?? { label: r.evaluation, tone: 'neutral' as Tone };
-    const a = r.actionId ? actionsById.get(r.actionId) : undefined;
-    return {
-      id: r.id, text: r.text, domain: r.domain, evalLabel: ev.label, evalNote: r.evaluationNote, tone: ev.tone,
-      dueOn: r.dueOn, dueNote: r.dueNote, pilot: name(r.pilotId), action: a ? brief(a) : null,
-    };
+  // a) et b) Programme annuel : échéance passée non confirmée, ou prévue dans l'horizon.
+  plan.forEach((p) => {
+    const who = { who: p.owner, ownerIds: p.ownerId ? [p.ownerId] : undefined, href: planHref(p) };
+    if (p.state === 'late') {
+      if (p.isReview && p.plannedOn && pendingReviews.has(p.plannedOn)) return;
+      const when = p.plannedOn ? `prévu le ${fmtDayMonth(p.plannedOn)}` : `prévu en ${monthName(p.month)} ${p.year}`;
+      todo.push({ date: now, kind: p.kind, tone: 'warn', title: `${p.detail ?? p.label} — ${when}, à confirmer`, overdue: true, ...who });
+    } else if (!p.done && p.plannedOn && p.plannedOn >= now && p.plannedOn <= horizon) {
+      todo.push({ date: p.plannedOn, kind: p.kind, tone: 'neutral', title: p.detail ?? p.label, ...who });
+    }
   });
-  const requirementCounts = Object.entries(REQUIREMENT_EVAL).map(([key, ev]) => ({ key, label: ev.label, tone: ev.tone, n: reqs.filter((r) => r.evaluation === key).length }));
 
-  // 7. Ressources et compétences
-  const cells = skills.rows.flatMap((r) => r.cells);
-  const skillCounts = {
-    people: skills.rows.length,
-    expired: cells.filter((c) => c.state === 'x').length,
-    soon: cells.filter((c) => c.state === 's').length,
-    never: cells.filter((c) => c.state === 'r').length,
-  };
-  const skillAlerts = skills.alerts.map((al) => ({
-    person: al.person.name,
-    title: al.title,
-    state: lapseState(al),
-    assignment: `${al.assignment.project} · ${al.assignment.activity}`,
-    startOn: al.assignment.startOn,
-    endOn: al.assignment.endOn,
-  }));
+  // c) Écarts et pistes de progrès sans action au plan d'actions.
+  active.filter((f) => f.kind !== 'point_fort' && !f.actionId).forEach((f) => {
+    const ownerId = (f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null) ?? QHSE_LEAD;
+    todo.push({
+      date: now, kind: "Constat d'audit", tone: f.kind === 'ecart_mineur' ? 'danger' : 'warn', overdue: true,
+      title: `${FINDING_KINDS[f.kind]?.label ?? f.kind} sans action — ${clip(f.text, 90)}`,
+      who: name(ownerId), ownerIds: [ownerId], href: `/audits?constat=${f.id}`,
+    });
+  });
 
-  const lead = people.get(ROLES['Animateur QHSE'].personId);
-  const director = people.get(ROLES.Direction.personId);
+  // d) Certificats : expiré, fin de validité proche, audit de suivi non programmé (l'audit à venir relève du programme).
+  certs.filter((c) => c.tone === 'ok').forEach((c) => {
+    const base = { kind: 'Certification', who: name(QHSE_LEAD), ownerIds: [QHSE_LEAD], href: '/audits' };
+    if (c.validUntil && c.validUntil < now) {
+      todo.push({ ...base, date: now, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
+    } else if (c.validUntil && c.validUntil <= horizon) {
+      todo.push({ ...base, date: c.validUntil, tone: 'warn', title: `Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}` });
+    }
+    if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', title: `${c.standard} · audit de suivi à programmer`, overdue: true });
+  });
 
-  return {
-    header: {
-      reviewOn: review.reviewOn,
-      from,
-      to: now,
-      site: session.site.label,
-      lead: lead ? `${lead.name} — ${lead.job}` : '—',
-      director: director ? `${director.name} — ${director.job}` : '—',
-      author: session.user.name,
-    },
-    reviewActions,
-    safety,
-    certs,
-    progFrom,
-    progTo,
-    programme,
-    programmeCounts,
-    auditGroups,
-    complaints,
-    byOrigin,
-    totals,
-    lateActions,
-    requirements,
-    requirementCounts,
-    skillCounts,
-    skillAlerts,
-    checklist: review.items,
-  };
-}
-export type ReviewDossier = Awaited<ReturnType<typeof loadReviewDossier>>;
+  // Les contributions attendues pour la revue de direction relèvent de loadReviewSignals (src/lib/data/review.ts).
+  return { todo };
+});

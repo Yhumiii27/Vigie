@@ -1,7 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
+import { Dot } from '@/components/ui';
+import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
+import type { EnvAction } from '@/lib/data/environment';
+import type { FormOptions } from '@/lib/data/options';
+
+export type ActionOptions = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
 
 /** Ligne de tableau qui ouvre une fenêtre (clic ou Entrée), sauf clic sur un lien ou un bouton de la ligne. */
 export function rowOpener(open: () => void) {
@@ -64,3 +72,31 @@ export function Suggestions({ id, values }: { id: string; values: string[] }) {
 export const shortSite = (label: string) => label.split(' — ')[0];
 
 export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as const;
+
+/** Actions du plan rattachées (filière, enlèvement) et création d'une nouvelle action pré-remplie (origine « Environnement »). */
+export function LinkedActions({ actions, options, defaults, canAct, empty = 'Aucune action rattachée.' }: {
+  actions: EnvAction[]; options: ActionOptions | null; defaults: ActionDefaults; canAct: boolean; empty?: string;
+}) {
+  return (
+    <section style={{ display: 'grid', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <h6 className="vg-h6">Actions liées</h6>
+        {canAct && options && (
+          <NewActionButton options={options} label="Nouvelle action" className="vg-text-btn" icon="ph-plus"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} defaults={{ origin: 'env', lockOrigin: true, kind: 'C', ...defaults }} />
+        )}
+      </div>
+      {actions.length === 0 ? (
+        <span style={muted}>{empty}</span>
+      ) : actions.map((a) => (
+        <Link key={a.id} href={`/actions?action=${encodeURIComponent(a.id)}`} className="vg-link"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, minWidth: 0 }} title={`${a.statusLabel} · ${a.pilot} · échéance ${fmtDate(a.dueOn)}`}>
+          <Dot color={TONE[a.tone].dot} size={6} />
+          <span style={{ whiteSpace: 'nowrap' }}>{a.id}</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-neutral-300)' }}>{a.title}</span>
+          <span style={{ ...muted, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{a.statusLabel.toLowerCase()}</span>
+        </Link>
+      ))}
+    </section>
+  );
+}

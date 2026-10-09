@@ -10,7 +10,8 @@ import { NewEntryButton, WasteRegister, type StreamOption } from '@/components/e
 import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/components/environment/model';
 import styles from '@/components/environment/environment.module.css';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
-import { SCREENS, TONE, canManage as canManageRole, canSee, type Tone } from '@/lib/domain';
+import { BSD_STALE_DAYS } from '@/components/environment/model';
+import { SCREENS, TONE, canEdit, canSee, type Tone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadEnvironment } from '@/lib/data/environment';
 import { loadFormOptions } from '@/lib/data/options';
@@ -21,7 +22,8 @@ export const metadata: Metadata = { title: SCREENS.env.title };
 const PATH = '/environnement';
 const TABS = ['registre', 'filieres', 'consommations'] as const;
 type Tab = (typeof TABS)[number];
-const VIEWS = ['dangereux', 'bsd-manquants'] as const;
+const VIEWS = ['dangereux', 'bsd-manquants', 'bsd-en-attente', 'annules'] as const;
+type View = (typeof VIEWS)[number];
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const plural = (n: number, one: string, many: string) => `${fmtNum(n)} ${n > 1 ? many : one}`;
@@ -32,10 +34,12 @@ const fmtEnergy = (kWh: number) => (kWh >= 10_000 ? `${fmtNum(kWh / 1000)} MWh
 export default async function EnvironmentPage({ searchParams }: PageProps<'/environnement'>) {
   const session = await guard('env');
   const sp = await searchParams;
-  const manage = canManageRole(session.role);
+  const manage = canEdit(session.role, 'env');
   const yearParam = Number(str(sp.annee));
   const [d, allOptions] = await Promise.all([loadEnvironment(Number.isInteger(yearParam) ? yearParam : undefined), loadFormOptions()]);
   const actionOptions = { people: allOptions.people, sites: allOptions.sites, origins: allOptions.origins };
+  // Création d'action : encadrement ayant la main sur l'écran (pas de lecture seule).
+  const entryActionOptions = manage ? actionOptions : null;
 
   // ── État porté par l'URL : onglet, année, filière, vue
   const tab: Tab = TABS.find((t) => t === str(sp.onglet)) ?? 'registre';
@@ -46,9 +50,14 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const params = { onglet: tab === 'registre' ? undefined : tab, annee, filiere, vue };
   const regParams = { ...params, onglet: undefined };
 
-  // ── Registre filtré
+  // ── Registre filtré (les enlèvements annulés n'apparaissent que sous « Annulés »)
+  const live = d.entries.filter((e) => !e.cancelled);
   const byStream = d.entries.filter((e) => !filiere || e.streamId === filiere);
-  const matchesView = (e: (typeof d.entries)[number], v: typeof vue) => !v || (v === 'dangereux' ? e.hazardous : e.missingBsd);
+  const matchesView = (e: (typeof d.entries)[number], v: View | undefined) => {
+    if (v === 'annules') return !!e.cancelled;
+    if (e.cancelled) return false;
+    return !v || (v === 'dangereux' ? e.hazardous : v === 'bsd-manquants' ? e.missingBsd : e.staleBsd);
+  };
   const shown = byStream.filter((e) => matchesView(e, vue));
   const byView = d.entries.filter((e) => matchesView(e, vue));
   const filtered = Boolean(filiere || vue);
@@ -56,15 +65,15 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const streamFilter = d.streams.find((s) => s.id === filiere);
 
   const missing = d.kpis.missing.count;
-  const sub = `Registre ${d.year} · ${plural(d.entries.length, 'enlèvement', 'enlèvements')} · ${missing ? `${plural(missing, 'BSD manquant', 'BSD manquants')}` : 'aucun BSD manquant'}`;
+  const sub = `Registre ${d.year} · ${plural(live.length, 'enlèvement', 'enlèvements')} · ${missing ? `${plural(missing, 'BSD manquant', 'BSD manquants')}` : 'aucun BSD manquant'}`;
 
   // ── Listes de choix et valeurs par défaut
   const defaultSite = session.site.id === ALL_SITES ? allOptions.sites[0]?.[0] ?? '' : session.site.id;
   const scopeSites = d.sites.map((s) => [s.id, s.label] as const);
-  const streamOptions: StreamOption[] = d.streams.map(({ id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site }) => ({
-    id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site,
+  const streamOptions: StreamOption[] = d.streams.map(({ id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId }) => ({
+    id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
   }));
-  const transporters = uniq([...d.entries.map((e) => e.transporter), ...d.streams.map((s) => s.collector)]);
+  const transporters = uniq([...live.map((e) => e.transporter), ...d.streams.map((s) => s.collector)]);
   const suggestions: StreamSuggestions = {
     channels: uniq(d.streams.map((s) => s.channel)),
     collectors: uniq(d.streams.map((s) => s.collector)),
@@ -109,7 +118,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   };
 
   const tabs: [Tab, string, string][] = [
-    ['registre', 'Registre des déchets', String(d.entries.length)],
+    ['registre', 'Registre des déchets', String(live.length)],
     ['filieres', 'Filières', String(d.streams.length)],
     ['consommations', 'Consommations', '12 mois'],
   ];
@@ -144,6 +153,15 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                 ? `+ ${k.missing.other} sur ${k.missing.otherYears.join(', ')} · Trackdéchets obligatoire`
                 : 'Trackdéchets obligatoire (C. env. R. 541-45)'}
             </div>
+            {k.missing.other > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 11 }}>
+                {k.missing.otherYears.map((y) => (
+                  <Link key={y} href={hrefWith(PATH, {}, { annee: y === d.currentYear ? undefined : String(y), vue: 'bsd-manquants' })} scroll={false} className="vg-link">
+                    Voir {y}
+                  </Link>
+                ))}
+              </div>
+            )}
             {missing > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                 <Link href={hrefWith(PATH, { annee }, { vue: 'bsd-manquants' })} scroll={false} className="vg-link">Afficher</Link>
@@ -178,7 +196,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   </a>
                 )}
                 {manage && tab === 'registre' && (
-                  <NewEntryButton streams={streamOptions} today={d.now} showSite={d.showSite} transporters={transporters} defaultStreamId={filiere} />
+                  <NewEntryButton streams={streamOptions} today={d.now} showSite={d.showSite} transporters={transporters} defaultStreamId={filiere} events={d.eventOptions} />
                 )}
                 {manage && tab === 'filieres' && <NewStreamButton sites={allOptions.sites} defaultSite={defaultSite} suggestions={suggestions} />}
                 {manage && tab === 'consommations' && monthSite && (
@@ -192,13 +210,19 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <SegLinks size={12} pad="4px 10px" options={yearOptions} />
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {[
-                      { key: undefined, label: 'Tous', n: byStream.length },
-                      { key: 'dangereux' as const, label: 'Déchets dangereux', n: byStream.filter((e) => e.hazardous).length },
-                      { key: 'bsd-manquants' as const, label: 'BSD manquants', n: byStream.filter((e) => e.missingBsd).length },
-                    ].map((c) => (
-                      <Link key={c.label} href={hrefWith(PATH, regParams, { vue: c.key })} scroll={false} className={`vg-chip${vue === c.key ? ' is-on' : ''}`}>
+                    {([
+                      { key: undefined, label: 'Tous', n: byStream.filter((e) => matchesView(e, undefined)).length },
+                      { key: 'dangereux', label: 'Déchets dangereux', n: byStream.filter((e) => matchesView(e, 'dangereux')).length },
+                      { key: 'bsd-manquants', label: 'BSD manquants', n: byStream.filter((e) => matchesView(e, 'bsd-manquants')).length },
+                      { key: 'bsd-en-attente', label: 'BSD non finalisés', n: byStream.filter((e) => matchesView(e, 'bsd-en-attente')).length },
+                      { key: 'annules', label: 'Annulés', n: byStream.filter((e) => matchesView(e, 'annules')).length },
+                    ] satisfies { key: View | undefined; label: string; n: number }[])
+                      .filter((c) => c.n > 0 || vue === c.key || (c.key !== 'annules' && c.key !== 'bsd-en-attente'))
+                      .map((c) => (
+                      <Link key={c.label} href={hrefWith(PATH, regParams, { vue: c.key })} scroll={false} className={`vg-chip${vue === c.key ? ' is-on' : ''}`}
+                        title={c.key === 'bsd-en-attente' ? `Bordereau brouillon, émis ou collecté plus de ${BSD_STALE_DAYS} jours après l'enlèvement` : undefined}>
                         {c.key === 'bsd-manquants' && c.n > 0 && <Dot color={TONE.danger.dot} size={6} />}
+                        {c.key === 'bsd-en-attente' && c.n > 0 && <Dot color={TONE.warn.dot} size={6} />}
                         {c.label}<span style={{ opacity: 0.6 }}>{c.n}</span>
                       </Link>
                     ))}
@@ -219,6 +243,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   </span>
                 </div>
                 <WasteRegister entries={shown} streams={streamOptions} canManage={manage} showSite={d.showSite} today={d.now} transporters={transporters}
+                  events={d.eventOptions} actionOptions={entryActionOptions} canSeeEvents={canSee(session.role, 'events')}
                   emptyText={
                     !d.streams.length ? `Aucune filière déchets pour ce site${manage ? ' : créez-en une dans l’onglet « Filières », puis inscrivez les enlèvements.' : '.'}`
                       : filtered ? 'Aucun enlèvement ne correspond aux filtres.'
@@ -235,7 +260,8 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                     {plural(d.streams.filter((s) => s.hazardous).length, 'filière dangereuse', 'filières dangereuses')} · cumuls {d.year} {d.periodNote} et {d.year - 1}
                   </span>
                 </div>
-                <StreamsPanel streams={d.streams} year={d.year} isCurrent={d.isCurrent} canManage={manage} showSite={d.showSite} sites={allOptions.sites} suggestions={suggestions} />
+                <StreamsPanel streams={d.streams} year={d.year} annee={annee} isCurrent={d.isCurrent} canManage={manage} showSite={d.showSite} sites={allOptions.sites}
+                  suggestions={suggestions} actionOptions={entryActionOptions} />
               </>
             )}
 
@@ -246,7 +272,12 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
 
           <aside className={styles.aside}>
             <div className="card" style={{ gap: 8 }}>
-              <CardHead title="Événements environnementaux" aside={<Aside>{plural(d.envEvents.length, 'ouvert', 'ouverts')}</Aside>} />
+              <CardHead title="Événements environnementaux" aside={
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
+                  <Aside>{plural(d.envEvents.length, 'ouvert', 'ouverts')}</Aside>
+                  <Link href="/signaler?type=ENV" className="vg-link" title="Signaler un déversement, une fuite, un rejet…">Signaler</Link>
+                </span>
+              } />
               <div style={{ display: 'grid', gap: 2 }}>
                 {d.envEvents.length === 0 && <span className="vg-muted" style={{ fontSize: 12 }}>Aucun événement environnemental ouvert.</span>}
                 {d.envEvents.map((e) => {
@@ -285,6 +316,22 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   </div>
                 ))}
               </div>
+              {(k.stale.count > 0 || k.stale.other > 0) && (
+                <div className="vg-inset" style={{ display: 'grid', gap: 3, padding: '8px 10px', fontSize: 12, boxShadow: `inset 2px 0 0 ${TONE.warn.dot}` }}>
+                  <span>
+                    {k.stale.count > 0
+                      ? <>{plural(k.stale.count, 'bordereau non finalisé', 'bordereaux non finalisés')} plus de {BSD_STALE_DAYS} j après l&apos;enlèvement</>
+                      : <>Aucun bordereau en attente en {d.year}</>}
+                    {k.stale.other > 0 && <span style={{ color: 'var(--color-neutral-500)' }}> · + {k.stale.other} sur {k.stale.otherYears.join(', ')}</span>}
+                  </span>
+                  <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {k.stale.count > 0 && <Link href={hrefWith(PATH, { annee }, { vue: 'bsd-en-attente' })} scroll={false} className="vg-link">Afficher</Link>}
+                    {k.stale.otherYears.map((y) => (
+                      <Link key={y} href={hrefWith(PATH, {}, { annee: y === d.currentYear ? undefined : String(y), vue: 'bsd-en-attente' })} scroll={false} className="vg-link">{y}</Link>
+                    ))}
+                  </span>
+                </div>
+              )}
               <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
                 Bordereau dématérialisé obligatoire pour tout déchet dangereux depuis le 1er janvier 2022. Les numéros et statuts sont saisis ici en attendant le connecteur.
               </p>

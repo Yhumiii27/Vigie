@@ -1,10 +1,12 @@
-import { readAttachment } from '@/lib/uploads';
+import { getSession } from '@/lib/session';
+import { canReadAttachment, readAttachment } from '@/lib/uploads';
 
-// Sert une pièce jointe (photo de signalement, document, rapport de contrôle).
+// Sert une pièce jointe (photo de signalement, document, rapport de contrôle), selon le droit sur l'entité propriétaire.
 export async function GET(_req: Request, ctx: RouteContext<'/fichiers/[id]'>) {
   const { id } = await ctx.params;
-  const file = await readAttachment(id);
-  if (!file) return new Response('Fichier introuvable', { status: 404 });
+  const [file, session] = await Promise.all([readAttachment(id), getSession()]);
+  // Même réponse qu'un fichier absent : ne pas révéler l'existence d'une pièce non autorisée.
+  if (!file || !(await canReadAttachment(file.row, session))) return new Response('Fichier introuvable', { status: 404 });
   return new Response(new Uint8Array(file.data), {
     headers: {
       'Content-Type': file.row.mimeType,

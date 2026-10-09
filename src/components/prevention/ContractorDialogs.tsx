@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input } from '@/components/form';
-import { Icon } from '@/components/ui';
+import { Icon, ToneTag } from '@/components/ui';
 import type { ContractorView } from '@/lib/data/prevention';
-import { saveContractor } from '@/server/prevention';
-import { muted, rowOpener } from './parts';
+import { archiveContractor, restoreContractor, saveContractor } from '@/server/prevention';
+import { ErrorLine, Facts, Notice, SectionTitle, muted, rowOpener, useRun } from './parts';
 
 function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
   return (
@@ -42,6 +45,96 @@ export function NewContractorButton() {
   );
 }
 
+const telHref = (phone: string) => `tel:${phone.replace(/\s/g, '')}`;
+
+/** Fiche d'une entreprise extérieure (tous rôles) : coordonnées, plans et permis du site, historique ; gestion pour l'encadrement. */
+function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
+  contractor: ContractorView; canManage: boolean; onEdit: () => void; onArchive: () => void;
+}) {
+  const { pending, error, run } = useRun();
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {c.archived && (
+        <Notice tone="neutral" icon="ph-archive">
+          {c.archivedLabel}{c.archiveReason ? ` : ${c.archiveReason}` : '.'} L&apos;entreprise n&apos;est plus proposée dans les formulaires ; ses plans et permis restent consultables.
+        </Notice>
+      )}
+      <Facts items={[
+        ['Corps de métier', c.trade],
+        ['Interlocuteur', c.contactName ?? '—'],
+        ['Téléphone', c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : '—'],
+        ['E-mail', c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>{c.contactEmail}</a> : '—'],
+        ['Statut', c.archived ? 'Archivée' : 'Active'],
+      ]} />
+
+      <div style={{ display: 'grid', gap: 6 }}>
+        <SectionTitle aside={<span style={muted}>sur le site sélectionné</span>}>Plans de prévention</SectionTitle>
+        {c.planList.length === 0 && <span style={muted}>Aucun plan de prévention.</span>}
+        {c.planList.map((p) => (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+            <Link href={`/prevention?plan=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
+            <span style={{ flex: 1, minWidth: 180 }}>{p.title}</span>
+            <span style={muted}>{p.site} · {p.period}</span>
+            <ToneTag tone={p.tone}>{p.statusLabel}</ToneTag>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gap: 6 }}>
+        <SectionTitle aside={<span style={muted}>sur le site sélectionné</span>}>Permis</SectionTitle>
+        {c.permitList.length === 0 && <span style={muted}>Aucun permis.</span>}
+        {c.permitList.map((p) => (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+            <Icon name={p.icon} size={14} style={{ color: 'var(--color-neutral-400)' }} />
+            <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
+            <span style={{ flex: 1, minWidth: 140 }}>{p.typeLabel}</span>
+            <span style={muted}>{p.validity}</span>
+            <ToneTag tone={p.tone}>{p.stateLabel}</ToneTag>
+          </div>
+        ))}
+      </div>
+
+      <ChangeLogList entries={c.history} />
+
+      <ErrorLine error={error} />
+      {canManage && (
+        <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          {c.archived
+            ? <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => run(() => restoreContractor(c.id))}><Icon name="ph-arrow-counter-clockwise" size={13} />Réactiver</button>
+            : (
+              <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!!c.archiveBlock} title={c.archiveBlock ?? undefined} onClick={onArchive}>
+                <Icon name="ph-archive" size={13} />Archiver
+              </button>
+            )}
+          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Mode = 'view' | 'edit' | 'archive';
+
+function ContractorDialog({ contractor, onClose, canManage }: { contractor: ContractorView | null; onClose: () => void; canManage: boolean }) {
+  const [mode, setMode] = useState<Mode>('view');
+  const back = () => setMode('view');
+  const close = () => { setMode('view'); onClose(); };
+  const kicker = mode === 'edit' ? 'Modifier l’entreprise' : mode === 'archive' ? 'Archiver l’entreprise' : 'Entreprise extérieure';
+  return (
+    <Dialog open={!!contractor} onClose={close} title={contractor?.name ?? ''} kicker={kicker} width={640}>
+      {contractor && mode === 'edit' && <ContractorForm contractor={contractor} onDone={back} onCancel={back} />}
+      {contractor && mode === 'archive' && (
+        <ReasonForm action={archiveContractor} hidden={{ id: contractor.id }} submitLabel="Archiver" submitIcon="ph-archive" onDone={back} onCancel={back}
+          placeholder="Ex. Contrat terminé, entreprise plus référencée"
+          message="L’entreprise ne sera plus proposée dans les plans, permis et activités de la carte ; son historique reste consultable et elle peut être réactivée." />
+      )}
+      {contractor && mode === 'view' && (
+        <ContractorSheet contractor={contractor} canManage={canManage} onEdit={() => setMode('edit')} onArchive={() => setMode('archive')} />
+      )}
+    </Dialog>
+  );
+}
+
 const count = (n: number, active: number, activeLabel: string) => (
   <>
     <span>{n}</span>
@@ -49,41 +142,39 @@ const count = (n: number, active: number, activeLabel: string) => (
   </>
 );
 
-/** Liste des entreprises extérieures ; un clic ouvre la fiche de modification (encadrement). */
-export function ContractorsTable({ contractors, canManage }: { contractors: ContractorView[]; canManage: boolean }) {
+/** Liste des entreprises extérieures ; un clic ouvre la fiche (tous rôles). */
+export function ContractorsTable({ contractors, canManage, emptyLabel }: { contractors: ContractorView[]; canManage: boolean; emptyLabel: string }) {
   const [selId, setSelId] = useState<string | null>(null);
   const sel = contractors.find((c) => c.id === selId) ?? null;
-  const close = () => setSelId(null);
 
   return (
     <>
       <div className="card" style={{ padding: '6px 14px 10px' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12.5, minWidth: 820 }}>
-            <thead><tr><th>Entreprise</th><th>Interlocuteur</th><th>Téléphone</th><th>E-mail</th><th style={{ textAlign: 'right' }}>Plans</th><th style={{ textAlign: 'right' }}>Permis</th>{canManage && <th aria-label="Modifier" />}</tr></thead>
+            <thead><tr><th>Entreprise</th><th>Interlocuteur</th><th>Téléphone</th><th>E-mail</th><th style={{ textAlign: 'right' }}>Plans</th><th style={{ textAlign: 'right' }}>Permis</th></tr></thead>
             <tbody>
-              {contractors.length === 0 && <tr><td colSpan={canManage ? 7 : 6} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>Aucune entreprise extérieure enregistrée.</td></tr>}
+              {contractors.length === 0 && <tr><td colSpan={6} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>{emptyLabel}</td></tr>}
               {contractors.map((c) => (
-                <tr key={c.id} {...(canManage ? rowOpener(() => setSelId(c.id)) : {})}>
+                <tr key={c.id} {...rowOpener(() => setSelId(c.id))}>
                   <td style={{ minWidth: 200 }}>
-                    <span style={{ display: 'block', fontWeight: 500 }}>{c.name}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
+                      {c.name}{c.archived && <span className="tag tag-neutral" style={{ fontWeight: 400 }}>Archivée</span>}
+                    </span>
                     <span style={{ display: 'block', ...muted }}>{c.trade}</span>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{c.contactName ?? <span style={muted}>—</span>}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{c.contactPhone ? <a href={`tel:${c.contactPhone.replace(/\s/g, '')}`} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : <span style={muted}>—</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : <span style={muted}>—</span>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactEmail}</a> : <span style={muted}>—</span>}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.plans, c.activePlans, 'en cours')}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.permits, c.activePermits, c.activePermits > 1 ? 'actifs' : 'actif')}</td>
-                  {canManage && <td style={{ textAlign: 'right', width: 32 }}><Icon name="ph-pencil-simple" size={13} style={{ color: 'var(--color-neutral-500)' }} /></td>}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      <Dialog open={!!sel} onClose={close} title={sel?.name ?? ''} kicker="Entreprise extérieure" width={600}>
-        {sel && <ContractorForm contractor={sel} onDone={close} onCancel={close} />}
-      </Dialog>
+      <ContractorDialog contractor={sel} onClose={() => setSelId(null)} canManage={canManage} />
     </>
   );
 }

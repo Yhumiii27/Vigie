@@ -1,5 +1,7 @@
 // Lecture et validation des formulaires soumis aux server actions.
 
+import { REASON_MAX } from './domain';
+
 /** État renvoyé par une server action de formulaire (utilisé avec useActionState). */
 export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string };
 
@@ -62,6 +64,17 @@ export function formReader(fd: FormData) {
       if (!v) { if (opts.required) fail(name, 'Choix obligatoire.'); return null; }
       if (!(allowed as readonly string[]).includes(v)) { fail(name, 'Valeur non autorisée.'); return null; }
       return v as T;
+    },
+    /** Motif obligatoire (annulation, archivage, classement sans suite…) : champ `reason` de ReasonButton / ReasonForm. */
+    reason(name = 'reason') {
+      const v = raw(name);
+      if (!v) fail(name, 'Motif obligatoire.');
+      else if (v.length > REASON_MAX) fail(name, `${REASON_MAX} caractères au maximum.`);
+      return v;
+    },
+    /** Valeurs multiples (cases à cocher de même nom), nettoyées et non vides. */
+    list(name: string) {
+      return fd.getAll(name).filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean);
     },
     files(name: string) {
       return fd.getAll(name).filter((f): f is File => typeof f !== 'string' && f.size > 0);

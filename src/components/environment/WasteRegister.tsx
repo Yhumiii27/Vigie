@@ -1,24 +1,27 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useState } from 'react';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { EntryView, StreamView } from '@/lib/data/environment';
-import { deleteWasteEntry, saveWasteEntry } from '@/server/environment';
-import { BSD_PLACEHOLDER, BSD_STATUS, BSD_STATUS_KEYS, fmtQty, lcfirst, treatmentLabel } from './model';
-import { DeleteZone, Note, Suggestions, muted, rowOpener, shortSite } from './parts';
+import type { EntryDetail, EntryView, EventOption, StreamView } from '@/lib/data/environment';
+import { cancelWasteEntry, saveWasteEntry } from '@/server/environment';
+import { BSD_PLACEHOLDER, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, fmtQty, lcfirst, treatmentLabel } from './model';
+import { LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions } from './parts';
 
-export type StreamOption = Pick<StreamView, 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site'>;
+export type StreamOption = Pick<StreamView, 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'>;
 
 const BSD_OPTIONS = BSD_STATUS_KEYS.map((k) => [k, BSD_STATUS[k].label] as const);
 
 // ─── Tableau du registre ────────────────────────────────────────────────────
 
-export function WasteRegister({ entries, streams, canManage, showSite, today, emptyText, transporters }: {
-  entries: EntryView[];
+export function WasteRegister({ entries, streams, canManage, showSite, today, emptyText, transporters, events, actionOptions, canSeeEvents }: {
+  entries: EntryDetail[];
   streams: StreamOption[];
   canManage: boolean;
   /** « Tous les sites » : rappelle le site de chaque enlèvement. */
@@ -26,6 +29,11 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
   today: string;
   emptyText: string;
   transporters: string[];
+  /** Événements environnementaux ouverts, pour le champ « Événement lié ». */
+  events: readonly EventOption[];
+  /** Listes de choix du formulaire d'action (null : création d'action non permise). */
+  actionOptions: ActionOptions | null;
+  canSeeEvents: boolean;
 }) {
   const [selId, setSelId] = useState<number | null>(null);
   const entry = selId != null ? entries.find((e) => e.id === selId) ?? null : null;
@@ -47,7 +55,7 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
               <tr><td colSpan={cols} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>{emptyText}</td></tr>
             )}
             {entries.map((e) => (
-              <tr key={e.id} {...(canManage ? rowOpener(() => setSelId(e.id)) : {})}>
+              <tr key={e.id} {...(canManage ? rowOpener(() => setSelId(e.id)) : {})} style={e.cancelled ? { opacity: 0.55 } : undefined}>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {fmtDate(e.removedOn)}
                   {showSite && <div style={muted}>{shortSite(e.site)}</div>}
@@ -66,12 +74,19 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
                   <span style={{ ...muted, marginLeft: 6 }}>{e.recovery ? 'valorisation' : 'élimination'}</span>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  {e.missingBsd ? (
+                  {e.cancelled ? (
+                    <span title={`Annulé par ${e.cancelled.by} : ${e.cancelled.reason}`}><ToneTag tone="neutral">Annulé</ToneTag></span>
+                  ) : e.missingBsd ? (
                     <ToneTag tone="danger"><Icon name="ph-warning" size={11} style={{ marginRight: 4 }} />BSD manquant</ToneTag>
                   ) : e.bsdNumber ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-300)' }}>{e.bsdNumber}</span>
                       {e.bsdLabel && <ToneTag tone={e.bsdTone}>{e.bsdLabel}</ToneTag>}
+                      {e.staleBsd && (
+                        <span title={`Bordereau non finalisé ${e.age} j après l'enlèvement : traitement final à vérifier.`} style={{ display: 'inline-flex', color: TONE.warn.dot }}>
+                          <Icon name="ph-hourglass-medium" size={13} />
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span style={{ color: 'var(--color-neutral-600)' }} title="Bordereau non requis pour un déchet non dangereux">—</span>
@@ -84,38 +99,87 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
       </div>
 
       <Dialog open={!!entry} onClose={close} width={620}
-        kicker={entry ? `Registre des déchets · ${shortSite(entry.site)}` : undefined}
+        kicker={entry ? `Registre des déchets · n° ${entry.id} · ${shortSite(entry.site)}` : undefined}
         title={entry ? `${entry.stream} · ${fmtDate(entry.removedOn)}` : ''}>
-        {entry && (
-          <>
-            <EntryForm key={entry.id} entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} onDone={close} onCancel={close} />
-            <DeleteZone label="Supprimer l'enlèvement" run={() => deleteWasteEntry(entry.id)} onDone={close}
-              question={<>Retirer définitivement du registre l&apos;enlèvement du {fmtDate(entry.removedOn)} ({entry.stream}, {fmtQty(entry.quantity, entry.unit)}) ?</>} />
-          </>
-        )}
+        {entry && <EntryPanel key={entry.id} entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters}
+          events={events} actionOptions={actionOptions} canSeeEvents={canSeeEvents} onClose={close} />}
       </Dialog>
     </div>
   );
 }
 
+/** Fiche d'un enlèvement : événement d'origine, actions liées, formulaire, annulation tracée et historique. */
+function EntryPanel({ entry, streams, today, showSite, transporters, events, actionOptions, canSeeEvents, onClose }: {
+  entry: EntryDetail; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[];
+  events: readonly EventOption[]; actionOptions: ActionOptions | null; canSeeEvents: boolean; onClose: () => void;
+}) {
+  const event = entry.event && (canSeeEvents
+    ? <Link href={`/evenements?sel=${encodeURIComponent(entry.event.id)}`} className="vg-link">{entry.event.id}</Link>
+    : <span>{entry.event.id}</span>);
+  return (
+    <div style={{ display: 'grid', gap: 14 }}>
+      {entry.cancelled && (
+        <Note icon="ph-prohibit">
+          Enlèvement annulé le {fmtDate(entry.cancelled.at.slice(0, 10))} par {entry.cancelled.by} : {entry.cancelled.reason}
+          {' '}Il reste inscrit au registre pour traçabilité, hors indicateurs, échéances et export.
+        </Note>
+      )}
+      {entry.event && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-neutral-300)' }}>
+          <Icon name="ph-warning-diamond" size={14} style={{ color: TONE.warn.dot }} />
+          <span>Enlèvement consécutif à l&apos;événement {event}{entry.event.title ? ` · ${entry.event.title}` : ''}</span>
+        </div>
+      )}
+      {entry.staleBsd && (
+        <Note icon="ph-hourglass-medium" tone="warn">
+          Bordereau {entry.bsdNumber} encore « {entry.bsdLabel?.toLowerCase()} » {entry.age} jours après l&apos;enlèvement (seuil {BSD_STALE_DAYS} j) :
+          relancez l&apos;installation de destination pour obtenir le certificat de traitement.
+        </Note>
+      )}
+      <LinkedActions actions={entry.actions} options={entry.cancelled ? null : actionOptions} canAct={!entry.cancelled}
+        defaults={{
+          originRef: entry.ref, siteId: entry.siteId, title: entry.staleBsd ? `Obtenir le certificat de traitement du ${entry.bsdNumber}` : undefined,
+          description: `Enlèvement du ${fmtDate(entry.removedOn)} · ${entry.stream} · ${fmtQty(entry.quantity, entry.unit)}${entry.bsdNumber ? ` · ${entry.bsdNumber}` : ''}.`,
+        }} />
+      {!entry.cancelled && (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h6 className="vg-h6">Enlèvement</h6>
+          <EntryForm entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} events={events} onDone={onClose} onCancel={onClose} />
+        </section>
+      )}
+      <ChangeLogList entries={entry.history} />
+      {!entry.cancelled && (
+        <div style={{ display: 'flex', justifyContent: 'flex-start', paddingTop: 10, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
+          <ReasonButton label="Annuler l'enlèvement" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)' }}
+            title="Annuler l'enlèvement" kicker={`${entry.stream} · ${fmtDate(entry.removedOn)}`} action={cancelWasteEntry} hidden={{ id: entry.id }}
+            submitLabel="Annuler l'enlèvement" submitIcon="ph-prohibit" placeholder="Ex. doublon de l'enlèvement du 08/07, erreur de filière…"
+            message={<>L&apos;enlèvement du {fmtDate(entry.removedOn)} ({entry.stream}, {fmtQty(entry.quantity, entry.unit)}) reste inscrit au registre, marqué annulé :
+              il sort des indicateurs, des échéances et de l&apos;export. Cette opération ne peut pas être défaite.</>}
+            onDone={onClose} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Bouton « Nouvel enlèvement ». */
-export function NewEntryButton({ streams, today, showSite, transporters, defaultStreamId }: {
-  streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; defaultStreamId?: string;
+export function NewEntryButton({ streams, today, showSite, transporters, defaultStreamId, events }: {
+  streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; defaultStreamId?: string; events: readonly EventOption[];
 }) {
   const none = streams.length === 0;
   return (
     <DialogButton label="Nouvel enlèvement" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvel enlèvement" kicker="Registre des déchets"
       width={620} disabled={none} tooltip={none ? "Créez d'abord une filière (onglet Filières)." : undefined}>
-      {(close) => <EntryForm streams={streams} today={today} showSite={showSite} transporters={transporters} defaultStreamId={defaultStreamId} onDone={close} onCancel={close} />}
+      {(close) => <EntryForm streams={streams} today={today} showSite={showSite} transporters={transporters} defaultStreamId={defaultStreamId} events={events} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }
 
 // ─── Formulaire d'enlèvement ────────────────────────────────────────────────
 
-function EntryForm({ entry, streams, today, showSite, transporters, defaultStreamId, onDone, onCancel }: {
+function EntryForm({ entry, streams, today, showSite, transporters, defaultStreamId, events, onDone, onCancel }: {
   entry?: EntryView; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; defaultStreamId?: string;
-  onDone: () => void; onCancel: () => void;
+  events: readonly EventOption[]; onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
   const initialStream = entry?.streamId ?? (defaultStreamId && streams.some((s) => s.id === defaultStreamId) ? defaultStreamId : streams.length === 1 ? streams[0].id : '');
@@ -128,6 +192,9 @@ function EntryForm({ entry, streams, today, showSite, transporters, defaultStrea
   // Codes et exutoire enregistrés à l'inscription tant que la filière ne change pas ; sinon ceux de la filière choisie.
   const info = entry && streamId === entry.streamId ? entry : stream;
 
+  // Événements du site de la filière choisie ; un événement déjà lié mais clôturé depuis reste proposé.
+  const siteEvents = events.filter((e) => !stream || e.siteId === stream.siteId).map((e) => [e.id, e.label] as const);
+  const eventOptions = entry?.eventId && !siteEvents.some(([v]) => v === entry.eventId) ? [[entry.eventId, entry.eventId] as const, ...siteEvents] : siteEvents;
   const options = streams.map((s) => [s.id, `${s.label} · ${s.ewcCode}${showSite ? ` — ${shortSite(s.site)}` : ''}`] as const);
   const bsdHint = !info
     ? `Format Trackdéchets : ${BSD_PLACEHOLDER}.`
@@ -174,6 +241,11 @@ function EntryForm({ entry, streams, today, showSite, transporters, defaultStrea
           <Select name="bsdStatus" options={BSD_OPTIONS} placeholder="—" defaultValue={entry?.bsdStatus ?? ''} disabled={!bsd.trim()} />
         </Field>
       </FormRow>
+      {eventOptions.length > 0 && (
+        <Field name="eventId" label="Événement lié" hint="Facultatif : déversement ou fuite à l'origine de l'enlèvement.">
+          <Select name="eventId" options={eventOptions} placeholder="Aucun" defaultValue={entry?.eventId ?? ''} />
+        </Field>
+      )}
       <Field name="notes" label="Observations">
         <TextArea name="notes" rows={2} maxLength={1000} defaultValue={entry?.notes ?? ''} placeholder="Contexte de l'enlèvement, écart, régularisation…" style={{ minHeight: 56 }} />
       </Field>

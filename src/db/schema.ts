@@ -1,4 +1,9 @@
-import { boolean, date, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, type AnyPgColumn } from 'drizzle-orm/pg-core';
+
+// Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
+// - archivage : archivedAt / archivedById / archiveReason (élément retiré du suivi, historique conservé) ;
+// - annulation : cancelledAt / cancelledById / cancelReason (saisie annulée, exclue des calculs) ;
+// - historique des modifications : table change_log (src/server/changelog.ts).
 
 // ─── Référentiels ────────────────────────────────────────────────────────────
 
@@ -10,6 +15,10 @@ export const sites = pgTable('sites', {
   seveso: text('seveso'),
   ppFromFirstMinute: boolean('pp_from_first_minute').notNull().default(false),
   sort: integer('sort').notNull().default(0),
+  // Archivage (site fermé ou cédé) : masqué des sélecteurs, données conservées et visibles sous « Tous les sites ».
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 // Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
@@ -21,6 +30,12 @@ export const people = pgTable('people', {
   // Suivi dans la matrice des habilitations (salariés de production).
   inSkillsMatrix: boolean('in_skills_matrix').notNull().default(false),
   sort: integer('sort').notNull().default(0),
+  // Service / équipe (filtre de la matrice) — repris plus tard du connecteur Cursus.
+  service: text('service').notNull().default(''),
+  // Sortie de l'effectif : la personne est archivée (jamais supprimée). À partir de cette date, elle n'apparaît plus
+  // dans la matrice, les signaux ni les listes de choix ; son nom reste lisible dans l'historique.
+  leftOn: date('left_on', { mode: 'string' }),
+  leftReason: text('left_reason'),
 });
 
 // Heures travaillées par mois et par site — base du TF1 / TG (source RH).
@@ -41,7 +56,9 @@ export const keystoneProjects = pgTable('keystone_projects', {
 // Pièces jointes (photos de signalement, documents maîtrisés, rapports de contrôle…), stockées dans .data/uploads.
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(), // uuid
-  entityType: text('entity_type').notNull(), // event | document_version | control_record | …
+  // event | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
+  // | qualification | audit_plan_item | certification — droit de lecture : canReadAttachment (src/lib/uploads.ts)
+  entityType: text('entity_type').notNull(),
   entityId: text('entity_id').notNull(),
   fileName: text('file_name').notNull(),
   mimeType: text('mime_type').notNull(),
@@ -60,7 +77,8 @@ export const events = pgTable('events', {
   title: text('title').notNull(),
   occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
   location: text('location').notNull(),
-  declarant: text('declarant'), // null quand anonyme
+  declarant: text('declarant'), // nom affiché (null quand anonyme) — conservé pour les déclarants externes (client…)
+  declarantId: text('declarant_id').references(() => people.id), // rapprochement « Mes signalements » (null = anonyme ou externe)
   anonymous: boolean('anonymous').notNull().default(false),
   keystoneProject: text('keystone_project'),
   equipment: text('equipment'),
@@ -73,6 +91,18 @@ export const events = pgTable('events', {
   ncOrigin: text('nc_origin'), // origine des non-conformités / réclamations
   injury: text('injury'), // AT : arret | sans_arret | soins
   lostDays: integer('lost_days'),
+  // AT : date de déclaration à la CPAM (sous 48 h, sauf soins inscrits au registre des accidents bénins).
+  cpamDeclaredOn: date('cpam_declared_on', { mode: 'string' }),
+  // Rattachements facultatifs vers les autres modules.
+  controlId: integer('control_id').references((): AnyPgColumn => controls.id), // équipement soumis à contrôle périodique
+  riskId: integer('risk_id').references((): AnyPgColumn => risks.id), // risque du DUERP concerné (réévaluation)
+  documentId: text('document_id').references((): AnyPgColumn => documents.id), // document maîtrisé concerné
+  preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
+  permitId: text('permit_id').references((): AnyPgColumn => permits.id),
+  // « Classé sans suite » (doublon, faux signalement…) : jamais supprimé, motif obligatoire, exclu des indicateurs.
+  dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
+  dismissedById: text('dismissed_by_id').references(() => people.id),
+  dismissReason: text('dismiss_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -83,6 +113,19 @@ export const eventAnalyses = pgTable('event_analyses', {
   content: jsonb('content').notNull(),
 }, (t) => [primaryKey({ columns: [t.eventId, t.method] })]);
 
+// Historique du workflow d'un événement : qui, quand, de → vers, motif (retour arrière, réouverture, classement).
+// La déclaration est datée par events.createdAt ; qualification et clôture se déduisent de la dernière ligne « advance ».
+export const eventSteps = pgTable('event_steps', {
+  id: serial('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => events.id),
+  kind: text('kind').notNull(), // advance | revert | reopen | dismiss | restore
+  fromStep: integer('from_step').notNull(),
+  toStep: integer('to_step').notNull(), // = fromStep pour dismiss / restore
+  reason: text('reason'), // obligatoire pour revert, reopen, dismiss, restore
+  byId: text('by_id').references(() => people.id),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Plan d'actions unique ──────────────────────────────────────────────────
 
 export const actions = pgTable('actions', {
@@ -92,15 +135,20 @@ export const actions = pgTable('actions', {
   origin: text('origin').notNull(), // ev | audit | risk | watch | client | rev | skills | prevention | docs | env
   originRef: text('origin_ref').notNull(),
   eventId: text('event_id').references(() => events.id),
+  reviewId: integer('review_id').references((): AnyPgColumn => reviews.id), // revue de direction d'origine (décision, objectif, préparation)
   siteId: text('site_id').references(() => sites.id), // null = tous sites
   pilotId: text('pilot_id').notNull().references(() => people.id),
   dueOn: date('due_on', { mode: 'string' }).notNull(),
-  status: text('status').notNull(), // todo | doing | verify | done — « en retard » est calculé
+  status: text('status').notNull(), // todo | doing | verify | done | cancelled — « en retard » est calculé
   kind: text('kind').notNull(), // C (corrective) | P (préventive)
   verifyDueOn: date('verify_due_on', { mode: 'string' }),
   efficacyNote: text('efficacy_note'), // constat de la vérification d'efficacité
   verifiedById: text('verified_by_id').references(() => people.id),
   closedOn: date('closed_on', { mode: 'string' }),
+  // Annulation (statut « cancelled », jamais de suppression) : qui, quand, pourquoi.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -124,6 +172,10 @@ export const workUnits = pgTable('work_units', {
   label: text('label').notNull(),
   siteId: text('site_id').references(() => sites.id),
   sort: integer('sort').notNull().default(0),
+  // Archivage (unité retirée du document unique, sans risque en vigueur) : jamais de suppression, motif conservé.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 export const risks = pgTable('risks', {
@@ -137,6 +189,12 @@ export const risks = pgTable('risks', {
   residualGravity: integer('residual_gravity').notNull(),
   residualProbability: integer('residual_probability').notNull(),
   sort: integer('sort').notNull().default(0),
+  // Dernière recotation du risque résiduel (null = jamais recoté depuis Vigie). Comparée à la clôture des actions liées.
+  residualReviewedOn: date('residual_reviewed_on', { mode: 'string' }),
+  // Archivage (risque retiré du document unique en vigueur) : jamais de suppression, motif, actions et événements conservés.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 export const riskActions = pgTable('risk_actions', {
@@ -159,9 +217,16 @@ export const requirements = pgTable('requirements', {
   lastEvaluatedOn: date('last_evaluated_on', { mode: 'string' }),
   pilotId: text('pilot_id').references(() => people.id),
   featured: boolean('featured').notNull().default(false),
-  keystoneProjects: integer('keystone_projects'),
+  keystoneProjects: integer('keystone_projects'), // surcharge manuelle du nombre calculé (affectsProjects)
+  // L'exigence concerne les projets Keystone livrés après sa date d'application (nombre calculé : concernedCount).
+  affectsProjects: boolean('affects_projects').notNull().default(false),
+  linkedTo: text('linked_to'), // 'duerp' : échéance et état calculés depuis la version en vigueur du DUERP (écran /risques)
   actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
+  // Archivage (« texte abrogé ») : jamais de suppression, motif conservé.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 export const controls = pgTable('controls', {
@@ -176,6 +241,12 @@ export const controls = pgTable('controls', {
   nextOn: date('next_on', { mode: 'string' }).notNull(),
   reserves: text('reserves'),
   sort: integer('sort').notNull().default(0),
+  requirementId: integer('requirement_id').references(() => requirements.id), // exigence dont relève le contrôle
+  actionId: text('action_id').references(() => actions.id), // action de levée des réserves en cours
+  // Archivage (« équipement réformé ») : historique conservé.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 // Historique des contrôles réalisés (le dernier met à jour controls.lastOn / nextOn / reserves).
@@ -188,6 +259,26 @@ export const controlRecords = pgTable('control_records', {
   notes: text('notes'),
   recordedById: text('recorded_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // État du contrôle avant cet enregistrement (renseigné quand il est devenu le dernier), pour annuler une saisie erronée.
+  prevLastOn: date('prev_last_on', { mode: 'string' }),
+  prevNextOn: date('prev_next_on', { mode: 'string' }),
+  prevReserves: text('prev_reserves'),
+  // Annulation d'une saisie erronée (motif obligatoire), à la place d'une suppression.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+});
+
+// Historique des évaluations de conformité ; la dernière est recopiée dans requirements.evaluation / evaluationNote / lastEvaluatedOn.
+// Preuve facultative : attachments.entityType = 'requirement_evaluation'.
+export const requirementEvaluations = pgTable('requirement_evaluations', {
+  id: serial('id').primaryKey(),
+  requirementId: integer('requirement_id').notNull().references(() => requirements.id),
+  evaluatedOn: date('evaluated_on', { mode: 'string' }).notNull(),
+  evaluation: text('evaluation').notNull(), // conforme | ecart | analyse | a_evaluer
+  note: text('note'),
+  evaluatedById: text('evaluated_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ─── Habilitations et formations ────────────────────────────────────────────
@@ -197,6 +288,10 @@ export const trainingTitles = pgTable('training_titles', {
   label: text('label').notNull(),
   validityMonths: integer('validity_months').notNull().default(0), // 0 = sans échéance
   sort: integer('sort').notNull().default(0),
+  // Titre retiré du suivi (historique conservé).
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 export const qualificationRequirements = pgTable('qualification_requirements', {
@@ -205,13 +300,22 @@ export const qualificationRequirements = pgTable('qualification_requirements', {
   renewalActionId: text('renewal_action_id').references(() => actions.id), // recyclage planifié
 }, (t) => [primaryKey({ columns: [t.personId, t.titleId] })]);
 
+// Historique des formations suivies : une ligne par formation, jamais écrasée. La qualification en cours d'une case
+// de la matrice est la dernière ligne non annulée (obtainedOn desc, puis id desc). Attestation : attachments 'qualification'.
 export const qualifications = pgTable('qualifications', {
+  id: serial('id').primaryKey(),
   personId: text('person_id').notNull().references(() => people.id),
   titleId: text('title_id').notNull().references(() => trainingTitles.id),
   obtainedOn: date('obtained_on', { mode: 'string' }).notNull(),
   expiresOn: date('expires_on', { mode: 'string' }),
   provider: text('provider'),
-}, (t) => [primaryKey({ columns: [t.personId, t.titleId] })]);
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  recordedById: text('recorded_by_id').references(() => people.id),
+  // Formation enregistrée par erreur : annulée avec un motif (jamais supprimée) et exclue du calcul de l'état.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [index('qualifications_person_title_idx').on(t.personId, t.titleId)]);
 
 // Affectations lues depuis le planning Keystone.
 export const keystoneAssignments = pgTable('keystone_assignments', {
@@ -229,11 +333,15 @@ export const certifications = pgTable('certifications', {
   id: text('id').primaryKey(),
   domain: text('domain').notNull(),
   standard: text('standard').notNull(),
-  status: text('status').notNull(),
-  tone: text('tone').notNull(), // ok | warn | off
+  status: text('status').notNull().default(''), // précision libre (ex. « Déploiement en cours ») ; statut affiché calculé (certificationStatus)
+  tone: text('tone').notNull(), // engagement : ok (certifié) | warn (en cours) | off (non engagé)
   note: text('note').notNull(),
+  organization: text('organization'), // organisme certificateur
+  issuedOn: date('issued_on', { mode: 'string' }), // émission du certificat
+  validUntil: date('valid_until', { mode: 'string' }), // fin de validité (fin de cycle)
   sort: integer('sort').notNull().default(0),
 });
+// Le prochain audit de suivi n'est pas stocké : élément du programme rattaché (certificationId) non réalisé le plus proche.
 
 export const auditPlanItems = pgTable('audit_plan_items', {
   id: serial('id').primaryKey(),
@@ -246,23 +354,74 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   ownerId: text('owner_id').references(() => people.id),
   actionId: text('action_id').references(() => actions.id), // échéance portée par l'action
   done: boolean('done').notNull().default(false),
+  doneOn: date('done_on', { mode: 'string' }), // date de réalisation
+  auditor: text('auditor'), // auditeur ou organisme (texte libre, peut être externe)
+  scope: text('scope'), // périmètre audité
+  certificationId: text('certification_id').references(() => certifications.id), // référentiel (audit de certification / de suivi)
 });
 
 export const auditFindings = pgTable('audit_findings', {
   id: serial('id').primaryKey(),
-  audit: text('audit').notNull(),
+  audit: text('audit').notNull(), // libellé ; recalculé depuis l'élément du programme quand planItemId est renseigné
+  planItemId: integer('plan_item_id').references(() => auditPlanItems.id), // audit du programme (null = constat hors programme)
+  clause: text('clause'), // exigence ou paragraphe, ex. « §8.2.3 »
+  foundOn: date('found_on', { mode: 'string' }), // date du constat
   kind: text('kind').notNull(), // ecart_mineur | piste | point_fort
   text: text('text').notNull(),
   actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
+  // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, l'action liée reste au plan.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 });
 
+// ─── Revue de direction (ISO 9001 §9.3)─────────────────────────────────────
+
+// Une revue par séance : préparation (planifiée), compte rendu (tenue), puis visa de la direction et dossier figé (clôturée).
+export const reviews = pgTable('reviews', {
+  id: serial('id').primaryKey(),
+  reviewOn: date('review_on', { mode: 'string' }).notNull(), // date prévue, puis date de tenue
+  kind: text('kind').notNull().default('ordinaire'), // ordinaire | intermediaire
+  status: text('status').notNull().default('planifiee'), // planifiee | tenue | cloturee | annulee
+  participantIds: jsonb('participant_ids').notNull().default([]), // identifiants de personnes (people.id)
+  externalParticipants: text('external_participants'), // participants hors annuaire (CSE, organisme…)
+  customerPerception: text('customer_perception'), // perception des clients (§9.3.2 c1)
+  resourceNeeds: text('resource_needs'), // besoins en ressources (§9.3.3 c)
+  minutes: text('minutes'), // compte rendu / conclusions de la séance
+  nextReviewOn: date('next_review_on', { mode: 'string' }),
+  recordedById: text('recorded_by_id').references(() => people.id), // saisie du compte rendu
+  closedOn: date('closed_on', { mode: 'string' }),
+  closedById: text('closed_by_id').references(() => people.id), // visa de la direction
+  snapshot: jsonb('snapshot'), // dossier figé à la clôture (null pour les revues antérieures à Vigie)
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Éléments d'entrée de la revue (check-list) : fournis par un contributeur, ou par Vigie (source automatique, état calculé).
 export const reviewItems = pgTable('review_items', {
   id: serial('id').primaryKey(),
-  reviewOn: date('review_on', { mode: 'string' }).notNull(),
+  reviewId: integer('review_id').notNull().references(() => reviews.id),
   label: text('label').notNull(),
-  done: boolean('done').notNull().default(false),
-  owner: text('owner').notNull(),
+  source: text('source').notNull().default('manuel'), // manuel | clé de REVIEW_SOURCES (src/lib/domain.ts)
+  done: boolean('done').notNull().default(false), // ignoré pour les sources automatiques (calculé)
+  ownerId: text('owner_id').references(() => people.id), // contributeur
+  owner: text('owner').notNull().default(''), // contributeur hors annuaire (texte libre, quand ownerId est vide)
+  dueOn: date('due_on', { mode: 'string' }), // date de remise attendue
+  sort: integer('sort').notNull().default(0),
+});
+
+// Décisions, objectifs et besoins en ressources issus de la revue (§9.3.3), transformables en actions.
+export const reviewDecisions = pgTable('review_decisions', {
+  id: serial('id').primaryKey(),
+  reviewId: integer('review_id').notNull().references(() => reviews.id),
+  kind: text('kind').notNull(), // decision | objectif | ressource
+  text: text('text').notNull(),
+  pilotId: text('pilot_id').references(() => people.id),
+  dueOn: date('due_on', { mode: 'string' }),
+  actionId: text('action_id').references(() => actions.id), // action du plan créée ou rattachée
   sort: integer('sort').notNull().default(0),
 });
 
@@ -275,6 +434,10 @@ export const contractors = pgTable('contractors', {
   contactName: text('contact_name'),
   contactPhone: text('contact_phone'),
   contactEmail: text('contact_email'),
+  // Entreprise archivée (plus référencée), historique conservé.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 // Plan de prévention (Code du travail R. 4512-6 à R. 4512-12).
@@ -292,12 +455,16 @@ export const preventionPlans = pgTable('prevention_plans', {
   inspectionOn: date('inspection_on', { mode: 'string' }), // inspection commune préalable
   interferenceRisks: text('interference_risks').notNull().default(''),
   measures: text('measures').notNull().default(''),
-  status: text('status').notNull(), // brouillon | a_signer | signe | clos
+  status: text('status').notNull(), // brouillon | a_signer | signe | clos | annule
   signedEuOn: date('signed_eu_on', { mode: 'string' }), // entreprise utilisatrice
   signedEeOn: date('signed_ee_on', { mode: 'string' }), // entreprise extérieure
   ownerId: text('owner_id').references(() => people.id),
   formData: jsonb('form_data'), // réponses du formulaire importé (voir src/lib/pp-form.ts)
   importedFromId: text('imported_from_id').references(() => attachments.id), // fichier source de l'import
+  // Plan annulé (intervention n'ayant pas lieu), motif obligatoire ; seul un brouillon jamais signé peut être supprimé.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 });
 
 // Modèles d'import du formulaire de plan de prévention : correspondance entre les champs
@@ -329,7 +496,9 @@ export const permits = pgTable('permits', {
   watchUntil: timestamp('watch_until', { withTimezone: true }), // surveillance après travaux par points chauds
   checklist: jsonb('checklist').notNull().default([]), // [{ label, checked }]
   status: text('status').notNull(), // demande | delivre | clos | annule
-  closedAt: timestamp('closed_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }), // instant de clôture ou d'annulation
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'), // motif d'annulation (statut annule)
 });
 
 // ─── Documents maîtrisés ────────────────────────────────────────────────────
@@ -389,6 +558,12 @@ export const wasteEntries = pgTable('waste_entries', {
   bsdStatus: text('bsd_status'), // brouillon | emis | collecte | traite
   transporter: text('transporter').notNull(),
   notes: text('notes'),
+  // Événement à l'origine de l'enlèvement (déversement éliminé en déchet dangereux…), facultatif.
+  eventId: text('event_id').references(() => events.id),
+  // Annulation tracée (R. 541-43 : registre conservé 3 ans, aucune suppression physique).
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 });
 
 export const consumptions = pgTable('consumptions', {
@@ -452,3 +627,26 @@ export const siteActivities = pgTable('site_activities', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Traçabilité et notifications ───────────────────────────────────────────
+
+// Journal des modifications des fiches principales (qui, quand, quoi, motif) : écrit par logChange (src/server/changelog.ts).
+export const changeLog = pgTable('change_log', {
+  id: serial('id').primaryKey(),
+  entityType: text('entity_type').notNull(), // event | action | risk | requirement | control | prevention_plan | site | …
+  entityId: text('entity_id').notNull(),
+  action: text('action').notNull(), // create | update | status | cancel | archive | restore | link | unlink | delete | …
+  summary: text('summary').notNull(), // phrase affichée (« Échéance reportée au 20/10 »)
+  reason: text('reason'), // motif saisi (annulation, archivage, réouverture…)
+  details: jsonb('details'), // [{ field, from, to }] facultatif
+  byId: text('by_id').references(() => people.id),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('change_log_entity_idx').on(t.entityType, t.entityId)]);
+
+// État « lu » des échéances calculées (clé stable todoKey), par personne. Les échéances ne sont pas stockées :
+// seules les clés lues le sont ; « Tout marquer comme lu » supprime les clés qui ne correspondent plus à rien.
+export const notificationReads = pgTable('notification_reads', {
+  personId: text('person_id').notNull().references(() => people.id),
+  itemKey: text('item_key').notNull(),
+  readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.personId, t.itemKey] })]);

@@ -4,18 +4,40 @@ import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ActionFields, NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
+import { MAX_BATCH_BYTES, MAX_FILE_BYTES } from '@/lib/attachments';
 import { addDays, fmtDate } from '@/lib/dates';
 import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
-import { closePlan, recordPlanEeSignature, savePlan, signPlanEu } from '@/server/prevention';
-import { DANGEROUS_WORK_HINT, MANDATORY_HOURS, PERMIT_TYPES, lcfirst, ruleBasis } from './model';
+import { addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSignature, removePlanAttachment, savePlan, signPlanEu } from '@/server/prevention';
+import { DANGEROUS_WORK_HINT, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, lcfirst, ruleBasis } from './model';
 import {
-  ConfirmButton, ErrorLine, Facts, Notice, SITE_LOCK_HINT, SectionTitle, SignChip,
-  dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
+  ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
+  contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
+
+/** Pièces jointes acceptées sur un plan : PDF, images, Word. */
+const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
+const MB = 1024 * 1024;
+
+/**
+ * Contrôle des fichiers choisis, avant l'envoi : au-delà de la limite des server actions (next.config), l'envoi
+ * échouerait sans message. Vide le champ et renvoie le motif du refus, ou null.
+ */
+function checkPicked(input: HTMLInputElement, maxFiles: number): string | null {
+  const picked = Array.from(input.files ?? []);
+  const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
+  const issue = tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
+    : picked.length > maxFiles ? `${maxFiles} fichiers au maximum par envoi.`
+      : picked.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : ajoutez-les en plusieurs fois.`
+        : null;
+  if (issue) input.value = '';
+  return issue;
+}
 
 /** Action proposée depuis un plan (plan d'actions unique, origine Prévention) : corrective pour une intervention sans plan signé. */
 export function planActionDefaults(plan: PlanView, todayIso: string): ActionDefaults {
@@ -25,7 +47,7 @@ export function planActionDefaults(plan: PlanView, todayIso: string): ActionDefa
       : !plan.signedEuOn && !plan.signedEeOn ? `Faire signer le plan de prévention ${plan.id} par les deux entreprises (${plan.contractor})`
         : !plan.signedEuOn ? `Signer le plan de prévention ${plan.id} pour l'entreprise utilisatrice (${plan.contractor})`
           : `Obtenir la signature du plan de prévention ${plan.id} par ${plan.contractor}`;
-  const when = plan.phase === 'clos' ? 'terminée' : plan.inProgress ? 'en cours' : plan.overdue ? 'terminée, plan non clos' : 'prévue';
+  const when = plan.phase === 'clos' || plan.phase === 'annule' ? 'terminée' : plan.inProgress ? 'en cours' : plan.overdue ? 'terminée, plan non clos' : 'prévue';
   const obligation = !plan.mandatory ? ''
     : plan.ruleBasis ? ` ; plan écrit et signé obligatoire dès la première minute d'intervention (${lcfirst(plan.ruleBasis)})`
       : ` ; plan écrit obligatoire (${plan.legalReason})`;
@@ -70,7 +92,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
       )}
       <FormRow>
         <Field name="contractorId" label="Entreprise extérieure" hint={options.contractors.length ? undefined : "Ajoutez d'abord l'entreprise dans l'onglet « Entreprises extérieures »."}>
-          <Select name="contractorId" options={options.contractors} defaultValue={plan?.contractorId ?? ''} placeholder="Choisir…" autoFocus={!plan} />
+          <Select name="contractorId" options={contractorChoices(options, plan && { id: plan.contractorId, name: plan.contractor })} defaultValue={plan?.contractorId ?? ''} placeholder="Choisir…" autoFocus={!plan} />
         </Field>
         <Field name="siteId" label="Site" hint={options.siteLocked ? SITE_LOCK_HINT : undefined}>
           <Select name="siteId" options={options.recordSites} value={siteId} onChange={(e) => setSiteId(e.target.value)} />
@@ -138,6 +160,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
 // ─── Fiche ──────────────────────────────────────────────────────────────────
 
 function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
+  const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={recordPlanEeSignature} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" encType="multipart/form-data" hidden={{ id: plan.id }}>
       <FormRow>
@@ -145,9 +168,10 @@ function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; to
           <Input name="signedEeOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
         </Field>
         <Field name="file" label="Exemplaire signé" hint="Facultatif : PDF ou photo, 10 Mo au maximum.">
-          <Input name="file" type="file" accept="application/pdf,image/*" />
+          <Input name="file" type="file" accept="application/pdf,image/*" onChange={(e) => setFileError(checkPicked(e.currentTarget, 1))} />
         </Field>
       </FormRow>
+      <ErrorLine error={fileError} />
     </ActionForm>
   );
 }
@@ -214,11 +238,61 @@ function ImportedForm({ form }: { form: PlanFormView }) {
   );
 }
 
-function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void }) {
+/** Pièces jointes du plan : consultation, ajout et retrait tant que le plan n'est ni clos ni annulé. */
+function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean }) {
+  const [adding, setAdding] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const { pending, error, run } = useRun();
+  const closeForm = () => { setAdding(false); setFileError(null); };
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <SectionTitle aside={editable && !adding && (
+        <button type="button" className="vg-text-btn" onClick={() => setAdding(true)}><Icon name="ph-paperclip" size={13} />Joindre un fichier</button>
+      )}>Pièces jointes</SectionTitle>
+      {plan.attachments.length === 0 && !adding && (
+        <span style={muted}>Aucune pièce jointe (exemplaire signé, compte rendu d&apos;inspection commune, avenant…).</span>
+      )}
+      {plan.attachments.length > 0 && (
+        <div className="vg-thumbs">
+          {plan.attachments.map((a) => (
+            <div key={a.id} style={{ display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start' }}>
+              <a href={a.url} target="_blank" rel="noreferrer" className="vg-thumb" title={a.name}>
+                {a.isImage
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={a.url} alt={a.name} />
+                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
+              </a>
+              {editable && (
+                <ConfirmButton label="Retirer" confirmLabel="Retirer" question="Retirer ?" icon="ph-x" pending={pending} className="vg-text-btn"
+                  onConfirm={() => run(() => removePlanAttachment(a.id))} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <ErrorLine error={error} />
+      {adding && (
+        <div className="vg-inset" style={{ padding: '10px 12px' }}>
+          <ActionForm action={addPlanAttachments} encType="multipart/form-data" hidden={{ id: plan.id }} submitLabel="Joindre" submitIcon="ph-paperclip"
+            onDone={closeForm} onCancel={closeForm}>
+            <Field name="files" label="Fichiers" hint={`PDF, image ou Word · ${MAX_PLAN_FILES} fichiers et ${MAX_BATCH_BYTES / MB} Mo au maximum par envoi.`}>
+              <Input name="files" type="file" multiple accept={PLAN_FILE_ACCEPT} onChange={(e) => setFileError(checkPicked(e.currentTarget, MAX_PLAN_FILES))} />
+            </Field>
+            <ErrorLine error={fileError} />
+          </ActionForm>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelPlan, onDeleted }: {
+  plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void; onCancelPlan: () => void; onDeleted: () => void;
+}) {
   const [eeOpen, setEeOpen] = useState(false);
   const { pending, error, run } = useRun();
-  const closed = plan.status === 'clos';
-  const editable = canManage && !closed;
+  const ended = plan.status === 'clos' || plan.status === 'annule';
+  const editable = canManage && !ended;
   // Plan obligatoire non signé, intervention terminée : clôture possible, l'écart reste tracé par l'action rattachée.
   const unsignedAfterWork = plan.mandatory && !(plan.signedEuOn && plan.signedEeOn) && plan.startOn <= options.today;
   const signBlock = !plan.inspectionDone ? "Inspection commune préalable à réaliser avant toute signature."
@@ -233,10 +307,24 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
           : <span className="tag tag-neutral">Plan écrit non obligatoire</span>}
         {plan.missingSignature && <ToneTag tone="danger">Intervention en cours sans plan signé</ToneTag>}
         {plan.overdue && <ToneTag tone="warn">Période échue · à clore</ToneTag>}
-        <Link href={`/prevention/carte?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-          <Icon name="ph-map-trifold" size={13} />Voir sur la carte
-        </Link>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+          {/* Lien HTML simple (navigation complète, nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application. */}
+          <a href={`/prevention/imprimer/plan/${encodeURIComponent(plan.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+            <Icon name="ph-printer" size={13} />Imprimer
+          </a>
+          {plan.status !== 'annule' && (
+            <Link href={`/prevention/carte?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm">
+              <Icon name="ph-map-trifold" size={13} />Voir sur la carte
+            </Link>
+          )}
+        </span>
       </div>
+
+      {plan.cancelled && (
+        <Notice tone="neutral" icon="ph-prohibit">
+          Plan annulé le {plan.cancelled.on}{plan.cancelled.by ? ` par ${plan.cancelled.by}` : ''}{plan.cancelled.reason ? ` : ${plan.cancelled.reason}` : '.'}
+        </Notice>
+      )}
 
       {plan.missingSignature && (
         <Notice tone="danger">
@@ -306,21 +394,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
         )}
       </div>
 
-      {plan.attachments.length > 0 && (
-        <div style={{ display: 'grid', gap: 6 }}>
-          <SectionTitle>Pièces jointes</SectionTitle>
-          <div className="vg-thumbs">
-            {plan.attachments.map((a) => (
-              <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="vg-thumb" title={a.name}>
-                {a.isImage
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={a.url} alt={a.name} />
-                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+      <PlanAttachments plan={plan} editable={editable} />
 
       {plan.form && <ImportedForm form={plan.form} />}
 
@@ -355,34 +429,57 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
         ))}
       </div>
 
+      <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
+        reportHref={canManage ? `/evenements?nouveau=1&plan=${encodeURIComponent(plan.id)}` : null} />
+
+      <ChangeLogList entries={plan.history} />
+
       <ErrorLine error={error} />
       {editable && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCreateAction}><Icon name="ph-list-plus" size={13} />Créer l&apos;action</button>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+          {plan.deletable
+            ? <ConfirmButton label="Supprimer le brouillon" confirmLabel="Supprimer" icon="ph-trash" pending={pending}
+              question="Supprimer ce brouillon saisi par erreur ? Ses pièces jointes sont supprimées."
+              onConfirm={() => run(() => deletePlan(plan.id), onDeleted)} />
+            : <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} title={plan.cancelBlock ?? undefined} onClick={onCancelPlan}>
+              <Icon name="ph-prohibit" size={13} />Annuler le plan
+            </button>}
           <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
             question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé par l'action rattachée." : 'Clore définitivement ce plan ?'}
             disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
             onConfirm={() => run(() => closePlan(plan.id))} />
         </div>
       )}
+      {options.procedure && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><ProcedureNote procedure={options.procedure} /></div>}
     </div>
   );
 }
 
-type Mode = 'view' | 'edit' | 'action';
+type Mode = 'view' | 'edit' | 'action' | 'cancel';
 
 /** Fiche d'un plan de prévention (consultation, signatures, modification, création d'une action). */
 export function PlanDialog({ plan, open, onClose, options, canManage }: { plan: PlanView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
-  const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}` : mode === 'action' ? `Plan d'actions unique · ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
+  const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}`
+    : mode === 'action' ? `Plan d'actions unique · ${plan?.id ?? ''}`
+      : mode === 'cancel' ? `Annuler le plan ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
   return (
     <Dialog open={open && !!plan} onClose={close} width={760} kicker={kicker} title={plan ? (mode === 'action' ? 'Nouvelle action' : `${plan.id} · ${plan.contractor}`) : ''}>
       {plan && mode === 'edit' && <PlanForm plan={plan} options={options} onDone={back} onCancel={back} />}
       {plan && mode === 'action' && <ActionFields options={options} defaults={planActionDefaults(plan, options.today)} onDone={back} onCancel={back} />}
-      {plan && mode === 'view' && <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')} />}
+      {plan && mode === 'cancel' && (
+        <ReasonForm action={cancelPlan} hidden={{ id: plan.id }} submitLabel="Annuler le plan" submitIcon="ph-prohibit" onDone={back} onCancel={back}
+          placeholder="Ex. Intervention reportée à 2027 : un nouveau plan sera établi"
+          message={<>Le plan reste consultable avec le motif de l&apos;annulation ; il ne compte plus dans les interventions ni dans les plans à signer.</>} />
+      )}
+      {plan && mode === 'view' && (
+        <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')}
+          onCancelPlan={() => setMode('cancel')} onDeleted={close} />
+      )}
     </Dialog>
   );
 }
@@ -418,7 +515,7 @@ export function PlanAlertActions({ plan, options }: { plan: PlanView; options: P
 
 const inspectionCell = (p: PlanView) => {
   if (p.inspectionOn) return <span style={{ color: p.inspectionDone ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{p.inspectionDone ? fmtDate(p.inspectionOn) : `Prévue le ${fmtDate(p.inspectionOn)}`}</span>;
-  if (p.status === 'clos') return <span style={muted}>—</span>;
+  if (p.status === 'clos' || p.status === 'annule') return <span style={muted}>—</span>;
   return <span style={{ color: p.mandatory ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>À réaliser</span>;
 };
 

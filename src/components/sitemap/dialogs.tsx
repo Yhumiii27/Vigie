@@ -261,11 +261,11 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
 
 /**
  * Écart de l'activité d'une entreprise extérieure active à la date : plan obligatoire (règle du site ou R. 4512-7)
- * non signé par les deux entreprises, ou plan clos ; null sinon.
+ * non signé par les deux entreprises, ou plan clos ou annulé ; null sinon.
  */
-export function planGap(a: ActivityView, date: string): 'Plan non signé' | 'Plan clos' | null {
+export function planGap(a: ActivityView, date: string): 'Plan non signé' | 'Plan clos ou annulé' | null {
   if (a.team !== 'externe' || !a.preventionPlanId || !activeOn(a, date)) return null;
-  if (a.planClosed) return 'Plan clos';
+  if (a.planClosed) return 'Plan clos ou annulé';
   return lacksSignedPlan(a) ? 'Plan non signé' : null;
 }
 
@@ -294,8 +294,8 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
       )}
       {gap && (
         <Notice tone="danger">
-          {gap === 'Plan clos'
-            ? `Intervention en cours alors que le plan ${activity.preventionPlanId} est clos : établissez un nouveau plan de prévention.`
+          {gap === 'Plan clos ou annulé'
+            ? `Intervention en cours alors que le plan ${activity.preventionPlanId} est clos ou annulé : établissez un nouveau plan de prévention.`
             : `${rule.ppFromFirstMinute ? `${ruleBasis(rule)} : le` : 'Le'} plan ${activity.preventionPlanId} (${(activity.planStatusLabel ?? '').toLowerCase()}) doit être signé par les deux entreprises avant toute intervention${rule.ppFromFirstMinute ? '' : ' (R. 4512-7)'}.`}
         </Notice>
       )}

@@ -1,5 +1,5 @@
 import 'server-only';
-import { asc } from 'drizzle-orm';
+import { asc, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { loadFormOptions } from '@/lib/data/options';
 import { today } from '@/lib/dates';
@@ -10,13 +10,14 @@ import { currentSiteId, getSession } from '@/lib/session';
 
 const parisDay = new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
 
-/** Données de l'écran d'import (référentiels des formulaires, modèles enregistrés), sur le site sélectionné. */
+/** Données de l'écran d'import (référentiels des formulaires, modèles enregistrés), sur le site sélectionné ou les sites actifs. */
 export async function loadImportScreen(): Promise<ImportScreenData> {
   const [db, session, selectedSite, options] = await Promise.all([getDb(), getSession(), currentSiteId(), loadFormOptions()]);
   const [templates, contractors, sites, people] = await Promise.all([
     db.select().from(t.ppImportTemplates).orderBy(asc(t.ppImportTemplates.name)),
-    db.select({ id: t.contractors.id, name: t.contractors.name, trade: t.contractors.trade }).from(t.contractors),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    // Entreprises archivées exclues : ni proposées, ni reconnues par leur nom dans le formulaire importé.
+    db.select({ id: t.contractors.id, name: t.contractors.name, trade: t.contractors.trade }).from(t.contractors).where(isNull(t.contractors.archivedAt)),
+    db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select({ id: t.people.id, name: t.people.name }).from(t.people),
   ]);
   const personName = new Map(people.map((p) => [p.id, p.name]));

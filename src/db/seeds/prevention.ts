@@ -13,6 +13,10 @@ import type { SeedTx } from './types';
 // Les autres permis d'entreprises extérieures sont rattachés à un plan signé couvrant leur validité (PF-2026-029, PE-2026-009) ;
 // les autres permis sont réalisés par le personnel interne (sans entreprise extérieure ni intervenant d'une autre entreprise).
 // PP-2026-017 (6 h, sans travaux dangereux) illustre la règle : non obligatoire au sens de R. 4512-7, exigé et signé au titre de Seveso.
+// Traçabilité (jamais de suppression) : l'entreprise EE-007 est archivée avec son plan clos PP-2025-033 ; PP-2026-010 est annulé
+// (intervention reportée, motif conservé) ; PF-2026-028 est annulé avec son motif. Échéances : PP-2026-011 est à clore (période
+// terminée), PP-2026-018 a une inspection commune prévue le 15/10, PE-2026-009 est à délivrer. Ces plans sont signés, clos, annulés
+// ou à venir : ils n'ajoutent aucun écart.
 
 // [id, raison sociale, corps de métier, contact, téléphone, e-mail]
 const CONTRACTORS: [string, string, string, string, string, string][] = [
@@ -22,15 +26,58 @@ const CONTRACTORS: [string, string, string, string, string, string][] = [
   ['EE-004', '[Entreprise Chaudronnerie Soudure]', 'Chaudronnerie et soudure', '[S. Garnier]', '06 39 98 31 07', 'atelier@chaudronnerie-soudure.example'],
   ['EE-005', '[Entreprise Contrôle ATEX]', 'Inspection et maintenance du matériel ATEX', '[V. Rousseau]', '02 61 91 44 60', 'contact@controle-atex.example'],
   ['EE-006', '[Entreprise Sécurité Incendie]', 'Maintenance des extincteurs et RIA', '[C. Perrin]', '02 61 91 52 75', 'maintenance@securite-incendie.example'],
+  ['EE-007', '[Entreprise Peinture Industrielle]', 'Peinture et revêtements de sols', '[R. Blanc]', '02 61 91 60 12', 'chantiers@peinture-industrielle.example'],
 ];
+// Entreprises archivées (plus référencées, historique conservé).
+const ARCHIVED: Record<string, { archivedAt: Date; archivedById: string; archiveReason: string }> = {
+  'EE-007': { archivedAt: new Date('2026-03-31T10:00:00+02:00'), archivedById: 'clefevre', archiveReason: 'Contrat de maintenance des sols terminé, entreprise plus référencée' },
+};
 
 type PlanSeed = {
   id: string; siteId: string; contractorId: string; title: string; location: string; startOn: string; endOn: string;
   estimatedHours: number; dangerousWork: boolean; keystoneProject?: string; inspectionOn?: string;
   interferenceRisks: string; measures: string; status: string; signedEuOn?: string; signedEeOn?: string; ownerId: string;
+  cancelledAt?: Date; cancelledById?: string; cancelReason?: string;
 };
 
 const PLANS: PlanSeed[] = [
+  {
+    // Historique de l'entreprise archivée EE-007.
+    id: 'PP-2025-033', siteId: 'ville-a', contractorId: 'EE-007',
+    title: "Réfection de la résine de sol de l'atelier usinage",
+    location: 'Atelier usinage', startOn: '2025-08-04', endOn: '2025-08-14', estimatedHours: 160, dangerousWork: false,
+    inspectionOn: '2025-07-28', signedEuOn: '2025-07-29', signedEeOn: '2025-07-30', status: 'clos', ownerId: 'sbenali',
+    interferenceRisks: "Vapeurs de solvants de la résine ; sols glissants pendant la pose ; circulation des chariots vers le magasin.",
+    measures: "Atelier fermé pendant les travaux (congés d'été) ; ventilation forcée ; aucune source d'ignition ni point chaud dans la zone ; balisage des accès et circulation déviée.",
+  },
+  {
+    id: 'PP-2026-010', siteId: 'ville-b', contractorId: 'EE-003',
+    title: "Nettoyage haute pression des bacs de rétention de la zone d'essais",
+    location: "Zone d'essais · bacs de rétention", startOn: '2026-10-19', endOn: '2026-10-20', estimatedHours: 14, dangerousWork: false,
+    status: 'annule', ownerId: 'jpetit',
+    cancelledAt: new Date('2026-10-01T11:00:00+02:00'), cancelledById: 'jpetit',
+    cancelReason: 'Intervention reportée à la campagne de printemps 2027 : un nouveau plan sera établi',
+    interferenceRisks: "Projections d'eau sous pression près des armoires des bancs ; effluents chargés en huile ; coactivité avec les essais.",
+    measures: '',
+  },
+  {
+    // Période d'intervention terminée, plan signé non clos : échéance « Plan à clore ».
+    id: 'PP-2026-011', siteId: 'ville-b', contractorId: 'EE-006',
+    title: "Vérification annuelle des extincteurs et RIA de la zone d'essais",
+    location: "Zone d'essais et bureaux", startOn: '2026-09-30', endOn: '2026-10-02', estimatedHours: 5, dangerousWork: false,
+    inspectionOn: '2026-09-25', signedEuOn: '2026-09-28', signedEeOn: '2026-09-28', status: 'signe', ownerId: 'jpetit',
+    interferenceRisks: "Circulation du technicien en zone ATEX 2 pendant les essais ; RIA mis en eau.",
+    measures: "Intervention hors campagne d'essais ; accompagnement par le chef de zone ; accueil sécurité de la zone d'essais ; essais des RIA hors zones de passage.",
+  },
+  {
+    // Inspection commune prévue le 15/10, démarrage au-delà de l'horizon des échéances.
+    id: 'PP-2026-018', siteId: 'ville-a', contractorId: 'EE-001',
+    title: 'Remplacement du moto-réducteur de translation du pont roulant 5 t',
+    location: 'Atelier usinage · pont roulant 5 t', startOn: '2026-10-26', endOn: '2026-10-28', estimatedHours: 24, dangerousWork: true,
+    inspectionOn: '2026-10-15', status: 'brouillon', ownerId: 'sbenali',
+    interferenceRisks: "Travail en hauteur sur le chemin de roulement au-dessus des postes d'usinage ; levage du moto-réducteur ; circulation dans l'allée centrale.",
+    measures: '',
+  },
   {
     id: 'PP-2025-041', siteId: 'ville-a', contractorId: 'EE-003',
     title: 'Nettoyage industriel des ateliers, des fosses de rétention et des bacs à copeaux (contrat annuel)',
@@ -102,7 +149,7 @@ const PLANS: PlanSeed[] = [
 type PermitSeed = {
   id: string; type: PermitType; siteId: string; location: string; description: string; contractorId?: string; performer: string;
   issuerId?: string; preventionPlanId?: string; keystoneProject?: string; validFrom: string; validTo: string; watchUntil?: string;
-  checked: number; status: string; closedAt?: string;
+  checked: number; status: string; closedAt?: string; cancelledById?: string; cancelReason?: string;
 };
 
 const PERMITS: PermitSeed[] = [
@@ -117,6 +164,7 @@ const PERMITS: PermitSeed[] = [
     description: 'Soudure de reprise sur le châssis du malaxeur MX-2 (reportée en cabine de soudage)',
     performer: '[T. Nguyen]', keystoneProject: 'K-2025-077 · [Client A]',
     validFrom: '2026-09-30T08:00', validTo: '2026-09-30T17:00', watchUntil: '2026-09-30T19:00', checked: 3, status: 'annule', closedAt: '2026-09-29T16:40',
+    cancelledById: 'sbenali', cancelReason: 'Soudure reportée en cabine de soudage : permis de feu inutile',
   },
   {
     id: 'PF-2026-029', type: 'feu', siteId: 'ville-b', location: "Zone d'essais · plateforme PIRL",
@@ -163,13 +211,16 @@ const atWinter = (local: string) => new Date(`${local}:00+01:00`);
 const instant = (local: string) => (local < '2026-03-29' || local >= '2026-10-25' ? atWinter(local) : at(local));
 
 export async function seedPrevention(tx: SeedTx) {
-  await tx.insert(t.contractors).values(CONTRACTORS.map(([id, name, trade, contactName, contactPhone, contactEmail]) => ({ id, name, trade, contactName, contactPhone, contactEmail })));
+  await tx.insert(t.contractors).values(CONTRACTORS.map(([id, name, trade, contactName, contactPhone, contactEmail]) => ({ id, name, trade, contactName, contactPhone, contactEmail, ...ARCHIVED[id] })));
   await tx.insert(t.preventionPlans).values(PLANS.map((p) => ({
     ...p,
     keystoneProject: p.keystoneProject ?? null,
     inspectionOn: p.inspectionOn ?? null,
     signedEuOn: p.signedEuOn ?? null,
     signedEeOn: p.signedEeOn ?? null,
+    cancelledAt: p.cancelledAt ?? null,
+    cancelledById: p.cancelledById ?? null,
+    cancelReason: p.cancelReason ?? null,
   })));
   await tx.insert(t.permits).values(PERMITS.map((p) => ({
     id: p.id,
@@ -188,5 +239,7 @@ export async function seedPrevention(tx: SeedTx) {
     checklist: PERMIT_TYPES[p.type].checklist.map((label, i) => ({ label, checked: i < p.checked })),
     status: p.status,
     closedAt: p.closedAt ? instant(p.closedAt) : null,
+    cancelledById: p.cancelledById ?? null,
+    cancelReason: p.cancelReason ?? null,
   })));
 }

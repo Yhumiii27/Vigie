@@ -5,16 +5,18 @@ import { useState, useTransition, type ReactNode } from 'react';
 import { Dot } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { ActionBrief } from '@/lib/data/audits';
+import type { ActionBrief, AttachmentBrief } from '@/lib/data/audits';
 import styles from './audits.module.css';
 
 /** Choix exclusif en contrôle segmenté, utilisable dans un ActionForm (champ radio `name`). */
-export function RadioSeg({ name, options, defaultValue }: { name: string; options: readonly (readonly [value: string, label: string, dot?: string])[]; defaultValue?: string }) {
+export function RadioSeg({ name, options, defaultValue, onChange }: {
+  name: string; options: readonly (readonly [value: string, label: string, dot?: string])[]; defaultValue?: string; onChange?: (value: string) => void;
+}) {
   return (
     <div className="seg" role="radiogroup" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }}>
       {options.map(([value, label, dot]) => (
         <label key={value} className="seg-opt" style={{ fontSize: 12, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <input type="radio" name={name} value={value} defaultChecked={defaultValue === value} />
+          <input type="radio" name={name} value={value} defaultChecked={defaultValue === value} onChange={onChange && ((e) => { if (e.target.checked) onChange(value); })} />
           {dot && <Dot color={dot} />}{label}
         </label>
       ))}
@@ -67,5 +69,45 @@ export function DeleteButton({ run, onDone, label = 'Supprimer', note }: { run: 
       </button>
       {error && <span role="alert" style={{ flexBasis: '100%', textAlign: 'right', fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </span>
+  );
+}
+
+/** URL de consultation d'une pièce jointe (même route que attachmentUrl, côté client). */
+export const fileUrl = (id: string) => `/fichiers/${id}`;
+
+/** Liste de fichiers joints (rapport, certificat) avec retrait en deux temps d'un fichier ajouté par erreur. */
+export function FileList({ files, onRemove, icon = 'ph-file-text' }: { files: AttachmentBrief[]; onRemove?: (id: string) => Promise<{ error?: string }>; icon?: string }) {
+  const [asking, setAsking] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  if (!files.length) return null;
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      {files.map((f) => (
+        <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, minWidth: 0 }}>
+          <a href={fileUrl(f.id)} target="_blank" rel="noopener" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.fileName}</span>
+          </a>
+          <span style={{ color: 'var(--color-neutral-500)', fontSize: 11 }}>{fmtDate(f.createdAt.slice(0, 10))}</span>
+          {onRemove && (asking === f.id ? (
+            <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
+              <button type="button" className="vg-text-btn" disabled={pending} onClick={() => setAsking(null)}>Annuler</button>
+              <button type="button" className="vg-text-btn" disabled={pending} style={{ color: 'var(--tone-danger-fg)' }}
+                onClick={() => start(async () => {
+                  const r = await onRemove(f.id);
+                  setError(r.error ?? null);
+                  if (!r.error) setAsking(null);
+                })}>
+                {pending ? 'Retrait…' : 'Confirmer le retrait'}
+              </button>
+            </span>
+          ) : (
+            <button type="button" className="vg-text-btn" style={{ marginLeft: 'auto', color: 'var(--color-neutral-400)' }} onClick={() => { setError(null); setAsking(f.id); }}>Retirer</button>
+          ))}
+        </div>
+      ))}
+      {error && <span role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
+    </div>
   );
 }

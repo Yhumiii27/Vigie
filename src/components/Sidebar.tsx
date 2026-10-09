@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { setRole, setSite } from '@/app/actions';
+import { SitesManager, type SiteAdminRow } from './SitesManager';
 
 export type NavSection = { label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
 
@@ -14,6 +15,8 @@ type Props = {
   user: { name: string; initials: string };
   role: string;
   roles: string[];
+  /** Sites (archivés compris) pour « Gérer les sites… » ; null si le rôle ne peut pas les administrer. */
+  siteAdmin?: SiteAdminRow[] | null;
 };
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
@@ -31,9 +34,10 @@ function useDismiss(open: boolean, close: () => void) {
   return ref;
 }
 
-export function Sidebar({ nav, site, sites, user, role, roles }: Props) {
+export function Sidebar({ nav, site, sites, user, role, roles, siteAdmin }: Props) {
   const pathname = usePathname();
   const [siteOpen, setSiteOpen] = useState(false);
+  const [manageSites, setManageSites] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [, start] = useTransition();
   const siteRef = useDismiss(siteOpen, () => setSiteOpen(false));
@@ -61,9 +65,19 @@ export function Sidebar({ nav, site, sites, user, role, roles }: Props) {
                 {s.label}
               </button>
             ))}
+            {siteAdmin && (
+              <>
+                <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
+                <button type="button" className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }}
+                  onClick={() => { setSiteOpen(false); setManageSites(true); }}>
+                  <i className="ph ph-gear-six" style={{ fontSize: 14, color: 'var(--color-neutral-500)' }} />Gérer les sites…
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+      {siteAdmin && manageSites && <SitesManager sites={siteAdmin} onClose={() => setManageSites(false)} />}
 
       <nav className="vg-nav">
         {nav.map((sec) => (
@@ -105,8 +119,9 @@ export function Sidebar({ nav, site, sites, user, role, roles }: Props) {
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 0', fontSize: 10.5, color: 'var(--color-neutral-600)' }}>
-        <i className="ph ph-windows-logo" style={{ fontSize: 12 }} />Connecté via Microsoft Entra ID
+      <div title="L'authentification Microsoft Entra ID sera branchée ultérieurement"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 0', fontSize: 10.5, color: 'var(--color-neutral-600)' }}>
+        <i className="ph ph-flask" style={{ fontSize: 12 }} />Mode démonstration · sélecteur de rôle
       </div>
     </aside>
   );

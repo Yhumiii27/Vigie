@@ -1,16 +1,30 @@
 // Constantes et règles de l'écran « Signalements et événements », partagées par le serveur et les composants client.
 
-import { EVENT_STEPS, STEP_ACTIONS, STEP_CLOSED } from '@/lib/domain';
+import { EVENT_STEPS, STEP_ACTIONS, STEP_CLOSED, STEP_QUALIFIED } from '@/lib/domain';
 
 /** Étape « Efficacité vérifiée » : toutes les actions liées doivent être clôturées, jusqu'à la clôture comprise. */
 export const STEP_EFFICACY = EVENT_STEPS.indexOf('Efficacité vérifiée');
 
-/** Pourquoi le passage à l'étape suivante est bloqué (null si possible). */
-export function advanceBlocker(step: number, linked: readonly { status: string }[]): string | null {
+/** Données de la fiche qui conditionnent le passage à l'étape suivante. */
+export type AdvanceContext = { pilotId: string | null; hasAnalysis: boolean; dismissed: boolean; methodLabel: string };
+
+/**
+ * Pourquoi le passage à l'étape suivante est bloqué (null si possible) :
+ * pilote désigné pour « Qualifié », analyse saisie puis au moins une action pour « Actions »,
+ * actions clôturées pour « Efficacité vérifiée » et la clôture.
+ */
+export function advanceBlocker(step: number, allLinked: readonly { status: string }[], ctx: AdvanceContext): string | null {
+  // Les actions annulées restent affichées sur la fiche mais ne comptent ni comme liées ni comme ouvertes.
+  const linked = allLinked.filter((a) => a.status !== 'cancelled');
+  if (ctx.dismissed) return 'Événement classé sans suite.';
   if (step >= STEP_CLOSED) return 'Événement déjà clôturé.';
   const next = step + 1;
-  if (next === STEP_ACTIONS && linked.length === 0) {
-    return `Liez au moins une action avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`;
+  if (next === STEP_QUALIFIED && !ctx.pilotId) {
+    return `Désignez un pilote (Modifier) avant le passage à l'étape « ${EVENT_STEPS[STEP_QUALIFIED]} ».`;
+  }
+  if (next === STEP_ACTIONS) {
+    if (!ctx.hasAnalysis) return `Saisissez l'analyse des causes (méthode « ${ctx.methodLabel} ») avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`;
+    if (linked.length === 0) return `Liez au moins une action avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`;
   }
   // Revérifié à la clôture : une action a pu être ajoutée ou rouverte après « Efficacité vérifiée ».
   if (next >= STEP_EFFICACY) {
@@ -25,10 +39,21 @@ export function advanceBlocker(step: number, linked: readonly { status: string }
 }
 
 /** Pourquoi aucune action ne peut plus être ajoutée à l'événement (null si possible). */
-export function addActionBlocker(step: number): string | null {
+export function addActionBlocker(step: number, dismissed = false): string | null {
+  if (dismissed) return 'Événement classé sans suite : aucune action ne peut lui être ajoutée.';
   if (step < STEP_EFFICACY) return null;
   return `Événement à l'étape « ${EVENT_STEPS[Math.min(step, STEP_CLOSED)]} » : ramenez-le à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} » (animateur QHSE ou direction) pour lui ajouter une action.`;
 }
+
+/** Pourquoi la fiche est en lecture seule (classée sans suite ou clôturée), null si modifiable. */
+export function eventLockReason(e: { step: number; dismissedAt: Date | string | null }): string | null {
+  if (e.dismissedAt) return 'Événement classé sans suite : annulez le classement (animateur QHSE ou direction) pour le modifier.';
+  if (e.step >= STEP_CLOSED) return 'Événement clôturé : rouvrez-le (animateur QHSE ou direction) pour le modifier.';
+  return null;
+}
+
+/** Accident du travail à déclarer à la CPAM (sous 48 h) ; les soins sans arrêt vont au registre des accidents bénins. */
+export const needsCpam = (e: { type: string; injury: string | null }) => e.type === 'AT' && e.injury !== 'soins';
 
 // ─── Fiche événement ────────────────────────────────────────────────────────
 
@@ -88,28 +113,31 @@ export function readD8(content: unknown): { current: number; notes: string[] } {
   return { current, notes };
 }
 
+/** Vrai si l'analyse de la méthode donnée contient au moins un élément saisi. */
+export function analysisFilled(method: string, content: unknown): boolean {
+  if (content == null) return false;
+  if (method === '5m') return readFiveM(content).size > 0;
+  if (method === 'tree') return readTree(content).length > 0;
+  if (method === 'why') return readWhys(content).length > 0;
+  const d8 = readD8(content);
+  return d8.current > 0 || d8.notes.some(Boolean);
+}
+
 // ─── Pièces jointes et photos ───────────────────────────────────────────────
 
 export const MAX_PHOTOS = 4;
-export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-/** Volume maximal d'un envoi (les server actions acceptent 11 Mo, marge multipart comprise). */
-export const MAX_BATCH_BYTES = 10 * 1024 * 1024;
-export const MAX_FILES_PER_BATCH = 10;
-export const ATTACH_ACCEPT = 'image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.csv';
+// Constantes et vignettes communes à toutes les pièces jointes : src/lib/attachments.ts (réexportées ici).
+export { ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES, fileIcon, fmtSize, type AttachmentItem } from '@/lib/attachments';
 
-export const fmtSize = (n: number) =>
-  n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} Ko` : `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`;
+// ─── Parcours terrain ───────────────────────────────────────────────────────
 
-export function fileIcon(mime: string) {
-  if (mime.startsWith('image/')) return 'ph-image';
-  if (mime === 'application/pdf') return 'ph-file-pdf';
-  if (/word/.test(mime)) return 'ph-file-doc';
-  if (/sheet|excel/.test(mime)) return 'ph-file-xls';
-  if (/presentation/.test(mime)) return 'ph-file-ppt';
-  if (mime === 'text/csv') return 'ph-file-csv';
-  if (mime.startsWith('text/')) return 'ph-file-text';
-  return 'ph-file';
+/** Paramètres du QR code de poste (?poste=&site=, ou ?lieu= libre) conservés entre « Signaler » et « Mes signalements ». */
+export function reportQuery(sp: Record<string, string | string[] | undefined>): string {
+  const params = new URLSearchParams();
+  for (const k of ['poste', 'site', 'lieu']) {
+    const v = sp[k];
+    if (typeof v === 'string' && v) params.set(k, v);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
 }
-
-/** Pièce jointe telle que la fiche l'affiche. */
-export type AttachmentItem = { id: string; name: string; mime: string; size: number; url: string; isImage: boolean };

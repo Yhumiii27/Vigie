@@ -16,6 +16,20 @@ export const BSD_STATUS: Record<BsdStatus, { label: string; tone: Tone }> = {
 export const BSD_STATUS_KEYS = Object.keys(BSD_STATUS) as BsdStatus[];
 export const isBsdStatus = (s: string | null | undefined): s is BsdStatus => !!s && s in BSD_STATUS;
 
+/** Bordereau resté brouillon, émis ou collecté plus de 30 jours après l'enlèvement : traitement final à vérifier. */
+export const BSD_STALE_DAYS = 30;
+export const BSD_PENDING: readonly BsdStatus[] = ['brouillon', 'emis', 'collecte'];
+
+/** Jour du mois suivant avant lequel les relevés de consommation d'un mois échu sont attendus. */
+export const READING_DUE_DAY = 15;
+
+/**
+ * Référence d'origine d'une action rattachée à un enlèvement : « FD-11 · 19/08/2026 » (filière seule : « FD-11 »).
+ * Avec `n` (identifiant de la ligne du registre), « FD-11 · 19/08/2026 · n° 42 » : distingue plusieurs enlèvements du même jour.
+ */
+export const entryRef = (streamId: string, removedOn: string, n?: number) =>
+  `${streamId} · ${removedOn.slice(8, 10)}/${removedOn.slice(5, 7)}/${removedOn.slice(0, 4)}${n != null ? ` · n° ${n}` : ''}`;
+
 /** Numéro de bordereau : lettres, chiffres et tirets (ex. BSD-20260312-7KQ4P2XR). */
 export const BSD_NUMBER = /^[A-Z0-9][A-Z0-9-]{5,39}$/;
 export const BSD_PLACEHOLDER = 'BSD-AAAAMMJJ-XXXXXXXX';
