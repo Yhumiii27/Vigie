@@ -56,3 +56,16 @@ Le **site** choisi en haut de la barre latérale filtre les données (événemen
 - Lecture des formulaires scannés : désactivée par défaut, car le document est envoyé à l'API Claude (Anthropic). Pour l'activer : `VIGIE_AI_IMPORT=1` et une clé `ANTHROPIC_API_KEY`. Les PDF remplissables et les fichiers Word sont lus localement. Des formulaires d'exemple sont dans `samples/` (`node scripts/pp-samples.mjs` pour les régénérer).
 - Authentification Microsoft Entra ID : le rôle se choisit dans le menu de démonstration (`src/lib/session.ts`).
 - Données Keystone (projets, affectations) : référentiel local en attendant l'intégration.
+
+## Mise en ligne (Docker, Coolify)
+
+Le `Dockerfile` à la racine compile l'application et lance `next start`. Réglages à donner à l'hébergeur :
+
+| Réglage | Valeur |
+| --- | --- |
+| Port interne | `3000` |
+| Volume persistant | `/data` (base PGlite dans `/data/db`, pièces jointes dans `/data/uploads`) |
+
+Le build télécharge la police Inter depuis Google Fonts : le serveur de build doit avoir accès à Internet.
+Tant que l'authentification Entra ID n'est pas branchée, protéger l'accès au niveau de l'hébergeur
+(authentification HTTP de Coolify, par exemple).
