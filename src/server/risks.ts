@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { and, asc, eq, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { addMonths, fmtDate, today } from '@/lib/dates';
+import { addMonths, fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { buildDuerpSnapshot, DUERP_RETENTION, versionComment, versionConflict } from '@/lib/data/risks';
 import { canSee } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';

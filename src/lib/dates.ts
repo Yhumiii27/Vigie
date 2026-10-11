@@ -5,11 +5,7 @@ const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet'
 export const MONTHS_SHORT = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
 const MONTHS_ABBR = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
 
-/** Date du jour à Paris ; `VIGIE_TODAY` permet de figer la date de référence. */
-export function today(): string {
-  if (process.env.VIGIE_TODAY) return process.env.VIGIE_TODAY;
-  return new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
+// La date du jour (`today()`, VIGIE_TODAY en démonstration) est servie par src/lib/today.ts (serveur).
 
 const ms = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
 
@@ -20,10 +16,15 @@ export function addDays(iso: string, n: number): string {
   return new Date(ms(iso) + n * DAY).toISOString().slice(0, 10);
 }
 
+/**
+ * Ajoute `n` mois (négatif : retire) à une date ISO en restant dans le mois d'arrivée :
+ * 31/08/2026 + 6 mois = 28/02/2027 (et non 03/03/2027), pour ne jamais dépasser une échéance réglementaire.
+ */
 export function addMonths(iso: string, n: number): string {
-  const d = new Date(ms(iso));
-  d.setUTCMonth(d.getUTCMonth() + n);
-  return d.toISOString().slice(0, 10);
+  const y = +iso.slice(0, 4);
+  const m = +iso.slice(5, 7) - 1 + n;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(+iso.slice(8, 10), lastDay))).toISOString().slice(0, 10);
 }
 
 /** 03/10 */

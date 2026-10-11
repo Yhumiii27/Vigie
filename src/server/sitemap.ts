@@ -7,7 +7,8 @@ import { isPlanEnded, planCovers, planStatus } from '@/components/prevention/mod
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/components/sitemap/coactivity';
 import { DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KIND_KEYS, SITE_MAP_ATTACHMENT, ZONE_KIND_KEYS, isRealDate } from '@/components/sitemap/model';
 import { findConflict, zoneAt } from '@/lib/data/sitemap';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';
 import { currentSiteId, inSite } from '@/lib/session';

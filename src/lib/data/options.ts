@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, desc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { today } from '../dates';
+import { today } from '@/lib/today';
 import { ORIGINS, STEP_CLOSED, isOpenActionStatus } from '../domain';
 import { currentSiteId, inSite } from '../session';
 
@@ -22,7 +22,7 @@ export const loadFormOptions = cache(async () => {
   const db = await getDb();
   const now = today();
   const [people, sites, projects, events, actions, site] = await Promise.all([
-    db.select().from(t.people).orderBy(asc(t.people.sort)),
+    db.select({ id: t.people.id, name: t.people.name, job: t.people.job, leftOn: t.people.leftOn }).from(t.people).orderBy(asc(t.people.sort)),
     db.select().from(t.sites).orderBy(asc(t.sites.sort)),
     db.select().from(t.keystoneProjects).orderBy(asc(t.keystoneProjects.id)),
     db.select({ id: t.events.id, title: t.events.title, siteId: t.events.siteId, step: t.events.step, dismissedAt: t.events.dismissedAt }).from(t.events).orderBy(desc(t.events.id)),

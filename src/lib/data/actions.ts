@@ -5,12 +5,14 @@ import { getDb, schema as t } from '@/db';
 import type { ChangeEntry } from '@/components/ChangeLog';
 import { ACTION_LINKS, loadLinkSources } from '../action-links';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
-import { addDays, daysBetween, fmtDate, fmtDayMonth, today } from '../dates';
+import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
 import {
-  ACTION_COLUMNS, EVENT_ORIGINS, ORIGINS, QHSE_LEAD, TODO_HORIZON_DAYS, canOpen, isEmployee, preventionRefHref,
+  ACTION_COLUMNS, EVENT_ORIGINS, ORIGINS, TODO_HORIZON_DAYS, canOpen, isEmployee, preventionRefHref,
   type ActionColumn, type TodoItem, type Tone,
 } from '../domain';
 import { actionColumn, actionView, loadActions, loadAllActions, loadPeople, type ActionView } from '../queries';
+import { loadQhseLeads } from './leads';
 import { getSession } from '../session';
 import { loadChangeLogs } from './changelog';
 
@@ -294,13 +296,16 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const inWindow = (d: string | null | undefined): d is string => !!d && d >= now && d <= horizon;
-  const [actions, people, plan] = await Promise.all([loadActions(), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems)]);
+  const [actions, people, plan, leads] = await Promise.all([
+    loadActions(), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems), loadQhseLeads(),
+  ]);
   const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
   const todo: TodoItem[] = [];
   actions.forEach((a) => {
     const col = actionColumn(a, now);
     const base = { who: people.get(a.pilotId)?.name ?? '', href: `/actions?action=${a.id}`, ownerIds: [a.pilotId] };
-    const verify = { ...base, ownerIds: [...new Set([a.pilotId, QHSE_LEAD])] };
+    // La vérification d'efficacité concerne aussi le responsable QHSE du site, qui la mène.
+    const verify = { ...base, ownerIds: [...new Set([a.pilotId, ...leads.forSite(a.siteId).ownerIds])] };
     if (col === 'late') todo.push({ ...base, date: now, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${a.title} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });
     if ((col === 'todo' || col === 'doing') && inWindow(a.dueOn) && !planActions.has(a.id)) todo.push({ ...base, date: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${a.title}` });
     if (col === 'verify' && inWindow(a.verifyDueOn)) todo.push({ ...verify, date: a.verifyDueOn, kind: 'Efficacité', tone: 'accent', title: `${a.eventId ?? a.originRef} · vérification d'efficacité de ${a.id}` });

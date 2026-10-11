@@ -7,7 +7,7 @@ import type { Option } from '@/lib/data/options';
 import { EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SEVERITY } from '@/lib/domain';
 import type { FormState } from '@/lib/forms';
 import { createEvent, saveEvent } from '@/server/events';
-import { INJURIES, hasNcOrigin, needsCpam } from './shared';
+import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT, INJURIES, hasNcOrigin, needsCpam } from './shared';
 
 /** Champs modifiables d'un événement (données simples transmises par la page serveur). */
 export type EditableEvent = {
@@ -30,24 +30,29 @@ const TYPE_OPTIONS = EVENT_TYPE_KEYS.map((k) => [k, EVENT_TYPES[k].label] as con
 const SEVERITY_OPTIONS = [1, 2, 3, 4].map((g) => [String(g), SEVERITY[g]] as const);
 const NC_OPTIONS = NC_ORIGINS.map((o) => [o, o] as const);
 
-/** Bouton « Modifier » de la fiche événement. */
-export function EventEditButton({ event, options }: { event: EditableEvent; options: EventFieldOptions }) {
+/**
+ * Bouton « Modifier » de la fiche événement. `health` : rôle habilité aux données de santé d'un AT (SEC-06) ; sinon
+ * la fiche n'en reçoit aucune et le formulaire ne les propose pas (les valeurs enregistrées sont conservées).
+ */
+export function EventEditButton({ event, options, health }: { event: EditableEvent; options: EventFieldOptions; health: boolean }) {
   return (
     <DialogButton label="Modifier" title={`Modifier ${event.id}`} kicker="Signalements et événements" width={680}>
-      {(close) => <EventFields mode="edit" event={event} options={options} onDone={close} onCancel={close} />}
+      {(close) => <EventFields mode="edit" event={event} options={options} health={health} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }
 
 type FieldsProps = {
   options: EventFieldOptions;
+  /** Blessure, jours perdus et déclaration CPAM saisissables (animateur QHSE, direction). */
+  health: boolean;
   onDone: (state: FormState) => void;
   onCancel: () => void;
 } & ({ mode: 'edit'; event: EditableEvent } | { mode: 'create'; event?: undefined; defaults?: EventDefaults; today: string });
 
 /** Formulaire complet d'un événement : création depuis le bureau (createEvent) ou modification de la fiche (saveEvent). */
 export function EventFields(props: FieldsProps) {
-  const { mode, options, onDone, onCancel } = props;
+  const { mode, options, health, onDone, onCancel } = props;
   const create = mode === 'create';
   const e: EventDefaults = props.mode === 'edit' ? props.event : { occurredOn: props.today, severity: 1, ...props.defaults };
   const [type, setType] = useState(e.type ?? '');
@@ -60,13 +65,15 @@ export function EventFields(props: FieldsProps) {
     ? [[e.keystoneProject, e.keystoneProject] as const, ...options.projects]
     : options.projects;
   const str = (v: string | number | null | undefined) => (v == null ? '' : String(v));
+  // Rôle non habilité : un accident du travail enregistré garde son type (requalification par l'animateur QHSE ou la direction).
+  const typeOptions = !health && !create && e.type === 'AT' ? TYPE_OPTIONS.filter(([k]) => k === 'AT') : TYPE_OPTIONS;
 
   return (
     <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id } : undefined}
       submitLabel={create ? 'Créer l’événement' : 'Enregistrer'} submitIcon={create ? 'ph-plus' : undefined}>
       <FormRow>
-        <Field name="type" label="Type">
-          <Select name="type" options={TYPE_OPTIONS} value={type} onChange={(ev) => setType(ev.target.value)} placeholder={create ? 'Choisir…' : undefined} />
+        <Field name="type" label="Type" hint={typeOptions.length === 1 ? "Requalification par l'animateur QHSE ou la direction." : undefined}>
+          <Select name="type" options={typeOptions} value={type} onChange={(ev) => setType(ev.target.value)} placeholder={create ? 'Choisir…' : undefined} />
         </Field>
         <Field name="occurredOn" label="Date">
           <Input name="occurredOn" type="date" defaultValue={e.occurredOn} max={create ? props.today : undefined} />
@@ -117,7 +124,13 @@ export function EventFields(props: FieldsProps) {
           <Select name="ncOrigin" options={NC_OPTIONS} defaultValue={ncDefault} placeholder="Non précisée" />
         </Field>
       )}
-      {type === 'AT' && (
+      {type === 'AT' && !health && (
+        <div className="vg-inset" role="note" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+          <i className="ph ph-lock-simple" style={{ fontSize: 14 }} aria-hidden />
+          <span style={{ textWrap: 'pretty' }}>{HEALTH_RESTRICTED} · {HEALTH_RESTRICTED_HINT}</span>
+        </div>
+      )}
+      {type === 'AT' && health && (
         <FormRow>
           <Field name="injury" label="Blessure">
             <Select name="injury" options={INJURIES} value={injury} onChange={(ev) => setInjury(ev.target.value)} placeholder="Non précisée" />
@@ -127,7 +140,7 @@ export function EventFields(props: FieldsProps) {
           </Field>
         </FormRow>
       )}
-      {needsCpam({ type, injury: injury || null }) && (
+      {health && needsCpam({ type, injury: injury || null }) && (
         <Field name="cpamDeclaredOn" label="Déclaration CPAM" hint="Date d'envoi de la déclaration d'accident du travail (sous 48 h). Vide : à déclarer.">
           <Input name="cpamDeclaredOn" type="date" defaultValue={e.cpamDeclaredOn ?? ''} />
         </Field>

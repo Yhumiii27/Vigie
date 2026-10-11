@@ -2,9 +2,9 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addMonthsClamped } from '@/components/watch/period';
 import { fileIcon, fmtSize } from '../attachments';
-import { addDays, fmtDate, fmtDayMonth, today } from '../dates';
+import { addDays, addMonths, fmtDate, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
 import {
   CONTROL_HORIZON_DAYS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   type TodoItem, type Tone,
@@ -151,7 +151,7 @@ export async function loadWatch() {
     });
     const late = linked.find((c) => c.overdue);
     const indicator = archived ? null : indicatorOf(r);
-    const reviewOn = r.lastEvaluatedOn && r.evaluation !== 'a_evaluer' ? addMonthsClamped(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS) : null;
+    const reviewOn = r.lastEvaluatedOn && r.evaluation !== 'a_evaluer' ? addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS) : null;
     const duerpDue = r.linkedTo === 'duerp' && duerp.nextUpdateOn ? `${fmtDate(duerp.nextUpdateOn)} · mise à jour annuelle du DUERP` : null;
     return {
       ...r,
@@ -289,7 +289,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     } else if (dated && r.dueOn && r.dueOn <= horizon && !compliant) {
       todo.push({ ...base, date: r.dueOn, tone: 'warn', count: 0, title: `${r.text} — applicable le ${fmtDayMonth(r.dueOn)}` });
     } else if (r.lastEvaluatedOn) {
-      const reviewOn = addMonthsClamped(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS);
+      const reviewOn = addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS);
       if (reviewOn <= horizon) {
         const late = reviewOn < now;
         todo.push({

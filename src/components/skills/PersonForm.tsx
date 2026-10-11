@@ -96,6 +96,14 @@ export function PersonForm({ person, sites, archivedSites, services, defaultSite
             <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : 'Choisir un site'} />
           </Field>
         </FormRow>
+        <FormRow>
+          <Field name="email" label="E-mail professionnel" hint="Rapproche la fiche du compte Microsoft à la première connexion.">
+            <Input name="email" type="email" defaultValue={person?.email ?? ''} placeholder="Ex. j.dupont@epc2i.fr" maxLength={254} autoComplete="off" />
+          </Field>
+          <Field name="matricule" label="Matricule" hint="Identifiant RH (Cursus, paie).">
+            <Input name="matricule" defaultValue={person?.matricule ?? ''} maxLength={40} autoComplete="off" />
+          </Field>
+        </FormRow>
         <Checkbox name="inSkillsMatrix" label="Suivi dans la matrice des habilitations" defaultChecked={person ? person.inSkillsMatrix : true} />
         {note('ph-plugs-connected', 'Saisie provisoire : le connecteur Cursus, propriétaire des données personnelles des salariés, alimentera cette fiche.')}
       </ActionForm>

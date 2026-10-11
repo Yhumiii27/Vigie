@@ -6,7 +6,8 @@ import { getDb, schema as t } from '@/db';
 import {
   BSD_NUMBER, BSD_STATUS_KEYS, CONSUMPTION_KINDS, TREATMENT_KEYS, WASTE_UNIT_KEYS, isHazardousCode, normalizeEwc,
 } from '@/components/environment/model';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { STEP_CLOSED, canEdit } from '@/lib/domain';
 import { requireInSite, requireManager } from '@/lib/guard';

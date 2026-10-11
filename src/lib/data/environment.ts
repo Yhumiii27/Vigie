@@ -9,7 +9,8 @@ import {
   type BsdStatus, type ConsumptionKind,
 } from '@/components/environment/model';
 import { hrefWith } from '@/components/ui';
-import { addDays, daysBetween, fmtDate, fmtDayMonth, today } from '../dates';
+import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
 import { EVENT_STEPS, REQUIREMENT_EVAL, canSee, columnOf, severityTone, type TodoItem, type Tone } from '../domain';
 import { actionColumn, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
 import { currentSiteId, getSession, inSite } from '../session';

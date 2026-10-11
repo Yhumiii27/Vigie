@@ -1,12 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, ne, or } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { isReviewPlanItem } from '@/components/audits/shared';
-import { fmtDate, fmtDayMonth, monthName, monthOf, today, yearOf } from '@/lib/dates';
+import { fmtDate, fmtDayMonth, monthName, monthOf, yearOf } from '@/lib/dates';
+import { today } from '@/lib/today';
 import {
-  REVIEW_DECISION_KEYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_KIND_KEYS, REVIEW_SOURCES, REVIEW_SOURCE_KEYS, ROLES, canSee,
+  REVIEW_DECISION_KEYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_KIND_KEYS, REVIEW_SOURCES, REVIEW_SOURCE_KEYS, canSee,
   type ReviewKind, type ReviewSource,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
@@ -67,8 +68,16 @@ async function planItemsOf(db: DbOrTx, reviewOn: string) {
   return (await db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.plannedOn, reviewOn))).filter(isReviewPlanItem);
 }
 
+/** Responsable de l'échéance du programme : la direction (dernier rôle connu, présente à l'effectif), sinon `fallbackId`. */
+async function directorId(tx: DbOrTx, fallbackId: string) {
+  const [d] = await tx.select({ id: t.people.id }).from(t.people)
+    .where(and(eq(t.people.lastRole, 'Direction'), or(isNull(t.people.leftOn), gt(t.people.leftOn, today()))))
+    .orderBy(asc(t.people.sort)).limit(1);
+  return d?.id ?? fallbackId;
+}
+
 /** Inscrit la revue au programme annuel si la ligne « Revues de direction » n'a rien ce mois-là (sinon, rien). */
-async function ensurePlanItem(tx: DbOrTx, reviewOn: string, kind: ReviewKind) {
+async function ensurePlanItem(tx: DbOrTx, reviewOn: string, kind: ReviewKind, byId: string) {
   const [taken] = await tx.select({ id: t.auditPlanItems.id }).from(t.auditPlanItems)
     .where(and(eq(t.auditPlanItems.track, PLAN_TRACK), eq(t.auditPlanItems.year, yearOf(reviewOn)), eq(t.auditPlanItems.month, monthOf(reviewOn))));
   if (taken) return;
@@ -76,7 +85,7 @@ async function ensurePlanItem(tx: DbOrTx, reviewOn: string, kind: ReviewKind) {
     track: PLAN_TRACK, year: yearOf(reviewOn), month: monthOf(reviewOn), plannedOn: reviewOn,
     label: `${REVIEW_KINDS[kind].short} ${fmtDayMonth(reviewOn)}`,
     detail: REVIEW_KINDS[kind].label === 'Revue annuelle' ? 'Revue de direction annuelle' : 'Revue de direction intermédiaire',
-    ownerId: ROLES.Direction.personId,
+    ownerId: await directorId(tx, byId),
   });
 }
 
@@ -130,7 +139,7 @@ export async function createReview(_prev: FormState, fd: FormData): Promise<Form
   const id = await db.transaction(async (tx) => {
     const [row] = await tx.insert(t.reviews).values({ reviewOn: reviewOn!, kind }).returning({ id: t.reviews.id });
     const copied = source ? await copyChecklist(tx, source.id, row.id) : 0;
-    await ensurePlanItem(tx, reviewOn!, kind);
+    await ensurePlanItem(tx, reviewOn!, kind, session.user.id);
     await logChange(tx, {
       byId: session.user.id,
       entityType: 'review', entityId: row.id, action: 'create',
@@ -246,7 +255,7 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
     }
     const [next] = await tx.insert(t.reviews).values({ reviewOn: nextReviewOn, kind: nextKind }).returning({ id: t.reviews.id });
     await copyChecklist(tx, review.id, next.id);
-    await ensurePlanItem(tx, nextReviewOn, nextKind);
+    await ensurePlanItem(tx, nextReviewOn, nextKind, session.user.id);
     await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: next.id, action: 'create', summary: `${REVIEW_KINDS[nextKind].label} planifiée le ${fmtDate(nextReviewOn)} (compte rendu du ${fmtDate(reviewOn!)})` });
   });
   done();

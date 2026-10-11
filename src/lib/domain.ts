@@ -259,17 +259,19 @@ export const NAV: { label: string; items: ScreenKey[] }[] = [
 
 export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de projet' | 'Salarié';
 
-// Rôle → utilisateur de démonstration, écrans autorisés (null = tous) et écrans en consultation seule.
+// Rôle → écrans autorisés (null = tous) et écrans en consultation seule.
 // « docs » reste en dernier dans chaque liste : homeOf() prend le premier écran.
-export const ROLES: Record<Role, { personId: string; screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
-  'Animateur QHSE': { personId: 'clefevre', screens: null },
-  Direction: { personId: 'hmarchand', screens: null },
-  'Chef de service': { personId: 'sbenali', screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'docs'], readOnly: ['docs'] },
-  'Chef de projet': { personId: 'edubois', screens: ['dashboard', 'events', 'actions', 'prevention', 'docs'], readOnly: ['docs'] },
-  Salarié: { personId: 'tnguyen', screens: ['events', 'actions', 'skills', 'docs'], readOnly: ['docs'] },
+// Personnes de démonstration associées aux rôles : src/lib/demo.ts (mode démonstration seulement).
+export const ROLES: Record<Role, { screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
+  'Animateur QHSE': { screens: null },
+  Direction: { screens: null },
+  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'docs'], readOnly: ['docs'] },
+  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'docs'], readOnly: ['docs'] },
+  Salarié: { screens: ['events', 'actions', 'skills', 'docs'], readOnly: ['docs'] },
 };
 export const ROLE_KEYS = Object.keys(ROLES) as Role[];
-export const DEFAULT_ROLE: Role = 'Animateur QHSE';
+/** Rôles du plus élevé au moins élevé : une personne qui porte plusieurs rôles Entra reçoit le premier de cette liste. */
+export const ROLE_PRECEDENCE: Role[] = ['Direction', 'Animateur QHSE', 'Chef de service', 'Chef de projet', 'Salarié'];
 /** Identifiant du choix « Tous les sites » (sélecteur de site, champ Site des formulaires). */
 export const ALL_SITES = 'all';
 
@@ -294,14 +296,17 @@ export const canManage = (role: Role) => role !== 'Salarié';
 export const canApprove = (role: Role) => role === 'Animateur QHSE' || role === 'Direction';
 /** Rôle Salarié : ne voit que ses propres données (habilitations, signalements, actions dont il est pilote). */
 export const isEmployee = (role: Role) => role === 'Salarié';
+/**
+ * Données de santé d'un accident du travail (blessure, jours perdus, déclaration CPAM, toute donnée médicale) :
+ * visibles et modifiables par l'animateur QHSE et la direction seulement (SEC-06) ; les indicateurs agrégés restent visibles.
+ */
+export const canSeeHealth = (role: Role) => role === 'Animateur QHSE' || role === 'Direction';
 /** Saisie sur un écran : encadrement, écran autorisé et non limité à la consultation. */
 export const canEdit = (role: Role, screen: ScreenKey) =>
   canManage(role) && canSee(role, screen) && !(ROLES[role].readOnly ?? []).includes(screen);
 
-/** Animateur QHSE responsable des alertes transverses (habilitations, constats…), en attendant un responsable par site. */
-export const QHSE_LEAD = ROLES['Animateur QHSE'].personId;
-/** @deprecated alias de QHSE_LEAD (plan du domaine habilitations). */
-export const SKILL_ALERT_OWNER = QHSE_LEAD;
+/** Destinataire affiché d'une alerte de site sans responsable QHSE (sites.qhse_lead_id vide ou sorti de l'effectif). */
+export const VACANT_QHSE_LEAD = 'Responsable QHSE à désigner';
 
 /** Procédure de référence (document maîtrisé) affichée en lien « Procédure » sur un écran. */
 export const SCREEN_PROCEDURES: Partial<Record<ScreenKey, string>> = { prevention: 'PR-QHSE-005' };
@@ -328,6 +333,8 @@ export type TodoItem = {
   key?: string;
   /** Nombre d'éléments sous-jacents regroupés dans l'échéance (badge), 1 par défaut. */
   count?: number;
+  /** Échéance qui révèle une donnée de santé (déclaration CPAM d'un AT) : réservée aux rôles canSeeHealth. */
+  health?: boolean;
 };
 export const todoKey = (t: TodoItem) => t.key ?? [t.kind, t.href ?? '', t.title].join('|');
 /** Rapprochement par identifiant ; repli sur le nom tant qu'un signal ne renseigne pas ownerIds. */

@@ -3,13 +3,15 @@ import { cache } from 'react';
 import { asc, eq, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { addMonths, daysBetween, fmtDayMonth, today, yearOf } from '../dates';
+import { addMonths, daysBetween, fmtDayMonth, yearOf } from '../dates';
+import { today } from '@/lib/today';
 import {
-  DUERP_REQUIREMENT_LINK, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, QHSE_LEAD, RISK_ACTION_THRESHOLD, RISK_LEVELS, RISK_TODO_KIND,
+  DUERP_REQUIREMENT_LINK, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, RISK_ACTION_THRESHOLD, RISK_LEVELS, RISK_TODO_KIND,
   STEP_CLOSED, TODO_HORIZON_DAYS, canSee, riskLevel, type EventType, type RiskFlag, type TodoItem, type Tone,
 } from '../domain';
 import { actionColumn, lcfirst, loadPeople } from '../queries';
-import { currentSiteId, getSession, inSite } from '../session';
+import { loadQhseLeads } from './leads';
+import { allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { loadChangeLogs } from './changelog';
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
@@ -133,6 +135,19 @@ export function parseSnapshot(raw: unknown): DuerpSnapshot {
   };
 }
 
+/**
+ * Instantané réduit au périmètre de la personne (SEC-02) : l'archivage fige tous les sites, une personne limitée à
+ * certains sites n'en consulte et n'en exporte que les unités et risques de ses sites (et ceux communs à tous les sites).
+ */
+export function snapshotInPerimeter<S extends DuerpSnapshot>(snapshot: S, allowed: string[] | null): S {
+  if (!allowed) return snapshot;
+  return {
+    ...snapshot,
+    ...(snapshot.units ? { units: snapshot.units.filter((u) => inPerimeter(allowed, u.siteId)) } : {}),
+    ...(snapshot.risks ? { risks: snapshot.risks.filter((r) => inPerimeter(allowed, r.siteId)) } : {}),
+  };
+}
+
 /** Commentaire (objet de la mise à jour) d'une version : colonne dédiée, sinon ancien emplacement dans l'instantané. */
 export function versionComment(row: { comment: string | null; snapshot: unknown }): string | null {
   return row.comment ?? parseSnapshot(row.snapshot).comment ?? null;
@@ -208,7 +223,7 @@ function actionTone(status: string, late: boolean): Tone {
 /** Lectures du DUERP communes à l'écran, aux échéances et aux listes de choix : une seule fois par requête. */
 const loadRiskBase = cache(async () => {
   const db = await getDb();
-  const [people, versions, allUnits, allRisks, links, actions, sites, site, events, requirements] = await Promise.all([
+  const [people, versions, allUnits, allRisks, links, actions, sites, site, events, requirements, allowed] = await Promise.all([
     loadPeople(),
     db.select().from(t.duerpVersions),
     db.select().from(t.workUnits).orderBy(asc(t.workUnits.sort), asc(t.workUnits.label)),
@@ -220,6 +235,7 @@ const loadRiskBase = cache(async () => {
     db.select({ id: t.events.id, type: t.events.type, title: t.events.title, occurredOn: t.events.occurredOn, step: t.events.step, riskId: t.events.riskId, dismissedAt: t.events.dismissedAt })
       .from(t.events).where(isNotNull(t.events.riskId)),
     db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.linkedTo, DUERP_REQUIREMENT_LINK)),
+    allowedSiteIds(),
   ]);
   const now = today();
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
@@ -283,7 +299,7 @@ const loadRiskBase = cache(async () => {
 
   const versionViews: DuerpVersionView[] = versions
     .map((v) => {
-      const snap = parseSnapshot(v.snapshot);
+      const snap = snapshotInPerimeter(parseSnapshot(v.snapshot), allowed);
       return {
         version: v.version, current: v.current, updatedOn: v.updatedOn, nextUpdateOn: v.nextUpdateOn, retention: v.retention,
         validatedById: v.validatedById, validatedBy: v.validatedById ? people.get(v.validatedById)?.name ?? '' : '',
@@ -421,12 +437,12 @@ export async function loadRiskExport(scope: { unitId: string } | { all: true }) 
 
 /** Version du DUERP et son instantané (null si la version n'existe pas). */
 export async function loadDuerpVersion(version: string) {
-  const db = await getDb();
+  const [db, allowed] = await Promise.all([getDb(), allowedSiteIds()]);
   const [row] = (await db.select().from(t.duerpVersions)).filter((v) => v.version === version);
   if (!row) return null;
   const people = await loadPeople();
   // Le commentaire est exposé à part ; l'éventuelle copie héritée de l'instantané est retirée.
-  const { comment: legacyComment, ...snapshot } = parseSnapshot(row.snapshot);
+  const { comment: legacyComment, ...snapshot } = snapshotInPerimeter(parseSnapshot(row.snapshot), allowed);
   return {
     version: row.version,
     current: row.current,
@@ -482,9 +498,11 @@ export function fileSlug(s: string) {
 export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const { role } = await getSession();
   if (!canSee(role, 'risks')) return { badge: 0, todo: [] };
-  const { now, people, current, units, risks } = await loadRiskBase();
-  const ownerId = current?.validatedById ?? QHSE_LEAD;
-  const base = { kind: RISK_TODO_KIND, who: people.get(ownerId)?.name ?? '', ownerIds: [...new Set([ownerId, QHSE_LEAD])] };
+  const [{ now, people, current, units, risks }, leads] = await Promise.all([loadRiskBase(), loadQhseLeads()]);
+  // Document unique commun aux sites : son validateur, et les responsables QHSE des sites.
+  const lead = leads.forSite(null);
+  const validator = current?.validatedById ? people.get(current.validatedById) : undefined;
+  const base = { kind: RISK_TODO_KIND, who: validator?.name ?? lead.who, ownerIds: [...new Set([...(validator ? [validator.id] : []), ...lead.ownerIds])] };
   const todo: TodoItem[] = [];
 
   if (!current) {

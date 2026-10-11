@@ -11,7 +11,8 @@ import {
   COACTIVITY_HORIZON_DAYS, DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
   type ActivityView, type Choice, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
 } from '@/components/sitemap/model';
-import { addDays, today } from '../dates';
+import { addDays } from '../dates';
+import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';
 import { lcfirst, loadPeople } from '../queries';
 import { currentSiteId } from '../session';

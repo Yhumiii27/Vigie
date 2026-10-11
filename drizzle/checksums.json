@@ -1,0 +1,25 @@
+{
+  "regle": "Migrations publiées : ne jamais modifier une migration listée ici (SQL, instantané, date du journal). Tout changement de schéma passe par une nouvelle migration (npm run db:generate), enregistrée ici par npm run db:check -- --enregistrer.",
+  "migrations": {
+    "0000_init": {
+      "when": 1791395566224,
+      "sql": "0218c8f9d8b4d2b76adddd571ae326234e8489a3f05a1fcc51ae094b9c0117f2",
+      "snapshot": "982527cb3e418377c185ed7396ce9a77cd91ba3672184331234ccb5692244e70"
+    },
+    "0001_seveso_import_map": {
+      "when": 1791396331449,
+      "sql": "253a0d895885ce0d758dc82830c93e915119ba5177b585c4d1b6bb6fcf10578d",
+      "snapshot": "afb50531aa819b1be86e852d29ce3f9dbfddf74e8971b26aba4f777e73fc508a"
+    },
+    "0002_traceability": {
+      "when": 1791559512834,
+      "sql": "3fded5983689679bc75a5effe980cf35d324e89e983e727629cea4ab1dae88a9",
+      "snapshot": "e129decde0c672f10c9c978eb35c3093ac5f51309b46c97deebdb129243c60cb"
+    },
+    "0003_production": {
+      "when": 1791720024194,
+      "sql": "69263f2555dd1c3de5c45c1303c790a93eba34408cd5e22188e8e00a5291b030",
+      "snapshot": "54bc45fc1ca0298f6acfa0045f908e419f30447f889afe1c1439cac202758099"
+    }
+  }
+}

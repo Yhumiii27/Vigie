@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { TransactionRollbackError, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { EVENT_ORIGINS, ORIGINS, canApprove, canManage } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { applyActionLink, checkActionLink, linkLogEntity } from '@/lib/action-links';
-import { requireInSite, requireManager } from '@/lib/guard';
+import { ALL_SITES_RESERVED, requireInSite, requireManager } from '@/lib/guard';
 import { ALL_SITES, activeSiteIds, getSession, inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
@@ -79,10 +80,13 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
     if (!inSite(selected, siteId)) return { error: SITE_CHOICE, fieldErrors: { siteId: SITE_CHOICE } };
     const blocked = await requireInSite(siteId, { create: true });
     if (blocked) return { error: blocked, fieldErrors: { siteId: blocked } };
-  } else if (cur.siteId !== siteId && siteId && !(await activeSiteIds()).includes(siteId)) {
-    // Transfert (l'action relève déjà du site sélectionné, contrôlé plus haut) : seulement vers un site actif.
-    const archived = 'Site archivé ou inconnu : choisissez un site actif.';
-    return { error: archived, fieldErrors: { siteId: archived } };
+  } else if (cur.siteId !== siteId) {
+    // Transfert (l'action relève déjà du site sélectionné, contrôlé plus haut) : vers un site actif du périmètre, ou vers
+    // « Tous les sites » pour un périmètre complet seulement (une action commune existante reste modifiable).
+    const blocked = !siteId
+      ? (session.allowedSiteIds ? ALL_SITES_RESERVED : null)
+      : !(await activeSiteIds()).includes(siteId) ? 'Site archivé ou inconnu : choisissez un site actif.' : null;
+    if (blocked) return { error: blocked, fieldErrors: { siteId: blocked } };
   }
 
   if (cur?.status === 'verify') {

@@ -10,7 +10,7 @@ import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/component
 import { LinkActionButton } from '@/components/LinkActionButton';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import { addDays, fmtDate } from '@/lib/dates';
+import { addDays, addMonths, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
@@ -18,7 +18,6 @@ import {
   archiveControl, cancelControlRecord, recordControl, removeControlRecordFile, restoreControl, saveControl, type CancelRecordState,
 } from '@/server/watch';
 import { ArchivedBanner, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
-import { addMonthsClamped } from './period';
 
 type Opts = Pick<FormOptions, 'people' | 'sites'> & Partial<Pick<FormOptions, 'origins' | 'actions'>>;
 export type ControlSuggestions = { types: string[]; organizations: string[] };
@@ -32,7 +31,7 @@ const months = (n: number) => (n === 1 ? 'mois' : `${n} mois`);
 /** Prochain contrôle = dernier + périodicité (vide tant que la saisie est incomplète). */
 function nextFrom(lastOn: string, period: string) {
   const n = Number(period);
-  return ISO.test(lastOn) && Number.isInteger(n) && n >= 1 && n <= 120 ? addMonthsClamped(lastOn, n) : '';
+  return ISO.test(lastOn) && Number.isInteger(n) && n >= 1 && n <= 120 ? addMonths(lastOn, n) : '';
 }
 
 // ─── Tableau des contrôles ──────────────────────────────────────────────────
@@ -475,7 +474,7 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
             ? 'Saisissez la date du contrôle réalisé.'
             : older
               ? `Antérieur au dernier contrôle connu (${c.last}) : ajouté à l'historique sans modifier l'échéance.`
-              : <>Prochain contrôle le <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtDate(addMonthsClamped(date, c.periodMonths))}</strong> (tous les {months(c.periodMonths)}).</>}
+              : <>Prochain contrôle le <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtDate(addMonths(date, c.periodMonths))}</strong> (tous les {months(c.periodMonths)}).</>}
         </span>
       </div>
       <Suggestions id={`${uid}-orgs`} values={suggestions.organizations} />

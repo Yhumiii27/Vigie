@@ -9,7 +9,8 @@ import {
   parseChecklist, permitDays, permitPlanIssue, planCovers, planEndIssue, planStatus, referenceNow, validityOver,
   type ChecklistItem, type SiteRule,
 } from '@/components/prevention/model';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { MAX_BATCH_BYTES } from '@/lib/attachments';
 import { requireInSite, requireManager } from '@/lib/guard';

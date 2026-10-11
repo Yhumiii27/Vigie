@@ -1,16 +1,19 @@
 import 'server-only';
 import { cache } from 'react';
-import { headers } from 'next/headers';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fmtQty } from '@/components/environment/model';
-import { advanceBlocker, analysisFilled, eventLockReason, needsCpam, type AttachmentItem } from '@/components/events/shared';
-import { addDays, fmtDate, fmtDayMonth, today } from '../dates';
+import type { ChangeEntry } from '@/components/ChangeLog';
+import { HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, eventLockReason, needsCpam, withoutHealth, type AttachmentItem } from '@/components/events/shared';
+import { addDays, fmtDate, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
 import {
-  CPAM_DELAY_DAYS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QHSE_LEAD, QUALIFY_DELAY_DAYS, STEP_CLOSED,
-  type EventTransition, type EventType, type Tone, type TodoItem,
+  CPAM_DELAY_DAYS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
+  canSeeHealth, isEmployee, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
 } from '../domain';
 import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents } from '../queries';
+import { loadChangeLog } from './changelog';
+import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import type { Option } from './options';
@@ -119,15 +122,28 @@ function cpamState(e: { type: string; injury: string | null; occurredOn: string;
 }
 
 /**
- * Fiche d'un événement du site sélectionné (classés sans suite compris) : vue, actions liées, contenus d'analyse,
- * pièces jointes, historique du workflow, rattachements et éventuel blocage du passage à l'étape suivante.
+ * Événements consultables sur /evenements (site sélectionné, classés sans suite compris), du plus récent au plus ancien :
+ * le Salarié ne voit que ses propres signalements nominatifs (rapprochement par identifiant, jamais les anonymes).
+ */
+export const loadVisibleEvents = cache(async () => {
+  const [events, { role, user }] = await Promise.all([loadSiteEvents(), getSession()]);
+  return isEmployee(role) ? events.filter((e) => e.declarantId === user.id && !e.anonymous) : events;
+});
+
+/**
+ * Fiche d'un événement consultable (loadVisibleEvents : site sélectionné, ses propres signalements pour le Salarié),
+ * classés sans suite compris : vue, actions liées, contenus d'analyse, pièces jointes, historique du workflow,
+ * rattachements et éventuel blocage du passage à l'étape suivante ; null si l'événement n'est pas consultable.
+ * Données de santé (SEC-06) : retirées de la fiche (valeurs à null, `health: false`) pour un rôle non habilité.
  */
 export async function loadEventDetail(id: string) {
   const db = await getDb();
   const now = today();
-  const [people, events] = await Promise.all([loadPeople(), loadSiteEvents()]);
-  const e = events.find((x) => x.id === id);
-  if (!e) return null;
+  const [people, events, { role }] = await Promise.all([loadPeople(), loadVisibleEvents(), getSession()]);
+  const row = events.find((x) => x.id === id);
+  if (!row) return null;
+  const health = canSeeHealth(role);
+  const e = health ? row : withoutHealth(row);
   // Les actions liées sont lues sans filtre de site : elles suivent l'événement.
   const [actions, analyses, attachments, steps, links, wasteEntries] = await Promise.all([
     db.select().from(t.actions).where(eq(t.actions.eventId, e.id)),
@@ -159,13 +175,28 @@ export async function loadEventDetail(id: string) {
     stepDates: stepDatesOf(steps, e.createdAt, e.step),
     links,
     wasteEntries,
-    cpam: cpamState(e, now),
+    cpam: health ? cpamState(e, now) : null,
+    /** Données de santé transmises (rôle habilité) ; sinon « Données restreintes ». */
+    health,
     dismissal: e.dismissedAt
       ? { on: isoDay(e.dismissedAt), by: name(e.dismissedById ?? dismissStep?.byId ?? null), reason: e.dismissReason ?? dismissStep?.reason ?? '' }
       : null,
   };
 }
 export type EventDetail = NonNullable<Awaited<ReturnType<typeof loadEventDetail>>>;
+
+/**
+ * Journal des modifications d'un événement. Rôle non habilité aux données de santé (SEC-06) : les champs correspondants
+ * sont retirés, et une modification qui ne portait que sur eux disparaît.
+ */
+export async function loadEventChangeLog(id: string): Promise<ChangeEntry[]> {
+  const [{ role }, log] = await Promise.all([getSession(), loadChangeLog('event', id)]);
+  if (canSeeHealth(role)) return log;
+  return log.flatMap((entry) => {
+    const details = entry.details.filter((d) => !HEALTH_LOG_FIELDS.includes(d.field));
+    return details.length || !entry.details.length ? [{ ...entry, details }] : [];
+  });
+}
 
 /** Date de clôture (dernier passage à « Clôturé ») des événements donnés : identifiant → date ISO. */
 export async function loadEventClosures(ids: string[]): Promise<Map<string, string>> {
@@ -265,68 +296,46 @@ export type MyReportDetail = NonNullable<Awaited<ReturnType<typeof loadMyReport>
 
 // ─── QR codes de poste ──────────────────────────────────────────────────────
 
-/** Postes de signalement : zones du plan de site des sites sélectionnés, chacune avec le lien encodé dans son QR code. */
-export async function loadReportPosts(siteFilter?: string | null) {
-  const db = await getDb();
-  const site = siteFilter ?? (await currentSiteId());
-  const [zones, sites] = await Promise.all([
-    db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId }).from(t.mapZones).orderBy(asc(t.mapZones.siteId), asc(t.mapZones.name)),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
-  ]);
-  const active = new Map(sites.filter((s) => !s.archivedAt).map((s) => [s.id, s.label.split(' — ')[0]]));
-  return zones
-    .filter((z) => active.has(z.siteId) && inSite(site, z.siteId))
-    .map((z) => ({ zoneId: z.id, name: z.name, siteId: z.siteId, siteLabel: active.get(z.siteId)!, path: `/signaler?poste=${z.id}&site=${encodeURIComponent(z.siteId)}` }));
-}
-export type ReportPost = Awaited<ReturnType<typeof loadReportPosts>>[number];
-
-/** Poste désigné par un QR code (?poste=&site=) : la zone doit appartenir au site indiqué (site actif). */
-export async function resolveReportPost(poste: string | undefined, site: string | undefined) {
-  const id = Number(poste);
-  if (!Number.isInteger(id) || !site) return null;
-  const db = await getDb();
-  const [row] = await db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, siteLabel: t.sites.label, archivedAt: t.sites.archivedAt })
-    .from(t.mapZones).innerJoin(t.sites, eq(t.mapZones.siteId, t.sites.id)).where(eq(t.mapZones.id, id));
-  if (!row || row.siteId !== site || row.archivedAt) return null;
-  return { zoneId: row.id, name: row.name, siteId: row.siteId, siteLabel: row.siteLabel.split(' — ')[0] };
-}
-
-/** Origine absolue de l'application (QR codes imprimés), d'après les en-têtes de la requête. */
-export async function appOrigin() {
-  const h = await headers();
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3200';
-  return `${h.get('x-forwarded-proto') ?? 'http'}://${host}`;
-}
+// Postes, jetons signés et résolution des QR codes : src/lib/data/report-posts.ts ; adresse publique des QR codes :
+// publicOrigin() (src/lib/public-url.ts, VIGIE_PUBLIC_URL, jamais l'en-tête Host — PRD-07).
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 
 /**
  * Échéances des événements :
  * - signalements à qualifier sous QUALIFY_DELAY_DAYS après la déclaration (createdAt) — dépassé : danger ;
- * - accidents du travail à déclarer à la CPAM sous CPAM_DELAY_DAYS après l'accident (hors soins sans arrêt).
+ * - accidents du travail à déclarer à la CPAM sous CPAM_DELAY_DAYS après l'accident (hors soins sans arrêt) : donnée de
+ *   santé (SEC-06), échéance réservée aux rôles habilités (`health`), adressée au pilote si son dernier rôle connu l'est,
+ *   sinon au responsable QHSE du site (animateurs QHSE si le poste est vacant).
  * Les classés sans suite sont exclus (loadEvents).
  */
 export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [events, people] = await Promise.all([loadEvents(), loadPeople()]);
+  const [events, people, leads] = await Promise.all([loadEvents(), loadPeople(), loadQhseLeads()]);
   const now = today();
   const todo: TodoItem[] = [];
   const who = (pid: string) => people.get(pid)?.name ?? '';
+  const healthOwner = (pid: string | null) => {
+    const r = pid ? people.get(pid)?.lastRole : null;
+    return !!r && canSeeHealth(r as Role);
+  };
   for (const e of events) {
     const href = `/evenements?sel=${e.id}`;
+    // Sans pilote désigné : le responsable QHSE du site (ou les animateurs QHSE si le poste est vacant).
+    const lead = leads.forSite(e.siteId);
     if (e.step === 0) {
       const due = addDays(isoDay(e.createdAt), QUALIFY_DELAY_DAYS);
-      const owner = e.pilotId ?? QHSE_LEAD;
       todo.push({
         date: due, kind: 'Signalement à qualifier', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`,
-        who: who(owner), href, ownerIds: [owner], overdue: due < now,
+        who: e.pilotId ? who(e.pilotId) : lead.who, href, ownerIds: e.pilotId ? [e.pilotId] : lead.ownerIds, overdue: due < now,
       });
     }
     if (needsCpam(e) && !e.cpamDeclaredOn && e.step < STEP_CLOSED) {
       const due = addDays(e.occurredOn, CPAM_DELAY_DAYS);
-      const owners = [...new Set([QHSE_LEAD, ...(e.pilotId ? [e.pilotId] : [])])];
+      const pilot = e.pilotId && healthOwner(e.pilotId) ? e.pilotId : null;
+      const owners = [...new Set([...lead.ownerIds, ...(pilot ? [pilot] : [])])];
       todo.push({
         date: due, kind: 'Déclaration AT à la CPAM', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`,
-        who: who(owners[owners.length - 1]), href, ownerIds: owners, overdue: due < now,
+        who: pilot ? who(pilot) : lead.who, href, ownerIds: owners, overdue: due < now, health: true,
       });
     }
   }

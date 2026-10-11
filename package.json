@@ -2,14 +2,27 @@
   "name": "vigie-qhse",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "dev": "next dev --port 3200",
+    "dev": "VIGIE_DEMO=1 next dev --port 3200",
     "build": "next build",
     "start": "next start --port 3200",
+    "start:demo": "VIGIE_DEMO=1 next start --port 3200",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:reset": "rm -rf .data"
+    "db:reset": "rm -rf .data",
+    "db:backup": "tsx --conditions=react-server scripts/vigie-db.ts backup",
+    "db:restore": "tsx --conditions=react-server scripts/vigie-db.ts restore",
+    "db:list": "tsx --conditions=react-server scripts/vigie-db.ts list",
+    "db:check": "tsx --conditions=react-server scripts/vigie-db.ts check",
+    "db:test-migrate": "tsx --conditions=react-server scripts/vigie-db.ts test-migrate",
+    "uploads:encrypt": "tsx --conditions=react-server scripts/vigie-db.ts encrypt-uploads",
+    "build:standalone": "VIGIE_STANDALONE=1 next build",
+    "build:ops": "esbuild scripts/vigie-db.ts --bundle --platform=node --format=cjs --target=node22 --conditions=react-server --external:@electric-sql/pglite --external:drizzle-kit --external:pg-native --log-level=warning --outfile=.next/standalone/scripts/vigie-db.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -18,9 +31,12 @@
     "drizzle-orm": "^0.45.3",
     "fast-xml-parser": "^5.11.2",
     "fflate": "^0.8.3",
+    "jose": "^6.2.12",
     "next": "16.4.0",
+    "openid-client": "^6.8.8",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -28,13 +44,19 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@next/env": "16.4.0",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
-    "typescript": "^5"
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
   }
 }

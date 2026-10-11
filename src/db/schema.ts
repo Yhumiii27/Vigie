@@ -1,4 +1,5 @@
-import { boolean, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { boolean, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
 // - archivage : archivedAt / archivedById / archiveReason (élément retiré du suivi, historique conservé) ;
@@ -15,6 +16,9 @@ export const sites = pgTable('sites', {
   seveso: text('seveso'),
   ppFromFirstMinute: boolean('pp_from_first_minute').notNull().default(false),
   sort: integer('sort').notNull().default(0),
+  // Responsable QHSE du site (« Gérer les sites ») : destinataire des alertes du site et pilote proposé des recyclages.
+  // Vacant (ou sorti de l'effectif) : alertes adressées aux animateurs QHSE (people.last_role), « responsable à désigner ».
+  qhseLeadId: text('qhse_lead_id').references((): AnyPgColumn => people.id),
   // Archivage (site fermé ou cédé) : masqué des sélecteurs, données conservées et visibles sous « Tous les sites ».
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
@@ -22,6 +26,7 @@ export const sites = pgTable('sites', {
 });
 
 // Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
+// Identifiant généré (jamais dérivé du nom) ; rapprochement Entra ID par objectId, puis par e-mail.
 export const people = pgTable('people', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -36,7 +41,14 @@ export const people = pgTable('people', {
   // dans la matrice, les signaux ni les listes de choix ; son nom reste lisible dans l'historique.
   leftOn: date('left_on', { mode: 'string' }),
   leftReason: text('left_reason'),
-});
+  // Identité (SEC-03) : objectId Entra ID (oid), e-mail professionnel (unique sans tenir compte de la casse), matricule RH.
+  entraObjectId: text('entra_object_id').unique('people_entra_object_id_unique'),
+  email: text('email'),
+  matricule: text('matricule').unique('people_matricule_unique'),
+  // Dernier rôle Vigie connu (rôle applicatif Entra à la dernière connexion) et date de cette connexion.
+  lastRole: text('last_role'),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+}, (t) => [uniqueIndex('people_email_lower_unique').on(sql`lower(${t.email})`)]);
 
 // Heures travaillées par mois et par site — base du TF1 / TG (source RH).
 export const hoursWorked = pgTable('hours_worked', {
@@ -79,7 +91,11 @@ export const events = pgTable('events', {
   location: text('location').notNull(),
   declarant: text('declarant'), // nom affiché (null quand anonyme) — conservé pour les déclarants externes (client…)
   declarantId: text('declarant_id').references(() => people.id), // rapprochement « Mes signalements » (null = anonyme ou externe)
+  declarantCompany: text('declarant_company'), // entreprise déclarée par un déclarant externe (signalement sans compte)
   anonymous: boolean('anonymous').notNull().default(false),
+  // Canal du signalement terrain : « session » (personne connectée) | « poste » (formulaire public, jeton de QR code) ;
+  // null pour une saisie depuis l'écran Événements ou un événement antérieur.
+  reportedVia: text('reported_via'),
   keystoneProject: text('keystone_project'),
   equipment: text('equipment'),
   pilotId: text('pilot_id').references(() => people.id),
@@ -593,6 +609,8 @@ export const mapZones = pgTable('map_zones', {
   kind: text('kind').notNull(), // batiment | atelier | stockage | atex | essais | quai | parking | exterieur | autre
   polygon: jsonb('polygon').notNull(), // [[x, y], …] normalisés
   notes: text('notes'),
+  // Version du QR code de poste (signée dans le jeton) : l'incrémenter révoque les QR codes déjà imprimés.
+  qrVersion: integer('qr_version').notNull().default(1),
 });
 
 // Voies de circulation (accès) ; « shared » = voie commune à plusieurs équipes.
@@ -650,3 +668,11 @@ export const notificationReads = pgTable('notification_reads', {
   itemKey: text('item_key').notNull(),
   readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.personId, t.itemKey] })]);
+
+// Limite de débit du signalement sans compte (/signaler avec jeton de poste) : compteur par fenêtre fixe.
+// `key` : identifiant haché, préfixé par sa nature (« ip:… », « jeton:… ») ; lignes anciennes purgées par window_start.
+export const reportRateLimits = pgTable('report_rate_limits', {
+  key: text('key').notNull(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  hits: integer('hits').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index('report_rate_limits_window_idx').on(t.windowStart)]);

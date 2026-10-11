@@ -1,0 +1,6 @@
+#!/bin/sh
+# Outils d'exploitation de Vigie dans le conteneur (scripts/vigie-db.ts, compilé à la construction de l'image) :
+#   vigie-db backup [--sans-pieces-jointes] [--conserver 14] | list | restore <fichier> [--remplacer]
+#   vigie-db test-migrate <fichier> [--base <url>] | encrypt-uploads
+# Mêmes variables que le serveur (DATABASE_URL, VIGIE_*_DIR, VIGIE_UPLOAD_KEY…). Voir docs/EXPLOITATION.md.
+cd /app && exec node /app/scripts/vigie-db.cjs "$@"

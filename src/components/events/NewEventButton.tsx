@@ -8,8 +8,9 @@ import { EventFields, type EventDefaults, type EventFieldOptions } from './Event
 /**
  * « Nouvel événement » (encadrement, bureau) : formulaire complet, ouvert d'emblée quand la page est appelée
  * avec ?nouveau=1 (signalement depuis un plan de prévention ou un permis). Ouvre la fiche créée.
+ * `health` : données de santé d'un AT saisissables (animateur QHSE, direction ; SEC-06).
  */
-export function NewEventButton({ options, defaults, today, initialOpen = false }: { options: EventFieldOptions; defaults?: EventDefaults; today: string; initialOpen?: boolean }) {
+export function NewEventButton({ options, defaults, today, health, initialOpen = false }: { options: EventFieldOptions; defaults?: EventDefaults; today: string; health: boolean; initialOpen?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
   const close = () => setOpen(false);
@@ -20,7 +21,7 @@ export function NewEventButton({ options, defaults, today, initialOpen = false }
       </button>
       <Dialog open={open} onClose={close} title="Nouvel événement" kicker="Signalements et événements" width={680}>
         {open && (
-          <EventFields mode="create" options={options} defaults={defaults} today={today} onCancel={close}
+          <EventFields mode="create" options={options} defaults={defaults} today={today} health={health} onCancel={close}
             onDone={(state) => { close(); if (state.id) router.push(`/evenements?sel=${encodeURIComponent(state.id)}`); }} />
         )}
       </Dialog>

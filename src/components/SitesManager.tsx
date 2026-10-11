@@ -1,21 +1,39 @@
 'use client';
 
 import { useState } from 'react';
-import { ActionForm, Field, FormRow, Input, TextArea } from './form';
+import { ActionForm, Field, FormRow, Input, Select, TextArea } from './form';
 import { Dialog } from './Dialog';
 import { SEVESO_LEVELS } from './prevention/model';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
+import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
 
 export type { SiteAdminRow };
+
+/** Contenu de « Gérer les sites » : sites (archivés compris) et personnes proposées comme responsable QHSE. */
+export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[] };
 
 type View = 'list' | { edit: SiteAdminRow | null } | { archive: SiteAdminRow };
 
 const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 const sevesoLabel = (v: string | null) => SEVESO_LEVELS.find(([k]) => k === v)?.[1];
 
-/** Fenêtre « Gérer les sites » (animateur QHSE, direction) : création, renommage, ordre, archivage avec motif, réactivation. */
-export function SitesManager({ sites, onClose }: { sites: SiteAdminRow[]; onClose: () => void }) {
+/** Champ « Responsable QHSE » d'un site (création, modification, amorçage) : vide = poste vacant. */
+export function QhseLeadField({ options, current }: { options: readonly Option[]; current?: Pick<SiteAdminRow, 'qhseLeadId' | 'qhseLead'> }) {
+  const list = current?.qhseLeadId && !options.some(([v]) => v === current.qhseLeadId)
+    ? [...options, [current.qhseLeadId, current.qhseLead ?? current.qhseLeadId] as const] : options;
+  return (
+    <Field name="qhseLeadId" label="Responsable QHSE" hint="Destinataire des alertes du site ; vacant : alertes aux animateurs QHSE.">
+      <Select name="qhseLeadId" options={[['', 'À désigner'], ...list]} defaultValue={current?.qhseLeadId ?? ''} />
+    </Field>
+  );
+}
+
+/**
+ * Fenêtre « Gérer les sites » (animateur QHSE, direction) : création, renommage, ordre, responsable QHSE,
+ * archivage avec motif, réactivation.
+ */
+export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onClose: () => void }) {
   const [view, setView] = useState<View>('list');
   const back = () => setView('list');
   const active = sites.filter((s) => !s.archivedOn);
@@ -34,6 +52,8 @@ export function SitesManager({ sites, onClose }: { sites: SiteAdminRow[]; onClos
                   {s.label}
                   <span className="vg-muted" style={{ fontSize: 11 }}>ordre {s.sort}</span>
                   {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 10 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
+                  <span className="vg-muted" style={{ fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title="Responsable QHSE">{s.qhseLead ?? 'Responsable QHSE à désigner'}</span>
                 </span>
                 <button type="button" className="vg-text-btn" onClick={() => setView({ edit: s })}>Modifier</button>
                 <button type="button" className="vg-text-btn" disabled={active.length <= 1} title={active.length <= 1 ? 'Au moins un site doit rester actif.' : undefined}
@@ -78,6 +98,7 @@ export function SitesManager({ sites, onClose }: { sites: SiteAdminRow[]; onClos
               <Input name="sort" type="number" min={0} max={9999} step={1} defaultValue={view.edit?.sort} />
             </Field>
           </FormRow>
+          <QhseLeadField options={leadOptions} current={view.edit ?? undefined} />
         </ActionForm>
       )}
 

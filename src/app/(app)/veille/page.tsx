@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Icon, MissingNotice, hrefWith } from '@/components/ui';
 import { AddControlButton, ControlsPanel, type ControlSuggestions } from '@/components/watch/ControlsPanel';
 import { AddRequirementButton, RequirementsPanel } from '@/components/watch/RequirementsPanel';
-import { today } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { REQUIREMENT_REVIEW_MONTHS, SCREENS, canApprove as canApproveRole, canManage as canManageRole } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';

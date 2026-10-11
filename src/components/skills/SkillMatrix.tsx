@@ -485,7 +485,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
             message={<>La formation du {fmtDate(toCancel.obtainedOn)} sort du calcul de l&apos;état ; elle reste visible, barrée, dans l&apos;historique avec ce motif. Aucune suppression.</>} />
         )}
         {row && cell && mode === 'plan' && (
-          <ActionFields options={options} defaults={renewalDefaults(row.person, cell.title, cell.state, cell.renewalDueOn)} onDone={back} onCancel={back} />
+          <ActionFields options={options} defaults={renewalDefaults(row.person, cell.title, cell.state, cell.renewalDueOn, row.renewalPilotId)} onDone={back} onCancel={back} />
         )}
       </Dialog>
 

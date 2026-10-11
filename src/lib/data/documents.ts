@@ -6,9 +6,11 @@ import {
   DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
   type DocStatus, type DocType, type VersionStatus,
 } from '@/components/documents/meta';
-import { addDays, addMonths, daysBetween, fmtDayMonth, today } from '../dates';
-import { ROLES, canApprove, canEdit, columnOf, type TodoItem, type Tone } from '../domain';
+import { addDays, addMonths, daysBetween, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
+import { canApprove, canEdit, columnOf, type TodoItem, type Tone } from '../domain';
 import { actionColumn, lcfirst, loadActions, loadPeople, type ActionRow } from '../queries';
+import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite } from '../session';
 import { loadChangeLogs } from './changelog';
 
@@ -279,7 +281,8 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
       ownerIds: [r.ownerId],
       href: href(r.id),
     } satisfies TodoItem));
-  const approvers = [ROLES['Animateur QHSE'].personId, ROLES.Direction.personId];
+  // Approbateurs : animateurs QHSE et direction (dernier rôle connu).
+  const approvers = (await loadQhseLeads()).approvers.map((p) => p.id);
   const approvals: TodoItem[] = canApprove(role)
     ? rows.flatMap((r) => r.versions.filter((v) => v.status === 'en_revue').map((v) => ({
       date: v.submittedOn ?? now,

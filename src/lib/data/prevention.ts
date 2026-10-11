@@ -11,7 +11,8 @@ import {
   type ChecklistItem, type PermitPlanIssueKind, type PermitState, type PermitType, type PlanPhase, type PlanStatus, type SiteRule,
 } from '@/components/prevention/model';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
-import { addDays, fmtDate, fmtDayMonth, today } from '../dates';
+import { addDays, fmtDate, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
 import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOSED, byUrgency, type EventType, type TodoItem, type Tone } from '../domain';
 import { actionView, loadPeople } from '../queries';
 import { loadChangeLogs } from './changelog';

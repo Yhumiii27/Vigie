@@ -2,10 +2,11 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, desc, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addDays, addMonths, fmtDate, fmtDayMonth, today, yearOf } from '../dates';
+import { addDays, addMonths, fmtDate, fmtDayMonth, yearOf } from '../dates';
+import { today } from '@/lib/today';
 import {
-  EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, ORIGINS, PLAN_ITEM_STATES, QHSE_LEAD, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
-  REVIEW_CLOSE_DAYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_SOURCES, REVIEW_STATUS, RISK_ACTION_THRESHOLD, ROLES, TODO_HORIZON_DAYS,
+  EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, ORIGINS, PLAN_ITEM_STATES, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
+  REVIEW_CLOSE_DAYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_SOURCES, REVIEW_STATUS, RISK_ACTION_THRESHOLD, TODO_HORIZON_DAYS,
   canApprove, canManage, canSee, isOpenActionStatus, type PlanItemState, type ReviewDecisionKind, type ReviewKind, type ReviewSource,
   type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
@@ -13,7 +14,8 @@ import {
   actionBrief, actionColumn, certificationStatus, controlStatus, isOpen, loadActions, loadAllActions, loadControls, loadEvents, loadPeople,
   type ActionBrief, type ActionRow, type Person,
 } from '../queries';
-import { currentSiteId, getSession, inSite } from '../session';
+import { loadQhseLeads } from './leads';
+import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { planItemAuditLabel } from './audits';
 import { loadChangeLog } from './changelog';
 import { TF1_TARGET, loadDashboard } from './dashboard';
@@ -288,10 +290,11 @@ const eventHref = (id: string) => `/evenements?etat=tous&sel=${encodeURIComponen
 
 /** En-tête et compte rendu d'une revue (aussi le seul contenu d'une revue antérieure à Vigie). */
 async function buildRecordParts(review: Review, reviews: Review[]) {
-  const [rec, session] = await Promise.all([readReviewRecord(review, reviews), getSession()]);
-  const { people, now, view } = rec;
-  const lead = people.get(ROLES['Animateur QHSE'].personId);
-  const director = people.get(ROLES.Direction.personId);
+  const [rec, session, leads] = await Promise.all([readReviewRecord(review, reviews), getSession(), loadQhseLeads()]);
+  const { now, view } = rec;
+  // Responsable QHSE du site sélectionné (ou des sites, sous « Tous les sites ») et direction (dernier rôle connu).
+  const lead = leads.lead(session.site.id === ALL_SITES ? null : session.site.id);
+  const director = leads.directors[0];
   return {
     rec,
     header: {
@@ -626,8 +629,12 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [reviews, items, people] = await Promise.all([loadReviews(), db.select().from(t.reviewItems), loadPeople()]);
-  const director = ROLES.Direction.personId;
+  const [reviews, items, people, leads] = await Promise.all([loadReviews(), db.select().from(t.reviewItems), loadPeople(), loadQhseLeads()]);
+  // Compte rendu et visa : la direction (dernier rôle connu) et les responsables QHSE ; contributions sans contributeur
+  // de l'annuaire : les responsables QHSE.
+  const qhse = leads.forSite(null);
+  const director = leads.directors[0];
+  const closers = [...new Set([...(director ? [director.id] : []), ...qhse.ownerIds])];
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
   const kind = 'Revue de direction';
   const todo: TodoItem[] = [];
@@ -636,7 +643,7 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
     const day = fmtDayMonth(r.reviewOn);
     items.filter((i) => i.reviewId === r.id && !i.done && !!i.dueOn && !REVIEW_SOURCES[sourceOf(i.source)].auto).forEach((i) => {
       const who = name(i.ownerId) || i.owner;
-      const ownerIds = i.ownerId ? [i.ownerId] : [QHSE_LEAD];
+      const ownerIds = i.ownerId ? [i.ownerId] : qhse.ownerIds;
       if (i.dueOn! < now) {
         todo.push({ date: now, kind, tone: 'danger', title: `${i.label} — attendu le ${fmtDayMonth(i.dueOn!)} · revue du ${day}`, who, href, ownerIds, overdue: true });
       } else if (i.dueOn! <= horizon) {
@@ -644,10 +651,10 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
       }
     });
     if (r.status === 'planifiee' && r.reviewOn < now) {
-      todo.push({ date: now, kind, tone: 'danger', title: `Revue de direction du ${day} — compte rendu à saisir`, who: name(director), href, ownerIds: [director, QHSE_LEAD], overdue: true });
+      todo.push({ date: now, kind, tone: 'danger', title: `Revue de direction du ${day} — compte rendu à saisir`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true });
     }
     if (r.status === 'tenue' && addDays(r.reviewOn, REVIEW_CLOSE_DAYS) < now) {
-      todo.push({ date: now, kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: name(director), href, ownerIds: [director, QHSE_LEAD], overdue: true });
+      todo.push({ date: now, kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true });
     }
   });
   return { todo };

@@ -1,6 +1,7 @@
 import 'server-only';
 import { getDb, schema as t } from '@/db';
-import { addDays, daysBetween, today } from '../dates';
+import { addDays, daysBetween } from '../dates';
+import { today } from '@/lib/today';
 import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, isMine, screenOfHref, todoKey, type ScreenKey, type TodoItem, type Tone } from '../domain';
 import { actionColumn, controlStatus, eventView, isOpen, lcfirst, loadActions, loadControls, loadEvents, loadPeople, type EventRow } from '../queries';
 import { currentSiteId, getSession, inSite } from '../session';

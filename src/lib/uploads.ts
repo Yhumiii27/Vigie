@@ -4,12 +4,21 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { config } from './config';
 import { canEdit, canManage, canSee, isEmployee, type Role } from './domain';
+import { decryptBuffer, encryptBuffer, fileKeys, isEncrypted } from './encryption';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED = /^(image\/(jpeg|png|webp|heic|heif|gif)|application\/pdf|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/msword|application\/vnd\.ms-excel|text\/plain|text\/csv)$/;
 
-const uploadDir = () => process.env.VIGIE_UPLOAD_DIR ?? path.join(/*turbopackIgnore: true*/ process.cwd(), '.data', 'uploads');
+/** Dossier des pièces jointes (VIGIE_UPLOAD_DIR, absolu ; .data/uploads par défaut). */
+const uploadDir = () => config().uploadDir;
+/**
+ * Clés des pièces jointes (PRD-02) : VIGIE_UPLOAD_KEY chiffre les nouveaux fichiers (AES-256-GCM, src/lib/encryption.ts) ;
+ * VIGIE_UPLOAD_KEY_PREVIOUS reste lisible pendant une rotation. Sans clé, fichiers en clair ; les fichiers en clair
+ * existants restent lisibles (npm run uploads:encrypt les chiffre).
+ */
+const uploadKeys = () => fileKeys([config().uploadKey, config().uploadKeyPrevious], 'pieces-jointes');
 
 export type Attachment = typeof t.attachments.$inferSelect;
 
@@ -27,7 +36,12 @@ export async function saveUpload(file: File, entityType: string, entityId: strin
   const id = randomUUID();
   const dir = uploadDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(/*turbopackIgnore: true*/ dir, id), Buffer.from(await file.arrayBuffer()));
+  const data = Buffer.from(await file.arrayBuffer());
+  // Contenu qui commence par l'en-tête de chiffrement de Vigie (aucun fichier légitime) : il serait pris, à la lecture,
+  // pour un fichier chiffré (illisible sans clé, « autre clé » avec) et fausserait npm run uploads:encrypt.
+  if (isEncrypted(data)) throw new Error(`« ${file.name} » est refusé : son contenu imite un fichier chiffré par Vigie.`);
+  const [key] = uploadKeys();
+  await writeFile(path.join(/*turbopackIgnore: true*/ dir, id), key ? encryptBuffer(data, key) : data);
   const db = await getDb();
   const [row] = await db.insert(t.attachments).values({
     id, entityType, entityId, fileName: file.name.slice(0, 200) || 'fichier', mimeType: file.type, size: file.size, storagePath: id, uploadedBy,
@@ -44,9 +58,17 @@ export async function readAttachment(id: string) {
   const db = await getDb();
   const [row] = await db.select().from(t.attachments).where(eq(t.attachments.id, id));
   if (!row) return null;
+  let stored: Buffer;
   try {
-    return { row, data: await readFile(path.join(/*turbopackIgnore: true*/ uploadDir(), path.basename(row.storagePath))) };
+    stored = await readFile(path.join(/*turbopackIgnore: true*/ uploadDir(), path.basename(row.storagePath)));
   } catch {
+    return null;
+  }
+  try {
+    return { row, data: decryptBuffer(stored, uploadKeys()) };
+  } catch (err) {
+    // Clé absente ou différente, fichier altéré : la pièce est indisponible (404), l'exploitant en est averti.
+    console.error(`[vigie] Pièce jointe ${row.id} illisible : ${(err as Error).message}`);
     return null;
   }
 }
@@ -63,13 +85,45 @@ export const attachmentUrl = (id: string) => `/fichiers/${id}`;
 
 // ─── Droit de lecture d'une pièce jointe (route /fichiers/[id]) ─────────────
 
-export type FileSession = { role: Role; user: { id: string } };
+export type FileSession = { role: Role; user: { id: string }; allowedSiteIds: string[] | null };
+
+/** Site de l'entité propriétaire d'une pièce jointe (null = sans site, ou entité qui vaut pour tous les sites). */
+async function attachmentSiteId(row: Attachment): Promise<string | null> {
+  const db = await getDb();
+  const one = async (q: Promise<{ siteId: string | null }[]>) => (await q)[0]?.siteId ?? null;
+  const num = Number(row.entityId);
+  switch (row.entityType) {
+    case 'event': return one(db.select({ siteId: t.events.siteId }).from(t.events).where(eq(t.events.id, row.entityId)));
+    case 'action': return one(db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, row.entityId)));
+    case 'prevention_plan': return one(db.select({ siteId: t.preventionPlans.siteId }).from(t.preventionPlans).where(eq(t.preventionPlans.id, row.entityId)));
+    case 'site_map': return row.entityId;
+    case 'document_version':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.documents.siteId }).from(t.documentVersions)
+        .innerJoin(t.documents, eq(t.documents.id, t.documentVersions.documentId)).where(eq(t.documentVersions.id, num))) : null;
+    case 'control_record':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.controls.siteId }).from(t.controlRecords)
+        .innerJoin(t.controls, eq(t.controls.id, t.controlRecords.controlId)).where(eq(t.controlRecords.id, num))) : null;
+    case 'qualification':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.people.siteId }).from(t.qualifications)
+        .innerJoin(t.people, eq(t.people.id, t.qualifications.personId)).where(eq(t.qualifications.id, num))) : null;
+    default: return null;
+  }
+}
 
 /**
- * Droit de lecture d'une pièce jointe : droit sur l'entité propriétaire. Refus par défaut pour un type inconnu
- * (sauf encadrement). Chaque domaine qui ajoute un entityType ajoute sa règle ici.
+ * Droit de lecture d'une pièce jointe : entité propriétaire dans le périmètre de sites de la personne (SEC-02), puis
+ * droit sur cette entité. Refus par défaut pour un type inconnu (sauf encadrement). Chaque domaine qui ajoute un
+ * entityType ajoute sa règle ici (et le site de l'entité dans attachmentSiteId).
  */
 export async function canReadAttachment(row: Attachment, s: FileSession): Promise<boolean> {
+  if (s.allowedSiteIds) {
+    const siteId = await attachmentSiteId(row);
+    if (siteId && !s.allowedSiteIds.includes(siteId)) return false;
+  }
+  return canReadEntity(row, s);
+}
+
+async function canReadEntity(row: Attachment, s: FileSession): Promise<boolean> {
   const db = await getDb();
   const { role, user } = s;
   switch (row.entityType) {

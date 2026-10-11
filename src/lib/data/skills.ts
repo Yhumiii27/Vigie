@@ -4,9 +4,12 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { lapseFor, period, renewalDue, type Lapse } from '@/components/skills/rules';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
-import { addDays, fmtDayMonth, today } from '../dates';
-import { QHSE_LEAD, TODO_HORIZON_DAYS, columnOf, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone } from '../domain';
+import { addDays, fmtDayMonth } from '../dates';
+import { today } from '@/lib/today';
+import { TODO_HORIZON_DAYS, columnOf, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone } from '../domain';
+import { hasLeft } from '../people';
 import { actionColumn, lcfirst, loadPeople, skillState, type Person } from '../queries';
+import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite } from '../session';
 
 // ─── Habilitations ──────────────────────────────────────────────────────────
@@ -66,6 +69,8 @@ export type SkillRow = {
   person: Person; cells: SkillCell[]; assignments: KeystoneAssignment[];
   /** Sortie de l'effectif déjà déclarée, à une date future (« Sortie le … »). */
   leavingOn: string | null;
+  /** Pilote proposé des recyclages : responsable QHSE du site du salarié (null : poste vacant, pilote à choisir). */
+  renewalPilotId: string | null;
 };
 
 export type SkillAlert = {
@@ -86,6 +91,8 @@ export type SkillAlert = {
   renewalDueOn: string | null;
   /** Titres requis du salarié (pour la fenêtre « Voir l'affectation »). */
   required: SkillCell[];
+  /** Pilote proposé du recyclage (voir SkillRow.renewalPilotId). */
+  renewalPilotId: string | null;
 };
 
 /**
@@ -95,7 +102,7 @@ export type SkillAlert = {
 export type ArchivedRecord = { person: Person; title: TrainingTitle; entries: QualificationEntry[] };
 
 /** Le salarié est sorti de l'effectif à la date `now` (archivé : plus dans la matrice, les signaux ni les listes). */
-export const hasLeft = (p: Pick<Person, 'leftOn'>, now: string) => !!p.leftOn && p.leftOn <= now;
+export { hasLeft };
 
 /**
  * Matrice du site sélectionné, sans filtre de rôle (signaux, revue de direction) : titres actifs en colonnes,
@@ -104,13 +111,14 @@ export const hasLeft = (p: Pick<Person, 'leftOn'>, now: string) => !!p.leftOn &&
 export const loadSkillData = cache(async () => {
   const db = await getDb();
   const now = today();
-  const [people, allTitles, reqs, quals, assignments, site] = await Promise.all([
+  const [people, allTitles, reqs, quals, assignments, site, leads] = await Promise.all([
     loadPeople(),
     db.select().from(t.trainingTitles).orderBy(asc(t.trainingTitles.sort)),
     db.select().from(t.qualificationRequirements),
     db.select().from(t.qualifications).orderBy(desc(t.qualifications.obtainedOn), desc(t.qualifications.id)),
     db.select().from(t.keystoneAssignments).orderBy(asc(t.keystoneAssignments.startOn)),
     currentSiteId(),
+    loadQhseLeads(),
   ]);
   // Titres archivés : hors matrice, formulaires et échéances ; listés dans « Titres suivis » (restauration).
   const titles = allTitles.filter((ti) => !ti.archivedAt);
@@ -168,6 +176,7 @@ export const loadSkillData = cache(async () => {
       person: p,
       assignments: upcoming,
       leavingOn: p.leftOn,
+      renewalPilotId: leads.lead(p.siteId)?.id ?? null,
       cells: titles.map((ti) => {
         const key = `${p.id}:${ti.id}`;
         const r = req.get(key);
@@ -202,6 +211,7 @@ export const loadSkillData = cache(async () => {
       return [{
         person: row.person, title: c.title.label, titleId: c.title.id, state: lapse === 'missing' ? 'r' : 'x', currentState: c.state, lapse,
         expiresOn: c.expiresOn, assignment: a, renewal: c.renewal, renewalDueOn: c.renewalDueOn, required: row.cells.filter((x) => x.required),
+        renewalPilotId: row.renewalPilotId,
       }];
     })))
     .sort((x, y) => x.assignment.startOn.localeCompare(y.assignment.startOn));
@@ -245,24 +255,25 @@ export type SkillMatrixData = Awaited<ReturnType<typeof loadSkillMatrix>>;
  * - valide mais expirant avant la fin d'une affectation Keystone : à la veille de l'affectation, sous 15 jours.
  * Un recyclage (ou une formation initiale) planifié, à lancer ou en cours, suffit : l'action porte sa propre échéance.
  * Une action en « Efficacité à vérifier » ne suffit pas (formation annulée depuis, par exemple) : le signal la mentionne.
- * Destinataires : l'animateur QHSE (QHSE_LEAD, pilote par défaut des recyclages) et le salarié concerné ; lien profond vers la case.
+ * Destinataires : le responsable QHSE du site du salarié (pilote proposé des recyclages ; animateurs QHSE si le poste
+ * est vacant) et le salarié concerné ; lien profond vers la case.
  */
 export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [skills, people, session] = await Promise.all([loadSkillData(), loadPeople(), getSession()]);
-  const lead = people.get(QHSE_LEAD)?.name;
+  const [skills, session, leads] = await Promise.all([loadSkillData(), getSession(), loadQhseLeads()]);
   const inWindow = (d: string | null): d is string => !!d && d >= now && d <= horizon;
   // Veille d'une affectation, au plus tôt aujourd'hui (affectation en cours ou débutant aujourd'hui).
   const eveOf = (startOn: string) => { const d = addDays(startOn, -1); return d < now ? now : d; };
   const todo: TodoItem[] = [];
   skills.rows.forEach((row) => {
     const p = row.person;
-    const who = [p.name, lead].filter(Boolean).join(' · ');
+    const lead = leads.forSite(p.siteId);
+    const who = [p.name, lead.who].filter(Boolean).join(' · ');
     row.cells.forEach((c) => {
       if (c.state === 'n' || c.renewal?.planned) return;
       const ti = c.title;
-      const base = { kind: 'Habilitation', who, href: `/habilitations?salarie=${p.id}&titre=${ti.id}`, ownerIds: [QHSE_LEAD, p.id] };
+      const base = { kind: 'Habilitation', who, href: `/habilitations?salarie=${p.id}&titre=${ti.id}`, ownerIds: [...new Set([...lead.ownerIds, p.id])] };
       const name = `${p.name} · ${lcfirst(ti.label)}`;
       // Première affectation à venir que le titre ne couvre pas : l'échéance suit cette affectation, pas la première.
       const a = row.assignments.find((x) => lapseFor(c.state, c.expiresOn, x, now) !== null);

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { PageHeader } from '@/components/PageHeader';
 import { AnalysisEditButton } from '@/components/events/AnalysisEditButton';
@@ -10,18 +10,18 @@ import { EventAttachments } from '@/components/events/EventAttachments';
 import { EventEditButton, type EditableEvent, type EventFieldOptions } from '@/components/events/EventEditButton';
 import { EventHistory } from '@/components/events/EventHistory';
 import { NewEventButton } from '@/components/events/NewEventButton';
-import { addActionBlocker, hasNcOrigin, injuryLabel, readD8, readTree, readWhys } from '@/components/events/shared';
+import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT, addActionBlocker, hasNcOrigin, injuryLabel, readD8, readTree, readWhys } from '@/components/events/shared';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
-import { fmtDate, fmtDayMonth, today } from '@/lib/dates';
+import { fmtDate, fmtDayMonth } from '@/lib/dates';
+import { today } from '@/lib/today';
 import {
   D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
-  canApprove, canManage, canSee, isEmployee, severityTone, type AnalysisMethod,
+  canApprove, canManage, canSee, canSeeHealth, isEmployee, severityTone, type AnalysisMethod,
 } from '@/lib/domain';
 import { guard } from '@/lib/guard';
-import { loadChangeLog } from '@/lib/data/changelog';
-import { loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, type EventDetail } from '@/lib/data/events';
+import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
-import { eventView, isOpen, loadPeople, loadSiteEvents } from '@/lib/queries';
+import { eventView, isOpen, loadPeople } from '@/lib/queries';
 
 export const metadata: Metadata = { title: SCREENS.events.title };
 
@@ -45,9 +45,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const now = today();
   const manager = canManage(role);
   const employee = isEmployee(role);
-  const [siteEvents, people, options, linkOptions] = await Promise.all([loadSiteEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
-  // Salarié : ses propres signalements uniquement (rapprochement par identifiant).
-  const events = employee ? siteEvents.filter((e) => e.declarantId === user.id && !e.anonymous) : siteEvents;
+  // Salarié : ses propres signalements uniquement (filtre dans loadVisibleEvents).
+  const [events, people, options, linkOptions] = await Promise.all([loadVisibleEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
 
   const needle = q.toLocaleLowerCase('fr');
   const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin) && (!needle || [e.id, e.title, e.location, e.equipment, e.keystoneProject].some((v) => v?.toLocaleLowerCase('fr').includes(needle)));
@@ -63,7 +62,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     loadEventClosures(list.filter((e) => e.step >= STEP_CLOSED).map((e) => e.id)),
     manager && sp.nouveau === '1' ? loadNewEventDefaults(str(sp.plan), str(sp.permis)) : null,
   ]);
-  const log = detail && !employee ? await loadChangeLog('event', detail.event.id) : [];
+  const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
   const params = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, sel: selParam };
 
   const counts = Object.fromEntries(EVENT_TYPE_KEYS.map((k) => [k, searched.filter((e) => e.type === k).length]));
@@ -91,7 +90,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
       <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · tous types`}
         actions={manager && (
           <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
-            initialOpen={sp.nouveau === '1'}
+            health={canSeeHealth(role)} initialOpen={sp.nouveau === '1'}
             defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
         )} />
       <div style={{ padding: '0 28px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
@@ -268,14 +267,21 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
   );
 }
 
+/** Données de santé d'un AT pour un rôle non habilité (SEC-06) : la fiche n'en reçoit aucune, seulement cette mention. */
+const Restricted = () => (
+  <span title={HEALTH_RESTRICTED_HINT} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-neutral-400)' }}>
+    <i className="ph ph-lock-simple" style={{ fontSize: 13 }} aria-hidden />{HEALTH_RESTRICTED}
+  </span>
+);
+
 function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, canSeeRisks, canSeeEnv }: {
-  detail: EventDetail; log: Awaited<ReturnType<typeof loadChangeLog>>; options: EventFieldOptions; actionOptions: ActionOptions; canEdit: boolean; canRevert: boolean;
+  detail: EventDetail; log: ChangeEntry[]; options: EventFieldOptions; actionOptions: ActionOptions; canEdit: boolean; canRevert: boolean;
   /** Accès à l'écran « Évaluation des risques » (chef de projet : non) : sinon le risque lié s'affiche sans lien. */
   canSeeRisks: boolean;
   /** Accès à l'écran « Environnement et déchets » : sinon les enlèvements liés s'affichent sans lien. */
   canSeeEnv: boolean;
 }) {
-  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, cpam, dismissal } = detail;
+  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, cpam, health, dismissal } = detail;
   const sev = TONE[severityTone(e.severity)];
   const closed = e.step >= STEP_CLOSED;
   const locked = !!lock;
@@ -297,7 +303,8 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
     ['Pilote', e.pilot], ['Gravité potentielle', SEVERITY[e.severity]],
   ];
   if (hasNcOrigin(e.type)) fields.push(['Origine', e.ncOrigin ?? (e.type === 'RC' ? 'Réclamation client' : '—')]);
-  if (e.type === 'AT') fields.push(['Blessure', e.injury === 'arret' && e.lostDays != null ? `${injuryLabel(e.injury)} · ${e.lostDays} j perdu${e.lostDays > 1 ? 's' : ''}` : injuryLabel(e.injury)]);
+  if (e.type === 'AT' && !health) fields.push(['Blessure · déclaration CPAM', <Restricted key="health" />]);
+  if (e.type === 'AT' && health) fields.push(['Blessure', e.injury === 'arret' && e.lostDays != null ? `${injuryLabel(e.injury)} · ${e.lostDays} j perdu${e.lostDays > 1 ? 's' : ''}` : injuryLabel(e.injury)]);
   if (cpam) fields.push(['Déclaration CPAM', cpam.declaredOn ? `Déclarée le ${fmtDate(cpam.declaredOn)}` : <ToneTag tone={cpam.tone}>{cpam.label}</ToneTag>]);
   if (links.risk) {
     fields.push(['Risque DUER', canSeeRisks ? (
@@ -355,7 +362,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-          {canEdit && !locked && <EventEditButton event={editable} options={editOptions} />}
+          {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} />}
           {canRevert && !e.dismissed && !closed && (
             <DismissButton id={e.id} disabled={openLinked > 0}
               tooltip={openLinked > 0 ? `${openLinked} action${openLinked > 1 ? 's' : ''} liée${openLinked > 1 ? 's' : ''} : annulez-${openLinked > 1 ? 'les' : 'la'} d'abord dans le plan d'actions.` : 'Doublon, faux signalement, hors sujet…'} />

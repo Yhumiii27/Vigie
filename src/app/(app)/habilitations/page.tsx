@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { MissingNotice } from '@/components/ui';
-import { today } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { SCREENS, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { ALL_SITES } from '@/lib/session';

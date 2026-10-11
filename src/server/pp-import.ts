@@ -15,10 +15,12 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { getDb, schema as t } from '@/db';
 import { planStatus } from '@/components/prevention/model';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
+import { config } from '@/lib/config';
 import { aiStatus } from '@/lib/pp-import/ai';
 import { parseDocx } from '@/lib/pp-import/docx';
 import { NEW_CONTRACTOR } from '@/lib/pp-import/draft';
@@ -253,7 +255,7 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
   if (chosenId && !chosen) return { ok: false, error: "Modèle d'import introuvable : il a peut-être été supprimé." };
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const ai = aiStatus();
+  const ai = aiStatus(config());
   let result: ParseResult;
   let used = false;
   let aiError: { error: string; retryable: boolean } | undefined;

@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { and, desc, eq, isNull, max, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addMonthsClamped } from '@/components/watch/period';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { fmtDate, today } from '@/lib/dates';
+import { addMonths, fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { REQUIREMENT_EVAL, canSee } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
@@ -260,7 +260,7 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   let nextOn = f.date('nextOn');
   const reserves = f.str('reserves', { max: 160 }) || null;
   if (lastOn && lastOn > today()) f.fail('lastOn', "Le dernier contrôle ne peut pas être postérieur à aujourd'hui.");
-  if (lastOn && periodMonths && !nextOn && !f.fieldErrors.nextOn) nextOn = addMonthsClamped(lastOn, periodMonths);
+  if (lastOn && periodMonths && !nextOn && !f.fieldErrors.nextOn) nextOn = addMonths(lastOn, periodMonths);
   if (lastOn && nextOn && nextOn <= lastOn) f.fail('nextOn', 'Le prochain contrôle doit suivre le dernier.');
   if (responsibleId && !(await personExists(responsibleId))) f.fail('responsibleId', 'Responsable inconnu.');
   if (!f.ok) return f.state();
@@ -331,7 +331,7 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
       ...(latest ? { prevLastOn: control.lastOn, prevNextOn: control.nextOn, prevReserves: control.reserves } : {}),
     }).returning({ id: t.controlRecords.id });
     if (latest) {
-      await tx.update(t.controls).set({ lastOn: performedOn!, nextOn: addMonthsClamped(performedOn!, control.periodMonths), reserves, actionId })
+      await tx.update(t.controls).set({ lastOn: performedOn!, nextOn: addMonths(performedOn!, control.periodMonths), reserves, actionId })
         .where(eq(t.controls.id, control.id));
     }
     return rec.id;
@@ -435,9 +435,9 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   let next: { lastOn: string; nextOn: string; reserves: string | null } | null = null;
   if (fixesState) {
     if (record.prevLastOn && (!m || record.prevLastOn >= m.performedOn)) {
-      next = { lastOn: record.prevLastOn, nextOn: record.prevNextOn ?? addMonthsClamped(record.prevLastOn, control.periodMonths), reserves: record.prevReserves };
+      next = { lastOn: record.prevLastOn, nextOn: record.prevNextOn ?? addMonths(record.prevLastOn, control.periodMonths), reserves: record.prevReserves };
     } else if (m) {
-      next = { lastOn: m.performedOn, nextOn: addMonthsClamped(m.performedOn, control.periodMonths), reserves: m.reserves };
+      next = { lastOn: m.performedOn, nextOn: addMonths(m.performedOn, control.periodMonths), reserves: m.reserves };
     }
   }
 

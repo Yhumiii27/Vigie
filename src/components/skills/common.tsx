@@ -4,16 +4,13 @@ import type { ActionDefaults } from '@/components/ActionFormDialog';
 import { Icon, ToneTag } from '@/components/ui';
 import { fileIcon } from '@/lib/attachments';
 import { daysBetween, fmtDate } from '@/lib/dates';
-import { QHSE_LEAD, SKILL_STATES, type SkillState } from '@/lib/domain';
+import { SKILL_STATES, type SkillState } from '@/lib/domain';
 import type { Person } from '@/lib/queries';
 import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
 
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
-
-/** Pilote par défaut des recyclages : le responsable des alertes habilitation (même personne que leur destinataire). */
-export const RENEWAL_PILOT = QHSE_LEAD;
 
 /** Période d'une affectation (règle partagée avec le serveur, voir rules.ts). */
 export { period } from './rules';
@@ -31,14 +28,17 @@ export const canPlanRenewal = (c: Pick<SkillCell, 'renewalDueOn' | 'renewal'>) =
 
 export const validityLabel = (t: Pick<TrainingTitle, 'validityMonths'>) => (t.validityMonths ? `Validité ${t.validityMonths} mois` : 'Sans échéance');
 
-/** Valeurs de l'action « Planifier le recyclage » (plan d'actions unique, origine Habilitations). */
-export function renewalDefaults(person: Pick<Person, 'id' | 'name' | 'siteId'>, title: Pick<TrainingTitle, 'id' | 'label'>, state: SkillState, dueOn: string | null): ActionDefaults {
+/**
+ * Valeurs de l'action « Planifier le recyclage » (plan d'actions unique, origine Habilitations).
+ * `pilotId` : responsable QHSE du site du salarié, destinataire des alertes habilitation (vide si le poste est vacant).
+ */
+export function renewalDefaults(person: Pick<Person, 'id' | 'name' | 'siteId'>, title: Pick<TrainingTitle, 'id' | 'label'>, state: SkillState, dueOn: string | null, pilotId: string | null): ActionDefaults {
   return {
     title: `${state === 'r' ? 'Formation initiale' : 'Recyclage'} ${lcfirst(title.label)} — ${person.name}`,
     origin: 'skills',
     originRef: `Habilitations · ${person.name}`,
     lockOrigin: true,
-    pilotId: RENEWAL_PILOT,
+    pilotId: pilotId ?? undefined,
     dueOn: dueOn ?? undefined,
     kind: 'P',
     siteId: person.siteId,

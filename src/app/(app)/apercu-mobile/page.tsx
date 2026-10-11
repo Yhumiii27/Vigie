@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { IOSDevice } from '@/components/IOSDevice';
 import { PageHeader } from '@/components/PageHeader';
 import { ReportForm } from '@/components/ReportForm';
@@ -8,17 +9,25 @@ import { MyReports } from '@/components/events/MyReports';
 import { QrCode } from '@/components/events/QrCode';
 import { MAX_PHOTOS } from '@/components/events/shared';
 import { SegLinks } from '@/components/ui';
-import { appOrigin, loadMyReport, loadMyReports, loadReportPosts } from '@/lib/data/events';
+import { isDemo } from '@/lib/config';
+import { loadMyReport, loadMyReports } from '@/lib/data/events';
+import { loadReportPosts } from '@/lib/data/report-posts';
+import { DEMO_POST } from '@/lib/demo';
 import { SCREENS, canManage } from '@/lib/domain';
+import { publicOrigin } from '@/lib/public-url';
 import { ALL_SITES, getSession } from '@/lib/session';
 
 export const metadata: Metadata = { title: SCREENS.mobile.title };
 
-const DEMO_POST = 'Atelier montage · poste M3';
 const PATH = SCREENS.mobile.path;
 const MINE = `${PATH}?vue=mes-signalements`;
 
+/**
+ * Aperçu mobile du signalement terrain : démonstration seulement (VIGIE_DEMO=1) ; en production, /signaler.
+ * Sur un téléphone, pas de cadre iPhone : le lien ouvre directement le formulaire terrain (EVT-06).
+ */
 export default async function MobilePreviewPage({ searchParams }: PageProps<'/apercu-mobile'>) {
+  if (!isDemo()) notFound();
   const sp = await searchParams;
   const mine = sp.vue === 'mes-signalements';
   const sel = mine && typeof sp.sel === 'string' ? sp.sel : undefined;
@@ -28,7 +37,7 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
     mine ? loadMyReports() : [],
     sel ? loadMyReport(sel) : null,
     loadReportPosts(),
-    appOrigin(),
+    publicOrigin(),
   ]);
   const firstPost = posts[0];
   const fieldHref = firstPost?.path ?? `/signaler?lieu=${encodeURIComponent(DEMO_POST)}`;
@@ -37,14 +46,21 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
     <>
       <PageHeader title={SCREENS.mobile.title} sub="Aperçu mobile · 390 × 844" />
       <div style={{ padding: '0 28px 40px', display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <IOSDevice width={390} height={844} dark>
-          {report
-            ? <MyReportDetail report={report} backHref={MINE} />
-            : mine
-              ? <MyReports reports={reports} userName={user.name} siteLabel={site.id === ALL_SITES ? site.label : reportSite} backHref={PATH}
-                  currentSiteId={site.id === ALL_SITES ? null : site.id} detailHref={(id) => `${MINE}&sel=${encodeURIComponent(id)}`} />
-              : <ReportForm siteLabel={reportSite} defaultLocation={DEMO_POST} myReportsHref={MINE} />}
-        </IOSDevice>
+        <div className="vg-narrow-only card" style={{ gap: 8, width: '100%' }}>
+          <div className="card-title" style={{ fontSize: 15 }}>Sur téléphone</div>
+          <Link href={fieldHref} className="btn btn-primary" style={{ minHeight: 44 }}><i className="ph ph-warning" style={{ fontSize: 16 }} />Ouvrir le formulaire terrain</Link>
+          <Link href="/signaler/mes-signalements" className="vg-link">Mes signalements →</Link>
+        </div>
+        <div className="vg-wide-only">
+          <IOSDevice width={390} height={844} dark>
+            {report
+              ? <MyReportDetail report={report} backHref={MINE} />
+              : mine
+                ? <MyReports reports={reports} userName={user.name} siteLabel={site.id === ALL_SITES ? site.label : reportSite} backHref={PATH}
+                    currentSiteId={site.id === ALL_SITES ? null : site.id} detailHref={(id) => `${MINE}&sel=${encodeURIComponent(id)}`} />
+                : <ReportForm siteLabel={reportSite} defaultLocation={DEMO_POST} myReportsHref={MINE} />}
+          </IOSDevice>
+        </div>
         <div style={{ display: 'grid', gap: 14, maxWidth: 360 }}>
           <div>
             <SegLinks options={[

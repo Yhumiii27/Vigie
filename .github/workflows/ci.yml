@@ -1,0 +1,113 @@
+# Intégration continue de Vigie (QUA-01) : à chaque push et pull request.
+# - verification : types, lint, tests (PGlite en mémoire puis PostgreSQL), migrations, construction, cloisonnement
+#   du rôle Salarié sur le serveur construit ;
+# - image : construction de l'image Docker et sonde de santé du conteneur.
+# Version de Node : .nvmrc (champ « engines » de package.json).
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verification:
+    name: Types, lint, tests, migrations, construction
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      # Même version majeure que docker-compose.yml : tests d'intégration en mode PostgreSQL (test/setup-postgres.ts).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vigie
+          POSTGRES_PASSWORD: vigie
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vigie"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci --no-audit --no-fund
+
+      - name: Types (next typegen + tsc)
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests (PGlite en mémoire)
+        run: npm test
+
+      - name: Tests d'intégration (PostgreSQL)
+        run: npx vitest run test/integration
+        env:
+          # Base d'administration : chaque fichier de test crée puis supprime sa propre base.
+          TEST_DATABASE_URL: postgres://vigie:vigie@localhost:5432/postgres
+
+      - name: Migrations (db:check)
+        run: npm run db:check
+
+      - name: Construction (démonstration)
+        run: npm run build
+        env:
+          VIGIE_DEMO: '1'
+
+      - name: Cloisonnement Salarié (serveur construit)
+        env:
+          VIGIE_TODAY: '2026-10-09'
+          VIGIE_DATA_DIR: ${{ runner.temp }}/vigie-demo
+          VIGIE_UPLOAD_DIR: ${{ runner.temp }}/vigie-uploads
+        run: |
+          npm run start:demo > "$RUNNER_TEMP/vigie-server.log" 2>&1 &
+          for i in $(seq 1 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3200/api/sante)" = 200 ] && break
+            sleep 2
+          done
+          VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e
+
+      - name: Journal du serveur
+        if: failure()
+        run: cat "$RUNNER_TEMP/vigie-server.log" || true
+
+  image:
+    name: Image Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Construction de l'image
+        run: docker build --pull -t vigie:ci .
+
+      - name: Démarrage du conteneur (démonstration) et route de santé
+        run: |
+          docker run -d --name vigie -p 3000:3000 -e VIGIE_DEMO=1 vigie:ci
+          for i in $(seq 1 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sante)" = 200 ] && exit 0
+            sleep 2
+          done
+          docker logs vigie
+          exit 1

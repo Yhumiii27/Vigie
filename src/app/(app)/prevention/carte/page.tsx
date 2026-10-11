@@ -20,7 +20,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function SiteMapPage({ searchParams }: Props) {
-  const { role } = await guard('prevention');
+  const { role, demo } = await guard('prevention');
   const sp = await searchParams;
   const plan = str(sp.plan), permit = str(sp.permis);
   const [data, options] = await Promise.all([loadSitemap({ site: str(sp.site), plan, permit }), loadFormOptions()]);
@@ -60,6 +60,10 @@ export default async function SiteMapPage({ searchParams }: Props) {
               </span>
             )}
             <Link href="/prevention" className="btn btn-secondary vg-btn-sm"><Icon name="ph-clipboard-text" size={13} />Plans de prévention et permis</Link>
+            {/* QR codes de signalement des zones (en démonstration : depuis l'aperçu mobile). */}
+            {canManage(role) && !demo && (
+              <Link href={`/signaler/postes?site=${encodeURIComponent(data.site.id)}`} className="btn btn-secondary vg-btn-sm"><Icon name="ph-qr-code" size={13} />QR codes des postes</Link>
+            )}
           </span>
         </div>
         <SiteMapScreen key={`${data.site.id}|${plan ?? ''}|${permit ?? ''}`} data={data} canManage={canManage(role)} initialDate={initialDate}

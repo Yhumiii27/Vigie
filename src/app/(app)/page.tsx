@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { ClickRow } from '@/components/ClickRow';
 import { PageHeader } from '@/components/PageHeader';
 import { Aside, CardHead, Dot, ToneTag } from '@/components/ui';
-import { fmtDate, fmtDay, fmtDayMonth, fmtLong, fmtMonthAbbr, isoWeek, today } from '@/lib/dates';
+import { fmtDate, fmtDay, fmtDayMonth, fmtLong, fmtMonthAbbr, isoWeek } from '@/lib/dates';
+import { isDemo } from '@/lib/config';
+import { today } from '@/lib/today';
 import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, severityTone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { MAX_TODO, loadDashboard } from '@/lib/data/dashboard';
@@ -122,7 +124,7 @@ export default async function DashboardPage() {
                 <thead><tr><th>Réf.</th><th>Date</th><th>Type</th><th>Intitulé</th><th>Lieu</th><th>Gravité</th><th>Étape</th><th>Pilote</th></tr></thead>
                 <tbody>
                   {d.latest.length === 0 && (
-                    <tr><td colSpan={8} className="vg-muted">Aucun signalement{d.scoped ? ' sur ce site' : ''}. <Link href="/apercu-mobile" className="vg-link">Nouveau signalement →</Link></td></tr>
+                    <tr><td colSpan={8} className="vg-muted">Aucun signalement{d.scoped ? ' sur ce site' : ''}. <Link href={isDemo() ? '/apercu-mobile' : '/signaler'} className="vg-link">Nouveau signalement →</Link></td></tr>
                   )}
                   {d.latest.map((e) => {
                     const href = `/evenements?sel=${e.id}`;

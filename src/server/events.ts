@@ -1,20 +1,28 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, isNotNull, isNull, like, ne } from 'drizzle-orm';
+import { headers } from 'next/headers';
+import { and, eq, isNotNull, isNull, like, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
-  FIVE_M, INJURY_KEYS, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_PHOTOS, MAX_TREE_LINES, MAX_WHYS,
-  advanceBlocker, analysisFilled, eventLockReason, hasNcOrigin, injuryLabel, needsCpam, normalizeTree, type D8Content, type TreeLine,
+  DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FIELDS, HEALTH_LABELS, INJURY_KEYS, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES,
+  MAX_TREE_LINES, MAX_WHYS, REPORT_TRAP_FIELD, advanceBlocker, analysisFilled, eventLockReason, hasNcOrigin, injuryLabel, needsCpam,
+  normalizeTree, type D8Content, type TreeLine,
 } from '@/components/events/shared';
-import { fmtDate, today } from '@/lib/dates';
+import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
+import { config } from '@/lib/config';
+import { resolveReportToken } from '@/lib/data/report-posts';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import {
   D8_STEPS, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, METHODS, NC_ORIGINS, SEVERITY, STEP_CLOSED, STEP_QUALIFIED,
-  type AnalysisMethod, type EventType,
+  canSeeHealth, type AnalysisMethod, type EventType,
 } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
-import { ALL_SITES, getSession, inSite } from '@/lib/session';
+import { REPORT_LIMITS, ReportLimitError, checkedPhoto, clientIp, countPostReport, hitReportLimit } from '@/lib/report-guard';
+import { readReportToken } from '@/lib/report-token';
+import { ALL_SITES, getOptionalSession, inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
@@ -175,8 +183,11 @@ export async function setAnalysisMethod(id: string, method: string): Promise<{ e
 
 type Reader = ReturnType<typeof formReader>;
 
-/** Champs communs à la création et à la modification d'un événement (formulaire EventFields). */
-function readEventForm(f: Reader) {
+/**
+ * Champs communs à la création et à la modification d'un événement (formulaire EventFields). `health` : rôle habilité
+ * aux données de santé (SEC-06) ; sinon blessure, jours perdus et déclaration CPAM ne sont pas lus (null).
+ */
+function readEventForm(f: Reader, health: boolean) {
   const type = f.oneOf('type', EVENT_TYPE_KEYS, { required: true });
   const title = f.str('title', { required: true, max: 200 });
   const occurredOn = f.date('occurredOn', { required: true });
@@ -189,9 +200,9 @@ function readEventForm(f: Reader) {
   const description = f.str('description', { max: 4000 });
   const immediateMeasures = f.str('immediateMeasures', { max: 4000 });
   const ncOrigin = type && hasNcOrigin(type) ? f.oneOf('ncOrigin', NC_ORIGINS) : null;
-  const injury = type === 'AT' ? f.oneOf('injury', INJURY_KEYS) : null;
+  const injury = health && type === 'AT' ? f.oneOf('injury', INJURY_KEYS) : null;
   const lostDays = injury === 'arret' ? f.int('lostDays', { min: 0, max: 3650 }) : null;
-  const cpamDeclaredOn = type && needsCpam({ type, injury }) ? f.date('cpamDeclaredOn') : null;
+  const cpamDeclaredOn = health && type && needsCpam({ type, injury }) ? f.date('cpamDeclaredOn') : null;
   const controlId = f.int('controlId', { min: 1 });
   const riskId = f.int('riskId', { min: 1 });
   const documentId = f.opt('documentId');
@@ -207,6 +218,12 @@ function readEventForm(f: Reader) {
   };
 }
 type EventValues = ReturnType<typeof readEventForm>;
+
+/** Le formulaire porte-t-il une donnée de santé (champ renseigné) ? Refusé pour un rôle non habilité (SEC-06). */
+const submitsHealth = (fd: FormData) => HEALTH_FIELDS.some((k) => {
+  const v = fd.get(k);
+  return typeof v === 'string' ? v.trim() !== '' : v != null;
+});
 
 /**
  * Vérifie les références saisies (site, pilote, projet, rattachements du même site que l'événement) ; complète le plan
@@ -264,7 +281,7 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
 const LABELS: Partial<Record<keyof EventValues, string>> = {
   type: 'Type', title: 'Intitulé', occurredOn: 'Date', location: 'Lieu', equipment: 'Équipement', keystoneProject: 'Projet Keystone',
   pilotId: 'Pilote', severity: 'Gravité potentielle', siteId: 'Site', description: 'Description', immediateMeasures: 'Mesures immédiates',
-  ncOrigin: 'Origine', injury: 'Blessure', lostDays: 'Jours perdus', cpamDeclaredOn: 'Déclaration CPAM', controlId: 'Équipement contrôlé',
+  ncOrigin: 'Origine', ...HEALTH_LABELS, controlId: 'Équipement contrôlé',
   riskId: 'Risque du DUER', documentId: 'Document', preventionPlanId: 'Plan de prévention', permitId: 'Permis',
 };
 // Les textes longs sont signalés comme modifiés sans recopier leur contenu dans le journal.
@@ -272,11 +289,14 @@ const LONG: (keyof EventValues)[] = ['description', 'immediateMeasures'];
 
 /** Modifie la fiche d'un événement (qualification par l'animateur QHSE ou l'encadrement). */
 export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
+  // Données de santé d'un AT (SEC-06) : saisies par l'animateur QHSE et la direction seulement.
+  const health = canSeeHealth(session.role);
+  if (!health && submitsHealth(fd)) return { error: HEALTH_DENIED };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
-  const v = readEventForm(f);
+  const read = readEventForm(f, health);
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -284,6 +304,10 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   if (!ev) return { error: 'Événement introuvable.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
+  // Rôle non habilité : données de santé enregistrées conservées ; un AT garde son type (le requalifier effacerait
+  // ses données de santé et le retirerait des taux de fréquence et de gravité).
+  if (!health && ev.type === 'AT' && read.type !== 'AT') f.fail('type', "Seuls l'animateur QHSE et la direction requalifient un accident du travail.");
+  const v: EventValues = health ? read : { ...read, injury: ev.injury, lostDays: ev.lostDays, cpamDeclaredOn: ev.cpamDeclaredOn };
   if (ev.step >= STEP_QUALIFIED && !v.pilotId) f.fail('pilotId', 'Un événement qualifié garde un pilote désigné.');
   await validateEventRefs(db, f, v, ev);
   if (!f.ok) return f.state();
@@ -328,8 +352,11 @@ async function nextEventId(db: DbOrTx) {
 export async function createEvent(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireManager();
   if (error) return { error };
+  // Données de santé d'un AT (SEC-06) : complétées ensuite par l'animateur QHSE ou la direction pour les autres rôles.
+  const health = canSeeHealth(session.role);
+  if (!health && submitsHealth(fd)) return { error: HEALTH_DENIED };
   const f = formReader(fd);
-  const v = readEventForm(f);
+  const v = readEventForm(f, health);
   const declarantId = f.opt('declarantId');
   const declarant = f.str('declarant', { max: 120 });
   if (!declarantId && !declarant) f.fail('declarant', 'Indiquez le déclarant externe, ou choisissez une personne.');
@@ -467,67 +494,164 @@ export async function removeEventFile(attachmentId: string): Promise<{ error?: s
 
 export type ReportResult = { id?: string; error?: string; warning?: string };
 
+const REPORT_LIMITED = "Trop de signalements envoyés depuis ce poste ou ce réseau : réessayez dans une heure, ou prévenez directement l'animateur QHSE.";
+const REPORT_POST_CEILING = "Ce poste a reçu trop de signalements sans compte depuis une heure : l'animateur QHSE est prévenu. Connectez-vous à Vigie pour signaler, ou prévenez-le directement.";
+const REPORT_TOKEN_ERRORS = {
+  revoked: "Ce QR code a été remplacé : scannez l'étiquette actuelle du poste, ou prévenez l'animateur QHSE.",
+  invalid: "Ce QR code n'est pas reconnu : scannez l'étiquette du poste, ou prévenez l'animateur QHSE.",
+} as const;
+
 /**
- * Signalement terrain (formulaire mobile, tous rôles) : crée l'événement à l'étape « Déclaré »
- * et enregistre les photos jointes (champ `photos`, 4 au maximum).
- * `siteId` : site du QR code de poste ; à défaut, site de la session.
+ * Signalement terrain (formulaire /signaler) : crée l'événement à l'étape « Déclaré » et enregistre les photos jointes
+ * (champ `photos`). Le QR code du poste (champ `jeton`, src/lib/report-token.ts) fixe le site ; le lieu est pré-rempli.
+ * - Personne connectée (Entra ID, ou rôle choisi en démonstration), tous rôles : signalement en son nom (ou anonyme),
+ *   suivi dans « Mes signalements ». Sans QR code valide : `siteId` d'un ancien QR code (?poste=&site=) s'il est dans
+ *   son périmètre, sinon site sélectionné.
+ * - Sans session (EVT-07) : seulement avec un jeton de poste valide ; anonyme ou nom + entreprise déclarés (jamais
+ *   rattaché à une fiche), champ piège anti-robot, photos limitées et contrôlées sur leur contenu, limite de débit
+ *   (src/lib/report-guard.ts) : tentatives par client, puis signalements enregistrés par poste et client et plafond du
+ *   poste, comptés dans la transaction qui crée l'événement (une demande refusée ne consomme pas le quota du poste).
  */
 export async function createReport(fd: FormData): Promise<ReportResult> {
   const f = formReader(fd);
+  const session = await getOptionalSession();
+  // Champ piège rempli : un robot. Réponse neutre, rien n'est enregistré.
+  if (!session && f.str(REPORT_TRAP_FIELD)) return {};
   const type = f.str('type');
   if (!(EVENT_TYPE_KEYS as string[]).includes(type)) return { error: 'Choisissez le type de signalement.' };
   const description = f.str('description');
   if (!description) return { error: "Décrivez ce qui s'est passé." };
   if (description.length > 4000) return { error: 'La description est limitée à 4 000 caractères.' };
-  const location = f.str('location').slice(0, 120) || 'Lieu non précisé';
   const gravity = f.opt('gravity');
   const anonymous = f.bool('anonymous');
-  const requestedSite = f.opt('siteId');
+  const token = f.opt(REPORT_TOKEN_PARAM);
   const photos = f.files('photos');
-  if (photos.length > MAX_PHOTOS) return { error: `${MAX_PHOTOS} photos au maximum.` };
+  const maxPhotos = session ? MAX_PHOTOS : MAX_PUBLIC_PHOTOS;
+  if (photos.length > maxPhotos) return { error: `${maxPhotos} photos au maximum.` };
   if (photos.reduce((s, p) => s + p.size, 0) > MAX_BATCH_BYTES) return { error: 'Les photos sont trop lourdes : retirez-en une.' };
   for (const p of photos) {
     if (!p.type.startsWith('image/')) return { error: `« ${p.name} » n'est pas une photo.` };
+    if (!session && p.size > MAX_PUBLIC_PHOTO_BYTES) return { error: `« ${p.name} » dépasse ${MAX_PUBLIC_PHOTO_BYTES / 1024 / 1024} Mo.` };
     const err = checkUpload(p);
     if (err) return { error: err };
   }
 
-  const { user, site, siteOptions } = await getSession();
-  const db = await getDb();
-  // Site du QR code s'il est actif, sinon site sélectionné (ou le premier site pour « Tous les sites »).
-  const qrSite = requestedSite && siteOptions.some((s) => s.id === requestedSite && s.id !== ALL_SITES) ? requestedSite : null;
-  const siteId = qrSite ?? (site.id === ALL_SITES ? siteOptions[0].id : site.id);
+  let report: { siteId: string; location: string; declarant: string | null; declarantId: string | null; declarantCompany: string | null; reportedVia: 'session' | 'poste' };
+  let files = photos;
+  /** Signalement sans compte : poste (version du QR code) et client, comptés à l'enregistrement. */
+  let publicPost: { zoneId: number; name: string; version: number; client: string; secret: string } | null = null;
+  if (session) {
+    const { user, site, siteOptions } = session;
+    const post = token ? await resolveReportToken(token) : null;
+    // Site du QR code de poste (même hors du périmètre : la personne est au poste), sinon celui d'un ancien QR code
+    // s'il est dans ses sites, sinon le site sélectionné (ou le premier site pour « Tous les sites »).
+    const requestedSite = f.opt('siteId');
+    const qrSite = post?.status === 'ok' ? post.post.siteId
+      : requestedSite && siteOptions.some((s) => s.id === requestedSite && s.id !== ALL_SITES) ? requestedSite : null;
+    const siteId = qrSite ?? (site.id === ALL_SITES ? siteOptions.find((s) => s.id !== ALL_SITES)?.id : site.id);
+    if (!siteId) return { error: "Aucun site n'est encore configuré dans Vigie : le signalement ne peut pas être enregistré." };
+    report = {
+      siteId, location: f.str('location').slice(0, 120) || (post?.status === 'ok' ? post.post.name : 'Lieu non précisé'),
+      declarant: anonymous ? null : user.name, declarantId: anonymous ? null : user.id, declarantCompany: null, reportedVia: 'session',
+    };
+  } else {
+    const name = anonymous ? '' : f.str('declarant').slice(0, DECLARANT_MAX);
+    const company = anonymous ? '' : f.str('declarantCompany').slice(0, DECLARANT_MAX);
+    if (!anonymous && !name) return { error: 'Indiquez votre nom, ou choisissez de rester anonyme.' };
+    if (!token) return { error: "Scannez le QR code du poste pour signaler sans compte, ou connectez-vous à Vigie." };
+    const secret = config().reportSecret;
+    if (!secret) return { error: REPORT_TOKEN_ERRORS.invalid };
+    // Photos d'un formulaire public : contrôlées sur leur contenu (type enregistré d'après celui-ci), avant tout compteur.
+    const checked = await Promise.all(photos.map(checkedPhoto));
+    const refused = photos.find((_, i) => !checked[i]);
+    if (refused) return { error: `« ${refused.name} » n'est pas une photo.` };
+    files = checked as File[];
+    // Limite par client avant de vérifier le jeton (essais de jetons compris) ; celles du poste se comptent à l'enregistrement.
+    const client = clientIp(await headers());
+    if (!(await hitReportLimit('ip', client, secret))) return { error: REPORT_LIMITED };
+    const post = await resolveReportToken(token);
+    if (post.status !== 'ok') return { error: REPORT_TOKEN_ERRORS[post.status] };
+    publicPost = { zoneId: post.post.zoneId, name: post.post.name, version: readReportToken(token)!.version, client, secret };
+    report = {
+      siteId: post.post.siteId, location: f.str('location').slice(0, 120) || post.post.name,
+      declarant: name || null, declarantId: null, declarantCompany: company || null, reportedVia: 'poste',
+    };
+  }
+
   const firstSentence = description.split(/(?<=[.!?])\s/)[0];
   const title = firstSentence.length > 90 ? `${firstSentence.slice(0, 87)}…` : firstSentence;
   const severity = gravity === 'Oui' ? 3 : gravity === 'Peut-être' ? 2 : 1;
-  const id = await db.transaction(async (tx) => {
-    const id = await nextEventId(tx);
-    await tx.insert(t.events).values({
-      id,
-      siteId,
-      type: type as EventType,
-      title,
-      occurredOn: today(),
-      location,
-      declarant: anonymous ? null : user.name,
-      declarantId: anonymous ? null : user.id,
-      anonymous,
-      severity,
-      step: 0,
-      description,
+  const db = await getDb();
+  let id: string;
+  try {
+    id = await db.transaction(async (tx) => {
+      // Sans compte : quota du poste compté avec l'événement (ReportLimitError annule la transaction, compteurs compris) ;
+      // plafond du poste atteint → journal du site et alerte au responsable QHSE (loadReportPostSignals).
+      if (publicPost) {
+        const { ceilingReached } = await countPostReport(tx, publicPost, publicPost.client, publicPost.secret);
+        if (ceilingReached) {
+          await logChange(tx, {
+            entityType: 'site', entityId: report.siteId, action: 'report-limit', byId: null,
+            summary: `Poste « ${publicPost.name} » : plafond de ${REPORT_LIMITS.postTotal.max} signalements sans compte dans l'heure atteint, les suivants sont refusés — régénérez le QR code s'il circule hors du site`,
+          });
+        }
+      }
+      const id = await nextEventId(tx);
+      await tx.insert(t.events).values({
+        id,
+        ...report,
+        type: type as EventType,
+        title,
+        occurredOn: today(),
+        anonymous,
+        severity,
+        step: 0,
+        description,
+      });
+      return id;
     });
-    return id;
-  });
+  } catch (err) {
+    if (err instanceof ReportLimitError) return { error: err.scope === 'postTotal' ? REPORT_POST_CEILING : REPORT_LIMITED };
+    throw err;
+  }
 
-  // Signalement anonyme : la photo n'est pas non plus rattachée à son auteur.
+  // Signalement anonyme ou sans compte : la photo n'est rattachée à aucune fiche.
   let warning: string | undefined;
-  for (const p of photos) {
+  for (const p of files) {
     try {
-      await saveUpload(p, 'event', id, anonymous ? null : user.id);
+      await saveUpload(p, 'event', id, report.declarantId);
     } catch {
       warning = "Le signalement est enregistré, mais une photo n'a pas pu l'être : transmettez-la à l'animateur QHSE.";
     }
   }
   done();
   return { id, warning };
+}
+
+/**
+ * « Régénérer le QR » d'un poste (zone du plan de site) : la version signée dans le jeton change, les étiquettes déjà
+ * imprimées n'ouvrent plus le formulaire sans compte (QR code arraché, photographié, diffusé hors du site…). Motif journalisé.
+ */
+export async function regenerateReportPost(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok || id == null) return f.state();
+  const db = await getDb();
+  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id));
+  if (!zone) return { error: 'Poste introuvable : la zone a peut-être été supprimée du plan de site.' };
+  const siteError = await requireInSite(zone.siteId);
+  if (siteError) return { error: siteError };
+  await db.transaction(async (tx) => {
+    const [row] = await tx.update(t.mapZones).set({ qrVersion: sql`${t.mapZones.qrVersion} + 1` }).where(eq(t.mapZones.id, id))
+      .returning({ version: t.mapZones.qrVersion });
+    await logChange(tx, {
+      entityType: 'site', entityId: zone.siteId, action: 'qr', byId: session.user.id, reason,
+      summary: `QR code du poste « ${zone.name} » régénéré (version ${row.version}) : les étiquettes précédentes ne fonctionnent plus`,
+    });
+  });
+  done();
+  return { ok: true };
 }

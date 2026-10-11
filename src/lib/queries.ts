@@ -2,14 +2,16 @@ import 'server-only';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { daysBetween, fmtDate, fmtDayMonth, today } from './dates';
+import { daysBetween, fmtDate, fmtDayMonth } from './dates';
+import { today } from '@/lib/today';
 import {
   CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, ORIGINS, SKILL_SOON_DAYS, STEP_CLOSED,
   columnOf, initials, type ActionColumn, type EventType, type SkillState, type Tone,
 } from './domain';
+import { PERSON_COLUMNS, type Person } from './people';
 import { currentSiteId, inSite } from './session';
 
-export type Person = typeof t.people.$inferSelect;
+export type { Person };
 export type EventRow = typeof t.events.$inferSelect;
 export type ActionRow = typeof t.actions.$inferSelect;
 
@@ -20,7 +22,7 @@ export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase
 
 export const loadPeople = cache(async () => {
   const db = await getDb();
-  return byId(await db.select().from(t.people).orderBy(asc(t.people.sort)));
+  return byId(await db.select(PERSON_COLUMNS).from(t.people).orderBy(asc(t.people.sort)));
 });
 
 // Les chargements ci-dessous sont filtrés sur le site sélectionné (cookie) ; « Tous les sites » consolide.
@@ -86,7 +88,9 @@ export function eventView(e: EventRow, people: Map<string, Person>, now = today(
     dismissed: !!e.dismissedAt,
     status: e.dismissedAt ? EVENT_DISMISSED : EVENT_STEPS[e.step],
     pilot: e.pilotId ? people.get(e.pilotId)?.name ?? '—' : '—',
-    declarantLabel: e.anonymous ? 'Anonyme' : e.declarant ?? '—',
+    // Signalement sans compte (QR code de poste) : nom et entreprise déclarés, non vérifiés.
+    declarantLabel: e.anonymous ? 'Anonyme'
+      : e.declarant ? `${e.declarant}${e.declarantCompany ? ` (${e.declarantCompany})` : ''}${e.reportedVia === 'poste' ? ' · déclaré sans compte' : ''}` : '—',
     days: daysBetween(e.occurredOn, now),
   };
 }

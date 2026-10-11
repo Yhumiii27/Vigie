@@ -24,7 +24,18 @@
   gap: 14px;
 }
 
+.cell {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  justify-items: center;
+  break-inside: avoid;
+}
+
+.notice { max-width: 720px; font-size: 12.5px; color: var(--tone-warn-fg); text-wrap: pretty; }
+
 .label {
+  justify-self: stretch;
   display: grid;
   justify-items: center;
   gap: 8px;
@@ -50,4 +61,5 @@
   .toolbar { display: none; }
   .grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
   .label { border-color: #bbb; }
+  .notice { display: none; }
 }

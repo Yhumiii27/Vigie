@@ -15,6 +15,8 @@ import { currentSiteId } from '@/lib/session';
 export const metadata: Metadata = { title: SCREENS.docs.title };
 
 const PATH = '/documents';
+/** Consultation seule : aucun formulaire, donc aucune liste de choix (personnel, sites, actions) transmise au navigateur (QUA-06). */
+const READER_OPTIONS = { people: [], sites: [], origins: [], actions: [] };
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
@@ -129,7 +131,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
           emptyText={emptyText}
           canManage={manager}
           canApprove={canApprove(role)}
-          options={{ people: formOptions.people, sites: formOptions.sites, origins: formOptions.origins, actions: data.actionOptions }}
+          options={manager ? { people: formOptions.people, sites: formOptions.sites, origins: formOptions.origins, actions: data.actionOptions } : READER_OPTIONS}
           existingIds={data.allIds}
           elsewhere={data.elsewhere}
           unavailable={data.unavailable}

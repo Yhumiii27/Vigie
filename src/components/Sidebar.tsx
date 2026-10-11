@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { setRole, setSite } from '@/app/actions';
-import { SitesManager, type SiteAdminRow } from './SitesManager';
+import { LOGOUT_PATH } from '@/lib/auth/paths';
+import { SitesManager, type SiteAdmin } from './SitesManager';
 
 export type NavSection = { label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
 
@@ -14,9 +15,12 @@ type Props = {
   sites: { id: string; label: string }[];
   user: { name: string; initials: string };
   role: string;
+  /** Mode démonstration : sélecteur de rôle et aperçu mobile ; sinon, le rôle vient d'Entra ID (déconnexion). */
+  demo: boolean;
+  /** Rôles du sélecteur de démonstration (vide hors démonstration). */
   roles: string[];
-  /** Sites (archivés compris) pour « Gérer les sites… » ; null si le rôle ne peut pas les administrer. */
-  siteAdmin?: SiteAdminRow[] | null;
+  /** Sites (archivés compris) et responsables proposés pour « Gérer les sites… » ; null si le rôle ne peut pas les administrer. */
+  siteAdmin?: SiteAdmin | null;
 };
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
@@ -34,7 +38,7 @@ function useDismiss(open: boolean, close: () => void) {
   return ref;
 }
 
-export function Sidebar({ nav, site, sites, user, role, roles, siteAdmin }: Props) {
+export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin }: Props) {
   const pathname = usePathname();
   const [siteOpen, setSiteOpen] = useState(false);
   const [manageSites, setManageSites] = useState(false);
@@ -77,7 +81,7 @@ export function Sidebar({ nav, site, sites, user, role, roles, siteAdmin }: Prop
           </div>
         )}
       </div>
-      {siteAdmin && manageSites && <SitesManager sites={siteAdmin} onClose={() => setManageSites(false)} />}
+      {siteAdmin && manageSites && <SitesManager {...siteAdmin} onClose={() => setManageSites(false)} />}
 
       <nav className="vg-nav">
         {nav.map((sec) => (
@@ -94,35 +98,63 @@ export function Sidebar({ nav, site, sites, user, role, roles, siteAdmin }: Prop
         ))}
       </nav>
 
-      <Link href="/apercu-mobile" className={`vg-mobile-link${isActive(pathname, '/apercu-mobile') ? ' is-on' : ''}`}>
-        <i className="ph ph-device-mobile" style={{ fontSize: 15 }} />
-        <span style={{ flex: 1 }}>Aperçu mobile · signalement terrain</span>
-      </Link>
+      {demo && (
+        <Link href="/apercu-mobile" className={`vg-mobile-link${isActive(pathname, '/apercu-mobile') ? ' is-on' : ''}`}>
+          <i className="ph ph-device-mobile" style={{ fontSize: 15 }} />
+          <span style={{ flex: 1 }}>Aperçu mobile · signalement terrain</span>
+        </Link>
+      )}
 
-      <div ref={roleRef} style={{ position: 'relative' }}>
-        <button type="button" className="vg-user" aria-expanded={roleOpen} onClick={() => setRoleOpen((o) => !o)} title="Changer de rôle (démonstration)">
-          <span className="vg-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{user.initials}</span>
-          <span style={{ minWidth: 0, display: 'grid', gap: 1 }}>
-            <span style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
-            <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{role}</span>
-          </span>
-        </button>
-        {roleOpen && (
-          <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }}>
-            <div className="vg-eyebrow" style={{ padding: '4px 8px 2px' }}>Voir en tant que</div>
-            {roles.map((r) => (
-              <button key={r} type="button" className={`vg-menu-item${r === role ? ' is-on' : ''}`}
-                onClick={() => { setRoleOpen(false); start(() => setRole(r)); }}>
-                {r}
-              </button>
-            ))}
+      {demo ? (
+        <>
+          <div ref={roleRef} style={{ position: 'relative' }}>
+            <button type="button" className="vg-user" aria-expanded={roleOpen} onClick={() => setRoleOpen((o) => !o)} title="Changer de rôle (démonstration)">
+              <UserBadge user={user} role={role} />
+            </button>
+            {roleOpen && (
+              <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }}>
+                <div className="vg-eyebrow" style={{ padding: '4px 8px 2px' }}>Voir en tant que</div>
+                {roles.map((r) => (
+                  <button key={r} type="button" className={`vg-menu-item${r === role ? ' is-on' : ''}`}
+                    onClick={() => { setRoleOpen(false); start(() => setRole(r)); }}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      <div title="L'authentification Microsoft Entra ID sera branchée ultérieurement"
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 0', fontSize: 10.5, color: 'var(--color-neutral-600)' }}>
-        <i className="ph ph-flask" style={{ fontSize: 12 }} />Mode démonstration · sélecteur de rôle
-      </div>
+          <div title="Mode démonstration (VIGIE_DEMO=1) : le rôle se choisit ici ; en production, il vient de Microsoft Entra ID"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 0', fontSize: 10.5, color: 'var(--color-neutral-600)' }}>
+            <i className="ph ph-flask" style={{ fontSize: 12 }} />Mode démonstration · sélecteur de rôle
+          </div>
+        </>
+      ) : (
+        <div ref={roleRef} style={{ position: 'relative' }}>
+          <button type="button" className="vg-user" aria-expanded={roleOpen} onClick={() => setRoleOpen((o) => !o)} title="Compte Microsoft">
+            <UserBadge user={user} role={role} />
+          </button>
+          {roleOpen && (
+            <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }}>
+              {/* Lien simple (pas de préchargement) : la déconnexion termine aussi la session Microsoft. */}
+              <a href={LOGOUT_PATH} className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <i className="ph ph-sign-out" style={{ fontSize: 14, color: 'var(--color-neutral-500)' }} />Se déconnecter
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </aside>
+  );
+}
+
+function UserBadge({ user, role }: { user: { name: string; initials: string }; role: string }) {
+  return (
+    <>
+      <span className="vg-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{user.initials}</span>
+      <span style={{ minWidth: 0, display: 'grid', gap: 1 }}>
+        <span style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{role}</span>
+      </span>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 import 'server-only';
 import { eq } from 'drizzle-orm';
 import { schema as t, type DbOrTx } from '@/db';
-import { addDays, fmtDayMonth, today } from '@/lib/dates';
+import { addDays, fmtDayMonth } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { canApprove } from '@/lib/domain';
 import type { FormState } from '@/lib/forms';
 import type { getSession } from '@/lib/session';

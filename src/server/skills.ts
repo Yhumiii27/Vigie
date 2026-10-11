@@ -1,11 +1,13 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { and, asc, eq, gte, isNotNull } from 'drizzle-orm';
 import { coversNeed } from '@/components/skills/rules';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { addDays, addMonths, fmtDate, today } from '@/lib/dates';
+import { addDays, addMonths, fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { canEdit, isOpenActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
@@ -21,14 +23,6 @@ function uniqueId(base: string, existing: Set<string>, sep = '') {
   let id = base;
   for (let n = 2; existing.has(id); n++) id = `${base}${sep}${n}`;
   return id;
-}
-
-/** « [T. Nguyen] » → tnguyen, « Jean-Marc Dupont » → jdupont (convention des identifiants du personnel). */
-function personSlug(name: string) {
-  const words = clean(name).replace(/[^a-z0-9\s.-]/g, ' ').split(/[\s.]+/).filter(Boolean);
-  if (!words.length) return 'salarie';
-  const slug = words.length === 1 ? words[0] : words[0][0] + words[words.length - 1];
-  return slug.replace(/[^a-z0-9]/g, '').slice(0, 24) || 'salarie';
 }
 
 const titleSlug = (label: string) => clean(label).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'titre';
@@ -264,14 +258,22 @@ export async function setRequirement(personId: string, titleId: string, required
   return {};
 }
 
-/** Ajoute ou modifie un salarié (saisie provisoire, en attendant le connecteur Cursus). Fiche d'un salarié sorti : réintégrer d'abord. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Ajoute ou modifie un salarié (saisie provisoire, en attendant le connecteur Cursus). Fiche d'un salarié sorti : réintégrer d'abord.
+ * Identifiant généré (jamais tiré du nom : deux homonymes sont deux fiches) ; doublons refusés sur l'e-mail (sans tenir compte
+ * de la casse) et le matricule, clés de rapprochement avec Entra ID et Cursus.
+ */
 export async function savePerson(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
   const db = await getDb();
   const [sites, people] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
-    db.select({ id: t.people.id, name: t.people.name, sort: t.people.sort, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people),
+    db.select({
+      id: t.people.id, sort: t.people.sort, siteId: t.people.siteId, leftOn: t.people.leftOn, email: t.people.email, matricule: t.people.matricule,
+    }).from(t.people),
   ]);
   const f = formReader(fd);
   const id = f.opt('id');
@@ -280,10 +282,19 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
   const service = f.str('service', { max: 60 });
   const siteId = f.oneOf('siteId', sites.map((s) => s.id), { required: true });
   const inSkillsMatrix = f.bool('inSkillsMatrix');
-  if (name && people.some((p) => p.id !== id && clean(p.name) === clean(name))) f.fail('name', 'Un salarié porte déjà ce nom.');
+  const email = f.str('email', { max: 254 }).toLowerCase() || null;
+  const matricule = f.str('matricule', { max: 40 }) || null;
+  if (email && !EMAIL.test(email)) f.fail('email', 'Adresse e-mail invalide.');
+  if (email && people.some((p) => p.id !== id && p.email?.toLowerCase() === email)) f.fail('email', 'Une autre fiche porte déjà cet e-mail.');
+  if (matricule && people.some((p) => p.id !== id && p.matricule === matricule)) f.fail('matricule', 'Une autre fiche porte déjà ce matricule.');
   if (!f.ok) return f.state();
 
-  const values = { name, job, service, siteId, inSkillsMatrix };
+  // E-mail et matricule : champs absents du formulaire (saisie partielle) = inchangés.
+  const values = {
+    name, job, service, siteId, inSkillsMatrix,
+    ...(fd.has('email') ? { email } : {}),
+    ...(fd.has('matricule') ? { matricule } : {}),
+  };
   if (id) {
     const prev = people.find((p) => p.id === id);
     if (!prev) return { error: 'Salarié introuvable.' };
@@ -299,7 +310,7 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
   }
   const blocked = await requireInSite(siteId, { create: true });
   if (blocked) return { error: blocked };
-  const newId = uniqueId(personSlug(name), new Set(people.map((p) => p.id)));
+  const newId = randomUUID();
   const sort = Math.max(-1, ...people.map((p) => p.sort)) + 1;
   await db.transaction(async (tx) => {
     await tx.insert(t.people).values({ id: newId, ...values, sort });

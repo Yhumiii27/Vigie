@@ -1,12 +1,22 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, sql } from 'drizzle-orm';
+import { asc, isNull, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { today } from '@/lib/today';
+import { canApprove, type TodoItem } from '../domain';
+import { hasLeft } from '../people';
 import { loadPeople } from '../queries';
+import { currentSiteId, getSession, inSite } from '../session';
+import { loadQhseLeads } from './leads';
+import type { Option } from './options';
 
 /** Site tel que la fenêtre « Gérer les sites » l'affiche (actifs et archivés). */
 export type SiteAdminRow = {
   id: string; label: string; sort: number; seveso: string | null;
+  /** Responsable QHSE (people.id) ; null = poste vacant. */
+  qhseLeadId: string | null;
+  /** Nom du responsable QHSE ; « (sorti de l'effectif) » s'il a quitté l'entreprise. */
+  qhseLead: string | null;
   /** Date d'archivage (AAAA-MM-JJ), null pour un site actif. */
   archivedOn: string | null;
   /** Nom de la personne qui a archivé le site. */
@@ -17,11 +27,48 @@ export type SiteAdminRow = {
 /** Tous les sites, actifs d'abord puis archivés, dans l'ordre d'affichage (administration des sites, animateur QHSE et direction). */
 export const loadSiteAdmin = cache(async (): Promise<SiteAdminRow[]> => {
   const db = await getDb();
+  const now = today();
   const [sites, people] = await Promise.all([db.select().from(t.sites).orderBy(sql`${t.sites.archivedAt} asc nulls first`, asc(t.sites.sort)), loadPeople()]);
-  return sites.map((s) => ({
-    id: s.id, label: s.label, sort: s.sort, seveso: s.seveso,
-    archivedOn: s.archivedAt ? s.archivedAt.toISOString().slice(0, 10) : null,
-    archivedBy: s.archivedById ? people.get(s.archivedById)?.name ?? s.archivedById : null,
-    archiveReason: s.archiveReason,
-  }));
+  return sites.map((s) => {
+    const lead = s.qhseLeadId ? people.get(s.qhseLeadId) : undefined;
+    return {
+      id: s.id, label: s.label, sort: s.sort, seveso: s.seveso,
+      qhseLeadId: s.qhseLeadId,
+      qhseLead: lead ? `${lead.name}${hasLeft(lead, now) ? " (sorti de l'effectif)" : ''}` : null,
+      archivedOn: s.archivedAt ? s.archivedAt.toISOString().slice(0, 10) : null,
+      archivedBy: s.archivedById ? people.get(s.archivedById)?.name ?? s.archivedById : null,
+      archiveReason: s.archiveReason,
+    };
+  });
+});
+
+/** Personnes proposées comme responsable QHSE d'un site : présentes à l'effectif, animateurs QHSE d'abord. */
+export const loadQhseLeadOptions = cache(async (): Promise<Option[]> => {
+  const now = today();
+  const people = [...(await loadPeople()).values()].filter((p) => !hasLeft(p, now));
+  const rank = (p: { lastRole: string | null }) => (p.lastRole === 'Animateur QHSE' ? 0 : 1);
+  return people.sort((a, b) => rank(a) - rank(b)).map((p) => [p.id, p.job ? `${p.name} — ${p.job}` : p.name] as Option);
+});
+
+/**
+ * Échéance « responsable QHSE à désigner » (TDB-01) : un site actif sans responsable, ou dont le responsable a quitté
+ * l'effectif. Pour l'animateur QHSE et la direction seulement (qui règlent le responsable dans « Gérer les sites… »).
+ */
+export const loadSiteSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
+  const { role } = await getSession();
+  if (!canApprove(role)) return { todo: [] };
+  const db = await getDb();
+  const [sites, leads, selected] = await Promise.all([
+    db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
+    loadQhseLeads(),
+    currentSiteId(),
+  ]);
+  const now = today();
+  const ownerIds = leads.approvers.map((p) => p.id);
+  return {
+    todo: sites.filter((s) => inSite(selected, s.id) && !leads.lead(s.id)).map((s) => ({
+      date: now, kind: 'Site', tone: 'warn', key: `site-lead|${s.id}`, ownerIds,
+      title: `${s.label} — responsable QHSE à désigner (Gérer les sites…)`, who: 'Animateur QHSE / Direction',
+    } satisfies TodoItem)),
+  };
 });

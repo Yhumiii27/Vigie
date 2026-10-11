@@ -116,7 +116,7 @@ export function SkillAlerts({ alerts, canManage, options, today }: { alerts: Ski
                 <RenewalTag renewal={a.renewal} state={a.currentState} />
               ) : canManage && canPlanRenewal(a) && (
                 <NewActionButton options={options} label={planLabel(a.currentState)} icon="ph-calendar-plus"
-                  defaults={renewalDefaults(a.person, { id: a.titleId, label: a.title }, a.currentState, a.renewalDueOn)} />
+                  defaults={renewalDefaults(a.person, { id: a.titleId, label: a.title }, a.currentState, a.renewalDueOn, a.renewalPilotId)} />
               )}
             </div>
           </div>

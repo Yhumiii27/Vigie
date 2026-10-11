@@ -61,6 +61,31 @@ export const INJURIES: [key: string, label: string][] = [['arret', 'Avec arrêt'
 export const INJURY_KEYS = INJURIES.map(([k]) => k);
 export const injuryLabel = (k: string | null | undefined) => INJURIES.find(([key]) => key === k)?.[1] ?? '—';
 
+// ─── Données de santé d'un AT (SEC-06) ──────────────────────────────────────
+// Visibles et modifiables par l'animateur QHSE et la direction seulement (canSeeHealth, src/lib/domain.ts) :
+// retirées des chargements des autres rôles (absentes de la charge RSC), refusées par les server actions.
+// Toute nouvelle donnée médicale d'un accident (lésions, victime, rubriques de la DAT…) s'ajoute à cette liste.
+
+/** Colonnes de la table events qui portent une donnée de santé, avec leur libellé (formulaire, journal des modifications). */
+export const HEALTH_LABELS = { injury: 'Blessure', lostDays: 'Jours perdus', cpamDeclaredOn: 'Déclaration CPAM' } as const;
+export type HealthField = keyof typeof HEALTH_LABELS;
+export const HEALTH_FIELDS = Object.keys(HEALTH_LABELS) as HealthField[];
+/** Libellés du journal des modifications retirés pour les rôles non habilités. */
+export const HEALTH_LOG_FIELDS: readonly string[] = Object.values(HEALTH_LABELS);
+
+/** Texte affiché à la place des données de santé pour les rôles non habilités. */
+export const HEALTH_RESTRICTED = 'Données restreintes';
+export const HEALTH_RESTRICTED_HINT = "Blessure, jours perdus et déclaration CPAM : réservés à l'animateur QHSE et à la direction.";
+/** Refus d'une server action qui reçoit une donnée de santé d'un rôle non habilité. */
+export const HEALTH_DENIED = "Les données de santé d'un accident du travail sont réservées à l'animateur QHSE et à la direction.";
+
+/** Copie de la ligne sans ses données de santé (valeurs à null). */
+export function withoutHealth<T extends Record<HealthField, unknown>>(row: T): T {
+  const copy: Record<HealthField, unknown> = { ...row };
+  for (const k of HEALTH_FIELDS) copy[k] = null;
+  return copy as T;
+}
+
 /** Types d'événement qui portent une origine de non-conformité. */
 export const hasNcOrigin = (type: string) => type === 'NC' || type === 'RC';
 
@@ -131,10 +156,18 @@ export { ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES, fi
 
 // ─── Parcours terrain ───────────────────────────────────────────────────────
 
-/** Paramètres du QR code de poste (?poste=&site=, ou ?lieu= libre) conservés entre « Signaler » et « Mes signalements ». */
+/** Formulaire sans compte (QR code de poste, EVT-07) : photos moins nombreuses et plus légères qu'avec une session. */
+export const MAX_PUBLIC_PHOTOS = 2;
+export const MAX_PUBLIC_PHOTO_BYTES = 5 * 1024 * 1024;
+/** Nom du champ piège anti-robot du formulaire sans compte (masqué : une personne ne le remplit pas). */
+export const REPORT_TRAP_FIELD = 'site_web';
+/** Longueur maximale du nom et de l'entreprise déclarés sans compte. */
+export const DECLARANT_MAX = 120;
+
+/** Paramètres du QR code de poste (?jeton=, ancien ?poste=&site=, ou ?lieu= libre) conservés entre « Signaler » et « Mes signalements ». */
 export function reportQuery(sp: Record<string, string | string[] | undefined>): string {
   const params = new URLSearchParams();
-  for (const k of ['poste', 'site', 'lieu']) {
+  for (const k of ['jeton', 'poste', 'site', 'lieu']) {
     const v = sp[k];
     if (typeof v === 'string' && v) params.set(k, v);
   }

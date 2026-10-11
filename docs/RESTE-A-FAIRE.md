@@ -1,10 +1,24 @@
 # Vigie — reste à faire (développement)
 
-*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules »).*
+*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026, après le lot 1.*
 
-**État du logiciel.** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Vigie reste une **démonstration** : le rôle se choisit dans un sélecteur, toute base vide reçoit le jeu de démonstration, aucun connecteur n'existe (Entra ID, Keystone, Cursus, Trackdéchets), les seuls échanges de fichiers sont l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets, et aucun test automatisé n'est écrit.
+**État du logiciel au 11/10/2026.** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Le lot 1 rend Vigie déployable : mode démonstration explicite (`VIGIE_DEMO=1` : sélecteur de rôle, jeu de démonstration, `VIGIE_TODAY`, aperçu mobile ; `npm run dev` et l'application Mac), PostgreSQL en production et PGlite en démonstration, connexion Microsoft Entra ID (OIDC + PKCE, session chiffrée, `src/proxy.ts`), rôles applicatifs et périmètre de sites, responsable QHSE par site, contrôle de l'hôte, CSP et cookies, données de santé des AT restreintes, signalement terrain sans compte par jeton de poste, image Docker et `docker-compose.yml`, sauvegardes chiffrées (dont la sauvegarde avant migration) et pièces jointes chiffrées au repos, contrôle des migrations, tests Vitest (36 fichiers, sur PGlite et sur PostgreSQL) et CI GitHub Actions ; exploitation : [`docs/EXPLOITATION.md`](EXPLOITATION.md). Aucun connecteur Keystone, Cursus ou Trackdéchets n'existe encore, et les seuls échanges de fichiers restent l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets. La connexion Entra n'a été éprouvée qu'avec un fournisseur OIDC factice : l'inscription de l'application dans le tenant reste à faire.
 
-**Contenu.** 309 éléments vérifiés dans le code, chacun avec sa preuve `fichier:ligne` (chemins depuis la racine du dépôt, lignes au commit `e8e3a3c`). Charge totale indicative : 309,5–895 jours, soit de l'ordre de 1,4 à 4 années-développeur ; les lots 1 et 2 (P0 et P1 sans prérequis externe) en représentent 54–158 j.
+**Avancement.** 25 éléments livrés (✅) : 21 des 23 éléments du lot 1, plus PRD-09, PRD-11, PRD-15 et QUA-13. 5 éléments partiels (◐), qui restent ouverts : TDB-01 et SEC-06 (lot 1), PRD-13, SEC-07 et QUA-28. Dans les tableaux, le statut précède l'intitulé ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ou ce qui reste. Les preuves `fichier:ligne` décrivent toujours l'état au commit `e8e3a3c`. Reste : 284 éléments ouverts (P0 : 0 · P1 : 36 · P2 : 125 · P3 : 123), 283–818 j.
+
+**Réserves du lot 1**, à reprendre dans les lots suivants (détail sous chaque élément) :
+
+- **TDB-01** (◐) — les alertes DUERP par unité de travail visent les responsables QHSE de tous les sites, au lieu de celui du site de l'unité (`src/lib/data/risks.ts`) ; aucun test à deux sites et deux responsables distincts.
+- **SEC-06** (◐) — l'intitulé et la description d'un AT restent en texte libre et peuvent décrire la lésion (champs restreints « nature et siège des lésions » : EVT-01) ; les pièces jointes d'un AT (certificat médical) ne sont pas restreintes (drapeau « santé » sur les pièces jointes, migration) ; le KPI « Jours sans accident avec arrêt » et de petits effectifs de la pyramide peuvent désigner un accident (agrégats conservés par décision, à confirmer).
+- **SEC-01, SEC-02, SEC-03** — un changement de rôle ou de groupe Entra s'applique à la connexion suivante (12 h au plus), et le site de rattachement est figé dans la session à la connexion ; au-delà de la limite de groupes du jeton (overage), les sites accordés par groupe sont ignorés (pas d'appel Microsoft Graph) ; la première connexion rapproche la fiche par des revendications d'e-mail modifiables (`email`, `preferred_username`, `upn`) : n'accepter que des adresses vérifiées (`xms_edov`) des domaines de l'entreprise ; la signature du jeton d'identité n'est pas vérifiée (canal TLS jugé suffisant ; sinon `enableNonRepudiationChecks`).
+- **SEC-05** — hors démonstration, une `VIGIE_PUBLIC_URL` en `http://` (autre que localhost) est acceptée : cookie de session sans `Secure`, sans HSTS ; exiger `https://`.
+- **SEC-02, EVT-23** — les listes de sites des formulaires proposent des sites hors périmètre, refusés ensuite par `requireInSite` (`src/lib/data/options.ts`) ; `loadLinkedAction` nomme le site d'une action hors périmètre.
+- **EVT-07, SEC-09** — la limite par adresse IP n'est fiable que derrière un reverse proxy qui réécrit `X-Forwarded-For` (dernière entrée ; aucun réglage du nombre de proxys de confiance) ; les empreintes d'IP ne sont purgées qu'au signalement suivant, figurent dans les sauvegardes et dérivent de `VIGIE_REPORT_SECRET` ; le nom d'origine des photos et `reported_via` sont conservés pour un signalement anonyme ; non traités : journal de `createReport` (EVT-12), suivi d'un signalement anonyme par code (EVT-28), « Régénérer le QR » depuis l'éditeur de zones de la carte.
+- **PRD-02, PRD-06** — une archive en clair est restaurée même quand une clé est configurée (pièces jointes contrôlées par leur nombre seulement) ; `restore --remplacer` d'une base PGlite échoue dans l'image Docker (`/data/pglite` est un point de montage, `EBUSY`) ; une base migrée par une version plus récente de Vigie n'est pas refusée au démarrage.
+- **SEC-14** — non traité : les gardes de rôle redirigent pendant le rendu (`/apercu-mobile` hors démonstration, pour une personne connectée, répond 200 puis « introuvable »).
+- **PRD-01, QUA-01** — l'image Docker fige les origines admises des server actions à la construction (le reverse proxy doit transmettre `Host` ou `X-Forwarded-Host`) ; connexion Entra non éprouvée dans le conteneur ; la CI n'a pas encore tourné sur GitHub.
+
+**Contenu.** 309 éléments vérifiés dans le code, chacun avec sa preuve `fichier:ligne` (chemins depuis la racine du dépôt, lignes au commit `e8e3a3c`). Charge totale indicative à l'inventaire : 309,5–895 jours, soit de l'ordre de 1,4 à 4 années-développeur ; les lots 1 et 2 (P0 et P1 sans prérequis externe) en représentaient 54–158 j. Après le lot 1 : 283–818 j, dont 27,5–79 j pour le lot 2.
 
 **Lecture.**
 
@@ -12,95 +26,100 @@
 - **Taille** — **S** < 1 j · **M** 1–3 j · **L** 3–10 j · **XL** > 10 j (aucun élément XL : les gros sujets sont découpés). Estimations indicatives pour un développeur qui connaît le code, hors recette et coordination ; la charge d'un ensemble est la somme des bornes basses (S = 0,5 j) et hautes.
 - **Réf** — préfixe du groupe + numéro, stable : à citer dans les tickets et les commits. Dans chaque groupe, les éléments sont triés par priorité.
 - **Dépend de** — prérequis technique ou décision externe ; les décisions attendues sont regroupées en [§ 19](#19-questions-ouvertes).
+- **Statut** — ✅ livré (réserves éventuelles dans la note sous l'élément) · ◐ partiel : l'élément reste ouvert, la note dit ce qui a été livré et ce qui reste · sans marque : à faire.
 
 ## 1. Synthèse
 
-| Groupe | Préfixe | P0 | P1 | P2 | P3 | Total | S / M / L | Charge (j) |
-|---|---|--:|--:|--:|--:|--:|:-:|--:|
-| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | · | 5 | 4 | 9 | **18** | 9 / 9 / 0 | 13,5–36 |
-| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 7 | 15 | 6 | **28** | 12 / 12 / 4 | 30–88 |
-| [Plan d'actions](#5-plan-dactions-act) | ACT | · | 1 | 4 | 11 | **16** | 11 / 4 / 1 | 12,5–33 |
-| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 3 | 9 | 8 | **20** | 8 / 9 / 3 | 22–65 |
-| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 2 | 9 | 9 | **20** | 10 / 8 / 2 | 19–54 |
-| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 1 | 9 | 10 | **20** | 8 / 9 / 3 | 22–65 |
-| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 2 | 9 | 7 | **18** | 10 / 8 / 0 | 13–34 |
-| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 6 | 11 | 19 | **36** | 19 / 16 / 1 | 28,5–77 |
-| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 2 | 10 | 11 | **23** | 14 / 6 / 3 | 22–62 |
-| [Intégrations](#12-intégrations-int) | INT | · | 4 | 6 | 7 | **17** | 2 / 8 / 7 | 30–96 |
-| [Imports, exports et impression](#13-imports-exports-et-impression-imp) | IMP | · | 1 | 6 | 2 | **9** | 2 / 5 / 2 | 12–37 |
-| [Production et exploitation](#14-production-et-exploitation-prd) | PRD | 4 | 3 | 8 | · | **15** | 7 / 8 / 0 | 11,5–31 |
-| [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | 3 | 3 | 6 | 2 | **14** | 6 / 6 / 2 | 15–44 |
-| [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | 7 | 6 | 15 | **28** | 12 / 13 / 3 | 28–81 |
-| [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | 3 | 11 | 2 | **16** | 5 / 10 / 1 | 15,5–45 |
-| [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | · | 6 | 5 | **11** | 0 / 9 / 2 | 15–47 |
-| **Total** | | **7** | **50** | **129** | **123** | **309** | 135 / 140 / 34 | **309,5–895** |
+Éléments encore ouverts au 11/10/2026, après le lot 1 (les partiels ◐ comptent pour leur taille entière). Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j.
+
+| Groupe | Préfixe | P0 | P1 | P2 | P3 | Ouverts | dont ◐ | S / M / L | Charge restante (j) | ✅ Livrés |
+|---|---|--:|--:|--:|--:|--:|--:|:-:|--:|--:|
+| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | · | 5 | 4 | 9 | **18** | 1 | 9 / 9 / 0 | 13,5–36 | · |
+| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 5 | 15 | 6 | **26** | · | 11 / 12 / 3 | 26,5–77 | 2 |
+| [Plan d'actions](#5-plan-dactions-act) | ACT | · | 1 | 4 | 11 | **16** | · | 11 / 4 / 1 | 12,5–33 | · |
+| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 3 | 9 | 8 | **20** | · | 8 / 9 / 3 | 22–65 | · |
+| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 2 | 9 | 9 | **20** | · | 10 / 8 / 2 | 19–54 | · |
+| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 1 | 9 | 10 | **20** | · | 8 / 9 / 3 | 22–65 | · |
+| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 2 | 9 | 7 | **18** | · | 10 / 8 / 0 | 13–34 | · |
+| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 6 | 11 | 19 | **36** | · | 19 / 16 / 1 | 28,5–77 | · |
+| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 2 | 10 | 11 | **23** | · | 14 / 6 / 3 | 22–62 | · |
+| [Intégrations](#12-intégrations-int) | INT | · | 4 | 6 | 7 | **17** | · | 2 / 8 / 7 | 30–96 | · |
+| [Imports, exports et impression](#13-imports-exports-et-impression-imp) | IMP | · | 1 | 6 | 2 | **9** | · | 2 / 5 / 2 | 12–37 | · |
+| [Production et exploitation](#14-production-et-exploitation-prd) | PRD | · | · | 5 | · | **5** | 1 | 2 / 3 / 0 | 4–11 | 10 |
+| [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | · | 1 | 6 | 2 | **9** | 2 | 3 / 5 / 1 | 9,5–28 | 5 |
+| [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | · | 5 | 15 | **20** | 1 | 8 / 11 / 1 | 18–51 | 8 |
+| [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | 3 | 11 | 2 | **16** | · | 5 / 10 / 1 | 15,5–45 | · |
+| [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | · | 6 | 5 | **11** | · | 0 / 9 / 2 | 15–47 | · |
+| **Total** | | **·** | **36** | **125** | **123** | **284** | 5 | 122 / 132 / 30 | **283–818** | **25** |
 
 Par type :
 
-| Type | Éléments | dont P0–P1 |
-|---|--:|--:|
-| fonctionnel | 74 | 8 |
-| conformité-réglementaire | 68 | 9 |
-| bug | 47 | 12 |
-| ux-accessibilité | 33 | 3 |
-| intégration | 23 | 4 |
-| dette-technique | 19 | 1 |
-| production | 15 | 6 |
-| sécurité | 11 | 8 |
-| qualité-tests | 9 | 5 |
-| import-export | 7 | 1 |
-| performance | 3 | 0 |
+| Type | Ouverts | dont P0–P1 | ✅ Livrés |
+|---|--:|--:|--:|
+| fonctionnel | 74 | 8 | · |
+| conformité-réglementaire | 68 | 9 | · |
+| bug | 44 | 9 | 3 |
+| ux-accessibilité | 33 | 3 | · |
+| intégration | 23 | 4 | · |
+| dette-technique | 18 | 1 | 1 |
+| production | 6 | 0 | 9 |
+| sécurité | 4 | 1 | 7 |
+| qualité-tests | 4 | 0 | 5 |
+| import-export | 7 | 1 | · |
+| performance | 3 | 0 | · |
 
-### Bloquants pour une mise en production (P0), dans l'ordre recommandé
+### Bloquants pour une mise en production (P0), dans l'ordre recommandé — ✅ livrés au lot 1 (11/10/2026)
 
-1. **PRD-03** Mode démonstration explicite (VIGIE_DEMO) — isoler le sélecteur de rôle, `setRole` et `VIGIE_TODAY` derrière `VIGIE_DEMO` ; préalable à tout déploiement.
-2. **SEC-03** Identifiants stables sur la fiche personne — objectId, e-mail, matricule : la clé de rapprochement avec Entra ID et Cursus.
-3. **PRD-04** Base de production sans jeu de démonstration — seed réservé à la démonstration ; retirer les identifiants du seed de `ROLES` et `QHSE_LEAD` (avec **TDB-01**).
-4. **PRD-01** Hébergement et empaquetage — sortie standalone, HTTPS, volume persistant ; trancher **PRD-05** (PGlite ou PostgreSQL) avant.
-5. **PRD-02** Sauvegarde, restauration et chiffrement — sauvegarde avant chaque migration et restauration testée, avant les premières données réelles.
-6. **SEC-01** Authentification Microsoft Entra ID — taille L et dépend du tenant : demander l'inscription de l'application dès le début du lot.
-7. **SEC-02** Rôles et périmètre de sites depuis Entra — rôles et sites autorisés tirés d'Entra ; ferme le changement de site hors périmètre.
+1. ✅ **PRD-03** Mode démonstration explicite (VIGIE_DEMO) — isoler le sélecteur de rôle, `setRole` et `VIGIE_TODAY` derrière `VIGIE_DEMO` ; préalable à tout déploiement.
+2. ✅ **SEC-03** Identifiants stables sur la fiche personne — objectId, e-mail, matricule : la clé de rapprochement avec Entra ID et Cursus.
+3. ✅ **PRD-04** Base de production sans jeu de démonstration — seed réservé à la démonstration ; retirer les identifiants du seed de `ROLES` et `QHSE_LEAD` (avec **TDB-01**).
+4. ✅ **PRD-01** Hébergement et empaquetage — sortie standalone, HTTPS, volume persistant ; trancher **PRD-05** (PGlite ou PostgreSQL) avant.
+5. ✅ **PRD-02** Sauvegarde, restauration et chiffrement — sauvegarde avant chaque migration et restauration testée, avant les premières données réelles.
+6. ✅ **SEC-01** Authentification Microsoft Entra ID — taille L et dépend du tenant : demander l'inscription de l'application dès le début du lot.
+7. ✅ **SEC-02** Rôles et périmètre de sites depuis Entra — rôles et sites autorisés tirés d'Entra ; ferme le changement de site hors périmètre.
 
-À livrer avec ces bloquants : **SEC-04**, **SEC-05** (hôte, en-têtes, cookies), **PRD-07** (URL publique des QR codes), **EVT-06** et **EVT-07** (parcours terrain sans poste de démonstration, authentifié).
+À livrer avec ces bloquants : **SEC-04**, **SEC-05** (hôte, en-têtes, cookies), **PRD-07** (URL publique des QR codes), **EVT-06** et **EVT-07** (parcours terrain sans poste de démonstration, authentifié) — livrés eux aussi, avec les réserves indiquées sous chaque élément.
 
 ## 2. Feuille de route proposée
 
 Quatre lots. Les lots 1 et 2 se suivent ; le lot 3 démarre dès que ses prérequis externes sont levés ; le lot 4 s'intercale selon la capacité. Les éléments qui exigent une migration drizzle sont à regrouper par lot pour limiter le nombre de migrations : ceux dont la colonne « Dépend de » le signale (TDB-01, ACT-09, ACT-10, PRV-02, PRV-04, PRV-07, PRV-09, DUE-03, AUD-01, AUD-03, AUD-22, AUD-36), mais aussi tous ceux qui ajoutent une colonne ou une table (par exemple SEC-03, EVT-01, EVT-19, DOC-02, DOC-09, HAB-04).
 
-### Lot 1 — Mise en production
+### Lot 1 — Mise en production (livré le 11/10/2026)
 
 23 éléments (P0 : 7 · P1 : 16) — charge indicative 26,5–79 j.
 
 Objectif : une instance hébergée, authentifiée, sauvegardée, sans données de démonstration, avec une intégration continue et les premiers tests.
 
+Bilan : 21 éléments livrés (✅), 2 partiels (◐ : TDB-01, SEC-06) ; livrés avec le lot : PRD-09, PRD-11, PRD-15, QUA-13 (✅), et en partie PRD-13, SEC-07, QUA-28 (◐). Le détail et les réserves figurent sous chaque élément, et l'essentiel en tête du document.
+
 1. Bloquants (P0), dans l'ordre du § 1
-   - **PRD-03** Mode démonstration explicite (VIGIE_DEMO) (P0, S)
-   - **SEC-03** Identifiants stables sur la fiche personne (P0, S)
-   - **PRD-04** Base de production sans jeu de démonstration (P0, M)
-   - **PRD-01** Hébergement et empaquetage (P0, M)
-   - **PRD-02** Sauvegarde, restauration et chiffrement (P0, M)
-   - **SEC-01** Authentification Microsoft Entra ID (P0, L)
-   - **SEC-02** Rôles et périmètre de sites depuis Entra (P0, M)
+   - ✅ **PRD-03** Mode démonstration explicite (VIGIE_DEMO) (P0, S)
+   - ✅ **SEC-03** Identifiants stables sur la fiche personne (P0, S)
+   - ✅ **PRD-04** Base de production sans jeu de démonstration (P0, M)
+   - ✅ **PRD-01** Hébergement et empaquetage (P0, M)
+   - ✅ **PRD-02** Sauvegarde, restauration et chiffrement (P0, M)
+   - ✅ **SEC-01** Authentification Microsoft Entra ID (P0, L)
+   - ✅ **SEC-02** Rôles et périmètre de sites depuis Entra (P0, M)
 2. Exploitation
-   - **PRD-05** PGlite ou PostgreSQL (P1, M)
-   - **PRD-06** Règles et tests de migration (P1, M)
-   - **PRD-07** URL publique des QR codes (P1, S)
+   - ✅ **PRD-05** PGlite ou PostgreSQL (P1, M)
+   - ✅ **PRD-06** Règles et tests de migration (P1, M)
+   - ✅ **PRD-07** URL publique des QR codes (P1, S)
 3. Sécurité et données
-   - **SEC-04** Contrôle de l'hôte (DNS rebinding) (P1, S)
-   - **SEC-05** En-têtes HTTP et cookies (P1, S)
-   - **SEC-06** Données de santé des AT restreintes (P1, M)
-   - **TDB-01** Destinataires des alertes : un animateur QHSE par site, tiré des données (P1, M)
+   - ✅ **SEC-04** Contrôle de l'hôte (DNS rebinding) (P1, S)
+   - ✅ **SEC-05** En-têtes HTTP et cookies (P1, S)
+   - ◐ **SEC-06** Données de santé des AT restreintes (P1, M)
+   - ◐ **TDB-01** Destinataires des alertes : un animateur QHSE par site, tiré des données (P1, M)
 4. Signalement terrain
-   - **EVT-06** « Nouveau signalement » : lieu de démonstration et cible du bouton (P1, S)
-   - **EVT-07** Parcours terrain authentifié et signalement sans compte (P1, L)
+   - ✅ **EVT-06** « Nouveau signalement » : lieu de démonstration et cible du bouton (P1, S)
+   - ✅ **EVT-07** Parcours terrain authentifié et signalement sans compte (P1, L)
 5. Qualité et tests
-   - **QUA-02** typecheck sur un clone neuf (P1, S)
-   - **QUA-01** Intégration continue (P1, S)
-   - **QUA-07** Corriger addMonths en fin de mois (P1, S)
-   - **QUA-03** Vitest et tests des règles pures (P1, L)
-   - **QUA-04** Tests d'intégration des server actions (P1, L)
-   - **QUA-05** Recette des server actions jamais exécutées (P1, M)
-   - **QUA-06** Non-régression du cloisonnement Salarié (P1, M)
+   - ✅ **QUA-02** typecheck sur un clone neuf (P1, S)
+   - ✅ **QUA-01** Intégration continue (P1, S)
+   - ✅ **QUA-07** Corriger addMonths en fin de mois (P1, S)
+   - ✅ **QUA-03** Vitest et tests des règles pures (P1, L)
+   - ✅ **QUA-04** Tests d'intégration des server actions (P1, L)
+   - ✅ **QUA-05** Recette des server actions jamais exécutées (P1, M)
+   - ✅ **QUA-06** Non-régression du cloisonnement Salarié (P1, M)
 
 ### Lot 2 — Fiabilisation et conformité prioritaire
 
@@ -159,24 +178,26 @@ Objectif : brancher Vigie sur le système EPC2i et ouvrir les échanges de fichi
 
 ### Lot 4 — Conformité étendue et confort
 
-216 éléments (P2 : 109 · P3 : 107) — charge indicative 190–530 j.
+212 éléments (P2 : 105 · P3 : 107) — charge indicative 188–526 j (216 éléments et 190–530 j avant le lot 1, qui a aussi livré PRD-09, PRD-11, PRD-15 et QUA-13).
 
 Objectif : le reste des P2, puis les P3, par thème.
 
 - **Traçabilité** (journal, motifs) : **TDB-09**, **EVT-12**, **ACT-03**, **ACT-04**, **ACT-05**, **PRV-04**, **PRV-12**, **DUE-04**, **DUE-06**, **HAB-03**, **VEI-04**, **AUD-10**, **AUD-36**, **DOC-04**, **DOC-10**, **SEC-11**.
 - **Conformité réglementaire** : **CNF-01** à **CNF-06**, **EVT-08**, **EVT-09**, **EVT-17**, **PRV-05**, **PRV-09**, **DUE-03**, **DUE-07**, **DUE-10**, **AUD-08**, **AUD-09**, **AUD-13**, **VEI-10**, **HAB-10**, **DOC-12**, **SEC-10**, **SEC-12**.
 - **Terrain et mobile** : **EVT-18** à **EVT-22**, **UX-05** à **UX-08**.
-- **Exploitation et robustesse** : **PRD-08** à **PRD-11**, **PRD-13** à **PRD-15**, **SEC-07** à **SEC-09**, **QUA-08** à **QUA-13**.
-- **P2** — 109 éléments, 109–316 j : TDB-06 à 09 · EVT-08, 09, 11 à 22 · ACT-02 à 05 · PRV-04 à 07, 09 à 12 · DUE-03 à 07, 09, 10 · HAB-03 à 07, 09, 10 · VEI-03 à 11 · AUD-07 à 17 · DOC-03 à 06, 08 à 12 · PRD-08 à 11, 13 à 15 · SEC-07 à 12 · QUA-08 à 13 · UX-04 à 14 · CNF-01 à 06
+- **Exploitation et robustesse** : **PRD-08**, **PRD-10**, **PRD-13** (◐), **PRD-14**, **SEC-07** (◐) à **SEC-09**, **QUA-08** à **QUA-12** (✅ livrés avec le lot 1 : PRD-09, PRD-11, PRD-15, QUA-13).
+- **P2** — 105 éléments, 107–312 j : TDB-06 à 09 · EVT-08, 09, 11 à 22 · ACT-02 à 05 · PRV-04 à 07, 09 à 12 · DUE-03 à 07, 09, 10 · HAB-03 à 07, 09, 10 · VEI-03 à 11 · AUD-07 à 17 · DOC-03 à 06, 08 à 12 · PRD-08, 10, 13, 14 · SEC-07 à 12 · QUA-08 à 12 · UX-04 à 14 · CNF-01 à 06
 - **P3** — 107 éléments, 81–214 j : TDB-10 à 18 · EVT-23 à 28 · ACT-06 à 16 · PRV-13 à 17, 19 · DUE-12 à 20 · HAB-11 à 19 · VEI-12 à 14, 16, 18 · AUD-18 à 25, 27 à 31, 33 à 36 · DOC-13 à 23 · SEC-13, 14 · QUA-14 à 28 · UX-15, 16 · CNF-07 à 11
 
 ## 3. Tableau de bord, échéances et navigation (TDB)
 
 18 éléments — P1 : 5 · P2 : 4 · P3 : 9 — charge indicative 13,5–36 j.
 
+Au 11/10/2026 : 1 partiel (◐ TDB-01) — reste 18 éléments ouverts, charge indicative 13,5–36 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| TDB-01 | Destinataires des alertes : un animateur QHSE par site, tiré des données | **P1** | M | Migration sites.qhseLeadId ; rôles réels Entra ID |
+| TDB-01 | ◐ Destinataires des alertes : un animateur QHSE par site, tiré des données | **P1** | M | Migration sites.qhseLeadId ; rôles réels Entra ID |
 | TDB-02 | Échéances masquées pour un responsable sans accès à l'écran source | **P1** | M | — |
 | TDB-03 | Saisie mensuelle des heures travaillées (base du TF1/TG) | **P1** | M | Levée du report « aucune saisie/import » |
 | TDB-04 | TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures | **P1** | S | — |
@@ -196,6 +217,7 @@ Objectif : le reste des P2, puis les P3, par thème.
 | TDB-18 | Recherche globale dans l'en-tête | P3 | M | — |
 
 - **TDB-01** — Les alertes de tous les domaines et le pilote par défaut des recyclages visent QHSE_LEAD, une personne de démonstration fixe. Il faut un responsable QHSE par site (dans « Gérer les sites »), utilisé par les load\*Signals. (preuve : src/lib/domain.ts:301-304 ; src/components/skills/common.tsx:16,41 ; src/lib/data/skills.ts:254-265 ; src/lib/data/events.ts:318-326 ; src/lib/data/risks.ts:486-487 ; src/lib/data/actions.ts:303 ; src/lib/data/audits.ts:272,282 ; src/lib/data/review.ts:639-650 ; src/db/schema.ts:10-22)
+  ◐ **Partiel (11/10/2026)** — livré : colonne `sites.qhse_lead_id`, modifiable dans « Gérer les sites » ; `loadQhseLeads()` (`src/lib/data/leads.ts`) adresse les alertes au responsable du site concerné, poste vacant : animateurs QHSE (`people.last_role`), « responsable à désigner ». Reste : les alertes DUERP par unité de travail (« ≥ 8 sans action de réduction », « résiduel encore ≥ 8 », « à recoter ») reprennent les responsables de tous les sites (`leads.forSite(null)`, `src/lib/data/risks.ts`) au lieu de celui du site de l'unité ; ajouter un test à deux sites et deux responsables distincts.
   *Question : Un animateur par site ou un seul ? Qui reçoit les alertes si le poste est vacant ?*
 - **TDB-02** — loadVisibleTodo écarte les échéances dont le lien vise un écran fermé au rôle, même pour leur responsable (visite S. Benali, audit E. Dubois, contributions de revue). (preuve : src/lib/data/todo.ts:32-36 ; src/lib/data/review.ts:623-625 ; src/lib/data/audits.ts:259-267 ; src/lib/domain.ts:276-287 ; src/db/seed.ts:263,306)
   *Question : Vue en lecture de l'élément, ou échéance sans lien ?*
@@ -224,6 +246,8 @@ Objectif : le reste des P2, puis les P3, par thème.
 
 28 éléments — P1 : 7 · P2 : 15 · P3 : 6 — charge indicative 30–88 j.
 
+Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, charge indicative 26,5–77 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
 | EVT-01 | Accident du travail : victime, circonstances et rubriques de la DAT | **P1** | L | Décision RGPD données de santé ; people en attendant Cursus |
@@ -231,8 +255,8 @@ Objectif : le reste des P2, puis les P3, par thème.
 | EVT-03 | Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance | **P1** | S | Calendrier des jours fériés dans src/lib/dates.ts |
 | EVT-04 | Registre des accidents bénins | **P1** | M | Victime et lésions de l'AT |
 | EVT-05 | Qualification : exiger les données propres au type | **P1** | S | — |
-| EVT-06 | « Nouveau signalement » : lieu de démonstration et cible du bouton | **P1** | S | — |
-| EVT-07 | Parcours terrain authentifié et signalement sans compte | **P1** | L | Entra ID |
+| EVT-06 | ✅ « Nouveau signalement » : lieu de démonstration et cible du bouton | **P1** | S | — |
+| EVT-07 | ✅ Parcours terrain authentifié et signalement sans compte | **P1** | L | Entra ID |
 | EVT-08 | Suivi de l'arrêt de travail : périodes, reprise, jours perdus calculés | P2 | M | Victime identifiée sur l'AT |
 | EVT-09 | Maladies professionnelles et accidents de trajet | P2 | M | Victime de l'AT |
 | EVT-10 | Synthèse imprimable de la DAT et feuille d'accident | P2 | M | Victime de l'AT |
@@ -266,8 +290,10 @@ Objectif : le reste des P2, puis les P3, par thème.
 - **EVT-05** — Seul le pilote est exigé : un AT sans blessure sort du TF1/TG, une NC sans origine tombe dans « Autre ». (preuve : src/components/events/shared.ts:22-24 ; src/server/events.ts:191-192 ; src/lib/data/dashboard.ts:35,58,77)
   *Question : Quels champs obligatoires à la qualification ?*
 - **EVT-06** — /apercu-mobile crée de vrais événements avec DEMO_POST et un cadre iPhone même sur téléphone. Viser /signaler sur mobile et retirer le poste codé en dur. (preuve : src/app/(app)/apercu-mobile/page.tsx:17,40-46 ; src/components/PageHeader.tsx:18 ; src/app/(app)/page.tsx:125)
+  ✅ **Livré (11/10/2026)** — « Nouveau signalement » ouvre `/signaler` (formulaire réel, responsive) ; `/apercu-mobile` et le poste de démonstration réservés à la démonstration.
   *Question : Cible en production selon le rôle ?*
 - **EVT-07** — createReport repose sur le cookie de démonstration. Choisir : Entra sur mobile, borne partagée ou formulaire public anonyme protégé. (preuve : src/server/events.ts:475-526 ; src/lib/session.ts:14-34 ; src/lib/domain.ts:272 ; src/app/signaler/page.tsx:13-19)
+  ✅ **Livré (11/10/2026)** — Personne connectée : signalement en son nom, « Mes signalements ». Sans compte : QR code de poste à jeton HMAC (`VIGIE_REPORT_SECRET`, `map_zones.qr_version`, « Régénérer le QR » dans `/signaler/postes`), formulaire anonyme ou nominatif déclaratif (nom, entreprise), champ piège, photos contrôlées, limite de débit en base (`report_rate_limits`, par client puis par poste). Réserves : la limite par adresse IP suppose un reverse proxy qui réécrit `X-Forwarded-For` (sinon contournable ; aucun réglage du nombre de proxys de confiance, `src/lib/report-guard.ts`) ; les empreintes d'IP ne sont purgées qu'au signalement suivant et figurent dans les sauvegardes (clé = `VIGIE_REPORT_SECRET`) ; noms d'origine des photos et `reported_via='session'` conservés pour un signalement anonyme (**SEC-09**) ; non traités : journal de `createReport` (**EVT-12**), suivi d'un anonyme par code (**EVT-28**), « Régénérer le QR » depuis l'éditeur de zones de la carte.
   *Question : Comment signalent intérimaires et entreprises extérieures ?*
 - **EVT-08** — lostDays est saisi à la main et vaut 0 s'il manque. Gérer les périodes d'arrêt (prolongation, rechute, reprise), calculer TG, signaler visite de reprise (R. 4624-31) et pré-reprise. (preuve : src/server/events.ts:193 ; src/lib/data/dashboard.ts:40 ; src/components/events/EventEditButton.tsx:125-127)
   *Question : Dates d'arrêt saisies par la QHSE ou venues de la paie / Cursus ?*
@@ -752,53 +778,68 @@ Objectif : le reste des P2, puis les P3, par thème.
 
 15 éléments — P0 : 4 · P1 : 3 · P2 : 8 — charge indicative 11,5–31 j.
 
+Au 11/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07, PRD-09, PRD-11, PRD-15) · 1 partiel (◐ PRD-13) — reste 5 éléments ouverts, charge indicative 4–11 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| PRD-01 | Hébergement et empaquetage | **P0** | M | — |
-| PRD-02 | Sauvegarde, restauration et chiffrement | **P0** | M | — |
-| PRD-03 | Mode démonstration explicite (VIGIE_DEMO) | **P0** | S | — |
-| PRD-04 | Base de production sans jeu de démonstration | **P0** | M | — |
-| PRD-05 | PGlite ou PostgreSQL | **P1** | M | — |
-| PRD-06 | Règles et tests de migration | **P1** | M | — |
-| PRD-07 | URL publique des QR codes | **P1** | S | — |
+| PRD-01 | ✅ Hébergement et empaquetage | **P0** | M | — |
+| PRD-02 | ✅ Sauvegarde, restauration et chiffrement | **P0** | M | — |
+| PRD-03 | ✅ Mode démonstration explicite (VIGIE_DEMO) | **P0** | S | — |
+| PRD-04 | ✅ Base de production sans jeu de démonstration | **P0** | M | — |
+| PRD-05 | ✅ PGlite ou PostgreSQL | **P1** | M | — |
+| PRD-06 | ✅ Règles et tests de migration | **P1** | M | — |
+| PRD-07 | ✅ URL publique des QR codes | **P1** | S | — |
 | PRD-08 | Numéros de référence sûrs | P2 | S | — |
-| PRD-09 | Configuration centralisée | P2 | S | — |
+| PRD-09 | ✅ Configuration centralisée | P2 | S | — |
 | PRD-10 | Journalisation serveur | P2 | S | — |
-| PRD-11 | Supervision et santé | P2 | S | — |
+| PRD-11 | ✅ Supervision et santé | P2 | S | — |
 | PRD-12 | Tâches planifiées | P2 | M | — |
-| PRD-13 | Stockage des pièces jointes | P2 | M | — |
+| PRD-13 | ◐ Stockage des pièces jointes | P2 | M | — |
 | PRD-14 | Application Mac client du serveur | P2 | M | — |
-| PRD-15 | Documentation d'exploitation | P2 | S | — |
+| PRD-15 | ✅ Documentation d'exploitation | P2 | S | — |
 
 - **PRD-01** — Sortie standalone, HTTPS, volume persistant pour la base et les pièces jointes ; aujourd'hui seul le serveur local du Mac existe. (preuve : next.config.ts:3-7 (pas d'output standalone) ; package.json:6-9 (seuls next dev/start --port 3200) ; aucun Dockerfile ni compose dans le dépôt ; src/db/index.ts:20,23 et src/lib/uploads.ts:12 (base, dossier drizzle/ et pièces résolus depuis process.cwd()) ; src/app/actions.ts:13,18 (cookies sans secure/httpOnly) ; desktop-app/README.md:99 (serveur limité à ::1, « Vigie n'a pas d'authentification »))
+  ✅ **Livré (11/10/2026)** — Sortie `standalone` (`VIGIE_STANDALONE=1`), `Dockerfile` multi-étapes (utilisateur non root, `HEALTHCHECK` sur `/api/sante`, outil `vigie-db` embarqué), `docker-compose.yml` (Vigie, PostgreSQL 16, volumes base, pièces jointes et sauvegardes ; HTTPS par reverse proxy ou profil Caddy `https`), chemins de données absolus hors du dossier de l'application ; installation : `docs/EXPLOITATION.md`. Réserves : l'image fige à sa construction les origines admises des server actions (le proxy doit transmettre `Host` ou `X-Forwarded-Host`) ; connexion Entra non éprouvée dans le conteneur.
 - **PRD-02** — Sauvegarde de la base et des fichiers (avant chaque migration), procédure de restauration, pièces jointes chiffrées au repos. (preuve : src/db/index.ts:19-24 (PGlite sur disque local, migration au démarrage sans sauvegarde préalable) ; src/lib/uploads.ts:12,28-30 (fichiers écrits en clair dans .data/uploads) ; package.json:13 (seul script : db:reset = rm -rf .data) ; aucun script de sauvegarde ou de restauration dans scripts/)
+  ✅ **Livré (11/10/2026)** — `npm run db:backup` / `db:restore` / `db:list` (`scripts/vigie-db.ts`, `vigie-db` dans l'image) : `pg_dump -Fc` ou `dumpDataDir` (PGlite), archive des pièces jointes, manifeste horodaté, chiffrement de l'archive ; sauvegarde automatique avant toute migration en attente (`VIGIE_BACKUP_BEFORE_MIGRATE`) ; pièces jointes chiffrées au repos (AES-256-GCM, `VIGIE_UPLOAD_KEY`, rotation par `VIGIE_UPLOAD_KEY_PREVIOUS`, `npm run uploads:encrypt`). Réserves : une archive en clair est restaurée même quand une clé est configurée (pièces jointes vérifiées par leur nombre seulement, `src/db/backup.ts`) ; `restore --remplacer` d'une base PGlite échoue dans l'image Docker (`/data/pglite` est un point de montage, `EBUSY`) ; les sauvegardes emportent la table `report_rate_limits` (voir EVT-07).
 - **PRD-03** — setRole, VIGIE_TODAY et le sélecteur de rôle ne doivent fonctionner qu'avec VIGIE_DEMO activé. (preuve : src/app/actions.ts:11-15 (setRole sans contrôle d'environnement) ; src/components/Sidebar.tsx:103-124 (sélecteur de rôle toujours affiché) ; src/lib/dates.ts:9-11 (VIGIE_TODAY honoré partout, sans validation) ; .env.example:6 (VIGIE_TODAY=2026-10-09 renseigné par défaut) ; src/lib/domain.ts:272 (DEFAULT_ROLE = Animateur QHSE sans cookie))
+  ✅ **Livré (11/10/2026)** — `VIGIE_DEMO=1` (posé par `npm run dev`, `npm run start:demo` et l'application Mac, `VIGIE_DESKTOP=1`) active seul le sélecteur de rôle, `setRole`, `VIGIE_TODAY` (validée, refusée hors démonstration), le jeu de démonstration et `/apercu-mobile` ; hors démonstration, connexion Entra obligatoire, jamais de rôle par défaut (`src/lib/env.ts`, `src/lib/auth/demo.ts`).
 - **PRD-04** — Seed conditionnel (démo seulement) et suppression des dépendances aux personnes du seed (ROLES.personId, QHSE_LEAD). (preuve : src/db/index.ts:24 (seed à chaque ouverture) ; src/db/seed.ts:329-331 (toute base vide reçoit le jeu de démonstration) ; src/lib/domain.ts:264-269,302 (ROLES.personId et QHSE_LEAD = identifiants du seed) ; src/lib/session.ts:28 (people.find(...)! : plantage si ces personnes n'existent pas) ; src/lib/data/actions.ts:303, audits.ts:272-282, risks.ts:486-487 (QHSE_LEAD propriétaire des alertes))
+  ✅ **Livré (11/10/2026)** — Jeu de démonstration chargé en démonstration seulement ; `ROLES.personId` et `QHSE_LEAD` remplacés par `src/lib/demo.ts` et `loadQhseLeads()` ; base de production vide : écran « Créer le premier site » (direction, animateur QHSE, `src/components/Bootstrap.tsx`) ; écrans testés sur une base sans site ni personne (`test/integration/bootstrap.test.ts`).
 - **PRD-05** — Une seule instance PGlite par processus et un seul serveur sur la base : décider du moteur de production. (preuve : src/db/index.ts:4-6,16-34 (instance PGlite unique par processus) ; src/db/seed.ts:3 et src/db/seeds/types.ts (type PgliteDatabase) ; desktop-app/README.md:52-57,101 (contrainte d'un seul serveur sur la base))
+  ✅ **Livré (11/10/2026)** — Tranché : PostgreSQL en production (`DATABASE_URL`, `node-postgres`), PGlite en démonstration et sur le Mac ; type commun `Db` / `Tx` (`src/db/types.ts`), migrations par le migrator du moteur ; suite d'intégration exécutée sur les deux moteurs (`TEST_DATABASE_URL`).
 - **PRD-06** — Ne plus modifier une migration publiée (0002 l'a été à la main) ; tester les migrations sur une copie de base avant déploiement. (preuve : src/db/index.ts:23 (migrate au démarrage, sans sauvegarde ni test préalable) ; drizzle/0002_traceability.sql et drizzle/meta/0002_snapshot.json (modifiés à la main au dernier run) ; package.json:5-14 (aucun script de test) ; pas de dossier .github ni de fichier \*.test.\* ; README.md:12 (db:reset recommandé après une modification du schéma))
+  ✅ **Livré (11/10/2026)** — Règle « une migration publiée ne se modifie jamais » (CLAUDE.md) ; `drizzle/checksums.json` et `npm run db:check` (empreintes, journal, `drizzle-kit check`, écart schéma/migrations, application à une base vide) ; `npm run db:test-migrate <sauvegarde>` ; en CI. Réserve : une base migrée par une version plus récente n'est pas refusée au démarrage (`MigrationState.newer` calculé mais inutilisé, `src/db/migrations.ts`).
 - **PRD-07** — Les QR codes dépendent de l'en-tête Host (repli localhost) : fixer VIGIE_PUBLIC_URL. (preuve : src/lib/data/events.ts:294-299 (appOrigin d'après x-forwarded-host/host, repli http://localhost:3200) ; utilisé par src/app/signaler/postes/page.tsx:19 et src/app/(app)/apercu-mobile/page.tsx:31)
+  ✅ **Livré (11/10/2026)** — URL des QR codes tirée de `VIGIE_PUBLIC_URL` (`publicOrigin()`, `src/lib/public-url.ts`), jamais de l'en-tête Host ; repli sur l'origine locale en démonstration.
 - **PRD-08** — Les références (A-n, PP-, etc.) sont calculées par max + 1 hors transaction : risque de doublon en écritures simultanées. (preuve : src/server/plan.ts:128-131 (A-n hors transaction) ; src/server/prevention.ts:78,227-228,542-543 ; src/server/documents.ts:112-114 ; src/server/environment.ts:209-211 ; src/server/audits.ts:99-102 ; src/server/pp-import.ts:502-504 ; à l'inverse src/server/events.ts:344-345 calcule dans la transaction ; src/lib/forms.ts:89-92 (nextRef))
 - **PRD-09** — Variables d'environnement lues et validées en un seul module (zod). (preuve : src/lib/dates.ts:10 (VIGIE_TODAY renvoyé tel quel) ; src/db/index.ts:20 (VIGIE_DATA_DIR) ; src/lib/uploads.ts:12 (VIGIE_UPLOAD_DIR) ; src/lib/pp-import/ai.ts:20-34 (VIGIE_AI_IMPORT, ANTHROPIC_API_KEY) ; package.json:25 (zod disponible))
+  ✅ **Livré (11/10/2026)** — `src/lib/env.ts` (zod, seule lecture de `process.env`, erreurs explicites au démarrage par `src/instrumentation.ts`) et `src/lib/config.ts` côté application ; `.env.example` réécrit (production, Docker Compose, démonstration).
 - **PRD-10** — Erreurs serveur journalisées avec leur référence (instrumentation.ts). (preuve : src/app/(app)/error.tsx:8,17-19 et src/app/error.tsx:8,19 (référence affichée, console.error côté client seulement) ; aucun src/instrumentation.ts ; les console.error serveur se limitent à src/server/pp-import.ts:118-540)
 - **PRD-11** — Route /api/sante contrôlant aussi la base. (preuve : pas de dossier src/app/api ; seule route handler : src/app/fichiers/[id]/route.ts ; desktop-app/README.md:43 (sonde /_next/static/vigie-desktop-probe, sans contrôle de la base))
+  ✅ **Livré (11/10/2026)** — `/api/sante` interroge la base (200 ou 503, sans détail interne), ouverte sans session ; `HEALTHCHECK` de l'image et sonde de la CI.
 - **PRD-12** — Calculer les échéances hors requête utilisateur (prérequis des notifications sortantes et des purges). (preuve : src/lib/data/todo.ts:22-37 (échéances calculées seulement dans une requête, via getSession et le site sélectionné) ; src/lib/data/notifications.ts:13-35 (notifications dans l'application uniquement) ; aucune bibliothèque d'envoi d'e-mail ni planificateur dans package.json:15-30)
 - **PRD-13** — Dossier persistant hors cwd, type réel du fichier, nettoyage des orphelins si l'insertion échoue. (preuve : src/lib/uploads.ts:12 (dossier relatif à cwd) ; src/lib/uploads.ts:17-20 (type MIME déclaré par le client) ; src/lib/uploads.ts:24-36 (writeFile puis insert, sans transaction ni nettoyage en cas d'échec) ; src/server/events.ts:526 (photos enregistrées après la création de l'événement))
+  ◐ **Partiel (11/10/2026)** — livré : dossier persistant absolu hors du dossier de l'application (`VIGIE_UPLOAD_DIR`), chiffrement au repos (PRD-02). Reste : type réel du fichier (octets) et nettoyage des fichiers orphelins si l'insertion échoue.
 - **PRD-14** — L'application Mac doit pouvoir ouvrir l'URL du serveur central au lieu de localhost:3200. (preuve : desktop-app/Sources/AppConfig.swift:41-42 (baseURL et probeURL figées sur localhost:3200) ; desktop-app/Sources/AppConfig.swift:46-52 (isAppURL : seuls localhost, 127.0.0.1 et ::1 sur le port 3200) ; desktop-app/README.md:99)
 - **PRD-15** — Procédures d'installation, sauvegarde, mise à jour et restauration. (preuve : README.md:5-12 (démarrage dev et db:reset seulement) ; README.md:29 (« suppression des risques », périmé) ; aucune section exploitation, sauvegarde ou mise à jour ; .env.example présent mais orienté démonstration (VIGIE_TODAY renseigné à la ligne 6))
+  ✅ **Livré (11/10/2026)** — `docs/EXPLOITATION.md` : installation (Docker Compose ou Node.js), inscription Entra ID, configuration, reverse proxy, sauvegarde et restauration, mise à jour, rotation des secrets, supervision.
 
 ## 15. Sécurité et RGPD (SEC)
 
 14 éléments — P0 : 3 · P1 : 3 · P2 : 6 · P3 : 2 — charge indicative 15–44 j.
 
+Au 11/10/2026 : 5 livrés (✅ SEC-01, SEC-02, SEC-03, SEC-04, SEC-05) · 2 partiels (◐ SEC-06, SEC-07) — reste 9 éléments ouverts, charge indicative 9,5–28 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| SEC-01 | Authentification Microsoft Entra ID | **P0** | L | Tenant Entra |
-| SEC-02 | Rôles et périmètre de sites depuis Entra | **P0** | M | Entra ID |
-| SEC-03 | Identifiants stables sur la fiche personne | **P0** | S | — |
-| SEC-04 | Contrôle de l'hôte (DNS rebinding) | **P1** | S | — |
-| SEC-05 | En-têtes HTTP et cookies | **P1** | S | — |
-| SEC-06 | Données de santé des AT restreintes | **P1** | M | — |
-| SEC-07 | Limitation de débit et quotas | P2 | M | — |
+| SEC-01 | ✅ Authentification Microsoft Entra ID | **P0** | L | Tenant Entra |
+| SEC-02 | ✅ Rôles et périmètre de sites depuis Entra | **P0** | M | Entra ID |
+| SEC-03 | ✅ Identifiants stables sur la fiche personne | **P0** | S | — |
+| SEC-04 | ✅ Contrôle de l'hôte (DNS rebinding) | **P1** | S | — |
+| SEC-05 | ✅ En-têtes HTTP et cookies | **P1** | S | — |
+| SEC-06 | ◐ Données de santé des AT restreintes | **P1** | M | — |
+| SEC-07 | ◐ Limitation de débit et quotas | P2 | M | — |
 | SEC-08 | Validation et service des pièces jointes | P2 | M | — |
 | SEC-09 | Anonymat des signalements côté serveur | P2 | S | — |
 | SEC-10 | Registre des traitements et durées de conservation | P2 | L | DPO |
@@ -808,12 +849,19 @@ Objectif : le reste des P2, puis les P3, par thème.
 | SEC-14 | Redirection 307 avant le streaming | P3 | S | — |
 
 - **SEC-01** — OIDC, session signée, contrôle dans proxy.ts, retrait de setRole. (preuve : src/lib/session.ts:12-18 (rôle lu dans un cookie, sinon rôle par défaut) ; src/lib/domain.ts:272 (DEFAULT_ROLE = 'Animateur QHSE') ; src/app/actions.ts:11-15 (setRole accessible à tous) ; pas de src/proxy.ts ; package.json:14-29 (aucune dépendance OIDC/MSAL/Auth.js))
+  ✅ **Livré (11/10/2026)** — OIDC code + PKCE avec `openid-client` (`/auth/connexion`, `/auth/retour`, `/auth/deconnexion`), session dans un cookie chiffré et signé (`jose`, `VIGIE_SESSION_SECRET`, 8 h glissantes, 12 h au plus), `src/proxy.ts` : connexion exigée hors routes publiques, `setRole` réservé à la démonstration ; éprouvé avec un fournisseur factice (`scripts/oidc-mock.mjs`, `scripts/e2e-auth.sh` : 68 contrôles). Réserves : rôle et groupes relus à la connexion suivante (12 h au plus) ; signature JWS du jeton d'identité non vérifiée (canal TLS jugé suffisant, `enableNonRepudiationChecks` non appelé dans `src/lib/auth/oidc.ts`) ; à la première connexion, la fiche est rapprochée par `email`, `preferred_username` ou `upn`, revendications modifiables et non vérifiées pour un invité (n'accepter l'e-mail que si `xms_edov` le garantit, domaines configurés) ; inscription dans le tenant réel à faire (`docs/EXPLOITATION.md` § 3).
 - **SEC-02** — Rôle et sites autorisés tirés d'Entra ; site par défaut = site de rattachement ; setSite limité au périmètre. (preuve : src/lib/domain.ts:264-272 (ROLES → personId en dur) ; src/lib/session.ts:28-33 (utilisateur déduit du rôle, site lu dans un cookie, sinon premier site actif, sans tenir compte du site de rattachement) ; src/app/actions.ts:17-19 (setSite sans contrôle du périmètre) ; src/lib/guard.ts:32-37 (requireInSite contrôle le site sélectionné, pas les sites autorisés à l'utilisateur))
+  ✅ **Livré (11/10/2026)** — Rôles applicatifs Entra (`Vigie.Direction`… surchargeables par `ENTRA_ROLE_*`, le plus élevé l'emporte ; aucun : « Accès non autorisé ») ; périmètre : tous les sites pour la direction et l'animateur QHSE, sinon site de rattachement + `VIGIE_SITE_GROUPS` ; site par défaut = site de rattachement ; `setSite`, `requireInSite` et `/fichiers` refusent un site hors périmètre. Réserves : au-delà de la limite de groupes du jeton (overage), les sites accordés par groupe sont ignorés (pas d'appel Microsoft Graph) ; le site de rattachement est aussi scellé dans la session, si bien qu'une personne mutée garde son ancien site jusqu'à 12 h (`src/lib/auth/person.ts`) ; les listes de sites des formulaires ignorent le périmètre (**EVT-23**, `src/lib/data/options.ts`, `loadLinkedAction`).
 - **SEC-03** — Ajouter objectId Entra, e-mail et matricule ; ne plus dédoublonner ni identifier par le nom. (preuve : src/db/schema.ts:25-39 (people : id, nom, poste, site, aucun e-mail, objectId ni matricule) ; src/server/skills.ts:283 (doublon détecté par le nom) ; src/server/skills.ts:302 (identifiant tiré du nom : uniqueId(personSlug(name))))
+  ✅ **Livré (11/10/2026)** — `people.entra_object_id` (unique), `email` (unique sans tenir compte de la casse), `matricule` (unique), `last_role`, `last_login_at` (migration `drizzle/0003_production.sql`) ; identifiant généré, plus de dédoublonnage par le nom ; à la connexion : rapprochement par objectId, sinon par e-mail, sinon création de la fiche (`src/lib/auth/person.ts`). Réserve : le rapprochement par e-mail se fie à des revendications modifiables (voir SEC-01).
 - **SEC-04** — Refuser les hôtes inconnus dans proxy.ts et restreindre serverActions.allowedOrigins. (preuve : pas de src/proxy.ts ; next.config.ts:3-7 (aucune liste d'hôtes ni serverActions.allowedOrigins) ; src/app/fichiers/[id]/route.ts:5-9 (droit déduit du seul cookie de rôle) ; src/lib/domain.ts:272 (sans cookie, rôle Animateur QHSE) ; desktop-app/README.md:99 (« Vigie n'a pas d'authentification »))
+  ✅ **Livré (11/10/2026)** — `src/proxy.ts` refuse (400) tout hôte hors `VIGIE_ALLOWED_HOSTS` et l'hôte de `VIGIE_PUBLIC_URL` (en-têtes `Host` et `X-Forwarded-Host` ; localhost admis en démonstration et pour `/api/sante`) ; `serverActions.allowedOrigins` restreint.
 - **SEC-05** — CSP, HSTS, poweredByHeader: false ; cookies httpOnly et secure. (preuve : next.config.ts:3-7 (ni headers() ni poweredByHeader: false) ; src/app/actions.ts:13 et 18 (cookies sans httpOnly ni secure) ; src/app/fichiers/[id]/route.ts:16 (seul en-tête de sécurité présent, nosniff))
+  ✅ **Livré (11/10/2026)** — `poweredByHeader: false` ; CSP à nonce (`frame-ancestors 'none'`), HSTS en HTTPS, `Referrer-Policy`, `Permissions-Policy` (caméra pour le signalement), `nosniff` (`src/proxy.ts`, `src/lib/security.ts`) ; cookies `httpOnly`, `SameSite=Lax`, `Secure` et préfixe `__Host-` en HTTPS. Réserve : hors démonstration, `VIGIE_PUBLIC_URL` accepte encore une adresse `http://` autre que localhost, et le cookie de session part alors sans `Secure` (`src/lib/env.ts`) : exiger `https://`.
 - **SEC-06** — Blessure, jours perdus et déclaration CPAM visibles par tout rôle qui voit les événements : les limiter aux rôles habilités. (preuve : src/app/(app)/evenements/page.tsx:300-301 (blessure, jours perdus et déclaration CPAM affichés à tout rôle qui voit les événements) ; src/app/(app)/evenements/page.tsx:47-50 (seul le Salarié est filtré) ; src/db/schema.ts:92-95 (injury, lostDays, cpamDeclaredOn))
+  ◐ **Partiel (11/10/2026)** — livré : blessure, jours perdus, déclaration CPAM et données médicales réservés à la direction et à l'animateur QHSE : retirés des chargements et de la charge RSC des autres rôles, refusés par les server actions, affichés « Données restreintes » (`canSeeHealth`, `HEALTH_LABELS`) ; échéances qui en révèlent une filtrées. Reste : l'intitulé et la description d'un AT restent en texte libre (champs restreints « nature et siège des lésions » : **EVT-01**) ; pièces jointes d'un AT (certificat médical) non restreintes (drapeau « santé », migration) ; KPI « Jours sans accident avec arrêt » et petits effectifs de la pyramide (agrégats conservés par décision, à confirmer).
 - **SEC-07** — Limites par utilisateur et par période sur le signalement, les fichiers et l'import IA. (preuve : src/server/events.ts:475-494 (createReport : contrôles par requête seulement, aucune limite par utilisateur ou par période) ; src/server/pp-import.ts:79 (seule la limite côté Anthropic est gérée) ; src/lib/uploads.ts:17-21 (pas de quota de stockage))
+  ◐ **Partiel (11/10/2026)** — livré : limite de débit du signalement sans compte (par client et par poste, en base, EVT-07). Reste : limites par utilisateur connecté (signalement, fichiers, import IA) et quotas de stockage.
 - **SEC-08** — Contrôle des octets réels (magic bytes) et antivirus ; types Office anciens à reconsidérer. (preuve : src/lib/uploads.ts:10 (liste blanche de types MIME, dont application/msword et vnd.ms-excel) ; src/lib/uploads.ts:17-21 (contrôle fondé sur file.type déclaré, ni octets réels ni antivirus) ; src/lib/uploads.ts:33 (type MIME et nom de fichier client enregistrés tels quels) ; src/app/fichiers/[id]/route.ts:12-14)
 - **SEC-09** — Retirer EXIF et noms de fichiers d'origine côté serveur pour les signalements anonymes. (preuve : src/server/events.ts:489-494 (aucun nettoyage des métadonnées côté serveur) ; src/server/events.ts:520-526 (saveUpload garde fichier et nom d'origine, seul uploadedBy est mis à null) ; src/components/ReportForm.tsx:37-58 (EXIF retiré seulement côté client, base du nom de fichier conservée))
 - **SEC-10** — Durées de conservation par donnée, purge et anonymisation (salariés sortis, AT). (preuve : src/lib/data/risks.ts:17-18 (seul le DUERP a une durée, un simple libellé) ; src/db/schema.ts:35-38 (salarié sorti conservé sans limite) ; src/db/schema.ts:92-95 (données AT sans durée de conservation) ; aucun job ni action de purge ou d'anonymisation dans src/server)
@@ -826,21 +874,23 @@ Objectif : le reste des P2, puis les P3, par thème.
 
 28 éléments — P1 : 7 · P2 : 6 · P3 : 15 — charge indicative 28–81 j.
 
+Au 11/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, QUA-07, QUA-13) · 1 partiel (◐ QUA-28) — reste 20 éléments ouverts, charge indicative 18–51 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| QUA-01 | Intégration continue | **P1** | S | — |
-| QUA-02 | typecheck sur un clone neuf | **P1** | S | — |
-| QUA-03 | Vitest et tests des règles pures | **P1** | L | — |
-| QUA-04 | Tests d'intégration des server actions | **P1** | L | Vitest |
-| QUA-05 | Recette des server actions jamais exécutées | **P1** | M | — |
-| QUA-06 | Non-régression du cloisonnement Salarié | **P1** | M | — |
-| QUA-07 | Corriger addMonths en fin de mois | **P1** | S | — |
+| QUA-01 | ✅ Intégration continue | **P1** | S | — |
+| QUA-02 | ✅ typecheck sur un clone neuf | **P1** | S | — |
+| QUA-03 | ✅ Vitest et tests des règles pures | **P1** | L | — |
+| QUA-04 | ✅ Tests d'intégration des server actions | **P1** | L | Vitest |
+| QUA-05 | ✅ Recette des server actions jamais exécutées | **P1** | M | — |
+| QUA-06 | ✅ Non-régression du cloisonnement Salarié | **P1** | M | — |
+| QUA-07 | ✅ Corriger addMonths en fin de mois | **P1** | S | — |
 | QUA-08 | Tests de bout en bout Playwright | P2 | L | — |
 | QUA-09 | Dates en UTC | P2 | S | — |
 | QUA-10 | Tests de l'import de plan de prévention | P2 | M | — |
 | QUA-11 | Historiques à l'ouverture d'une fiche | P2 | M | — |
 | QUA-12 | Modifications simultanées | P2 | M | — |
-| QUA-13 | README et CLAUDE.md à jour | P2 | S | — |
+| QUA-13 | ✅ README et CLAUDE.md à jour | P2 | S | — |
 | QUA-14 | Sortir les règles métier des composants | P3 | M | — |
 | QUA-15 | Jeu d'essai des scans | P3 | M | — |
 | QUA-16 | Recette visuelle et contrôle d'accessibilité (axe-core) | P3 | M | — |
@@ -855,21 +905,29 @@ Objectif : le reste des P2, puis les P3, par thème.
 | QUA-25 | Helpers mutualisés | P3 | S | — |
 | QUA-26 | Découper les gros fichiers | P3 | M | — |
 | QUA-27 | AGENTS.md | P3 | S | — |
-| QUA-28 | Environnement de développement | P3 | S | — |
+| QUA-28 | ◐ Environnement de développement | P3 | S | — |
 
 - **QUA-01** — Pipeline typecheck, lint et build sur chaque push. (preuve : package.json:5-13 (scripts dev/build/start/lint/typecheck/db:\*, aucun test) ; .github/ absent ; git remote origin = github.com/Yhumiii27/Vigie)
+  ✅ **Livré (11/10/2026)** — `.github/workflows/ci.yml` : types, lint, tests PGlite puis PostgreSQL (service `postgres:16`), `db:check`, construction, cloisonnement Salarié sur le serveur construit, image Docker et sonde de santé ; Node de `.nvmrc`. Réserve : pas encore exécutée sur GitHub.
 - **QUA-02** — tsc échoue tant que .next/types n'est pas généré : lancer next typegen avant tsc. (preuve : package.json:10 ("typecheck": "tsc --noEmit") ; .gitignore:57 (next-env.d.ts) ; next-env.d.ts:3-4 importe ./.next/types/routes.d.ts ; src/app/(app)/a-faire/page.tsx:14, src/app/fichiers/[id]/route.ts:5 (PageProps/RouteContext générés))
+  ✅ **Livré (11/10/2026)** — `npm run typecheck` = `next typegen && tsc --noEmit`.
 - **QUA-03** — Tests unitaires des règles des domaines (statuts, échéances, dates, coactivité). (preuve : src/lib/queries.ts:1 (import 'server-only'), :57-77 (actionColumn, controlStatus, skillState) ; src/lib/dates.ts:23-27 ; src/components/prevention/model.ts, src/components/sitemap/coactivity.ts ; package.json:5-13 sans script test)
+  ✅ **Livré (11/10/2026)** — Vitest (`npm test`, `vitest.config.mts`) ; tests des règles pures à côté des modules (dates, domaine, requêtes, étapes des événements, prévention, coactivité, habilitations, risques, formulaires, configuration, chiffrement, jetons, sécurité, proxy, authentification).
 - **QUA-04** — Server actions testées sur une base PGlite en mémoire (droits, site, journal). (preuve : src/db/index.ts:19-25 (open : PGlite(dir) + migrate + seed), :28-34 (instance globale) ; src/lib/session.ts:14-35 (cookies()) ; src/server/\*.ts (≈125 « export async function »))
+  ✅ **Livré (11/10/2026)** — `test/integration/` : base de démonstration neuve par fichier (`freshDemoDatabase()`, `actAs()`, `changeLog()` de `test/helpers.ts`, `next/headers`, `next/cache` et `next/navigation` simulés) ; droits, site, motif et journal ; PGlite en mémoire ou PostgreSQL (`TEST_DATABASE_URL`, une base par fichier) ; 36 fichiers, 268 tests au total.
 - **QUA-05** — Les actions prévention et habilitations du dernier lot n'ont jamais été appelées : recette manuelle ou automatisée. (preuve : previous-run.md:235 (actions prévention « not exercised »), :332 (habilitations : « None of the new server actions were called »), :575 (≈20 actions appelées), corrections postérieures « I did not run the app » ; src/server/prevention.ts:260-459 (signPlanEu, recordPlanEeSignature, closePlan, cancelPlan, deletePlan, add/removePlanAttachment) ; src/server/skills.ts:97-422)
+  ✅ **Livré (11/10/2026)** — Actions prévention (`signPlanEu`, `recordPlanEeSignature`, `closePlan`, `cancelPlan`, `deletePlan`, pièces jointes) et habilitations exécutées par `test/integration/prevention-actions.test.ts` et `skills-actions.test.ts`.
 - **QUA-06** — Vérifier que la charge RSC envoyée au Salarié ne contient que ses données. (preuve : src/lib/uploads.ts:71-110 (canReadAttachment) ; src/lib/data/todo.ts:32-36 (loadVisibleTodo, isMine) ; previous-run.md, section Review fixes « Salarié data leak in the page payload (evenements/page.tsx) »)
+  ✅ **Livré (11/10/2026)** — Chargements du Salarié (`test/integration/employee-isolation.test.ts`) et charge RSC des pages sur le serveur construit (`test/e2e/employee-payload.test.ts`, `VIGIE_E2E_URL`, en CI).
 - **QUA-07** — addMonths déborde au mois suivant (31/01 + 1 mois = 03/03) : échéances repoussées ; utiliser la version bornée. (preuve : src/lib/dates.ts:23-27 (setUTCMonth sans borne) ; src/server/skills.ts:130 (expiresOn = addMonths(...)) ; src/components/skills/TrainingForm.tsx:26 ; src/lib/data/documents.ts:126 ; src/server/risks.ts:428 ; src/components/watch/period.ts:7-12 (version bornée))
+  ✅ **Livré (11/10/2026)** — `addMonths` borné à la fin du mois (31/01 + 1 mois = 28/02 ou 29/02), version unique dans `src/lib/dates.ts` (`src/components/watch/period.ts` supprimé), testée (`src/lib/dates.test.ts`).
 - **QUA-08** — Parcours principaux par rôle. (preuve : package.json:32-41 (devDependencies sans @playwright/test) ; src/lib/domain.ts:264-269 (5 rôles et écrans))
 - **QUA-09** — Plusieurs dates du jour sont calculées en UTC : un helper parisDay commun. (preuve : src/lib/data/actions.ts:83 (isoDay) ; src/lib/attachments.ts:32 (addedOn) ; src/lib/data/audits.ts:113 ; src/lib/data/review.ts:169,602 ; src/lib/data/sites.ts:23 ; src/components/skills/TitlesManager.tsx:34)
 - **QUA-10** — Tests sur les formulaires d'exemple et leurs résultats attendus. (preuve : samples/README.md:5-11 (résultats attendus) ; src/lib/pp-import/pdf-form.ts, docx.ts, mapping.ts ; scripts/pp-samples.mjs)
 - **QUA-11** — Les journaux sont chargés pour toute la liste : les charger à l'ouverture de la fiche. (preuve : src/lib/data/actions.ts:149 (loadChangeLogs('action', toutes les actions)) ; src/components/actions/ActionDetail.tsx:287 ; src/lib/data/risks.ts:320, prevention.ts:375-377, audits.ts:98-100, watch.ts:122-123, documents.ts:182)
 - **QUA-12** — Écriture conditionnelle (version ou updatedAt) pour éviter qu'une modification en écrase une autre. (preuve : src/server/events.ts:305 (update events set v where id) ; src/server/events.ts:316-319 (nextEventId) ; src/lib/forms.ts:89-92 (nextRef) ; src/server/risks.ts:39-40 (isUniqueViolation, seul cas traité))
 - **QUA-13** — Routes, date de démonstration et conventions (requireInSite, logChange, archivage) à mettre à jour. (preuve : README.md:12 (VIGIE_TODAY=2026-10-06), :24-40 (table des routes incomplète), :29 (« suppression des risques ») ; .env.example:6 ; CLAUDE.md, section Conventions (pas de requireInSite / logChange / archivage) ; src/lib/guard.ts:32, src/server/changelog.ts)
+  ✅ **Livré (11/10/2026)** — README (démarrage démonstration et production, routes, vérifications) et CLAUDE.md (configuration, mode démonstration, session et périmètre, `requireInSite`, `logChange`, archivage, migrations, tests) mis à jour.
 - **QUA-14** — Le serveur importe des règles depuis src/components : les déplacer dans src/lib/rules. (preuve : src/server/watch.ts:6 et src/lib/data/watch.ts:5 (addMonthsClamped depuis components/watch/period) ; src/server/prevention.ts:11, src/server/sitemap.ts:6-8, src/server/skills.ts:5, src/lib/data/sitemap.ts:5-13, src/lib/action-links.ts:5 (imports @/components))
 - **QUA-15** — Mesurer la précision de l'IA sur des scans et photos. (preuve : samples/ (plan-de-prevention-exemple.pdf/.docx, vierge.pdf seulement) ; samples/README.md (section « Scans et photos ») ; src/lib/pp-import/scan.ts, ai.ts)
 - **QUA-16** — Captures d'écran comparées et contrôle d'accessibilité axe-core en trois tailles d'écran. (preuve : package.json:5-13 (aucun script de test visuel ni axe-core) ; design/Vigie.dc.html (maquette de référence))
@@ -885,6 +943,7 @@ Objectif : le reste des P2, puis les P3, par thème.
 - **QUA-26** — Seed et prévention à découper comme les seeds déjà séparés. (preuve : src/db/seed.ts (531 l., 57 Ko) vs src/db/seeds/{documents,environment,prevention,sitemap}.ts ; src/server/prevention.ts (678 l., 42 Ko) ; src/lib/data/prevention.ts (739 l.))
 - **QUA-27** — Committer AGENTS.md ou passer par agentRules dans next.config. (preuve : next.config.ts:3-7 (pas d'agentRules) ; node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/agentRules.md ; .gitignore (pas d'AGENTS.md) ; previous-run.md:327,374,577)
 - **QUA-28** — Hook de démarrage de session, champ engines et version de Node figée. (preuve : .claude/launch.json (seul fichier) ; package.json:1-42 (pas d'engines) ; absence de .nvmrc / .node-version)
+  ◐ **Partiel (11/10/2026)** — livré : champ `engines` (Node ≥ 22) et `.nvmrc`. Reste : hook de démarrage de session.
 
 ## 17. UX et accessibilité (UX)
 
@@ -964,21 +1023,21 @@ Décisions attendues du responsable produit avant ou pendant le développement.
 
 | Prérequis ou arbitrage | Éléments concernés |
 |---|---|
-| Tenant Microsoft Entra ID (inscription de l'application, correspondance groupes ↔ rôles) | TDB-01, EVT-07, EVT-22, DOC-07, INT-04, INT-11, INT-17, SEC-01, SEC-02 |
+| Tenant Microsoft Entra ID (inscription de l'application, correspondance groupes ↔ rôles) — toujours requis pour la mise en service ; TDB-01, EVT-07, SEC-01 et SEC-02 sont livrés et éprouvés avec un fournisseur factice (`docs/EXPLOITATION.md` § 3) | TDB-01, EVT-07, EVT-22, DOC-07, INT-04, INT-11, INT-17, SEC-01, SEC-02 |
 | API Keystone (projets, affectations) | PRV-20, VEI-17, INT-02, INT-12, INT-15 |
 | API Cursus (personnel, formations, effectifs) | EVT-01, PRV-08, DUE-08, HAB-02, HAB-08, HAB-20, DOC-07, INT-03, INT-09 |
 | Jeton API Trackdéchets et SIRET des sites | INT-10, DOC-02 |
-| Hébergement cible et HTTPS ; moteur de base de production (PGlite ou PostgreSQL) | PRD-01, PRD-05, EVT-20, INT-01 |
+| Hébergement cible et HTTPS ; moteur de base de production (PGlite ou PostgreSQL) — tranché le 11/10/2026 : PostgreSQL, image Docker derrière un reverse proxy HTTPS (PRD-01, PRD-05 livrés) ; restent le serveur cible, son nom DNS et son certificat | PRD-01, PRD-05, EVT-20, INT-01 |
 | Avis du DPO (données de santé, IA, conservation) | EVT-01, INT-07, SEC-10 |
 | Levée des reports (saisie et imports, exports, exigences par poste) | TDB-03, HAB-07, AUD-32, IMP-01, IMP-02, IMP-03, IMP-05, IMP-06, IMP-08, IMP-09 |
 | Suivi des consultations CSE | DUE-02 |
 | Messagerie ou signature électronique | PRV-18 |
 
-### Questions par élément (40)
+### Questions par élément (40, dont 3 tranchées au lot 1)
 
 **Tableau de bord, échéances et navigation**
 
-- **TDB-01** *Destinataires des alertes : un animateur QHSE par site, tiré des données* — Un animateur par site ou un seul ? Qui reçoit les alertes si le poste est vacant ?
+- **TDB-01** *Destinataires des alertes : un animateur QHSE par site, tiré des données* — Un animateur par site ou un seul ? Qui reçoit les alertes si le poste est vacant ? *Tranché (11/10/2026) : un responsable QHSE par site, désigné dans « Gérer les sites » ; poste vacant : les animateurs QHSE, avec la mention « responsable à désigner ».*
 - **TDB-02** *Échéances masquées pour un responsable sans accès à l'écran source* — Vue en lecture de l'élément, ou échéance sans lien ?
 - **TDB-03** *Saisie mensuelle des heures travaillées (base du TF1/TG)* — Saisie manuelle ou import (paie, Lucca, Cursus) ? Intérimaires inclus ?
 - **TDB-05** *« Mes échéances » consolidées tous sites* — Consolider tous sites pour chaque personne, indépendamment du sélecteur ?
@@ -987,13 +1046,13 @@ Décisions attendues du responsable produit avant ou pendant le développement.
 
 **Événements et signalement terrain**
 
-- **EVT-01** *Accident du travail : victime, circonstances et rubriques de la DAT* — Quels champs tenir dans Vigie et qui peut lire les lésions ?
+- **EVT-01** *Accident du travail : victime, circonstances et rubriques de la DAT* — Quels champs tenir dans Vigie et qui peut lire les lésions ? *En partie tranché (11/10/2026) : les données de santé d'un AT sont réservées à la direction et à l'animateur QHSE (SEC-06).*
 - **EVT-02** *Clôture d'un AT sans déclaration CPAM : l'obligation disparaît* — Bloquer la clôture ou garder l'échéance visible ?
 - **EVT-03** *Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance* — Point de départ : date de l'accident ou createdAt ? Fériés Alsace-Moselle ?
 - **EVT-04** *Registre des accidents bénins* — Registre par site ou unique ? Visa de la victime dans Vigie ?
 - **EVT-05** *Qualification : exiger les données propres au type* — Quels champs obligatoires à la qualification ?
-- **EVT-06** *« Nouveau signalement » : lieu de démonstration et cible du bouton* — Cible en production selon le rôle ?
-- **EVT-07** *Parcours terrain authentifié et signalement sans compte* — Comment signalent intérimaires et entreprises extérieures ?
+- **EVT-06** *« Nouveau signalement » : lieu de démonstration et cible du bouton* — Cible en production selon le rôle ? *Tranché (11/10/2026) : `/signaler` pour tous les rôles ; l'aperçu mobile reste à la démonstration.*
+- **EVT-07** *Parcours terrain authentifié et signalement sans compte* — Comment signalent intérimaires et entreprises extérieures ? *Tranché (11/10/2026) : sans compte, par le QR code du poste (jeton signé), anonymement ou avec nom et entreprise déclarés.*
 - **EVT-08** *Suivi de l'arrêt de travail : périodes, reprise, jours perdus calculés* — Dates d'arrêt saisies par la QHSE ou venues de la paie / Cursus ?
 - **EVT-15** *Échéances événement manquantes* — Quels délais retenir ?
 - **EVT-16** *Clôture d'un événement réservée aux approbateurs ?* — Qui valide la clôture ?
@@ -1040,7 +1099,8 @@ Rappel des décisions déjà prises, qui s'appliquent à tous les éléments ci-
 
 - **Jamais de suppression physique** d'un enregistrement métier tracé : on annule, classe sans suite ou archive, avec un motif obligatoire (qui, quand, pourquoi). Éléments archivés ou annulés masqués par défaut, visibles par filtre. Suppression tolérée seulement pour un brouillon jamais diffusé ou une pièce jointe ajoutée par erreur avant clôture (d'où **AUD-03**, **AUD-36**, **DOC-09**, **PRV-12**, **EVT-19**).
 - **Imports et exports reportés** : pas d'import Lucca ni Excel, pas de saisie ni d'import des heures travaillées, pas de nouveaux exports CSV ; les boutons « à venir » restent en place. **TDB-03**, **IMP-01** à **IMP-03**, **IMP-05**, **IMP-06**, **IMP-08** et **IMP-09** attendent la levée de ce report ; **IMP-04** (refonte du CSV existant) et **IMP-07** (impression) n'en dépendent pas.
-- **Connecteurs non implémentés** (Entra ID, Keystone, Cursus, Trackdéchets) : les emplacements « à venir » sont conservés. Cursus est la source de vérité RH cible ; Lucca reste la source provisoire du personnel.
+- **Connecteurs non implémentés** (Keystone, Cursus, Trackdéchets ; Entra ID est branché depuis le lot 1) : les emplacements « à venir » sont conservés. Cursus est la source de vérité RH cible ; Lucca reste la source provisoire du personnel.
+- **Décisions du lot 1** (11/10/2026) : PostgreSQL en production, choisi par `DATABASE_URL`, et PGlite en démonstration et dans l'application Mac ; image Docker générique et `docker-compose.yml`, HTTPS par un reverse proxy ; signalement sans compte par QR code de poste à jeton signé, anonyme ou nominatif déclaratif, avec limite de débit, « Mes signalements » étant réservé aux personnes connectées ; données de santé d'un AT visibles et modifiables par la direction et l'animateur QHSE seulement, absentes de la charge des autres rôles ; un responsable QHSE par site.
 - **Rôle Salarié** : ne voit que ses propres données (habilitations, signalements, actions) et peut déclarer réalisée une action dont il est pilote ; **QUA-06** protège ce cloisonnement.
 - **Indicateurs calculés, jamais stockés** (TF1/TG, retards, échéances, statuts) dans `src/lib/queries.ts`.
 - **Exigences par poste** : hors périmètre jusqu'ici ; **HAB-07** demande l'arbitrage.

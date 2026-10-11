@@ -196,6 +196,11 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
   .vg-side { width: auto; height: auto; position: static; background: none; }
   .vg-header, .vg-page { padding-left: 16px; padding-right: 16px; }
   .vg-form-row { grid-template-columns: minmax(0, 1fr) !important; }
+  .vg-wide-only { display: none !important; }
+}
+/* Élément réservé au téléphone (ex. « Nouveau signalement » vers /signaler au lieu de l'aperçu mobile de démonstration). */
+@media (min-width: 761px) {
+  .vg-narrow-only { display: none !important; }
 }
 
 /* ─── Squelettes de chargement (loading.tsx) et état non lu ─────────────── */

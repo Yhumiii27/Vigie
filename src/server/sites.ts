@@ -1,12 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { SEVESO_LEVELS } from '@/components/prevention/model';
 import { ALL_SITES } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover } from '@/lib/guard';
+import { hasLeft } from '@/lib/people';
+import { today } from '@/lib/today';
 import { logChange } from './changelog';
 
 // Administration des sites (fenêtre « Gérer les sites… » du sélecteur de site) : animateur QHSE et direction.
@@ -23,21 +25,35 @@ function slug(label: string) {
   return s || 'site';
 }
 
-/** Création (id vide) ou modification du libellé et de l'ordre d'affichage d'un site. */
+/**
+ * Création (id vide) ou modification d'un site : libellé, ordre d'affichage et responsable QHSE (champ `qhseLeadId`,
+ * vide = poste vacant ; absent du formulaire = inchangé). Le premier site créé (amorçage d'une base vide) devient
+ * le site de rattachement de la personne qui le crée, si elle n'en a pas.
+ */
 export async function saveSite(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireApprover();
+  const { session, error } = await requireApprover();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id');
   const label = f.str('label', { required: true, max: LABEL_MAX });
   const sort = f.int('sort', { min: 0, max: SORT_MAX });
-  if (!f.ok) return f.state();
 
   const db = await getDb();
-  const sites = await db.select().from(t.sites);
+  const [sites, people] = await Promise.all([
+    db.select().from(t.sites),
+    db.select({ id: t.people.id, name: t.people.name, leftOn: t.people.leftOn }).from(t.people),
+  ]);
+  const before = id ? sites.find((s) => s.id === id) : undefined;
+  // Responsable : une personne présente à l'effectif (le responsable actuel reste admis, même sorti, pour ne rien changer).
+  const now = today();
+  const leadField = fd.has('qhseLeadId');
+  const leadChoices = people.filter((p) => !hasLeft(p, now) || p.id === before?.qhseLeadId).map((p) => p.id);
+  const qhseLeadId = leadField ? f.oneOf('qhseLeadId', leadChoices) : before?.qhseLeadId ?? null;
+  if (!f.ok) return f.state();
   if (sites.some((s) => s.id !== id && s.label.toLowerCase() === label.toLowerCase())) {
     return { error: 'Certains champs sont à corriger.', fieldErrors: { label: 'Un site porte déjà ce nom.' } };
   }
+  const leadName = (pid: string | null | undefined) => (pid ? people.find((p) => p.id === pid)?.name ?? pid : 'à désigner');
 
   if (!id) {
     const base = slug(label);
@@ -46,23 +62,29 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
     for (let i = 2; newId === ALL_SITES || sites.some((s) => s.id === newId); i++) newId = `${base}-${i}`;
     const order = sort ?? Math.max(-1, ...sites.map((s) => s.sort)) + 1;
     await db.transaction(async (tx) => {
-      await tx.insert(t.sites).values({ id: newId, label, sort: order });
-      await logChange(tx, { entityType: 'site', entityId: newId, action: 'create', summary: `Site « ${label} » créé` });
+      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId });
+      if (!sites.length) {
+        await tx.update(t.people).set({ siteId: newId }).where(and(eq(t.people.id, session.user.id), isNull(t.people.siteId)));
+      }
+      await logChange(tx, {
+        byId: session.user.id, entityType: 'site', entityId: newId, action: 'create',
+        summary: `Site « ${label} » créé${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}`,
+      });
     });
     revalidatePath('/', 'layout');
     return { ok: true, id: newId };
   }
 
-  const before = sites.find((s) => s.id === id);
   if (!before) return { error: 'Site inconnu.' };
   const order = sort ?? before.sort;
   await db.transaction(async (tx) => {
-    await tx.update(t.sites).set({ label, sort: order }).where(eq(t.sites.id, id));
+    await tx.update(t.sites).set({ label, sort: order, qhseLeadId }).where(eq(t.sites.id, id));
     const details = [
       ...(before.label !== label ? [{ field: 'Libellé', from: before.label, to: label }] : []),
       ...(before.sort !== order ? [{ field: 'Ordre', from: String(before.sort), to: String(order) }] : []),
+      ...(before.qhseLeadId !== qhseLeadId ? [{ field: 'Responsable QHSE', from: leadName(before.qhseLeadId), to: leadName(qhseLeadId) }] : []),
     ];
-    if (details.length) await logChange(tx, { entityType: 'site', entityId: id, action: 'update', summary: 'Site modifié', details });
+    if (details.length) await logChange(tx, { byId: session.user.id, entityType: 'site', entityId: id, action: 'update', summary: 'Site modifié', details });
   });
   revalidatePath('/', 'layout');
   return { ok: true, id };
@@ -74,7 +96,8 @@ export async function archiveSite(_prev: FormState, fd: FormData): Promise<FormS
   if (error) return { error };
   const f = formReader(fd);
   const siteId = f.str('siteId', { required: true });
-  const reason = f.str('reason', { required: true, max: ARCHIVE_REASON_MAX });
+  const reason = f.reason();
+  if (reason.length > ARCHIVE_REASON_MAX) f.fail('reason', `${ARCHIVE_REASON_MAX} caractères au maximum.`);
   if (!f.ok) return f.state();
 
   const db = await getDb();

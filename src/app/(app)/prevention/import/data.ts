@@ -2,7 +2,8 @@ import 'server-only';
 import { asc, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { loadFormOptions } from '@/lib/data/options';
-import { today } from '@/lib/dates';
+import { today } from '@/lib/today';
+import { config } from '@/lib/config';
 import { aiStatus } from '@/lib/pp-import/ai';
 import { IMPORT_FORMATS, readMapping } from '@/lib/pp-import/schemas';
 import type { ImportScreenData } from '@/lib/pp-import/types';
@@ -41,6 +42,6 @@ export async function loadImportScreen(): Promise<ImportScreenData> {
     projects: options.projects,
     today: today(),
     currentUserId: session.user.id,
-    aiStatus: aiStatus(),
+    aiStatus: aiStatus(config()),
   };
 }

@@ -1,8 +1,10 @@
 import 'server-only';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { PgliteDatabase } from 'drizzle-orm/pglite';
+import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { addDays, monthName } from '../lib/dates';
+import { DEMO_QHSE_LEAD, DEMO_ROLE_PEOPLE } from '../lib/demo';
+import type { Role } from '../lib/domain';
 import * as t from './schema';
+import type { Db } from './types';
 import { seedDocuments } from './seeds/documents';
 import { seedEnvironment } from './seeds/environment';
 import { seedPrevention } from './seeds/prevention';
@@ -44,15 +46,15 @@ const EVENTS: [string, string, string, string, string, string, string, string, s
   ['EV-2026-130', '2026-10-02', 'NC', "Cotes hors tolérance sur l'arbre de malaxeur", 'Atelier usinage · CU-2', '[P. Roux]', 'K-2025-042 · [Client A]', "Centre d'usinage CU-2", '[L. Moreau]', 2, 3, "Contrôle final : Ø45 h7 mesuré à 45,06 sur 3 arbres du lot. Dérive de l'outil non détectée en cours de série.", 'Lot bloqué en zone NC, 3 arbres repris, contrôle à 100 % du lot suivant.', '8d', 'Fabrication'],
   ['EV-2026-129', '2026-10-01', 'SD', "Flexible hydraulique endommagé sur le banc d'essais", "Zone d'essais · BE-1", '[A. Martin]', 'K-2024-118 · [Client B]', "Banc d'essais BE-1", '[J. Petit]', 3, 1, 'Gaine extérieure fendue sur le flexible HP du vérin principal, tresse apparente. Pression de service 250 bar.', 'Banc arrêté, flexible remplacé, essais reportés de 48 h.', '5m'],
   ['EV-2026-128', '2026-09-29', 'RC', 'Fuite sur la presse à cartoucher livrée en juin', 'Mise en service · [Client C]', '[Client C]', 'K-2024-097 · [Client C]', 'Presse PC-400', '[L. Moreau]', 2, 2, "Le client signale une fuite d'huile au bloc hydraulique après 400 h de fonctionnement. Production ralentie.", 'Intervention sous garantie planifiée, joints de rechange expédiés.', '5m', 'Réclamation client'],
-  ['EV-2026-127', '2026-09-26', 'AT', "Coupure à la main lors de l'ébavurage", 'Atelier usinage · T-4', '[M. Girard]', '', 'Tour T-4', '[S. Benali]', 2, 3, "Coupure superficielle à l'index gauche en ébavurant une bride ; gants anti-coupure non portés. Accident sans arrêt, soins à l'infirmerie.", "Rappel du port des gants, outil d'ébavurage mis à disposition au poste.", 'why', undefined, 'sans_arret'],
+  ['EV-2026-127', '2026-09-26', 'AT', "Coupure à la main lors de l'ébavurage", 'Atelier usinage · T-4', '[M. Girard]', '', 'Tour T-4', '[S. Benali]', 2, 3, "Coupure superficielle à l'index gauche en ébavurant une bride ; gants anti-coupure non portés.", "Rappel du port des gants, outil d'ébavurage mis à disposition au poste.", 'why', undefined, 'sans_arret'],
   ['EV-2026-126', '2026-09-24', 'ENV', "Déversement d'huile sur rétention au magasin", 'Magasin', '[R. Fontaine]', '', 'Cuve huile hydraulique 1 000 L', '[C. Lefèvre]', 1, 3, "Fuite d'un raccord de la cuve : 20 L retenus dans le bac de rétention, aucun rejet au sol.", 'Raccord resserré, huile pompée, absorbant utilisé et éliminé en déchet dangereux.', '5m'],
   ['EV-2026-125', '2026-09-22', 'NC', 'Dossier technique incomplet à la revue de conception', "Bureau d'études", '[E. Dubois]', 'K-2026-007 · [Client D]', '', '[E. Dubois]', 1, 1, 'Analyse de risques machine (EN ISO 12100) absente du dossier présenté à la revue de conception du 22/09.', 'Revue reportée au 06/10, analyse en cours.', '5m', 'Conception BE'],
   ['EV-2026-124', '2026-09-19', 'SD', 'Bouteilles de gaz stockées sans arrimage', 'Atelier montage', '[T. Nguyen]', '', 'Poste soudure', '[S. Benali]', 2, 4, "Quatre bouteilles d'argon debout sans chaîne ni râtelier, à proximité du passage des chariots.", 'Bouteilles arrimées immédiatement, zone balisée.', 'why'],
   ['EV-2026-122', '2026-09-15', 'PA', "Démarrage intempestif d'un convoyeur en mise en service", 'Mise en service · [Client B]', '[J. Petit]', 'K-2024-118 · [Client B]', 'Convoyeur CV-12', '[J. Petit]', 4, 2, 'Redémarrage du convoyeur depuis le pupitre client pendant un réglage mécanique, technicien à 40 cm de la bande.', 'Consignation LOTO systématique, clé du pupitre retirée, point avec le chef de poste client.', 'tree'],
   ['EV-2026-121', '2026-09-12', 'NC', 'Traitement de surface non conforme sur pièces fournisseur', 'Magasin · réception', '[R. Fontaine]', 'K-2025-042 · [Client A]', 'Lot [Fournisseur F] n° 4471', '[L. Moreau]', 1, 3, 'Épaisseur de zingage mesurée à 6 µm pour 12 µm spécifiés, sur 40 supports.', 'Lot refusé, dérogation refusée, relance du fournisseur.', '8d', 'Fournisseurs'],
-  ['EV-2026-120', '2026-09-10', 'AT', "Projection dans l'œil lors du meulage", 'Atelier usinage', '[M. Girard]', '', "Meuleuse d'angle", '[S. Benali]', 2, 4, "Particule métallique dans l'œil droit malgré les lunettes ; écran facial non porté. Soins et retour au poste.", 'Écran facial rendu obligatoire au poste meulage, affichage mis à jour.', 'why', undefined, 'soins'],
-  ['EV-2026-119', '2026-09-08', 'AT', 'Entorse en descendant de la plateforme PIRL', "Zone d'essais", '[A. Martin]', '', 'Plateforme PIRL', '[S. Benali]', 2, 4, 'Faux pas sur la dernière marche de la plateforme, entorse de la cheville. Accident avec arrêt (3 jours).', "Garde-corps et marche antidérapante vérifiés, sensibilisation de l'équipe.", 'tree', undefined, 'arret', 3],
-  ['EV-2026-118', '2026-09-07', 'AT', "Pincement de doigt à la fermeture d'un carter", 'Mise en service · [Client A]', '[T. Nguyen]', 'K-2025-042 · [Client A]', '', '[S. Benali]', 1, 4, 'Pincement du majeur entre le carter et le bâti lors de la fermeture. Soins, sans arrêt.', 'Poignées de manutention ajoutées sur les carters.', 'why', undefined, 'soins'],
+  ['EV-2026-120', '2026-09-10', 'AT', "Projection dans l'œil lors du meulage", 'Atelier usinage', '[M. Girard]', '', "Meuleuse d'angle", '[S. Benali]', 2, 4, "Particule métallique dans l'œil droit malgré les lunettes ; écran facial non porté.", 'Écran facial rendu obligatoire au poste meulage, affichage mis à jour.', 'why', undefined, 'soins'],
+  ['EV-2026-119', '2026-09-08', 'AT', 'Entorse en descendant de la plateforme PIRL', "Zone d'essais", '[A. Martin]', '', 'Plateforme PIRL', '[S. Benali]', 2, 4, 'Faux pas sur la dernière marche de la plateforme, entorse de la cheville.', "Garde-corps et marche antidérapante vérifiés, sensibilisation de l'équipe.", 'tree', undefined, 'arret', 3],
+  ['EV-2026-118', '2026-09-07', 'AT', "Pincement de doigt à la fermeture d'un carter", 'Mise en service · [Client A]', '[T. Nguyen]', 'K-2025-042 · [Client A]', '', '[S. Benali]', 1, 4, 'Pincement du majeur entre le carter et le bâti lors de la fermeture.', 'Poignées de manutention ajoutées sur les carters.', 'why', undefined, 'soins'],
   ['EV-2026-117', '2026-09-02', 'SD', "Éclairage défaillant dans l'allée centrale", 'Atelier usinage', '[P. Roux]', '', '', '[C. Lefèvre]', 1, 3, 'Trois luminaires hors service, éclairement mesuré à 90 lux pour 200 lux requis.', "Éclairage d'appoint mobile installé.", '5m'],
   ['EV-2026-115', '2026-08-28', 'PA', 'Chariot élévateur : angle mort au croisement', 'Magasin', '[R. Fontaine]', '', 'Chariot R489', '[C. Lefèvre]', 3, 3, "Un piéton a surgi au croisement des allées B et C ; freinage d'urgence à moins d'un mètre.", 'Vitesse limitée à 5 km/h, rappel des règles de circulation.', 'tree'],
   ['EV-2026-112', '2026-08-20', 'NC', 'Jeu excessif après montage du réducteur', 'Atelier montage', '[T. Nguyen]', 'K-2024-097 · [Client C]', 'Réducteur RD-7', '[L. Moreau]', 2, 4, 'Jeu axial de 0,8 mm mesuré pour 0,2 mm maxi à la fiche de réglage. Détecté au contrôle final.', 'Réducteur démonté et re-réglé, fiche de réglage en révision.', '8d', 'Fabrication'],
@@ -326,9 +328,51 @@ function stepRows(eventId: string, occurredOn: string, step: number, pilotId: st
   return rows;
 }
 
-export async function seed(db: PgliteDatabase<typeof t>) {
-  const [{ n }] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from sites`)).rows;
-  if (n > 0) return;
+/** Dernier rôle connu des personnes de démonstration (destinataires par rôle : animateurs QHSE, direction). */
+const DEMO_LAST_ROLES = new Map(Object.entries(DEMO_ROLE_PEOPLE).map(([role, id]) => [id, role as Role]));
+
+/** E-mail de démonstration (domaine réservé .example) : « [C. Lefèvre] » → c.lefevre@epc2i.example. */
+const demoEmail = (name: string) =>
+  `${name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '')}@epc2i.example`;
+
+/**
+ * Base de démonstration remplie par une version antérieure à la migration 0003 (cas courant : `.data/vigie` de
+ * `npm run dev` et de l'application Mac) : responsable QHSE des sites, dernier rôle connu et e-mail y sont vides,
+ * et toutes les alertes iraient au poste vacant. Complétés une seule fois, comme dans un jeu neuf : seulement pour le
+ * jeu de démonstration (fiche de l'animatrice QHSE présente) et tant que rien n'est renseigné — un choix fait
+ * ensuite dans « Gérer les sites » n'est jamais écrasé.
+ */
+async function upgradeDemo(db: Db) {
+  const [[lead], [withLead], [withRole]] = await Promise.all([
+    db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
+    db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
+    db.select({ n: count() }).from(t.people).where(isNotNull(t.people.lastRole)),
+  ]);
+  if (lead.n === 0 || withLead.n > 0 || withRole.n > 0) return;
+  await db.transaction(async (tx) => {
+    for (const [id, lastRole] of DEMO_LAST_ROLES) {
+      await tx.update(t.people).set({ lastRole }).where(and(eq(t.people.id, id), isNull(t.people.lastRole)));
+    }
+    // E-mail unique (insensible à la casse) : une adresse déjà attribuée à une autre fiche n'est pas reprise.
+    const taken = new Set((await tx.select({ email: t.people.email }).from(t.people).where(isNotNull(t.people.email)))
+      .map((p) => p.email!.toLowerCase()));
+    for (const [id, name] of PEOPLE) {
+      const email = demoEmail(name);
+      if (taken.has(email)) continue;
+      await tx.update(t.people).set({ email }).where(and(eq(t.people.id, id), isNull(t.people.email)));
+    }
+    await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD })
+      .where(and(inArray(t.sites.id, ['ville-a', 'ville-b']), isNull(t.sites.qhseLeadId)));
+  });
+}
+
+/**
+ * Jeu de démonstration (VIGIE_DEMO=1 seulement, voir src/db/index.ts) : chargé dans une base vide (ni site ni personne) ;
+ * base déjà remplie : mise à niveau unique d'un jeu de démonstration antérieur (upgradeDemo).
+ */
+export async function seed(db: Db) {
+  const [[sites], [people]] = await Promise.all([db.select({ n: count() }).from(t.sites), db.select({ n: count() }).from(t.people)]);
+  if (sites.n > 0 || people.n > 0) return upgradeDemo(db);
 
   await db.transaction(async (tx) => {
     await tx.insert(t.sites).values([
@@ -338,7 +382,10 @@ export async function seed(db: PgliteDatabase<typeof t>) {
     ]);
     await tx.insert(t.people).values(PEOPLE.map(([id, name, job, inSkillsMatrix, service], sort) => ({
       id, name, job, inSkillsMatrix, service, sort, siteId: SITE_B_PEOPLE.has(id) ? 'ville-b' : 'ville-a', ...LEFT[id],
+      email: demoEmail(name), lastRole: DEMO_LAST_ROLES.get(id) ?? null,
     })));
+    // Responsable QHSE des deux sites actifs : l'animatrice QHSE de démonstration.
+    await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD }).where(inArray(t.sites.id, ['ville-a', 'ville-b']));
     // Site archivé (fermé) : absent des sélecteurs, sans autre donnée rattachée.
     await tx.insert(t.sites).values({
       id: 'ville-c', label: 'Site de [Ville C] — ancien dépôt logistique', seveso: null, ppFromFirstMinute: false, sort: 3,

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
-import { today } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { canApprove, canEdit } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';

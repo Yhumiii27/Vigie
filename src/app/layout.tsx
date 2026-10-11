@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { connection } from 'next/server';
 import '@phosphor-icons/web/regular';
 import './nocturne.css';
 import './vigie.css';
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: '#161826' };
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  // CSP à nonce (src/proxy.ts) : toute page est rendue à la requête, pour que Next.js pose le nonce sur ses scripts
+  // (page 404 comprise, sinon prérendue sans nonce).
+  await connection();
   return (
     <html lang="fr" className={inter.variable}>
       <body>{children}</body>

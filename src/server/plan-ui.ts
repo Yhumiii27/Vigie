@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addDays, fmtDate, today } from '@/lib/dates';
-import { CANCEL_REASON_MAX, canManage } from '@/lib/domain';
+import { addDays, fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
+import { canManage } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { detachAllLinks } from '@/lib/action-links';
 import { requireApprover, requireInSite } from '@/lib/guard';
@@ -98,7 +99,7 @@ export async function cancelAction(_prev: FormState, fd: FormData): Promise<Form
   const f = formReader(fd);
   const id = f.str('id', { required: true });
   const from = f.oneOf('from', STATUSES, { required: true });
-  const reason = f.str('reason', { required: true, max: CANCEL_REASON_MAX });
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();

@@ -4,9 +4,11 @@ import { asc, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { isReviewPlanItem } from '@/components/audits/shared';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { addDays, fmtDate, fmtDayMonth, monthName, today, yearOf } from '../dates';
-import { FINDING_KINDS, QHSE_LEAD, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type TodoItem, type Tone } from '../domain';
+import { addDays, fmtDate, fmtDayMonth, monthName, yearOf } from '../dates';
+import { today } from '@/lib/today';
+import { FINDING_KINDS, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type TodoItem, type Tone } from '../domain';
 import { actionBrief, certificationStatus, loadPeople, type ActionBrief } from '../queries';
+import { loadQhseLeads } from './leads';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
 
@@ -242,9 +244,10 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
  */
 export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const db = await getDb();
-  const [{ now, people, certs, plan, active }, reviews] = await Promise.all([
+  const [{ now, people, certs, plan, active }, reviews, leads] = await Promise.all([
     readAudits(),
     db.select({ reviewOn: t.reviews.reviewOn, status: t.reviews.status }).from(t.reviews),
+    loadQhseLeads(),
   ]);
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   // Revue planifiée passée : loadReviewSignals signale déjà « compte rendu à saisir » (src/lib/data/review.ts), pas de doublon.
@@ -269,17 +272,20 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
 
   // c) Écarts et pistes de progrès sans action au plan d'actions.
   active.filter((f) => f.kind !== 'point_fort' && !f.actionId).forEach((f) => {
-    const ownerId = (f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null) ?? QHSE_LEAD;
+    // Responsable de l'élément du programme, sinon les responsables QHSE (constat commun aux sites).
+    const ownerId = f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null;
+    const owners = ownerId ? { who: name(ownerId), ownerIds: [ownerId] } : leads.forSite(null);
     todo.push({
       date: now, kind: "Constat d'audit", tone: f.kind === 'ecart_mineur' ? 'danger' : 'warn', overdue: true,
       title: `${FINDING_KINDS[f.kind]?.label ?? f.kind} sans action — ${clip(f.text, 90)}`,
-      who: name(ownerId), ownerIds: [ownerId], href: `/audits?constat=${f.id}`,
+      who: owners.who, ownerIds: owners.ownerIds, href: `/audits?constat=${f.id}`,
     });
   });
 
   // d) Certificats : expiré, fin de validité proche, audit de suivi non programmé (l'audit à venir relève du programme).
   certs.filter((c) => c.tone === 'ok').forEach((c) => {
-    const base = { kind: 'Certification', who: name(QHSE_LEAD), ownerIds: [QHSE_LEAD], href: '/audits' };
+    const { who, ownerIds } = leads.forSite(null);
+    const base = { kind: 'Certification', who, ownerIds, href: '/audits' };
     if (c.validUntil && c.validUntil < now) {
       todo.push({ ...base, date: now, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
     } else if (c.validUntil && c.validUntil <= horizon) {
