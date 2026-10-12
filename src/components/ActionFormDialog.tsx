@@ -21,18 +21,22 @@ export type ActionDefaults = {
   dueOn?: string;
   kind?: 'C' | 'P';
   verifyDueOn?: string | null;
-  /** Rattachement à créer (voir saveAction) : risk:12, finding:3, qualification:tnguyen:hauteur… */
+  /**
+   * Rattachement à créer (voir saveAction) : risk:12, finding:3, qualification:tnguyen:hauteur… ; source d'origine
+   * preventionplan:PP-2026-012, permit:…, document:…, wastestream:…, wasteentry:<id> (à défaut, déduite de originRef).
+   */
   link?: string;
   /** Origine imposée par l'écran appelant (masque le choix). */
   lockOrigin?: boolean;
 };
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'events'>>;
+type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'events' | 'allSites'>>;
 
 /**
  * Formulaire de création / modification d'une action du plan d'actions unique.
  * Origine Événement ou Client (et liste `options.events` fournie) : sélecteur « Événement lié », qui rattache
  * réellement l'action à l'événement (fiche événement, blocage de l'étape Actions).
+ * Modification : origine et référence affichées sans être modifiables (fixées à la création avec la source, ACT-01).
  */
 export function ActionFields({ options, defaults = {}, onDone, onCancel }: { options: Opts; defaults?: ActionDefaults; onDone: () => void; onCancel?: () => void }) {
   const editing = !!defaults.id;
@@ -51,16 +55,26 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel }: { opt
   const people = editing && defaults.pilotId && !options.people.some(([v]) => v === defaults.pilotId)
     ? [...options.people, [defaults.pilotId, `${defaults.pilotName ?? defaults.pilotId} — a quitté l'effectif`] as const]
     : options.people;
+  const originLabel = options.origins.find(([k]) => k === defaults.origin)?.[1] ?? defaults.origin ?? '';
   return (
     <ActionForm action={saveAction} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : "Créer l'action"}
-      hidden={{ id: defaults.id, link: defaults.link, ...(defaults.lockOrigin ? { origin: defaults.origin, originRef: defaults.originRef, eventId: defaults.eventId } : {}) }}>
+      hidden={{
+        id: defaults.id, link: editing ? undefined : defaults.link,
+        ...(defaults.lockOrigin ? { ...(editing ? {} : { origin: defaults.origin, originRef: defaults.originRef }), eventId: defaults.eventId } : {}),
+      }}>
       <Field name="title" label="Action">
         <Input name="title" defaultValue={defaults.title} placeholder="Verbe d'action + objet (ex. Remplacer les élingues textiles…)" autoFocus />
       </Field>
       <Field name="description" label="Précisions" hint="Facultatif : périmètre, moyens, livrable attendu.">
         <TextArea name="description" defaultValue={defaults.description ?? ''} rows={2} />
       </Field>
-      {!defaults.lockOrigin && (
+      {editing && !defaults.lockOrigin && (
+        <Field name="origin" label="Origine" hint="Fixée à la création de l'action, avec sa source : elle ne se modifie pas.">
+          <input id="origin" className="input" readOnly tabIndex={-1} style={{ color: 'var(--color-neutral-400)', cursor: 'default' }}
+            value={[originLabel, defaults.originRef].filter(Boolean).join(' · ')} />
+        </Field>
+      )}
+      {!editing && !defaults.lockOrigin && (
         <FormRow>
           <Field name="origin" label="Origine">
             <Select name="origin" options={options.origins} defaultValue={defaults.origin ?? 'ev'} onChange={(e) => setOrigin(e.target.value)} />
@@ -90,8 +104,9 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel }: { opt
         </Field>
         <Field name="siteId" label="Site">
           {/* '' = site sélectionné ; ALL_SITES = action valable pour tous les sites. */}
-          <Select name="siteId" options={[[ALL_SITES, 'Tous les sites'], ...sites]} placeholder="Site sélectionné"
-            defaultValue={defaults.siteId === null ? ALL_SITES : defaults.siteId ?? ''} />
+          {/* « Tous les sites » : périmètre complet seulement (options.allSites), ou valeur actuelle de l'action modifiée. */}
+          <Select name="siteId" options={[...(options.allSites !== false || (editing && defaults.siteId === null) ? [[ALL_SITES, 'Tous les sites'] as const] : []), ...sites]}
+            placeholder="Site sélectionné" defaultValue={defaults.siteId === null ? ALL_SITES : defaults.siteId ?? ''} />
         </Field>
       </FormRow>
       {editing && (

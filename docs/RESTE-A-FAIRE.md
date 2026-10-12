@@ -1,24 +1,28 @@
 # Vigie — reste à faire (développement)
 
-*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026, après le lot 1.*
+*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026, après le lot 1, puis le 12/10/2026, après le lot 2.*
 
-**État du logiciel au 11/10/2026.** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Le lot 1 rend Vigie déployable : mode démonstration explicite (`VIGIE_DEMO=1` : sélecteur de rôle, jeu de démonstration, `VIGIE_TODAY`, aperçu mobile ; `npm run dev` et l'application Mac), PostgreSQL en production et PGlite en démonstration, connexion Microsoft Entra ID (OIDC + PKCE, session chiffrée, `src/proxy.ts`), rôles applicatifs et périmètre de sites, responsable QHSE par site, contrôle de l'hôte, CSP et cookies, données de santé des AT restreintes, signalement terrain sans compte par jeton de poste, image Docker et `docker-compose.yml`, sauvegardes chiffrées (dont la sauvegarde avant migration) et pièces jointes chiffrées au repos, contrôle des migrations, tests Vitest (36 fichiers, sur PGlite et sur PostgreSQL) et CI GitHub Actions ; exploitation : [`docs/EXPLOITATION.md`](EXPLOITATION.md). Aucun connecteur Keystone, Cursus ou Trackdéchets n'existe encore, et les seuls échanges de fichiers restent l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets. La connexion Entra n'a été éprouvée qu'avec un fournisseur OIDC factice : l'inscription de l'application dans le tenant reste à faire.
+**État du logiciel au 12/10/2026.** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Le lot 1 rend Vigie déployable : mode démonstration explicite (`VIGIE_DEMO=1` : sélecteur de rôle, jeu de démonstration, `VIGIE_TODAY`, aperçu mobile ; `npm run dev` et l'application Mac), PostgreSQL en production et PGlite en démonstration, connexion Microsoft Entra ID (OIDC + PKCE, session chiffrée, `src/proxy.ts`), rôles applicatifs et périmètre de sites, responsable QHSE par site, contrôle de l'hôte, CSP et cookies, données de santé des AT restreintes, signalement terrain sans compte par jeton de poste, image Docker et `docker-compose.yml`, sauvegardes chiffrées (dont la sauvegarde avant migration) et pièces jointes chiffrées au repos, contrôle des migrations, tests Vitest et CI GitHub Actions ; exploitation : [`docs/EXPLOITATION.md`](EXPLOITATION.md). Le lot 2 fiabilise et met en conformité : rubriques de la déclaration d'accident du travail (lésions et pièces médicales restreintes), délai CPAM de 48 h hors dimanches et fériés, déclaration selon la victime (entreprise de travail temporaire informée sous 24 h pour un intérimaire, TF1/TG sur les accidents de l'effectif), clôture d'un AT subordonnée à la déclaration, registre des accidents bénins par site, qualification exigeante, écarts R. 4512-6 passés et contenu réglementaire des plans de prévention, fiche imprimable des permis, DUERP en lecture pour tous avec registre des demandes d'accès et impression, PAPRIPACT, programme d'audit lié aux revues (report, annulation), contributions de revue, dossier de revue figé à la séance, échéances du responsable sur tout son périmètre et sur un écran fermé, TF1/TG sur 12 mois complets, actions rattachées à leur source par un vrai lien (avec reprise), mentions de l'arrêté du 31 mai 2021 au registre des déchets, navigation mobile et fenêtres accessibles, et lève les réserves de sécurité et d'exploitation du lot 1 ; une seule migration (`drizzle/0004_compliance.sql`). Tests Vitest : 72 fichiers (597 tests, dont 39 fichiers d'intégration rejoués sur PostgreSQL) et 2 fichiers de bout en bout sur le serveur construit. Aucun connecteur Keystone, Cursus ou Trackdéchets n'existe encore, et les seuls échanges de fichiers restent l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets. La connexion Entra n'a été éprouvée qu'avec un fournisseur OIDC factice : l'inscription de l'application dans le tenant reste à faire.
 
-**Avancement.** 25 éléments livrés (✅) : 21 des 23 éléments du lot 1, plus PRD-09, PRD-11, PRD-15 et QUA-13. 5 éléments partiels (◐), qui restent ouverts : TDB-01 et SEC-06 (lot 1), PRD-13, SEC-07 et QUA-28. Dans les tableaux, le statut précède l'intitulé ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ou ce qui reste. Les preuves `fichier:ligne` décrivent toujours l'état au commit `e8e3a3c`. Reste : 284 éléments ouverts (P0 : 0 · P1 : 36 · P2 : 125 · P3 : 123), 283–818 j.
+**Avancement.** 58 éléments livrés (✅) : les 23 éléments du lot 1 (TDB-01 et SEC-06 terminés au lot 2), les 28 du lot 2, plus PRD-09, PRD-11, PRD-15, QUA-13 (avec le lot 1) et EVT-23, AUD-30, SEC-14 (avec le lot 2). 6 éléments partiels (◐), qui restent ouverts : PRD-13, SEC-07, QUA-28 (lot 1), SEC-09, DOC-04 et DOC-10 (lot 2). Dans les tableaux, le statut précède l'intitulé ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ou ce qui reste. Les preuves `fichier:ligne` décrivent toujours l'état au commit `e8e3a3c`. Reste : 251 éléments ouverts (P0 : 0 · P1 : 6 · P2 : 125 · P3 : 120), 252–730 j ; les 6 P1 restants (lot 3) attendent un connecteur ou la levée d'un report.
 
-**Réserves du lot 1**, à reprendre dans les lots suivants (détail sous chaque élément) :
+**Réserves des lots 1 et 2**, à reprendre dans les lots suivants (détail sous chaque élément) :
 
-- **TDB-01** (◐) — les alertes DUERP par unité de travail visent les responsables QHSE de tous les sites, au lieu de celui du site de l'unité (`src/lib/data/risks.ts`) ; aucun test à deux sites et deux responsables distincts.
-- **SEC-06** (◐) — l'intitulé et la description d'un AT restent en texte libre et peuvent décrire la lésion (champs restreints « nature et siège des lésions » : EVT-01) ; les pièces jointes d'un AT (certificat médical) ne sont pas restreintes (drapeau « santé » sur les pièces jointes, migration) ; le KPI « Jours sans accident avec arrêt » et de petits effectifs de la pyramide peuvent désigner un accident (agrégats conservés par décision, à confirmer).
-- **SEC-01, SEC-02, SEC-03** — un changement de rôle ou de groupe Entra s'applique à la connexion suivante (12 h au plus), et le site de rattachement est figé dans la session à la connexion ; au-delà de la limite de groupes du jeton (overage), les sites accordés par groupe sont ignorés (pas d'appel Microsoft Graph) ; la première connexion rapproche la fiche par des revendications d'e-mail modifiables (`email`, `preferred_username`, `upn`) : n'accepter que des adresses vérifiées (`xms_edov`) des domaines de l'entreprise ; la signature du jeton d'identité n'est pas vérifiée (canal TLS jugé suffisant ; sinon `enableNonRepudiationChecks`).
-- **SEC-05** — hors démonstration, une `VIGIE_PUBLIC_URL` en `http://` (autre que localhost) est acceptée : cookie de session sans `Secure`, sans HSTS ; exiger `https://`.
-- **SEC-02, EVT-23** — les listes de sites des formulaires proposent des sites hors périmètre, refusés ensuite par `requireInSite` (`src/lib/data/options.ts`) ; `loadLinkedAction` nomme le site d'une action hors périmètre.
-- **EVT-07, SEC-09** — la limite par adresse IP n'est fiable que derrière un reverse proxy qui réécrit `X-Forwarded-For` (dernière entrée ; aucun réglage du nombre de proxys de confiance) ; les empreintes d'IP ne sont purgées qu'au signalement suivant, figurent dans les sauvegardes et dérivent de `VIGIE_REPORT_SECRET` ; le nom d'origine des photos et `reported_via` sont conservés pour un signalement anonyme ; non traités : journal de `createReport` (EVT-12), suivi d'un signalement anonyme par code (EVT-28), « Régénérer le QR » depuis l'éditeur de zones de la carte.
-- **PRD-02, PRD-06** — une archive en clair est restaurée même quand une clé est configurée (pièces jointes contrôlées par leur nombre seulement) ; `restore --remplacer` d'une base PGlite échoue dans l'image Docker (`/data/pglite` est un point de montage, `EBUSY`) ; une base migrée par une version plus récente de Vigie n'est pas refusée au démarrage.
-- **SEC-14** — non traité : les gardes de rôle redirigent pendant le rendu (`/apercu-mobile` hors démonstration, pour une personne connectée, répond 200 puis « introuvable »).
+- **SEC-01, SEC-02, SEC-03** — un changement de rôle ou de groupe Entra s'applique à la connexion suivante (12 h au plus), et le site de rattachement est figé dans la session à la connexion ; au-delà de la limite de groupes du jeton (overage), les sites accordés par groupe sont ignorés (pas d'appel Microsoft Graph) ; la signature du jeton d'identité n'est pas vérifiée (canal TLS jugé suffisant ; sinon `enableNonRepudiationChecks`). Depuis le lot 2, une première connexion exige l'adresse vérifiée (`email`, `xms_edov`) d'un domaine de `VIGIE_EMAIL_DOMAINS`, direction comprise : le tenant doit déclarer ces revendications facultatives.
 - **PRD-01, QUA-01** — l'image Docker fige les origines admises des server actions à la construction (le reverse proxy doit transmettre `Host` ou `X-Forwarded-Host`) ; connexion Entra non éprouvée dans le conteneur ; la CI n'a pas encore tourné sur GitHub.
+- **ACT-01** — après le déploiement de la migration 0004 sur une base existante : sauvegarde, puis `vigie-db reprise-liens` (essai) et `--appliquer` (`docs/EXPLOITATION.md` § 6) ; sans reprise, les actions existantes n'apparaissent plus sur leur fiche source.
+- **SEC-09** (◐) — métadonnées EXIF des photos retirées côté navigateur seulement ; non traités : journal de `createReport` (EVT-12), suivi d'un signalement anonyme par code (EVT-28), « Régénérer le QR » depuis l'éditeur de zones de la carte.
+- **Textes à faire valider par le responsable QHSE** — libellés de l'arrêté du 31 mai 2021 et des cinq qualifications de déchets (**DOC-02**), rubriques R. 4512-9 et R. 4511-10 du plan de prévention (**PRV-02**).
+- **PRV-02, PRV-03** — un plan de prévention obligatoire ne peut plus être signé tant qu'une des six rubriques requises est vide (plans existants à compléter) ; la date de délivrance d'un permis est tirée du journal en attendant une colonne (**PRV-04**).
+- **DOC-02** — non traités : courtier et négociant, éco-organisme, numéros de notification et de document de mouvement, plusieurs transporteurs par enlèvement, déclaration RNDTS / Trackdéchets (**INT-10**) ; taux de valorisation toujours calculé d'après le code R/D.
+- **UX-01, UX-03** — rendu à 375 px et 1 280 px à vérifier dans un navigateur réel ; `/evenements` déborde encore à 375 px (lignes de la liste) ; `autoFocus` ne peut pas orienter le premier champ d'une fenêtre.
+- **TDB-05** — l'état lu d'une échéance reste attaché à son lien d'origine (les échéances de coactivité, dont le lien porte désormais `&site=`, réapparaissent une fois non lues).
+- **DUE-01, TDB-01** — le Salarié voit sur `/risques` les références, intitulés, échéances et statuts des actions de prévention du DUERP ; un chef de service ou de projet responsable QHSE d'un site reçoit aussi les alertes de niveau DUERP (consultation du CSE, PAPRIPACT), que seuls les validateurs traitent.
+- **AUD-03, AUD-06** — `savePlanItem` ne modifie plus la planification d'un élément existant (« Reporter… » seulement) ; la première saisie du compte rendu d'une revue exige « Tous les sites ».
+- **Revue du lot 2 : points mineurs non corrigés** — **SEC-06** : pièces médicales gardées une heure dans le cache du navigateur (poste partagé) ; **EVT-01** : aide de saisie sur les lésions limitée à l'intitulé et à la description, pièces médicales d'un AT requalifié invisibles ; **EVT-03** : date d'envoi des réserves motivées au lieu de leur réception, retard non signalé ; **PRV-01** : plan devenu obligatoire en cours de travaux compté comme écart ; **DUE-02** : programme figé sans rappel des mentions de L. 4121-3-1 ; **AUD-04** : fiche résumée d'une action hors périmètre visible dans « Mes contributions » (revue clôturée) ; **ACT-01** : référence saisie en texte rattachée sans contrôle `canEdit` de l'écran source, reprise ouverte aux actions postérieures à 0004 et sans trace sur la source, création depuis une filière absente de son historique ; **SEC-02** : « Tous les sites » proposé à tort par « Créer l'action » sur plusieurs écrans (refusé à l'enregistrement) ; **UX-03** : focus perdu à la fermeture du panneau des notifications.
+- **Journal** — **DOC-04** et **DOC-10** partiels (métadonnées des documents et filières seulement) ; restent **VEI-04** (rattachements des exigences et contrôles), **VEI-05** (action clôturée, réserve ouverte), **DOC-03** (relances à un propriétaire sorti) et **DOC-20** (filières d'un site archivé proposées).
 
-**Contenu.** 309 éléments vérifiés dans le code, chacun avec sa preuve `fichier:ligne` (chemins depuis la racine du dépôt, lignes au commit `e8e3a3c`). Charge totale indicative à l'inventaire : 309,5–895 jours, soit de l'ordre de 1,4 à 4 années-développeur ; les lots 1 et 2 (P0 et P1 sans prérequis externe) en représentaient 54–158 j. Après le lot 1 : 283–818 j, dont 27,5–79 j pour le lot 2.
+**Contenu.** 309 éléments vérifiés dans le code, chacun avec sa preuve `fichier:ligne` (chemins depuis la racine du dépôt, lignes au commit `e8e3a3c`). Charge totale indicative à l'inventaire : 309,5–895 jours, soit de l'ordre de 1,4 à 4 années-développeur ; les lots 1 et 2 (P0 et P1 sans prérequis externe) en représentaient 54–158 j. Après le lot 1 : 283–818 j, dont 27,5–79 j pour le lot 2 ; après le lot 2 : 252–730 j.
 
 **Lecture.**
 
@@ -30,40 +34,40 @@
 
 ## 1. Synthèse
 
-Éléments encore ouverts au 11/10/2026, après le lot 1 (les partiels ◐ comptent pour leur taille entière). Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j.
+Éléments encore ouverts au 12/10/2026, après les lots 1 et 2 (les partiels ◐ comptent pour leur taille entière). Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j.
 
 | Groupe | Préfixe | P0 | P1 | P2 | P3 | Ouverts | dont ◐ | S / M / L | Charge restante (j) | ✅ Livrés |
 |---|---|--:|--:|--:|--:|--:|--:|:-:|--:|--:|
-| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | · | 5 | 4 | 9 | **18** | 1 | 9 / 9 / 0 | 13,5–36 | · |
-| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 5 | 15 | 6 | **26** | · | 11 / 12 / 3 | 26,5–77 | 2 |
-| [Plan d'actions](#5-plan-dactions-act) | ACT | · | 1 | 4 | 11 | **16** | · | 11 / 4 / 1 | 12,5–33 | · |
-| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 3 | 9 | 8 | **20** | · | 8 / 9 / 3 | 22–65 | · |
-| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 2 | 9 | 9 | **20** | · | 10 / 8 / 2 | 19–54 | · |
-| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 1 | 9 | 10 | **20** | · | 8 / 9 / 3 | 22–65 | · |
-| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 2 | 9 | 7 | **18** | · | 10 / 8 / 0 | 13–34 | · |
-| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 6 | 11 | 19 | **36** | · | 19 / 16 / 1 | 28,5–77 | · |
-| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 2 | 10 | 11 | **23** | · | 14 / 6 / 3 | 22–62 | · |
+| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | · | 1 | 4 | 9 | **14** | · | 8 / 6 / 0 | 10–26 | 4 |
+| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | · | 15 | 5 | **20** | · | 7 / 11 / 2 | 20,5–60 | 8 |
+| [Plan d'actions](#5-plan-dactions-act) | ACT | · | · | 4 | 11 | **15** | · | 11 / 4 / 0 | 9,5–23 | 1 |
+| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | · | 9 | 8 | **17** | · | 7 / 7 / 3 | 19,5–58 | 3 |
+| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | · | 9 | 9 | **18** | · | 10 / 7 / 1 | 15–41 | 2 |
+| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | · | 9 | 10 | **19** | · | 7 / 9 / 3 | 21,5–64 | 1 |
+| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | · | 9 | 7 | **16** | · | 8 / 8 / 0 | 12–32 | 2 |
+| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | · | 11 | 18 | **29** | · | 16 / 12 / 1 | 23–62 | 7 |
+| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | · | 10 | 11 | **21** | 2 | 13 / 5 / 3 | 20,5–58 | 2 |
 | [Intégrations](#12-intégrations-int) | INT | · | 4 | 6 | 7 | **17** | · | 2 / 8 / 7 | 30–96 | · |
 | [Imports, exports et impression](#13-imports-exports-et-impression-imp) | IMP | · | 1 | 6 | 2 | **9** | · | 2 / 5 / 2 | 12–37 | · |
 | [Production et exploitation](#14-production-et-exploitation-prd) | PRD | · | · | 5 | · | **5** | 1 | 2 / 3 / 0 | 4–11 | 10 |
-| [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | · | 1 | 6 | 2 | **9** | 2 | 3 / 5 / 1 | 9,5–28 | 5 |
+| [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | · | · | 6 | 1 | **7** | 2 | 2 / 4 / 1 | 8–24 | 7 |
 | [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | · | 5 | 15 | **20** | 1 | 8 / 11 / 1 | 18–51 | 8 |
-| [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | 3 | 11 | 2 | **16** | · | 5 / 10 / 1 | 15,5–45 | · |
+| [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | · | 11 | 2 | **13** | · | 3 / 9 / 1 | 13,5–40 | 3 |
 | [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | · | 6 | 5 | **11** | · | 0 / 9 / 2 | 15–47 | · |
-| **Total** | | **·** | **36** | **125** | **123** | **284** | 5 | 122 / 132 / 30 | **283–818** | **25** |
+| **Total** | | **·** | **6** | **125** | **120** | **251** | 6 | 106 / 118 / 27 | **252–730** | **58** |
 
 Par type :
 
 | Type | Ouverts | dont P0–P1 | ✅ Livrés |
 |---|--:|--:|--:|
-| fonctionnel | 74 | 8 | · |
-| conformité-réglementaire | 68 | 9 | · |
-| bug | 44 | 9 | 3 |
-| ux-accessibilité | 33 | 3 | · |
+| fonctionnel | 66 | 1 | 8 |
+| conformité-réglementaire | 59 | 0 | 9 |
+| bug | 33 | 0 | 14 |
+| ux-accessibilité | 30 | 0 | 3 |
 | intégration | 23 | 4 | · |
-| dette-technique | 18 | 1 | 1 |
+| dette-technique | 17 | 0 | 2 |
 | production | 6 | 0 | 9 |
-| sécurité | 4 | 1 | 7 |
+| sécurité | 3 | 0 | 8 |
 | qualité-tests | 4 | 0 | 5 |
 | import-export | 7 | 1 | · |
 | performance | 3 | 0 | · |
@@ -90,7 +94,7 @@ Quatre lots. Les lots 1 et 2 se suivent ; le lot 3 démarre dès que ses préreq
 
 Objectif : une instance hébergée, authentifiée, sauvegardée, sans données de démonstration, avec une intégration continue et les premiers tests.
 
-Bilan : 21 éléments livrés (✅), 2 partiels (◐ : TDB-01, SEC-06) ; livrés avec le lot : PRD-09, PRD-11, PRD-15, QUA-13 (✅), et en partie PRD-13, SEC-07, QUA-28 (◐). Le détail et les réserves figurent sous chaque élément, et l'essentiel en tête du document.
+Bilan : 21 éléments livrés (✅), 2 partiels (◐ : TDB-01, SEC-06, terminés au lot 2 le 12/10/2026) ; livrés avec le lot : PRD-09, PRD-11, PRD-15, QUA-13 (✅), et en partie PRD-13, SEC-07, QUA-28 (◐). Le détail et les réserves figurent sous chaque élément, et l'essentiel en tête du document.
 
 1. Bloquants (P0), dans l'ordre du § 1
    - ✅ **PRD-03** Mode démonstration explicite (VIGIE_DEMO) (P0, S)
@@ -107,8 +111,8 @@ Bilan : 21 éléments livrés (✅), 2 partiels (◐ : TDB-01, SEC-06) ; livrés
 3. Sécurité et données
    - ✅ **SEC-04** Contrôle de l'hôte (DNS rebinding) (P1, S)
    - ✅ **SEC-05** En-têtes HTTP et cookies (P1, S)
-   - ◐ **SEC-06** Données de santé des AT restreintes (P1, M)
-   - ◐ **TDB-01** Destinataires des alertes : un animateur QHSE par site, tiré des données (P1, M)
+   - ✅ **SEC-06** Données de santé des AT restreintes (P1, M)
+   - ✅ **TDB-01** Destinataires des alertes : un animateur QHSE par site, tiré des données (P1, M)
 4. Signalement terrain
    - ✅ **EVT-06** « Nouveau signalement » : lieu de démonstration et cible du bouton (P1, S)
    - ✅ **EVT-07** Parcours terrain authentifié et signalement sans compte (P1, L)
@@ -121,45 +125,47 @@ Bilan : 21 éléments livrés (✅), 2 partiels (◐ : TDB-01, SEC-06) ; livrés
    - ✅ **QUA-05** Recette des server actions jamais exécutées (P1, M)
    - ✅ **QUA-06** Non-régression du cloisonnement Salarié (P1, M)
 
-### Lot 2 — Fiabilisation et conformité prioritaire
+### Lot 2 — Fiabilisation et conformité prioritaire (livré le 12/10/2026)
 
 28 éléments (P1 : 28) — charge indicative 27,5–79 j.
 
 Objectif : tous les P1 métier qui ne dépendent pas d'un connecteur ni d'une levée de report.
 
+Bilan : les 28 éléments livrés (✅), avec les réserves indiquées sous chaque élément ; terminés avec le lot : TDB-01 et SEC-06 (◐ au lot 1) ; livrés avec lui : AUD-30, EVT-23, SEC-14 (✅), et en partie DOC-04, DOC-10, SEC-09 (◐) ; réserves de sécurité et d'exploitation du lot 1 levées (première connexion par adresse vérifiée, `VIGIE_PUBLIC_URL` en HTTPS, sites des formulaires, proxys de confiance, purge des empreintes d'IP, contrôles de restauration, restauration PGlite sur place, base plus récente refusée, redirections de rôle dans `src/proxy.ts`). Une seule migration (`drizzle/0004_compliance.sql`) ; après son déploiement, reprise des liens d'origine des actions (`vigie-db reprise-liens`, `docs/EXPLOITATION.md` § 6). Corrigé après la revue du lot 2 : déclaration d'un AT selon la victime (intérimaire : ETT informée sous 24 h ; personne extérieure : son employeur), mentions exigées avant l'inscription au registre des accidents bénins et échéance d'inscription, indicateurs de sécurité sur les accidents de l'effectif (mois d'un AT avec arrêt sans heures signalé), nom d'une pièce reclassée médicale retiré du journal, filière liée à une action non supprimable, dossiers de pièces jointes et de sauvegardes hors du dossier PGlite ; les points mineurs non corrigés figurent en tête du document.
+
 1. Corrections rapides (S)
-   - **TDB-04** TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures (P1, S)
-   - **EVT-02** Clôture d'un AT sans déclaration CPAM : l'obligation disparaît (P1, S)
-   - **EVT-05** Qualification : exiger les données propres au type (P1, S)
-   - **HAB-01** Contrôle des fichiers côté navigateur dans « Enregistrer une formation » (P1, S)
-   - **VEI-01** Pilote, responsable ou site effacés en silence (P1, S)
-   - **VEI-02** Réserves sans action de levée absentes des échéances (P1, S)
-   - **DOC-01** Document : propriétaire sorti ou site archivé remplacé (P1, S)
-   - **AUD-02** Accès en lecture aux audits pour leurs responsables (P1, S)
-   - **AUD-05** Section 1 du dossier : décisions sans action et actions annulées (P1, S)
-   - **UX-02** Formulaire terrain : zoom iOS, cibles, dictée (P1, S)
-   - **UX-03** Fenêtres modales (P1, S)
+   - ✅ **TDB-04** TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures (P1, S)
+   - ✅ **EVT-02** Clôture d'un AT sans déclaration CPAM : l'obligation disparaît (P1, S)
+   - ✅ **EVT-05** Qualification : exiger les données propres au type (P1, S)
+   - ✅ **HAB-01** Contrôle des fichiers côté navigateur dans « Enregistrer une formation » (P1, S)
+   - ✅ **VEI-01** Pilote, responsable ou site effacés en silence (P1, S)
+   - ✅ **VEI-02** Réserves sans action de levée absentes des échéances (P1, S)
+   - ✅ **DOC-01** Document : propriétaire sorti ou site archivé remplacé (P1, S)
+   - ✅ **AUD-02** Accès en lecture aux audits pour leurs responsables (P1, S)
+   - ✅ **AUD-05** Section 1 du dossier : décisions sans action et actions annulées (P1, S)
+   - ✅ **UX-02** Formulaire terrain : zoom iOS, cibles, dictée (P1, S)
+   - ✅ **UX-03** Fenêtres modales (P1, S)
 2. Accidents du travail — **EVT-01** après la décision RGPD, avec **SEC-06** du lot 1
-   - **EVT-03** Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance (P1, S)
-   - **EVT-01** Accident du travail : victime, circonstances et rubriques de la DAT (P1, L)
-   - **EVT-04** Registre des accidents bénins (P1, M)
+   - ✅ **EVT-03** Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance (P1, S)
+   - ✅ **EVT-01** Accident du travail : victime, circonstances et rubriques de la DAT (P1, L)
+   - ✅ **EVT-04** Registre des accidents bénins (P1, M)
 3. Prévention et DUERP
-   - **PRV-01** Écarts R. 4512-6 passés non comptés (P1, M)
-   - **PRV-02** Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9) (P1, M)
-   - **PRV-03** Fiche imprimable d'un permis et registre par période (P1, S)
-   - **DUE-01** Mise à disposition du DUERP aux salariés, anciens salariés et instances (P1, M)
-   - **DUE-02** PAPRIPACT : programme annuel de prévention (P1, L)
+   - ✅ **PRV-01** Écarts R. 4512-6 passés non comptés (P1, M)
+   - ✅ **PRV-02** Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9) (P1, M)
+   - ✅ **PRV-03** Fiche imprimable d'un permis et registre par période (P1, S)
+   - ✅ **DUE-01** Mise à disposition du DUERP aux salariés, anciens salariés et instances (P1, M)
+   - ✅ **DUE-02** PAPRIPACT : programme annuel de prévention (P1, L)
 4. Audits et revue de direction
-   - **AUD-01** Lier programme d'audit et revues de direction par reviewId (P1, M)
-   - **AUD-03** Reporter ou annuler un élément du programme (P1, M)
-   - **AUD-04** Contributeurs de revue sans accès à l'écran Audits (P1, M)
-   - **AUD-06** Dossier figé calculé à la clôture, pas à la séance (P1, M)
+   - ✅ **AUD-01** Lier programme d'audit et revues de direction par reviewId (P1, M)
+   - ✅ **AUD-03** Reporter ou annuler un élément du programme (P1, M)
+   - ✅ **AUD-04** Contributeurs de revue sans accès à l'écran Audits (P1, M)
+   - ✅ **AUD-06** Dossier figé calculé à la clôture, pas à la séance (P1, M)
 5. Échéances, liens et mobile — **ACT-01** avec son script de reprise
-   - **TDB-02** Échéances masquées pour un responsable sans accès à l'écran source (P1, M)
-   - **TDB-05** « Mes échéances » consolidées tous sites (P1, M)
-   - **ACT-01** Rattacher les actions Prévention, Documents et Environnement par un vrai lien (P1, L)
-   - **DOC-02** Registre des déchets : mentions de l'arrêté du 31 mai 2021 (P1, M)
-   - **UX-01** Navigation mobile (P1, M)
+   - ✅ **TDB-02** Échéances masquées pour un responsable sans accès à l'écran source (P1, M)
+   - ✅ **TDB-05** « Mes échéances » consolidées tous sites (P1, M)
+   - ✅ **ACT-01** Rattacher les actions Prévention, Documents et Environnement par un vrai lien (P1, L)
+   - ✅ **DOC-02** Registre des déchets : mentions de l'arrêté du 31 mai 2021 (P1, M)
+   - ✅ **UX-01** Navigation mobile (P1, M)
 
 ### Lot 3 — Intégrations EPC2i, imports, exports et impression
 
@@ -178,30 +184,30 @@ Objectif : brancher Vigie sur le système EPC2i et ouvrir les échanges de fichi
 
 ### Lot 4 — Conformité étendue et confort
 
-212 éléments (P2 : 105 · P3 : 107) — charge indicative 188–526 j (216 éléments et 190–530 j avant le lot 1, qui a aussi livré PRD-09, PRD-11, PRD-15 et QUA-13).
+209 éléments (P2 : 105 · P3 : 104) — charge indicative 186,5–523 j (216 éléments et 190–530 j avant le lot 1, qui a aussi livré PRD-09, PRD-11, PRD-15 et QUA-13 ; livrés avec le lot 2 : EVT-23, AUD-30, SEC-14 ; en partie SEC-09, DOC-04, DOC-10).
 
 Objectif : le reste des P2, puis les P3, par thème.
 
-- **Traçabilité** (journal, motifs) : **TDB-09**, **EVT-12**, **ACT-03**, **ACT-04**, **ACT-05**, **PRV-04**, **PRV-12**, **DUE-04**, **DUE-06**, **HAB-03**, **VEI-04**, **AUD-10**, **AUD-36**, **DOC-04**, **DOC-10**, **SEC-11**.
+- **Traçabilité** (journal, motifs) : **TDB-09**, **EVT-12**, **ACT-03**, **ACT-04**, **ACT-05**, **PRV-04**, **PRV-12**, **DUE-04**, **DUE-06**, **HAB-03**, **VEI-04**, **AUD-10**, **AUD-36**, **DOC-04** (◐), **DOC-10** (◐), **SEC-11**.
 - **Conformité réglementaire** : **CNF-01** à **CNF-06**, **EVT-08**, **EVT-09**, **EVT-17**, **PRV-05**, **PRV-09**, **DUE-03**, **DUE-07**, **DUE-10**, **AUD-08**, **AUD-09**, **AUD-13**, **VEI-10**, **HAB-10**, **DOC-12**, **SEC-10**, **SEC-12**.
 - **Terrain et mobile** : **EVT-18** à **EVT-22**, **UX-05** à **UX-08**.
-- **Exploitation et robustesse** : **PRD-08**, **PRD-10**, **PRD-13** (◐), **PRD-14**, **SEC-07** (◐) à **SEC-09**, **QUA-08** à **QUA-12** (✅ livrés avec le lot 1 : PRD-09, PRD-11, PRD-15, QUA-13).
+- **Exploitation et robustesse** : **PRD-08**, **PRD-10**, **PRD-13** (◐), **PRD-14**, **SEC-07** (◐), **SEC-08**, **SEC-09** (◐), **QUA-08** à **QUA-12** (✅ livrés avec le lot 1 : PRD-09, PRD-11, PRD-15, QUA-13).
 - **P2** — 105 éléments, 107–312 j : TDB-06 à 09 · EVT-08, 09, 11 à 22 · ACT-02 à 05 · PRV-04 à 07, 09 à 12 · DUE-03 à 07, 09, 10 · HAB-03 à 07, 09, 10 · VEI-03 à 11 · AUD-07 à 17 · DOC-03 à 06, 08 à 12 · PRD-08, 10, 13, 14 · SEC-07 à 12 · QUA-08 à 12 · UX-04 à 14 · CNF-01 à 06
-- **P3** — 107 éléments, 81–214 j : TDB-10 à 18 · EVT-23 à 28 · ACT-06 à 16 · PRV-13 à 17, 19 · DUE-12 à 20 · HAB-11 à 19 · VEI-12 à 14, 16, 18 · AUD-18 à 25, 27 à 31, 33 à 36 · DOC-13 à 23 · SEC-13, 14 · QUA-14 à 28 · UX-15, 16 · CNF-07 à 11
+- **P3** — 104 éléments, 79,5–211 j : TDB-10 à 18 · EVT-24 à 28 · ACT-06 à 16 · PRV-13 à 17, 19 · DUE-12 à 20 · HAB-11 à 19 · VEI-12 à 14, 16, 18 · AUD-18 à 25, 27 à 29, 31, 33 à 36 · DOC-13 à 23 · SEC-13 · QUA-14 à 28 · UX-15, 16 · CNF-07 à 11
 
 ## 3. Tableau de bord, échéances et navigation (TDB)
 
 18 éléments — P1 : 5 · P2 : 4 · P3 : 9 — charge indicative 13,5–36 j.
 
-Au 11/10/2026 : 1 partiel (◐ TDB-01) — reste 18 éléments ouverts, charge indicative 13,5–36 j.
+Au 12/10/2026 : 4 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05) — reste 14 éléments ouverts, charge indicative 10–26 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| TDB-01 | ◐ Destinataires des alertes : un animateur QHSE par site, tiré des données | **P1** | M | Migration sites.qhseLeadId ; rôles réels Entra ID |
-| TDB-02 | Échéances masquées pour un responsable sans accès à l'écran source | **P1** | M | — |
+| TDB-01 | ✅ Destinataires des alertes : un animateur QHSE par site, tiré des données | **P1** | M | Migration sites.qhseLeadId ; rôles réels Entra ID |
+| TDB-02 | ✅ Échéances masquées pour un responsable sans accès à l'écran source | **P1** | M | — |
 | TDB-03 | Saisie mensuelle des heures travaillées (base du TF1/TG) | **P1** | M | Levée du report « aucune saisie/import » |
-| TDB-04 | TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures | **P1** | S | — |
-| TDB-05 | « Mes échéances » consolidées tous sites | **P1** | M | — |
+| TDB-04 | ✅ TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures | **P1** | S | — |
+| TDB-05 | ✅ « Mes échéances » consolidées tous sites | **P1** | M | — |
 | TDB-06 | Notifications d'information (action confiée, suite d'un signalement) | P2 | M | — |
 | TDB-07 | État lu : clé avec date d'échéance et gravité, retards triés par ancienneté | P2 | M | — |
 | TDB-08 | Archivage d'un site : avertir des éléments encore ouverts | P2 | M | — |
@@ -217,14 +223,17 @@ Au 11/10/2026 : 1 partiel (◐ TDB-01) — reste 18 éléments ouverts, charge i
 | TDB-18 | Recherche globale dans l'en-tête | P3 | M | — |
 
 - **TDB-01** — Les alertes de tous les domaines et le pilote par défaut des recyclages visent QHSE_LEAD, une personne de démonstration fixe. Il faut un responsable QHSE par site (dans « Gérer les sites »), utilisé par les load\*Signals. (preuve : src/lib/domain.ts:301-304 ; src/components/skills/common.tsx:16,41 ; src/lib/data/skills.ts:254-265 ; src/lib/data/events.ts:318-326 ; src/lib/data/risks.ts:486-487 ; src/lib/data/actions.ts:303 ; src/lib/data/audits.ts:272,282 ; src/lib/data/review.ts:639-650 ; src/db/schema.ts:10-22)
-  ◐ **Partiel (11/10/2026)** — livré : colonne `sites.qhse_lead_id`, modifiable dans « Gérer les sites » ; `loadQhseLeads()` (`src/lib/data/leads.ts`) adresse les alertes au responsable du site concerné, poste vacant : animateurs QHSE (`people.last_role`), « responsable à désigner ». Reste : les alertes DUERP par unité de travail (« ≥ 8 sans action de réduction », « résiduel encore ≥ 8 », « à recoter ») reprennent les responsables de tous les sites (`leads.forSite(null)`, `src/lib/data/risks.ts`) au lieu de celui du site de l'unité ; ajouter un test à deux sites et deux responsables distincts.
+  ✅ **Livré (12/10/2026)** — colonne `sites.qhse_lead_id`, modifiable dans « Gérer les sites » ; `loadQhseLeads()` adresse les alertes au responsable du site concerné (poste vacant : animateurs QHSE, « responsable à désigner ») ; lot 2 : alertes DUERP par unité au responsable QHSE du site de l'unité (`unitRiskTodos`, test à deux sites et deux responsables), le validateur ne reçoit plus que les alertes de niveau DUERP.
   *Question : Un animateur par site ou un seul ? Qui reçoit les alertes si le poste est vacant ?*
 - **TDB-02** — loadVisibleTodo écarte les échéances dont le lien vise un écran fermé au rôle, même pour leur responsable (visite S. Benali, audit E. Dubois, contributions de revue). (preuve : src/lib/data/todo.ts:32-36 ; src/lib/data/review.ts:623-625 ; src/lib/data/audits.ts:259-267 ; src/lib/domain.ts:276-287 ; src/db/seed.ts:263,306)
+  ✅ **Livré (12/10/2026)** — règle pure `visibleTodo` (`src/lib/todo-visibility.ts`) : le responsable d'une échéance (`ownerIds`) la garde même quand l'écran source lui est fermé, avec un lien vers la vue en lecture (`readHref`, par exemple « Mes contributions ») ou sans lien ; un écran en consultation seule ne montre que les échéances de la personne ; données de santé jamais révélées, responsable compris.
   *Question : Vue en lecture de l'élément, ou échéance sans lien ?*
 - **TDB-03** — hours_worked n'est rempli que par le seed (10/2025-09/2026). Ajouter saveHoursWorked (site, mois, requireApprover), une fenêtre depuis le KPI TF1 et un signal « heures de M-1 non saisies ». (preuve : src/db/seed.ts:349-354 ; src/lib/data/dashboard.ts:25,38-40 ; src/lib/data/review.ts:97,113)
   *Question : Saisie manuelle ou import (paie, Lucca, Cursus) ? Intérimaires inclus ?*
 - **TDB-04** — La comparaison de chaînes inclut un 13e mois, les mois manquants gonflent les taux sans avertissement, et 0 heure affiche TF1 0,0. Extraire une fonction pure testée utilisée par le tableau de bord et la revue. (preuve : src/lib/data/dashboard.ts:37-40,66 ; src/lib/data/review.ts:113,364-369)
+  ✅ **Livré (12/10/2026)** — TF1/TG par la fonction pure `safetyRates` sur les 12 derniers mois complets (`lastFullMonths`) ; sans heures : « — » et « Heures travaillées non saisies » ; mois manquants signalés (« Heures manquantes : … », ton d'alerte), y compris le mois d'un AT avec arrêt d'un site sans heures saisies (l'accident prouve l'activité) ; accidents de l'effectif seulement (`workforceAccident` : ni intérimaire, déclaré par l'ETT, ni personne extérieure), comme le KPI « Jours sans accident avec arrêt » et la pyramide ; même calcul dans le dossier de revue.
 - **TDB-05** — Notifications et À faire ne couvrent que le site sélectionné : une personne ne voit pas ses échéances d'un autre site. (preuve : src/lib/data/todo.ts:21-28 ; src/lib/data/notifications.ts:24-34 ; src/lib/queries.ts:39-42 ; src/lib/session.ts:31,52-58)
+  ✅ **Livré (12/10/2026)** — « Toutes » = échéances du site sélectionné que le rôle peut traiter, plus celles de la personne sur tous les sites de son périmètre (nom court du site affiché) ; server action `openTodo` : sélectionne le site de l'échéance (ou « Tous les sites ») puis ouvre le lien ; badges des écrans limités au site sélectionné, badge « À faire » sur tout le périmètre. Réserve : l'état lu reste attaché au lien d'origine (les échéances de coactivité, dont le lien porte désormais `&site=`, réapparaissent une fois non lues).
   *Question : Consolider tous sites pour chaque personne, indépendamment du sélecteur ?*
 - **TDB-06** — La cloche ne contient que des échéances : rien quand une action est confiée ou réaffectée, ni pour le déclarant quand son signalement est qualifié, classé ou clôturé. (preuve : src/lib/data/notifications.ts:24-34 ; src/server/plan.ts:117-146)
 - **TDB-07** — todoKey ignore la date et le ton : une échéance récurrente ou aggravée reste lue. Les retards ont tous la date du jour. Ajouter dueOn à TodoItem, à la clé et au tri. (preuve : src/lib/domain.ts:319-336 ; src/lib/data/watch.ts:265-298 ; src/lib/data/audits.ts:259-275 ; src/lib/data/review.ts:640-650)
@@ -246,15 +255,15 @@ Au 11/10/2026 : 1 partiel (◐ TDB-01) — reste 18 éléments ouverts, charge i
 
 28 éléments — P1 : 7 · P2 : 15 · P3 : 6 — charge indicative 30–88 j.
 
-Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, charge indicative 26,5–77 j.
+Au 12/10/2026 : 8 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, EVT-07, EVT-23) — reste 20 éléments ouverts, charge indicative 20,5–60 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| EVT-01 | Accident du travail : victime, circonstances et rubriques de la DAT | **P1** | L | Décision RGPD données de santé ; people en attendant Cursus |
-| EVT-02 | Clôture d'un AT sans déclaration CPAM : l'obligation disparaît | **P1** | S | — |
-| EVT-03 | Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance | **P1** | S | Calendrier des jours fériés dans src/lib/dates.ts |
-| EVT-04 | Registre des accidents bénins | **P1** | M | Victime et lésions de l'AT |
-| EVT-05 | Qualification : exiger les données propres au type | **P1** | S | — |
+| EVT-01 | ✅ Accident du travail : victime, circonstances et rubriques de la DAT | **P1** | L | Décision RGPD données de santé ; people en attendant Cursus |
+| EVT-02 | ✅ Clôture d'un AT sans déclaration CPAM : l'obligation disparaît | **P1** | S | — |
+| EVT-03 | ✅ Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance | **P1** | S | Calendrier des jours fériés dans src/lib/dates.ts |
+| EVT-04 | ✅ Registre des accidents bénins | **P1** | M | Victime et lésions de l'AT |
+| EVT-05 | ✅ Qualification : exiger les données propres au type | **P1** | S | — |
 | EVT-06 | ✅ « Nouveau signalement » : lieu de démonstration et cible du bouton | **P1** | S | — |
 | EVT-07 | ✅ Parcours terrain authentifié et signalement sans compte | **P1** | L | Entra ID |
 | EVT-08 | Suivi de l'arrêt de travail : périodes, reprise, jours perdus calculés | P2 | M | Victime identifiée sur l'AT |
@@ -272,7 +281,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | EVT-20 | Signalement installable (PWA) | P2 | M | HTTPS |
 | EVT-21 | File d'attente hors ligne des signalements | P2 | L | PWA |
 | EVT-22 | Espace salarié mobile (mes actions, mes habilitations) | P2 | L | Entra ID ; navigation mobile |
-| EVT-23 | Formulaire événement : le champ Site propose des sites refusés | P3 | S | — |
+| EVT-23 | ✅ Formulaire événement : le champ Site propose des sites refusés | P3 | S | — |
 | EVT-24 | « Nouvel événement » prérempli depuis contrôle, risque, document, environnement | P3 | S | — |
 | EVT-25 | Fiche événement : action annulée ou clôturée ouverte en modification | P3 | S | — |
 | EVT-26 | « Plan d'actions → » filtré sur l'événement | P3 | S | — |
@@ -280,19 +289,25 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | EVT-28 | Suivi d'un signalement anonyme par code | P3 | M | — |
 
 - **EVT-01** — Ajouter victime (salarié, intérimaire, externe), heure, horaire, siège et nature des lésions, témoins, date de connaissance, réserves (Cerfa 14463), avec accès restreint. (preuve : src/db/schema.ts:73-107 ; src/components/events/EventEditButton.tsx:120-134)
+  ✅ **Livré (12/10/2026)** — rubriques de la DAT sur la fiche d'un AT : victime (salarié de l'effectif, intérimaire avec son entreprise de travail temporaire, ou personne extérieure), heure, horaire de travail, date de connaissance (`knownAt`), activité, circonstances, témoins, tiers ; nature et siège des lésions, soins, réserves, pièces médicales : données de santé (`HEALTH_LABELS`, `attachments.health`, direction et animateur QHSE) ; obligation de déclaration selon la victime (`declarationDuty`) : l'entreprise déclare l'accident d'un salarié, informe l'ETT sous 24 h pour un intérimaire (R. 412-2 CSS), ne déclare pas celui d'une personne extérieure ; composants `AccidentFields` et `AccidentSection`. Réserves : l'aide de saisie sur les lésions ne porte que sur l'intitulé et la description (pas sur circonstances, activité ni mesures immédiates, visibles de l'encadrement) ; un AT requalifié en un autre type garde ses pièces médicales, qui ne s'affichent plus (fiche médicale rendue pour un AT seulement).
   *Question : Quels champs tenir dans Vigie et qui peut lire les lésions ?*
 - **EVT-02** — Un AT peut être clôturé sans cpamDeclaredOn et l'échéance sort alors des signaux. Bloquer dans advanceBlocker ou garder le signal. (preuve : src/lib/data/events.ts:324 ; src/components/events/shared.ts:16-39,49-53)
+  ✅ **Livré (12/10/2026)** — clôture d'un AT réservée à l'animateur QHSE et à la direction, refusée tant que la déclaration CPAM n'est pas saisie, sauf inscription au registre des accidents bénins ou motif tracé (`waiveCpamDeclaration` / `cancelCpamWaiver`, journalisés) ; intérimaire ou personne extérieure : clôture après le motif « déclaration par l'ETT » ou « par l'employeur de la victime » ; l'échéance reste visible quelle que soit l'étape.
   *Question : Bloquer la clôture ou garder l'échéance visible ?*
 - **EVT-03** — Le délai est occurredOn + 2 jours calendaires (R. 441-3 CSS non respecté). Ajouter aussi l'échéance des réserves motivées (10 jours francs). (preuve : src/lib/data/events.ts:117,325 ; src/lib/domain.ts:34 ; src/lib/dates.ts:19)
+  ✅ **Livré (12/10/2026)** — `src/components/events/deadlines.ts` (fonction pure testée) : 48 h à compter de la connaissance (`knownAt`, à défaut l'enregistrement dans Vigie, ou l'escalade depuis le registre bénin), dimanches et jours fériés exclus (Pâques calculée), option par site « Alsace-Moselle » (Vendredi saint, 26 décembre ; case de « Gérer les sites ») ; délai des réserves motivées (10 jours, reporté au premier jour ni samedi, ni dimanche, ni férié) affiché sur la fiche ; intérimaire : information de l'ETT sous 24 h d'heure à heure (`ettDeadline`) ; accident bénin : inscription au registre (ou déclaration) dans les mêmes 48 h ; aucune échéance pour une personne extérieure. Réserve : la date saisie est celle de l'envoi des réserves (« adressées le »), pas de leur réception par la caisse, et une date postérieure au délai reste affichée sans alerte.
   *Question : Point de départ : date de l'accident ou createdAt ? Fériés Alsace-Moselle ?*
 - **EVT-04** — Le libellé existe mais pas le registre (R. 441-3, D. 441-1 CSS) : vue imprimable par site, secouriste SST valide, bascule en déclaration si arrêt ultérieur. (preuve : src/lib/data/events.ts:113-115 ; src/components/events/shared.ts:55-56)
+  ✅ **Livré (12/10/2026)** — registre par site (`benign_accidents`, numérotation continue sous verrou), inscription d'un AT sans arrêt ni soins médicaux (premiers soins), d'une victime de l'effectif (ni intérimaire ni personne extérieure), une fois saisies les mentions du registre (victime, lieu, circonstances, nature et siège des lésions), avec le donneur de soins (secouriste du travail dont le titre est valide à la date des soins : case « Secourisme » des titres suivis), visa enregistré par sa date, escalade vers la CPAM, annulation motivée ; page imprimable `/evenements/registre-benin` (A4 paysage) ; réservé à la direction et à l'animateur QHSE (redirection dans `src/proxy.ts` aussi).
   *Question : Registre par site ou unique ? Visa de la victime dans Vigie ?*
 - **EVT-05** — Seul le pilote est exigé : un AT sans blessure sort du TF1/TG, une NC sans origine tombe dans « Autre ». (preuve : src/components/events/shared.ts:22-24 ; src/server/events.ts:191-192 ; src/lib/data/dashboard.ts:35,58,77)
+  ✅ **Livré (12/10/2026)** — champs obligatoires à la qualification selon le type (`QUALIFICATION_FIELDS`, `src/lib/domain.ts`) : contrôlés par `advanceEvent`, non effaçables une fois l'événement qualifié (`saveEvent`), signalés dans le formulaire.
   *Question : Quels champs obligatoires à la qualification ?*
 - **EVT-06** — /apercu-mobile crée de vrais événements avec DEMO_POST et un cadre iPhone même sur téléphone. Viser /signaler sur mobile et retirer le poste codé en dur. (preuve : src/app/(app)/apercu-mobile/page.tsx:17,40-46 ; src/components/PageHeader.tsx:18 ; src/app/(app)/page.tsx:125)
   ✅ **Livré (11/10/2026)** — « Nouveau signalement » ouvre `/signaler` (formulaire réel, responsive) ; `/apercu-mobile` et le poste de démonstration réservés à la démonstration.
   *Question : Cible en production selon le rôle ?*
 - **EVT-07** — createReport repose sur le cookie de démonstration. Choisir : Entra sur mobile, borne partagée ou formulaire public anonyme protégé. (preuve : src/server/events.ts:475-526 ; src/lib/session.ts:14-34 ; src/lib/domain.ts:272 ; src/app/signaler/page.tsx:13-19)
+  ✅ **Réserve levée (12/10/2026)** — nombre de proxys de confiance pour `X-Forwarded-For` (`VIGIE_TRUSTED_PROXIES`, `clientIpFrom`) ; purge des empreintes d'IP à l'ouverture de la base puis toutes les heures (`src/db/maintenance.ts`), table `report_rate_limits` exclue des sauvegardes ; signalement anonyme : photos renommées et canal neutre (**SEC-09**, ◐ : EXIF retiré côté navigateur seulement).
   ✅ **Livré (11/10/2026)** — Personne connectée : signalement en son nom, « Mes signalements ». Sans compte : QR code de poste à jeton HMAC (`VIGIE_REPORT_SECRET`, `map_zones.qr_version`, « Régénérer le QR » dans `/signaler/postes`), formulaire anonyme ou nominatif déclaratif (nom, entreprise), champ piège, photos contrôlées, limite de débit en base (`report_rate_limits`, par client puis par poste). Réserves : la limite par adresse IP suppose un reverse proxy qui réécrit `X-Forwarded-For` (sinon contournable ; aucun réglage du nombre de proxys de confiance, `src/lib/report-guard.ts`) ; les empreintes d'IP ne sont purgées qu'au signalement suivant et figurent dans les sauvegardes (clé = `VIGIE_REPORT_SECRET`) ; noms d'origine des photos et `reported_via='session'` conservés pour un signalement anonyme (**SEC-09**) ; non traités : journal de `createReport` (**EVT-12**), suivi d'un anonyme par code (**EVT-28**), « Régénérer le QR » depuis l'éditeur de zones de la carte.
   *Question : Comment signalent intérimaires et entreprises extérieures ?*
 - **EVT-08** — lostDays est saisi à la main et vaut 0 s'il manque. Gérer les périodes d'arrêt (prolongation, rechute, reprise), calculer TG, signaler visite de reprise (R. 4624-31) et pré-reprise. (preuve : src/server/events.ts:193 ; src/lib/data/dashboard.ts:40 ; src/components/events/EventEditButton.tsx:125-127)
@@ -316,6 +331,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
   *Question : Ajouter date et heure au formulaire terrain ?*
 - **EVT-22** — Le parcours terrain n'offre que Signaler et Mes signalements ; ajouter Démarrer / Déclarer réalisée avec photo et ses échéances. (preuve : src/app/signaler/ (page.tsx, mes-signalements/, postes/) ; src/server/plan-ui.ts:18-22)
 - **EVT-23** — Tous les sites actifs sont listés alors que le serveur refuse tout autre site que le sélectionné. (preuve : src/components/events/EventEditButton.tsx:102-104 ; src/app/(app)/evenements/page.tsx:77,335 ; src/lib/guard.ts:32-37 ; src/server/events.ts:228-232)
+  ✅ **Livré (12/10/2026)** — `options.sites` = exactement les sites qu'accepte `requireInSite(…, { create: true })` (`writableSites()`, `src/lib/guard.ts`), `options.allSites` pour « Tous les sites » ; test de concordance des deux règles.
 - **EVT-24** — Seuls plan et permis préremplissent ; l'environnement renvoie vers /signaler?type=ENV. (preuve : src/lib/data/events.ts:340-356 ; src/app/(app)/environnement/page.tsx:278)
 - **EVT-25** — Le clic ouvre le formulaire que le serveur refuse ensuite ; idem quand l'événement est verrouillé. (preuve : src/components/events/EventActions.tsx:31 ; src/app/(app)/evenements/page.tsx:342-345,402 ; src/server/plan.ts:51-52)
 - **EVT-26** — Pointer vers /actions?q=&lt;référence> avec les clôturées. (preuve : src/components/events/EventActions.tsx:45 ; src/app/(app)/actions/page.tsx:55,75)
@@ -327,9 +343,11 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 16 éléments — P1 : 1 · P2 : 4 · P3 : 11 — charge indicative 12,5–33 j.
 
+Au 12/10/2026 : 1 livré (✅ ACT-01) — reste 15 éléments ouverts, charge indicative 9,5–23 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| ACT-01 | Rattacher les actions Prévention, Documents et Environnement par un vrai lien | **P1** | L | Script de reprise par originRef |
+| ACT-01 | ✅ Rattacher les actions Prévention, Documents et Environnement par un vrai lien | **P1** | L | Script de reprise par originRef |
 | ACT-02 | Rattacher une action existante depuis toutes les sources | P2 | M | Rattachement par vrai lien |
 | ACT-03 | Tracer les changements d'action faits par les autres modules | P2 | S | — |
 | ACT-04 | Historique de l'action : tous les champs modifiés | P2 | S | — |
@@ -347,6 +365,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | ACT-16 | Indicateurs de performance du plan d'actions | P3 | M | Date de réalisation ; échéance initiale |
 
 - **ACT-01** — Ces écrans retrouvent leurs actions par originRef : modifier la référence, la date ou la filière d'un enlèvement détache l'action sans trace. Ajouter des types plan, permit, document, waste, stream au registre action-links et migrer. (preuve : src/lib/data/prevention.ts:372,383,453,516 ; src/server/prevention.ts:321,386 ; src/lib/data/environment.ts:142-145,238-239,314 ; src/lib/data/documents.ts:157 ; src/lib/action-links.ts:52-311 (type `plan` = programme d'audit, lignes 132-153) ; src/components/actions/ActionDetail.tsx:64-67 (originRef modifiable))
+  ✅ **Livré (12/10/2026)** — colonnes `actions.prevention_plan_id`, `permit_id`, `document_id`, `waste_stream_id`, `waste_entry_id` (migration 0004), posées à la création (lien explicite de l'écran ou référence résolue, `src/lib/origin-links.ts`) et journalisées sur l'action et sur la source ; origine verrouillée ensuite ; les écrans Prévention, Documents et Environnement lisent ces colonnes ; reprise idempotente des références textuelles : `npm run db:reprise-liens [-- --appliquer]` (`vigie-db reprise-liens` dans l'image ; à lancer après le déploiement de 0004, `docs/EXPLOITATION.md` § 6), d'office sur une base de démonstration ; une filière qui porte une action (annulée comprise) n'est plus supprimable. Réserves : une référence saisie en texte et résolue n'est pas soumise au droit de modifier l'écran source (`canEdit`), contrairement au lien explicite — un rôle en consultation peut ainsi rattacher l'action et écrire dans l'historique de la source ; la reprise examine aussi les actions créées après 0004 dont la référence était alors sans fiche, et ne journalise que sur l'action ; la création depuis une filière n'écrit rien dans l'historique de la filière (`logAs` absent).
   *Question : Colonnes dédiées ou table action_links ? Origine verrouillée ?*
 - **ACT-02** — Événement, habilitation, document, plan et permis n'ont pas LinkActionButton ; la fiche action ne permet pas d'ajouter ou détacher une source. (preuve : Utilisations de LinkActionButton limitées à src/components/watch/\*, review/ReviewPanel.tsx, audits/\*, risks/RiskSheet.tsx ; src/components/prevention/PlanDialogs.tsx:419-430 (liste sans « Rattacher ») ; src/components/actions/ActionDetail.tsx:137-153 (sources affichées, sans ajout ni détachement) ; src/lib/action-links.ts:230-263 (type qualification sans bouton))
 - **ACT-03** — Le recyclage passe l'action en « verify » par UPDATE direct (date passée reprise) et la cascade de site d'un événement n'écrit rien : passer par applyActionStatus et logChange. (preuve : src/server/skills.ts:155-159 ; src/server/events.ts:306-310)
@@ -371,11 +390,13 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 20 éléments — P1 : 3 · P2 : 9 · P3 : 8 — charge indicative 22–65 j.
 
+Au 12/10/2026 : 3 livrés (✅ PRV-01, PRV-02, PRV-03) — reste 17 éléments ouverts, charge indicative 19,5–58 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| PRV-01 | Écarts R. 4512-6 passés non comptés | **P1** | M | — |
-| PRV-02 | Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9) | **P1** | M | Migration drizzle |
-| PRV-03 | Fiche imprimable d'un permis et registre par période | **P1** | S | — |
+| PRV-01 | ✅ Écarts R. 4512-6 passés non comptés | **P1** | M | — |
+| PRV-02 | ✅ Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9) | **P1** | M | Migration drizzle |
+| PRV-03 | ✅ Fiche imprimable d'un permis et registre par période | **P1** | S | — |
 | PRV-04 | Traçabilité de la délivrance, de la check-list et de la clôture des permis | P2 | M | Migration drizzle |
 | PRV-05 | Protocoles de sécurité de chargement et déchargement | P2 | M | — |
 | PRV-06 | Inspection commune « préalable » acceptée après le début des travaux | P2 | S | — |
@@ -395,10 +416,13 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | PRV-20 | Plans de prévention reçus des clients | P3 | L | Keystone |
 
 - **PRV-01** — Seules les interventions en cours sans plan signé comptent ; une intervention terminée sans signature ou signée après démarrage ne laisse pas d'écart. (preuve : src/components/prevention/model.ts:104-107 (isInProgress, lacksSignedPlan), 120-121 (planEndIssue) ; src/lib/data/prevention.ts:265, 609-614, 660-668, 697-699 ; src/server/prevention.ts:270-272 et 284-302 (signature acceptée après startOn))
+  ✅ **Livré (12/10/2026)** — écart R. 4512-6 = plan obligatoire signé (première signature complète, `first_signed_on`) après le début de l'intervention, ou intervention sans plan signé, sur 12 mois glissants ; compté dans les indicateurs (KPI « Écarts R. 4512-6 sur 12 mois », veille) et non dans le badge ; clôture ou annulation d'un plan signé en retard subordonnée à une action qui trace l'écart ; déplacer le début d'une intervention commencée exige un motif. Réserve : l'obligation est jugée sur les heures estimées actuelles ; un plan devenu obligatoire en cours de travaux (400 h atteintes, R. 4512-7 1°) puis signé est compté à tort comme signé après le début.
   *Question : Écart passé dans le badge ou seulement dans les indicateurs ?*
 - **PRV-02** — Manquent effectif EE, sous-traitants, secours et évacuation, instructions, phases dangereuses, matériels prêtés. (preuve : src/db/schema.ts:443-468 ; src/components/prevention/PlanDialogs.tsx:101-155 ; src/app/(app)/prevention/imprimer/plan/[id]/page.tsx:75-137 (formData non imprimé, alors que la fiche l'affiche en PlanDialogs.tsx:210-228))
+  ✅ **Livré (12/10/2026)** — contenu réglementaire en champs structurés (effectif et encadrant de l'entreprise extérieure, sous-traitance, cinq rubriques R. 4512-8, postes R. 4512-9) ; signature d'un plan obligatoire refusée tant qu'une des six rubriques requises est vide ; impression complétée (§ 5 et 6, annexe du formulaire importé). Réserve : libellés R. 4512-9 et R. 4511-10 à faire valider par le responsable QHSE ; les plans de production existants devront être complétés avant signature.
   *Question : Champs structurés ou sections libres du modèle importé ?*
 - **PRV-03** — Un permis délivré ne s'imprime pas pour affichage ; le registre ne filtre pas par mois ou année. (preuve : src/components/prevention/PermitDialogs.tsx:331-342 (aucun lien d'impression) ; src/app/(app)/prevention/imprimer/permis/page.tsx:21-25 (filtres état et type seulement))
+  ✅ **Livré (12/10/2026)** — fiche imprimable d'un permis (`/prevention/imprimer/permis/[id]`) ; registre filtré par année et mois (un permis compte dans chaque mois que couvre sa validité), « Tous, annulés compris », date de délivrance. Réserve : la date de délivrance est tirée du journal (« Permis délivré ») en attendant une colonne (**PRV-04**).
 - **PRV-04** — Ni date-heure de délivrance, ni acceptation, ni fin réelle, ni auteur de clôture ou de ronde ; check-list sans historique ; clôture possible avant la fin de surveillance. (preuve : src/server/prevention.ts:559-572 (setPermitCheck sans logChange), 642-656 (closePermit sans contrôle de watchUntil) ; src/db/schema.ts:483-501 (aucun champ acceptation ou ronde) ; déjà tracé : src/server/prevention.ts:600-603, 651-654 et src/components/prevention/PermitDialogs.tsx:409)
   *Question : Interdire la clôture avant la fin des 2 h de surveillance ?*
 - **PRV-05** — Protocole écrit exigé pour les transporteurs (R. 4515-4 à 11), signé des deux parties, avec révision. (preuve : aucune occurrence de « protocole » ni de « R. 4515 » dans src/ ni dans design/Vigie.dc.html)
@@ -429,10 +453,12 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 20 éléments — P1 : 2 · P2 : 9 · P3 : 9 — charge indicative 19–54 j.
 
+Au 12/10/2026 : 2 livrés (✅ DUE-01, DUE-02) — reste 18 éléments ouverts, charge indicative 15–41 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| DUE-01 | Mise à disposition du DUERP aux salariés, anciens salariés et instances | **P1** | M | — |
-| DUE-02 | PAPRIPACT : programme annuel de prévention | **P1** | L | Suivi des consultations CSE |
+| DUE-01 | ✅ Mise à disposition du DUERP aux salariés, anciens salariés et instances | **P1** | M | — |
+| DUE-02 | ✅ PAPRIPACT : programme annuel de prévention | **P1** | L | Suivi des consultations CSE |
 | DUE-03 | Transmission de chaque version au SPST et dépôt sur le portail | P2 | S | Migration drizzle |
 | DUE-04 | Annulation d'une action : détachement absent de l'historique du risque | P2 | S | — |
 | DUE-05 | Unités sur un site archivé déplacées en silence | P2 | S | — |
@@ -453,8 +479,10 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | DUE-20 | Unités de travail reliées aux zones du plan de site | P3 | M | — |
 
 - **DUE-01** — Salarié et Chef de projet n'ont aucun accès (R. 4121-4). Consultation en lecture et vue imprimable de la version en vigueur, trace des mises à disposition. (preuve : src/lib/domain.ts:268-269 ; src/app/(app)/risques/page.tsx:21 ; src/app/(app)/risques/export/route.ts:26-27 ; src/db/seed.ts:187 (exigence « mise à disposition des salariés et du CSE » marquée conforme))
+  ✅ **Livré (12/10/2026)** — tout le DUERP en lecture pour tous les rôles (version en vigueur et versions archivées, dans le périmètre de la personne), sans les archives, les actions à rattacher, l'historique ni la liste du personnel pour les rôles en consultation ; impression `/risques/imprimer` (`?version=n`) ; registre des demandes d'accès (anciens salariés, CSE, médecin du travail, inspection, CARSAT : date, demandeur, version communiquée, canal), réservé aux validateurs, avec une échéance pour une demande en attente.
   *Question : Tout le DUERP ou l'unité du salarié ?*
 - **DUE-02** — Construire le programme (L. 4121-3-1) à partir des actions rattachées aux risques, avec coût, ressources, indicateur, figé par année avec la consultation CSE. (preuve : src/db/schema.ts:131-153 (actions : ni coût, ni ressources, ni indicateur) ; src/db/schema.ts:200-203 (risk_actions) ; src/db/schema.ts:157-168 (duerp_versions sans programme rattaché))
+  ✅ **Livré (12/10/2026)** — programme annuel par année (`prevention_programs`, `prevention_program_actions` : coût estimé, ressources, indicateur sur les lignes du programme seulement), prérempli depuis le DUERP, figé avec un instantané à la consultation du CSE, rouvert avec motif ; panneau `ProgramPanel`, impression `/risques/imprimer/programme?annee=`, échéances « consultation du CSE à saisir » et « programme à établir ». Réserve : un programme peut être figé sans coût ni indicateur sur ses lignes (champs optionnels, décision du lot 2), sans avertissement rappelant les mentions de L. 4121-3-1 (conditions d'exécution, indicateurs, coût, calendrier) ; l'impression ne signale que les lignes sans coût.
   *Question : Champs coût et ressources sur toutes les actions ?*
 - **DUE-03** — Ajouter date de transmission SPST, échéance associée, et emplacement pour le futur dépôt numérique. (preuve : src/db/schema.ts:157-168 ; src/lib/data/risks.ts:498-500 ; src/components/risks/VersionDialogs.tsx:200-215 (formulaire de version sans transmission SPST))
 - **DUE-04** — detachAllLinks n'appelle pas logAs ; l'état « Annulée » de la fiche n'est jamais atteint. (preuve : src/server/plan-ui.ts:116-124 ; src/lib/action-links.ts:92-94,346-354 ; src/components/risks/RiskSheet.tsx:172-176 (affichage « Annulée » inatteignable))
@@ -482,9 +510,11 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 20 éléments — P1 : 1 · P2 : 9 · P3 : 10 — charge indicative 22–65 j.
 
+Au 12/10/2026 : 1 livré (✅ HAB-01) — reste 19 éléments ouverts, charge indicative 21,5–64 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| HAB-01 | Contrôle des fichiers côté navigateur dans « Enregistrer une formation » | **P1** | S | — |
+| HAB-01 | ✅ Contrôle des fichiers côté navigateur dans « Enregistrer une formation » | **P1** | S | — |
 | HAB-02 | Suivi de l'état de santé au travail : VIP, SIR, aptitude, reprise | P2 | L | Cursus |
 | HAB-03 | Journal des habilitations : compléter et afficher | P2 | M | — |
 | HAB-04 | Les anciens recyclages perdent leur lien vers l'habilitation | P2 | M | — |
@@ -506,6 +536,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | HAB-20 | Jeunes travailleurs : dérogation aux travaux réglementés | P3 | M | Cursus |
 
 - **HAB-01** — Au-delà de 11 Mo la server action plante ; réutiliser checkPickedFiles. (preuve : src/components/skills/TrainingForm.tsx:115-117 (Input sans contrôle, consigne « 10 Mo par fichier ») ; src/components/watch/parts.tsx:15-24 (checkPickedFiles, FILES_HINT) ; next.config.ts:6 (bodySizeLimit 11mb) ; src/server/skills.ts:52-56,112 (checkFiles jamais atteint au-delà de la limite) ; src/components/form.tsx:32-38 (useActionState sans repli))
+  ✅ **Livré (12/10/2026)** — taille et nombre des fichiers contrôlés dans le navigateur (`pickedFilesError`, mêmes limites que le serveur) pour « Enregistrer une formation » et les formulaires de documents.
 - **HAB-02** — Dates des visites sans contenu médical (R. 4624-10 à 31) avec échéances. (preuve : src/db/schema.ts:24-39 (people : name, job, siteId, service, leftOn, aucune donnée de suivi de santé) ; aucune occurrence de visite ou aptitude dans src/ ; CLAUDE.md « Cursus, propriétaire des données personnelles des employés »)
   *Question : Tenu dans Cursus ou dans Vigie ?*
 - **HAB-03** — setRequirement et les attestations ne sont pas tracés ; l'historique écrit n'est affiché nulle part ; qualification sans logAs. (preuve : src/server/skills.ts:195-231 (attestations sans logChange), 237-265 (setRequirement sans logChange), 293-296 (« Fiche salarié modifiée » sans details) ; src/lib/action-links.ts:230-263 (qualification sans logAs, à comparer aux lignes 99, 123, 147) ; src/components/skills/SkillMatrix.tsx:188 (HistoryTable seul, aucun ChangeLogList))
@@ -532,10 +563,12 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 18 éléments — P1 : 2 · P2 : 9 · P3 : 7 — charge indicative 13–34 j.
 
+Au 12/10/2026 : 2 livrés (✅ VEI-01, VEI-02) — reste 16 éléments ouverts, charge indicative 12–32 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| VEI-01 | Pilote, responsable ou site effacés en silence | **P1** | S | — |
-| VEI-02 | Réserves sans action de levée absentes des échéances | **P1** | S | — |
+| VEI-01 | ✅ Pilote, responsable ou site effacés en silence | **P1** | S | — |
+| VEI-02 | ✅ Réserves sans action de levée absentes des échéances | **P1** | S | — |
 | VEI-03 | Échéance figée d'une exigence suivie par des contrôles | P2 | S | — |
 | VEI-04 | Rattachements d'actions absents du journal des exigences et contrôles | P2 | S | — |
 | VEI-05 | Écart ou réserve dont l'action est clôturée : relancer pour boucler | P2 | M | — |
@@ -554,7 +587,9 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | VEI-18 | Périodicité de réévaluation propre à chaque exigence | P3 | S | — |
 
 - **VEI-01** — Sans withCurrent, l'enregistrement efface pilote sorti ou site archivé. (preuve : src/app/(app)/veille/page.tsx:25 ; src/lib/data/options.ts:33-34,49-50 ; src/components/watch/RequirementsPanel.tsx:442 ; src/components/watch/ControlsPanel.tsx:378,406,411 ; src/server/watch.ts:257,271-273)
+  ✅ **Livré (12/10/2026)** — pilote ou responsable sorti de l'effectif et site archivé conservés à la modification (`withCurrent`, `src/lib/form-options.ts`), signalés sous le champ ; le serveur refuse de les choisir pour un nouvel enregistrement.
 - **VEI-02** — Une réserve sans action de levée n'a ni signal ni badge ; proposer aussi « Créer une action » sur un contrôle dépassé sans réserve. (preuve : src/lib/data/watch.ts:264-272,303-304 ; src/components/watch/ControlsPanel.tsx:109-110,255)
+  ✅ **Livré (12/10/2026)** — contrôle avec réserves sans action de levée : échéance en retard (rouge) comptée dans le badge Veille ; « Rattacher » et « Créer une action » (préremplie, échéance à 15 jours) sur un contrôle en retard sans action.
 - **VEI-03** — L'échéance d'une exigence suivie par des contrôles est figée : la calculer depuis le prochain contrôle rattaché. (preuve : src/lib/data/watch.ts:148-151,155,160,282,287-290 ; src/db/seed.ts:188,423)
 - **VEI-04** — requirement et control sans logAs ; détachements de recordControl non tracés. (preuve : src/lib/action-links.ts:155-201 (pas de logAs, cf. 99,123,147) ; src/server/links.ts:52-53,74-75 ; src/server/plan.ts:139-140 ; src/server/watch.ts:326,334,358,447,452)
 - **VEI-05** — L'action clôturée laisse l'écart ou la réserve ouvert : proposer « Réévaluer » et « Lever les réserves », avec un signal. (preuve : src/lib/data/watch.ts:166,283-284 ; src/components/watch/RequirementsPanel.tsx:354-367 ; src/components/watch/ControlsPanel.tsx:258-271)
@@ -576,14 +611,16 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 36 éléments — P1 : 6 · P2 : 11 · P3 : 19 — charge indicative 28,5–77 j.
 
+Au 12/10/2026 : 7 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, AUD-30) — reste 29 éléments ouverts, charge indicative 23–62 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| AUD-01 | Lier programme d'audit et revues de direction par reviewId | **P1** | M | Migration drizzle |
-| AUD-02 | Accès en lecture aux audits pour leurs responsables | **P1** | S | — |
-| AUD-03 | Reporter ou annuler un élément du programme | **P1** | M | Migration drizzle |
-| AUD-04 | Contributeurs de revue sans accès à l'écran Audits | **P1** | M | — |
-| AUD-05 | Section 1 du dossier : décisions sans action et actions annulées | **P1** | S | — |
-| AUD-06 | Dossier figé calculé à la clôture, pas à la séance | **P1** | M | — |
+| AUD-01 | ✅ Lier programme d'audit et revues de direction par reviewId | **P1** | M | Migration drizzle |
+| AUD-02 | ✅ Accès en lecture aux audits pour leurs responsables | **P1** | S | — |
+| AUD-03 | ✅ Reporter ou annuler un élément du programme | **P1** | M | Migration drizzle |
+| AUD-04 | ✅ Contributeurs de revue sans accès à l'écran Audits | **P1** | M | — |
+| AUD-05 | ✅ Section 1 du dossier : décisions sans action et actions annulées | **P1** | S | — |
+| AUD-06 | ✅ Dossier figé calculé à la clôture, pas à la séance | **P1** | M | — |
 | AUD-07 | Supprimer le libellé d'audit codé en dur | P2 | S | — |
 | AUD-08 | Cycle de certification : renouvellement, suspension, historique | P2 | M | — |
 | AUD-09 | Types de constat : écart majeur, observation, délai de réponse | P2 | M | — |
@@ -607,7 +644,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | AUD-27 | Auditeur interne lié à une personne | P3 | M | — |
 | AUD-28 | Plusieurs actions par constat | P3 | M | — |
 | AUD-29 | Liste des constats : filtres et audits sans constat | P3 | S | — |
-| AUD-30 | Revue annulée : échéance du programme | P3 | S | Lien reviewId |
+| AUD-30 | ✅ Revue annulée : échéance du programme | P3 | S | Lien reviewId |
 | AUD-31 | Contrôles de dates et de doublons | P3 | S | — |
 | AUD-32 | Archiver les enregistrements figés en PDF et dans Documents maîtrisés | P3 | M | Arbitrage exports |
 | AUD-33 | Constats des audits fournisseurs dans la section Fournisseurs | P3 | S | — |
@@ -616,11 +653,17 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | AUD-36 | Décision de revue abandonnée ou reformulée après la séance : statut, motif, ancien libellé | P3 | M | Migration drizzle |
 
 - **AUD-01** — Lien par égalité de dates ; verrouiller les cellules de revue et ajouter « Ouvrir la revue ». (preuve : src/server/review.ts:66-81 (planItemsOf par plannedOn, ensurePlanItem sans lien si le mois est pris) ; src/server/review.ts:96-103,229-232 ; src/lib/data/audits.ts:252,262 (pendingReviews par date) ; src/components/audits/ProgramTimeline.tsx:113-117,194-292 (élément de revue modifiable comme un audit, sans lien vers la revue) ; src/db/schema.ts:346-361 (pas de reviewId))
+  ✅ **Livré (12/10/2026)** — `audit_plan_items.review_id` (unique) : programme et revues liés, cellules verrouillées (« Ouvrir la revue »), « Au programme : … » ou « Hors programme annuel » sur la fiche de revue, modifications du programme par une revue journalisées ; annuler une revue annule son élément de programme (**AUD-30**).
 - **AUD-02** — Chef de service et de projet sans écran Audits ; utiliser canEdit. (preuve : src/lib/domain.ts:267-268 ; src/app/(app)/audits/page.tsx:17,24 (guard puis canManage au lieu de canEdit) ; src/server/audits.ts:27-31 (canSee seulement) ; src/lib/data/todo.ts:34 (échéances filtrées par canOpen) ; src/db/seed.ts:263-267 (responsables E. Dubois et S. Benali))
+  ✅ **Livré (12/10/2026)** — écran Audits ouvert en consultation aux chefs de service et de projet (boutons de saisie masqués, écritures refusées par `canEdit`, listes des formulaires absentes de la charge de la page) ; leurs éléments et échéances visibles.
 - **AUD-03** — Seule la suppression existe ; année non modifiable. (preuve : src/components/audits/ProgramTimeline.tsx:138-141,211 (DeleteButton seul, year en champ caché) ; src/server/audits.ts:283-306 (delete physique, refus si action, constat ou rapport) ; src/lib/data/audits.ts:73-74,261-264 (état « late » permanent))
+  ✅ **Livré (12/10/2026)** — « Reporter… » (`reschedulePlanItem`, date d'origine conservée dans `postponed_from`) et « Annuler l'élément » (`cancelPlanItem`, motif) remplacent la suppression ; liste repliable « Éléments annulés » ; `savePlanItem` ne change plus la planification d'un élément existant.
 - **AUD-04** — Les contributeurs sans accès à l'écran Audits ne peuvent pas contribuer : vue « Mes contributions » et lecture du compte rendu. (preuve : src/lib/data/review.ts:624-625,637-645 ; src/server/review.ts:27-31,314-316 ; src/db/seed.ts:299,304,306)
+  ✅ **Livré (12/10/2026)** — page « Mes contributions » (`/audits/contributions`, ouverte à tous les rôles) : la personne coche elle-même les éléments de revue qui lui sont confiés (`setReviewItemDone`), voit les décisions et les actions qu'elle pilote ; échéances de contribution avec ce lien en lecture ; `/revue-de-direction` renvoie les rôles sans accès au dossier vers cette page. Réserve (périmètre, **SEC-02**) : pour une revue clôturée, les décisions viennent du dossier figé, construit sous « Tous les sites » : la fiche résumée de l'action (intitulé, pilote, statut, échéance) y est montrée même quand l'action est sur un site hors du périmètre du participant.
 - **AUD-05** — Le suivi des revues précédentes omet les décisions sans action et les actions annulées : ISO 9001 §9.3.2 a incomplet. (preuve : src/lib/data/review.ts:194,356-361 ; src/lib/queries.ts:45 ; src/lib/data/review.ts:200 (seules les décisions de la revue courante sont lues))
+  ✅ **Livré (12/10/2026)** — section 1 du dossier (`reviewFollowUp`) : décisions sans action au plan et actions annulées (avec leur motif) ; anciens dossiers (v1) affichés comme avant.
 - **AUD-06** — L'instantané calcule la période et les indicateurs à la date de clôture, pas à la date de la séance. (preuve : src/lib/data/review.ts:301-302 ; src/server/review.ts:268-273 ; src/lib/domain.ts:230)
+  ✅ **Livré (12/10/2026)** — dossier calculé à la date de la séance (`buildReviewDossier(…, { asOf })`), figé à la saisie du compte rendu (`holdReview`, « Tous les sites » requis) puis repris à la clôture ; instantanés v2 (`seance` / `cloture`), v1 toujours lus.
 - **AUD-07** — DEFAULT_AUDIT préremplit le libellé d'audit des constats. (preuve : src/lib/data/audits.ts:65 ; src/app/(app)/audits/page.tsx:11,48 ; src/components/audits/FindingsCard.tsx:138,237)
 - **AUD-08** — Échéance de certification visible à 15 j seulement ; ni cycle de 3 ans, ni renouvellement, ni suspension, ni historique. (preuve : src/lib/data/audits.ts:283-288 ; src/lib/domain.ts:182,312 (CERT_SOON_DAYS = 30, TODO_HORIZON_DAYS = 15) ; src/lib/queries.ts:140-148 ; src/db/schema.ts:332-343)
 - **AUD-09** — Trois types seulement (écart mineur, piste, point fort) : ajouter écart majeur, observation et délai de réponse. (preuve : src/lib/domain.ts:161-165 ; src/db/schema.ts:369 (kind : ecart_mineur | piste | point_fort) ; src/lib/data/audits.ts:271-274)
@@ -645,6 +688,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 - **AUD-28** — Un constat ne porte qu'une action (actionId unique). (preuve : src/db/schema.ts:371 ; src/lib/action-links.ts (rattachement à un seul emplacement))
 - **AUD-29** — Seules des puces par audit filtrent la liste ; les audits sans constat n'y apparaissent pas. (preuve : src/components/audits/FindingsCard.tsx:85,105-118 ; src/lib/data/audits.ts:134-153 (groupes construits à partir des seuls constats))
 - **AUD-30** — L'élément de programme d'une revue annulée reste en place et passe « à confirmer ». (preuve : src/server/review.ts:297-300 ; src/lib/data/audits.ts:252,262)
+  ✅ **Livré (12/10/2026)** — annuler une revue de direction annule son élément de programme (lien `review_id`, **AUD-01**).
 - **AUD-31** — Éléments après la revue, échéance passée, plusieurs revues planifiées. (preuve : src/server/review.ts:50-55,128,341,402)
 - **AUD-32** — Archiver en PDF, et dans les documents maîtrisés, le dossier de revue et les versions DUERP figés. (preuve : src/server/review.ts:256-282 ; src/components/review/DossierView.tsx:45 (impression navigateur seulement) ; src/lib/data/documents.ts:168-197 (aucun lien avec les revues))
 - **AUD-33** — Les constats d'audits fournisseurs, déjà chargés, sont rangés dans la section Audits et non Fournisseurs. (preuve : src/lib/data/review.ts:419-432 ; src/lib/data/review.ts:442-452 (constats regroupés dans la section Audits))
@@ -656,18 +700,20 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 23 éléments — P1 : 2 · P2 : 10 · P3 : 11 — charge indicative 22–62 j.
 
+Au 12/10/2026 : 2 livrés (✅ DOC-01, DOC-02) · 2 partiels (◐ DOC-04, DOC-10) — reste 21 éléments ouverts, charge indicative 20,5–58 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| DOC-01 | Document : propriétaire sorti ou site archivé remplacé | **P1** | S | — |
-| DOC-02 | Registre des déchets : mentions de l'arrêté du 31 mai 2021 | **P1** | M | SIRET des sites |
+| DOC-01 | ✅ Document : propriétaire sorti ou site archivé remplacé | **P1** | S | — |
+| DOC-02 | ✅ Registre des déchets : mentions de l'arrêté du 31 mai 2021 | **P1** | M | SIRET des sites |
 | DOC-03 | Propriétaire en consultation seule : ni révision ni échéances | P2 | M | — |
-| DOC-04 | Journal du cycle de vie des documents | P2 | M | — |
+| DOC-04 | ◐ Journal du cycle de vie des documents | P2 | M | — |
 | DOC-05 | Version approuvée sans fichier | P2 | S | — |
 | DOC-06 | Renvoi en brouillon sans motif | P2 | S | — |
 | DOC-07 | Diffusion contrôlée et prise de connaissance | P2 | L | Cursus ; Entra ID |
 | DOC-08 | Lien profond vers un enlèvement ou une filière | P2 | S | — |
 | DOC-09 | Archivage d'une filière déchets | P2 | S | — |
-| DOC-10 | Journal des filières et relevés | P2 | S | — |
+| DOC-10 | ◐ Journal des filières et relevés | P2 | S | — |
 | DOC-11 | Pièces jointes d'un enlèvement | P2 | M | — |
 | DOC-12 | Statuts de BSD refus et acceptation partielle | P2 | S | — |
 | DOC-13 | Action liée d'une version : contrôles contournés | P3 | S | — |
@@ -683,15 +729,19 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 | DOC-23 | Aspects et impacts environnementaux | P3 | L | — |
 
 - **DOC-01** — Sans withCurrent, l'enregistrement remplace en silence un propriétaire sorti ou un site archivé. (preuve : src/components/documents/DocumentForms.tsx:114-115,125-126 ; src/lib/data/options.ts:31-32,49 ; src/components/form.tsx:79-86 ; src/server/documents.ts:23-39)
+  ✅ **Livré (12/10/2026)** — à la modification d'un document, le propriétaire sorti ou le site archivé sont conservés (indication sous le champ) ; un propriétaire sorti ou un site archivé ne peuvent pas être choisis ; modification des métadonnées journalisée (propriétaire, site et type par leurs libellés).
 - **DOC-02** — Mentions manquantes au registre : SIRET, récépissé du transporteur, traitement final. (preuve : src/db/schema.ts:533-567 ; src/db/schema.ts:10-22 (sites sans SIRET) ; src/lib/data/environment.ts:447-450 ; src/components/environment/model.ts:1-3)
+  ✅ **Livré (12/10/2026)** — mentions de l'arrêté du 31 mai 2021 : SIRET de l'établissement (`saveSiteSiret`, journalisé), POP, qualification, SIRET et adresse du collecteur, récépissé, SIRET et adresse de l'installation de destination, transporteur (SIRET, adresse, récépissé), adresse d'enlèvement ; contrôles purs (SIRET, TVA intracommunautaire), mentions manquantes signalées (filtre, échéance par site et par année), export CSV dans l'ordre de l'arrêté. Réserves : courtier et négociant, éco-organisme, numéros de notification et de document de mouvement, plusieurs transporteurs par enlèvement et déclaration RNDTS / Trackdéchets (**INT-10**) non traités ; taux de valorisation toujours calculé d'après le code R/D ; libellés de l'arrêté à faire valider par le responsable QHSE.
 - **DOC-03** — Un propriétaire en consultation seule ne peut pas réviser son document et loadDocumentSignals ne lui renvoie rien sans canEdit. (preuve : src/lib/domain.ts:267-269 ; src/lib/data/documents.ts:268 ; src/server/documents.ts:67-71 ; src/components/documents/DocumentForms.tsx:68 ; src/db/seeds/documents.ts:41,75,84,108,116,124)
 - **DOC-04** — Seul obsoleteDocument écrit dans le journal ; les autres étapes du cycle de vie ne sont pas tracées. (preuve : src/server/documents.ts:97-351 (aucun logChange) ; src/server/documents.ts:377 (seul appel) ; src/server/documents.ts:320 ; src/db/schema.ts:518-529)
+  ◐ **Partiel (12/10/2026)** — livré : modification des métadonnées d'un document journalisée (propriétaire, site, type). Reste : les autres étapes du cycle de vie (versions, approbation, diffusion).
 - **DOC-05** — Une version peut être approuvée sans fichier joint. (preuve : src/server/documents.ts:285-306 ; src/components/documents/DocumentPanel.tsx (ConfirmForm submit : note « Aucun fichier », ConfirmForm approve : aucun contrôle))
 - **DOC-06** — Le renvoi en brouillon ne demande pas de motif et ne crée pas d'échéance pour l'auteur. (preuve : src/server/documents.ts:309-324 ; src/components/documents/DocumentPanel.tsx (mode 'return' : ConfirmForm sans champ motif) ; src/lib/data/documents.ts:265-295)
 - **DOC-07** — La diffusion est un texte libre : destinataires structurés et accusé de prise de connaissance. (preuve : src/db/schema.ts:513 ; design/Vigie.dc.html:778 (docs : « diffusion contrôlée »))
 - **DOC-08** — Les fiches d'enlèvement et de filière s'ouvrent en état local, sans lien profond. (preuve : src/components/environment/WasteRegister.tsx:38 ; src/components/environment/StreamsPanel.tsx:36 ; src/lib/data/actions.ts:185-188)
 - **DOC-09** — Une filière ne peut qu'être supprimée : ajouter l'archivage. (preuve : src/server/environment.ts:217-234 ; src/db/schema.ts:533-544 (pas d'archivedAt))
 - **DOC-10** — Filières et relevés modifiés sans logChange. (preuve : src/server/environment.ts:164-215 ; src/server/environment.ts:218-234 ; src/server/environment.ts:242-282)
+  ◐ **Partiel (12/10/2026)** — livré : filières journalisées (création, modification, historique affiché). Reste : relevés de consommation.
 - **DOC-11** — Joindre bordereau et certificat à un enlèvement. (preuve : src/lib/uploads.ts:71-112 ; src/components/environment/WasteRegister.tsx:111-160)
 - **DOC-12** — Quatre statuts de BSD seulement : ajouter refus et acceptation partielle. (preuve : src/components/environment/model.ts:9-15,21)
 - **DOC-13** — L'action liée à une version est lue par readAction au lieu de checkActionLink : les contrôles de rattachement sont contournés. (preuve : src/server/documents.ts:43-49,105,183,240 ; src/lib/action-links.ts:324-330 ; src/server/links.ts:17-31,38-58)
@@ -778,7 +828,7 @@ Au 11/10/2026 : 2 livrés (✅ EVT-06, EVT-07) — reste 26 éléments ouverts, 
 
 15 éléments — P0 : 4 · P1 : 3 · P2 : 8 — charge indicative 11,5–31 j.
 
-Au 11/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07, PRD-09, PRD-11, PRD-15) · 1 partiel (◐ PRD-13) — reste 5 éléments ouverts, charge indicative 4–11 j.
+Au 12/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07, PRD-09, PRD-11, PRD-15) · 1 partiel (◐ PRD-13) — reste 5 éléments ouverts, charge indicative 4–11 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
@@ -801,6 +851,7 @@ Au 11/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, 
 - **PRD-01** — Sortie standalone, HTTPS, volume persistant pour la base et les pièces jointes ; aujourd'hui seul le serveur local du Mac existe. (preuve : next.config.ts:3-7 (pas d'output standalone) ; package.json:6-9 (seuls next dev/start --port 3200) ; aucun Dockerfile ni compose dans le dépôt ; src/db/index.ts:20,23 et src/lib/uploads.ts:12 (base, dossier drizzle/ et pièces résolus depuis process.cwd()) ; src/app/actions.ts:13,18 (cookies sans secure/httpOnly) ; desktop-app/README.md:99 (serveur limité à ::1, « Vigie n'a pas d'authentification »))
   ✅ **Livré (11/10/2026)** — Sortie `standalone` (`VIGIE_STANDALONE=1`), `Dockerfile` multi-étapes (utilisateur non root, `HEALTHCHECK` sur `/api/sante`, outil `vigie-db` embarqué), `docker-compose.yml` (Vigie, PostgreSQL 16, volumes base, pièces jointes et sauvegardes ; HTTPS par reverse proxy ou profil Caddy `https`), chemins de données absolus hors du dossier de l'application ; installation : `docs/EXPLOITATION.md`. Réserves : l'image fige à sa construction les origines admises des server actions (le proxy doit transmettre `Host` ou `X-Forwarded-Host`) ; connexion Entra non éprouvée dans le conteneur.
 - **PRD-02** — Sauvegarde de la base et des fichiers (avant chaque migration), procédure de restauration, pièces jointes chiffrées au repos. (preuve : src/db/index.ts:19-24 (PGlite sur disque local, migration au démarrage sans sauvegarde préalable) ; src/lib/uploads.ts:12,28-30 (fichiers écrits en clair dans .data/uploads) ; package.json:13 (seul script : db:reset = rm -rf .data) ; aucun script de sauvegarde ou de restauration dans scripts/)
+  ✅ **Réserve levée (12/10/2026)** — restauration et essai de migration : archive en clair refusée quand `VIGIE_UPLOAD_KEY` est définie, sauf `--accepter-clair` ; empreinte SHA-256 de chaque pièce jointe dans le manifeste, contrôlée (pièce manquante, en double, non déclarée ou modifiée) ; PGlite : copie ouverte en mémoire d'abord, base actuelle sauvegardée, dossier vidé et rechargé sur place (plus d'`EBUSY` dans l'image), remis en état en cas d'échec ; `VIGIE_UPLOAD_DIR` et `VIGIE_BACKUP_DIR` refusés dans `VIGIE_DATA_DIR` (au démarrage et à la restauration).
   ✅ **Livré (11/10/2026)** — `npm run db:backup` / `db:restore` / `db:list` (`scripts/vigie-db.ts`, `vigie-db` dans l'image) : `pg_dump -Fc` ou `dumpDataDir` (PGlite), archive des pièces jointes, manifeste horodaté, chiffrement de l'archive ; sauvegarde automatique avant toute migration en attente (`VIGIE_BACKUP_BEFORE_MIGRATE`) ; pièces jointes chiffrées au repos (AES-256-GCM, `VIGIE_UPLOAD_KEY`, rotation par `VIGIE_UPLOAD_KEY_PREVIOUS`, `npm run uploads:encrypt`). Réserves : une archive en clair est restaurée même quand une clé est configurée (pièces jointes vérifiées par leur nombre seulement, `src/db/backup.ts`) ; `restore --remplacer` d'une base PGlite échoue dans l'image Docker (`/data/pglite` est un point de montage, `EBUSY`) ; les sauvegardes emportent la table `report_rate_limits` (voir EVT-07).
 - **PRD-03** — setRole, VIGIE_TODAY et le sélecteur de rôle ne doivent fonctionner qu'avec VIGIE_DEMO activé. (preuve : src/app/actions.ts:11-15 (setRole sans contrôle d'environnement) ; src/components/Sidebar.tsx:103-124 (sélecteur de rôle toujours affiché) ; src/lib/dates.ts:9-11 (VIGIE_TODAY honoré partout, sans validation) ; .env.example:6 (VIGIE_TODAY=2026-10-09 renseigné par défaut) ; src/lib/domain.ts:272 (DEFAULT_ROLE = Animateur QHSE sans cookie))
   ✅ **Livré (11/10/2026)** — `VIGIE_DEMO=1` (posé par `npm run dev`, `npm run start:demo` et l'application Mac, `VIGIE_DESKTOP=1`) active seul le sélecteur de rôle, `setRole`, `VIGIE_TODAY` (validée, refusée hors démonstration), le jeu de démonstration et `/apercu-mobile` ; hors démonstration, connexion Entra obligatoire, jamais de rôle par défaut (`src/lib/env.ts`, `src/lib/auth/demo.ts`).
@@ -809,6 +860,7 @@ Au 11/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, 
 - **PRD-05** — Une seule instance PGlite par processus et un seul serveur sur la base : décider du moteur de production. (preuve : src/db/index.ts:4-6,16-34 (instance PGlite unique par processus) ; src/db/seed.ts:3 et src/db/seeds/types.ts (type PgliteDatabase) ; desktop-app/README.md:52-57,101 (contrainte d'un seul serveur sur la base))
   ✅ **Livré (11/10/2026)** — Tranché : PostgreSQL en production (`DATABASE_URL`, `node-postgres`), PGlite en démonstration et sur le Mac ; type commun `Db` / `Tx` (`src/db/types.ts`), migrations par le migrator du moteur ; suite d'intégration exécutée sur les deux moteurs (`TEST_DATABASE_URL`).
 - **PRD-06** — Ne plus modifier une migration publiée (0002 l'a été à la main) ; tester les migrations sur une copie de base avant déploiement. (preuve : src/db/index.ts:23 (migrate au démarrage, sans sauvegarde ni test préalable) ; drizzle/0002_traceability.sql et drizzle/meta/0002_snapshot.json (modifiés à la main au dernier run) ; package.json:5-14 (aucun script de test) ; pas de dossier .github ni de fichier \*.test.\* ; README.md:12 (db:reset recommandé après une modification du schéma))
+  ✅ **Réserve levée (12/10/2026)** — base migrée par une version plus récente de Vigie refusée avant toute sauvegarde, migration ou chargement (`NewerDatabaseError`, `/api/sante` en 503).
   ✅ **Livré (11/10/2026)** — Règle « une migration publiée ne se modifie jamais » (CLAUDE.md) ; `drizzle/checksums.json` et `npm run db:check` (empreintes, journal, `drizzle-kit check`, écart schéma/migrations, application à une base vide) ; `npm run db:test-migrate <sauvegarde>` ; en CI. Réserve : une base migrée par une version plus récente n'est pas refusée au démarrage (`MigrationState.newer` calculé mais inutilisé, `src/db/migrations.ts`).
 - **PRD-07** — Les QR codes dépendent de l'en-tête Host (repli localhost) : fixer VIGIE_PUBLIC_URL. (preuve : src/lib/data/events.ts:294-299 (appOrigin d'après x-forwarded-host/host, repli http://localhost:3200) ; utilisé par src/app/signaler/postes/page.tsx:19 et src/app/(app)/apercu-mobile/page.tsx:31)
   ✅ **Livré (11/10/2026)** — URL des QR codes tirée de `VIGIE_PUBLIC_URL` (`publicOrigin()`, `src/lib/public-url.ts`), jamais de l'en-tête Host ; repli sur l'origine locale en démonstration.
@@ -829,7 +881,7 @@ Au 11/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, 
 
 14 éléments — P0 : 3 · P1 : 3 · P2 : 6 · P3 : 2 — charge indicative 15–44 j.
 
-Au 11/10/2026 : 5 livrés (✅ SEC-01, SEC-02, SEC-03, SEC-04, SEC-05) · 2 partiels (◐ SEC-06, SEC-07) — reste 9 éléments ouverts, charge indicative 9,5–28 j.
+Au 12/10/2026 : 7 livrés (✅ SEC-01, SEC-02, SEC-03, SEC-04, SEC-05, SEC-06, SEC-14) · 2 partiels (◐ SEC-07, SEC-09) — reste 7 éléments ouverts, charge indicative 8–24 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
@@ -838,43 +890,49 @@ Au 11/10/2026 : 5 livrés (✅ SEC-01, SEC-02, SEC-03, SEC-04, SEC-05) · 2 part
 | SEC-03 | ✅ Identifiants stables sur la fiche personne | **P0** | S | — |
 | SEC-04 | ✅ Contrôle de l'hôte (DNS rebinding) | **P1** | S | — |
 | SEC-05 | ✅ En-têtes HTTP et cookies | **P1** | S | — |
-| SEC-06 | ◐ Données de santé des AT restreintes | **P1** | M | — |
+| SEC-06 | ✅ Données de santé des AT restreintes | **P1** | M | — |
 | SEC-07 | ◐ Limitation de débit et quotas | P2 | M | — |
 | SEC-08 | Validation et service des pièces jointes | P2 | M | — |
-| SEC-09 | Anonymat des signalements côté serveur | P2 | S | — |
+| SEC-09 | ◐ Anonymat des signalements côté serveur | P2 | S | — |
 | SEC-10 | Registre des traitements et durées de conservation | P2 | L | DPO |
 | SEC-11 | Consultations tracées | P2 | M | — |
 | SEC-12 | Mentions d'information RGPD | P2 | S | — |
 | SEC-13 | Droits d'accès d'un salarié | P3 | M | — |
-| SEC-14 | Redirection 307 avant le streaming | P3 | S | — |
+| SEC-14 | ✅ Redirection 307 avant le streaming | P3 | S | — |
 
 - **SEC-01** — OIDC, session signée, contrôle dans proxy.ts, retrait de setRole. (preuve : src/lib/session.ts:12-18 (rôle lu dans un cookie, sinon rôle par défaut) ; src/lib/domain.ts:272 (DEFAULT_ROLE = 'Animateur QHSE') ; src/app/actions.ts:11-15 (setRole accessible à tous) ; pas de src/proxy.ts ; package.json:14-29 (aucune dépendance OIDC/MSAL/Auth.js))
+  ✅ **Réserve levée (12/10/2026)** — première connexion : rapprochement ou création de fiche seulement par l'adresse de la revendication `email` vérifiée (`xms_edov`) et d'un domaine de `VIGIE_EMAIL_DOMAINS`, sinon page « Compte Microsoft non rattaché », sans rien écrire ; une adresse non vérifiée ne remplace jamais celle de la fiche.
   ✅ **Livré (11/10/2026)** — OIDC code + PKCE avec `openid-client` (`/auth/connexion`, `/auth/retour`, `/auth/deconnexion`), session dans un cookie chiffré et signé (`jose`, `VIGIE_SESSION_SECRET`, 8 h glissantes, 12 h au plus), `src/proxy.ts` : connexion exigée hors routes publiques, `setRole` réservé à la démonstration ; éprouvé avec un fournisseur factice (`scripts/oidc-mock.mjs`, `scripts/e2e-auth.sh` : 68 contrôles). Réserves : rôle et groupes relus à la connexion suivante (12 h au plus) ; signature JWS du jeton d'identité non vérifiée (canal TLS jugé suffisant, `enableNonRepudiationChecks` non appelé dans `src/lib/auth/oidc.ts`) ; à la première connexion, la fiche est rapprochée par `email`, `preferred_username` ou `upn`, revendications modifiables et non vérifiées pour un invité (n'accepter l'e-mail que si `xms_edov` le garantit, domaines configurés) ; inscription dans le tenant réel à faire (`docs/EXPLOITATION.md` § 3).
 - **SEC-02** — Rôle et sites autorisés tirés d'Entra ; site par défaut = site de rattachement ; setSite limité au périmètre. (preuve : src/lib/domain.ts:264-272 (ROLES → personId en dur) ; src/lib/session.ts:28-33 (utilisateur déduit du rôle, site lu dans un cookie, sinon premier site actif, sans tenir compte du site de rattachement) ; src/app/actions.ts:17-19 (setSite sans contrôle du périmètre) ; src/lib/guard.ts:32-37 (requireInSite contrôle le site sélectionné, pas les sites autorisés à l'utilisateur))
+  ✅ **Réserve levée (12/10/2026)** — listes de sites des formulaires limitées au périmètre (`writableSites()`, `options.allSites`) ; `loadLinkedAction` traite une action hors périmètre comme introuvable. Réserve : « Créer l'action » (`ActionFormDialog`) propose « Tous les sites » quand les options de l'écran ne portent pas `allSites` (risques, veille, habilitations, prévention, environnement, documents) ; un chef de service restreint se le voit ensuite refuser par `saveAction`. Voir aussi la réserve d'**AUD-04**.
   ✅ **Livré (11/10/2026)** — Rôles applicatifs Entra (`Vigie.Direction`… surchargeables par `ENTRA_ROLE_*`, le plus élevé l'emporte ; aucun : « Accès non autorisé ») ; périmètre : tous les sites pour la direction et l'animateur QHSE, sinon site de rattachement + `VIGIE_SITE_GROUPS` ; site par défaut = site de rattachement ; `setSite`, `requireInSite` et `/fichiers` refusent un site hors périmètre. Réserves : au-delà de la limite de groupes du jeton (overage), les sites accordés par groupe sont ignorés (pas d'appel Microsoft Graph) ; le site de rattachement est aussi scellé dans la session, si bien qu'une personne mutée garde son ancien site jusqu'à 12 h (`src/lib/auth/person.ts`) ; les listes de sites des formulaires ignorent le périmètre (**EVT-23**, `src/lib/data/options.ts`, `loadLinkedAction`).
 - **SEC-03** — Ajouter objectId Entra, e-mail et matricule ; ne plus dédoublonner ni identifier par le nom. (preuve : src/db/schema.ts:25-39 (people : id, nom, poste, site, aucun e-mail, objectId ni matricule) ; src/server/skills.ts:283 (doublon détecté par le nom) ; src/server/skills.ts:302 (identifiant tiré du nom : uniqueId(personSlug(name))))
+  ✅ **Réserve levée (12/10/2026)** — rapprochement par e-mail seulement sur adresse vérifiée d'un domaine de l'entreprise (voir SEC-01).
   ✅ **Livré (11/10/2026)** — `people.entra_object_id` (unique), `email` (unique sans tenir compte de la casse), `matricule` (unique), `last_role`, `last_login_at` (migration `drizzle/0003_production.sql`) ; identifiant généré, plus de dédoublonnage par le nom ; à la connexion : rapprochement par objectId, sinon par e-mail, sinon création de la fiche (`src/lib/auth/person.ts`). Réserve : le rapprochement par e-mail se fie à des revendications modifiables (voir SEC-01).
 - **SEC-04** — Refuser les hôtes inconnus dans proxy.ts et restreindre serverActions.allowedOrigins. (preuve : pas de src/proxy.ts ; next.config.ts:3-7 (aucune liste d'hôtes ni serverActions.allowedOrigins) ; src/app/fichiers/[id]/route.ts:5-9 (droit déduit du seul cookie de rôle) ; src/lib/domain.ts:272 (sans cookie, rôle Animateur QHSE) ; desktop-app/README.md:99 (« Vigie n'a pas d'authentification »))
   ✅ **Livré (11/10/2026)** — `src/proxy.ts` refuse (400) tout hôte hors `VIGIE_ALLOWED_HOSTS` et l'hôte de `VIGIE_PUBLIC_URL` (en-têtes `Host` et `X-Forwarded-Host` ; localhost admis en démonstration et pour `/api/sante`) ; `serverActions.allowedOrigins` restreint.
 - **SEC-05** — CSP, HSTS, poweredByHeader: false ; cookies httpOnly et secure. (preuve : next.config.ts:3-7 (ni headers() ni poweredByHeader: false) ; src/app/actions.ts:13 et 18 (cookies sans httpOnly ni secure) ; src/app/fichiers/[id]/route.ts:16 (seul en-tête de sécurité présent, nosniff))
+  ✅ **Réserve levée (12/10/2026)** — hors démonstration, `VIGIE_PUBLIC_URL` doit être en `https://` (`http://` admis pour localhost seulement).
   ✅ **Livré (11/10/2026)** — `poweredByHeader: false` ; CSP à nonce (`frame-ancestors 'none'`), HSTS en HTTPS, `Referrer-Policy`, `Permissions-Policy` (caméra pour le signalement), `nosniff` (`src/proxy.ts`, `src/lib/security.ts`) ; cookies `httpOnly`, `SameSite=Lax`, `Secure` et préfixe `__Host-` en HTTPS. Réserve : hors démonstration, `VIGIE_PUBLIC_URL` accepte encore une adresse `http://` autre que localhost, et le cookie de session part alors sans `Secure` (`src/lib/env.ts`) : exiger `https://`.
 - **SEC-06** — Blessure, jours perdus et déclaration CPAM visibles par tout rôle qui voit les événements : les limiter aux rôles habilités. (preuve : src/app/(app)/evenements/page.tsx:300-301 (blessure, jours perdus et déclaration CPAM affichés à tout rôle qui voit les événements) ; src/app/(app)/evenements/page.tsx:47-50 (seul le Salarié est filtré) ; src/db/schema.ts:92-95 (injury, lostDays, cpamDeclaredOn))
-  ◐ **Partiel (11/10/2026)** — livré : blessure, jours perdus, déclaration CPAM et données médicales réservés à la direction et à l'animateur QHSE : retirés des chargements et de la charge RSC des autres rôles, refusés par les server actions, affichés « Données restreintes » (`canSeeHealth`, `HEALTH_LABELS`) ; échéances qui en révèlent une filtrées. Reste : l'intitulé et la description d'un AT restent en texte libre (champs restreints « nature et siège des lésions » : **EVT-01**) ; pièces jointes d'un AT (certificat médical) non restreintes (drapeau « santé », migration) ; KPI « Jours sans accident avec arrêt » et petits effectifs de la pyramide (agrégats conservés par décision, à confirmer).
+  ✅ **Livré (12/10/2026)** — blessure, jours perdus, déclaration CPAM et données médicales réservés à la direction et à l'animateur QHSE (`canSeeHealth`, `HEALTH_LABELS`) ; lot 2 : nature et siège des lésions, soins et réserves en champs restreints (**EVT-01**), pièces jointes médicales (`attachments.health`, refusées par `/fichiers`, reclassement « médical » sans retour), aide de saisie et avertissement sur l'intitulé et la description d'un AT, intitulé neutre « Accident · lieu » pour un signalement terrain ; nom d'une pièce reclassée médicale retiré du journal des autres rôles. Réserves : KPI « Jours sans accident avec arrêt » et pyramide conservés (agrégats, décision du lot 2) ; `/fichiers` sert toute pièce, médicale comprise, avec `Cache-Control: private, max-age=3600` et la déconnexion ne vide pas le cache du navigateur (poste partagé) ; voir aussi les réserves d'**EVT-01**.
 - **SEC-07** — Limites par utilisateur et par période sur le signalement, les fichiers et l'import IA. (preuve : src/server/events.ts:475-494 (createReport : contrôles par requête seulement, aucune limite par utilisateur ou par période) ; src/server/pp-import.ts:79 (seule la limite côté Anthropic est gérée) ; src/lib/uploads.ts:17-21 (pas de quota de stockage))
   ◐ **Partiel (11/10/2026)** — livré : limite de débit du signalement sans compte (par client et par poste, en base, EVT-07). Reste : limites par utilisateur connecté (signalement, fichiers, import IA) et quotas de stockage.
 - **SEC-08** — Contrôle des octets réels (magic bytes) et antivirus ; types Office anciens à reconsidérer. (preuve : src/lib/uploads.ts:10 (liste blanche de types MIME, dont application/msword et vnd.ms-excel) ; src/lib/uploads.ts:17-21 (contrôle fondé sur file.type déclaré, ni octets réels ni antivirus) ; src/lib/uploads.ts:33 (type MIME et nom de fichier client enregistrés tels quels) ; src/app/fichiers/[id]/route.ts:12-14)
 - **SEC-09** — Retirer EXIF et noms de fichiers d'origine côté serveur pour les signalements anonymes. (preuve : src/server/events.ts:489-494 (aucun nettoyage des métadonnées côté serveur) ; src/server/events.ts:520-526 (saveUpload garde fichier et nom d'origine, seul uploadedBy est mis à null) ; src/components/ReportForm.tsx:37-58 (EXIF retiré seulement côté client, base du nom de fichier conservée))
+  ◐ **Partiel (12/10/2026)** — livré : signalement anonyme : canal neutre (`reported_via = 'terrain'`), photos renommées « photo-n » côté navigateur et côté serveur (`anonymousPhoto`, `src/lib/report-guard.ts`). Reste : retrait des métadonnées EXIF côté serveur (seulement côté navigateur aujourd'hui).
 - **SEC-10** — Durées de conservation par donnée, purge et anonymisation (salariés sortis, AT). (preuve : src/lib/data/risks.ts:17-18 (seul le DUERP a une durée, un simple libellé) ; src/db/schema.ts:35-38 (salarié sorti conservé sans limite) ; src/db/schema.ts:92-95 (données AT sans durée de conservation) ; aucun job ni action de purge ou d'anonymisation dans src/server)
 - **SEC-11** — Journal des accès aux données sensibles et aux fichiers, en plus des modifications. (preuve : src/app/fichiers/[id]/route.ts:5-18 (aucune trace de consultation) ; src/db/schema.ts:634-644 (change_log limité aux modifications) ; src/app/(app)/evenements/page.tsx:66 (seul le journal des modifications est chargé))
 - **SEC-12** — Mentions de l'article 13 sur le signalement et la fiche salarié. (preuve : src/components/ReportForm.tsx:298-301 (option d'anonymat sans mention d'information) ; src/components/skills/PersonForm.tsx:100 ; aucune occurrence de « RGPD », « CNIL » ou « données personnelles » sous forme de mention dans src)
 - **SEC-13** — Vue par personne de toutes ses données pour répondre à une demande d'accès. (preuve : src/lib/data/skills.ts:229-234 (vue limitée à soi, sur la matrice seulement) ; src/app/(app)/evenements/page.tsx:47-50 ; src/lib/data/actions.ts:234 (filtres « mes données » éparpillés, sans fiche par personne))
 - **SEC-14** — Les gardes redirigent pendant le rendu, après envoi du squelette : faire la redirection dans proxy.ts. (preuve : src/lib/guard.ts:7-11 (redirect() pendant le rendu) ; src/app/(app)/loading.tsx (squelette envoyé avant la redirection) ; pas de src/proxy.ts pour faire la redirection avant le rendu)
+  ✅ **Livré (12/10/2026)** — `src/lib/auth/route-access.ts` : `src/proxy.ts` redirige (307) avant le rendu une page dont l'écran est fermé au rôle, le registre des accidents bénins hors données de santé, `/signaler/postes` hors encadrement, et répond 404 pour `/apercu-mobile` hors démonstration ; `route-access.test.ts` vérifie la table contre les appels `guard()` des pages, qui restent en place.
 
 ## 16. Qualité, tests, performance et dette technique (QUA)
 
 28 éléments — P1 : 7 · P2 : 6 · P3 : 15 — charge indicative 28–81 j.
 
-Au 11/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, QUA-07, QUA-13) · 1 partiel (◐ QUA-28) — reste 20 éléments ouverts, charge indicative 18–51 j.
+Au 12/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, QUA-07, QUA-13) · 1 partiel (◐ QUA-28) — reste 20 éléments ouverts, charge indicative 18–51 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
@@ -949,11 +1007,13 @@ Au 11/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, Q
 
 16 éléments — P1 : 3 · P2 : 11 · P3 : 2 — charge indicative 15,5–45 j.
 
+Au 12/10/2026 : 3 livrés (✅ UX-01, UX-02, UX-03) — reste 13 éléments ouverts, charge indicative 13,5–40 j.
+
 | Réf | Élément | Priorité | Taille | Dépend de |
 |---|---|:-:|:-:|---|
-| UX-01 | Navigation mobile | **P1** | M | — |
-| UX-02 | Formulaire terrain : zoom iOS, cibles, dictée | **P1** | S | — |
-| UX-03 | Fenêtres modales | **P1** | S | — |
+| UX-01 | ✅ Navigation mobile | **P1** | M | — |
+| UX-02 | ✅ Formulaire terrain : zoom iOS, cibles, dictée | **P1** | S | — |
+| UX-03 | ✅ Fenêtres modales | **P1** | S | — |
 | UX-04 | Erreurs de formulaire accessibles | P2 | S | — |
 | UX-05 | Photos : galerie et allègement | P2 | M | — |
 | UX-06 | Mise en page tablette | P2 | M | — |
@@ -969,8 +1029,11 @@ Au 11/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, Q
 | UX-16 | Aide en ligne | P3 | M | — |
 
 - **UX-01** — Barre latérale empilée sur téléphone : tiroir de navigation, cloche à largeur adaptable. (preuve : src/app/vigie.css:194-199 (sidebar en position statique et empilée, pas de tiroir) ; src/app/(app)/layout.tsx:17-19 ; src/components/NotificationBell.tsx:40 (width: 380 fixe) ; src/components/PageHeader.tsx:18 (lien vers /apercu-mobile au lieu de /signaler) ; src/app/(app)/apercu-mobile/page.tsx:39 (IOSDevice width={390}))
+  ✅ **Livré (12/10/2026)** — barre supérieure et tiroir de navigation sur téléphone (`AppShell` : reste de la page inaccessible tant qu'il est ouvert, Échap ou fond pour fermer, focus rendu au bouton), `aria-current`, panneau des notifications à la largeur de l'écran, boutons d'en-tête qui passent à la ligne. Réserve : rendu à 375 px et 1 280 px à vérifier dans un navigateur réel ; `/evenements` déborde encore à 375 px (lignes de la liste des événements).
 - **UX-02** — Champs à 16 px (zoom iOS), cibles tactiles de 44 px, micro proposé seulement si la dictée est disponible, radiogroup nommé. (preuve : src/components/ReportForm.tsx:235,249 (fontSize 13.5) ; src/app/vigie.css:152 (.vg-form .input 13px) ; src/components/ReportForm.tsx:240 (bouton « Modifier » padding 0), 250-251 (micro 30 px), 279-280 (retrait 26 px), 93-95 (micro sans détection préalable), 290-291 (radiogroup sans aria-label))
+  ✅ **Livré (12/10/2026)** — `/signaler` et `ReportForm` : champs en 16 px (pas de zoom iOS), cibles de 44 px, dictée (bouton micro quand le navigateur la propose), retrait d'une photo ; champs des fenêtres en 16 px sur téléphone.
 - **UX-03** — Nom accessible, titre sémantique, fermeture au clic extérieur sans perte de saisie. (preuve : src/components/Dialog.tsx:18 (dialog sans aria-labelledby), 25 (titre en div, pas en titre de section), 19 (fermeture sur clic dont la cible est le dialog, sans vérifier le mousedown ni une saisie en cours), 59 (icône du DialogButton sans aria-hidden))
+  ✅ **Livré (12/10/2026)** — `Dialog` nommé par son titre (`<h2>`), clic extérieur sans effet si la saisie a commencé ou si l'appui a débuté dans la fenêtre, Échap demande confirmation quand une saisie est en cours, focus sur le premier champ. Réserves : `autoFocus` de React ne pose aucun attribut et ne peut pas orienter ce choix ; le panneau des notifications, fermé par Échap ou par un clic sur une échéance, ne rend pas le focus à la cloche.
 - **UX-04** — Erreurs reliées aux champs (aria-describedby) et focus sur la première erreur. (preuve : src/components/form.tsx:59 (span .vg-field-error sans id), 71/76/82 (aria-invalid sans aria-describedby, id={name}), 35-41 (aucun focus sur l'erreur après l'échec) ; src/components/watch/RequirementsPanel.tsx:483 et src/components/audits/ProgramTimeline.tsx:256 (Field sans name))
 - **UX-05** — Choix depuis la galerie et réduction/nettoyage EXIF partagés (shrinkPhoto) pour toutes les pièces jointes. (preuve : src/components/ReportForm.tsx:258 (capture="environment"), 38-60 (shrinkPhoto local au composant) ; src/components/Attachments.tsx:44-60 (envoi des fichiers d'origine, sans réduction ni nettoyage EXIF))
 - **UX-06** — Mises en page 768-1180 px (un seul point de rupture à 760 px aujourd'hui). (preuve : src/app/vigie.css:28-29 (.vg-side width 236px), 194 (seul point de rupture à 760 px) ; src/app/(app)/evenements/page.tsx:97 (minmax(320px) en auto-fit, une seule colonne sous ~946 px) ; src/components/actions/KanbanBoard.tsx:21 (repeat(5, minmax(200px))))
@@ -1033,24 +1096,24 @@ Décisions attendues du responsable produit avant ou pendant le développement.
 | Suivi des consultations CSE | DUE-02 |
 | Messagerie ou signature électronique | PRV-18 |
 
-### Questions par élément (40, dont 3 tranchées au lot 1)
+### Questions par élément (40, dont 3 tranchées au lot 1 et 12 au lot 2)
 
 **Tableau de bord, échéances et navigation**
 
 - **TDB-01** *Destinataires des alertes : un animateur QHSE par site, tiré des données* — Un animateur par site ou un seul ? Qui reçoit les alertes si le poste est vacant ? *Tranché (11/10/2026) : un responsable QHSE par site, désigné dans « Gérer les sites » ; poste vacant : les animateurs QHSE, avec la mention « responsable à désigner ».*
-- **TDB-02** *Échéances masquées pour un responsable sans accès à l'écran source* — Vue en lecture de l'élément, ou échéance sans lien ?
-- **TDB-03** *Saisie mensuelle des heures travaillées (base du TF1/TG)* — Saisie manuelle ou import (paie, Lucca, Cursus) ? Intérimaires inclus ?
-- **TDB-05** *« Mes échéances » consolidées tous sites* — Consolider tous sites pour chaque personne, indépendamment du sélecteur ?
+- **TDB-02** *Échéances masquées pour un responsable sans accès à l'écran source* — Vue en lecture de l'élément, ou échéance sans lien ? *Tranché (12/10/2026) : l'échéance reste visible pour son responsable, avec un lien vers une vue en lecture quand elle existe, sinon sans lien.*
+- **TDB-03** *Saisie mensuelle des heures travaillées (base du TF1/TG)* — Saisie manuelle ou import (paie, Lucca, Cursus) ? Intérimaires inclus ? *Depuis le lot 2 (12/10/2026), TF1/TG, jours sans accident et pyramide ne comptent que les accidents de l'effectif (intérimaires et personnes extérieures exclus), cohérents avec des heures de l'effectif : à confirmer avec la réponse.*
+- **TDB-05** *« Mes échéances » consolidées tous sites* — Consolider tous sites pour chaque personne, indépendamment du sélecteur ? *Tranché (12/10/2026) : oui : « Mes échéances » sur tous les sites du périmètre de la personne, indépendamment du sélecteur de site.*
 - **TDB-08** *Archivage d'un site : avertir des éléments encore ouverts* — Blocage ou avertissement ? Transfert en masse ?
 - **TDB-18** *Recherche globale dans l'en-tête* — Souhaitée alors que la maquette n'en prévoit pas ?
 
 **Événements et signalement terrain**
 
-- **EVT-01** *Accident du travail : victime, circonstances et rubriques de la DAT* — Quels champs tenir dans Vigie et qui peut lire les lésions ? *En partie tranché (11/10/2026) : les données de santé d'un AT sont réservées à la direction et à l'animateur QHSE (SEC-06).*
-- **EVT-02** *Clôture d'un AT sans déclaration CPAM : l'obligation disparaît* — Bloquer la clôture ou garder l'échéance visible ?
-- **EVT-03** *Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance* — Point de départ : date de l'accident ou createdAt ? Fériés Alsace-Moselle ?
-- **EVT-04** *Registre des accidents bénins* — Registre par site ou unique ? Visa de la victime dans Vigie ?
-- **EVT-05** *Qualification : exiger les données propres au type* — Quels champs obligatoires à la qualification ?
+- **EVT-01** *Accident du travail : victime, circonstances et rubriques de la DAT* — Quels champs tenir dans Vigie et qui peut lire les lésions ? *En partie tranché (11/10/2026) : les données de santé d'un AT sont réservées à la direction et à l'animateur QHSE (SEC-06).* *Tranché (12/10/2026) : rubriques de la DAT (victime, date, heure et lieu, activité, circonstances, objet en cause, témoins, tiers, lésions, arrêt, soins) ; lésions, soins, certificat médical et pièces jointes médicales réservés à la direction et à l'animateur QHSE.*
+- **EVT-02** *Clôture d'un AT sans déclaration CPAM : l'obligation disparaît* — Bloquer la clôture ou garder l'échéance visible ? *Tranché (12/10/2026) : clôture refusée tant que la déclaration n'est pas saisie, sauf inscription au registre des accidents bénins ou motif tracé.*
+- **EVT-03** *Délai CPAM : 48 h hors dimanches et fériés, à compter de la connaissance* — Point de départ : date de l'accident ou createdAt ? Fériés Alsace-Moselle ? *Tranché (12/10/2026) : à compter de la connaissance de l'accident par l'employeur (`knownAt`, par défaut l'enregistrement dans Vigie), dimanches et fériés nationaux exclus ; option « Alsace-Moselle » par site.*
+- **EVT-04** *Registre des accidents bénins* — Registre par site ou unique ? Visa de la victime dans Vigie ? *Tranché (12/10/2026) : un registre par site, imprimable pour le visa papier de la victime et du donneur de soins (visa enregistré par sa date).*
+- **EVT-05** *Qualification : exiger les données propres au type* — Quels champs obligatoires à la qualification ? *Tranché (12/10/2026) : AT : victime, circonstances, lieu ; PA et SD : lieu, gravité potentielle ; NC : origine ; RC : client et référence ; ENV : aspect et milieu (`QUALIFICATION_FIELDS`).*
 - **EVT-06** *« Nouveau signalement » : lieu de démonstration et cible du bouton* — Cible en production selon le rôle ? *Tranché (11/10/2026) : `/signaler` pour tous les rôles ; l'aperçu mobile reste à la démonstration.*
 - **EVT-07** *Parcours terrain authentifié et signalement sans compte* — Comment signalent intérimaires et entreprises extérieures ? *Tranché (11/10/2026) : sans compte, par le QR code du poste (jeton signé), anonymement ou avec nom et entreprise déclarés.*
 - **EVT-08** *Suivi de l'arrêt de travail : périodes, reprise, jours perdus calculés* — Dates d'arrêt saisies par la QHSE ou venues de la paie / Cursus ?
@@ -1062,15 +1125,15 @@ Décisions attendues du responsable produit avant ou pendant le développement.
 
 **Plan d'actions**
 
-- **ACT-01** *Rattacher les actions Prévention, Documents et Environnement par un vrai lien* — Colonnes dédiées ou table action_links ? Origine verrouillée ?
+- **ACT-01** *Rattacher les actions Prévention, Documents et Environnement par un vrai lien* — Colonnes dédiées ou table action_links ? Origine verrouillée ? *Tranché (12/10/2026) : colonnes dédiées sur `actions`, origine verrouillée après la création, reprise des références textuelles par script.*
 - **ACT-09** *Report d'échéance motivé et échéance initiale conservée* — Motif obligatoire et report réservé aux approbateurs ?
 - **ACT-10** *Date, auteur et commentaire de réalisation* — Preuve obligatoire ?
 - **ACT-13** *Jugement « Efficacité insuffisante » et indépendance du vérificateur* — Jugement réservé aux approbateurs ?
 
 **Prévention et carte du site**
 
-- **PRV-01** *Écarts R. 4512-6 passés non comptés* — Écart passé dans le badge ou seulement dans les indicateurs ?
-- **PRV-02** *Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9)* — Champs structurés ou sections libres du modèle importé ?
+- **PRV-01** *Écarts R. 4512-6 passés non comptés* — Écart passé dans le badge ou seulement dans les indicateurs ? *Tranché (12/10/2026) : dans les indicateurs (veille, revue), pas dans le badge.*
+- **PRV-02** *Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9)* — Champs structurés ou sections libres du modèle importé ? *Tranché (12/10/2026) : champs structurés, sections libres du modèle importé conservées.*
 - **PRV-04** *Traçabilité de la délivrance, de la check-list et de la clôture des permis* — Interdire la clôture avant la fin des 2 h de surveillance ?
 - **PRV-05** *Protocoles de sécurité de chargement et déchargement* — Transporteurs gérés comme entreprises extérieures ?
 - **PRV-06** *Inspection commune « préalable » acceptée après le début des travaux* — Refus strict ou écart tracé ?
@@ -1082,8 +1145,8 @@ Décisions attendues du responsable produit avant ou pendant le développement.
 
 **Risques / DUERP**
 
-- **DUE-01** *Mise à disposition du DUERP aux salariés, anciens salariés et instances* — Tout le DUERP ou l'unité du salarié ?
-- **DUE-02** *PAPRIPACT : programme annuel de prévention* — Champs coût et ressources sur toutes les actions ?
+- **DUE-01** *Mise à disposition du DUERP aux salariés, anciens salariés et instances* — Tout le DUERP ou l'unité du salarié ? *Tranché (12/10/2026) : tout le DUERP en lecture pour tous les rôles, registre des demandes d'accès, version imprimable.*
+- **DUE-02** *PAPRIPACT : programme annuel de prévention* — Champs coût et ressources sur toutes les actions ? *Tranché (12/10/2026) : coût, ressources et indicateur sur les lignes du programme seulement (optionnels).*
 - **DUE-04** *Annulation d'une action : détachement absent de l'historique du risque* — Garder l'action annulée grisée ?
 - **DUE-07** *Réévaluation après accident et mise à jour du DUERP déclenchée* — Seuil de gravité imposant une nouvelle version ?
 - **DUE-10** *Contenu d'une version figé à la validation* — État au jour de la validation ou de l'archivage ?

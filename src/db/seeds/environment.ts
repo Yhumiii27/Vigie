@@ -8,6 +8,10 @@ import type { SeedTx } from './types';
 // Deux bordereaux non finalisés plus de 30 jours après la collecte (FD-11 du 19/08, FD-04 du 27/08), un enlèvement
 // annulé (doublon du 08/07, motif conservé), le relevé de septembre 2026 manquant sur le site B, et les deux
 // enlèvements consécutifs au déversement EV-2026-126 rattachés à l'événement.
+// Mentions de l'arrêté du 31 mai 2021 (DOC-02) : SIRET, adresse et récépissé des collecteurs, SIRET et adresse des
+// installations, qualification du traitement — fictifs (SIRET de la forme 000000000000NN, clé de Luhn valide). Écart voulu :
+// les enlèvements confiés à [Transports Benne Express] (transporteur distinct du collecteur, non référencé) n'ont ni SIRET,
+// ni adresse, ni récépissé du transporteur — trois enlèvements de 2026 aux mentions incomplètes (14/01, 15/04, 08/07).
 
 // [id, site, libellé, code déchet, unité, code traitement, filière de traitement, collecteur, installation de destination]
 const STREAMS: [string, string, string, string, string, string, string, string, string][] = [
@@ -24,6 +28,42 @@ const STREAMS: [string, string, string, string, string, string, string, string, 
   ['FD-11', 'ville-b', "Huiles hydrauliques usagées (banc d'essais)", '13 01 10*', 'kg', 'R9', 'Régénération', '[Collecteur Huiles Ouest]', '[Raffinerie de régénération — Ville C]'],
   ['FD-12', 'ville-b', "Déchets en mélange (zone d'essais)", '20 03 01', 'kg', 'D10', 'Incinération', '[Collecteur DIB Ouest]', '[Unité d’incinération — Ville B]'],
 ];
+
+// Collecteurs (transporteurs par défaut) : SIRET, adresse, n° de récépissé de déclaration (R. 541-50 à R. 541-53).
+const COLLECTORS: Record<string, [siret: string, address: string, receipt: string]> = {
+  '[Collecteur Huiles Ouest]': ['00000000000034', '[ZI des Huiles, Ville C]', '[Récépissé transport n° 2024-0001]'],
+  '[Collecteur DD Ouest]': ['00000000000042', '[ZA Est, Ville D]', '[Récépissé transport n° 2023-0142]'],
+  '[Ferrailleur Ouest]': ['00000000000059', '[Port de Ville A]', '[Récépissé transport n° 2022-0077]'],
+  '[Collecteur DIB Ouest]': ['00000000000067', '[Route de Ville G]', '[Récépissé transport n° 2025-0019]'],
+};
+// Installations de destination : SIRET et adresse.
+const DESTINATIONS: Record<string, [siret: string, address: string]> = {
+  '[Raffinerie de régénération — Ville C]': ['00000000000075', '[Ville C]'],
+  '[Cimenterie — Ville D]': ['00000000000083', '[Ville D]'],
+  '[Centre de reconditionnement de fûts — Ville E]': ['00000000000091', '[Ville E]'],
+  '[Centre de traitement physico-chimique — Ville F]': ['00000000000109', '[Ville F]'],
+  '[Centre de recyclage des métaux — Ville A]': ['00000000000117', '[Ville A]'],
+  '[Papeterie — Ville G]': ['00000000000125', '[Ville G]'],
+  '[Plateforme bois — Ville H]': ['00000000000133', '[Ville H]'],
+  '[Unité d’incinération — Ville A]': ['00000000000141', '[Ville A]'],
+  '[Centre d’incinération de déchets dangereux — Ville I]': ['00000000000158', '[Ville I]'],
+  '[Unité d’incinération — Ville B]': ['00000000000166', '[Ville B]'],
+};
+// Qualification du traitement final (hiérarchie de l'art. L. 541-1) : R9 régénération, R3/R4 recyclage, R1 valorisation
+// énergétique, D9/D10 élimination.
+const QUALIFICATION: Record<string, string> = {
+  'FD-01': 'recyclage', 'FD-02': 'valorisation_energetique', 'FD-03': 'recyclage', 'FD-04': 'elimination', 'FD-05': 'recyclage', 'FD-06': 'recyclage',
+  'FD-07': 'recyclage', 'FD-08': 'recyclage', 'FD-09': 'elimination', 'FD-10': 'elimination', 'FD-11': 'recyclage', 'FD-12': 'elimination',
+};
+
+/** Mentions par défaut des filières de démonstration (mise à niveau d'une base antérieure à la migration 0004, seed.ts). */
+export function demoWasteStreamMentions(): Record<string, { pop: boolean; qualification: string; collectorSiret: string; collectorAddress: string; collectorReceipt: string; destinationSiret: string; destinationAddress: string }> {
+  return Object.fromEntries(STREAMS.map(([id, , , , , , , collector, destination]) => {
+    const [collectorSiret, collectorAddress, collectorReceipt] = COLLECTORS[collector];
+    const [destinationSiret, destinationAddress] = DESTINATIONS[destination];
+    return [id, { pop: false, qualification: QUALIFICATION[id], collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress }];
+  }));
+}
 
 // [filière, date d'enlèvement, quantité (kg), n° BSD, statut BSD, transporteur (défaut : collecteur), notes]
 const ENTRIES: [string, string, number, string | null, string | null, string | null, string | null][] = [
@@ -84,9 +124,22 @@ const TREND_2026: Record<keyof typeof SEASON, number> = { electricite: 0.955, ga
 const iso = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}-01`;
 
 export async function seedEnvironment(tx: SeedTx) {
-  const streams = STREAMS.map(([id, siteId, label, ewcCode, unit, treatmentCode, channel, collector, destination]) => ({
-    id, siteId, label, ewcCode, hazardous: ewcCode.endsWith('*'), unit, treatmentCode, channel, collector, destination,
-  }));
+  const streams = STREAMS.map(([id, siteId, label, ewcCode, unit, treatmentCode, channel, collector, destination]) => {
+    const [collectorSiret, collectorAddress, collectorReceipt] = COLLECTORS[collector];
+    const [destinationSiret, destinationAddress] = DESTINATIONS[destination];
+    return {
+      id, siteId, label, ewcCode, hazardous: ewcCode.endsWith('*'), unit, treatmentCode, channel, collector, destination,
+      pop: false, qualification: QUALIFICATION[id], collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
+    };
+  });
+  // Mentions copiées de la filière à l'inscription ; transporteur : celles du collecteur quand il assure lui-même l'enlèvement.
+  const mentions = (s: (typeof streams)[number], transporter: string) => ({
+    pop: s.pop, qualification: s.qualification, destinationSiret: s.destinationSiret, destinationAddress: s.destinationAddress,
+    ...(transporter === s.collector
+      ? { transporterSiret: s.collectorSiret, transporterAddress: s.collectorAddress, transporterReceipt: s.collectorReceipt }
+      : { transporterSiret: null, transporterAddress: null, transporterReceipt: null }),
+    pickupAddress: null,
+  });
   await tx.insert(t.wasteStreams).values(streams);
 
   const byId = new Map(streams.map((s) => [s.id, s]));
@@ -95,7 +148,7 @@ export async function seedEnvironment(tx: SeedTx) {
     return {
       siteId: s.siteId, streamId, removedOn, quantity, bsdNumber, bsdStatus,
       // Copies figées à l'inscription (cf. saveWasteEntry).
-      ewcCode: s.ewcCode, treatmentCode: s.treatmentCode, destination: s.destination,
+      ewcCode: s.ewcCode, treatmentCode: s.treatmentCode, destination: s.destination, ...mentions(s, transporter ?? s.collector),
       transporter: transporter ?? s.collector, notes,
       // Enlèvements consécutifs au déversement du magasin.
       eventId: notes?.includes('EV-2026-126') ? 'EV-2026-126' : null,
@@ -105,7 +158,7 @@ export async function seedEnvironment(tx: SeedTx) {
   const dib = byId.get('FD-09')!;
   await tx.insert(t.wasteEntries).values({
     siteId: dib.siteId, streamId: dib.id, removedOn: '2026-07-09', quantity: 1340, transporter: '[Transports Benne Express]',
-    ewcCode: dib.ewcCode, treatmentCode: dib.treatmentCode, destination: dib.destination, notes: null,
+    ewcCode: dib.ewcCode, treatmentCode: dib.treatmentCode, destination: dib.destination, ...mentions(dib, '[Transports Benne Express]'), notes: null,
     cancelledAt: new Date('2026-07-10T09:30:00+02:00'), cancelledById: 'clefevre', cancelReason: "Doublon de l'enlèvement du 08/07/2026 (saisie en double).",
   });
 

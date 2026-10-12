@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cookieJar, form } from '../next-mocks';
 import { eq } from 'drizzle-orm';
 import { closeDb, getDb, schema as t } from '@/db';
+import { toParisLocal } from '@/lib/dates';
 import { resetConfig } from '@/lib/env';
 
 // Données de santé d'un AT (SEC-06) : blessure, jours perdus et déclaration CPAM visibles et modifiables par
@@ -28,16 +29,26 @@ async function as(role: string) {
   cookieJar.set('vigie_site', ev.siteId);
 }
 
-/** Formulaire « Modifier » de l'AT, d'après la fiche enregistrée (sans champ de santé). */
-async function editForm(over: Record<string, string> = {}) {
+/**
+ * Formulaire « Modifier » de l'AT, d'après la fiche enregistrée : rubriques de la déclaration (victime, circonstances…,
+ * exigées sur un AT qualifié, EVT-05) sans champ de santé ; `health` : avec les données de santé (rôle habilité).
+ */
+async function editForm(over: Record<string, string> = {}, { health = false } = {}) {
   const db = await getDb();
   const [e] = await db.select().from(t.events).where(eq(t.events.id, AT));
   const s = (v: string | number | null) => (v == null ? '' : String(v));
   return form({
-    id: e.id, type: e.type, title: e.title, occurredOn: e.occurredOn, location: e.location, equipment: s(e.equipment),
+    id: e.id, type: e.type, title: e.title, occurredOn: e.occurredOn, occurredTime: s(e.occurredTime), location: e.location, equipment: s(e.equipment),
     keystoneProject: s(e.keystoneProject), pilotId: s(e.pilotId), severity: s(e.severity), siteId: e.siteId,
     description: e.description, immediateMeasures: e.immediateMeasures, controlId: s(e.controlId), riskId: s(e.riskId),
-    documentId: s(e.documentId), preventionPlanId: s(e.preventionPlanId), permitId: s(e.permitId), ...over,
+    documentId: s(e.documentId), preventionPlanId: s(e.preventionPlanId), permitId: s(e.permitId),
+    victimKind: s(e.victimKind), victimId: s(e.victimId), victimName: s(e.victimName), victimCompany: s(e.victimCompany), workSchedule: s(e.workSchedule),
+    knownAt: e.knownAt ? toParisLocal(e.knownAt) : '', activity: s(e.activity), circumstances: s(e.circumstances), witnesses: s(e.witnesses), thirdParty: s(e.thirdParty),
+    ...(health ? {
+      injury: s(e.injury), lostDays: s(e.lostDays), cpamDeclaredOn: s(e.cpamDeclaredOn), lesionNature: s(e.lesionNature), lesionSite: s(e.lesionSite),
+      careGiven: s(e.careGiven), reservesOn: s(e.reservesOn),
+    } : {}),
+    ...over,
   });
 }
 
@@ -67,16 +78,17 @@ describe('données de santé des accidents du travail', () => {
   it('modification : refusée avec une donnée de santé, conservée sinon ; un AT garde son type', async () => {
     const { saveEvent } = await import('@/server/events');
     await as('Chef de service');
-    for (const field of ['injury', 'lostDays', 'cpamDeclaredOn']) {
-      const r = await saveEvent({}, await editForm({ [field]: field === 'injury' ? 'soins' : field === 'lostDays' ? '0' : '2026-09-10' }));
-      expect(r.error).toMatch(/données de santé/);
+    const values: Record<string, string> = { injury: 'soins', lostDays: '0', cpamDeclaredOn: '2026-09-10', lesionNature: 'Entorse', lesionSite: 'Cheville', careGiven: 'Urgences', reservesOn: '2026-09-12' };
+    for (const [field, value] of Object.entries(values)) {
+      const r = await saveEvent({}, await editForm({ [field]: value }));
+      expect(r.error, field).toMatch(/données de santé/);
     }
     expect(await saveEvent({}, await editForm({ type: 'PA' }))).toMatchObject({ fieldErrors: { type: expect.any(String) } });
-    expect(await saveEvent({}, await editForm({ title: 'Entorse sur la plateforme PIRL' }))).toMatchObject({ ok: true });
-    expect(await stored()).toEqual({ title: 'Entorse sur la plateforme PIRL', type: 'AT', injury: 'arret', lostDays: 3, cpamDeclaredOn: '2026-09-09' });
+    expect(await saveEvent({}, await editForm({ title: 'Chute sur la plateforme PIRL' }))).toMatchObject({ ok: true });
+    expect(await stored()).toEqual({ title: 'Chute sur la plateforme PIRL', type: 'AT', injury: 'arret', lostDays: 3, cpamDeclaredOn: '2026-09-09' });
 
     await as('Animateur QHSE');
-    expect(await saveEvent({}, await editForm({ injury: 'arret', lostDays: '4', cpamDeclaredOn: '2026-09-09' }))).toMatchObject({ ok: true });
+    expect(await saveEvent({}, await editForm({ lostDays: '4' }, { health: true }))).toMatchObject({ ok: true });
     expect(await stored()).toMatchObject({ injury: 'arret', lostDays: 4 });
   });
 

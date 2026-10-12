@@ -1,5 +1,7 @@
-// Filtres des onglets Plans et Permis (?filtre=, ?type=), partagés par l'écran et le registre imprimable.
+// Filtres des onglets Plans et Permis (?filtre=, ?type=), partagés par l'écran et le registre imprimable
+// (qui ajoute la période ?annee=, ?mois= et le filtre « Tous, annulés compris »).
 
+import { addDays, addMonths, monthName } from '@/lib/dates';
 import type { PermitState, PermitType, PlanPhase } from './model';
 
 export type ListFilter<S extends string> = {
@@ -34,6 +36,12 @@ export const PERMIT_FILTERS: ListFilter<PermitState>[] = [
   { key: 'tous', label: 'Tous', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos'], empty: 'Aucun permis sur ce site.' },
 ];
 
+/** Registre imprimable : filtres de l'onglet Permis, plus tous les permis annulés compris (l'écran reste inchangé). */
+export const REGISTER_FILTERS: ListFilter<PermitState>[] = [
+  ...PERMIT_FILTERS,
+  { key: 'registre', label: 'Tous, annulés compris', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos', 'annule'], empty: 'Aucun permis sur ce site.' },
+];
+
 /** ?type= : tous types (sans paramètre), permis de feu, permis d'essai. */
 export const PERMIT_TYPE_FILTERS: { key: PermitType | null; label: string }[] = [
   { key: null, label: 'Tous types' },
@@ -63,3 +71,29 @@ export const filterParam = <S extends string>(filters: ListFilter<S>[], f: ListF
 /** Filtres affichés : les filtres facultatifs seulement s'ils contiennent des éléments ou s'ils sont sélectionnés. */
 export const shownFilters = <S extends string>(filters: ListFilter<S>[], current: ListFilter<S>, count: (f: ListFilter<S>) => number) =>
   filters.filter((f) => !f.optional || f === current || count(f) > 0);
+
+// ─── Période du registre des permis (?annee=, ?mois=) ───────────────────────
+
+/** Période du registre : jours « AAAA-MM-JJ » inclus, libellé (« octobre 2026 », « année 2026 »), valeurs des paramètres. */
+export type Period = { from: string; to: string; label: string; annee: string; mois?: string };
+
+/**
+ * Période demandée : une année (?annee=2026), ou un mois de cette année (&mois=1 à 12) ; un mois invalide est ignoré
+ * (l'année entière), un mois sans année valide ne donne aucune période (null : toutes les périodes).
+ */
+export function pickPeriod(annee?: string, mois?: string): Period | null {
+  if (!annee || !/^\d{4}$/.test(annee)) return null;
+  const m = mois && /^\d{1,2}$/.test(mois) ? Number(mois) : NaN;
+  if (Number.isInteger(m) && m >= 1 && m <= 12) {
+    const from = `${annee}-${String(m).padStart(2, '0')}-01`;
+    return { from, to: addDays(addMonths(from, 1), -1), label: `${monthName(m)} ${annee}`, annee, mois: String(m) };
+  }
+  return { from: `${annee}-01-01`, to: `${annee}-12-31`, label: `année ${annee}`, annee };
+}
+
+/**
+ * Permis dont la validité recoupe la période, en jours de Paris : validFrom et validTo en date-heure locale
+ * « AAAA-MM-JJTHH:mm » (PermitView). Un permis du 30/09 22:00 au 01/10 06:00 compte en septembre et en octobre.
+ */
+export const inPeriod = (p: { validFrom: string; validTo: string }, period: Pick<Period, 'from' | 'to'>) =>
+  p.validFrom.slice(0, 10) <= period.to && p.validTo.slice(0, 10) >= period.from;

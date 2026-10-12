@@ -4,11 +4,13 @@ import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { ChangeEntry } from '@/components/ChangeLog';
 import {
-  PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, SIGNAL_HORIZON_DAYS,
-  firstMinuteReason, firstMinuteRule, fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded,
-  lacksSignedPlan, legalMandatory, legalReason, mandatoryReason, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan, permitPlanCheck,
-  permitState, planEndIssue, planPhase, planStatus, referenceNow, ruleBasis, sevesoLabel, toParisLocal,
-  type ChecklistItem, type PermitPlanIssueKind, type PermitState, type PermitType, type PlanPhase, type PlanStatus, type SiteRule,
+  PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, SIGNAL_HORIZON_DAYS, START_GAP_LABEL,
+  firstFullSignatureOn, firstMinuteReason, firstMinuteRule, fmtLocalLong, fmtLocalRange, fmtLocalShort, inGapWindow, inspectionDone, isFullySigned,
+  isInProgress, isMandatory, isPlanEnded, lacksSignedPlan, legalMandatory, legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitDays,
+  permitLacksSignedPlan, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planStatus, referenceNow,
+  ruleBasis, sevesoLabel, startGap, toParisLocal,
+  type ChecklistItem, type PermitPlanIssueKind, type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule,
+  type StartGapKind,
 } from '@/components/prevention/model';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { addDays, fmtDate, fmtDayMonth } from '../dates';
@@ -17,7 +19,7 @@ import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOS
 import { actionView, loadPeople } from '../queries';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
-import { currentSiteId, inSite } from '../session';
+import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { attachmentUrl } from '../uploads';
 
 // ─── Plans de prévention et permis ──────────────────────────────────────────
@@ -87,6 +89,13 @@ export type PlanView = {
   measures: string;
   signedEuOn: string | null;
   signedEeOn: string | null;
+  /** Première signature complète (EU et EE), conservée quand une modification a effacé les signatures. */
+  firstSignedOn: string | null;
+  /**
+   * Écart R. 4512-6 constaté au démarrage (plan obligatoire signé après le début, ou intervention sans plan signé), null
+   * sinon ; past : écart qui n'est plus en cours (plan signé depuis, ou intervention terminée), compté dans les indicateurs.
+   */
+  startGap: { kind: StartGapKind; label: string; past: boolean; signedOn: string | null } | null;
   ownerId: string | null;
   owner: string | null;
   status: PlanStatus;
@@ -126,7 +135,11 @@ export type PlanView = {
   /** Pièces jointes (exemplaire signé…), hors fichier source d'un formulaire importé (voir form). */
   attachments: { id: string; name: string; url: string; isImage: boolean; icon: string }[];
   form: PlanFormView | null;
-};
+  /** Sections exigées pour signer un plan obligatoire qui restent vides (libellés courts) ; vide si le plan n'est pas obligatoire. */
+  contentMissing: string[];
+  /** Sections du contenu réglementaire renseignées (8 sections et l'effectif prévisible). */
+  contentStats: { filled: number; total: number };
+} & PlanContent;
 
 export type PermitView = {
   id: string;
@@ -177,10 +190,14 @@ export type PermitView = {
   watching: boolean;
   closedAt: string | null;
   closedLabel: string | null;
+  /** Délivrance (dernière entrée « Permis délivré » du journal) : date-heure locale (Paris), null si le permis n'a pas été délivré. */
+  deliveredAt: string | null;
+  /** 06/10/2026 à 07:15 */
+  deliveredLabel: string | null;
   /** Motif d'annulation (statut annule). */
   cancelReason: string | null;
   cancelledBy: string | null;
-  /** Actions du plan d'actions unique rattachées au permis (originRef = référence du permis). */
+  /** Actions du plan d'actions unique rattachées au permis (actions.permitId, ACT-01). */
   actions: PlanView['actions'];
   /** Nombre d'actions rattachées au plan du permis (renvoi vers la fiche du plan). */
   planActions: number;
@@ -215,9 +232,12 @@ export type ContractorView = {
   history: ChangeEntry[];
 };
 
-/** Lignes du site sélectionné (plans, permis), référentiels et règle de prévention de chaque site. */
-const loadRows = cache(async () => {
-  const [db, site, people] = await Promise.all([getDb(), currentSiteId(), loadPeople()]);
+/**
+ * Lignes du site sélectionné (scope 'site') ou de tout le périmètre (scope 'perimeter' : échéances, TDB-05) — plans,
+ * permis —, référentiels et règle de prévention de chaque site.
+ */
+const loadRows = cache(async (scope: SiteScope = 'site') => {
+  const [db, site, people, keep] = await Promise.all([getDb(), currentSiteId(), loadPeople(), siteFilter(scope)]);
   const [contractors, plans, permits, sites, activities, linkedEvents] = await Promise.all([
     db.select().from(t.contractors),
     db.select().from(t.preventionPlans),
@@ -247,8 +267,8 @@ const loadRows = cache(async () => {
     /** Plans cités par un événement (signalement lié à l'intervention). */
     eventPlanIds: new Set(linkedEvents.map((e) => e.planId).filter(Boolean)),
     linkedEvents,
-    plans: plans.filter((p) => inSite(site, p.siteId)),
-    permits: permits.filter((p) => inSite(site, p.siteId)),
+    plans: plans.filter((p) => keep(p.siteId)),
+    permits: permits.filter((p) => keep(p.siteId)),
   };
 });
 type Rows = Awaited<ReturnType<typeof loadRows>>;
@@ -273,10 +293,23 @@ function gapsOf({ now, nowMs, plans, permits, allPlans, ruleOf }: Rows) {
   return { linkedPlan, planGaps, permitGaps, gapWith, countedPermitGaps };
 }
 
-/** Écarts et nombre d'interventions sans plan signé (plans en écart, permis en écart comptés à part) : même calcul pour l'écran et la veille. */
+type PlanRow = Rows['allPlans'][number];
+
+/**
+ * Écarts et nombre d'interventions sans plan signé (plans en écart, permis en écart comptés à part) : même calcul pour
+ * l'écran et la veille. Écarts passés (PRV-01, indicateurs seulement, ni badge ni échéance) : interventions commencées
+ * dans les 12 derniers mois avec un plan obligatoire signé après leur début, ou réalisées sans plan signé, hors écarts
+ * en cours ; plans annulés et permis exclus (la délivrance d'un permis exige déjà un plan signé).
+ */
 function gapSummary(rows: Rows) {
+  const { now, plans, ruleOf } = rows;
   const gaps = gapsOf(rows);
-  return { gaps, gapCount: gaps.planGaps.size + gaps.countedPermitGaps.size };
+  const pastGaps = plans
+    .filter((p) => !gaps.planGaps.has(p.id) && inGapWindow(p, now))
+    .map((p) => ({ plan: p, kind: startGap(p, now, ruleOf(p.siteId)) }))
+    .filter((x): x is { plan: PlanRow; kind: StartGapKind } => !!x.kind)
+    .sort((a, b) => b.plan.startOn.localeCompare(a.plan.startOn));
+  return { gaps, gapCount: gaps.planGaps.size + gaps.countedPermitGaps.size, pastGaps, pastGapCount: pastGaps.length };
 }
 
 /** Permis encore actifs (demandés ou délivrés, éventuellement expirés non clos). */
@@ -360,7 +393,7 @@ async function loadProcedure(db: Rows['db']): Promise<ProcedureLink | null> {
 export async function loadPrevention() {
   const rows = await loadRows();
   const { db, now, nowMs, people, contractors, sites, selectedSite, ruleOf, allPlans, allPermits, activities, eventPlanIds, linkedEvents, plans, permits } = rows;
-  const { gaps } = gapSummary(rows);
+  const { gaps, pastGaps } = gapSummary(rows);
   const name = (id: string | null) => (id ? people.get(id)?.name ?? null : null);
   const contractorOf = new Map(contractors.map((c) => [c.id, c]));
   const siteOf = new Map(sites.map((s) => [s.id, s.label]));
@@ -370,7 +403,8 @@ export async function loadPrevention() {
 
   const [preventionActions, attachments, imported, planLogs, permitLogs, contractorLogs, procedure] = await Promise.all([
     // Actions annulées comprises : elles restent rattachées (un plan qui en a une n'est plus un brouillon supprimable).
-    planIds.length || permitIds.length ? db.select().from(t.actions).where(and(eq(t.actions.origin, 'prevention'), isNotNull(t.actions.originRef))) : [],
+    // Source par les colonnes posées à la création (ACT-01), plus par la référence textuelle.
+    planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
     planIds.length ? db.select().from(t.attachments).where(eq(t.attachments.entityType, PLAN_ATTACHMENT)).orderBy(asc(t.attachments.createdAt)) : [],
     importIds.length ? db.select({ id: t.attachments.id }).from(t.attachments).where(inArray(t.attachments.id, importIds)) : [],
     loadChangeLogs('prevention_plan', planIds),
@@ -380,8 +414,8 @@ export async function loadPrevention() {
   ]);
   const linkedActions = preventionActions.filter((a) => a.status !== 'cancelled');
   const importedIds = new Set(imported.map((f) => f.id));
-  const actionsOf = (ref: string) => linkedActions
-    .filter((a) => a.originRef === ref)
+  const actionsOf = (key: 'preventionPlanId' | 'permitId', id: string) => linkedActions
+    .filter((a) => a[key] === id)
     .sort(byIdDesc)
     .map((a) => {
       const v = actionView(a, people, now);
@@ -409,6 +443,10 @@ export async function loadPrevention() {
     const check = isOpenPermit(p) ? permitPlanCheck(p, plan, rule) : null;
     const planIssue = check?.message ?? null;
     const planRequired = permitNeedsSignedPlan(p, rule);
+    const history = permitLogs.get(p.id) ?? [];
+    // Journal le plus récent d'abord : dernière délivrance (la date de délivrance n'a pas de colonne, voir PRV-04).
+    const delivery = p.status === 'demande' ? null : history.find((e) => e.action === 'status' && e.summary === PERMIT_DELIVERED);
+    const deliveredAt = delivery ? toParisLocal(new Date(delivery.at)) : null;
     return {
       id: p.id,
       type,
@@ -448,12 +486,14 @@ export async function loadPrevention() {
       watching: state === 'en_cours' && p.validTo.getTime() < nowMs,
       closedAt: p.closedAt ? toParisLocal(p.closedAt) : null,
       closedLabel: p.closedAt ? fmtLocalLong(toParisLocal(p.closedAt)) : null,
+      deliveredAt,
+      deliveredLabel: deliveredAt ? fmtLocalLong(deliveredAt) : null,
       cancelReason: p.status === 'annule' ? p.cancelReason : null,
       cancelledBy: p.status === 'annule' ? name(p.cancelledById) : null,
-      actions: actionsOf(p.id),
-      planActions: p.preventionPlanId ? linkedActions.filter((a) => a.originRef === p.preventionPlanId).length : 0,
+      actions: actionsOf('permitId', p.id),
+      planActions: p.preventionPlanId ? linkedActions.filter((a) => a.preventionPlanId === p.preventionPlanId).length : 0,
       events: eventsOf('permitId', p.id),
-      history: permitLogs.get(p.id) ?? [],
+      history,
     };
   });
   const PERMIT_ORDER: PermitState[] = ['en_cours', 'expire', 'delivre', 'demande', 'clos', 'annule'];
@@ -466,11 +506,12 @@ export async function loadPrevention() {
     const firstMinute = firstMinuteRule(rule);
     const mandatory = isMandatory(p, rule);
     const contractor = contractorOf.get(p.contractorId);
-    const actions = actionsOf(p.id);
+    const actions = actionsOf('preventionPlanId', p.id);
     const openPermitIds = allPermits.filter((x) => x.preventionPlanId === p.id && isOpenPermit(x)).map((x) => x.id);
     const endCheck = { mandatory, now, openPermitIds, actionCount: actions.length };
     const liveActivities = activities.filter((a) => a.planId === p.id && a.endOn >= now).length;
     const form = parseFormData(p.formData);
+    const gapKind = startGap(p, now, rule);
     return {
       id: p.id,
       siteId: p.siteId,
@@ -493,6 +534,22 @@ export async function loadPrevention() {
       measures: p.measures,
       signedEuOn: p.signedEuOn,
       signedEeOn: p.signedEeOn,
+      firstSignedOn: p.firstSignedOn,
+      startGap: gapKind && {
+        kind: gapKind, label: START_GAP_LABEL[gapKind], past: !gaps.planGaps.has(p.id),
+        signedOn: gapKind === 'signe_apres' ? firstFullSignatureOn(p) : null,
+      },
+      eeHeadcount: p.eeHeadcount,
+      eeSupervisor: p.eeSupervisor,
+      subcontracting: p.subcontracting,
+      dangerousPhases: p.dangerousPhases,
+      equipment: p.equipment,
+      workerInstructions: p.workerInstructions,
+      emergencyOrganisation: p.emergencyOrganisation,
+      coordination: p.coordination,
+      sirPosts: p.sirPosts,
+      contentMissing: mandatory ? missingPlanContent(p) : [],
+      contentStats: planContentStats(p),
       ownerId: p.ownerId,
       owner: name(p.ownerId),
       status,
@@ -514,7 +571,7 @@ export async function loadPrevention() {
         ?? (liveActivities ? `${plural(liveActivities, 'activité de la carte en cours ou à venir rattachée', 'activités de la carte en cours ou à venir rattachées')} au plan : retirez-les ou modifiez-les avant d'annuler le plan.` : null),
       deletable: status === 'brouillon' && !p.signedEuOn && !p.signedEeOn
         && !allPermits.some((x) => x.preventionPlanId === p.id)
-        && !preventionActions.some((a) => a.originRef === p.id)
+        && !preventionActions.some((a) => a.preventionPlanId === p.id)
         && !activities.some((a) => a.planId === p.id) && !eventPlanIds.has(p.id),
       cancelled: p.status === 'annule'
         ? { on: p.cancelledAt ? fmtInstant(p.cancelledAt) : '—', by: name(p.cancelledById), reason: p.cancelReason ?? '' }
@@ -586,6 +643,9 @@ export async function loadPrevention() {
   const missing = planViews.filter((p) => p.missingSignature);
   const permitAlerts = permitViews.filter((p) => gaps.countedPermitGaps.has(p.id));
   const gapCount = missing.length + permitAlerts.length;
+  const lateSigned = pastGaps.filter((g) => g.kind === 'signe_apres').length;
+  const unsignedPast = pastGaps.length - lateSigned;
+  const pastRefs = pastGaps.slice(0, 3).map((g) => g.plan.id).join(', ') + (pastGaps.length > 3 ? '…' : '');
   const gapSites = [...new Set([...missing, ...permitAlerts].map((p) => p.siteId))];
   const toSign = planViews.filter((p) => p.status === 'a_signer');
   const active = permitViews.filter((p) => p.state === 'en_cours' || p.state === 'delivre');
@@ -614,6 +674,19 @@ export async function loadPrevention() {
       tone: gapCount ? 'danger' : 'ok',
     },
     {
+      // Écarts R. 4512-6 en cours et passés (interventions commencées depuis 12 mois) : indicateur seulement, hors badge.
+      label: 'Écarts R. 4512-6 sur 12 mois',
+      value: String(gapCount + pastGaps.length),
+      sub: gapCount ? `dont ${gapCount} en cours` : pastGaps.length ? 'aucun en cours' : 'conforme',
+      note: pastGaps.length
+        ? `${[
+          lateSigned && plural(lateSigned, 'plan signé après le démarrage', 'plans signés après le démarrage'),
+          unsignedPast && plural(unsignedPast, 'intervention réalisée sans plan signé', 'interventions réalisées sans plan signé'),
+        ].filter(Boolean).join(' · ')} (${pastRefs})`
+        : 'Aucun plan signé après le démarrage ni intervention réalisée sans plan signé',
+      tone: gapCount ? 'danger' : pastGaps.length ? 'warn' : 'ok',
+    },
+    {
       label: 'Permis actifs',
       value: String(active.length),
       sub: `${active.filter((p) => p.type === 'feu').length} feu · ${active.filter((p) => p.type === 'essai').length} essai`,
@@ -635,6 +708,11 @@ export async function loadPrevention() {
     alerts: missing,
     /** Permis d'entreprises extérieures sans plan signé, hors permis d'un plan déjà en écart. */
     permitAlerts,
+    /** Écarts R. 4512-6 passés sur 12 mois (indicateur), le plus récent d'abord. */
+    pastGaps: pastGaps.map(({ plan: p, kind }) => ({
+      id: p.id, title: p.title, contractor: contractorOf.get(p.contractorId)?.name ?? p.contractorId, startOn: p.startOn, kind,
+      label: START_GAP_LABEL[kind], href: `/prevention?plan=${encodeURIComponent(p.id)}`,
+    })),
     siteRules,
     procedure,
     counts: { inProgress: inProgress.length, activePermits: active.length, contractors: activeContractors.length },
@@ -655,29 +733,39 @@ export type PreventionData = Awaited<ReturnType<typeof loadPrevention>>;
 
 /**
  * Indicateur calculé pour la veille réglementaire (exigence du domaine PREVENTION_REQUIREMENT_DOMAIN, R. 4512-6) :
- * interventions sans plan signé sur le site sélectionné, même calcul que l'écran. L'évaluation de conformité reste
- * un jugement du pilote, affiché à côté de cet indicateur.
+ * interventions sans plan signé en cours et écarts passés sur 12 mois (PRV-01), sur le site sélectionné, même calcul que
+ * l'écran. gapCount compte les deux ; l'évaluation de conformité reste un jugement du pilote, affiché à côté.
  */
-export const loadPreventionCompliance = cache(async (): Promise<{ gapCount: number; label: string; tone: Tone; href: string }> => {
-  const { gapCount } = gapSummary(await loadRows());
+export const loadPreventionCompliance = cache(async (): Promise<{
+  gapCount: number; currentGapCount: number; pastGapCount: number; label: string; tone: Tone; href: string;
+}> => {
+  const { gapCount: current, pastGapCount: past } = gapSummary(await loadRows());
+  const pastLabel = `${plural(past, 'écart passé', 'écarts passés')} sur 12 mois`;
   return {
-    gapCount,
-    label: gapCount ? plural(gapCount, 'intervention sans plan signé', 'interventions sans plan signé') : 'Aucune intervention sans plan signé',
-    tone: gapCount ? 'danger' : 'ok',
+    gapCount: current + past,
+    currentGapCount: current,
+    pastGapCount: past,
+    label: current
+      ? `${plural(current, 'intervention sans plan signé', 'interventions sans plan signé')}${past ? ` · ${pastLabel}` : ''}`
+      : past ? `Aucune intervention en cours sans plan signé · ${pastLabel}` : 'Aucun écart R. 4512-6 sur 12 mois',
+    tone: current ? 'danger' : past ? 'warn' : 'ok',
     href: '/prevention',
   };
 });
 
 /**
- * Échéances du domaine (tableau de bord, notifications, badge), sur le site sélectionné ; plans clos ou annulés exclus :
+ * Échéances du domaine (tableau de bord, notifications, badge), sur tous les sites du périmètre (TDB-05, siteId du plan
+ * ou du permis) ; plans clos ou annulés exclus :
  * - plans : intervention en cours sans plan signé (écart) ; plan obligatoire à signer avant un démarrage sous l'horizon ;
  *   période échue, plan à clore ; sinon inspection commune prévue sous l'horizon pour un plan non signé ;
  * - permis : écart (entreprise extérieure sans plan signé, compté avec son plan s'il est lui-même en écart) ;
  *   permis expiré non clos ou demande échue ; demande à délivrer dont la validité commence sous l'horizon.
  * Les échéances ouvrent directement la fiche concernée (/prevention?plan=… ou ?onglet=permis&permis=…).
+ * Les écarts R. 4512-6 passés (PRV-01 : plan signé après le début, intervention réalisée sans plan signé) restent des
+ * indicateurs (écran, veille, revue de direction) : ni échéance ni badge ; l'action qui trace l'écart est exigée à la clôture.
  */
 export const loadPreventionSignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
-  const rows = await loadRows();
+  const rows = await loadRows('perimeter');
   const { now, nowMs, people, contractors, plans, permits, ruleOf } = rows;
   const { gaps } = gapSummary(rows);
   const horizon = addDays(now, SIGNAL_HORIZON_DAYS);
@@ -691,19 +779,20 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const who = [contractorName(p.contractorId), owner(p.ownerId)].filter(Boolean).join(' · ');
     const ownerIds = p.ownerId ? [p.ownerId] : undefined;
     const kind = 'Plan de prévention';
+    const siteId = p.siteId;
     if (gaps.planGaps.has(p.id)) {
-      todo.push({ date: now, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, overdue: true });
+      todo.push({ date: now, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
       return;
     }
     if (p.endOn < now) {
-      todo.push({ date: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, overdue: true });
+      todo.push({ date: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
       return;
     }
     const toSignBeforeStart = p.startOn > now && p.startOn <= horizon && isMandatory(p, ruleOf(p.siteId)) && !isFullySigned(p);
     if (toSignBeforeStart) {
-      todo.push({ date: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds });
+      todo.push({ date: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds, siteId });
     } else if (!isFullySigned(p) && p.inspectionOn && p.inspectionOn > now && p.inspectionOn <= horizon) {
-      todo.push({ date: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds });
+      todo.push({ date: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
     }
   });
   permits.forEach((p) => {
@@ -712,11 +801,12 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const who = [contractorName(p.contractorId), owner(p.issuerId)].filter(Boolean).join(' · ');
     const href = `/prevention?onglet=permis&permis=${p.id}`;
     const ownerIds = p.issuerId ? [p.issuerId] : undefined;
+    const siteId = p.siteId;
     // Permis en écart : compté à part, sauf s'il est rattaché à un plan déjà en écart (échéance du plan).
     if (gaps.permitGaps.has(p.id)) {
       if (!gaps.countedPermitGaps.has(p.id)) return;
       const what = p.status === 'demande' ? `demande de ${label}` : label;
-      todo.push({ date: now, kind: 'Permis', tone: 'danger', title: `${p.id} · ${what} d'une entreprise extérieure sans plan de prévention signé — ${p.location}`, who, href, ownerIds, overdue: true });
+      todo.push({ date: now, kind: 'Permis', tone: 'danger', title: `${p.id} · ${what} d'une entreprise extérieure sans plan de prévention signé — ${p.location}`, who, href, ownerIds, siteId, overdue: true });
       return;
     }
     if (permitState(p, nowMs) === 'expire') {
@@ -725,14 +815,14 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
         title: p.status === 'demande'
           ? `${p.id} · demande de ${label} échue, jamais délivrée — ${p.location}`
           : `${p.id} · ${label} expiré non clos — ${p.location}`,
-        who, href, ownerIds, overdue: true,
+        who, href, ownerIds, siteId, overdue: true,
       });
       return;
     }
     const { from } = permitDays(p);
     if (p.status === 'demande' && from <= horizon) {
       const validity = fmtLocalRange(toParisLocal(p.validFrom), toParisLocal(p.validTo));
-      todo.push({ date: from > now ? from : now, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds });
+      todo.push({ date: from > now ? from : now, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
     }
   });
 

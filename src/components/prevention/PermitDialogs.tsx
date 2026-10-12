@@ -334,11 +334,17 @@ function PermitSheet({ permit, options, canManage, onEdit, onCreateAction, onCan
         <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{permit.typeLabel}</span>
         {permit.planGap && <ToneTag tone="danger">{permit.status === 'demande' ? 'Demande' : 'Entreprise extérieure'} sans plan signé · écart</ToneTag>}
         {permit.planGapWith && <span style={muted}>compté avec le plan {permit.planGapWith}, en écart</span>}
-        {!ended && (
-          <Link href={`/prevention/carte?permis=${encodeURIComponent(permit.id)}`} className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-            <Icon name="ph-map-trifold" size={13} />Voir sur la carte
-          </Link>
-        )}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+          {/* Fiche à afficher sur le lieu des travaux : lien HTML simple (nouvel onglet), la feuille d'impression ne reste pas chargée. */}
+          <a href={`/prevention/imprimer/permis/${encodeURIComponent(permit.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+            <Icon name="ph-printer" size={13} />Imprimer
+          </a>
+          {!ended && (
+            <Link href={`/prevention/carte?permis=${encodeURIComponent(permit.id)}`} className="btn btn-ghost vg-btn-sm">
+              <Icon name="ph-map-trifold" size={13} />Voir sur la carte
+            </Link>
+          )}
+        </span>
       </div>
 
       {expired && delivered && <Notice tone="danger">Validité dépassée sans clôture : vérifiez la fin des travaux{permit.type === 'feu' ? ' et la ronde de surveillance' : ' et la remise en sécurité de la zone'}, puis clôturez le permis.</Notice>}

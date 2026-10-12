@@ -104,8 +104,8 @@ export function DecisionForm({ reviewId, decision, people, canDelete, onClose }:
 
 // ─── Compte rendu de la séance ──────────────────────────────────────────────
 
-export function HoldForm({ review, people, now, next, onClose }: {
-  review: ReviewView; people: readonly Option[]; now: string; next: { on: string; kind: ReviewKind }; onClose: () => void;
+export function HoldForm({ review, people, now, next, allSites, onClose }: {
+  review: ReviewView; people: readonly Option[]; now: string; next: { on: string; kind: ReviewKind }; allSites: boolean; onClose: () => void;
 }) {
   const chosen = new Set(review.participantIds);
   // Participants déjà enregistrés mais sortis de l'effectif : conservés dans la liste.
@@ -114,6 +114,12 @@ export function HoldForm({ review, people, now, next, onClose }: {
   return (
     <ActionForm action={holdReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }}
       submitLabel={review.status === 'tenue' ? 'Enregistrer le compte rendu' : 'Enregistrer · revue tenue'}>
+      {/* Première saisie : le dossier de séance est figé (indicateurs arrêtés à la date de la séance, AUD-06) sur tout le périmètre. */}
+      <p style={{ margin: 0, fontSize: 12, color: !allSites && !review.seanceFrozen ? 'var(--tone-warn-fg)' : 'var(--color-neutral-500)', textWrap: 'pretty' }}>
+        {review.seanceFrozen
+          ? 'Dossier de séance figé à la première saisie : le corriger ne recalcule pas ses indicateurs, sauf si la date de la séance change (« Tous les sites » requis).'
+          : `À l'enregistrement, le dossier de séance est figé avec les indicateurs arrêtés à la date de la séance.${allSites ? '' : ' Sélectionnez d’abord « Tous les sites » : il couvre tout le périmètre.'}`}
+      </p>
       <Field name="reviewOn" label="Date de la séance" hint="Corrigez-la si la revue s'est tenue un autre jour.">
         <Input name="reviewOn" type="date" defaultValue={review.reviewOn <= now ? review.reviewOn : now} max={now} />
       </Field>
@@ -169,7 +175,7 @@ export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }:
       </FormRow>
       {copyFrom && copyLabel && <Checkbox name="copyItems" label={`Reprendre la check-list de la ${copyLabel.toLowerCase()}`} defaultChecked />}
       <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        La revue est inscrite au programme annuel (ligne « Revues de direction ») si le mois est libre.
+        La revue est inscrite au programme annuel : elle reprend l&apos;échéance de revue déjà prévue ce mois-là, sinon elle est ajoutée à la ligne « Revues de direction » si ce mois y est libre (sinon : hors programme).
       </p>
     </ActionForm>
   );
@@ -178,7 +184,7 @@ export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }:
 export function RescheduleForm({ review, onClose }: { review: ReviewView; onClose: () => void }) {
   return (
     <ActionForm action={rescheduleReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }} submitLabel="Reporter la revue">
-      <Field name="to" label="Nouvelle date" hint="L'échéance de la revue au programme annuel est reportée à cette date.">
+      <Field name="to" label="Nouvelle date" hint="L'échéance de la revue au programme annuel est reportée à cette date (première date conservée).">
         <Input name="to" type="date" defaultValue={review.reviewOn} autoFocus />
       </Field>
     </ActionForm>
@@ -203,7 +209,7 @@ export function CloseReviewButton({ id, allSites }: { id: number; allSites: bool
   return (
     <span style={{ display: 'grid', gap: 6, flexBasis: '100%' }}>
       <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-        Le dossier est figé tel qu&apos;il est calculé maintenant et ne pourra plus être modifié.
+        Le dossier est figé avec les indicateurs arrêtés à la date de la séance (dossier de séance et compte rendu) et ne pourra plus être modifié.
         {!allSites && ' Sélectionnez d’abord « Tous les sites » : le dossier archivé couvre tout le périmètre.'}
       </span>
       <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -226,7 +232,7 @@ export function CancelReviewButton({ review }: { review: ReviewView }) {
   return (
     <ReasonButton action={cancelReview} hidden={{ id: review.id }} label="Annuler la revue" icon="ph-x-circle" className="btn btn-ghost vg-btn-sm"
       title="Annuler la revue" kicker={`Revue de direction du ${fmtDate(review.reviewOn)}`} submitLabel="Annuler la revue"
-      message="La revue et sa check-list restent consultables dans l'historique (filtre « Afficher les annulées »). L'échéance du programme annuel est conservée : reprogrammez-la si besoin."
+      message="La revue et sa check-list restent consultables dans l'historique (filtre « Afficher les annulées »). Son échéance au programme annuel est annulée avec elle (liste « Éléments annulés »)."
       hint="Obligatoire, 300 caractères au maximum." placeholder="Ex. Revue regroupée avec la revue annuelle" />
   );
 }

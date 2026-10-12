@@ -50,3 +50,43 @@ export function isoWeek(iso: string): number {
 
 /** Libellé de mois en toutes lettres (« octobre »). */
 export const monthName = (m: number) => MONTHS[m - 1];
+
+// ─── Dates et heures (fuseau Europe/Paris) ──────────────────────────────────
+
+const PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+const LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
+
+/** Instant → « AAAA-MM-JJTHH:mm » à l'heure de Paris (valeur d'un champ datetime-local). */
+export function toParisLocal(d: Date): string {
+  const p = Object.fromEntries(PARTS.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
+}
+
+const wallMs = (local: string) => {
+  const m = LOCAL.exec(local);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
+};
+
+/** « AAAA-MM-JJTHH:mm » (heure de Paris) → instant ; null si la saisie est invalide. */
+export function fromParisLocal(local: string): Date | null {
+  const wall = wallMs(local);
+  if (wall == null) return null;
+  const offset = (d: Date) => wallMs(toParisLocal(d))! - Math.floor(d.getTime() / 60_000) * 60_000;
+  let d = new Date(wall - offset(new Date(wall)));
+  d = new Date(wall - offset(d));
+  return d;
+}
+
+/** Ajoute des heures à une date-heure locale (calcul « horloge murale »). */
+export function addHoursLocal(local: string, hours: number): string {
+  const wall = wallMs(local);
+  if (wall == null) return local;
+  return new Date(wall + hours * 3_600_000).toISOString().slice(0, 16);
+}
+
+/** Instant de référence : date du jour Vigie (VIGIE_TODAY le cas échéant) à l'heure courante de Paris. */
+export function referenceNow(todayIso: string): Date {
+  return fromParisLocal(`${todayIso}T${toParisLocal(new Date()).slice(11)}`) ?? new Date();
+}

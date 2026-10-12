@@ -117,3 +117,19 @@ export async function currentSiteId(): Promise<string | null> {
 
 /** Vrai si l'élément appartient au site sélectionné (les éléments sans site valent pour tous les sites). */
 export const inSite = (siteId: string | null, itemSite: string | null | undefined) => !siteId || !itemSite || itemSite === siteId;
+
+/** Portée d'un chargement : site sélectionné (écrans), ou tout le périmètre de la personne (échéances, TDB-05). */
+export type SiteScope = 'site' | 'perimeter';
+
+/**
+ * Filtre de site d'un chargement : 'site' = site sélectionné (inSite ; « Tous les sites » = tout) ; 'perimeter' = tous les
+ * sites de la personne (inPerimeter(allowedSiteIds, id), archivés compris). Les éléments sans site passent toujours.
+ */
+export async function siteFilter(scope: SiteScope = 'site'): Promise<(siteId: string | null | undefined) => boolean> {
+  if (scope === 'perimeter') {
+    const allowed = await allowedSiteIds();
+    return (siteId) => inPerimeter(allowed, siteId);
+  }
+  const site = await currentSiteId();
+  return (siteId) => inSite(site, siteId);
+}

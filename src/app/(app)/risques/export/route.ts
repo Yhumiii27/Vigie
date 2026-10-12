@@ -3,7 +3,8 @@ import { canSee } from '@/lib/domain';
 import { fileSlug, loadDuerpVersion, loadRiskExport, risksCsv } from '@/lib/data/risks';
 import { getSession } from '@/lib/session';
 
-// Exports du DUERP :
+// Exports du DUERP, ouverts à tous les rôles (consultation du document unique, R. 4121-4, DUE-01 : contenu déjà affiché à
+// l'écran, sans pilote ni événement ; site sélectionné, instantanés réduits au périmètre) :
 //   ?unite=<id>                 → CSV de l'unité de travail (site sélectionné)
 //   ?portee=tout                → CSV de toutes les unités du site sélectionné (ou de tous les sites)
 //   ?version=<n>                → CSV de l'instantané d'une version archivée
@@ -24,6 +25,7 @@ const notFound = (msg: string) => new Response(msg, { status: 404, headers: { 'C
 
 export async function GET(req: NextRequest) {
   const { role } = await getSession();
+  // Écran « Évaluation des risques » : ouvert à tous les rôles aujourd'hui ; contrôle conservé si ROLES change.
   if (!canSee(role, 'risks')) return new Response('Accès refusé', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   const sp = req.nextUrl.searchParams;
 

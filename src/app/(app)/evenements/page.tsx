@@ -4,19 +4,21 @@ import type { ReactNode } from 'react';
 import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { PageHeader } from '@/components/PageHeader';
+import { AccidentSection } from '@/components/events/AccidentSection';
 import { AnalysisEditButton } from '@/components/events/AnalysisEditButton';
 import { EventActions, type EventActionItem } from '@/components/events/EventActions';
 import { EventAttachments } from '@/components/events/EventAttachments';
 import { EventEditButton, type EditableEvent, type EventFieldOptions } from '@/components/events/EventEditButton';
 import { EventHistory } from '@/components/events/EventHistory';
+import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { NewEventButton } from '@/components/events/NewEventButton';
-import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT, addActionBlocker, hasNcOrigin, injuryLabel, readD8, readTree, readWhys } from '@/components/events/shared';
+import { BENIGN_REGISTER_PATH, addActionBlocker, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
-import { fmtDate, fmtDayMonth } from '@/lib/dates';
+import { fmtDate, fmtDayMonth, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
-  D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
-  canApprove, canManage, canSee, canSeeHealth, isEmployee, severityTone, type AnalysisMethod,
+  ALL_SITES, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
+  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeHealth, isEmployee, severityTone, type AnalysisMethod,
 } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
@@ -28,7 +30,7 @@ export const metadata: Metadata = { title: SCREENS.events.title };
 const H6 = ({ children }: { children: React.ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 
 type Tab = 'ouverts' | 'tous' | 'classes';
-type ActionOptions = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+type ActionOptions = Pick<FormOptions, 'people' | 'origins' | 'sites' | 'allSites'>;
 
 export default async function EventsPage({ searchParams }: PageProps<'/evenements'>) {
   const { role, user, site, siteOptions } = await guard('events');
@@ -49,7 +51,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const [events, people, options, linkOptions] = await Promise.all([loadVisibleEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
 
   const needle = q.toLocaleLowerCase('fr');
-  const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin) && (!needle || [e.id, e.title, e.location, e.equipment, e.keystoneProject].some((v) => v?.toLocaleLowerCase('fr').includes(needle)));
+  const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin)
+    && (!needle || [e.id, e.title, e.location, e.equipment, e.keystoneProject, e.customer, e.customerRef].some((v) => v?.toLocaleLowerCase('fr').includes(needle)));
   const found = events.filter(matches);
   const inTab = { ouverts: found.filter(isOpen), tous: found.filter((e) => !e.dismissedAt), classes: found.filter((e) => !!e.dismissedAt) };
   const searched = inTab[tab];
@@ -77,8 +80,9 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     controls: linkOptions.controls, risks: linkOptions.risks, documents: linkOptions.documents, plans: linkOptions.plans, permits: linkOptions.permits,
   };
   // Seules les listes utiles au formulaire d'action sont transmises au composant client (pas les événements ni les actions du site).
-  const actionOptions: ActionOptions = { people: options.people, origins: options.origins, sites: options.sites };
-  const defaultSite = site.id !== 'all' ? site.id : siteOptions[0]?.id;
+  const actionOptions: ActionOptions = { people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites };
+  const defaultSite = site.id !== ALL_SITES ? site.id : siteOptions[0]?.id;
+  const health = canSeeHealth(role);
   const emptyText = tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' || q || type || origin ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
   const tabLink = (etat: Tab, label: string, n: number) => ({
     href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, sel: undefined }),
@@ -89,9 +93,17 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     <>
       <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · tous types`}
         actions={manager && (
-          <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
-            health={canSeeHealth(role)} initialOpen={sp.nouveau === '1'}
-            defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
+          <>
+            {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
+            {health && (
+              <a href={`${BENIGN_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-wide-only">
+                <i className="ph ph-notebook" style={{ fontSize: 14 }} />Registre des accidents bénins
+              </a>
+            )}
+            <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
+              health={health} initialOpen={sp.nouveau === '1'}
+              defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
+          </>
         )} />
       <div style={{ padding: '0 28px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, maxWidth: 420 }}>
@@ -148,16 +160,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
-            : <EventCard key={detail.event.id} detail={detail} log={log} options={fieldOptions} actionOptions={actionOptions} canEdit={manager} canRevert={canApprove(role)} canSeeRisks={canSee(role, 'risks')} canSeeEnv={canSee(role, 'env')} />)}
+            : <EventCard key={detail.event.id} detail={detail} log={log} options={fieldOptions} actionOptions={actionOptions} canEdit={manager} canRevert={canApprove(role)}
+              canSeeRisks={canSee(role, 'risks')} canEditRisks={canEditScreen(role, 'risks')} canSeeEnv={canSee(role, 'env')} today={now} />)}
         </div>
       </div>
     </>
   );
 }
-
-const Label = ({ children }: { children: ReactNode }) => (
-  <span style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{children}</span>
-);
 
 /** Libellé court de l'état d'un événement (en-tête de fiche). */
 function statusText(e: EventDetail['event'], stepDates: EventDetail['stepDates']) {
@@ -184,19 +193,6 @@ function StepTrack({ step, dismissed, stepDates }: { step: number; dismissed: bo
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function Fields({ fields }: { fields: [string, ReactNode][] }) {
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
-      {fields.map(([k, v]) => (
-        <div key={k} style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
-          <Label>{k}</Label>
-          <span style={{ fontSize: 12.5 }}>{v}</span>
-        </div>
-      ))}
     </div>
   );
 }
@@ -267,21 +263,17 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
   );
 }
 
-/** Données de santé d'un AT pour un rôle non habilité (SEC-06) : la fiche n'en reçoit aucune, seulement cette mention. */
-const Restricted = () => (
-  <span title={HEALTH_RESTRICTED_HINT} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-neutral-400)' }}>
-    <i className="ph ph-lock-simple" style={{ fontSize: 13 }} aria-hidden />{HEALTH_RESTRICTED}
-  </span>
-);
-
-function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, canSeeRisks, canSeeEnv }: {
+function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
   detail: EventDetail; log: ChangeEntry[]; options: EventFieldOptions; actionOptions: ActionOptions; canEdit: boolean; canRevert: boolean;
-  /** Accès à l'écran « Évaluation des risques » (chef de projet : non) : sinon le risque lié s'affiche sans lien. */
+  /** Accès à l'écran « Évaluation des risques » : sinon le risque lié s'affiche sans lien. */
   canSeeRisks: boolean;
+  /** Saisie sur l'écran « Évaluation des risques » (pas en consultation seule) : lien « Réévaluer le risque → ». */
+  canEditRisks: boolean;
   /** Accès à l'écran « Environnement et déchets » : sinon les enlèvements liés s'affichent sans lien. */
   canSeeEnv: boolean;
+  today: string;
 }) {
-  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, cpam, health, dismissal } = detail;
+  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, health, dismissal, accident, register } = detail;
   const sev = TONE[severityTone(e.severity)];
   const closed = e.step >= STEP_CLOSED;
   const locked = !!lock;
@@ -289,7 +281,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
   const link = (l: { label: string; href: string } | undefined, fallback = '—') => (l ? <Link href={l.href} className="vg-link" style={{ fontSize: 12.5 }}>{l.label}</Link> : fallback);
   const fields: [string, ReactNode][] = [
     ['Date', fmtDate(e.occurredOn)], ['Lieu', e.location], ['Site', siteLabel], ['Déclarant', e.declarantLabel], ['Projet Keystone lié', e.keystoneProject ?? '—'],
-    ['Équipement', (
+    [e.type === 'AT' ? 'Objet ou matériel en cause' : 'Équipement', (
       <span key="equipment" style={{ display: 'grid', gap: 3 }}>
         {e.equipment && <span>{e.equipment}</span>}
         {links.control && (
@@ -303,14 +295,13 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
     ['Pilote', e.pilot], ['Gravité potentielle', SEVERITY[e.severity]],
   ];
   if (hasNcOrigin(e.type)) fields.push(['Origine', e.ncOrigin ?? (e.type === 'RC' ? 'Réclamation client' : '—')]);
-  if (e.type === 'AT' && !health) fields.push(['Blessure · déclaration CPAM', <Restricted key="health" />]);
-  if (e.type === 'AT' && health) fields.push(['Blessure', e.injury === 'arret' && e.lostDays != null ? `${injuryLabel(e.injury)} · ${e.lostDays} j perdu${e.lostDays > 1 ? 's' : ''}` : injuryLabel(e.injury)]);
-  if (cpam) fields.push(['Déclaration CPAM', cpam.declaredOn ? `Déclarée le ${fmtDate(cpam.declaredOn)}` : <ToneTag tone={cpam.tone}>{cpam.label}</ToneTag>]);
+  if (e.type === 'RC') fields.push(['Client', e.customer ?? '—'], ['Référence client', e.customerRef ?? '—']);
+  if (e.type === 'ENV') fields.push(['Aspect environnemental', e.envAspect ?? '—'], ['Milieu concerné', e.envMedium ?? '—']);
   if (links.risk) {
     fields.push(['Risque DUER', canSeeRisks ? (
       <span key="risk" style={{ display: 'grid', gap: 3 }}>
         {link(links.risk)}
-        {['AT', 'PA', 'SD'].includes(e.type) && <Link href={links.risk.href} className="vg-link" style={{ fontSize: 11.5 }}>Réévaluer le risque →</Link>}
+        {canEditRisks && ['AT', 'PA', 'SD'].includes(e.type) && <Link href={links.risk.href} className="vg-link" style={{ fontSize: 11.5 }}>Réévaluer le risque →</Link>}
       </span>
     ) : links.risk.label]);
   }
@@ -329,16 +320,21 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
     )]);
   }
 
+  // Données de santé à null pour un rôle non habilité (withoutHealth) : le formulaire ne les propose pas.
   const editable: EditableEvent = {
-    id: e.id, siteId: e.siteId, type: e.type, title: e.title, occurredOn: e.occurredOn, location: e.location, equipment: e.equipment,
+    id: e.id, siteId: e.siteId, type: e.type, title: e.title, occurredOn: e.occurredOn, occurredTime: e.occurredTime, location: e.location, equipment: e.equipment,
     keystoneProject: e.keystoneProject, pilotId: e.pilotId, severity: e.severity, description: e.description, immediateMeasures: e.immediateMeasures,
-    ncOrigin: e.ncOrigin, injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn,
+    ncOrigin: e.ncOrigin, customer: e.customer, customerRef: e.customerRef, envAspect: e.envAspect, envMedium: e.envMedium,
+    victimKind: e.victimKind, victimId: e.victimId, victimName: e.victimName, victimCompany: e.victimCompany, workSchedule: e.workSchedule,
+    knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
+    injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn, lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven, reservesOn: e.reservesOn,
     controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId,
   };
   // Valeurs déjà enregistrées gardées dans les listes (pilote sorti, site archivé, rattachement hors du site sélectionné).
   const editOptions: EventFieldOptions = {
     ...options,
     people: withCurrent(options.people, e.pilotId, e.pilot),
+    victims: withCurrent(options.people, e.victimId, accident?.victim),
     sites: withCurrent(options.sites, e.siteId, siteLabel),
     controls: withCurrent(options.controls, e.controlId == null ? null : String(e.controlId), links.control?.label),
     risks: withCurrent(options.risks, e.riskId == null ? null : String(e.riskId), links.risk?.label),
@@ -362,7 +358,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
-          {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} />}
+          {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} benign={register?.entry ? (register.entry.escalatedAt ? 'escalated' : 'active') : null} />}
           {canRevert && !e.dismissed && !closed && (
             <DismissButton id={e.id} disabled={openLinked > 0}
               tooltip={openLinked > 0 ? `${openLinked} action${openLinked > 1 ? 's' : ''} liée${openLinked > 1 ? 's' : ''} : annulez-${openLinked > 1 ? 'les' : 'la'} d'abord dans le plan d'actions.` : 'Doublon, faux signalement, hors sujet…'} />
@@ -392,6 +388,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
       <StepTrack step={e.step} dismissed={e.dismissed} stepDates={stepDates} />
       <Fields fields={fields} />
       <Narrative description={e.description} immediateMeasures={e.immediateMeasures} />
+      {accident && <AccidentSection detail={detail} canEdit={canEdit} today={today} />}
 
       <EventAttachments eventId={e.id} files={attachments} canManage={canEdit && !locked} />
 

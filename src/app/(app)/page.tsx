@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ClickRow } from '@/components/ClickRow';
 import { PageHeader } from '@/components/PageHeader';
+import { TodoLink } from '@/components/TodoLink';
 import { Aside, CardHead, Dot, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDay, fmtDayMonth, fmtLong, fmtMonthAbbr, isoWeek } from '@/lib/dates';
 import { isDemo } from '@/lib/config';
@@ -37,7 +38,7 @@ export default async function DashboardPage() {
           })}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: 12 }}>
           <div className="card" style={{ gap: 10 }}>
             <CardHead title="Pyramide des événements sécurité" aside={<Aside>12 mois glissants</Aside>} />
             {d.pyramidTotal === 0
@@ -94,19 +95,17 @@ export default async function DashboardPage() {
             } />
             <div style={{ display: 'grid', gap: 7 }}>
               {d.todo.length === 0 && <span className="vg-muted" style={{ fontSize: 12 }}>Aucune échéance dans les {TODO_HORIZON_DAYS} prochains jours.</span>}
-              {d.todo.slice(0, MAX_TODO).map((t, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'start' }}>
+              {d.todo.slice(0, MAX_TODO).map((t) => (
+                <div key={t.key} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'start' }}>
                   <div style={{ textAlign: 'center', lineHeight: 1.1, color: t.overdue ? TONE.danger.dot : undefined }}>
                     <div style={{ fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</div>
                     <div style={{ fontSize: 10, color: t.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
-                    {t.href
-                      ? <Link href={t.href} style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{t.title}</Link>
-                      : <span style={{ fontSize: 12.5 }}>{t.title}</span>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--color-neutral-500)' }}>
+                    <TodoLink item={{ key: t.key, href: t.href, elsewhere: t.elsewhere }} style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{t.title}</TodoLink>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-500)' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Dot color={TONE[t.tone].dot} size={6} />{t.kind}</span>
-                      <span>{t.who}</span>
+                      <span>{t.who}{t.elsewhere && t.siteLabel ? ` · ${t.siteLabel}` : ''}</span>
                     </div>
                   </div>
                 </div>
@@ -116,8 +115,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
-          <div className="card" style={{ gap: 8, gridColumn: 'span 2' }}>
+        {/* « Derniers signalements » sur deux colonnes quand la grille en a deux (requête de conteneur, vigie.css). */}
+        <div className="vg-dash-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 12, alignItems: 'start' }}>
+          <div className="card vg-span-2" style={{ gap: 8 }}>
             <CardHead title="Derniers signalements" aside={<Link href="/evenements" className="vg-link">Tout voir →</Link>} />
             <div style={{ overflowX: 'auto' }}>
               <table className="table" style={{ fontSize: 12.5, minWidth: 640 }}>

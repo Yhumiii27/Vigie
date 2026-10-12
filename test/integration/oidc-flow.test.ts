@@ -47,23 +47,25 @@ beforeAll(async () => {
   Object.assign(process.env, {
     VIGIE_DATA_DIR: 'memory://', VIGIE_PUBLIC_URL: APP, VIGIE_SESSION_SECRET: SECRET,
     ENTRA_TENANT_ID: 'vigie-test', ENTRA_CLIENT_ID: 'vigie', ENTRA_CLIENT_SECRET: 'secret-de-test', ENTRA_ISSUER: issuer,
-    VIGIE_SITE_GROUPS: 'grp-ville-a:ville-a,grp-ville-b:ville-b',
+    VIGIE_SITE_GROUPS: 'grp-ville-a:ville-a,grp-ville-b:ville-b', VIGIE_EMAIL_DOMAINS: 'epc2i.example',
   });
   resetConfig();
   await closeDb();
   const db = await getDb();
   await db.insert(t.sites).values([{ id: 'ville-a', label: 'Site A', sort: 1 }, { id: 'ville-b', label: 'Site B', sort: 2 }]);
-  // Comptes du fournisseur factice : [T. Nguyen] (Salarié, groupe B), [C. Lefèvre] (animateur), [Y. Lambert] (sorti).
+  // Comptes du fournisseur factice : [T. Nguyen] (Salarié, groupe B), [C. Lefèvre] (animateur), [Y. Lambert] (sorti),
+  // [M. Girard] (fiche visée par le compte « nonverifie », à l'adresse non vérifiée).
   await db.insert(t.people).values([
     { id: 'tnguyen', name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', siteId: 'ville-a', sort: 0 },
     { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', siteId: 'ville-a', sort: 1 },
     { id: 'ylambert', name: '[Y. Lambert]', email: 'y.lambert@epc2i.example', siteId: 'ville-a', leftOn: '2026-01-31', sort: 2 },
+    { id: 'mgirard', name: '[M. Girard]', email: 'm.girard@epc2i.example', siteId: 'ville-a', sort: 3 },
   ]);
 });
 
 afterAll(async () => {
   mock?.kill();
-  for (const k of ['VIGIE_PUBLIC_URL', 'VIGIE_SESSION_SECRET', 'ENTRA_TENANT_ID', 'ENTRA_CLIENT_ID', 'ENTRA_CLIENT_SECRET', 'ENTRA_ISSUER', 'VIGIE_SITE_GROUPS']) delete process.env[k];
+  for (const k of ['VIGIE_PUBLIC_URL', 'VIGIE_SESSION_SECRET', 'ENTRA_TENANT_ID', 'ENTRA_CLIENT_ID', 'ENTRA_CLIENT_SECRET', 'ENTRA_ISSUER', 'VIGIE_SITE_GROUPS', 'VIGIE_EMAIL_DOMAINS']) delete process.env[k];
   resetConfig();
   cookieJar.clear();
   await closeDb();
@@ -163,6 +165,23 @@ describe('connexion Entra ID (fournisseur factice)', () => {
     const { GET } = await import('@/app/auth/retour/route');
     const res = await GET(new NextRequest(back, { headers: { cookie: cookieHeader(tx) } }));
     expect(res.headers.get('location')).toBe(`${APP}/auth/acces?motif=non-autorise`);
+  });
+
+  it('première connexion sans adresse vérifiée de l’entreprise : « Compte Microsoft non rattaché », aucune fiche associée ni créée', async () => {
+    const db = await getDb();
+    const before = (await db.select({ id: t.people.id }).from(t.people)).length;
+    // Compte à adresse non vérifiée (xms_edov faux) : la fiche [M. Girard] qui porte cette adresse n'est pas associée.
+    // Domaine hors entreprise (adresse vérifiée de prestataire.example) : aucune fiche créée.
+    for (const user of ['nonverifie', 'horsdomaine']) {
+      const { res } = await login(user);
+      expect(res.status).toBe(303);
+      expect(res.headers.get('location')).toBe(`${APP}/auth/acces?motif=adresse`);
+      expect(res.cookies.get('vigie_session')).toBeUndefined();
+    }
+    const [mg] = await db.select().from(t.people).where(eq(t.people.id, 'mgirard'));
+    expect(mg).toMatchObject({ entraObjectId: null, lastLoginAt: null });
+    expect((await db.select({ id: t.people.id }).from(t.people)).length).toBe(before);
+    expect(await db.select().from(t.people).where(eq(t.people.name, 'P. Durand (prestataire)'))).toEqual([]);
   });
 
   it('échec : code rejoué, cookie de transaction absent ou d’une autre connexion', async () => {

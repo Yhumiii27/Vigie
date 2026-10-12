@@ -12,7 +12,8 @@ export type ChangeDetail = { field: string; from: string | null; to: string | nu
 export type ChangeInput = {
   /** event | action | risk | work_unit | duerp_version | requirement | control | control_record | prevention_plan | permit
    * | contractor | qualification | training_title | person | audit_plan_item | certification | audit_finding | review
-   * | review_item | document | waste_entry | site… */
+   * | review_item | document | waste_entry | site | benign_accident (id) | duerp_access_request (id)
+   * | prevention_program (String(year))… */
   entityType: string;
   entityId: string | number;
   /** create | update | status | cancel | archive | restore | link | unlink | delete | … (libre, court) */

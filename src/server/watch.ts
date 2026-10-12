@@ -9,6 +9,7 @@ import { today } from '@/lib/today';
 import { REQUIREMENT_EVAL, canSee } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
@@ -25,10 +26,11 @@ async function requireWatchManager() {
   return { session, error: null };
 }
 
-async function personExists(id: string) {
+/** Personne choisie (pilote, responsable) : présente ou sortie de l'effectif (`leftOn`), undefined si inconnue. */
+async function findPerson(id: string) {
   const db = await getDb();
-  const [p] = await db.select({ id: t.people.id }).from(t.people).where(eq(t.people.id, id));
-  return !!p;
+  const [p] = await db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, id));
+  return p;
 }
 
 /** Motif d'archivage, de restauration ou d'annulation (champ `reason`). */
@@ -87,26 +89,30 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
   if (!dueOn && !dueNote) f.fail('dueNote', "Indiquez une date d'échéance ou une note (ex. Permanent).");
   if (featured && !dueOn) f.fail('dueOn', 'Date requise pour la mise en avant sur le tableau de bord.');
   if (affectsProjects && !dueOn) f.fail('dueOn', "Date d'application requise pour calculer les projets concernés.");
-  if (pilotId && !(await personExists(pilotId))) f.fail('pilotId', 'Pilote inconnu.');
-  if (!f.ok) return f.state();
 
   const db = await getDb();
   const now = today();
+  const [current] = id ? await db.select().from(t.requirements).where(eq(t.requirements.id, id)) : [];
+  // Pilote sorti de l'effectif : conservé tant qu'il n'est pas remplacé, jamais choisi à nouveau (VEI-01).
+  const pilot = pilotId ? await findPerson(pilotId) : undefined;
+  if (pilotId && !pilot) f.fail('pilotId', 'Pilote inconnu.');
+  else if (pilot && hasLeft(pilot, now) && pilotId !== current?.pilotId) f.fail('pilotId', "Pilote sorti de l'effectif : choisissez une personne présente.");
+  if (!f.ok) return f.state();
+  if (id && !current) return { error: 'Exigence introuvable.' };
+
   const values = { text, domain, summary, dueOn, dueNote, evaluation: evaluation!, evaluationNote, pilotId, impact, affectsProjects, keystoneProjects, featured };
   const evalRow = (requirementId: number) => ({ requirementId, evaluatedOn: now, evaluation: values.evaluation, note: evaluationNote, evaluatedById: session.user.id });
 
   let savedId = id;
-  if (id) {
-    const [current] = await db.select().from(t.requirements).where(eq(t.requirements.id, id));
-    if (!current) return { error: 'Exigence introuvable.' };
+  if (current) {
     if (current.archivedAt) return { error: ARCHIVED_REQ };
     const reevaluated = current.evaluation !== values.evaluation || (current.evaluationNote ?? null) !== values.evaluationNote;
     const details = diffFields(await withNames(current, ['pilotId']), await withNames({ ...current, ...values }, ['pilotId']), REQ_LABELS, fmtLog);
     await db.transaction(async (tx) => {
-      if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, id)));
-      await tx.update(t.requirements).set({ ...values, lastEvaluatedOn: reevaluated ? now : current.lastEvaluatedOn }).where(eq(t.requirements.id, id));
-      if (reevaluated) await tx.insert(t.requirementEvaluations).values(evalRow(id));
-      if (details.length) await logChange(tx, { entityType: 'requirement', entityId: id, action: 'update', summary: 'Exigence modifiée', details });
+      if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, current.id)));
+      await tx.update(t.requirements).set({ ...values, lastEvaluatedOn: reevaluated ? now : current.lastEvaluatedOn }).where(eq(t.requirements.id, current.id));
+      if (reevaluated) await tx.insert(t.requirementEvaluations).values(evalRow(current.id));
+      if (details.length) await logChange(tx, { entityType: 'requirement', entityId: current.id, action: 'update', summary: 'Exigence modifiée', details });
     });
   } else {
     savedId = await db.transaction(async (tx) => {
@@ -262,12 +268,17 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   if (lastOn && lastOn > today()) f.fail('lastOn', "Le dernier contrôle ne peut pas être postérieur à aujourd'hui.");
   if (lastOn && periodMonths && !nextOn && !f.fieldErrors.nextOn) nextOn = addMonths(lastOn, periodMonths);
   if (lastOn && nextOn && nextOn <= lastOn) f.fail('nextOn', 'Le prochain contrôle doit suivre le dernier.');
-  if (responsibleId && !(await personExists(responsibleId))) f.fail('responsibleId', 'Responsable inconnu.');
+  const responsible = responsibleId ? await findPerson(responsibleId) : undefined;
+  if (responsibleId && !responsible) f.fail('responsibleId', 'Responsable inconnu.');
   if (!f.ok) return f.state();
 
   const current = id ? await loadControlForEdit(id) : null;
   if (current?.error) return { error: current.error };
   const before = current?.control ?? null;
+  // Responsable sorti de l'effectif : conservé tant qu'il n'est pas remplacé, jamais choisi à nouveau (VEI-01).
+  if (responsible && hasLeft(responsible, today()) && responsibleId !== before?.responsibleId) {
+    return { error: 'Certains champs sont à corriger.', fieldErrors: { responsibleId: "Responsable sorti de l'effectif : choisissez une personne présente." } };
+  }
   if (!before || before.siteId !== siteId) {
     const siteError = await requireInSite(siteId, { create: true });
     if (siteError) return { error: siteError, fieldErrors: { siteId: 'Site non autorisé.' } };

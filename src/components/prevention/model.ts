@@ -2,7 +2,10 @@
 // Code du travail R. 4512-6 à R. 4512-12 · arrêté du 19 mars 1993 (liste des travaux dangereux).
 // Règle interne par site (établissement Seveso seuil haut) : plan écrit et signé dès la première minute d'intervention.
 
+import { addMonths, toParisLocal } from '@/lib/dates';
 import type { Tone } from '@/lib/domain';
+
+export { addHoursLocal, fromParisLocal, referenceNow, toParisLocal } from '@/lib/dates';
 
 /** Seuil d'heures (sur 12 mois) au-delà duquel le plan de prévention écrit est obligatoire (R. 4512-7). */
 export const MANDATORY_HOURS = 400;
@@ -40,6 +43,8 @@ type PlanLike = {
   inspectionOn: string | null;
   signedEuOn: string | null;
   signedEeOn: string | null;
+  /** Première signature complète (EU et EE), conservée quand une modification efface les signatures (PRV-01). */
+  firstSignedOn?: string | null;
 };
 
 // ─── Règle du site : classement Seveso et plan « dès la première minute » ───
@@ -106,10 +111,46 @@ export const isInProgress = (p: PlanLike, now: string) => !isPlanEnded(p) && p.s
 /** Écart R. 4512-6 (ou règle Seveso du site) : intervention en cours sans plan obligatoire signé par les deux entreprises. */
 export const lacksSignedPlan = (p: PlanLike, now: string, rule: SiteRule | null | undefined) => isInProgress(p, now) && isMandatory(p, rule) && !isFullySigned(p);
 
+/** Date de la signature complète actuelle (la plus tardive des signatures EU et EE), null si le plan n'est pas signé par les deux. */
+export const fullSignatureOn = (p: Pick<PlanLike, 'signedEuOn' | 'signedEeOn'>) =>
+  (p.signedEuOn && p.signedEeOn ? (p.signedEuOn > p.signedEeOn ? p.signedEuOn : p.signedEeOn) : null);
+
+/** Première signature complète du plan : conservée quand une modification a effacé les signatures, sinon la signature actuelle. */
+export const firstFullSignatureOn = (p: Pick<PlanLike, 'signedEuOn' | 'signedEeOn' | 'firstSignedOn'>) => p.firstSignedOn ?? fullSignatureOn(p);
+
+/** Plan signé par les deux entreprises au plus tard le jour du début de l'intervention (même jour admis), d'après les dates déclarées. */
+export const signedBeforeStart = (p: Pick<PlanLike, 'startOn' | 'signedEuOn' | 'signedEeOn' | 'firstSignedOn'>) => {
+  const first = firstFullSignatureOn(p);
+  return !!first && first <= p.startOn;
+};
+
+/** Écart R. 4512-6 au démarrage : plan signé après le début de l'intervention, ou intervention commencée (ou réalisée) sans plan signé. */
+export type StartGapKind = 'signe_apres' | 'non_signe';
+export const START_GAP_LABEL: Record<StartGapKind, string> = {
+  signe_apres: "plan signé après le début de l'intervention",
+  non_signe: 'intervention réalisée sans plan signé',
+};
+
+/**
+ * Écart R. 4512-6 (ou règle du site) constaté au démarrage d'une intervention commencée, null sinon : plan obligatoire
+ * dont la première signature complète est postérieure au début ('signe_apres'), ou jamais signé par les deux entreprises
+ * ('non_signe'). Les plans annulés n'en comptent pas (le motif dit si l'intervention a eu lieu ; une annulation après le
+ * démarrage exige déjà l'action qui trace l'écart). En cours, l'écart 'non_signe' est l'écart courant (lacksSignedPlan).
+ */
+export function startGap(p: PlanLike, now: string, rule: SiteRule | null | undefined): StartGapKind | null {
+  if (p.status === 'annule' || !isMandatory(p, rule) || p.startOn > now || signedBeforeStart(p)) return null;
+  return firstFullSignatureOn(p) ? 'signe_apres' : 'non_signe';
+}
+
+/** Fenêtre des écarts passés comptés dans les indicateurs : interventions commencées dans les 12 derniers mois. */
+export const GAP_WINDOW_MONTHS = 12;
+export const inGapWindow = (p: Pick<PlanLike, 'startOn'>, now: string) => p.startOn > addMonths(now, -GAP_WINDOW_MONTHS) && p.startOn <= now;
+
 /**
  * Motif empêchant de clore ou d'annuler un plan (même règle à l'écran et côté serveur), null sinon :
- * jamais pendant une intervention sans le plan obligatoire signé ; après une intervention réalisée sans plan signé,
- * seulement une fois l'écart tracé par une action ; jamais avec des permis rattachés encore actifs.
+ * jamais pendant une intervention sans le plan obligatoire signé ; après une intervention réalisée sans plan signé, ou
+ * avec un plan signé après son début, seulement une fois l'écart tracé par une action ; jamais avec des permis rattachés
+ * encore actifs.
  */
 export function planEndIssue(
   p: PlanLike,
@@ -119,7 +160,116 @@ export function planEndIssue(
   const what = verb === 'clore' ? 'de clore le plan' : "d'annuler le plan";
   if (unsigned && p.startOn <= now && p.endOn >= now) return `Intervention en cours avec un plan obligatoire non signé : enregistrez les signatures des deux entreprises avant ${what}.`;
   if (unsigned && p.startOn <= now && !actionCount) return `Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant ${what}.`;
+  const first = firstFullSignatureOn(p);
+  if (mandatory && first && first > p.startOn && p.startOn <= now && !actionCount) return `Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant ${what}.`;
   if (openPermitIds.length) return `Permis rattachés encore actifs (${openPermitIds.join(', ')}) : clôturez-les ou annulez-les avant ${what}.`;
+  return null;
+}
+
+// ─── Contenu réglementaire du plan (PRV-02) ─────────────────────────────────
+
+export type PlanContentGroup = 'ee' | 'measures' | 'sir';
+export const PLAN_CONTENT_GROUPS: Record<PlanContentGroup, { label: string; ref: string }> = {
+  ee: { label: "Informations de l'entreprise extérieure", ref: 'R. 4511-10' },
+  measures: { label: 'Mesures du plan', ref: 'R. 4512-8' },
+  sir: { label: 'Suivi individuel renforcé', ref: 'R. 4512-9' },
+};
+
+/** Effectif prévisible de l'entreprise extérieure (colonne ee_headcount, entier ou non renseigné). */
+export const EE_HEADCOUNT = { label: 'Effectif prévisible', ref: 'R. 4511-10' } as const;
+export const EE_HEADCOUNT_MAX = 10_000;
+
+export type PlanContentKey =
+  | 'eeSupervisor' | 'subcontracting' | 'dangerousPhases' | 'equipment' | 'workerInstructions' | 'emergencyOrganisation' | 'coordination' | 'sirPosts';
+
+export type PlanContentField = {
+  key: PlanContentKey;
+  group: PlanContentGroup;
+  label: string;
+  /** Libellé court des messages (« premiers secours et évacuation »). */
+  short: string;
+  ref: string;
+  hint: string;
+  placeholder: string;
+  max: number;
+  /** Section exigée pour signer un plan obligatoire (« Aucun » ou « Sans objet » quand elle ne s'applique pas). */
+  requiredToSign: boolean;
+};
+
+/** Sections du contenu réglementaire, dans l'ordre du formulaire et du document imprimable. */
+export const PLAN_CONTENT: PlanContentField[] = [
+  {
+    key: 'eeSupervisor', group: 'ee', label: "Responsable de l'intervention (nom et qualification)", short: "responsable de l'intervention", ref: 'R. 4511-10',
+    hint: "Personne chargée de diriger l'intervention pour l'entreprise extérieure.", placeholder: "Ex. [M. Lebrun], chef d'équipe maintenance levage",
+    max: 200, requiredToSign: false,
+  },
+  {
+    key: 'subcontracting', group: 'ee', label: 'Sous-traitants et travaux sous-traités (« Aucun » sinon)', short: 'sous-traitance', ref: 'R. 4511-10',
+    hint: 'Noms et références des sous-traitants, identification des travaux sous-traités.', placeholder: 'Ex. Aucun sous-traitant',
+    max: 2000, requiredToSign: false,
+  },
+  {
+    key: 'dangerousPhases', group: 'measures', label: "Phases d'activité dangereuses et moyens de prévention spécifiques", short: 'phases dangereuses', ref: 'R. 4512-8, 1°',
+    hint: "Phases dangereuses de l'intervention et moyens de prévention correspondants.",
+    placeholder: 'Ex. Travail en nacelle sur le chemin de roulement : harnais, zone balisée au sol', max: 4000, requiredToSign: true,
+  },
+  {
+    key: 'equipment', group: 'measures', label: 'Matériels, installations et dispositifs : adaptation, prêt, entretien', short: 'matériels et installations', ref: 'R. 4512-8, 2°',
+    hint: "Adaptation aux opérations, matériel prêté par l'entreprise utilisatrice, conditions d'entretien.",
+    placeholder: "Ex. Nacelle de l'entreprise extérieure (VGP à jour) ; pont 5 t prêté par l'atelier", max: 4000, requiredToSign: true,
+  },
+  {
+    key: 'workerInstructions', group: 'measures', label: 'Instructions données aux travailleurs', short: 'instructions aux travailleurs', ref: 'R. 4512-8, 3°',
+    hint: 'Accueil sécurité, consignes du site, consignations, EPI.',
+    placeholder: 'Ex. Accueil sécurité du site ; pont consigné par le chargé de consignation', max: 4000, requiredToSign: true,
+  },
+  {
+    key: 'emergencyOrganisation', group: 'measures', label: "Premiers secours et évacuation (dispositif de l'EU)", short: 'premiers secours et évacuation', ref: 'R. 4512-8, 4°',
+    hint: "Organisation des premiers secours en cas d'urgence et dispositif mis en place par l'entreprise utilisatrice (alarme, évacuation, SST).",
+    placeholder: "Ex. SST de l'atelier, point de rassemblement parking nord ; secours 18/112", max: 4000, requiredToSign: true,
+  },
+  {
+    key: 'coordination', group: 'measures', label: 'Coordination et organisation du commandement', short: 'coordination et commandement', ref: 'R. 4512-8, 5°',
+    hint: "Participation des travailleurs d'une entreprise aux travaux de l'autre, coordination, organisation du commandement.",
+    placeholder: "Ex. Point quotidien 7 h 30 avec le chef d'atelier", max: 4000, requiredToSign: true,
+  },
+  {
+    key: 'sirPosts', group: 'sir',
+    label: 'Postes susceptibles de relever du suivi individuel renforcé (postes, aucune donnée nominative ou médicale ; « Aucun » sinon)',
+    short: 'suivi individuel renforcé', ref: 'R. 4512-9',
+    hint: 'Intitulés des postes seulement : jamais de nom ni de donnée médicale.', placeholder: 'Ex. Aucun poste', max: 4000, requiredToSign: true,
+  },
+];
+
+export const PLAN_CONTENT_KEYS = PLAN_CONTENT.map((c) => c.key);
+
+/** Contenu réglementaire d'un plan (colonnes de prevention_plans). */
+export type PlanContent = Record<PlanContentKey, string> & { eeHeadcount: number | null };
+
+/** Sections exigées pour signer qui restent vides (libellés courts). */
+export const missingPlanContent = (p: Pick<PlanContent, PlanContentKey>) =>
+  PLAN_CONTENT.filter((c) => c.requiredToSign && !(p[c.key] ?? '').trim()).map((c) => c.short);
+
+/** Sections renseignées : les 8 sections de texte et l'effectif prévisible. */
+export function planContentStats(p: PlanContent) {
+  const filled = PLAN_CONTENT.filter((c) => (p[c.key] ?? '').trim()).length + (p.eeHeadcount != null ? 1 : 0);
+  return { filled, total: PLAN_CONTENT.length + 1 };
+}
+
+/**
+ * Motif empêchant de signer le plan (signature EU) ou d'enregistrer la signature de l'entreprise extérieure, null sinon
+ * (même règle à l'écran et côté serveur) : inspection commune préalable réalisée, mesures de prévention renseignées et,
+ * pour un plan obligatoire, contenu R. 4512-8 et R. 4512-9 complet.
+ */
+export function planSignIssue(
+  p: Pick<PlanLike, 'inspectionOn'> & { measures: string } & Pick<PlanContent, PlanContentKey>,
+  { now, mandatory, verb }: { now: string; mandatory: boolean; verb: 'signer' | 'recueillir' },
+): string | null {
+  const before = verb === 'signer' ? 'avant de signer le plan' : 'avant de recueillir les signatures';
+  if (!inspectionDone(p, now)) return `Réalisez l'inspection commune préalable ${before}.`;
+  if (!p.measures.trim()) return `Complétez les mesures de prévention ${before}.`;
+  const missing = mandatory ? missingPlanContent(p) : [];
+  if (missing.length) return `Complétez le contenu du plan (R. 4512-8 et R. 4512-9) ${before} : ${missing.join(', ')}.`;
   return null;
 }
 
@@ -180,6 +330,9 @@ export function parseChecklist(raw: unknown): ChecklistItem[] {
 }
 
 export type PermitState = 'demande' | 'delivre' | 'en_cours' | 'expire' | 'clos' | 'annule';
+/** Résumé du journal à la délivrance (deliverPermit) : date de délivrance de la fiche imprimable. */
+export const PERMIT_DELIVERED = 'Permis délivré';
+
 export const PERMIT_STATE: Record<PermitState, { label: string; tone: Tone }> = {
   demande: { label: 'Demandé', tone: 'warn' },
   delivre: { label: 'Délivré', tone: 'accent' },
@@ -288,43 +441,7 @@ export function permitLacksSignedPlan(permit: ActivePermitLike, plan: LinkedPlan
 
 // ─── Dates et heures (fuseau Europe/Paris) ──────────────────────────────────
 
-const PARTS = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-});
-const LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
-
-/** Instant → « AAAA-MM-JJTHH:mm » à l'heure de Paris (valeur d'un champ datetime-local). */
-export function toParisLocal(d: Date): string {
-  const p = Object.fromEntries(PARTS.formatToParts(d).map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day}T${p.hour === '24' ? '00' : p.hour}:${p.minute}`;
-}
-
-const wallMs = (local: string) => {
-  const m = LOCAL.exec(local);
-  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : null;
-};
-
-/** « AAAA-MM-JJTHH:mm » (heure de Paris) → instant ; null si la saisie est invalide. */
-export function fromParisLocal(local: string): Date | null {
-  const wall = wallMs(local);
-  if (wall == null) return null;
-  const offset = (d: Date) => wallMs(toParisLocal(d))! - Math.floor(d.getTime() / 60_000) * 60_000;
-  let d = new Date(wall - offset(new Date(wall)));
-  d = new Date(wall - offset(d));
-  return d;
-}
-
-/** Ajoute des heures à une date-heure locale (calcul « horloge murale »). */
-export function addHoursLocal(local: string, hours: number): string {
-  const wall = wallMs(local);
-  if (wall == null) return local;
-  return new Date(wall + hours * 3_600_000).toISOString().slice(0, 16);
-}
-
-/** Instant de référence : date du jour Vigie (VIGIE_TODAY le cas échéant) à l'heure courante de Paris. */
-export function referenceNow(todayIso: string): Date {
-  return fromParisLocal(`${todayIso}T${toParisLocal(new Date()).slice(11)}`) ?? new Date();
-}
+// toParisLocal, fromParisLocal, addHoursLocal, referenceNow : src/lib/dates.ts (partagés avec les événements, EVT-03/04).
 
 /** 07/10 08:00 */
 export const fmtLocalShort = (local: string) => `${local.slice(8, 10)}/${local.slice(5, 7)} ${local.slice(11, 16)}`;

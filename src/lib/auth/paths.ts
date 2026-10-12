@@ -7,10 +7,11 @@ export const CALLBACK_PATH = '/auth/retour';
 export const LOGOUT_PATH = '/auth/deconnexion';
 /** Page « Vous êtes déconnecté » : URI de retour après la déconnexion Microsoft (à inscrire aussi dans l'application Entra). */
 export const SIGNED_OUT_PATH = '/auth/deconnecte';
-/** Refus d'accès expliqué (?motif=configuration | non-autorise | connexion | echec), hors session. */
+/** Refus d'accès expliqué (?motif=configuration | non-autorise | adresse | connexion | echec), hors session. */
 export const ACCESS_PATH = '/auth/acces';
 
-export type AccessMotif = 'configuration' | 'non-autorise' | 'connexion' | 'echec';
+/** « adresse » : première connexion sans adresse e-mail vérifiée d'un domaine de l'entreprise (compte non rattaché). */
+export type AccessMotif = 'configuration' | 'non-autorise' | 'adresse' | 'connexion' | 'echec';
 export const accessHref = (motif: AccessMotif) => `${ACCESS_PATH}?motif=${motif}`;
 
 /** Préfixe des routes d'authentification, ouvertes sans session (proxy.ts). */

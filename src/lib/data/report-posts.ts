@@ -7,7 +7,7 @@ import { config } from '../config';
 import { canManage, type TodoItem } from '../domain';
 import { REPORT_LIMITS, REPORT_LIMIT_RETENTION_MS, postTotalValue, reportLimitKey } from '../report-guard';
 import { readReportToken, reportTokenMatches, reportTokenPath, signReportToken } from '../report-token';
-import { currentSiteId, getSession, inSite } from '../session';
+import { currentSiteId, getSession, inSite, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 
 // ─── Postes de signalement : QR codes des zones du plan de site (EVT-07) ────
@@ -83,12 +83,13 @@ export const loadReportPostSignals = cache(async (): Promise<{ todo: TodoItem[] 
   const { role } = await getSession();
   if (!secret || !canManage(role)) return { todo: [] };
   const db = await getDb();
-  const [zones, selected] = await Promise.all([
+  const [zones, keep] = await Promise.all([
     db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, qrVersion: t.mapZones.qrVersion, siteLabel: t.sites.label })
       .from(t.mapZones).innerJoin(t.sites, eq(t.mapZones.siteId, t.sites.id)).where(isNull(t.sites.archivedAt)),
-    currentSiteId(),
+    siteFilter('perimeter'),
   ]);
-  const byKey = new Map(zones.filter((z) => inSite(selected, z.siteId))
+  // Postes de tous les sites du périmètre (TDB-05).
+  const byKey = new Map(zones.filter((z) => keep(z.siteId))
     .map((z) => [reportLimitKey('postTotal', postTotalValue(z.id, z.qrVersion), secret), z]));
   if (!byKey.size) return { todo: [] };
   const full = await db.selectDistinct({ key: t.reportRateLimits.key }).from(t.reportRateLimits).where(and(
@@ -105,7 +106,7 @@ export const loadReportPostSignals = cache(async (): Promise<{ todo: TodoItem[] 
       return {
         date: now, kind: 'QR code de poste', tone: 'danger', overdue: true, key: `report-ceiling|${z.id}|${z.qrVersion}`,
         title: `${z.name} (${shortLabel(z.siteLabel)}) — plafond de signalements sans compte atteint : régénérer le QR code s'il circule hors du site`,
-        href: `/signaler/postes?site=${encodeURIComponent(z.siteId)}`, who: to.who, ownerIds: to.ownerIds,
+        href: `/signaler/postes?site=${encodeURIComponent(z.siteId)}`, who: to.who, ownerIds: to.ownerIds, siteId: z.siteId,
       } satisfies TodoItem;
     }),
   };

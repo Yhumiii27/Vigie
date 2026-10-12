@@ -8,10 +8,10 @@ import {
 } from '@/components/documents/meta';
 import { addDays, addMonths, daysBetween, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
-import { canApprove, canEdit, columnOf, type TodoItem, type Tone } from '../domain';
+import { canApprove, columnOf, type TodoItem, type Tone } from '../domain';
 import { actionColumn, lcfirst, loadActions, loadPeople, type ActionRow } from '../queries';
 import { loadQhseLeads } from './leads';
-import { currentSiteId, getSession, inSite } from '../session';
+import { currentSiteId, getSession, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
 
 // ─── Documents maîtrisés (ISO 9001 §7.5) ────────────────────────────────────
@@ -156,7 +156,7 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
       overdue: reviewDays != null && reviewDays < 0,
       dueSoon: reviewDays != null && reviewDays >= 0 && reviewDays <= DOC_SOON_DAYS,
       reviewActions: actions
-        .filter((a) => a.origin === 'docs' && (a.originRef === d.id || a.originRef.startsWith(`${d.id} `)))
+        .filter((a) => a.documentId === d.id)
         .map(linked).filter((a) => a.open),
       actionTitle: `Revue périodique de ${d.id} — ${lcfirst(d.title)}`,
     };
@@ -166,12 +166,16 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
     || typeRank(a.type) - typeRank(b.type) || a.id.localeCompare(b.id, 'fr', { numeric: true }));
 }
 
-/** Documents du site sélectionné (les documents sans site valent pour toute l'entreprise). */
-const loadDocumentBase = cache(async () => {
+/**
+ * Documents du site sélectionné (scope 'site') ou de tout le périmètre (scope 'perimeter' : échéances, TDB-05) ; les
+ * documents sans site valent pour toute l'entreprise.
+ */
+const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [site, people, docs, versions, files, actions, sites] = await Promise.all([
+  const [site, keep, people, docs, versions, files, actions, sites] = await Promise.all([
     currentSiteId(),
+    siteFilter(scope),
     loadPeople(),
     db.select().from(t.documents),
     db.select().from(t.documentVersions).orderBy(asc(t.documentVersions.id)),
@@ -186,7 +190,7 @@ const loadDocumentBase = cache(async () => {
     const e = entries.find((x) => x.action === 'archive');
     return e ? [[id, { on: dayOf(e.at), by: e.who, reason: e.reason }] as const] : [];
   }));
-  const rows = buildDocumentRows({ people, docs, versions, files, actions, sites, retirements }, site, now);
+  const rows = buildDocumentRows({ people, docs: docs.filter((d) => keep(d.siteId)), versions, files, actions, sites, retirements }, null, now);
   // Documents rattachés à un autre site : la fiche ouverte par ?doc= (après création ou changement de site) l'explique.
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const elsewhere: Record<string, string> = Object.fromEntries(docs
@@ -260,14 +264,13 @@ export type DocumentsData = Awaited<ReturnType<typeof loadDocuments>>;
 type KpiTile = { key: 'vigueur' | 'revue' | 'retard' | 'brouillon'; label: string; value: number; sub: string; subTone: Tone; note: string };
 
 /**
- * Échéances documentaires, pour les seuls rédacteurs (rien en consultation seule) :
+ * Échéances documentaires, sur tous les sites du périmètre (TDB-05, siteId du document ; null = tous les sites) :
  * - revues périodiques dépassées ou à moins de 15 j (propriétaire du document) ;
  * - versions en revue à approuver (approbateurs : animateur QHSE et direction).
+ * Rôle en consultation seule : visibleTodo ne lui laisse que ses propres échéances (propriétaire du document).
  */
 export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [{ rows, now }, { role }] = await Promise.all([loadDocumentBase(), getSession()]);
-  // Pas d'échéance pour un rôle en consultation seule (ou sans accès) : rien à y faire.
-  if (!canEdit(role, 'docs')) return { todo: [] };
+  const [{ rows, now }, { role }] = await Promise.all([loadDocumentBase('perimeter'), getSession()]);
   const href = (id: string) => `/documents?doc=${encodeURIComponent(id)}`;
   const reviews: TodoItem[] = rows
     .filter((r) => r.nextReviewOn && (r.overdue || r.dueSoon))
@@ -279,6 +282,7 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
       title: r.overdue ? `${r.id} · ${r.title} — revue dépassée depuis le ${fmtDayMonth(r.nextReviewOn!)}` : `${r.id} · revue périodique « ${r.title} »`,
       who: r.owner,
       ownerIds: [r.ownerId],
+      siteId: r.siteId,
       href: href(r.id),
     } satisfies TodoItem));
   // Approbateurs : animateurs QHSE et direction (dernier rôle connu).
@@ -291,6 +295,7 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
       title: `${r.id} · version ${v.version} à approuver`,
       who: 'Animateur QHSE / Direction',
       ownerIds: approvers,
+      siteId: r.siteId,
       href: href(r.id),
     } satisfies TodoItem)))
     : [];

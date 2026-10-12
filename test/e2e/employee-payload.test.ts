@@ -92,7 +92,11 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
     });
 
     it('écrans fermés au Salarié : renvoi vers son écran, aucune donnée métier transmise', async () => {
-      for (const path of ['/', '/prevention', '/prevention/carte', '/risques', '/veille', '/audits', '/environnement', '/revue-de-direction']) {
+      // /risques est ouvert à tous en consultation (DUE-01) : cas « DUERP en consultation » (domaine risques).
+      for (const path of [
+        '/', '/prevention', '/prevention/carte', '/veille', '/audits', '/environnement', '/revue-de-direction',
+        '/prevention/imprimer/permis', '/prevention/imprimer/permis/PF-2026-031', '/prevention/imprimer/plan/PP-2026-013',
+      ]) {
         const { status, location, body } = await load(path, rsc);
         // Renvoi par une redirection HTTP, ou dans la page déjà commencée (contrôle du rôle pendant le rendu, SEC-14).
         expect(status === 307 ? location : body, path).toContain('/evenements');
@@ -101,6 +105,15 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         expect(found(body, PREVENTION_REF), path).toEqual([]);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
       }
+    });
+
+    it('registre des accidents bénins (données de santé, EVT-04) : renvoi vers les événements, aucune inscription transmise', async () => {
+      const path = '/evenements/registre-benin?site=ville-a';
+      const { status, location, body } = await load(path, rsc);
+      expect(status === 307 ? location : body, path).toContain('/evenements');
+      expect(body, path).not.toContain('Registre des accidents du travail bénins');
+      expect(body, path).not.toMatch(/Pincement|Majeur droit|Rinçage oculaire|Secouristes du travail/);
+      expect(found(body, EVENT_REF), path).toEqual([]);
     });
   });
 });

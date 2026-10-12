@@ -244,10 +244,11 @@ export type ControlRecordView = ControlView['records'][number];
 
 /**
  * Échéances de la veille :
- * - contrôles périodiques actifs du site dépassés ou sous CONTROL_HORIZON_DAYS ;
+ * - contrôles périodiques actifs des sites du périmètre (TDB-05) dépassés ou sous CONTROL_HORIZON_DAYS, et réserves en
+ *   cours sans action de levée (VEI-02) ;
  * - exigences actives (toute l'entreprise), au plus une échéance chacune, par priorité : écart ou analyse sans action,
  *   conformité à évaluer, date d'application dépassée ou proche sans conformité, réévaluation annuelle due.
- * Badge (count) : contrôles sous 30 j + exigences à évaluer ou en écart sans action ; les autres échéances d'exigence
+ * Badge (count) : contrôles sous 30 j + réserves sans action + exigences à évaluer ou en écart sans action ; les autres échéances d'exigence
  * apparaissent dans « À traiter » sans compter dans le badge (count = 0).
  */
 export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
@@ -255,7 +256,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
   const db = await getDb();
   // Liens toujours renseignés : loadVisibleTodo écarte les échéances des rôles sans accès à la veille.
   const [controls, people, reqs] = await Promise.all([
-    loadControls(),
+    loadControls('perimeter'),
     loadPeople(),
     db.select().from(t.requirements).where(isNull(t.requirements.archivedAt)).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
   ]);
@@ -266,9 +267,13 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const s = controlStatus(c, now);
     const who = [c.organization, c.responsibleId ? people.get(c.responsibleId)?.name : ''].filter(Boolean).join(' · ');
     const title = `${c.controlType} · ${lcfirst(equipShort(c.equipment))}`;
-    const base = { kind: 'Contrôle', who, href: `/veille?onglet=controles&controle=${c.id}`, ownerIds: c.responsibleId ? [c.responsibleId] : undefined };
+    const base = { kind: 'Contrôle', who, href: `/veille?onglet=controles&controle=${c.id}`, ownerIds: c.responsibleId ? [c.responsibleId] : undefined, siteId: c.siteId };
     if (s.days < 0) todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}` });
     else if (c.nextOn <= ctrlHorizon) todo.push({ ...base, date: c.nextOn, tone: 'warn', title });
+    // Réserves sans action de levée : même urgence qu'un écart sans action (VEI-02).
+    if (c.reserves && !c.actionId) {
+      todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — réserves « ${c.reserves} » sans action de levée` });
+    }
   });
 
   const horizon = addDays(now, TODO_HORIZON_DAYS);
@@ -276,6 +281,8 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const base = {
       kind: 'Veille', who: r.pilotId ? people.get(r.pilotId)?.name ?? '' : '',
       href: `/veille?exigence=${r.id}`, ownerIds: r.pilotId ? [r.pilotId] : undefined,
+      // Exigence de veille : commune à tous les sites.
+      siteId: null,
     };
     const compliant = r.evaluation === 'conforme';
     // Exigence DUERP : l'échéance de mise à jour est celle de la version en vigueur, signalée par l'écran Risques.
@@ -301,6 +308,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
   });
 
   const badge = controls.filter((c) => controlStatus(c, now).days <= CONTROL_HORIZON_DAYS).length
+    + controls.filter((c) => c.reserves && !c.actionId).length
     + reqs.filter((r) => r.evaluation === 'a_evaluer' || (NEEDS_ACTION.has(r.evaluation) && !r.actionId)).length;
   return { badge, todo };
 });

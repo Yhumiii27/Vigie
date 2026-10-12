@@ -14,6 +14,10 @@ const TEXTS: Record<AccessMotif, { title: string; body: string }> = {
     title: 'Accès non autorisé',
     body: "Votre compte n'a pas de rôle Vigie, ou aucun site ne vous est ouvert. Demandez à l'administrateur de l'annuaire Microsoft de vous attribuer un rôle de l'application Vigie, puis reconnectez-vous.",
   },
+  adresse: {
+    title: 'Compte Microsoft non rattaché',
+    body: "Vigie n'a pas pu rattacher votre compte Microsoft à une fiche du personnel : l'adresse e-mail transmise par Microsoft n'est pas une adresse vérifiée d'un domaine de l'entreprise. Prévenez l'animateur QHSE ou l'administrateur de l'annuaire, qui vérifiera l'adresse de votre fiche et la configuration de Vigie.",
+  },
   connexion: {
     title: 'Connexion requise',
     body: 'Connectez-vous avec votre compte Microsoft professionnel pour accéder à Vigie.',
@@ -27,7 +31,7 @@ const TEXTS: Record<AccessMotif, { title: string; body: string }> = {
 /** Refus d'accès expliqué, hors session (cible des redirections de getSession, du proxy et de /auth/retour). */
 export default async function AccessPage({ searchParams }: PageProps<'/auth/acces'>) {
   const { motif } = await searchParams;
-  const key: AccessMotif = motif === 'configuration' || motif === 'non-autorise' || motif === 'echec' ? motif : 'connexion';
+  const key: AccessMotif = motif === 'configuration' || motif === 'non-autorise' || motif === 'adresse' || motif === 'echec' ? motif : 'connexion';
   const text = TEXTS[key];
   const missing = key === 'configuration' ? entraMissing() : [];
   return (
@@ -39,7 +43,7 @@ export default async function AccessPage({ searchParams }: PageProps<'/auth/acce
         </ul>
       )}
       {(key === 'connexion' || key === 'echec') && <a href={LOGIN_PATH} className="btn btn-primary">{key === 'echec' ? 'Réessayer' : 'Se connecter'}</a>}
-      {key === 'non-autorise' && !isDemo() && <a href={LOGOUT_PATH} className="btn btn-secondary">Changer de compte</a>}
+      {(key === 'non-autorise' || key === 'adresse') && !isDemo() && <a href={LOGOUT_PATH} className="btn btn-secondary">Changer de compte</a>}
     </AuthNotice>
   );
 }

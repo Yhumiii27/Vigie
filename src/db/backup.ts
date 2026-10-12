@@ -5,6 +5,10 @@
 // chiffrée (AES-256-GCM, clé dérivée de VIGIE_UPLOAD_KEY) quand la clé est définie : vigie-<date>-<moteur>-<motif>.tar[.enc].
 // - PostgreSQL : pg_dump au format personnalisé (base.pgdump), restauré par pg_restore ;
 // - PGlite : copie du dossier de données (dumpDataDir, base-pglite.tar.gz), rechargée par loadDataDir.
+// Le manifeste porte l'empreinte (SHA-256) de la base et de chaque pièce jointe, contrôlées à l'extraction. Quand
+// VIGIE_UPLOAD_KEY est définie, une archive en clair est refusée sauf demande explicite (--accepter-clair).
+// Compteurs du signalement sans compte (report_rate_limits : empreintes d'adresses IP, 24 h) : exclus des copies
+// PostgreSQL ; une copie PGlite (dossier entier) les contient encore, purgés à l'ouverture suivante (src/db/maintenance.ts).
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -14,7 +18,7 @@ import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { childProcessEnv, type StorageConfig } from '../lib/env';
-import { decryptFileStream, encryptStream, fileKeys } from '../lib/encryption';
+import { decryptFileStream, encryptStream, fileIsEncrypted, fileKeys } from '../lib/encryption';
 import { readTar, tarStream, type TarEntry } from './archive';
 import { migrationState, type Query } from './migrations';
 import type { DbEngine } from './types';
@@ -31,8 +35,12 @@ export type Manifest = {
   encrypted: boolean;
   migrations: { applied: number; last: string | null; lastWhen: number | null; pending: string[] };
   database: { file: string; size: number; sha256: string };
-  /** Pièces jointes copiées telles quelles (chiffrées au repos ou non) ; absentes des sauvegardes avant migration. */
-  uploads: { included: boolean; count: number; bytes: number };
+  /**
+   * Pièces jointes copiées telles quelles (chiffrées au repos ou non) ; absentes des sauvegardes avant migration.
+   * `files` : nom de stockage → SHA-256 (hexadécimal) de chaque pièce ; absent des sauvegardes d'une version antérieure
+   * (champ facultatif : le manifeste reste en version 1, lisible par ces versions qui l'ignorent).
+   */
+  uploads: { included: boolean; count: number; bytes: number; files?: Record<string, string> };
 };
 
 /** Base à sauvegarder : requête SQL (état des migrations) et moyen de copie propre au moteur. */
@@ -71,10 +79,13 @@ function run(cmd: string, args: string[], env: Record<string, string>): Promise<
   });
 }
 
-/** Copie d'une base PostgreSQL au format personnalisé de pg_dump (compressé, restaurable par pg_restore). */
+/**
+ * Copie d'une base PostgreSQL au format personnalisé de pg_dump (compressé, restaurable par pg_restore), sans les
+ * compteurs du signalement sans compte (empreintes d'adresses IP conservées 24 h : la table est restaurée vide).
+ */
 export async function pgDump(url: string, file: string) {
   const c = pgConnection(url);
-  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', `--file=${file}`, `--dbname=${c.dbname}`], c.env);
+  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', '--exclude-table-data=public.report_rate_limits', `--file=${file}`, `--dbname=${c.dbname}`], c.env);
 }
 
 /**
@@ -173,12 +184,15 @@ export async function createBackup(storage: StorageConfig, source: DbSource, opt
     else await writeFile(dbFile, Buffer.from(await (await source.dump()).arrayBuffer()), { mode: 0o600 });
     const dbSize = (await stat(dbFile)).size;
     const uploads = opts.uploads ? await listUploads(storage.uploadDir) : [];
+    // Empreinte de chaque pièce jointe, lue avant l'écriture de l'archive (le manifeste reste en tête).
+    const files: Record<string, string> = {};
+    for (const u of uploads) files[u.name] = await sha256File(path.join(/*turbopackIgnore: true*/ storage.uploadDir, u.name));
     const now = new Date();
     const manifest: Manifest = {
       format: 'vigie-sauvegarde', version: 1, createdAt: now.toISOString(), reason: opts.reason, engine: source.engine, encrypted: encrypt,
       migrations: { applied: state.applied, last: state.last, lastWhen: state.lastWhen, pending: state.pending.map((m) => m.tag) },
       database: { file: dbName, size: dbSize, sha256: await sha256File(dbFile) },
-      uploads: { included: opts.uploads, count: uploads.length, bytes: uploads.reduce((n, u) => n + u.size, 0) },
+      uploads: { included: opts.uploads, count: uploads.length, bytes: uploads.reduce((n, u) => n + u.size, 0), files },
     };
     const manifestJson = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
     const entries: TarEntry[] = [
@@ -200,6 +214,10 @@ export async function createBackup(storage: StorageConfig, source: DbSource, opt
 
 export type ExtractedBackup = {
   manifest: Manifest;
+  /** Archive chiffrée (en-tête de chiffrement de Vigie). */
+  encrypted: boolean;
+  /** Avertissements à afficher (sauvegarde d'une version antérieure, sans empreintes des pièces jointes…). */
+  warnings: string[];
   /** Copie de la base, extraite et contrôlée (empreinte du manifeste). */
   dbFile: string;
   /** Dossier des pièces jointes extraites (noms de stockage). */
@@ -228,26 +246,54 @@ function checkManifest(m: Partial<Manifest>): Manifest {
   return m as Manifest;
 }
 
+export type ExtractOptions = {
+  /**
+   * Accepter une archive en clair alors que VIGIE_UPLOAD_KEY est définie (vigie-db --accepter-clair) : sauvegarde
+   * --clair, ou faite avant l'activation du chiffrement, dont la provenance est connue.
+   */
+  allowPlaintext?: boolean;
+};
+
+const altered = (detail: string) => new Error(`Sauvegarde altérée : ${detail}`);
+
 /**
- * Extrait une sauvegarde dans `work` (dossier vide) et la contrôle : déchiffrement authentifié jusqu'au dernier octet,
- * empreinte de la base, noms des pièces jointes. Rien n'est appliqué ici : la restauration ne commence qu'après.
+ * Extrait une sauvegarde dans `work` (dossier vide) et la contrôle : archive chiffrée exigée quand une clé est définie
+ * (sauf `allowPlaintext`), déchiffrement authentifié jusqu'au dernier octet, manifeste cohérent avec l'archive,
+ * empreinte de la base, noms (uniques) et empreintes des pièces jointes. Rien n'est appliqué ici : la restauration ne
+ * commence qu'après.
  */
-export async function extractBackup(file: string, storage: StorageConfig, work: string): Promise<ExtractedBackup> {
+export async function extractBackup(file: string, storage: StorageConfig, work: string, opts: ExtractOptions = {}): Promise<ExtractedBackup> {
+  const encrypted = await fileIsEncrypted(file);
+  // Avec une clé, Vigie chiffre ses sauvegardes : une archive en clair a pu être substituée (pièces jointes, base).
+  if (!encrypted && storage.uploadKey && !opts.allowPlaintext) {
+    throw new Error('Sauvegarde en clair refusée : VIGIE_UPLOAD_KEY est définie, et Vigie chiffre alors ses sauvegardes ; une archive en clair a pu être substituée. '
+      + 'Si elle vient bien de ce serveur (sauvegarde --clair, ou faite avant l\'activation du chiffrement) : relancer avec --accepter-clair.');
+  }
   const input = await decryptFileStream(file, fileKeys([storage.uploadKey, storage.uploadKeyPrevious], 'sauvegardes'));
   const uploadsDir = path.join(/*turbopackIgnore: true*/ work, 'pieces-jointes');
   await mkdir(uploadsDir, { recursive: true, mode: 0o700 });
   let manifest: Manifest | null = null;
   const uploads: string[] = [];
+  const checkEncryption = (m: Manifest) => {
+    if (m.encrypted !== encrypted) {
+      throw altered(`le manifeste annonce une archive ${m.encrypted ? 'chiffrée' : 'en clair'}, le fichier est ${encrypted ? 'chiffré' : 'en clair'}.`);
+    }
+  };
   try {
     await readTar(input, (name) => {
-      if (name === MANIFEST) return collect((data) => {
-        manifest = checkManifest(JSON.parse(data.toString('utf8')) as Partial<Manifest>);
-      });
+      if (name === MANIFEST) {
+        if (manifest) throw altered('manifeste en double.');
+        return collect((data) => {
+          manifest = checkManifest(JSON.parse(data.toString('utf8')) as Partial<Manifest>);
+        });
+      }
       if (!manifest) throw new Error('Fichier non reconnu : ce n\'est pas une sauvegarde de Vigie (manifeste absent en tête d\'archive).');
+      checkEncryption(manifest);
       if (name === manifest.database.file) return createWriteStream(path.join(/*turbopackIgnore: true*/ work, name), { mode: 0o600 });
       if (name.startsWith(UPLOADS_PREFIX)) {
         const base = name.slice(UPLOADS_PREFIX.length);
         if (!UPLOAD_NAME.test(base)) throw new Error(`Sauvegarde invalide : nom de pièce jointe refusé (${name}).`);
+        if (uploads.includes(base)) throw altered(`pièce jointe en double (${base}).`);
         uploads.push(base);
         return createWriteStream(path.join(/*turbopackIgnore: true*/ uploadsDir, base), { mode: 0o600 });
       }
@@ -261,12 +307,41 @@ export async function extractBackup(file: string, storage: StorageConfig, work: 
   }
   const m = manifest as Manifest | null;
   if (!m) throw new Error('Fichier non reconnu : ce n\'est pas une sauvegarde de Vigie (manifeste absent).');
+  checkEncryption(m);
   const dbFile = path.join(/*turbopackIgnore: true*/ work, m.database.file);
   const ok = await stat(dbFile).then((st) => st.size === m.database.size, () => false);
   if (!ok || (await sha256File(dbFile)) !== m.database.sha256) throw new Error('Sauvegarde altérée : la copie de la base ne correspond pas au manifeste.');
-  if (m.uploads.included && uploads.length !== m.uploads.count) throw new Error(`Sauvegarde incomplète : ${uploads.length} pièces jointes sur ${m.uploads.count}.`);
-  return { manifest: m, dbFile, uploadsDir, uploads };
+  const warnings = await checkUploads(m, uploads, uploadsDir);
+  return { manifest: m, encrypted, warnings, dbFile, uploadsDir, uploads };
 }
+
+/** Pièces jointes extraites et manifeste : mêmes noms, mêmes empreintes (ou, sans empreintes, même nombre). */
+async function checkUploads(m: Manifest, uploads: string[], dir: string): Promise<string[]> {
+  if (!m.uploads.included) {
+    if (uploads.length) throw altered(`${uploads.length} pièce(s) jointe(s) dans une archive que le manifeste déclare sans pièces jointes.`);
+    return [];
+  }
+  const files = m.uploads.files;
+  if (!files) {
+    // Sauvegarde d'une version antérieure de Vigie : contrôle par le nombre seulement.
+    if (uploads.length !== m.uploads.count) throw new Error(`Sauvegarde incomplète : ${uploads.length} pièces jointes sur ${m.uploads.count}.`);
+    return uploads.length
+      ? ['manifeste sans empreintes des pièces jointes (sauvegarde d\'une version antérieure de Vigie) : pièces jointes contrôlées par leur nombre seulement.']
+      : [];
+  }
+  const declared = Object.keys(files);
+  if (declared.length !== m.uploads.count) throw altered(`le manifeste annonce ${m.uploads.count} pièces jointes et en décrit ${declared.length}.`);
+  const missing = declared.filter((n) => !uploads.includes(n));
+  if (missing.length) throw altered(`pièces jointes manquantes (${listNames(missing)}).`);
+  const undeclared = uploads.filter((n) => !Object.hasOwn(files, n));
+  if (undeclared.length) throw altered(`pièces jointes non déclarées (${listNames(undeclared)}).`);
+  for (const name of uploads) {
+    if ((await sha256File(path.join(/*turbopackIgnore: true*/ dir, name))) !== files[name]) throw altered(`la pièce jointe ${name} ne correspond pas au manifeste.`);
+  }
+  return [];
+}
+
+const listNames = (names: string[]) => (names.length > 5 ? `${names.slice(0, 5).join(', ')}… : ${names.length} au total` : names.join(', '));
 
 /** Copie les pièces jointes extraites dans le dossier des pièces jointes (même nom : remplacé ; les autres restent). */
 export async function restoreUploads(extracted: ExtractedBackup, uploadDir: string): Promise<number> {

@@ -8,7 +8,7 @@ export function MarkAllReadButton({ scope, filter, disabled }: { scope: 'notific
   const [pending, start] = useTransition();
   return (
     <button type="button" className="btn btn-secondary vg-btn-sm" disabled={disabled || pending} onClick={() => start(() => markAllRead(scope, filter))}>
-      <i className="ph ph-checks" style={{ fontSize: 14 }} />{pending ? 'Enregistrement…' : 'Tout marquer comme lu'}
+      <i className="ph ph-checks" style={{ fontSize: 14 }} aria-hidden />{pending ? 'Enregistrement…' : 'Tout marquer comme lu'}
     </button>
   );
 }

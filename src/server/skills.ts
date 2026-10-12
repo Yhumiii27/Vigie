@@ -368,7 +368,11 @@ export async function reinstatePerson(id: string): Promise<{ error?: string }> {
   return {};
 }
 
-/** Ajoute un titre suivi ou modifie son intitulé et sa durée de validité (les échéances enregistrées ne sont pas recalculées). */
+/**
+ * Ajoute un titre suivi ou modifie son intitulé, sa durée de validité et la case « secourisme » (`firstAid`, lue seulement
+ * si le formulaire porte `firstAidField` : titres des donneurs de soins du registre des accidents bénins, EVT-04) ; les
+ * échéances enregistrées ne sont pas recalculées.
+ */
 export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
@@ -378,6 +382,7 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const id = f.opt('id');
   const label = f.str('label', { required: true, max: 60 });
   const validityMonths = f.int('validityMonths', { required: true, min: 0, max: 240 });
+  const firstAidField = fd.has('firstAidField');
   // Les titres archivés comptent : restaurer plutôt que recréer (historique des formations conservé).
   const twin = label ? titles.find((x) => x.id !== id && clean(x.label) === clean(label)) : undefined;
   if (twin) f.fail('label', twin.archivedAt ? 'Ce titre existe déjà (archivé) : restaurez-le.' : 'Ce titre est déjà suivi.');
@@ -387,18 +392,25 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
     const prev = titles.find((x) => x.id === id);
     if (!prev) return { error: 'Titre introuvable.' };
     if (prev.archivedAt) return { error: 'Titre archivé : restaurez-le pour le modifier.' };
+    const firstAid = firstAidField ? f.bool('firstAid') : prev.firstAid;
+    const details = [
+      ...(prev.label !== label ? [{ field: 'Intitulé', from: prev.label, to: label }] : []),
+      ...(prev.validityMonths !== validityMonths ? [{ field: 'Validité (mois)', from: String(prev.validityMonths), to: String(validityMonths) }] : []),
+      ...(prev.firstAid !== firstAid ? [{ field: 'Secourisme', from: prev.firstAid ? 'oui' : 'non', to: firstAid ? 'oui' : 'non' }] : []),
+    ];
     await db.transaction(async (tx) => {
-      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths! }).where(eq(t.trainingTitles.id, id));
-      await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié` });
+      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid }).where(eq(t.trainingTitles.id, id));
+      await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
     });
     done();
     return { ok: true, id };
   }
   const newId = uniqueId(titleSlug(label), new Set(titles.map((x) => x.id)), '-');
   const sort = Math.max(-1, ...titles.map((x) => x.sort)) + 1;
+  const firstAid = firstAidField && f.bool('firstAid');
   await db.transaction(async (tx) => {
-    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort });
-    await logChange(tx, { entityType: 'training_title', entityId: newId, action: 'create', summary: `Titre « ${label} » ajouté` });
+    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid });
+    await logChange(tx, { entityType: 'training_title', entityId: newId, action: 'create', summary: `Titre « ${label} » ajouté${firstAid ? ' (secourisme)' : ''}` });
   });
   done();
   return { ok: true, id: newId };

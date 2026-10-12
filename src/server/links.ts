@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { checkActionLink } from '@/lib/action-links';
+import { ORIGIN_LOCKED, checkActionLink } from '@/lib/action-links';
 import { isClosedActionStatus } from '@/lib/domain';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { inSite } from '@/lib/session';
@@ -11,6 +11,8 @@ import { logChange } from './changelog';
 
 // Rattacher / détacher une action existante à une source (risque, constat, exigence, contrôle, revue…),
 // pour le composant transverse LinkActionButton. Les types de liens sont décrits dans src/lib/action-links.ts.
+// Les sources d'origine (plan de prévention, permis, document, filière, enlèvement : ACT-01) sont fixées à la création de
+// l'action (saveAction) : jamais rattachées ni détachées ici.
 
 type Result = { error?: string };
 
@@ -20,6 +22,7 @@ async function check(link: string, actionId: string) {
   const db = await getDb();
   const checked = await checkActionLink(db, session.role, link);
   if ('error' in checked) return { error: checked.error };
+  if (checked.parsed.def.origin) return { error: ORIGIN_LOCKED };
   const [action] = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, actionId));
   if (!action) return { error: 'Action introuvable.' };
   // L'action aussi doit relever du site sélectionné (ou valoir pour tous les sites).

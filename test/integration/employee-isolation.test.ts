@@ -119,7 +119,7 @@ describe('Salarié : ses données seulement', () => {
     const [qMine] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, ME));
     const [qOther] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, 'mgirard'));
     const row = (entityType: string, entityId: string | number, uploadedBy: string | null = null): Attachment => ({
-      id: 'x', entityType, entityId: String(entityId), fileName: 'f.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy, createdAt: new Date(),
+      id: 'x', entityType, entityId: String(entityId), fileName: 'f.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy, createdAt: new Date(), health: false,
     });
     const s = { role: 'Salarié' as const, user: { id: ME }, allowedSiteIds: null };
     expect(await canReadAttachment(row('event', 'EV-2026-131'), s)).toBe(true);

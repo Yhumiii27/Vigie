@@ -47,7 +47,7 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
   return (
     <Frame>
       <div style={{ padding: '14px 18px 0', display: 'grid', gap: 10 }}>
-        <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, justifySelf: 'start' }}>
+        <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5, justifySelf: 'start' }}>
           <i className="ph ph-caret-left" />Retour à Vigie
         </Link>
         {check && check.status !== 'ok' && (

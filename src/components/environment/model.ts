@@ -84,6 +84,47 @@ export const treatmentLabel = (code: string) => TREATMENT_CODES.find(([c]) => c 
 /** Valorisation (R1–R13) ou élimination (D1–D15). */
 export const isRecovery = (code: string) => code.startsWith('R');
 
+/**
+ * Opérations de transit (échange, regroupement, reconditionnement, stockage préalable) : le traitement final n'est pas
+ * connu de la filière, sa qualification se précise à chaque enlèvement.
+ */
+export const TRANSIT_CODES: readonly string[] = ['R12', 'R13', 'D13', 'D14', 'D15'];
+export const isTransitCode = (code: string) => TRANSIT_CODES.includes(code);
+
+// ─── Qualification du traitement final (arrêté du 31 mai 2021, hiérarchie de l'art. L. 541-1) ──
+
+export type TreatmentQualification = 'reutilisation' | 'recyclage' | 'valorisation_energetique' | 'autre_valorisation' | 'elimination';
+export const TREATMENT_QUALIFICATIONS: Record<TreatmentQualification, string> = {
+  reutilisation: 'Préparation en vue de la réutilisation',
+  recyclage: 'Recyclage',
+  valorisation_energetique: 'Valorisation énergétique',
+  autre_valorisation: 'Autre valorisation',
+  elimination: 'Élimination',
+};
+export const QUALIFICATION_KEYS = Object.keys(TREATMENT_QUALIFICATIONS) as TreatmentQualification[];
+export const isQualification = (q: string | null | undefined): q is TreatmentQualification => !!q && Object.hasOwn(TREATMENT_QUALIFICATIONS, q);
+export const qualificationLabel = (q: string | null | undefined) => (isQualification(q) ? TREATMENT_QUALIFICATIONS[q] : q ?? null);
+
+/**
+ * Qualification proposée d'après le code de traitement : R1 valorisation énergétique, R2–R9 recyclage, R10–R11 autre
+ * valorisation, D1–D12 élimination ; null pour une opération de transit (à préciser à chaque enlèvement) ou un code inconnu.
+ */
+export function defaultQualification(code: string): TreatmentQualification | null {
+  const m = /^([RD])(\d{1,2})$/.exec(code);
+  if (!m || isTransitCode(code)) return null;
+  const n = +m[2];
+  if (m[1] === 'D') return n >= 1 && n <= 12 ? 'elimination' : null;
+  return n === 1 ? 'valorisation_energetique' : n >= 2 && n <= 9 ? 'recyclage' : n === 10 || n === 11 ? 'autre_valorisation' : null;
+}
+
+/** Qualification incohérente avec le code de traitement (hors transit) : D impose « Élimination », R l'exclut. */
+export function qualificationError(code: string, q: string | null | undefined): string | null {
+  if (!q || isTransitCode(code)) return null;
+  if (code.startsWith('D') && q !== 'elimination') return "Une opération d'élimination (D) se qualifie « Élimination ».";
+  if (code.startsWith('R') && q === 'elimination') return 'Une opération de valorisation (R) ne peut pas être qualifiée « Élimination ».';
+  return null;
+}
+
 // ─── Unités et quantités ────────────────────────────────────────────────────
 
 export const WASTE_UNITS: readonly (readonly [value: string, label: string])[] = [
@@ -92,6 +133,113 @@ export const WASTE_UNITS: readonly (readonly [value: string, label: string])[] =
 export const WASTE_UNIT_KEYS = WASTE_UNITS.map(([u]) => u);
 /** Quantité en tonnes pour les unités de masse ; null pour un volume (non pesé). */
 export const toTonnes = (quantity: number, unit: string) => (unit === 'kg' ? quantity / 1000 : unit === 't' ? quantity : null);
+
+/** Quantité du registre (arrêté du 31 mai 2021) : en tonnes, ou en m³ pour un déchet mesuré en volume ; null si unité inconnue. */
+export function toRegisterQuantity(quantity: number, unit: string): { quantity: number; unit: 't' | 'm³' } | null {
+  const round = (n: number) => Math.round(n * 1e6) / 1e6;
+  if (unit === 'kg') return { quantity: round(quantity / 1000), unit: 't' };
+  if (unit === 't') return { quantity, unit: 't' };
+  if (unit === 'L') return { quantity: round(quantity / 1000), unit: 'm³' };
+  if (unit === 'm³') return { quantity, unit: 'm³' };
+  return null;
+}
+
+// ─── Mentions obligatoires du registre (arrêté du 31 mai 2021, art. 2) ───────
+
+/** Mentions de l'arrêté exigées au registre à partir de cette date (entrée en vigueur au 1er janvier 2022). */
+export const REGISTER_MENTIONS_FROM = '2022-01-01';
+
+/** Mentions contrôlées, dans l'ordre du registre. */
+export const REGISTER_MENTIONS = {
+  siteSiret: "SIRET de l'établissement",
+  transporterSiret: 'SIRET du transporteur',
+  transporterAddress: 'Adresse du transporteur',
+  transporterReceipt: 'Récépissé du transporteur',
+  destinationSiret: "SIRET de l'installation de destination",
+  destinationAddress: "Adresse de l'installation de destination",
+  qualification: 'Qualification du traitement final',
+} as const;
+
+/** Mentions de la filière proposées par défaut à chaque enlèvement (collecteur, installation, qualification). */
+export const STREAM_MENTIONS = {
+  collectorSiret: 'SIRET du collecteur',
+  collectorAddress: 'Adresse du collecteur',
+  collectorReceipt: 'Récépissé du collecteur',
+  destinationSiret: REGISTER_MENTIONS.destinationSiret,
+  destinationAddress: REGISTER_MENTIONS.destinationAddress,
+  qualification: REGISTER_MENTIONS.qualification,
+} as const;
+
+type Maybe<T> = T | null | undefined;
+
+/** Mentions d'un enlèvement (valeurs résolues : copie de l'enlèvement, à défaut celle de la filière). */
+export type EntryMentions = {
+  removedOn: string;
+  siteSiret: Maybe<string>;
+  transporterSiret: Maybe<string>;
+  transporterAddress: Maybe<string>;
+  transporterReceipt: Maybe<string>;
+  destinationSiret: Maybe<string>;
+  destinationAddress: Maybe<string>;
+  qualification: Maybe<string>;
+};
+
+/** Mentions obligatoires absentes d'un enlèvement (aucune avant REGISTER_MENTIONS_FROM). */
+export function registerGaps(e: EntryMentions): string[] {
+  if (e.removedOn < REGISTER_MENTIONS_FROM) return [];
+  return (Object.keys(REGISTER_MENTIONS) as (keyof typeof REGISTER_MENTIONS)[]).filter((k) => !e[k]).map((k) => REGISTER_MENTIONS[k]);
+}
+
+/** Valeurs par défaut d'une filière. */
+export type StreamMentions = {
+  treatmentCode: string;
+  collectorSiret: Maybe<string>;
+  collectorAddress: Maybe<string>;
+  collectorReceipt: Maybe<string>;
+  destinationSiret: Maybe<string>;
+  destinationAddress: Maybe<string>;
+  qualification: Maybe<string>;
+};
+
+/** Valeurs par défaut absentes d'une filière (la qualification d'une opération de transit se précise à chaque enlèvement). */
+export function streamGaps(s: StreamMentions): string[] {
+  return (Object.keys(STREAM_MENTIONS) as (keyof typeof STREAM_MENTIONS)[])
+    .filter((k) => !s[k] && !(k === 'qualification' && isTransitCode(s.treatmentCode)))
+    .map((k) => STREAM_MENTIONS[k]);
+}
+
+/** Filière telle que la résolution des copies d'un enlèvement la lit. */
+export type StreamDefaults = {
+  collector: string; destination: string; treatmentCode: string; pop: boolean; qualification: Maybe<string>;
+  collectorSiret: Maybe<string>; collectorAddress: Maybe<string>; collectorReceipt: Maybe<string>;
+  destinationSiret: Maybe<string>; destinationAddress: Maybe<string>;
+};
+
+/** Copies enregistrées sur un enlèvement (null = non copiée : inscription antérieure aux mentions). */
+export type EntryCopies = {
+  transporter: string; destination: Maybe<string>; treatmentCode: Maybe<string>; pop: Maybe<boolean>; qualification: Maybe<string>;
+  transporterSiret: Maybe<string>; transporterAddress: Maybe<string>; transporterReceipt: Maybe<string>;
+  destinationSiret: Maybe<string>; destinationAddress: Maybe<string>;
+};
+
+/**
+ * Mentions d'un enlèvement : sa copie, à défaut la valeur actuelle de la filière quand elle vaut pour lui — transporteur
+ * resté le collecteur, même installation de destination, même code de traitement. Sinon la mention reste à compléter.
+ */
+export function resolveMentions(e: EntryCopies, s: StreamDefaults) {
+  const sameCollector = e.transporter === s.collector;
+  const sameDestination = (e.destination ?? s.destination) === s.destination;
+  const sameTreatment = (e.treatmentCode ?? s.treatmentCode) === s.treatmentCode;
+  return {
+    pop: e.pop ?? s.pop,
+    qualification: e.qualification ?? (sameTreatment ? s.qualification ?? null : null),
+    transporterSiret: e.transporterSiret ?? (sameCollector ? s.collectorSiret ?? null : null),
+    transporterAddress: e.transporterAddress ?? (sameCollector ? s.collectorAddress ?? null : null),
+    transporterReceipt: e.transporterReceipt ?? (sameCollector ? s.collectorReceipt ?? null : null),
+    destinationSiret: e.destinationSiret ?? (sameDestination ? s.destinationSiret ?? null : null),
+    destinationAddress: e.destinationAddress ?? (sameDestination ? s.destinationAddress ?? null : null),
+  };
+}
 
 // ─── Consommations ──────────────────────────────────────────────────────────
 

@@ -123,7 +123,7 @@ describe('closePlan et cancelPlan', () => {
     expect(await closePlan('PP-2026-019')).toEqual({ error: "Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant de clore le plan." });
     const db = await getDb();
     await db.insert(t.actions).values({
-      id: 'A-900', title: 'Tracer l’intervention sans plan signé', origin: 'prevention', originRef: 'PP-2026-019', siteId: 'ville-a',
+      id: 'A-900', title: 'Tracer l’intervention sans plan signé', origin: 'prevention', originRef: 'PP-2026-019', preventionPlanId: 'PP-2026-019', siteId: 'ville-a',
       pilotId: 'clefevre', dueOn: '2026-10-20', status: 'todo', kind: 'C',
     });
     expect(await closePlan('PP-2026-019')).toEqual({});

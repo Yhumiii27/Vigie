@@ -11,7 +11,8 @@ import { today } from '@/lib/today';
 
 // URI de retour OIDC (SEC-01, SEC-02) : <VIGIE_PUBLIC_URL>/auth/retour?code=…&state=…
 // Code → jetons (PKCE), rôle Vigie (rôles applicatifs, le plus élevé), sites (groupes Entra), fiche rapprochée ou créée,
-// puis cookie de session chiffré (8 h glissantes, 12 h au plus). Aucun rôle Vigie : « Accès non autorisé ».
+// puis cookie de session chiffré (8 h glissantes, 12 h au plus). Aucun rôle Vigie : « Accès non autorisé » ; première
+// connexion sans adresse vérifiée d'un domaine de l'entreprise (VIGIE_EMAIL_DOMAINS) : « Compte Microsoft non rattaché ».
 
 export async function GET(req: NextRequest) {
   const c = config();
@@ -54,12 +55,14 @@ export async function GET(req: NextRequest) {
 
   let outcome;
   try {
-    outcome = await signInPerson(await getDb(), { profile, role, groupSites: sitesFromGroups(profile.groups, c.siteGroups), today: today() });
+    outcome = await signInPerson(await getDb(), {
+      profile, role, groupSites: sitesFromGroups(profile.groups, c.siteGroups), today: today(), emailDomains: c.emailDomains,
+    });
   } catch (err) {
     // Base indisponible, ou deux premières connexions simultanées du même compte (contrainte d'unicité) : réessayer.
     return fail('echec', `fiche de ${profile.oid} non enregistrée (${err instanceof Error ? err.message : String(err)})`);
   }
-  if (!outcome.ok) return fail('non-autorise', outcome.reason);
+  if (!outcome.ok) return fail(outcome.motif, outcome.reason);
 
   const now = Math.floor(Date.now() / 1000);
   const session: SessionClaims = {

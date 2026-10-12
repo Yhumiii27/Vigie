@@ -3,17 +3,18 @@ import { CERT_TONE_LABELS, certDot, type CertTone } from '@/components/audits/sh
 import { Dot, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
 import { TONE, type Role } from '@/lib/domain';
-import type { ReviewDossier, ReviewDossierPage, ReviewRecordOnly } from '@/lib/data/review';
+import type { ReviewDossierPage, ReviewRecordOnly, StoredDossier } from '@/lib/data/review';
 import {
-  ActionRefs, ActionStatus, ActionTable, Blank, Empty, Kpi, PyramidRow, RecordText, Ref, Section,
-  capitalize, evalCount, fmtNum, fmtPct, fromMonth, plural, sectionCounter,
+  ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, Section,
+  capitalize, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
 
 /**
- * Contenu du dossier : calculé (préparatoire), figé à la clôture (instantané), ou compte rendu seul (revue antérieure
- * à Vigie). Chaque section vérifie ses données : un instantané d'un format antérieur reste lisible.
+ * Contenu du dossier : calculé (préparatoire), figé à la saisie du compte rendu (dossier de séance), figé au visa
+ * (instantané), ou compte rendu seul (revue antérieure à Vigie). Chaque section vérifie ses données : un instantané d'un
+ * format antérieur reste lisible (section 1 « previousActions » des instantanés de version 1).
  */
-type DossierData = ReviewRecordOnly & Partial<Omit<ReviewDossier, keyof ReviewRecordOnly>>;
+type DossierData = ReviewRecordOnly & Partial<Omit<StoredDossier, keyof ReviewRecordOnly>>;
 
 const BLANK_DECISIONS = 3;
 
@@ -21,7 +22,9 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
   const d: DossierData = page.mode === 'record' ? page.record : page.dossier;
   const h = d.header;
   const r = d.record;
-  const now = h.to;
+  // Date d'arrêt des indicateurs (fin de la période examinée) : retards, échéances ; la séance une fois passée (AUD-06).
+  const asOf = page.mode === 'record' ? page.now : page.asOf || h.to;
+  const atSeance = asOf === h.reviewOn;
   const held = h.status !== 'planifiee';
   const n = sectionCounter();
   const others = page.reviews.filter((x) => x.id !== page.review.id);
@@ -29,11 +32,15 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
   const done = d.checklist.filter((c) => c.done).length;
   const participants = [...(r.participants ?? []), r.externalParticipants].filter(Boolean);
 
+  const stopped = `indicateurs arrêtés ${atSeance ? 'à la séance du' : 'au'} ${fmtDate(asOf)}`;
+  const taken = (on: string, by: string) => `le ${on ? fmtDate(on) : '—'}${by ? ` par ${by}` : ''}`;
   const banner = page.mode === 'snapshot'
-    ? { icon: 'ph-lock-simple', tone: 'ok' as const, text: `Dossier figé le ${page.takenOn ? fmtDate(page.takenOn) : '—'} par ${page.takenBy || '—'} à la clôture` }
-    : page.mode === 'record'
-      ? { icon: 'ph-archive', tone: 'neutral' as const, text: 'Revue antérieure à Vigie · dossier non archivé' }
-      : { icon: 'ph-arrows-clockwise', tone: 'warn' as const, text: `Dossier préparatoire · indicateurs calculés le ${fmtDate(page.now)}` };
+    ? { icon: 'ph-lock-simple', tone: 'ok' as const, text: `Dossier figé au visa ${taken(page.takenOn, page.takenBy)} · ${stopped}` }
+    : page.mode === 'seance'
+      ? { icon: 'ph-lock-simple-open', tone: 'accent' as const, text: `Dossier de séance figé ${taken(page.takenOn, '')} · ${stopped} · compte rendu modifiable jusqu'au visa` }
+      : page.mode === 'record'
+        ? { icon: 'ph-archive', tone: 'neutral' as const, text: 'Revue antérieure à Vigie · dossier non archivé' }
+        : { icon: 'ph-arrows-clockwise', tone: 'warn' as const, text: `Dossier préparatoire · indicateurs calculés le ${fmtDate(page.now)}${asOf < page.now ? `, arrêtés à la séance du ${fmtDate(asOf)}` : ''}` };
 
   return (
     <main className="rd-doc">
@@ -61,9 +68,10 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
         <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · système de management QHSE</div>
         <h1>Revue de direction {kind} du {fmtDate(h.reviewOn)}</h1>
         <div className="rd-muted" style={{ fontSize: 12.5 }}>
-          {page.mode === 'snapshot' && `Dossier figé le ${page.takenOn ? fmtDate(page.takenOn) : '—'} par ${page.takenBy || '—'} · visa de la direction`}
+          {page.mode === 'snapshot' && `Dossier figé au visa de la direction ${taken(page.takenOn, page.takenBy)}${page.seance ? ` · dossier de séance du ${page.seance.takenOn ? fmtDate(page.seance.takenOn) : '—'}` : ''} · ${stopped}`}
+          {page.mode === 'seance' && `Dossier de séance figé ${taken(page.takenOn, page.takenBy)} · ${stopped} · compte rendu modifiable jusqu'au visa`}
           {page.mode === 'record' && 'Compte rendu enregistré · revue antérieure à Vigie : dossier préparatoire non archivé'}
-          {page.mode === 'live' && `Dossier préparatoire consolidé · généré le ${fmtDate(now)} par ${h.author}`}
+          {page.mode === 'live' && `Dossier préparatoire consolidé · généré le ${fmtDate(page.now)} par ${h.author}`}
         </div>
         <dl className="rd-meta">
           {page.mode !== 'record' && <><dt>Période examinée</dt><dd>12 mois glissants, du {fmtDate(h.from)} au {fmtDate(h.to)}</dd></>}
@@ -79,7 +87,13 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
         </dl>
       </header>
 
-      {d.previousActions && (
+      {d.previousFollowUp ? (
+        <Section n={n()} title="Suivi des décisions et actions des revues précédentes" aside={followUpAside(d.previousFollowUp)}>
+          {d.previousFollowUp.length ? <FollowUpTable rows={d.previousFollowUp} role={role} />
+            : <Empty>Aucune décision ni action issue des revues précédentes.</Empty>}
+        </Section>
+      ) : d.previousActions && (
+        // Instantané de version 1 (avant le lot 2) : actions des revues précédentes seulement.
         <Section n={n()} title="Suivi des actions des revues précédentes" aside={plural(d.previousActions.length, 'action', 'actions')}>
           {d.previousActions.length ? <ActionTable rows={d.previousActions} role={role} review extra={(a) => a.originRef} />
             : <Empty>Aucune action issue des revues précédentes.</Empty>}
@@ -87,10 +101,11 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
       )}
 
       {d.safety && (
-        <Section n={n()} title="Indicateurs sécurité" aside="12 mois glissants">
+        <Section n={n()} title="Indicateurs sécurité" aside={d.safety.missingMonths !== undefined ? '12 derniers mois complets' : '12 mois glissants'}>
           <div className="rd-kpis">
             <Kpi label="Jours sans accident avec arrêt" value={d.safety.daysWithout} note={d.safety.daysNote} />
-            <Kpi label="TF1 · taux de fréquence" value={d.safety.tf1} note={`Accidents avec arrêt par million d'heures · objectif < ${d.safety.target}`} />
+            <Kpi label="TF1 · taux de fréquence" value={d.safety.tf1}
+              note={`Accidents avec arrêt par million d'heures · objectif < ${d.safety.target}${d.safety.missingMonths ? ` · ${plural(d.safety.missingMonths, 'mois', 'mois')} sans heures saisies` : ''}`} />
             <Kpi label="TG · taux de gravité" value={d.safety.tg} note="Jours perdus pour 1 000 heures travaillées" />
           </div>
           <h3 className="rd-h3">Pyramide des événements sécurité</h3>
@@ -242,6 +257,8 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
           {d.audits.progFrom && d.audits.progTo && d.audits.programmeCounts && (
             <p className="rd-summary">
               {fromMonth(d.audits.progFrom)} à {monthName(+d.audits.progTo.slice(5, 7))} {yearOf(d.audits.progTo)} (période examinée et année suivant la revue) · {d.audits.programmeCounts.done} réalisé{d.audits.programmeCounts.done > 1 ? 's' : ''} · {d.audits.programmeCounts.pending} à confirmer (échéance passée) · {d.audits.programmeCounts.upcoming} à venir
+              {d.audits.programmeCounts.cancelled != null && ` · ${d.audits.programmeCounts.cancelled} annulé${d.audits.programmeCounts.cancelled > 1 ? 's' : ''}`}
+              {d.audits.programmeCounts.postponed != null && ` · ${d.audits.programmeCounts.postponed} reporté${d.audits.programmeCounts.postponed > 1 ? 's' : ''}`}
             </p>
           )}
           {d.audits.programme?.length ? (
@@ -254,6 +271,7 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
                     <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{p.track}</td>
                     <td>
                       <Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref>
+                      {p.postponedFrom && <div className="rd-muted" style={{ fontSize: 11 }}>Reporté · initialement {p.postponedFrom.endsWith('-01') ? `${monthName(+p.postponedFrom.slice(5, 7))} ${yearOf(p.postponedFrom)}` : fmtDate(p.postponedFrom)}</div>}
                       {p.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={p.action.href} role={role}>{p.action.id}</Ref> · {p.action.status}</div>}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.owner || '—'}</td>
@@ -328,7 +346,7 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
                       <td className="rd-muted">{a.origin} · {a.originRef}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}</td>
-                      <td className="rd-num-cell">{daysBetween(a.dueOn, now)} j</td>
+                      <td className="rd-num-cell">{daysBetween(a.dueOn, asOf)} j</td>
                     </tr>
                   ))}
                 </tbody>
@@ -611,8 +629,9 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
       </Section>
 
       <div className="rd-foot">
-        {page.mode === 'live' && `Document généré par Vigie le ${fmtDate(now)} · indicateurs calculés à cette date, à valider en séance.`}
-        {page.mode === 'snapshot' && `Dossier figé par Vigie le ${page.takenOn ? fmtDate(page.takenOn) : '—'} à la clôture de la revue · indicateurs arrêtés à cette date.`}
+        {page.mode === 'live' && `Document généré par Vigie le ${fmtDate(page.now)} · indicateurs calculés à cette date${asOf < page.now ? `, arrêtés à la séance du ${fmtDate(asOf)}` : ''}, à valider en séance.`}
+        {page.mode === 'seance' && `Dossier de séance figé par Vigie le ${page.takenOn ? fmtDate(page.takenOn) : '—'} · ${stopped} · compte rendu modifiable jusqu'au visa de la direction.`}
+        {page.mode === 'snapshot' && `Dossier figé par Vigie le ${page.takenOn ? fmtDate(page.takenOn) : '—'} au visa de la direction · ${stopped}.`}
         {page.mode === 'record' && `Compte rendu enregistré dans Vigie · consulté le ${fmtDate(page.now)}.`}
       </div>
     </main>

@@ -9,16 +9,23 @@ const MB = 1024 * 1024;
 export const FILES_HINT = `PDF, image ou document Office · ${MAX_FILES_PER_BATCH} fichiers et ${MAX_BATCH_BYTES / MB} Mo au maximum par envoi.`;
 
 /**
+ * Motif de refus d'un choix de fichiers (fichier trop lourd, trop de fichiers, volume total), ou null : mêmes limites
+ * que le serveur (checkUpload, MAX_FILES_PER_BATCH, MAX_BATCH_BYTES). Règle pure, testée dans parts.test.ts.
+ */
+export function pickedFilesError(files: readonly { name: string; size: number }[]): string | null {
+  const tooBig = files.find((f) => f.size > MAX_FILE_BYTES);
+  return tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
+    : files.length > MAX_FILES_PER_BATCH ? `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`
+      : files.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : joignez-en moins ou réduisez leur taille.`
+        : null;
+}
+
+/**
  * Contrôle des fichiers choisis, avant l'envoi : au-delà de la limite des server actions (next.config), la requête
  * serait refusée avant l'action et la page basculerait sur l'écran d'erreur. Vide le champ et renvoie le motif, ou null.
  */
 export function checkPickedFiles(input: HTMLInputElement): string | null {
-  const picked = Array.from(input.files ?? []);
-  const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
-  const issue = tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
-    : picked.length > MAX_FILES_PER_BATCH ? `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`
-      : picked.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : joignez-en moins ou réduisez leur taille.`
-        : null;
+  const issue = pickedFilesError(Array.from(input.files ?? []));
   if (issue) input.value = '';
   return issue;
 }

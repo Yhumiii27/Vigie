@@ -32,11 +32,15 @@ export function rowOpener(open: () => void) {
 type OpenState = { id: number; view: RiskSheetView; direct?: boolean };
 
 /** Tableau des risques de l'unité ; un clic sur une ligne ouvre la fiche du risque (lecture pour tous, modification pour l'encadrement). */
-export function RiskTable({ rows, unit, units, canManage, options, linkableActions, initialRiskId }: {
+export function RiskTable({ rows, unit, units, canManage, showEvents = true, showHistory = true, options, linkableActions, initialRiskId }: {
   rows: RiskView[];
   unit: Unit;
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];
   canManage: boolean;
+  /** Événements liés dans la fiche (masqués pour le Salarié). */
+  showEvents?: boolean;
+  /** Historique dans la fiche (rôles qui modifient le DUERP). */
+  showHistory?: boolean;
   options: Options;
   linkableActions: RisksData['linkableActions'];
   /** Lien profond ?risque=<id> : fiche ouverte au chargement. */
@@ -94,7 +98,7 @@ export function RiskTable({ rows, unit, units, canManage, options, linkableActio
       {/* Fenêtre rendue hors du tableau : dans la ligne cliquable, elle hériterait de son curseur et de son survol. */}
       <Dialog open={!!current} onClose={close} title={heading?.title ?? ''} kicker={heading?.kicker} width={open?.view === 'newAction' ? 560 : 640}>
         {current && open && (
-          <RiskSheet key={`${current.id}:${open.view}`} risk={current} unit={unit} units={units} canManage={canManage} options={options}
+          <RiskSheet key={`${current.id}:${open.view}`} risk={current} unit={unit} units={units} canManage={canManage} showEvents={showEvents} showHistory={showHistory} options={options}
             linkableActions={linkableActions} isFirst={index === 0} isLast={index === rows.length - 1}
             view={canManage ? open.view : 'sheet'} onView={onView} onClose={close} />
         )}

@@ -2,7 +2,8 @@ import 'server-only';
 import { mkdirSync } from 'node:fs';
 import { config } from '@/lib/config';
 import type { StorageConfig } from '@/lib/env';
-import { MIGRATIONS_DIR } from './migrations';
+import { startMaintenance } from './maintenance';
+import { MIGRATIONS_DIR, refuseNewerDatabase } from './migrations';
 import * as schema from './schema';
 import type { Db, DbEngine } from './types';
 
@@ -14,6 +15,9 @@ export type { Db, DbEngine, DbOrTx, Tx } from './types';
 // n'est chargé qu'en démonstration (VIGIE_DEMO=1), dans une base vide (PRD-04).
 
 // Avant toute migration en attente sur une base existante : sauvegarde automatique (src/db/backup.ts, PRD-02).
+// Base migrée par une version plus récente de Vigie : refusée (NewerDatabaseError), rien n'est migré, sauvegardé ni
+// chargé ; comme pour un échec de migration, la base reste indisponible (pages en erreur, /api/sante 503) et l'ouverture
+// est retentée à la requête suivante.
 
 export { MIGRATIONS_DIR };
 /** Verrou consultatif PostgreSQL des migrations : un seul serveur les applique à la fois. */
@@ -36,6 +40,8 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
   try {
     await client.query('select pg_advisory_lock($1::bigint)', [MIGRATION_LOCK]);
     try {
+      // Base migrée par une version plus récente : refusée avant toute sauvegarde ou migration (PRD-06).
+      await refuseNewerDatabase((q, p) => client.query(q, p));
       const { backupBeforeMigrate } = await import('./backup');
       await backupBeforeMigrate(storage, { engine: 'postgres', url, query: (q, p) => client.query(q, p) });
       await migrate(drizzle(client, { schema }), { migrationsFolder: MIGRATIONS_DIR });
@@ -59,6 +65,7 @@ async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> 
   const client = new PGlite(dir);
   const db = drizzle(client, { schema });
   try {
+    await refuseNewerDatabase((q, p) => client.query(q, p));
     const { backupBeforeMigrate } = await import('./backup');
     await backupBeforeMigrate(storage, { engine: 'pglite', query: (q, p) => client.query(q, p), dump: () => client.dumpDataDir('gzip') });
     await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
@@ -76,7 +83,9 @@ async function open(): Promise<Opened> {
     const { seed } = await import('./seed');
     await seed(opened.db);
   }
-  return opened;
+  // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
+  const stop = startMaintenance(opened.db);
+  return { ...opened, close: async () => { await stop(); await opened.close(); } };
 }
 
 /**

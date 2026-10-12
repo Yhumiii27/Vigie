@@ -4,17 +4,22 @@ import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fmtQty } from '@/components/environment/model';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, eventLockReason, needsCpam, withoutHealth, type AttachmentItem } from '@/components/events/shared';
-import { addDays, fmtDate, fmtDayMonth } from '../dates';
+import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, reservesDeadline } from '@/components/events/deadlines';
+import {
+  BENIGN_REGISTER_PATH, FIRST_AID_TITLE_FALLBACK, HEALTH_FILE_FIELD, HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending,
+  declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
+  type AttachmentItem, type DeclarationDuty,
+} from '@/components/events/shared';
+import { addDays, fmtDate, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {
-  CPAM_DELAY_DAYS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
-  canSeeHealth, isEmployee, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
+  ALL_SITES, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
+  canSeeHealth, isEmployee, type BenignCaregiverKind, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
 } from '../domain';
-import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents } from '../queries';
+import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents, type Person } from '../queries';
 import { loadChangeLog } from './changelog';
 import { loadQhseLeads } from './leads';
-import { currentSiteId, getSession, inSite } from '../session';
+import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import type { Option } from './options';
 
@@ -47,13 +52,96 @@ async function loadSteps(eventIds: string[]) {
   return db.select().from(t.eventSteps).where(inArray(t.eventSteps.eventId, eventIds)).orderBy(asc(t.eventSteps.at), asc(t.eventSteps.id));
 }
 
-/** Pièces jointes d'un événement (photos du signalement, constats, rapports…), les plus anciennes d'abord. */
-export async function loadEventAttachments(eventId: string): Promise<AttachmentItem[]> {
+/**
+ * Pièces jointes d'un événement (photos du signalement, constats, rapports…), les plus anciennes d'abord, et pièces
+ * médicales d'un AT (attachments.health, SEC-06) : jamais transmises à un rôle non habilité (`health` faux : medical vide).
+ */
+export async function loadEventAttachments(eventId: string, health: boolean): Promise<{ files: AttachmentItem[]; medical: AttachmentItem[] }> {
   const db = await getDb();
   const rows = await db.select().from(t.attachments)
     .where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, eventId)))
     .orderBy(asc(t.attachments.createdAt));
-  return rows.map((r) => ({ id: r.id, name: r.fileName, mime: r.mimeType, size: r.size, url: attachmentUrl(r.id), isImage: r.mimeType.startsWith('image/') }));
+  const item = (r: (typeof rows)[number]): AttachmentItem => ({ id: r.id, name: r.fileName, mime: r.mimeType, size: r.size, url: attachmentUrl(r.id), isImage: r.mimeType.startsWith('image/') });
+  return { files: rows.filter((r) => !r.health).map(item), medical: health ? rows.filter((r) => r.health).map(item) : [] };
+}
+
+// ─── Registre des accidents bénins (EVT-04) ─────────────────────────────────
+
+/** Secouriste du travail de l'effectif : titre de secourisme valide à la date donnée (échéance du titre, null = sans échéance). */
+export type FirstAider = { id: string; name: string; until: string | null };
+
+/**
+ * Secouristes du travail d'un site à une date (sans contrôle de session : appelé par les server actions) : personnes du
+ * site (ou sans site) présentes à l'effectif ce jour-là, dont la dernière formation non annulée d'un titre de secourisme
+ * (training_titles.first_aid ; à défaut, titre « SST » ou « sauveteur secouriste » d'après son libellé) obtenue au plus tard
+ * ce jour-là est encore valide. Triés par nom.
+ */
+export async function loadFirstAiders(siteId: string, onIso: string): Promise<FirstAider[]> {
+  const db = await getDb();
+  const titles = await db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, firstAid: t.trainingTitles.firstAid })
+    .from(t.trainingTitles).where(isNull(t.trainingTitles.archivedAt));
+  const flagged = titles.filter((x) => x.firstAid);
+  const ids = (flagged.length ? flagged : titles.filter((x) => FIRST_AID_TITLE_FALLBACK.test(x.label))).map((x) => x.id);
+  if (!ids.length) return [];
+  const [people, quals] = await Promise.all([
+    db.select({ id: t.people.id, name: t.people.name, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people),
+    db.select({ id: t.qualifications.id, personId: t.qualifications.personId, titleId: t.qualifications.titleId, obtainedOn: t.qualifications.obtainedOn, expiresOn: t.qualifications.expiresOn })
+      .from(t.qualifications).where(and(inArray(t.qualifications.titleId, ids), isNull(t.qualifications.cancelledAt))),
+  ]);
+  // Dernière formation de chaque (personne, titre) obtenue au plus tard à la date.
+  const latest = new Map<string, (typeof quals)[number]>();
+  for (const q of quals) {
+    if (q.obtainedOn > onIso) continue;
+    const key = `${q.personId}|${q.titleId}`;
+    const cur = latest.get(key);
+    if (!cur || q.obtainedOn > cur.obtainedOn || (q.obtainedOn === cur.obtainedOn && q.id > cur.id)) latest.set(key, q);
+  }
+  const until = new Map<string, string | null>();
+  for (const q of latest.values()) {
+    if (q.expiresOn && q.expiresOn < onIso) continue;
+    const prev = until.get(q.personId);
+    // Plusieurs titres valides : l'échéance la plus lointaine (sans échéance d'abord).
+    if (!until.has(q.personId) || (prev !== null && (q.expiresOn === null || q.expiresOn > prev!))) until.set(q.personId, q.expiresOn);
+  }
+  return people
+    .filter((p) => until.has(p.id) && (!p.siteId || p.siteId === siteId) && !(p.leftOn && p.leftOn <= onIso))
+    .map((p) => ({ id: p.id, name: p.name, until: until.get(p.id) ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+}
+
+/** Choix « Secouriste de l'effectif » : « Nom · SST valide jusqu'au … ». */
+export const firstAiderOption = (a: FirstAider): Option => [a.id, `${a.name} · SST valide ${a.until ? `jusqu'au ${fmtDate(a.until)}` : 'sans échéance'}`];
+
+type BenignRow = typeof t.benignAccidents.$inferSelect;
+
+/** Donneur de soins d'une inscription : secouriste de l'effectif (nom) ou professionnel de santé déclaré, avec sa qualité. */
+const caregiverOf = (r: BenignRow, people: Map<string, Person>) => ({
+  caregiver: r.caregiverId ? people.get(r.caregiverId)?.name ?? r.caregiverId : r.caregiverName ?? '—',
+  qualification: BENIGN_CAREGIVER_KINDS[r.caregiverQualification as BenignCaregiverKind] ?? r.caregiverQualification,
+});
+
+/** Inscription au registre telle qu'affichée sur la fiche d'un AT (rôles habilités). */
+export type BenignEntryView = {
+  id: number; number: number; siteId: string; careGivenAt: string; care: string; caregiver: string; qualification: string;
+  signedOn: string | null; escalatedAt: string | null; createdOn: string;
+};
+
+type BenignEntry = BenignEntryView & { escalatedOn: Date | null };
+/** Inscription transmise à la page : sans l'instant de bascule (servi au calcul de l'échéance CPAM). */
+const benignView = ({ escalatedOn, ...view }: BenignEntry): BenignEntryView => (void escalatedOn, view);
+
+/** Inscription active (non annulée) d'un événement au registre des accidents bénins, ou null. */
+export async function activeBenignEntry(eventId: string, people?: Map<string, Person>): Promise<BenignEntry | null> {
+  const db = await getDb();
+  const [[r], persons] = await Promise.all([
+    db.select().from(t.benignAccidents).where(and(eq(t.benignAccidents.eventId, eventId), isNull(t.benignAccidents.cancelledAt))),
+    people ?? loadPeople(),
+  ]);
+  if (!r) return null;
+  return {
+    id: r.id, number: r.number, siteId: r.siteId, careGivenAt: toParisLocal(r.careGivenAt), care: r.care, ...caregiverOf(r, persons),
+    signedOn: r.signedOn, escalatedAt: r.escalatedAt ? toParisLocal(r.escalatedAt) : null, escalatedOn: r.escalatedAt, createdOn: isoDay(r.createdAt),
+  };
 }
 
 /** Rattachement affiché sur la fiche (lien vers le module concerné). */
@@ -110,15 +198,57 @@ async function loadWasteEntries(eventId: string): Promise<EventLink[]> {
 /** Entrée de l'historique du workflow, sérialisable. */
 export type EventHistoryEntry = { id: number; kind: EventTransition; label: string; icon: string; from: string; to: string; reason: string | null; by: string; at: string };
 
-/** Déclaration CPAM d'un AT : date de déclaration, échéance (48 h) ou mention « non requise » (soins). */
-export type CpamState = { declaredOn: string | null; dueOn: string | null; tone: Tone; label: string } | null;
+/**
+ * Déclaration CPAM d'un AT (rôles habilités) : date de déclaration et réserves motivées, absence de déclaration motivée,
+ * inscription au registre des accidents bénins, ou échéance du délai de 48 h (EVT-03) — de l'inscription au registre d'un
+ * accident bénin, ou de l'information de l'ETT (24 h) pour un intérimaire ; aucune échéance pour une victime extérieure
+ * (son employeur déclare). `canWaive` : obligation encore ouverte, que l'animateur QHSE ou la direction peuvent motiver
+ * (EVT-02) ; `duty` : qui déclare selon la victime (declarationDuty).
+ */
+export type CpamState = {
+  declaredOn: string | null; dueOn: string | null; tone: Tone; label: string;
+  waiver: { reason: string; by: string; on: string } | null;
+  reserves: { on: string | null; dueOn: string; tone: Tone; label: string } | null;
+  canWaive: boolean;
+  duty: DeclarationDuty;
+} | null;
 
-function cpamState(e: { type: string; injury: string | null; occurredOn: string; cpamDeclaredOn: string | null }, now: string): CpamState {
+type EventRow = typeof t.events.$inferSelect;
+
+const WAIVED_LABEL: Record<DeclarationDuty, string> = {
+  cpam: "Non déclarée par l'entreprise",
+  ett: "Déclaration par l'entreprise de travail temporaire",
+  employer: "Déclaration par l'employeur de la victime",
+};
+
+function cpamState(e: EventRow, entry: { number: number; escalatedOn: Date | null } | null, site: { alsaceMoselle: boolean } | undefined, now: string, nameOf: (pid: string | null) => string): CpamState {
   if (e.type !== 'AT') return null;
-  if (!needsCpam(e)) return { declaredOn: null, dueOn: null, tone: 'neutral', label: 'Non requise · registre des accidents bénins' };
-  if (e.cpamDeclaredOn) return { declaredOn: e.cpamDeclaredOn, dueOn: null, tone: 'ok', label: `Déclarée le ${fmtDayMonth(e.cpamDeclaredOn)}` };
-  const dueOn = addDays(e.occurredOn, CPAM_DELAY_DAYS);
-  return { declaredOn: null, dueOn, tone: dueOn < now ? 'danger' : 'warn', label: `À déclarer avant le ${fmtDayMonth(dueOn)}` };
+  const opts = { alsaceMoselle: !!site?.alsaceMoselle };
+  const duty = declarationDuty(e);
+  const base = { declaredOn: null, dueOn: null, waiver: null, reserves: null, canWaive: cpamPending(e, !!entry), duty };
+  if (e.injury === 'soins' && entry) return { ...base, tone: 'neutral', label: `Non requise · inscrit au registre des accidents bénins (n° ${entry.number})` };
+  if (e.cpamWaivedAt) {
+    return { ...base, tone: 'neutral', label: WAIVED_LABEL[duty], waiver: { reason: e.cpamWaiverReason ?? '', by: nameOf(e.cpamWaivedById), on: isoDay(e.cpamWaivedAt) } };
+  }
+  if (e.cpamDeclaredOn) {
+    const dueOn = reservesDeadline(e.cpamDeclaredOn, opts);
+    const reserves = e.reservesOn
+      ? { on: e.reservesOn, dueOn, tone: 'ok' as Tone, label: `Réserves motivées adressées le ${fmtDate(e.reservesOn)}` }
+      : now <= dueOn
+        ? { on: null, dueOn, tone: 'neutral' as Tone, label: `Réserves motivées possibles jusqu'au ${fmtDate(dueOn)} (10 jours francs)` }
+        : { on: null, dueOn, tone: 'neutral' as Tone, label: `Délai de réserves dépassé le ${fmtDate(dueOn)}` };
+    return { ...base, declaredOn: e.cpamDeclaredOn, tone: 'ok', label: `Déclarée le ${fmtDate(e.cpamDeclaredOn)}`, reserves };
+  }
+  if (duty === 'employer') {
+    return { ...base, tone: 'neutral', label: "Déclarée par l'employeur de la victime : à indiquer (motif) avant la clôture" };
+  }
+  const due = duty === 'ett' ? ettDeadline(cpamBasis(e)) : cpamDeadline(cpamBasis(e, entry?.escalatedOn), opts);
+  const tone: Tone = due.date < now ? 'danger' : 'warn';
+  if (duty === 'ett') {
+    return { ...base, dueOn: due.date, tone, label: `ETT à informer ${fmtDeadline(due)} (copie CARSAT et inspection du travail) : elle déclare l'accident` };
+  }
+  if (e.injury === 'soins') return { ...base, dueOn: due.date, tone, label: `Accident bénin : à inscrire au registre ou à déclarer ${fmtDeadline(due)}` };
+  return { ...base, dueOn: due.date, tone, label: `À déclarer ${fmtDeadline(due)}` };
 }
 
 /**
@@ -143,15 +273,20 @@ export async function loadEventDetail(id: string) {
   const row = events.find((x) => x.id === id);
   if (!row) return null;
   const health = canSeeHealth(role);
+  const at = row.type === 'AT';
   const e = health ? row : withoutHealth(row);
   // Les actions liées sont lues sans filtre de site : elles suivent l'événement.
-  const [actions, analyses, attachments, steps, links, wasteEntries] = await Promise.all([
+  const [actions, analyses, files, steps, links, wasteEntries, entry, [site], firstAiders] = await Promise.all([
     db.select().from(t.actions).where(eq(t.actions.eventId, e.id)),
     db.select().from(t.eventAnalyses).where(eq(t.eventAnalyses.eventId, e.id)),
-    loadEventAttachments(e.id),
+    loadEventAttachments(e.id, health),
     loadSteps([e.id]),
     loadLinks(e, now),
     loadWasteEntries(e.id),
+    // Registre des accidents bénins : donnée de santé, lue pour les rôles habilités seulement.
+    health && at ? activeBenignEntry(e.id, people) : null,
+    db.select({ label: t.sites.label, alsaceMoselle: t.sites.alsaceMoselle }).from(t.sites).where(eq(t.sites.id, e.siteId)),
+    health && at && row.injury === 'soins' ? loadFirstAiders(e.siteId, now) : [],
   ]);
   const content = Object.fromEntries(analyses.map((a) => [a.method, a.content])) as Record<string, unknown>;
   const methodLabel = METHODS.find(([k]) => k === e.analysisMethod)?.[1] ?? e.analysisMethod;
@@ -164,18 +299,54 @@ export async function loadEventDetail(id: string) {
     };
   });
   const dismissStep = [...steps].reverse().find((r) => r.kind === 'dismiss');
+  const missing = missingQualification(row);
+  const lock = eventLockReason(e);
+  // Blocage calculé sur la ligne complète : pour un rôle non habilité, la clôture d'un AT renvoie AT_CLOSE_RESTRICTED,
+  // sans rien dire de la déclaration (SEC-06).
+  const blocker = advanceBlocker(row.step, actions, {
+    pilotId: row.pilotId, hasAnalysis: analysisFilled(row.analysisMethod, content[row.analysisMethod]), dismissed: !!row.dismissedAt, methodLabel, missing,
+    accident: at ? { health, cpamPending: health && cpamPending(row, !!entry), benign: health && row.injury === 'soins', duty: declarationDuty(row) } : undefined,
+  });
+  // Registre des accidents bénins : premiers soins non déclarés, victime de l'effectif, mentions du registre saisies.
+  const registerBlocker = at && health && !entry && !lock ? benignRegisterBlocker(row) : null;
   return {
     event: eventView(e, people, now),
     actions: actions.sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true })).map((a) => ({ ...actionView(a, people, now), originKey: a.origin })),
     analyses: content,
-    attachments,
-    blocker: advanceBlocker(e.step, actions, { pilotId: e.pilotId, hasAnalysis: analysisFilled(e.analysisMethod, content[e.analysisMethod]), dismissed: !!e.dismissedAt, methodLabel }),
-    lock: eventLockReason(e),
+    attachments: files.files,
+    /** Pièces médicales d'un AT (rôles habilités ; vide sinon). */
+    medical: files.medical,
+    blocker,
+    lock,
+    /** Données exigées à la qualification et non saisies (EVT-05). */
+    missing,
     history,
     stepDates: stepDatesOf(steps, e.createdAt, e.step),
     links,
     wasteEntries,
-    cpam: health ? cpamState(e, now) : null,
+    /**
+     * Rubriques de la déclaration d'un AT (EVT-01), hors données de santé : victime, heure, horaire, connaissance par
+     * l'employeur (départ du délai de 48 h ; à défaut, l'enregistrement dans Vigie), activité, circonstances, témoins, tiers.
+     * Non transmises au Salarié (fiche déclarant).
+     */
+    accident: at && !isEmployee(role) ? {
+      victim: victimLabel(row, (pid) => name(pid)), victimKind: victimKindLabel(row.victimKind), occurredTime: row.occurredTime, workSchedule: row.workSchedule,
+      knownAt: { local: toParisLocal(row.knownAt ?? row.createdAt), isDefault: !row.knownAt },
+      activity: row.activity, circumstances: row.circumstances, witnesses: row.witnesses, thirdParty: row.thirdParty,
+    } : null,
+    /**
+     * Registre des accidents bénins (rôles habilités, AT) : inscription active, inscription possible, secouristes du site ;
+     * `hint` : pourquoi un accident bénin non déclaré ne peut pas encore être inscrit (mentions manquantes, intérimaire,
+     * victime extérieure), null sinon.
+     */
+    register: health && at ? {
+      entry: entry ? benignView(entry) : null,
+      canRegister: !entry && !lock && !registerBlocker,
+      hint: row.injury === 'soins' && !row.cpamDeclaredOn ? registerBlocker : null,
+      firstAiders: firstAiders.map(firstAiderOption),
+      href: `${BENIGN_REGISTER_PATH}?site=${encodeURIComponent(row.siteId)}`,
+    } : null,
+    cpam: health ? cpamState(row, entry, site, now, name) : null,
     /** Données de santé transmises (rôle habilité) ; sinon « Données restreintes ». */
     health,
     dismissal: e.dismissedAt
@@ -187,13 +358,19 @@ export type EventDetail = NonNullable<Awaited<ReturnType<typeof loadEventDetail>
 
 /**
  * Journal des modifications d'un événement. Rôle non habilité aux données de santé (SEC-06) : les champs correspondants
- * sont retirés, et une modification qui ne portait que sur eux disparaît.
+ * sont retirés, et une modification qui ne portait que sur eux disparaît. Une pièce jointe reclassée ensuite en pièce
+ * médicale garde au journal son ajout sous « Fichier » : son nom (ex. arrêt de travail nommant la victime) est retiré
+ * d'après les noms des pièces médicales du journal (ajout, reclassement, retrait), sans réécrire les entrées enregistrées.
  */
 export async function loadEventChangeLog(id: string): Promise<ChangeEntry[]> {
   const [{ role }, log] = await Promise.all([getSession(), loadChangeLog('event', id)]);
   if (canSeeHealth(role)) return log;
+  const medical = new Set(log.flatMap((e) => e.details.filter((d) => d.field === HEALTH_FILE_FIELD).flatMap((d) => [d.from, d.to]))
+    .filter((name): name is string => !!name));
+  const isMedicalFile = (d: ChangeEntry['details'][number]) =>
+    d.field === 'Fichier' && ((d.from != null && medical.has(d.from)) || (d.to != null && medical.has(d.to)));
   return log.flatMap((entry) => {
-    const details = entry.details.filter((d) => !HEALTH_LOG_FIELDS.includes(d.field));
+    const details = entry.details.filter((d) => !HEALTH_LOG_FIELDS.includes(d.field) && !isMedicalFile(d));
     return details.length || !entry.details.length ? [{ ...entry, details }] : [];
   });
 }
@@ -243,7 +420,8 @@ export async function loadMyReports() {
   const [events, sites, photos] = await Promise.all([
     db.select().from(t.events).where(and(eq(t.events.declarantId, user.id), eq(t.events.anonymous, false))),
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
-    db.select({ entityId: t.attachments.entityId, mime: t.attachments.mimeType }).from(t.attachments).where(eq(t.attachments.entityType, 'event')),
+    // Pièces médicales (attachments.health) exclues : jamais comptées pour le déclarant (SEC-06).
+    db.select({ entityId: t.attachments.entityId, mime: t.attachments.mimeType }).from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.health, false))),
   ]);
   const siteLabel = new Map(sites.map((s) => [s.id, s.label.split(' — ')[0]]));
   return events
@@ -276,7 +454,7 @@ export async function loadMyReport(id: string) {
   const [[site], actions, photos, steps] = await Promise.all([
     db.select({ label: t.sites.label }).from(t.sites).where(eq(t.sites.id, e.siteId)),
     db.select().from(t.actions).where(eq(t.actions.eventId, e.id)),
-    db.select({ mime: t.attachments.mimeType }).from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, e.id))),
+    db.select({ mime: t.attachments.mimeType }).from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, e.id), eq(t.attachments.health, false))),
     loadSteps([e.id]),
   ]);
   const type = EVENT_TYPES[e.type as EventType];
@@ -304,13 +482,25 @@ export type MyReportDetail = NonNullable<Awaited<ReturnType<typeof loadMyReport>
 /**
  * Échéances des événements :
  * - signalements à qualifier sous QUALIFY_DELAY_DAYS après la déclaration (createdAt) — dépassé : danger ;
- * - accidents du travail à déclarer à la CPAM sous CPAM_DELAY_DAYS après l'accident (hors soins sans arrêt) : donnée de
- *   santé (SEC-06), échéance réservée aux rôles habilités (`health`), adressée au pilote si son dernier rôle connu l'est,
- *   sinon au responsable QHSE du site (animateurs QHSE si le poste est vacant).
- * Les classés sans suite sont exclus (loadEvents).
+ * - accidents du travail à déclarer à la CPAM dans les 48 h de leur connaissance, dimanches et fériés non compris (EVT-03 :
+ *   knownAt, sinon createdAt ; après une bascule depuis le registre des accidents bénins, date de connaissance de l'arrêt
+ *   ou des soins), tant que la déclaration n'est ni saisie ni motivée, clôturés compris (EVT-02) : donnée de santé (SEC-06),
+ *   échéance réservée aux rôles habilités (`health`), adressée au pilote si son dernier rôle connu l'est, sinon au
+ *   responsable QHSE du site (animateurs QHSE si le poste est vacant). Réserves motivées : information de la fiche seulement.
+ *   Selon la victime (declarationDuty) : accident bénin (premiers soins) à inscrire au registre ou à déclarer dans le même
+ *   délai de 48 h ; intérimaire : entreprise de travail temporaire à informer sous 24 h (R. 412-2 CSS), close par le motif
+ *   d'absence de déclaration ; victime extérieure : aucune échéance.
+ * Les classés sans suite sont exclus (loadEvents). Tous les sites du périmètre (TDB-05) : siteId de l'événement.
  */
 export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [events, people, leads] = await Promise.all([loadEvents(), loadPeople(), loadQhseLeads()]);
+  const db = await getDb();
+  const [events, people, leads, sites, register] = await Promise.all([
+    loadEvents('perimeter'), loadPeople(), loadQhseLeads(),
+    db.select({ id: t.sites.id, alsaceMoselle: t.sites.alsaceMoselle }).from(t.sites),
+    db.select({ eventId: t.benignAccidents.eventId, escalatedAt: t.benignAccidents.escalatedAt }).from(t.benignAccidents).where(isNull(t.benignAccidents.cancelledAt)),
+  ]);
+  const alsaceMoselle = new Map(sites.map((s) => [s.id, s.alsaceMoselle]));
+  const escalatedAt = new Map(register.map((r) => [r.eventId, r.escalatedAt]));
   const now = today();
   const todo: TodoItem[] = [];
   const who = (pid: string) => people.get(pid)?.name ?? '';
@@ -325,22 +515,73 @@ export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: 
     if (e.step === 0) {
       const due = addDays(isoDay(e.createdAt), QUALIFY_DELAY_DAYS);
       todo.push({
-        date: due, kind: 'Signalement à qualifier', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`,
+        date: due, kind: 'Signalement à qualifier', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
         who: e.pilotId ? who(e.pilotId) : lead.who, href, ownerIds: e.pilotId ? [e.pilotId] : lead.ownerIds, overdue: due < now,
       });
     }
-    if (needsCpam(e) && !e.cpamDeclaredOn && e.step < STEP_CLOSED) {
-      const due = addDays(e.occurredOn, CPAM_DELAY_DAYS);
-      const pilot = e.pilotId && healthOwner(e.pilotId) ? e.pilotId : null;
-      const owners = [...new Set([...lead.ownerIds, ...(pilot ? [pilot] : [])])];
-      todo.push({
-        date: due, kind: 'Déclaration AT à la CPAM', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`,
-        who: pilot ? who(pilot) : lead.who, href, ownerIds: owners, overdue: due < now, health: true,
-      });
+    // Déclaration d'un AT selon la victime (declarationDuty), tant qu'elle n'est ni saisie ni motivée : CPAM sous 48 h,
+    // accident bénin à inscrire au registre (ou à déclarer) sous 48 h, ETT à informer sous 24 h ; rien pour une victime
+    // extérieure (son employeur déclare). `escalatedAt` porte les inscriptions actives au registre.
+    if (e.type === 'AT' && !e.cpamDeclaredOn && !e.cpamWaivedAt) {
+      const duty = declarationDuty(e);
+      const registered = escalatedAt.has(e.id);
+      const opts = { alsaceMoselle: alsaceMoselle.get(e.siteId) };
+      const deadline = needsCpam(e) ? { kind: 'Déclaration AT à la CPAM', date: cpamDeadline(cpamBasis(e, escalatedAt.get(e.id)), opts).date }
+        : duty === 'ett' && !(e.injury === 'soins' && registered) ? { kind: "Information de l'ETT (AT d'un intérimaire)", date: ettDeadline(cpamBasis(e)).date }
+          : duty === 'cpam' && e.injury === 'soins' && !registered ? { kind: 'Inscription au registre des accidents bénins', date: cpamDeadline(cpamBasis(e), opts).date }
+            : null;
+      if (deadline) {
+        const due = deadline.date;
+        const pilot = e.pilotId && healthOwner(e.pilotId) ? e.pilotId : null;
+        const owners = [...new Set([...lead.ownerIds, ...(pilot ? [pilot] : [])])];
+        todo.push({
+          date: due, kind: deadline.kind, tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
+          who: pilot ? who(pilot) : lead.who, href, ownerIds: owners, overdue: due < now, health: true,
+        });
+      }
     }
   }
   return { todo };
 });
+
+/**
+ * Registre des accidents du travail bénins d'un site (EVT-04, page imprimable /evenements/registre-benin) : animateur QHSE
+ * et direction seulement (null sinon), site du périmètre (null hors périmètre ou inconnu). Sans site : liste des sites du
+ * périmètre (choix). Inscriptions annulées comprises (numéro jamais réattribué), par numéro d'ordre ; `year` : soins de
+ * l'année seulement.
+ */
+export async function loadBenignRegister(siteId: string | null, year?: number) {
+  const { role, allowedSiteIds, siteOptions } = await getSession();
+  if (!canSeeHealth(role)) return null;
+  const sites = siteOptions.filter((s) => s.id !== ALL_SITES);
+  if (!siteId) return { site: null, sites, entries: [], years: [] as number[], year: null as number | null, firstAiders: [] as FirstAider[] };
+  if (!inPerimeter(allowedSiteIds, siteId)) return null;
+  const db = await getDb();
+  const now = today();
+  const [[site], rows, people, firstAiders] = await Promise.all([
+    db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites).where(eq(t.sites.id, siteId)),
+    db.select({ entry: t.benignAccidents, event: t.events }).from(t.benignAccidents)
+      .innerJoin(t.events, eq(t.events.id, t.benignAccidents.eventId))
+      .where(eq(t.benignAccidents.siteId, siteId)).orderBy(asc(t.benignAccidents.number)),
+    loadPeople(),
+    loadFirstAiders(siteId, now),
+  ]);
+  if (!site) return null;
+  const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : '—');
+  const yearOf = (r: (typeof rows)[number]) => +toParisLocal(r.entry.careGivenAt).slice(0, 4);
+  const years = [...new Set(rows.map(yearOf))].sort((a, b) => b - a);
+  const entries = rows.filter((r) => !year || yearOf(r) === year).map(({ entry: r, event: e }) => ({
+    id: r.id, number: r.number, ref: e.id, occurredOn: e.occurredOn, occurredTime: e.occurredTime,
+    victim: victimLabel(e, name), location: e.location, circumstances: e.circumstances, lesionNature: e.lesionNature, lesionSite: e.lesionSite,
+    witnesses: e.witnesses, care: r.care, ...caregiverOf(r, people), careGivenAt: toParisLocal(r.careGivenAt), signedOn: r.signedOn,
+    // Date d'inscription (délai de 48 h, dimanches et fériés non compris).
+    registeredOn: isoDay(r.createdAt),
+    escalated: r.escalatedAt ? { at: toParisLocal(r.escalatedAt), injuryLabel: injuryLabel(e.injury), cpamDeclaredOn: e.cpamDeclaredOn } : null,
+    cancelled: r.cancelledAt ? { on: isoDay(r.cancelledAt), by: name(r.cancelledById), reason: r.cancelReason ?? '' } : null,
+  }));
+  return { site: { id: site.id, label: site.label.split(' — ')[0] }, sites, entries, years, year: year ?? null, firstAiders };
+}
+export type BenignRegister = NonNullable<Awaited<ReturnType<typeof loadBenignRegister>>>;
 
 /**
  * Valeurs proposées à « Nouvel événement » ouvert depuis un plan de prévention ou un permis (?plan=, ?permis=) :

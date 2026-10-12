@@ -49,12 +49,12 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Fiche d'un risque, dans la fenêtre ouverte depuis le tableau : lecture pour tous les rôles (actions et événements liés,
- * historique) ; pour l'encadrement, modification, ordre, rattachement d'actions, nouvelle action et archivage (jamais de
- * suppression). Un risque archivé est en lecture seule ; l'animateur QHSE et la direction peuvent le restaurer.
+ * Fiche d'un risque, dans la fenêtre ouverte depuis le tableau : lecture pour tous les rôles (actions liées ; événements
+ * liés sauf pour le Salarié ; historique pour les rôles qui modifient le DUERP) ; pour l'encadrement, modification, ordre,
+ * rattachement d'actions, nouvelle action et archivage (jamais de suppression). Un risque archivé est en lecture seule ; l'animateur QHSE et la direction peuvent le restaurer.
  * Une seule fenêtre dont la vue change : pas de fenêtres imbriquées.
  */
-export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, options, linkableActions, isFirst, isLast, view, onView, onClose }: {
+export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, showEvents = true, showHistory = true, options, linkableActions, isFirst, isLast, view, onView, onClose }: {
   risk: RiskView;
   unit: Unit;
   /** Unité du risque archivée : restauration du risque impossible avant celle de l'unité. */
@@ -63,6 +63,10 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   canManage: boolean;
   /** Animateur QHSE, direction : restauration d'un risque archivé. */
   canApprove?: boolean;
+  /** Événements liés (masqués pour le Salarié : signalements nominatifs de collègues). */
+  showEvents?: boolean;
+  /** Historique de la fiche (rôles qui modifient le DUERP). */
+  showHistory?: boolean;
   options: Options;
   linkableActions: RisksData['linkableActions'];
   isFirst: boolean;
@@ -175,7 +179,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
                 {a.cancelled
                   ? <ToneTag tone="neutral">Annulée</ToneTag>
                   : <span style={{ color: actionColor(a), whiteSpace: 'nowrap' }}>{a.status}</span>}
-                <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.pilot}</span>
+                {a.pilot && <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.pilot}</span>}
                 <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{a.done && a.closedOn ? `clôturée le ${fmtDate(a.closedOn)}` : `échéance ${fmtDate(a.dueOn)}`}</span>
                 {editable && <LinkActionButton link={`risk:${risk.id}`} current={a.id} />}
               </li>
@@ -198,7 +202,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         )}
       </section>
 
-      <section style={{ display: 'grid', gap: 8 }}>
+      {showEvents && <section style={{ display: 'grid', gap: 8 }}>
         <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
         {risk.events.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
@@ -215,9 +219,9 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         ) : (
           <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucun événement rattaché. Le rattachement se fait depuis la fiche de l&apos;événement.</div>
         )}
-      </section>
+      </section>}
 
-      <ChangeLogList entries={risk.history} />
+      {showHistory && <ChangeLogList entries={risk.history} />}
 
       {error && <div role="alert" className="vg-form-error">{error}</div>}
       {archived && canApprove && (

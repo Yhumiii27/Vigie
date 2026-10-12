@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { DialogButton } from '@/components/Dialog';
-import { ActionForm, Field, FormRow, Input } from '@/components/form';
+import { ActionForm, Checkbox, Field, FormRow, Input } from '@/components/form';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { fmtDate } from '@/lib/dates';
 import type { ArchivedRecord, TrainingTitle } from '@/lib/data/skills';
@@ -11,7 +11,7 @@ import { HistoryTable } from './common';
 
 function TitleForm({ title, onDone }: { title?: TrainingTitle; onDone: () => void }) {
   return (
-    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id }}>
+    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1' }}>
       <FormRow>
         <Field name="label" label="Intitulé">
           <Input name="label" defaultValue={title?.label} placeholder="Ex. Habilitation soudure" maxLength={60} autoFocus />
@@ -20,6 +20,9 @@ function TitleForm({ title, onDone }: { title?: TrainingTitle; onDone: () => voi
           <Input name="validityMonths" type="number" inputMode="numeric" min={0} max={240} step={1} defaultValue={title?.validityMonths ?? 36} />
         </Field>
       </FormRow>
+      <Field name="firstAid" label="Secourisme" hint="Titulaires en cours de validité proposés comme donneurs de soins du registre des accidents bénins.">
+        <Checkbox name="firstAid" label="Sauveteur secouriste du travail (SST) ou équivalent" defaultChecked={title?.firstAid ?? false} />
+      </Field>
     </ActionForm>
   );
 }
@@ -98,7 +101,10 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
             </tr>
           ) : (
             <tr key={t.id}>
-              <td>{t.label}</td>
+              <td>
+                {t.label}
+                {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 10, marginLeft: 8 }} title="Donneurs de soins du registre des accidents bénins">Secourisme</span>}
+              </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t.validityMonths ? `${t.validityMonths} mois` : 'Sans échéance'}</td>
               {canManage && (
                 <td style={{ textAlign: 'right', width: 1, whiteSpace: 'nowrap' }}>

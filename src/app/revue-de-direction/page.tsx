@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { DossierView } from '@/components/review/DossierView';
 import { ToneTag } from '@/components/ui';
 import { fmtDate, yearOf } from '@/lib/dates';
+import { canReadReviewDossier } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadReviewDossierPage } from '@/lib/data/review';
 import './dossier.css';
@@ -13,6 +15,13 @@ export const metadata: Metadata = { title: 'Dossier de revue de direction' };
 export default async function ReviewDossierPage({ searchParams }: PageProps<'/revue-de-direction'>) {
   const session = await guard('audits');
   const sp = await searchParams;
+  // Dossier consolidé (données de tous les modules) : animateur QHSE et direction (AUD-02), seuls rôles qui saisissent sur
+  // l'écran Audits. L'encadrement, qui consulte l'écran Audits, lit le compte rendu sur la carte et dans « Mes contributions »
+  // (AUD-04) ; un rôle sans l'écran Audits (salarié) est renvoyé vers son écran d'accueil par guard().
+  if (!canReadReviewDossier(session.role)) {
+    const revue = typeof sp.revue === 'string' && /^\d+$/.test(sp.revue) ? sp.revue : null;
+    redirect(`/audits/contributions${revue ? `?revue=${revue}` : ''}`);
+  }
   const page = await loadReviewDossierPage({ revue: sp.revue });
 
   if (page.mode === 'none') {

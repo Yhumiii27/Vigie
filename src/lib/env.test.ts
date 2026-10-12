@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { ConfigError, entraMissing, parseConfig, parseStorageConfig, secureCookies } from './env';
+import { ConfigError, entraMissing, isWithinDir, parseConfig, parseStorageConfig, secureCookies } from './env';
 
 describe('parseConfig', () => {
   it('démonstration : PGlite, secret de QR code de repli, VIGIE_TODAY admis', () => {
@@ -78,6 +78,57 @@ describe('parseConfig', () => {
     expect(s.backupBeforeMigrate).toBe(false);
     expect(parseStorageConfig({ VIGIE_UPLOAD_KEY: key.toString('hex') }).uploadKey?.equals(key)).toBe(true);
     expect(() => parseStorageConfig({ VIGIE_UPLOAD_KEY: Buffer.alloc(16).toString('base64') })).toThrow(/VIGIE_UPLOAD_KEY/);
+  });
+
+  it('stockage : pièces jointes et sauvegardes hors de VIGIE_DATA_DIR (vidé par la restauration PGlite)', () => {
+    const problems = (env: Record<string, string>) => {
+      try {
+        parseStorageConfig(env);
+        return [];
+      } catch (err) {
+        return (err as ConfigError).problems.map((p) => p.split(' : ')[0]);
+      }
+    };
+    expect(problems({ VIGIE_DATA_DIR: '/data', VIGIE_UPLOAD_DIR: '/data/uploads', VIGIE_BACKUP_DIR: '/data/backups' })).toEqual(['VIGIE_UPLOAD_DIR', 'VIGIE_BACKUP_DIR']);
+    expect(problems({ VIGIE_DATA_DIR: '/data/pglite', VIGIE_UPLOAD_DIR: '/data/pglite', VIGIE_BACKUP_DIR: '/data/backups' })).toEqual(['VIGIE_UPLOAD_DIR']);
+    expect(problems({ VIGIE_DATA_DIR: 'donnees', VIGIE_BACKUP_DIR: 'donnees/sauvegardes/../../donnees/s' })).toEqual(['VIGIE_BACKUP_DIR']);
+    expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_DATA_DIR: '/data', VIGIE_UPLOAD_DIR: '/data/uploads' })).toThrow(/VIGIE_UPLOAD_DIR : à placer hors de VIGIE_DATA_DIR \(\/data\)/);
+    // Dossiers voisins (image Docker, défauts), parent commun, nom proche ou base en mémoire : admis.
+    expect(problems({ VIGIE_DATA_DIR: '/data/pglite', VIGIE_UPLOAD_DIR: '/data/uploads', VIGIE_BACKUP_DIR: '/data/backups' })).toEqual([]);
+    expect(problems({})).toEqual([]);
+    expect(problems({ VIGIE_DATA_DIR: '/data/pglite', VIGIE_UPLOAD_DIR: '/data', VIGIE_BACKUP_DIR: '/data/pglite-sauvegardes' })).toEqual([]);
+    expect(problems({ VIGIE_DATA_DIR: '/data/pg', VIGIE_UPLOAD_DIR: '/data/pg..pieces' })).toEqual([]);
+    expect(problems({ VIGIE_DATA_DIR: 'memory://', VIGIE_UPLOAD_DIR: '/data/uploads' })).toEqual([]);
+    expect(isWithinDir('/data', '/data')).toBe(true);
+    expect(isWithinDir('/data', '/data/a/b')).toBe(true);
+    expect(isWithinDir('/data/a', '/data')).toBe(false);
+    expect(isWithinDir('/data', '/data2')).toBe(false);
+  });
+
+  it('VIGIE_PUBLIC_URL : https:// hors démonstration, http:// pour localhost seulement (SEC-05)', () => {
+    expect(() => parseConfig({ VIGIE_PUBLIC_URL: 'http://vigie.interne' })).toThrow(/VIGIE_PUBLIC_URL : https:\/\/ obligatoire hors démonstration/);
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_PUBLIC_URL: 'http://vigie.interne' }).publicUrl).toBe('http://vigie.interne');
+    expect(parseConfig({ VIGIE_PUBLIC_URL: 'http://localhost:3291' }).publicUrl).toBe('http://localhost:3291');
+    expect(parseConfig({ VIGIE_PUBLIC_URL: 'http://127.0.0.1' }).publicUrl).toBe('http://127.0.0.1');
+    expect(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.interne:8443' }).publicUrl).toBe('https://vigie.interne:8443');
+  });
+
+  it('VIGIE_EMAIL_DOMAINS : liste de domaines en minuscules, sans « @ » ni doublon ; vide par défaut', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1' }).emailDomains).toEqual([]);
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_EMAIL_DOMAINS: '@EPC2I.fr, epc2i.com,epc2i.fr' }).emailDomains).toEqual(['epc2i.fr', 'epc2i.com']);
+    for (const bad of ['a@b', 'https://x', 'epc2i', ',']) {
+      expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_EMAIL_DOMAINS: bad })).toThrow(/VIGIE_EMAIL_DOMAINS : liste de noms de domaine attendue/);
+    }
+    // Facultative pour la configuration Entra : sans elle, seules les premières connexions sont refusées.
+    expect(entraMissing(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr', ENTRA_TENANT_ID: 't', ENTRA_CLIENT_ID: 'c', ENTRA_CLIENT_SECRET: 's', VIGIE_SESSION_SECRET: 'x'.repeat(32) }))).toEqual([]);
+  });
+
+  it('VIGIE_TRUSTED_PROXIES : entier de 1 à 10, 1 par défaut', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1' }).trustedProxies).toBe(1);
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_TRUSTED_PROXIES: '2' }).trustedProxies).toBe(2);
+    expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_TRUSTED_PROXIES: '0' })).toThrow(/VIGIE_TRUSTED_PROXIES : entre 1 et 10/);
+    expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_TRUSTED_PROXIES: '11' })).toThrow(/VIGIE_TRUSTED_PROXIES : entre 1 et 10/);
+    expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_TRUSTED_PROXIES: 'deux' })).toThrow(/VIGIE_TRUSTED_PROXIES : nombre entier attendu \(1 par défaut\)$/m);
   });
 
   it('cookies Secure dès que l’adresse publique est en HTTPS', () => {

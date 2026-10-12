@@ -3,8 +3,11 @@ import { cache } from 'react';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/components/events/shared';
+import { entryRef } from '@/components/environment/model';
 import { canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
 import { requireInSite } from './guard';
+import { ORIGIN_COLUMNS, ORIGIN_LINKS, loadOriginCatalog, originLink, resolveOriginRef, type OriginColumn } from './origin-links';
+import { allowedSiteIds, inPerimeter, inSite } from './session';
 
 // ─── Rattachements d'une action du plan à sa source ─────────────────────────
 //
@@ -13,6 +16,9 @@ import { requireInSite } from './guard';
 // (détacher partout) et par la fiche action (liens vers les sources).
 // Syntaxe d'un lien : `<type>:<arg>[:<arg>]`, ex. risk:12 · finding:3 · qualification:tnguyen:hauteur.
 // Ajouter un type = ajouter une entrée à ACTION_LINKS (les quatre fonctions), sans autre changement.
+// Sources d'origine (ACT-01, `origin`) : plan de prévention, permis, document, filière et enlèvement du registre des
+// déchets, portés par une colonne de l'action (src/lib/origin-links.ts) ; posées à la création seulement (lien explicite
+// ou référence d'origine résolue, originLinkFor), jamais rattachées ni détachées ensuite, conservées à l'annulation.
 
 /** Source d'une action, affichée sur sa fiche (lien cliquable). */
 export type ActionSource = { kind: string; label: string; href: string; detail?: string };
@@ -34,10 +40,15 @@ type LinkKind = {
   logAs?(args: string[]): { entityType: string; entityId: string | number } | null;
   /** Toutes les sources de ce type, par action (fiche action). */
   sources(db: DbOrTx, actionIds?: string[]): Promise<(ActionSource & { actionId: string })[]>;
+  /** Source d'origine portée par cette colonne de l'action : fixée à la création, jamais rattachée ni détachée ensuite. */
+  origin?: OriginColumn;
 };
 
 const num = (s: string | undefined) => (s && /^\d+$/.test(s) ? Number(s) : NaN);
 const NOT_FOUND = 'Élément introuvable : le rattachement est impossible.';
+/** Rattacher ou détacher une source d'origine après la création de l'action (linkAction, unlinkAction). */
+export const ORIGIN_LOCKED = "L'origine d'une action est fixée à sa création : elle ne se rattache ni ne se détache ensuite.";
+const enc = encodeURIComponent;
 /** Revue de direction sur /audits : année du programme de la revue, carte « Revue » ouverte sur elle. */
 const reviewHref = (id: number, reviewOn: string) => `/audits?annee=${reviewOn.slice(0, 4)}&revue=${id}#revue`;
 const only = (ids?: string[]) => <R extends { actionId: string | null }>(rows: R[]) => rows.filter((r) => !!r.actionId && (!ids || ids.includes(r.actionId)));
@@ -48,6 +59,119 @@ async function slotTaken(tx: DbOrTx, current: string | null, actionId: string): 
   const [prev] = await tx.select({ status: t.actions.status }).from(t.actions).where(eq(t.actions.id, current));
   return prev && !isClosedActionStatus(prev.status) ? `Déjà rattaché à l'action ${current} : détachez-la avant d'en rattacher une autre.` : null;
 }
+
+/** Source d'origine trouvée (`blocked` : rattachement refusé, ex. plan annulé). */
+type OriginSource = { id: string | number; siteId: string | null; blocked?: string | null };
+
+/**
+ * Type de lien d'une source d'origine (colonne `column` de l'action) : rattachement à la création seulement ; detach et
+ * detachAll sans effet (origine verrouillée, conservée sur une action annulée).
+ */
+function originKind(column: OriginColumn, def: {
+  screen: ScreenKey;
+  find(tx: DbOrTx, id: string): Promise<OriginSource | undefined>;
+  logAs?: LinkKind['logAs'];
+  sources: LinkKind['sources'];
+}): LinkKind {
+  return {
+    screen: def.screen,
+    origin: column,
+    keptOnCancel: true,
+    async attach(tx, [id = ''], actionId) {
+      const src = await def.find(tx, id);
+      if (!src) return NOT_FOUND;
+      if (src.blocked) return src.blocked;
+      const [a] = await tx.select({ current: t.actions[column] }).from(t.actions).where(eq(t.actions.id, actionId));
+      if (!a) return 'Action introuvable.';
+      if (a.current != null && String(a.current) !== String(src.id)) return ORIGIN_LOCKED;
+      await tx.update(t.actions).set({ [column]: src.id } as Partial<typeof t.actions.$inferInsert>).where(eq(t.actions.id, actionId));
+      return null;
+    },
+    async detach() { /* origine verrouillée */ },
+    async detachAll() { /* la source d'origine reste lisible sur une action annulée */ },
+    async siteOf(tx, [id = '']) {
+      return (await def.find(tx, id))?.siteId;
+    },
+    logAs: def.logAs,
+    sources: def.sources,
+  };
+}
+
+const ORIGIN_KINDS: Record<string, LinkKind> = {
+  [ORIGIN_LINKS.preventionPlanId.kind]: originKind('preventionPlanId', {
+    screen: 'prevention',
+    async find(tx, id) {
+      const [p] = await tx.select({ id: t.preventionPlans.id, siteId: t.preventionPlans.siteId, status: t.preventionPlans.status }).from(t.preventionPlans).where(eq(t.preventionPlans.id, id));
+      return p && { ...p, blocked: p.status === 'annule' ? 'Plan de prévention annulé : rattachement impossible.' : null };
+    },
+    logAs: ([id]) => (id ? { entityType: 'prevention_plan', entityId: id } : null),
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.actions.id, id: t.preventionPlans.id, title: t.preventionPlans.title })
+        .from(t.actions).innerJoin(t.preventionPlans, eq(t.actions.preventionPlanId, t.preventionPlans.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, kind: 'preventionplan', label: r.id, detail: r.title, href: `/prevention?plan=${enc(r.id)}` }));
+    },
+  }),
+
+  [ORIGIN_LINKS.permitId.kind]: originKind('permitId', {
+    screen: 'prevention',
+    async find(tx, id) {
+      const [p] = await tx.select({ id: t.permits.id, siteId: t.permits.siteId, status: t.permits.status }).from(t.permits).where(eq(t.permits.id, id));
+      return p && { ...p, blocked: p.status === 'annule' ? 'Permis annulé : rattachement impossible.' : null };
+    },
+    logAs: ([id]) => (id ? { entityType: 'permit', entityId: id } : null),
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.actions.id, id: t.permits.id, description: t.permits.description })
+        .from(t.actions).innerJoin(t.permits, eq(t.actions.permitId, t.permits.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, kind: 'permit', label: r.id, detail: r.description.slice(0, 80), href: `/prevention?onglet=permis&permis=${enc(r.id)}` }));
+    },
+  }),
+
+  [ORIGIN_LINKS.documentId.kind]: originKind('documentId', {
+    screen: 'docs',
+    async find(tx, id) {
+      const [d] = await tx.select({ id: t.documents.id, siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, id));
+      return d;
+    },
+    logAs: ([id]) => (id ? { entityType: 'document', entityId: id } : null),
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.actions.id, id: t.documents.id, title: t.documents.title })
+        .from(t.actions).innerJoin(t.documents, eq(t.actions.documentId, t.documents.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, kind: 'document', label: r.id, detail: r.title, href: `/documents?doc=${enc(r.id)}` }));
+    },
+  }),
+
+  [ORIGIN_LINKS.wasteStreamId.kind]: originKind('wasteStreamId', {
+    screen: 'env',
+    async find(tx, id) {
+      const [s] = await tx.select({ id: t.wasteStreams.id, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
+      return s;
+    },
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.actions.id, id: t.wasteStreams.id, label: t.wasteStreams.label })
+        .from(t.actions).innerJoin(t.wasteStreams, eq(t.actions.wasteStreamId, t.wasteStreams.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, kind: 'wastestream', label: r.id, detail: r.label, href: `/environnement?filiere=${enc(r.id)}` }));
+    },
+  }),
+
+  [ORIGIN_LINKS.wasteEntryId.kind]: originKind('wasteEntryId', {
+    screen: 'env',
+    async find(tx, id) {
+      const [e] = await tx.select({ id: t.wasteEntries.id, siteId: t.wasteEntries.siteId, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries).where(eq(t.wasteEntries.id, num(id)));
+      return e && { id: e.id, siteId: e.siteId, blocked: e.cancelledAt ? 'Enlèvement annulé : rattachement impossible.' : null };
+    },
+    logAs: ([id]) => (Number.isInteger(num(id)) ? { entityType: 'waste_entry', entityId: num(id) } : null),
+    async sources(db, ids) {
+      const rows = await db.select({
+        actionId: t.actions.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, cancelledAt: t.wasteEntries.cancelledAt, stream: t.wasteStreams.label,
+      }).from(t.actions).innerJoin(t.wasteEntries, eq(t.actions.wasteEntryId, t.wasteEntries.id)).innerJoin(t.wasteStreams, eq(t.wasteEntries.streamId, t.wasteStreams.id));
+      // Registre de l'année de l'enlèvement, filtré sur sa filière (vue « Annulés » pour un enlèvement annulé).
+      return only(ids)(rows).map((r) => ({
+        actionId: r.actionId, kind: 'wasteentry', label: entryRef(r.streamId, r.removedOn), detail: `${r.stream}${r.cancelledAt ? ' · enlèvement annulé' : ''}`,
+        href: `/environnement?annee=${r.removedOn.slice(0, 4)}&filiere=${enc(r.streamId)}${r.cancelledAt ? '&vue=annules' : ''}`,
+      }));
+    },
+  }),
+};
 
 export const ACTION_LINKS: Record<string, LinkKind> = {
   event: {
@@ -308,6 +432,8 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, kind: 'reviewdecision', label: `Décision de revue · ${r.text.slice(0, 60)}`, href: reviewHref(r.reviewId, r.reviewOn) }));
     },
   },
+
+  ...ORIGIN_KINDS,
 };
 
 /** Décompose un lien `type:arg[:arg]` ; null si le type est inconnu. */
@@ -327,6 +453,52 @@ export async function checkActionLink(db: DbOrTx, role: Role, link: string): Pro
   if (!canEdit(role, parsed.def.screen)) return { error: 'Votre rôle ne permet pas cette modification.' };
   const siteError = parsed.def.siteOf ? await requireInSite(await parsed.def.siteOf(db, parsed.args)) : null;
   return siteError ? { error: siteError } : { parsed };
+}
+
+/**
+ * Source d'origine d'une nouvelle action (ACT-01) : `link` de l'écran appelant quand c'est un type d'origine, sinon la
+ * référence d'origine résolue comme par la reprise (resolveOriginRef : plan, permis, document, filière ou enlèvement) ;
+ * null si l'origine n'en a pas ou si la référence ne désigne aucune fiche (texte libre, « Registre des déchets 2026 »).
+ * Contrôles : type de lien conforme à l'origine de l'action, source du site sélectionné (requireInSite) et du site de
+ * l'action ; une référence qui désigne une fiche hors du périmètre de la personne reste un simple texte. Le lien
+ * explicite passe aussi par checkActionLink (écran ouvert en saisie au rôle) ; une référence résolue non : rattacher
+ * l'action à son origine ne modifie que l'action, déjà réservée à l'encadrement. Le rattachement lui-même
+ * (applyActionLink, dans la transaction de création) refuse une source annulée.
+ */
+export async function originLinkFor(db: DbOrTx, a: { origin: string; originRef: string; link: string | null; siteId: string | null }): Promise<
+  { link: string | null } | { error: string; fieldErrors: Record<string, string> }
+> {
+  const explicit = a.link ? parseActionLink(a.link) : null;
+  let link: string | null = null;
+  if (explicit?.def.origin) {
+    if (ORIGIN_LINKS[explicit.def.origin].origin !== a.origin) {
+      const error = "Ce rattachement ne correspond pas à l'origine de l'action.";
+      return { error, fieldErrors: { origin: error } };
+    }
+    link = a.link;
+  } else {
+    const found = resolveOriginRef(a.origin, a.originRef, await loadOriginCatalog(db, a.originRef));
+    if (found?.column) link = originLink(found.column, found.target);
+  }
+  const parsed = link ? parseActionLink(link) : null;
+  if (!parsed) return { link: null };
+  const sourceSite = await parsed.def.siteOf?.(db, parsed.args);
+  // Référence d'une fiche hors du périmètre de la personne : simple texte, sans rien révéler de la fiche (SEC-02).
+  if (!explicit?.def.origin && !inPerimeter(await allowedSiteIds(), sourceSite)) return { link: null };
+  const blocked = await requireInSite(sourceSite);
+  if (blocked) return { error: `Référence d'origine ${a.originRef} : ${blocked.charAt(0).toLowerCase()}${blocked.slice(1)}`, fieldErrors: { originRef: blocked } };
+  if (!inSite(sourceSite ?? null, a.siteId)) {
+    const error = `L'action doit concerner le site de sa source (${a.originRef}) : choisissez ce site.`;
+    return { error, fieldErrors: { siteId: 'Site différent de celui de la source.' } };
+  }
+  return { link };
+}
+
+/** Site de la source d'origine portée par l'action (colonnes ACT-01) : undefined sans source d'origine, null = sans site. */
+export async function originSiteOf(db: DbOrTx, a: Pick<typeof t.actions.$inferSelect, OriginColumn>): Promise<string | null | undefined> {
+  const column = ORIGIN_COLUMNS.find((c) => a[c] != null);
+  const parsed = column ? parseActionLink(originLink(column, a[column]!)) : null;
+  return parsed ? (await parsed.def.siteOf?.(db, parsed.args)) ?? null : undefined;
 }
 
 /** Fiche dont l'historique trace aussi les rattachements à la source `link` (LinkKind.logAs) ; null sinon. */

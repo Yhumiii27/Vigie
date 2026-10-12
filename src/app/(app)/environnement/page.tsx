@@ -7,11 +7,15 @@ import { ConsumptionMonthButton, ConsumptionPanel } from '@/components/environme
 import { FilterMenu } from '@/components/environment/FilterMenu';
 import { NewStreamButton, StreamsPanel, type StreamSuggestions } from '@/components/environment/StreamsPanel';
 import { NewEntryButton, WasteRegister, type StreamOption } from '@/components/environment/WasteRegister';
+import { SiteSiretButton } from '@/components/environment/SiteSiret';
+import { Note } from '@/components/environment/parts';
+import type { Carrier, Installation } from '@/components/environment/parts';
 import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/components/environment/model';
 import styles from '@/components/environment/environment.module.css';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import { BSD_STALE_DAYS } from '@/components/environment/model';
-import { SCREENS, TONE, canEdit, canSee, type Tone } from '@/lib/domain';
+import { SCREENS, TONE, canApprove, canEdit, canSee, type Tone } from '@/lib/domain';
+import { fmtSiret } from '@/lib/siret';
 import { guard } from '@/lib/guard';
 import { loadEnvironment } from '@/lib/data/environment';
 import { loadFormOptions } from '@/lib/data/options';
@@ -22,7 +26,7 @@ export const metadata: Metadata = { title: SCREENS.env.title };
 const PATH = '/environnement';
 const TABS = ['registre', 'filieres', 'consommations'] as const;
 type Tab = (typeof TABS)[number];
-const VIEWS = ['dangereux', 'bsd-manquants', 'bsd-en-attente', 'annules'] as const;
+const VIEWS = ['dangereux', 'bsd-manquants', 'bsd-en-attente', 'mentions-incompletes', 'annules'] as const;
 type View = (typeof VIEWS)[number];
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
@@ -56,7 +60,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const matchesView = (e: (typeof d.entries)[number], v: View | undefined) => {
     if (v === 'annules') return !!e.cancelled;
     if (e.cancelled) return false;
-    return !v || (v === 'dangereux' ? e.hazardous : v === 'bsd-manquants' ? e.missingBsd : e.staleBsd);
+    return !v || (v === 'dangereux' ? e.hazardous : v === 'bsd-manquants' ? e.missingBsd : v === 'mentions-incompletes' ? e.gaps.length > 0 : e.staleBsd);
   };
   const shown = byStream.filter((e) => matchesView(e, vue));
   const byView = d.entries.filter((e) => matchesView(e, vue));
@@ -70,15 +74,37 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   // ── Listes de choix et valeurs par défaut
   const defaultSite = session.site.id === ALL_SITES ? allOptions.sites[0]?.[0] ?? '' : session.site.id;
   const scopeSites = d.sites.map((s) => [s.id, s.label] as const);
-  const streamOptions: StreamOption[] = d.streams.map(({ id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId }) => ({
+  const streamOptions: StreamOption[] = d.streams.map(({
     id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
+  }) => ({
+    id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
   }));
   const transporters = uniq([...live.map((e) => e.transporter), ...d.streams.map((s) => s.collector)]);
+  // Identité connue des transporteurs et des installations (mentions du registre) : enlèvements, du plus ancien au plus
+  // récent, puis filières (le collecteur et l'installation de la filière font foi).
+  const carriers: Record<string, Carrier> = {};
+  const installations: Record<string, Installation> = {};
+  [...live].reverse().forEach((e) => {
+    if (e.transporterSiret || e.transporterAddress || e.transporterReceipt) carriers[e.transporter] = { siret: e.transporterSiret, address: e.transporterAddress, receipt: e.transporterReceipt };
+    if (e.destinationSiret || e.destinationAddress) installations[e.destination] = { siret: e.destinationSiret, address: e.destinationAddress };
+  });
+  d.streams.forEach((s) => {
+    if (s.collectorSiret || s.collectorAddress || s.collectorReceipt) carriers[s.collector] = { siret: s.collectorSiret, address: s.collectorAddress, receipt: s.collectorReceipt };
+    if (s.destinationSiret || s.destinationAddress) installations[s.destination] = { siret: s.destinationSiret, address: s.destinationAddress };
+  });
   const suggestions: StreamSuggestions = {
     channels: uniq(d.streams.map((s) => s.channel)),
     collectors: uniq(d.streams.map((s) => s.collector)),
     destinations: uniq(d.streams.map((s) => s.destination)),
+    carriers,
+    installations,
   };
+  // SIRET des établissements (première mention du registre) : renseigné par l'animateur QHSE ou la direction.
+  const approver = canApprove(session.role);
+  const noSiret = d.registrySites.filter((s) => !s.siret);
+  const siretSite = session.site.id === ALL_SITES ? undefined : session.site.id;
   const previousMonth = shiftMonth(d.consumption.maxMonth, -1);
   const monthSite = d.sites.some((s) => s.id === defaultSite) ? defaultSite : d.sites[0]?.id ?? '';
   // Mois proposé : le plus récent mois échu sans relevé, sinon le mois qui suit le dernier relevé du site.
@@ -196,7 +222,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   </a>
                 )}
                 {manage && tab === 'registre' && (
-                  <NewEntryButton streams={streamOptions} today={d.now} showSite={d.showSite} transporters={transporters} defaultStreamId={filiere} events={d.eventOptions} />
+                  <NewEntryButton streams={streamOptions} today={d.now} showSite={d.showSite} transporters={transporters} carriers={carriers} defaultStreamId={filiere} events={d.eventOptions} />
                 )}
                 {manage && tab === 'filieres' && <NewStreamButton sites={allOptions.sites} defaultSite={defaultSite} suggestions={suggestions} />}
                 {manage && tab === 'consommations' && monthSite && (
@@ -215,14 +241,16 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                       { key: 'dangereux', label: 'Déchets dangereux', n: byStream.filter((e) => matchesView(e, 'dangereux')).length },
                       { key: 'bsd-manquants', label: 'BSD manquants', n: byStream.filter((e) => matchesView(e, 'bsd-manquants')).length },
                       { key: 'bsd-en-attente', label: 'BSD non finalisés', n: byStream.filter((e) => matchesView(e, 'bsd-en-attente')).length },
+                      { key: 'mentions-incompletes', label: 'Mentions incomplètes', n: byStream.filter((e) => matchesView(e, 'mentions-incompletes')).length },
                       { key: 'annules', label: 'Annulés', n: byStream.filter((e) => matchesView(e, 'annules')).length },
                     ] satisfies { key: View | undefined; label: string; n: number }[])
-                      .filter((c) => c.n > 0 || vue === c.key || (c.key !== 'annules' && c.key !== 'bsd-en-attente'))
+                      .filter((c) => c.n > 0 || vue === c.key || (c.key !== 'annules' && c.key !== 'bsd-en-attente' && c.key !== 'mentions-incompletes'))
                       .map((c) => (
                       <Link key={c.label} href={hrefWith(PATH, regParams, { vue: c.key })} scroll={false} className={`vg-chip${vue === c.key ? ' is-on' : ''}`}
-                        title={c.key === 'bsd-en-attente' ? `Bordereau brouillon, émis ou collecté plus de ${BSD_STALE_DAYS} jours après l'enlèvement` : undefined}>
+                        title={c.key === 'bsd-en-attente' ? `Bordereau brouillon, émis ou collecté plus de ${BSD_STALE_DAYS} jours après l'enlèvement`
+                          : c.key === 'mentions-incompletes' ? 'Mentions obligatoires manquantes (arrêté du 31 mai 2021) : SIRET, adresse, récépissé, qualification du traitement…' : undefined}>
                         {c.key === 'bsd-manquants' && c.n > 0 && <Dot color={TONE.danger.dot} size={6} />}
-                        {c.key === 'bsd-en-attente' && c.n > 0 && <Dot color={TONE.warn.dot} size={6} />}
+                        {(c.key === 'bsd-en-attente' || c.key === 'mentions-incompletes') && c.n > 0 && <Dot color={TONE.warn.dot} size={6} />}
                         {c.label}<span style={{ opacity: 0.6 }}>{c.n}</span>
                       </Link>
                     ))}
@@ -242,7 +270,25 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                     {plural(shown.length, 'enlèvement', 'enlèvements')}{shownTonnes ? ` · ${tonnes(shownTonnes)}` : ''} · {session.site.label}
                   </span>
                 </div>
-                <WasteRegister entries={shown} streams={streamOptions} canManage={manage} showSite={d.showSite} today={d.now} transporters={transporters}
+                {noSiret.length > 0 ? (
+                  <Note icon="ph-identification-card" tone="warn">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ flex: '1 1 260px' }}>
+                        SIRET de l&apos;établissement à renseigner ({noSiret.map((s) => s.label.split(' — ')[0]).join(', ')}) : première mention du registre
+                        chronologique (arrêté du 31 mai 2021).{!approver && ' À compléter par l’animateur QHSE ou la direction.'}
+                      </span>
+                      {approver && <SiteSiretButton sites={d.registrySites} defaultSiteId={noSiret.find((s) => s.id === siretSite)?.id ?? noSiret[0].id} />}
+                    </span>
+                  </Note>
+                ) : d.registrySites.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
+                    <span>
+                      {d.registrySites.map((s) => `${d.registrySites.length > 1 ? `${s.label.split(' — ')[0]} · ` : ''}SIRET ${fmtSiret(s.siret!)}`).join(' — ')}
+                    </span>
+                    {approver && <SiteSiretButton sites={d.registrySites} defaultSiteId={siretSite} label="Modifier" className="vg-text-btn" />}
+                  </div>
+                )}
+                <WasteRegister entries={shown} streams={streamOptions} canManage={manage} showSite={d.showSite} today={d.now} transporters={transporters} carriers={carriers}
                   events={d.eventOptions} actionOptions={entryActionOptions} canSeeEvents={canSee(session.role, 'events')}
                   emptyText={
                     !d.streams.length ? `Aucune filière déchets pour ce site${manage ? ' : créez-en une dans l’onglet « Filières », puis inscrivez les enlèvements.' : '.'}`
@@ -365,9 +411,12 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
         </div>
 
         <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-          Registre chronologique des déchets sortants (Code de l&apos;environnement, art. R. 541-43 et arrêté du 31 mai 2021). Un déchet dont le code porte
-          un astérisque est dangereux : son enlèvement exige un bordereau de suivi dématérialisé Trackdéchets (art. R. 541-45). Codes de traitement :
-          R1–R13 valorisation, D1–D15 élimination.
+          Registre chronologique des déchets sortants (Code de l&apos;environnement, art. R. 541-43 et arrêté du 31 mai 2021), conservé trois ans.
+          Mentions de chaque enlèvement : date d&apos;expédition, établissement (SIRET) et adresse de prise en charge si elle diffère, dénomination et code du
+          déchet, POP le cas échéant, quantité en tonnes (ou m³), transporteur (raison sociale, SIRET, adresse, récépissé), n° de bordereau, installation de
+          destination (raison sociale, SIRET, adresse), code de traitement et qualification du traitement final. Un déchet dont le code porte un astérisque
+          est dangereux : son enlèvement exige un bordereau de suivi dématérialisé Trackdéchets (art. R. 541-45). Codes de traitement : R1–R13 valorisation,
+          D1–D15 élimination ; R12, R13 et D13 à D15 sont des opérations de transit.
         </p>
       </div>
     </>

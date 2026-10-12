@@ -110,7 +110,7 @@ describe('signalement sans compte (jeton de poste)', () => {
       anonymous: false, reportedVia: 'poste', step: 0, severity: 3, title: 'Carter de protection absent.',
     });
     const files = await db.select().from(t.attachments).where(eq(t.attachments.entityId, r.id!));
-    expect(files).toMatchObject([{ entityType: 'event', mimeType: 'image/jpeg', uploadedBy: null }]);
+    expect(files).toMatchObject([{ entityType: 'event', mimeType: 'image/jpeg', uploadedBy: null, fileName: 'photo.jpg' }]);
     const { eventView } = await import('@/lib/queries');
     expect(eventView(ev, new Map()).declarantLabel).toBe('Jean Martin (Intérim Plus) · déclaré sans compte');
   });
@@ -119,9 +119,13 @@ describe('signalement sans compte (jeton de poste)', () => {
     const { createReport } = await import('@/server/events');
     const jeton = await tokenOf(zoneB);
     expect(await createReport(fd({ type: 'PA', description: 'Chute de charge évitée.', jeton }))).toEqual({ error: 'Indiquez votre nom, ou choisissez de rester anonyme.' });
-    const r = await createReport(fd({ type: 'PA', description: 'Chute de charge évitée.', jeton, anonymous: '1', declarant: 'Ignoré', declarantCompany: 'Ignorée', location: 'Quai 2' }));
-    const [ev] = await (await getDb()).select().from(t.events).where(eq(t.events.id, r.id!));
-    expect(ev).toMatchObject({ siteId: 'ville-b', location: 'Quai 2', declarant: null, declarantCompany: null, declarantId: null, anonymous: true, reportedVia: 'poste' });
+    const r = await createReport(fd({ type: 'PA', description: 'Chute de charge évitée.', jeton, anonymous: '1', declarant: 'Ignoré', declarantCompany: 'Ignorée', location: 'Quai 2' }, [jpeg('IMG_20261009_jean-martin.jpg')]));
+    const db = await getDb();
+    const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
+    // Canal neutre et nom de photo neutre (SEC-09) : rien ne dit par où ni par qui le signalement est arrivé.
+    expect(ev).toMatchObject({ siteId: 'ville-b', location: 'Quai 2', declarant: null, declarantCompany: null, declarantId: null, anonymous: true, reportedVia: 'terrain' });
+    expect(await db.select({ fileName: t.attachments.fileName, uploadedBy: t.attachments.uploadedBy }).from(t.attachments).where(eq(t.attachments.entityId, r.id!)))
+      .toEqual([{ fileName: 'photo-1.jpg', uploadedBy: null }]);
   });
 
   it('refus : sans jeton, jeton falsifié, champ piège, photo qui n’en est pas une, trop de photos', async () => {
@@ -254,7 +258,17 @@ describe('signalement d’une personne connectée', () => {
     const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
     expect(ev).toMatchObject({ siteId: 'ville-b', location: 'Zone d’essais', declarant: 'T. Nguyen', declarantId: 'sal', declarantCompany: null, reportedVia: 'session' });
     const [file] = await db.select().from(t.attachments).where(eq(t.attachments.entityId, r.id!));
-    expect(file.uploadedBy).toBe('sal');
+    expect(file).toMatchObject({ uploadedBy: 'sal', fileName: 'photo.jpg' });
+    // Anonyme depuis une session (SEC-09) : ni déclarant, ni canal « session », ni nom d'origine des photos.
+    const anon = await createReport(fd({ type: 'SD', description: 'Carter ouvert.', anonymous: '1' }, [jpeg('IMG_0042.jpg'), jpeg('selfie-nguyen.jpg')]));
+    const [evAnon] = await db.select().from(t.events).where(eq(t.events.id, anon.id!));
+    expect(evAnon).toMatchObject({ anonymous: true, declarant: null, declarantId: null, reportedVia: 'terrain' });
+    expect((await db.select({ fileName: t.attachments.fileName, uploadedBy: t.attachments.uploadedBy }).from(t.attachments).where(eq(t.attachments.entityId, anon.id!)))
+      .map((x) => [x.fileName, x.uploadedBy]).sort()).toEqual([['photo-1.jpg', null], ['photo-2.jpg', null]]);
+    // Accident : intitulé neutre, la description reste telle quelle (SEC-06).
+    const accident = await createReport(fd({ type: 'AT', description: 'Coupure à la main en ébavurant. Saignement important.', location: 'Atelier montage' }));
+    const [evAt] = await db.select().from(t.events).where(eq(t.events.id, accident.id!));
+    expect(evAt).toMatchObject({ title: 'Accident · Atelier montage', description: 'Coupure à la main en ébavurant. Saignement important.', reportedVia: 'session' });
     const { loadMyReports } = await import('@/lib/data/events');
     expect((await loadMyReports()).map((m) => m.id)).toContain(r.id);
     // Sans QR code : site de rattachement ; un ancien `siteId` hors périmètre est ignoré.

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { config } from './config';
-import { canEdit, canManage, canSee, isEmployee, type Role } from './domain';
+import { canEdit, canManage, canSee, canSeeHealth, isEmployee, type Role } from './domain';
 import { decryptBuffer, encryptBuffer, fileKeys, isEncrypted } from './encryption';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -29,8 +29,11 @@ export function checkUpload(file: File): string | null {
   return null;
 }
 
-/** Enregistre un fichier sur disque et le rattache à une entité (event, document_version, control_record…). */
-export async function saveUpload(file: File, entityType: string, entityId: string, uploadedBy: string | null): Promise<Attachment> {
+/**
+ * Enregistre un fichier sur disque et le rattache à une entité (event, document_version, control_record…).
+ * `health` : pièce médicale (certificat, avis d'arrêt, réserves…), réservée aux rôles canSeeHealth (SEC-06).
+ */
+export async function saveUpload(file: File, entityType: string, entityId: string, uploadedBy: string | null, opts: { health?: boolean } = {}): Promise<Attachment> {
   const err = checkUpload(file);
   if (err) throw new Error(err);
   const id = randomUUID();
@@ -45,6 +48,7 @@ export async function saveUpload(file: File, entityType: string, entityId: strin
   const db = await getDb();
   const [row] = await db.insert(t.attachments).values({
     id, entityType, entityId, fileName: file.name.slice(0, 200) || 'fichier', mimeType: file.type, size: file.size, storagePath: id, uploadedBy,
+    health: !!opts.health,
   }).returning();
   return row;
 }
@@ -111,11 +115,13 @@ async function attachmentSiteId(row: Attachment): Promise<string | null> {
 }
 
 /**
- * Droit de lecture d'une pièce jointe : entité propriétaire dans le périmètre de sites de la personne (SEC-02), puis
- * droit sur cette entité. Refus par défaut pour un type inconnu (sauf encadrement). Chaque domaine qui ajoute un
- * entityType ajoute sa règle ici (et le site de l'entité dans attachmentSiteId).
+ * Droit de lecture d'une pièce jointe : pièce médicale (attachments.health) réservée aux rôles canSeeHealth (SEC-06), quel
+ * que soit l'entityType ; entité propriétaire dans le périmètre de sites de la personne (SEC-02), puis droit sur cette
+ * entité. Refus par défaut pour un type inconnu (sauf encadrement). Chaque domaine qui ajoute un entityType ajoute sa
+ * règle ici (et le site de l'entité dans attachmentSiteId).
  */
 export async function canReadAttachment(row: Attachment, s: FileSession): Promise<boolean> {
+  if (row.health && !canSeeHealth(s.role)) return false;
   if (s.allowedSiteIds) {
     const siteId = await attachmentSiteId(row);
     if (siteId && !s.allowedSiteIds.includes(siteId)) return false;

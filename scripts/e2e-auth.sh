@@ -10,6 +10,7 @@
 #        ENTRA_TENANT_ID=vigie-test ENTRA_CLIENT_ID=vigie ENTRA_CLIENT_SECRET=secret-de-test
 #        ENTRA_ISSUER=http://127.0.0.1:55480/vigie-test/v2.0
 #        VIGIE_SITE_GROUPS=grp-ville-a:ville-a,grp-ville-b:ville-b
+#        VIGIE_EMAIL_DOMAINS=epc2i.example
 #
 # Usage : APP=http://localhost:3291 MOCK=http://127.0.0.1:55480 VIGIE_SESSION_SECRET=… \
 #         PSQL="psql postgres://vigie@127.0.0.1:5432/vigie" UPLOAD_DIR=/chemin/uploads scripts/e2e-auth.sh
@@ -118,9 +119,13 @@ check "salarié + groupe site B : connexion" "$(login salarie /evenements)" "200
 check "salarié : site B accordé par groupe" "$(set_site salarie ville-b)" cookie
 check "salarié : « Tous les sites » refusé" "$(set_site salarie all)" refus
 check "salarié : cookie de site B → site B" "$(curl -s -b "$(jar salarie)" -b 'vigie_site=ville-b' "$APP/evenements" -o "$WORK/s2.html"; selected_site "$WORK/s2.html")" "Site de [Ville B] — zone d'essais"
+check "salarié : écran fermé → accueil du rôle avant le rendu (SEC-14)" "$(location -b "$(jar salarie)" "$APP/veille")" "/evenements"
+check "salarié : tableau de bord → accueil du rôle (SEC-14)" "$(location -b "$(jar salarie)" "$APP/")" "/evenements"
+check "salarié : QR codes des postes → /signaler (SEC-14)" "$(location -b "$(jar salarie)" "$APP/signaler/postes")" "/signaler"
+check "aperçu mobile hors démonstration : 404 (SEC-14)" "$(code -b "$(jar salarie)" "$APP/apercu-mobile")" 404
 check "chef de projet du site B : connexion" "$(login essais)" "200 /"
 check "chef de projet : cookie visant le site A → site B (rattachement)" "$(curl -s -b "$(jar essais)" -b 'vigie_site=ville-a' "$APP/" -o "$WORK/e2.html"; selected_site "$WORK/e2.html")" "Site de [Ville B] — zone d'essais"
-check "nouvel utilisateur : fiche créée" "$(login nouveau)" "200 /"
+check "nouvel utilisateur (salarié) : fiche créée, accueil du rôle" "$(login nouveau)" "200 /evenements"
 if [ -n "$PSQL" ]; then
   check "nouvel utilisateur : site = premier site accordé, groupe inconnu ignoré" "$(sql "select site_id, last_role, email from people where entra_object_id is not null and name='Nina Rousseau'")" "ville-b|Salarié|n.rousseau@epc2i.example"
   check "nouvel utilisateur : création journalisée" "$(sql "select count(*) from change_log c join people p on p.id = c.entity_id where p.name='Nina Rousseau' and c.action='create'")" 1
@@ -131,6 +136,12 @@ check "sans rôle : pas de cookie de session" "$(session_cookie sansrole)" ""
 [ -n "$PSQL" ] && check "sans rôle : fiche non associée" "$(sql "select entra_object_id is null from people where id='proux'")" t
 check "salarié sorti de l'effectif : refusé" "$(login parti)" "200 /auth/acces?motif=non-autorise"
 check "non affecté à l'application (AADSTS50105) : refusé" "$(login nonaffecte)" "200 /auth/acces?motif=non-autorise"
+check "adresse non vérifiée (xms_edov faux) : compte non rattaché" "$(login nonverifie)" "200 /auth/acces?motif=adresse"
+contains "… page « Compte Microsoft non rattaché »" "$(cat "$WORK/nonverifie.html")" "Compte Microsoft non rattaché"
+check "adresse non vérifiée : pas de cookie de session" "$(session_cookie nonverifie)" ""
+[ -n "$PSQL" ] && check "adresse non vérifiée : fiche visée (mgirard) non associée" "$(sql "select entra_object_id is null from people where id='mgirard'")" t
+check "domaine hors entreprise : compte non rattaché" "$(login horsdomaine)" "200 /auth/acces?motif=adresse"
+[ -n "$PSQL" ] && check "domaine hors entreprise : aucune fiche créée" "$(sql "select count(*) from people where name='P. Durand (prestataire)'")" 0
 check "retour vers une autre origine neutralisé" "$(login animateur '/auth/connexion?retour=https%3A%2F%2Fvigie.attaquant.example%2F')" "200 /"
 
 if [ -n "$PSQL" ] && [ -n "$UPLOAD_DIR" ]; then
@@ -161,7 +172,7 @@ fi
 
 echo "6. Déconnexion"
 check "déconnexion depuis un autre site (Sec-Fetch-Site: cross-site) : sans effet" "$(location -b "$(jar salarie)" -H 'Sec-Fetch-Site: cross-site' "$APP/auth/deconnexion")" "/"
-check "… session toujours valide" "$(code -b "$(jar salarie)" "$APP/")" 200
+check "… session toujours valide" "$(code -b "$(jar salarie)" "$APP/evenements")" 200
 check "déconnexion : session Microsoft terminée, page « déconnecté »" "$(curl -s -L -c "$(jar salarie)" -b "$(jar salarie)" -o /dev/null -w '%{http_code} %{url_effective}' "$APP/auth/deconnexion" | sed "s#$APP##")" "200 /auth/deconnecte"
 check "déconnexion : cookie de session effacé" "$(session_cookie salarie)" ""
 check "après déconnexion : connexion requise" "$(location -b "$(jar salarie)" "$APP/")" "/auth/connexion?retour=%2F"

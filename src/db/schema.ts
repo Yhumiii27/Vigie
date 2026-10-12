@@ -19,6 +19,10 @@ export const sites = pgTable('sites', {
   // Responsable QHSE du site (« Gérer les sites ») : destinataire des alertes du site et pilote proposé des recyclages.
   // Vacant (ou sorti de l'effectif) : alertes adressées aux animateurs QHSE (people.last_role), « responsable à désigner ».
   qhseLeadId: text('qhse_lead_id').references((): AnyPgColumn => people.id),
+  // Identification de l'établissement au registre chronologique des déchets (arrêté du 31 mai 2021) : SIRET, 14 chiffres sans espace.
+  siret: text('siret'),
+  // Droit local d'Alsace-Moselle : Vendredi saint et 26 décembre fériés (délai de déclaration des AT, EVT-03).
+  alsaceMoselle: boolean('alsace_moselle').notNull().default(false),
   // Archivage (site fermé ou cédé) : masqué des sélecteurs, données conservées et visibles sous « Tous les sites ».
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
@@ -68,7 +72,7 @@ export const keystoneProjects = pgTable('keystone_projects', {
 // Pièces jointes (photos de signalement, documents maîtrisés, rapports de contrôle…), stockées dans .data/uploads.
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(), // uuid
-  // event | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
+  // event | event (health) | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
   // | qualification | audit_plan_item | certification — droit de lecture : canReadAttachment (src/lib/uploads.ts)
   entityType: text('entity_type').notNull(),
   entityId: text('entity_id').notNull(),
@@ -78,6 +82,9 @@ export const attachments = pgTable('attachments', {
   storagePath: text('storage_path').notNull(),
   uploadedBy: text('uploaded_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Pièce médicale (certificat, avis d'arrêt, réserves…) : animateur QHSE et direction seulement, refusée par /fichiers aux
+  // autres rôles (SEC-06).
+  health: boolean('health').notNull().default(false),
 });
 
 // ─── Signalements et événements ─────────────────────────────────────────────
@@ -93,8 +100,9 @@ export const events = pgTable('events', {
   declarantId: text('declarant_id').references(() => people.id), // rapprochement « Mes signalements » (null = anonyme ou externe)
   declarantCompany: text('declarant_company'), // entreprise déclarée par un déclarant externe (signalement sans compte)
   anonymous: boolean('anonymous').notNull().default(false),
-  // Canal du signalement terrain : « session » (personne connectée) | « poste » (formulaire public, jeton de QR code) ;
-  // null pour une saisie depuis l'écran Événements ou un événement antérieur.
+  // Canal du signalement terrain (SEC-09) : « session » (personne connectée, nominatif) | « poste » (formulaire public,
+  // nominatif déclaré) | « terrain » (signalement anonyme, quel que soit le canal) | null (saisie depuis l'écran Événements
+  // ou événement antérieur).
   reportedVia: text('reported_via'),
   keystoneProject: text('keystone_project'),
   equipment: text('equipment'),
@@ -109,6 +117,33 @@ export const events = pgTable('events', {
   lostDays: integer('lost_days'),
   // AT : date de déclaration à la CPAM (sous 48 h, sauf soins inscrits au registre des accidents bénins).
   cpamDeclaredOn: date('cpam_declared_on', { mode: 'string' }),
+  // AT — rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463). Données de santé : HEALTH_LABELS (src/components/events/shared.ts).
+  victimKind: text('victim_kind'), // salarie | interimaire | externe (VICTIM_KINDS)
+  victimId: text('victim_id').references(() => people.id), // victime de l'effectif
+  victimName: text('victim_name'), // intérimaire ou personne extérieure : nom déclaré
+  victimCompany: text('victim_company'), // entreprise de travail temporaire, ou employeur de la personne extérieure
+  occurredTime: text('occurred_time'), // heure des faits « HH:MM » (Europe/Paris), tous types
+  workSchedule: text('work_schedule'), // horaire de travail de la victime le jour de l'accident (texte libre)
+  // Connaissance de l'accident par l'employeur : départ du délai de 48 h (R. 441-3 CSS) ; null = events.created_at.
+  knownAt: timestamp('known_at', { withTimezone: true }),
+  activity: text('activity'), // activité de la victime au moment de l'accident
+  circumstances: text('circumstances'), // circonstances détaillées (faits, sans donnée médicale)
+  witnesses: text('witnesses'), // témoins (nom, entreprise, coordonnées)
+  thirdParty: text('third_party'), // tiers impliqué (nom, adresse, assureur) ; vide = aucun
+  // Données de santé d'un AT (SEC-06 : animateur QHSE et direction seulement).
+  lesionNature: text('lesion_nature'),
+  lesionSite: text('lesion_site'),
+  careGiven: text('care_given'), // soins dispensés, transport (poste de secours, médecin, urgences…)
+  reservesOn: date('reserves_on', { mode: 'string' }), // réserves motivées adressées à la CPAM le (R. 441-6)
+  // Déclaration CPAM non faite par l'entreprise (EVT-02) : motif tracé (ETT, tiers, registre papier…) — donnée de santé.
+  cpamWaivedAt: timestamp('cpam_waived_at', { withTimezone: true }),
+  cpamWaivedById: text('cpam_waived_by_id').references(() => people.id),
+  cpamWaiverReason: text('cpam_waiver_reason'),
+  // Qualification (EVT-05) : réclamation client, aspect environnemental.
+  customer: text('customer'), // RC : client
+  customerRef: text('customer_ref'), // RC : référence client (commande, affaire, livraison)
+  envAspect: text('env_aspect'), // ENV : ENV_ASPECTS
+  envMedium: text('env_medium'), // ENV : ENV_MEDIA
   // Rattachements facultatifs vers les autres modules.
   controlId: integer('control_id').references((): AnyPgColumn => controls.id), // équipement soumis à contrôle périodique
   riskId: integer('risk_id').references((): AnyPgColumn => risks.id), // risque du DUERP concerné (réévaluation)
@@ -142,16 +177,53 @@ export const eventSteps = pgTable('event_steps', {
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Registre des accidents du travail bénins (EVT-04, art. L. 441-4 et D. 441-1 à D. 441-4 CSS) : un registre par site
+// (établissement), une inscription par AT sans arrêt ni soins médicaux (events.injury = 'soins'), jamais supprimée
+// (annulation motivée, numéro non réattribué). Données de santé : animateur QHSE et direction seulement (canSeeHealth).
+export const benignAccidents = pgTable('benign_accidents', {
+  id: serial('id').primaryKey(),
+  siteId: text('site_id').notNull().references(() => sites.id), // site du registre (fixé à l'inscription)
+  number: integer('number').notNull(), // numéro d'ordre dans le registre du site
+  eventId: text('event_id').notNull().references(() => events.id),
+  careGivenAt: timestamp('care_given_at', { withTimezone: true }).notNull(),
+  caregiverId: text('caregiver_id').references(() => people.id), // secouriste (SST valide) de l'effectif
+  caregiverName: text('caregiver_name'), // professionnel de santé déclaré (hors effectif ou non suivi)
+  caregiverQualification: text('caregiver_qualification').notNull(), // sst | infirmier | medecin | pharmacien
+  care: text('care').notNull(), // soins dispensés
+  signedOn: date('signed_on', { mode: 'string' }), // visas de la victime et du donneur de soins recueillis sur le registre papier
+  // Arrêt ou soins médicaux ultérieurs connus le : bascule en déclaration CPAM (48 h à compter de cette date).
+  escalatedAt: timestamp('escalated_at', { withTimezone: true }),
+  escalatedById: text('escalated_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdById: text('created_by_id').references(() => people.id),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  uniqueIndex('benign_accidents_site_number_unique').on(t.siteId, t.number),
+  // Une seule inscription active par événement (une inscription annulée n'empêche pas de réinscrire).
+  uniqueIndex('benign_accidents_event_active_unique').on(t.eventId).where(sql`cancelled_at is null`),
+  index('benign_accidents_event_idx').on(t.eventId),
+]);
+
 // ─── Plan d'actions unique ──────────────────────────────────────────────────
 
 export const actions = pgTable('actions', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   description: text('description'),
-  origin: text('origin').notNull(), // ev | audit | risk | watch | client | rev | skills | prevention | docs | env
+  origin: text('origin').notNull(), // ev | audit | risk | watch | client | rev | skills | prevention | docs | env — fixée à la création (ACT-01)
   originRef: text('origin_ref').notNull(),
   eventId: text('event_id').references(() => events.id),
   reviewId: integer('review_id').references((): AnyPgColumn => reviews.id), // revue de direction d'origine (décision, objectif, préparation)
+  // Sources d'origine portées par l'action (ACT-01), comme eventId et reviewId : une au plus par type, conservées sur une
+  // action annulée. Posées à la création (lien explicite de l'écran, ou référence d'origine résolue une fois :
+  // src/lib/origin-links.ts) et par la reprise (vigie-db reprise-liens), jamais recalculées ; les écrans sources les lisent.
+  preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
+  permitId: text('permit_id').references((): AnyPgColumn => permits.id),
+  documentId: text('document_id').references((): AnyPgColumn => documents.id),
+  wasteStreamId: text('waste_stream_id').references((): AnyPgColumn => wasteStreams.id),
+  wasteEntryId: integer('waste_entry_id').references((): AnyPgColumn => wasteEntries.id), // enlèvement du registre des déchets
   siteId: text('site_id').references(() => sites.id), // null = tous sites
   pilotId: text('pilot_id').notNull().references(() => people.id),
   dueOn: date('due_on', { mode: 'string' }).notNull(),
@@ -217,6 +289,49 @@ export const riskActions = pgTable('risk_actions', {
   riskId: integer('risk_id').notNull().references(() => risks.id),
   actionId: text('action_id').notNull().references(() => actions.id),
 }, (t) => [primaryKey({ columns: [t.riskId, t.actionId] })]);
+
+// Registre des mises à disposition du DUERP (R. 4121-4, DUE-01) : demandes d'accès des salariés, anciens salariés, CSE,
+// médecin du travail, inspection du travail, CARSAT…, avec la version communiquée. Jamais supprimée : annulation motivée.
+export const duerpAccessRequests = pgTable('duerp_access_requests', {
+  id: serial('id').primaryKey(),
+  requestedOn: date('requested_on', { mode: 'string' }).notNull(),
+  requesterKind: text('requester_kind').notNull(), // DUERP_REQUESTERS (src/lib/domain.ts)
+  requesterName: text('requester_name').notNull(), // personne ou organisme demandeur
+  siteId: text('site_id').references(() => sites.id), // établissement concerné ; null = tous les sites
+  version: text('version').notNull().references(() => duerpVersions.version), // version communiquée (ou demandée)
+  communicatedOn: date('communicated_on', { mode: 'string' }), // null = demande en attente
+  channel: text('channel'), // DUERP_ACCESS_CHANNELS
+  note: text('note'),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+});
+
+// PAPRIPACT (L. 4121-3-1, DUE-02) : programme annuel de prévention issu du DUERP, un par année ; arrêté à la consultation
+// du CSE (lignes figées dans `snapshot`, type ProgramSnapshot de src/lib/data/risks.ts), rouvert seulement avec un motif.
+export const preventionPrograms = pgTable('prevention_programs', {
+  year: integer('year').primaryKey(),
+  duerpVersion: text('duerp_version').notNull().references(() => duerpVersions.version),
+  comment: text('comment'), // objet du programme
+  cseConsultedOn: date('cse_consulted_on', { mode: 'string' }),
+  frozenAt: timestamp('frozen_at', { withTimezone: true }), // null = en préparation
+  frozenById: text('frozen_by_id').references(() => people.id),
+  snapshot: jsonb('snapshot'), // lignes figées à l'arrêt ; null en préparation
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Actions du plan d'actions unique retenues au programme : coût estimé (€ HT), ressources et indicateur de résultat,
+// pour ces actions seulement. Ligne retirable tant que le programme est en préparation (journal du programme).
+export const preventionProgramActions = pgTable('prevention_program_actions', {
+  year: integer('year').notNull().references(() => preventionPrograms.year),
+  actionId: text('action_id').notNull().references(() => actions.id),
+  estimatedCost: numeric('estimated_cost', { precision: 12, scale: 2, mode: 'number' }),
+  resources: text('resources'),
+  indicator: text('indicator'),
+}, (t) => [primaryKey({ columns: [t.year, t.actionId] })]);
 
 // ─── Veille réglementaire et contrôles ──────────────────────────────────────
 
@@ -304,6 +419,8 @@ export const trainingTitles = pgTable('training_titles', {
   label: text('label').notNull(),
   validityMonths: integer('validity_months').notNull().default(0), // 0 = sans échéance
   sort: integer('sort').notNull().default(0),
+  // Titre de secourisme (SST) : ses titulaires valides peuvent donner les soins inscrits au registre des accidents bénins (EVT-04).
+  firstAid: boolean('first_aid').notNull().default(false),
   // Titre retiré du suivi (historique conservé).
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
@@ -374,6 +491,16 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   auditor: text('auditor'), // auditeur ou organisme (texte libre, peut être externe)
   scope: text('scope'), // périmètre audité
   certificationId: text('certification_id').references(() => certifications.id), // référentiel (audit de certification / de suivi)
+  // Revue de direction portée par l'élément (AUD-01) : sa date, sa réalisation et son annulation suivent la revue ; l'élément
+  // est verrouillé dans le programme (« Ouvrir la revue »). Au plus un élément par revue.
+  reviewId: integer('review_id').references((): AnyPgColumn => reviews.id).unique('audit_plan_items_review_id_unique'),
+  // Replanification (AUD-03, « Reporter » avec motif) : première date prévue (sinon le 1er du mois prévu) avant le premier
+  // report ; null = jamais replanifié.
+  postponedFrom: date('postponed_from', { mode: 'string' }),
+  // Annulation (AUD-03) : jamais de suppression ; motif obligatoire ; hors grille, échéances, constats et dossier (liste « Éléments annulés »).
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 });
 
 export const auditFindings = pgTable('audit_findings', {
@@ -409,7 +536,9 @@ export const reviews = pgTable('reviews', {
   recordedById: text('recorded_by_id').references(() => people.id), // saisie du compte rendu
   closedOn: date('closed_on', { mode: 'string' }),
   closedById: text('closed_by_id').references(() => people.id), // visa de la direction
-  snapshot: jsonb('snapshot'), // dossier figé à la clôture (null pour les revues antérieures à Vigie)
+  // Dossier figé : sections arrêtées à la date de la séance (phase « seance », écrite à la première saisie du compte rendu),
+  // puis dossier complet au visa (phase « cloture ») ; null pour les revues antérieures à Vigie.
+  snapshot: jsonb('snapshot'),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
@@ -471,9 +600,24 @@ export const preventionPlans = pgTable('prevention_plans', {
   inspectionOn: date('inspection_on', { mode: 'string' }), // inspection commune préalable
   interferenceRisks: text('interference_risks').notNull().default(''),
   measures: text('measures').notNull().default(''),
+  // PRV-02 : contenu réglementaire du plan. Informations de l'entreprise extérieure (R. 4511-10), mesures du plan
+  // (R. 4512-8, 1° à 5°), postes relevant du suivi individuel renforcé (R. 4512-9). Les sections libres du formulaire importé restent dans form_data.
+  eeHeadcount: integer('ee_headcount'), // effectif prévisible de l'entreprise extérieure (null = non renseigné)
+  eeSupervisor: text('ee_supervisor').notNull().default(''), // nom et qualification de la personne qui dirige l'intervention
+  subcontracting: text('subcontracting').notNull().default(''), // sous-traitants (noms, références) et travaux sous-traités
+  dangerousPhases: text('dangerous_phases').notNull().default(''), // R. 4512-8 1° phases dangereuses et moyens spécifiques
+  equipment: text('equipment').notNull().default(''), // R. 4512-8 2° matériels, installations, dispositifs (prêtés), entretien
+  workerInstructions: text('worker_instructions').notNull().default(''), // R. 4512-8 3° instructions aux travailleurs
+  emergencyOrganisation: text('emergency_organisation').notNull().default(''), // R. 4512-8 4° premiers secours, évacuation
+  coordination: text('coordination').notNull().default(''), // R. 4512-8 5° coordination, organisation du commandement
+  sirPosts: text('sir_posts').notNull().default(''), // R. 4512-9 postes susceptibles de relever du suivi individuel renforcé (postes, jamais de noms)
   status: text('status').notNull(), // brouillon | a_signer | signe | clos | annule
   signedEuOn: date('signed_eu_on', { mode: 'string' }), // entreprise utilisatrice
   signedEeOn: date('signed_ee_on', { mode: 'string' }), // entreprise extérieure
+  // PRV-01 : date de la première signature complète (EU et EE, la plus tardive des deux). Elle est conservée quand une
+  // modification efface les signatures. Null = jamais signé par les deux, ou ligne antérieure (repli dans le code sur les
+  // signatures actuelles).
+  firstSignedOn: date('first_signed_on', { mode: 'string' }),
   ownerId: text('owner_id').references(() => people.id),
   formData: jsonb('form_data'), // réponses du formulaire importé (voir src/lib/pp-form.ts)
   importedFromId: text('imported_from_id').references(() => attachments.id), // fichier source de l'import
@@ -557,6 +701,19 @@ export const wasteStreams = pgTable('waste_streams', {
   channel: text('channel').notNull(), // filière
   collector: text('collector').notNull(),
   destination: text('destination').notNull(), // installation de traitement
+  // Valeurs par défaut de la filière, copiées sur chaque enlèvement à son inscription (DOC-02, arrêté du 31 mai 2021).
+  // Le déchet contient des polluants organiques persistants (POP, règlement (UE) 2019/1021) : mention « le cas échéant » du registre.
+  pop: boolean('pop').notNull().default(false),
+  // Qualification du traitement final (hiérarchie de l'art. L. 541-1) : reutilisation | recyclage | valorisation_energetique
+  // | autre_valorisation | elimination ; null = à préciser à chaque enlèvement (transit, regroupement : R12, R13, D13, D14, D15).
+  qualification: text('qualification'),
+  // Collecteur (transporteur proposé par défaut) : SIRET (ou n° de TVA intracommunautaire), adresse, n° de récépissé de déclaration (R. 541-50 à R. 541-53).
+  collectorSiret: text('collector_siret'),
+  collectorAddress: text('collector_address'),
+  collectorReceipt: text('collector_receipt'),
+  // Installation de destination : SIRET (ou n° de TVA intracommunautaire) et adresse.
+  destinationSiret: text('destination_siret'),
+  destinationAddress: text('destination_address'),
 });
 
 // Registre chronologique des déchets sortants.
@@ -570,6 +727,18 @@ export const wasteEntries = pgTable('waste_entries', {
   ewcCode: text('ewc_code'),
   treatmentCode: text('treatment_code'),
   destination: text('destination'),
+  // Mentions de l'arrêté du 31 mai 2021. Copies figées comme ewcCode / destination : copiées de la filière à l'inscription,
+  // complétées si vides à l'enregistrement suivant ; null = valeur de la filière (inscriptions antérieures).
+  pop: boolean('pop'),
+  qualification: text('qualification'),
+  destinationSiret: text('destination_siret'),
+  destinationAddress: text('destination_address'),
+  // Transporteur de cet enlèvement (saisi, par défaut celui du collecteur de la filière).
+  transporterSiret: text('transporter_siret'),
+  transporterAddress: text('transporter_address'),
+  transporterReceipt: text('transporter_receipt'),
+  // Adresse de prise en charge lorsqu'elle se distingue de celle de l'établissement (chantier, autre dépôt).
+  pickupAddress: text('pickup_address'),
   bsdNumber: text('bsd_number'), // bordereau Trackdéchets (obligatoire pour les déchets dangereux)
   bsdStatus: text('bsd_status'), // brouillon | emis | collecte | traite
   transporter: text('transporter').notNull(),

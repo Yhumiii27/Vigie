@@ -66,6 +66,17 @@ export type VigieConfig = {
   entraRoles: Record<Role, string>;
   /** Sites accordés par groupe Entra (VIGIE_SITE_GROUPS=groupObjectId:siteId,…). */
   siteGroups: { groupId: string; siteId: string }[];
+  /**
+   * Domaines de messagerie de l'entreprise (VIGIE_EMAIL_DOMAINS, minuscules, sans « @ ») : une première connexion ne
+   * rapproche ou ne crée une fiche que par une adresse vérifiée (revendications email et xms_edov) de l'un d'eux.
+   * Vide : toute première connexion est refusée (les comptes déjà associés se connectent toujours).
+   */
+  emailDomains: string[];
+  /**
+   * Reverse proxys de confiance devant Vigie (VIGIE_TRUSTED_PROXIES, 1 par défaut) : l'adresse du client est la
+   * N-ième entrée de X-Forwarded-For en partant de la fin (src/lib/report-guard.ts).
+   */
+  trustedProxies: number;
   /** Lecture des scans par l'API Claude (VIGIE_AI_IMPORT=1). */
   aiImport: boolean;
   anthropicEnv: AnthropicEnv;
@@ -83,6 +94,8 @@ const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { error: 'date attendue a
 const origin = z.url({ protocol: /^https?$/, error: 'URL http(s) attendue' }).transform((v) => new URL(v))
   .refine((u) => u.pathname === '/' && !u.search && !u.hash, { error: "origine attendue, sans chemin (ex. https://vigie.exemple.fr)" })
   .transform((u) => u.origin);
+/** Nom de domaine de messagerie (VIGIE_EMAIL_DOMAINS), en minuscules : au moins deux libellés. */
+const EMAIL_DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const secret = z.string().min(SECRET_MIN, { error: `au moins ${SECRET_MIN} caractères (ex. openssl rand -base64 48)` });
 
 /** Clé de 32 octets en base64 ou en hexadécimal. */
@@ -124,14 +137,27 @@ function readStorage(env: Env, read: Reader, problems: string[]): StorageConfig 
   const uploadKey = key('VIGIE_UPLOAD_KEY');
   const uploadKeyPrevious = key('VIGIE_UPLOAD_KEY_PREVIOUS');
   if (uploadKeyPrevious && !uploadKey) problems.push('VIGIE_UPLOAD_KEY_PREVIOUS : sans objet sans VIGIE_UPLOAD_KEY (nouvelle clé).');
+  const databaseUrl = read('DATABASE_URL', z.string().regex(/^postgres(ql)?:\/\//, { error: 'URL postgres:// ou postgresql:// attendue' })) ?? null;
+  const dataDir = absDir(blank(env.VIGIE_DATA_DIR), ['.data', 'vigie']);
+  const uploadDir = absDir(blank(env.VIGIE_UPLOAD_DIR), ['.data', 'uploads']);
+  const backupDir = absDir(blank(env.VIGIE_BACKUP_DIR), ['.data', 'backups']);
+  // La restauration d'une base PGlite vide VIGIE_DATA_DIR : pièces jointes et sauvegardes jamais dans ce dossier.
+  for (const [name, dir] of [['VIGIE_UPLOAD_DIR', uploadDir], ['VIGIE_BACKUP_DIR', backupDir]] as const) {
+    if (isWithinDir(dataDir, dir)) {
+      problems.push(`${name} : à placer hors de VIGIE_DATA_DIR (${dataDir}), dossier réservé à la base PGlite et vidé par sa restauration (ex. /data/pglite, /data/uploads, /data/backups).`);
+    }
+  }
   return {
-    databaseUrl: read('DATABASE_URL', z.string().regex(/^postgres(ql)?:\/\//, { error: 'URL postgres:// ou postgresql:// attendue' })) ?? null,
-    dataDir: absDir(blank(env.VIGIE_DATA_DIR), ['.data', 'vigie']),
-    uploadDir: absDir(blank(env.VIGIE_UPLOAD_DIR), ['.data', 'uploads']),
-    uploadKey, uploadKeyPrevious,
-    backupDir: absDir(blank(env.VIGIE_BACKUP_DIR), ['.data', 'backups']),
+    databaseUrl, dataDir, uploadDir, uploadKey, uploadKeyPrevious, backupDir,
     backupBeforeMigrate: read('VIGIE_BACKUP_BEFORE_MIGRATE', flag) ?? true,
   };
+}
+
+/** `dir` est `parent` ou se trouve dessous (chemins absolus ; une base en mémoire « memory:// » ne contient rien). */
+export function isWithinDir(parent: string, dir: string): boolean {
+  if (parent.startsWith('memory://') || dir.startsWith('memory://')) return false;
+  const rel = path.relative(parent, dir);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
 /**
@@ -158,6 +184,10 @@ export function parseConfig(env: Env): VigieConfig {
   const storage = readStorage(env, read, problems);
   const publicUrl = read('VIGIE_PUBLIC_URL', origin) ?? null;
   if (!publicUrl && !demo && blank(env.VIGIE_PUBLIC_URL) === undefined) problems.push("VIGIE_PUBLIC_URL : obligatoire hors démonstration (adresse publique de Vigie, ex. https://vigie.exemple.fr).");
+  // SEC-05 : hors démonstration, HTTPS (cookies Secure, HSTS) ; http:// seulement pour un essai local.
+  if (!demo && publicUrl?.startsWith('http://') && !isLoopbackHost(new URL(publicUrl).host)) {
+    problems.push('VIGIE_PUBLIC_URL : https:// obligatoire hors démonstration (cookies Secure, HSTS) ; http:// admis pour localhost seulement (essai local).');
+  }
 
   const hostList = read('VIGIE_ALLOWED_HOSTS', z.string().transform((v) => v.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean))
     .refine((l) => l.every((h) => /^(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(:\d{1,5})?$/.test(h)), { error: 'liste d’hôtes attendue (hote[:port],…), sans schéma ni chemin' })) ?? [];
@@ -186,13 +216,21 @@ export function parseConfig(env: Env): VigieConfig {
     .refine((l) => l.every((p) => p.length === 2 && p[0] && p[1]), { error: 'liste attendue : groupObjectId:siteId,…' })
     .transform((l) => l.map(([groupId, siteId]) => ({ groupId, siteId })))) ?? [];
 
+  const emailDomains = read('VIGIE_EMAIL_DOMAINS', z.string()
+    .transform((v) => [...new Set(v.split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean))])
+    .refine((l) => l.length > 0 && l.every((d) => EMAIL_DOMAIN.test(d)), { error: 'liste de noms de domaine attendue (ex. epc2i.fr,epc2i.com)' })) ?? [];
+  const trustedProxies = read('VIGIE_TRUSTED_PROXIES', z.string()
+    .regex(/^\d+$/, { error: 'nombre entier attendu (1 par défaut)' })
+    .transform(Number)
+    .refine((n) => n >= 1 && n <= 10, { error: 'entre 1 et 10' })) ?? 1;
+
   const aiImport = read('VIGIE_AI_IMPORT', flag) ?? false;
   const anthropicEnv = Object.fromEntries(ANTHROPIC_KEYS.flatMap((k) => (env[k] ? [[k, env[k]]] : []))) as AnthropicEnv;
 
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage,
-    publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, aiImport, anthropicEnv,
+    publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
   };
 }
 

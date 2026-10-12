@@ -20,6 +20,11 @@
       "when": 1791720024194,
       "sql": "69263f2555dd1c3de5c45c1303c790a93eba34408cd5e22188e8e00a5291b030",
       "snapshot": "54bc45fc1ca0298f6acfa0045f908e419f30447f889afe1c1439cac202758099"
+    },
+    "0004_compliance": {
+      "when": 1791794375690,
+      "sql": "ad9abeba4fc39ea896ee6869f29631791af7042e7c85184c0209d6b6cd0051b0",
+      "snapshot": "7c2a053bf80369fc1166203d64742f31d6ad054e3f7d1c719cfe53f1fc4d444a"
     }
   }
 }

@@ -14,6 +14,9 @@ export const certDot = (tone: string) => (tone === 'ok' ? TONE.ok.dot : tone ===
 
 export const FINDING_KEYS = Object.keys(FINDING_KINDS);
 
+/** Ligne du programme annuel où s'inscrivent les échéances des revues de direction (AUD-01). */
+export const REVIEW_TRACK = 'Revues de direction';
+
 /**
  * Échéance du programme qui porte une revue de direction (ni auditeur, ni périmètre, ni rapport, ni constats) : ligne des
  * revues, ou libellé / intitulé « revue de direction ». Une « revue de contrat » ou « de conception » reste un audit.
@@ -26,3 +29,6 @@ export const MONTH_OPTIONS = MONTHS_SHORT.map((_, i) => {
   const name = monthName(i + 1);
   return [String(i + 1), name[0].toUpperCase() + name.slice(1)] as const;
 });
+
+/** « Septembre 2026 » : mois et année d'un élément du programme (planification, report). */
+export const monthLabel = (month: number, year: number) => `${MONTH_OPTIONS[month - 1]?.[1] ?? month} ${year}`;

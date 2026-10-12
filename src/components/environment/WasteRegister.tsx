@@ -11,16 +11,39 @@ import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { EntryDetail, EntryView, EventOption, StreamView } from '@/lib/data/environment';
 import { cancelWasteEntry, saveWasteEntry } from '@/server/environment';
-import { BSD_PLACEHOLDER, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, fmtQty, lcfirst, treatmentLabel } from './model';
-import { LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions } from './parts';
+import { fmtSiret } from '@/lib/siret';
+import {
+  BSD_PLACEHOLDER, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, QUALIFICATION_KEYS, REGISTER_MENTIONS, TREATMENT_QUALIFICATIONS, fmtQty, isTransitCode, lcfirst,
+  qualificationError, qualificationLabel, treatmentLabel,
+} from './model';
+import { CompanyIdField, LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier } from './parts';
 
-export type StreamOption = Pick<StreamView, 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'>;
+export type StreamOption = Pick<StreamView,
+  | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
+  | 'pop' | 'qualification' | 'collectorSiret' | 'collectorAddress' | 'collectorReceipt' | 'destinationSiret' | 'destinationAddress'>;
 
 const BSD_OPTIONS = BSD_STATUS_KEYS.map((k) => [k, BSD_STATUS[k].label] as const);
+const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
+const RECEIPT_HINT = "Récépissé de déclaration de transport de déchets (R. 541-50) ; « Exempté » si non soumis.";
+const NO_CARRIER: Carrier = { siret: null, address: null, receipt: null };
+const collectorOf = (s: StreamOption | undefined): Carrier =>
+  s ? { siret: s.collectorSiret, address: s.collectorAddress, receipt: s.collectorReceipt } : NO_CARRIER;
+
+/** Où compléter chaque mention manquante d'un enlèvement. */
+function gapHelp(e: EntryView): string[] {
+  const has = (m: string) => e.gaps.includes(m);
+  return [
+    (has(REGISTER_MENTIONS.transporterSiret) || has(REGISTER_MENTIONS.transporterAddress) || has(REGISTER_MENTIONS.transporterReceipt))
+      && 'transporteur : SIRET, adresse et récépissé dans le formulaire ci-dessous',
+    has(REGISTER_MENTIONS.qualification) && 'qualification : dans le formulaire ci-dessous',
+    (has(REGISTER_MENTIONS.destinationSiret) || has(REGISTER_MENTIONS.destinationAddress)) && `installation : sur la filière ${e.streamId} (onglet « Filières »)`,
+    has(REGISTER_MENTIONS.siteSiret) && "SIRET de l'établissement : bouton « Renseigner le SIRET » au-dessus du registre",
+  ].filter((x): x is string => !!x);
+}
 
 // ─── Tableau du registre ────────────────────────────────────────────────────
 
-export function WasteRegister({ entries, streams, canManage, showSite, today, emptyText, transporters, events, actionOptions, canSeeEvents }: {
+export function WasteRegister({ entries, streams, canManage, showSite, today, emptyText, transporters, carriers, events, actionOptions, canSeeEvents }: {
   entries: EntryDetail[];
   streams: StreamOption[];
   canManage: boolean;
@@ -29,6 +52,8 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
   today: string;
   emptyText: string;
   transporters: string[];
+  /** Identité connue des transporteurs (SIRET, adresse, récépissé), proposée à la saisie du nom. */
+  carriers: Record<string, Carrier>;
   /** Événements environnementaux ouverts, pour le champ « Événement lié ». */
   events: readonly EventOption[];
   /** Listes de choix du formulaire d'action (null : création d'action non permise). */
@@ -63,6 +88,9 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
                 <td style={{ minWidth: 170 }}>
                   {e.stream}
                   {e.notes && <div style={{ ...muted, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={e.notes}>{e.notes}</div>}
+                  {e.gaps.length > 0 && (
+                    <div style={{ ...muted, color: TONE.warn.fg }} title={`Mentions manquantes : ${e.gaps.join(' · ')}`}>Mentions incomplètes · {e.gaps.length}</div>
+                  )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-300)' }}>{e.ewcCode}</td>
                 <td>{e.hazardous ? <ToneTag tone="warn">Dangereux</ToneTag> : <span style={{ color: 'var(--color-neutral-600)' }}>Non</span>}</td>
@@ -101,7 +129,7 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
       <Dialog open={!!entry} onClose={close} width={620}
         kicker={entry ? `Registre des déchets · n° ${entry.id} · ${shortSite(entry.site)}` : undefined}
         title={entry ? `${entry.stream} · ${fmtDate(entry.removedOn)}` : ''}>
-        {entry && <EntryPanel key={entry.id} entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters}
+        {entry && <EntryPanel key={entry.id} entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} carriers={carriers}
           events={events} actionOptions={actionOptions} canSeeEvents={canSeeEvents} onClose={close} />}
       </Dialog>
     </div>
@@ -109,8 +137,8 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
 }
 
 /** Fiche d'un enlèvement : événement d'origine, actions liées, formulaire, annulation tracée et historique. */
-function EntryPanel({ entry, streams, today, showSite, transporters, events, actionOptions, canSeeEvents, onClose }: {
-  entry: EntryDetail; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[];
+function EntryPanel({ entry, streams, today, showSite, transporters, carriers, events, actionOptions, canSeeEvents, onClose }: {
+  entry: EntryDetail; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>;
   events: readonly EventOption[]; actionOptions: ActionOptions | null; canSeeEvents: boolean; onClose: () => void;
 }) {
   const event = entry.event && (canSeeEvents
@@ -130,6 +158,12 @@ function EntryPanel({ entry, streams, today, showSite, transporters, events, act
           <span>Enlèvement consécutif à l&apos;événement {event}{entry.event.title ? ` · ${entry.event.title}` : ''}</span>
         </div>
       )}
+      {entry.gaps.length > 0 && (
+        <Note icon="ph-warning" tone="warn">
+          Mentions obligatoires manquantes (arrêté du 31 mai 2021) : {entry.gaps.join(' · ')}.
+          <span style={{ display: 'block', marginTop: 2, color: 'var(--color-neutral-400)' }}>À compléter — {gapHelp(entry).join(' ; ')}.</span>
+        </Note>
+      )}
       {entry.staleBsd && (
         <Note icon="ph-hourglass-medium" tone="warn">
           Bordereau {entry.bsdNumber} encore « {entry.bsdLabel?.toLowerCase()} » {entry.age} jours après l&apos;enlèvement (seuil {BSD_STALE_DAYS} j) :
@@ -144,7 +178,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, events, act
       {!entry.cancelled && (
         <section style={{ display: 'grid', gap: 8 }}>
           <h6 className="vg-h6">Enlèvement</h6>
-          <EntryForm entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} events={events} onDone={onClose} onCancel={onClose} />
+          <EntryForm entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} carriers={carriers} events={events} onDone={onClose} onCancel={onClose} />
         </section>
       )}
       <ChangeLogList entries={entry.history} />
@@ -163,22 +197,22 @@ function EntryPanel({ entry, streams, today, showSite, transporters, events, act
 }
 
 /** Bouton « Nouvel enlèvement ». */
-export function NewEntryButton({ streams, today, showSite, transporters, defaultStreamId, events }: {
-  streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; defaultStreamId?: string; events: readonly EventOption[];
+export function NewEntryButton({ streams, today, showSite, transporters, carriers, defaultStreamId, events }: {
+  streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string; events: readonly EventOption[];
 }) {
   const none = streams.length === 0;
   return (
     <DialogButton label="Nouvel enlèvement" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvel enlèvement" kicker="Registre des déchets"
       width={620} disabled={none} tooltip={none ? "Créez d'abord une filière (onglet Filières)." : undefined}>
-      {(close) => <EntryForm streams={streams} today={today} showSite={showSite} transporters={transporters} defaultStreamId={defaultStreamId} events={events} onDone={close} onCancel={close} />}
+      {(close) => <EntryForm streams={streams} today={today} showSite={showSite} transporters={transporters} carriers={carriers} defaultStreamId={defaultStreamId} events={events} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }
 
 // ─── Formulaire d'enlèvement ────────────────────────────────────────────────
 
-function EntryForm({ entry, streams, today, showSite, transporters, defaultStreamId, events, onDone, onCancel }: {
-  entry?: EntryView; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; defaultStreamId?: string;
+function EntryForm({ entry, streams, today, showSite, transporters, carriers, defaultStreamId, events, onDone, onCancel }: {
+  entry?: EntryView; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string;
   events: readonly EventOption[]; onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
@@ -186,11 +220,23 @@ function EntryForm({ entry, streams, today, showSite, transporters, defaultStrea
   const [streamId, setStreamId] = useState(initialStream);
   const stream = streams.find((s) => s.id === streamId);
   const [transporter, setTransporter] = useState(entry?.transporter ?? stream?.collector ?? '');
-  // Le transporteur suit le collecteur de la filière tant qu'il n'a pas été saisi à la main.
+  // Le transporteur (nom, SIRET, adresse, récépissé) suit le collecteur de la filière tant qu'il n'a pas été saisi à la main ;
+  // un transporteur connu reprend ses mentions, sauf mentions saisies à la main.
   const [manualTransporter, setManualTransporter] = useState(!!entry && entry.transporter !== stream?.collector);
+  const initialCarrier = entry
+    ? { siret: entry.transporterSiret, address: entry.transporterAddress, receipt: entry.transporterReceipt }
+    : collectorOf(stream);
+  const [carrier, setCarrier] = useState({ siret: initialCarrier.siret ?? '', address: initialCarrier.address ?? '', receipt: initialCarrier.receipt ?? '' });
+  const [manualCarrier, setManualCarrier] = useState(false);
+  const fillCarrier = (c: Carrier) => setCarrier({ siret: c.siret ?? '', address: c.address ?? '', receipt: c.receipt ?? '' });
+  const editCarrier = (k: keyof Carrier, v: string) => { setCarrier((c) => ({ ...c, [k]: v })); setManualCarrier(true); };
   const [bsd, setBsd] = useState(entry?.bsdNumber ?? '');
-  // Codes et exutoire enregistrés à l'inscription tant que la filière ne change pas ; sinon ceux de la filière choisie.
+  // Codes, exutoire et mentions enregistrés à l'inscription tant que la filière ne change pas ; sinon ceux de la filière choisie.
   const info = entry && streamId === entry.streamId ? entry : stream;
+  const [qualification, setQualification] = useState(entry?.qualification ?? stream?.qualification ?? '');
+  const [manualQualification, setManualQualification] = useState(false);
+  const transit = !!info && isTransitCode(info.treatmentCode);
+  const qualificationIssue = info ? qualificationError(info.treatmentCode, qualification) : null;
 
   // Événements du site de la filière choisie ; un événement déjà lié mais clôturé depuis reste proposé.
   const siteEvents = events.filter((e) => !stream || e.siteId === stream.siteId).map((e) => [e.id, e.label] as const);
@@ -209,13 +255,21 @@ function EntryForm({ entry, streams, today, showSite, transporters, defaultStrea
           onChange={(e) => {
             const next = streams.find((s) => s.id === e.target.value);
             setStreamId(e.target.value);
-            if (!manualTransporter) setTransporter(next?.collector ?? '');
+            if (!manualTransporter) {
+              setTransporter(next?.collector ?? '');
+              if (!manualCarrier) fillCarrier(collectorOf(next));
+            }
+            const back = entry && e.target.value === entry.streamId;
+            if (!manualQualification) setQualification((back ? entry.qualification : next?.qualification) ?? '');
           }} />
       </Field>
       {info && (
         <Note icon={info.hazardous ? 'ph-warning' : 'ph-recycle'} tone={info.hazardous ? 'warn' : undefined}>
-          {info.ewcCode} · {info.hazardous ? 'déchet dangereux, bordereau Trackdéchets obligatoire' : 'déchet non dangereux'} ·{' '}
-          {info.treatmentCode} ({lcfirst(info.channel)}) vers {info.destination}.
+          {info.ewcCode} · {info.hazardous ? 'déchet dangereux, bordereau Trackdéchets obligatoire' : 'déchet non dangereux'}
+          {info.pop ? ' · contient des polluants organiques persistants (POP)' : ''} ·{' '}
+          {info.treatmentCode} ({lcfirst(info.channel)}) vers {info.destination}
+          {info.destinationSiret ? ` (SIRET ${fmtSiret(info.destinationSiret)})` : ' (SIRET de l’installation à renseigner sur la filière)'}
+          {info.qualification ? ` · ${qualificationLabel(info.qualification)}` : ''}.
           {info === entry && stream && (entry.ewcCode !== stream.ewcCode || entry.treatmentCode !== stream.treatmentCode || entry.destination !== stream.destination)
             && " Codes et exutoire enregistrés à l'inscription : la filière a été modifiée depuis."}
         </Note>
@@ -228,10 +282,34 @@ function EntryForm({ entry, streams, today, showSite, transporters, defaultStrea
           <Input name="quantity" type="number" min={0} step="any" inputMode="decimal" defaultValue={entry?.quantity ?? ''} placeholder="Ex. 420" />
         </Field>
       </FormRow>
-      <Field name="transporter" label="Transporteur" hint={manualTransporter ? undefined : 'Par défaut, le collecteur de la filière.'}>
+      <Field name="transporter" label="Transporteur" hint={manualTransporter ? undefined : 'Par défaut, le collecteur de la filière et ses mentions.'}>
         <Input name="transporter" value={transporter} maxLength={160} list={`${uid}-transporters`}
-          onChange={(e) => { setTransporter(e.target.value); setManualTransporter(true); }} />
+          onChange={(e) => {
+            const name = e.target.value;
+            setTransporter(name);
+            setManualTransporter(true);
+            if (!manualCarrier) fillCarrier(stream && name.trim() === stream.collector ? collectorOf(stream) : carriers[name.trim()] ?? NO_CARRIER);
+          }} />
       </Field>
+      <FormRow>
+        <CompanyIdField name="transporterSiret" label="SIRET du transporteur" value={carrier.siret} onChange={(v) => editCarrier('siret', v)} foreign />
+        <Field name="transporterReceipt" label="N° de récépissé" hint={RECEIPT_HINT}>
+          <Input name="transporterReceipt" value={carrier.receipt} onChange={(e) => editCarrier('receipt', e.target.value)} maxLength={60} autoComplete="off" />
+        </Field>
+      </FormRow>
+      <Field name="transporterAddress" label="Adresse du transporteur">
+        <Input name="transporterAddress" value={carrier.address} onChange={(e) => editCarrier('address', e.target.value)} maxLength={300} placeholder="N°, voie, code postal, commune" />
+      </Field>
+      <FormRow>
+        <Field name="pickupAddress" label="Adresse de prise en charge" hint="Si différente de l'adresse du site : chantier, autre dépôt.">
+          <Input name="pickupAddress" defaultValue={entry?.pickupAddress ?? ''} maxLength={300} />
+        </Field>
+        <Field name="qualification" label="Qualification du traitement final"
+          hint={qualificationIssue ? <span style={{ color: TONE.warn.fg }}>{qualificationIssue}</span> : transit ? 'Opération de transit : précisez le traitement final.' : undefined}>
+          <Select name="qualification" options={QUALIFICATION_OPTIONS} placeholder={transit ? 'À préciser' : 'Choisir…'} value={qualification}
+            onChange={(e) => { setQualification(e.target.value); setManualQualification(true); }} />
+        </Field>
+      </FormRow>
       <FormRow>
         <Field name="bsdNumber" label="N° de bordereau (BSD)" hint={bsdHint}>
           <Input name="bsdNumber" value={bsd} onChange={(e) => setBsd(e.target.value)} placeholder={BSD_PLACEHOLDER} maxLength={40} autoComplete="off"

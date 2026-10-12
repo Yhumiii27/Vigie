@@ -3,15 +3,23 @@
 //
 //   npm run db:backup [-- --sans-pieces-jointes] [--clair] [--conserver <n>]
 //                                                              sauvegarde (base + pièces jointes) dans VIGIE_BACKUP_DIR
-//   npm run db:restore -- <sauvegarde> [--remplacer] [--forcer] restauration (serveur arrêté)
-//   npm run db:test-migrate -- <sauvegarde> [--base <url>]     migrations actuelles appliquées à une copie restaurée
+//   npm run db:restore -- <sauvegarde> [--remplacer] [--forcer] [--accepter-clair]
+//                                                              restauration (serveur arrêté)
+//   npm run db:test-migrate -- <sauvegarde> [--base <url>] [--accepter-clair]
+//                                                              migrations actuelles appliquées à une copie restaurée
 //   npm run db:list                                            sauvegardes présentes
 //   npm run db:check [-- --enregistrer]                        contrôle des migrations (empreintes, schéma, base vide)
 //   npm run uploads:encrypt                                    chiffre les pièces jointes en clair (VIGIE_UPLOAD_KEY)
+//   npm run db:reprise-liens [-- --appliquer] [--forcer]       reprise des liens d'origine des actions (ACT-01, après 0004)
+//
+// Restauration et essai de migration : archive contrôlée avant tout (empreintes de la base et des pièces jointes) ;
+// avec VIGIE_UPLOAD_KEY, une archive en clair est refusée sauf --accepter-clair (sauvegarde --clair, ou faite avant
+// l'activation du chiffrement). PGlite : la base remplacée est d'abord sauvegardée dans VIGIE_BACKUP_DIR, puis le
+// dossier est vidé et rechargé sur place (point de montage Docker), et remis en état en cas d'échec.
 //
 // Image Docker : même outil, compilé dans /app/scripts/vigie-db.cjs (commande « vigie-db <commande> … »).
 
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -20,18 +28,27 @@ import type { PGlite } from '@electric-sql/pglite';
 import type { Client } from 'pg';
 import { createBackup, extractBackup, listBackups, listUploads, pgReplace, pgRestore, restoreUploads, type DbSource, type ExtractedBackup } from '../src/db/backup';
 import { MIGRATIONS_DIR, compareChecksums, currentChecksums, migrationState, readChecksums, readJournal, recordNewChecksums, type Query } from '../src/db/migrations';
+import * as schema from '../src/db/schema';
+import type { Db } from '../src/db/types';
 import { decryptBuffer, encryptBuffer, encryptedWith, fileKeys, isEncrypted } from '../src/lib/encryption';
-import { ConfigError, parseStorageConfig, type StorageConfig } from '../src/lib/env';
+import { ConfigError, isWithinDir, parseStorageConfig, type StorageConfig } from '../src/lib/env';
+import { backfillActionLinks, formatBackfillReport } from '../src/lib/origin-links';
 
 const USAGE = `Usage : vigie-db <commande> [options]
   backup [--sans-pieces-jointes] [--clair] [--conserver <n>]
                                              sauvegarde de la base et des pièces jointes ; --conserver : garde les
                                              n dernières sauvegardes manuelles (les autres sont supprimées)
-  restore <fichier> [--remplacer] [--forcer] restauration d'une sauvegarde (Vigie arrêté)
-  test-migrate <fichier> [--base <url>]      essai des migrations sur une copie restaurée
+  restore <fichier> [--remplacer] [--forcer] [--accepter-clair]
+                                             restauration d'une sauvegarde (Vigie arrêté) ; --accepter-clair :
+                                             archive en clair admise alors que VIGIE_UPLOAD_KEY est définie
+  test-migrate <fichier> [--base <url>] [--accepter-clair]
+                                             essai des migrations sur une copie restaurée
   list                                       sauvegardes de VIGIE_BACKUP_DIR
   check [--enregistrer]                      contrôle des migrations (développement, CI)
-  encrypt-uploads                            chiffrement des pièces jointes existantes`;
+  encrypt-uploads                            chiffrement des pièces jointes existantes
+  reprise-liens [--appliquer] [--forcer]     rattache les actions Prévention, Documents et Environnement existantes à
+                                             leur fiche source d'après leur référence d'origine (ACT-01) ; sans
+                                             --appliquer : essai, aucune écriture ; relançable (lien jamais remplacé)`;
 
 class UsageError extends Error {}
 
@@ -110,6 +127,14 @@ async function list(storage: StorageConfig) {
 
 const engineOf = (storage: StorageConfig) => (storage.databaseUrl ? 'postgres' : 'pglite');
 
+/** Extraction contrôlée (restore, test-migrate) : --accepter-clair, avertissements affichés. */
+async function extractChecked(file: string, storage: StorageConfig, work: string, flags: Set<string>): Promise<ExtractedBackup> {
+  const extracted = await extractBackup(path.resolve(file), storage, work, { allowPlaintext: flags.has('--accepter-clair') });
+  if (!extracted.encrypted && storage.uploadKey) say('Avertissement : archive en clair acceptée (--accepter-clair).');
+  for (const w of extracted.warnings) say(`Avertissement : ${w}`);
+  return extracted;
+}
+
 /** Contrôles communs à restore et test-migrate : moteur, version de Vigie. */
 function checkCompatible(extracted: ExtractedBackup, engine: 'postgres' | 'pglite' | null, force: boolean) {
   const m = extracted.manifest;
@@ -149,19 +174,32 @@ async function restorePostgres(storage: StorageConfig, extracted: ExtractedBacku
   }
 }
 
-async function restorePglite(storage: StorageConfig, extracted: ExtractedBackup, flags: Set<string>) {
-  const dir = storage.dataDir;
-  if (dir.startsWith('memory://')) throw new Error('VIGIE_DATA_DIR désigne une base en mémoire : rien à restaurer.');
-  const entries = await readdir(dir).catch(() => [] as string[]);
-  if (entries.length) {
-    if (pgliteInUse(dir) && !flags.has('--forcer')) throw new Error(`La base PGlite ${dir} est ouverte par un serveur Vigie : l'arrêter avant la restauration (ou --forcer après un arrêt brutal).`);
-    if (!flags.has('--remplacer')) throw new Error(`${dir} contient déjà une base : --remplacer pour la remplacer (l'actuelle est conservée à côté).`);
-    const aside = `${dir}.avant-restauration-${stampNow()}`;
-    await rename(dir, aside);
-    say(`Base actuelle conservée : ${aside}`);
-  }
+/** Entrées d'un dossier de données PGlite (« lost+found » d'un volume ext4 ignoré : il n'appartient pas à la base). */
+const dataEntries = async (dir: string) => (await readdir(dir).catch(() => [] as string[])).filter((n) => n !== 'lost+found');
+
+/** Entrée d'un dossier de données PostgreSQL (PG_VERSION, base, global, pg_*, fichiers de configuration, postmaster.*). */
+const PG_ENTRY = /^(PG_VERSION|base|global|pg_[a-z_]+(\.conf)?|postgresql(\.auto)?\.conf|postmaster\.(pid|opts))$/;
+
+/**
+ * Vide le dossier sur place, entrées PostgreSQL seulement (le dossier lui-même, éventuel point de montage Docker,
+ * n'est ni supprimé ni renommé ; restorePglite a refusé auparavant un dossier qui contient autre chose).
+ */
+async function emptyDir(dir: string) {
+  for (const name of await dataEntries(dir)) if (PG_ENTRY.test(name)) await rm(path.join(dir, name), { recursive: true, force: true });
+}
+
+/** Chemin réel (liens symboliques résolus) ; dossier encore absent : chemin réel du parent existant le plus proche. */
+async function realDir(dir: string): Promise<string> {
+  const real = await realpath(dir).catch(() => null);
+  if (real) return real;
+  const parent = path.dirname(dir);
+  return parent === dir ? dir : path.join(await realDir(parent), path.basename(dir));
+}
+
+/** Charge une copie PGlite (dumpDataDir) dans `dir` et vérifie qu'elle s'ouvre. */
+async function loadPglite(dir: string, copy: Blob) {
   const { PGlite } = await import('@electric-sql/pglite');
-  const client = new PGlite(dir, { loadDataDir: new Blob([new Uint8Array(await readFile(extracted.dbFile))]) });
+  const client = new PGlite(dir, { loadDataDir: copy });
   try {
     await client.query('select 1');
   } finally {
@@ -169,11 +207,66 @@ async function restorePglite(storage: StorageConfig, extracted: ExtractedBackup,
   }
 }
 
+async function restorePglite(storage: StorageConfig, extracted: ExtractedBackup, flags: Set<string>) {
+  const dir = storage.dataDir;
+  if (dir.startsWith('memory://')) throw new Error('VIGIE_DATA_DIR désigne une base en mémoire : rien à restaurer.');
+  // Le dossier est vidé avant le chargement : refus, avant toute modification, s'il contient autre chose que la base.
+  const real = await realDir(dir);
+  for (const [name, other] of [['VIGIE_UPLOAD_DIR', storage.uploadDir], ['VIGIE_BACKUP_DIR', storage.backupDir]] as const) {
+    if (isWithinDir(real, await realDir(other))) throw new Error(`${name} (${other}) est dans VIGIE_DATA_DIR (${dir}), vidé par la restauration : rien n'est modifié. Placer pièces jointes et sauvegardes hors de ce dossier.`);
+  }
+  const entries = await dataEntries(dir);
+  const foreign = entries.filter((n) => !PG_ENTRY.test(n));
+  if (foreign.length) {
+    throw new Error(`${dir} contient d'autres fichiers qu'une base PGlite (${foreign.slice(0, 5).join(', ')}${foreign.length > 5 ? '…' : ''}) : rien n'est modifié. `
+      + 'VIGIE_DATA_DIR doit désigner un dossier réservé à la base.');
+  }
+  const occupied = entries.length > 0;
+  if (occupied) {
+    if (pgliteInUse(dir) && !flags.has('--forcer')) throw new Error(`La base PGlite ${dir} est ouverte par un serveur Vigie : l'arrêter avant la restauration (ou --forcer après un arrêt brutal).`);
+    if (!flags.has('--remplacer')) throw new Error(`${dir} contient déjà une base : --remplacer pour la remplacer (une sauvegarde « avant-restauration » est faite d'abord).`);
+  }
+  // 1. Copie lisible, contrôlée en mémoire avant toute modification du dossier.
+  const copy = new Blob([new Uint8Array(await readFile(extracted.dbFile))]);
+  try {
+    await loadPglite('memory://', copy);
+  } catch (err) {
+    throw new Error(`Copie PGlite illisible (${(err as Error).message}) : base actuelle inchangée.`);
+  }
+  // 2. Base actuelle : sauvegardée dans VIGIE_BACKUP_DIR (comme pour PostgreSQL), puis dossier vidé sur place
+  //    (jamais renommé : /data/pglite est un point de montage dans l'image Docker).
+  let previous: Blob | null = null;
+  let previousFile: string | null = null;
+  if (occupied) {
+    const client = await openPgliteDir(dir, true);
+    try {
+      const { file } = await createBackup(storage, {
+        engine: 'pglite', query: pgliteQuery(client), dump: async () => (previous = await client.dumpDataDir('gzip')),
+      }, { reason: 'avant-restauration', uploads: false });
+      previousFile = file;
+      say(`Base actuelle sauvegardée : ${file}`);
+    } finally {
+      await client.close();
+    }
+    await emptyDir(dir);
+  }
+  // 3. Copie chargée dans le dossier ; 4. en cas d'échec, base précédente remise en place.
+  await mkdir(dir, { recursive: true });
+  try {
+    await loadPglite(dir, copy);
+  } catch (err) {
+    await emptyDir(dir);
+    if (!previous) throw err;
+    await loadPglite(dir, previous);
+    throw new Error(`${(err as Error).message}\nRestauration annulée : base précédente remise en place (copie : ${previousFile}).`);
+  }
+}
+
 async function restore(storage: StorageConfig, file: string, flags: Set<string>) {
   await mkdirBackup(storage);
   const work = await mkdtemp(path.join(storage.backupDir, '.restauration-'));
   try {
-    const extracted = await extractBackup(path.resolve(file), storage, work);
+    const extracted = await extractChecked(file, storage, work, flags);
     const m = extracted.manifest;
     say(`Sauvegarde du ${new Date(m.createdAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })} (${m.reason}) contrôlée : base ${m.engine}, `
       + `${m.migrations.applied} migrations, ${m.uploads.included ? `${m.uploads.count} pièces jointes` : 'sans pièces jointes'}.`);
@@ -262,7 +355,7 @@ async function testMigrate(storage: StorageConfig, file: string, flags: Set<stri
   await mkdirBackup(storage);
   const work = await mkdtemp(path.join(storage.backupDir, '.essai-migration-'));
   try {
-    const extracted = await extractBackup(path.resolve(file), storage, work);
+    const extracted = await extractChecked(file, storage, work, flags);
     checkCompatible(extracted, null, flags.has('--forcer'));
     if (extracted.manifest.engine === 'pglite') {
       const { PGlite } = await import('@electric-sql/pglite');
@@ -441,6 +534,44 @@ async function encryptUploads(storage: StorageConfig) {
   if (problems.length) throw new Error(`Certains fichiers n'ont pas pu être chiffrés : ${problems.join(' ; ')}.`);
 }
 
+// ─── reprise-liens ──────────────────────────────────────────────────────────
+
+/**
+ * Reprise des liens d'origine des actions (ACT-01, src/lib/origin-links.ts) sur une base déjà migrée par Vigie (migration
+ * 0004 appliquée au démarrage), de préférence après une sauvegarde : essai par défaut, --appliquer pour écrire (une entrée
+ * « Origine rattachée » au journal de chaque action). Une base de démonstration est reprise d'office à son ouverture.
+ */
+async function repriseLiens(storage: StorageConfig, flags: Set<string>) {
+  const unknown = [...flags].filter((f) => f !== '--appliquer' && f !== '--forcer');
+  if (unknown.length) throw new UsageError(`Option inconnue : ${unknown.join(' ')}`);
+  const run = async (db: Db, query: Query) => {
+    const state = await migrationState(query);
+    if (state.newer) throw new Error('Base migrée par une version plus récente de Vigie : lancer la reprise avec cette version.');
+    if (state.pending.length) {
+      throw new Error(`Migrations en attente (${state.pending.map((m) => m.tag).join(', ')}) : démarrer Vigie une fois, qui les applique, avant la reprise.`);
+    }
+    const report = await backfillActionLinks(db, { apply: flags.has('--appliquer') });
+    formatBackfillReport(report).forEach((line) => say(line));
+  };
+  if (storage.databaseUrl) {
+    const client = await pgClient(storage.databaseUrl);
+    try {
+      const { drizzle } = await import('drizzle-orm/node-postgres');
+      return await run(drizzle(client, { schema }), pgQuery(client));
+    } finally {
+      await client.end();
+    }
+  }
+  if (storage.dataDir.startsWith('memory://')) throw new Error(`Aucune base PGlite dans ${storage.dataDir} (VIGIE_DATA_DIR).`);
+  const client = await openPgliteDir(storage.dataDir, flags.has('--forcer'));
+  try {
+    const { drizzle } = await import('drizzle-orm/pglite');
+    return await run(drizzle(client, { schema }), pgliteQuery(client));
+  } finally {
+    await client.close();
+  }
+}
+
 // ─── Entrée ─────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -469,6 +600,7 @@ async function main() {
     case 'list': return list(storage);
     case 'check': return check(flags);
     case 'encrypt-uploads': return encryptUploads(storage);
+    case 'reprise-liens': return repriseLiens(storage, flags);
     default: throw new UsageError(`Commande inconnue : ${command}`);
   }
 }

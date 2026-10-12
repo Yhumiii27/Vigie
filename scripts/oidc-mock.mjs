@@ -14,6 +14,8 @@
 //   - ou paramètre login_hint=<clé> dans l'URL d'autorisation.
 // Comptes par défaut (DEFAULT_USERS ci-dessous) calqués sur le jeu de démonstration ; groupes d'exemple grp-ville-a,
 // grp-ville-b (VIGIE_SITE_GROUPS=grp-ville-a:ville-a,grp-ville-b:ville-b). GET /_mock/users les liste.
+// Revendications email et xms_edov (adresse vérifiée, vraie sauf « edov: false ») comme les revendications facultatives
+// d'Entra ; « noEmail: true » les retire (VIGIE_EMAIL_DOMAINS=epc2i.example pour les comptes par défaut).
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -40,6 +42,10 @@ const DEFAULT_USERS = {
   sansrole: { name: '[P. Roux]', email: 'p.roux@epc2i.example', roles: [], groups: [] },
   parti: { name: '[Y. Lambert]', email: 'y.lambert@epc2i.example', roles: ['Vigie.Salarie'], groups: [] },
   nonaffecte: { name: 'Externe Non Affecté', email: 'externe@autre.example', roles: [], groups: [], assigned: false },
+  // Première connexion refusée (motif « adresse ») : adresse d'une fiche existante non vérifiée par Microsoft (xms_edov
+  // faux), ou adresse vérifiée d'un domaine hors de VIGIE_EMAIL_DOMAINS (epc2i.example dans les essais).
+  nonverifie: { name: 'Compte Adresse Non Vérifiée', email: 'm.girard@epc2i.example', edov: false, roles: ['Vigie.Salarie'], groups: [] },
+  horsdomaine: { name: 'P. Durand (prestataire)', email: 'p.durand@prestataire.example', roles: ['Vigie.ChefProjet'], groups: [] },
 };
 const USERS = args.users ? JSON.parse(readFileSync(args.users, 'utf8')) : DEFAULT_USERS;
 // objectId stable par compte (dérivé de la clé) : les connexions successives retrouvent la même fiche.
@@ -66,7 +72,7 @@ const discovery = {
   scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
   token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
   code_challenge_methods_supported: ['S256'],
-  claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'oid', 'tid', 'name', 'email', 'preferred_username', 'roles', 'groups', 'login_hint'],
+  claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'oid', 'tid', 'name', 'email', 'xms_edov', 'preferred_username', 'roles', 'groups', 'login_hint'],
 };
 
 const send = (res, status, body, headers = {}) => {
@@ -140,7 +146,7 @@ async function token(req, res) {
   const oid = u.oid ?? oidOf(entry.key);
   const now = Math.floor(Date.now() / 1000);
   const claims = {
-    oid, tid: TENANT, name: u.name, preferred_username: u.email, ...(u.noEmail ? {} : { email: u.email }),
+    oid, tid: TENANT, name: u.name, preferred_username: u.email, ...(u.noEmail ? {} : { email: u.email, xms_edov: u.edov ?? true }),
     ...(u.roles.length ? { roles: u.roles } : {}), ...(u.groups.length ? { groups: u.groups } : {}),
     login_hint: `hint-${entry.key}`, ...(entry.nonce ? { nonce: entry.nonce } : {}), ver: '2.0',
   };

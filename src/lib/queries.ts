@@ -5,13 +5,13 @@ import { getDb, schema as t } from '@/db';
 import { daysBetween, fmtDate, fmtDayMonth } from './dates';
 import { today } from '@/lib/today';
 import {
-  CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, ORIGINS, SKILL_SOON_DAYS, STEP_CLOSED,
+  CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, ORIGINS, SAFETY_WINDOW_MONTHS, SKILL_SOON_DAYS, STEP_CLOSED,
   columnOf, initials, type ActionColumn, type EventType, type SkillState, type Tone,
 } from './domain';
 import { PERSON_COLUMNS, type Person } from './people';
-import { currentSiteId, inSite } from './session';
+import { siteFilter, type SiteScope } from './session';
 
-export type { Person };
+export type { Person, SiteScope };
 export type EventRow = typeof t.events.$inferSelect;
 export type ActionRow = typeof t.actions.$inferSelect;
 
@@ -25,31 +25,33 @@ export const loadPeople = cache(async () => {
   return byId(await db.select(PERSON_COLUMNS).from(t.people).orderBy(asc(t.people.sort)));
 });
 
-// Les chargements ci-dessous sont filtrés sur le site sélectionné (cookie) ; « Tous les sites » consolide.
+// Les chargements ci-dessous sont filtrés sur le site sélectionné (cookie, scope 'site' par défaut ; « Tous les sites »
+// consolide), ou sur tout le périmètre de la personne (scope 'perimeter' : échéances, TDB-05). cache() distingue les
+// appels par leurs arguments : f() et f('site') sont deux entrées, sans conséquence.
 
 /** Tous les événements du site, classés sans suite compris (liste « Classés sans suite », fiche). */
-export const loadSiteEvents = cache(async () => {
-  const [db, site] = await Promise.all([getDb(), currentSiteId()]);
-  const rows = (await db.select().from(t.events)).filter((e) => inSite(site, e.siteId));
+export const loadSiteEvents = cache(async (scope: SiteScope = 'site') => {
+  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
+  const rows = (await db.select().from(t.events)).filter((e) => keep(e.siteId));
   return rows.sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.id.localeCompare(a.id, 'fr', { numeric: true }));
 });
 
 /** Événements du site hors classés sans suite : base des indicateurs (TF1/TG, pyramide, NC ouvertes…). */
-export const loadEvents = cache(async () => (await loadSiteEvents()).filter((e) => !e.dismissedAt));
+export const loadEvents = cache(async (scope: SiteScope = 'site') => (await loadSiteEvents(scope)).filter((e) => !e.dismissedAt));
 
 /** Toutes les actions du site, annulées comprises (filtre « Annulées », historique). */
-export const loadAllActions = cache(async () => {
-  const [db, site] = await Promise.all([getDb(), currentSiteId()]);
-  return (await db.select().from(t.actions)).filter((a) => inSite(site, a.siteId));
+export const loadAllActions = cache(async (scope: SiteScope = 'site') => {
+  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
+  return (await db.select().from(t.actions)).filter((a) => keep(a.siteId));
 });
 
 /** Actions du site hors annulées : base de tous les calculs transverses (retards, échéances, revues…). */
-export const loadActions = cache(async () => (await loadAllActions()).filter((a) => a.status !== 'cancelled'));
+export const loadActions = cache(async (scope: SiteScope = 'site') => (await loadAllActions(scope)).filter((a) => a.status !== 'cancelled'));
 
 /** Contrôles périodiques actifs du site (les équipements réformés, archivés, sont exclus). */
-export const loadControls = cache(async () => {
-  const [db, site] = await Promise.all([getDb(), currentSiteId()]);
-  return (await db.select().from(t.controls).orderBy(asc(t.controls.sort))).filter((c) => !c.archivedAt && inSite(site, c.siteId));
+export const loadControls = cache(async (scope: SiteScope = 'site') => {
+  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
+  return (await db.select().from(t.controls).orderBy(asc(t.controls.sort))).filter((c) => !c.archivedAt && keep(c.siteId));
 });
 
 // ─── Règles de calcul ───────────────────────────────────────────────────────
@@ -75,6 +77,109 @@ export function skillState(required: boolean, expiresOn: string | null | undefin
   if (!expiresOn) return 'v';
   if (expiresOn < now) return 'x';
   return daysBetween(now, expiresOn) <= SKILL_SOON_DAYS ? 's' : 'v';
+}
+
+// ─── Taux de fréquence et de gravité (TDB-04) ───────────────────────────────
+
+/** Les `n` mois complets précédant `now` (mois en cours exclu), « AAAA-MM », du plus ancien au plus récent. */
+export function lastFullMonths(now: string, n = SAFETY_WINDOW_MONTHS): string[] {
+  const y = +now.slice(0, 4);
+  const m = +now.slice(5, 7) - 1;
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(y, m - n + i, 1)).toISOString().slice(0, 7));
+}
+
+export type SafetyRates = {
+  /** Accidents avec arrêt × 10⁶ / heures travaillées ; null sans heures (jamais 0 par défaut). */
+  tf1: number | null;
+  /** Jours perdus × 10³ / heures travaillées ; null sans heures. */
+  tg: number | null;
+  hours: number;
+  accidents: number;
+  lostDays: number;
+  /** Mois attendus sans heures saisies (site, « AAAA-MM »), par mois puis dans l'ordre des sites. */
+  missing: { siteId: string; month: string }[];
+};
+
+/**
+ * Accident du travail de l'effectif (salarié, ou victime non précisée) : seul compté dans TF1 / TG, les jours sans accident
+ * avec arrêt et la pyramide des accidents — les heures travaillées (hours_worked, source RH) sont celles de l'effectif ;
+ * l'accident d'un intérimaire relève de l'entreprise de travail temporaire, celui d'une personne extérieure de son employeur.
+ */
+export const workforceAccident = (e: { type: string; victimKind: string | null }) =>
+  e.type === 'AT' && e.victimKind !== 'interimaire' && e.victimKind !== 'externe';
+
+/**
+ * TF1 / TG sur les mois donnés (lastFullMonths), sites de l'entrée seulement :
+ * - mois d'une valeur = ses 7 premiers caractères (hours_worked.month vaut « AAAA-MM-01 ») ;
+ * - un AT avec arrêt de la fenêtre prouve l'activité de son site ce mois-là : sa case est toujours attendue ;
+ * - sites suivis : sites actifs, sites archivés ayant au moins une ligne d'heures (toute période) ou un AT avec arrêt
+ *   dans la fenêtre ;
+ * - cases attendues : (site, mois) à partir du premier mois saisi pour le site (toute période), avancé au premier AT
+ *   avec arrêt de la fenêtre qui le précède (aucun mois saisi : toute la fenêtre), jusqu'au mois d'archivage, plus les
+ *   cases des AT avec arrêt ; cases couvertes : lignes d'heures des mois et sites de l'entrée (une valeur 0 compte) ;
+ * - accidents et jours perdus : AT avec arrêt de l'effectif (workforceAccident) du mois d'une case couverte (sans site :
+ *   un mois couvert sur un site au moins) — un mois sans heures n'entre ni au numérateur ni au dénominateur, il est
+ *   signalé dans `missing`.
+ */
+export function safetyRates(input: {
+  months: string[];
+  sites: { id: string; archivedOn: string | null }[];
+  hours: { month: string; siteId: string; hours: number }[];
+  events: { type: string; injury: string | null; lostDays: number | null; occurredOn: string; siteId: string | null; victimKind: string | null }[];
+}): SafetyRates {
+  const ym = (v: string) => v.slice(0, 7);
+  const window = new Set(input.months);
+  const siteIds = new Set(input.sites.map((s) => s.id));
+  const firstEntered = new Map<string, string>();
+  input.hours.forEach((h) => {
+    const m = ym(h.month);
+    const first = firstEntered.get(h.siteId);
+    if (!first || m < first) firstEntered.set(h.siteId, m);
+  });
+  // AT avec arrêt de la fenêtre sur un site de l'entrée : preuve d'activité du site ce mois-là.
+  const isArret = (e: (typeof input.events)[number]) => workforceAccident(e) && e.injury === 'arret' && window.has(ym(e.occurredOn));
+  const proven = new Set<string>();
+  const firstProven = new Map<string, string>();
+  input.events.forEach((e) => {
+    if (!isArret(e) || !e.siteId || !siteIds.has(e.siteId)) return;
+    const m = ym(e.occurredOn);
+    proven.add(`${e.siteId}|${m}`);
+    const first = firstProven.get(e.siteId);
+    if (!first || m < first) firstProven.set(e.siteId, m);
+  });
+  const tracked = input.sites.filter((s) => !s.archivedOn || firstEntered.has(s.id) || firstProven.has(s.id));
+  const covered = new Set<string>();
+  const coveredMonths = new Set<string>();
+  let hours = 0;
+  input.hours.forEach((h) => {
+    const m = ym(h.month);
+    if (!window.has(m) || !siteIds.has(h.siteId)) return;
+    covered.add(`${h.siteId}|${m}`);
+    coveredMonths.add(m);
+    hours += h.hours;
+  });
+  const missing: SafetyRates['missing'] = [];
+  input.months.forEach((m) => tracked.forEach((s) => {
+    const key = `${s.id}|${m}`;
+    if (covered.has(key)) return;
+    const entered = firstEntered.get(s.id);
+    const proof = firstProven.get(s.id);
+    const first = entered && proof && proof < entered ? proof : entered;
+    const expected = proven.has(key) || ((!first || m >= first) && (!s.archivedOn || m <= ym(s.archivedOn)));
+    if (expected) missing.push({ siteId: s.id, month: m });
+  }));
+  const counted = input.events.filter((e) => {
+    if (!isArret(e)) return false;
+    const m = ym(e.occurredOn);
+    return e.siteId ? covered.has(`${e.siteId}|${m}`) : coveredMonths.has(m);
+  });
+  const accidents = counted.length;
+  const lostDays = counted.reduce((n, e) => n + (e.lostDays ?? 0), 0);
+  return {
+    tf1: hours ? (accidents * 1e6) / hours : null,
+    tg: hours ? (lostDays * 1e3) / hours : null,
+    hours, accidents, lostDays, missing,
+  };
 }
 
 // ─── Vues partagées ─────────────────────────────────────────────────────────

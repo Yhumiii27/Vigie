@@ -29,6 +29,13 @@
       "when": 1791720024194,
       "tag": "0003_production",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791794375690,
+      "tag": "0004_compliance",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import { addDays, addMonths, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
+import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
 import {
   archiveControl, cancelControlRecord, recordControl, removeControlRecordFile, restoreControl, saveControl, type CancelRecordState,
@@ -97,7 +98,13 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, re
                 <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{c.organization}</td>
                 <td style={{ whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{c.last}</td>
                 <td style={{ whiteSpace: 'nowrap', color: c.tone === 'neutral' ? 'var(--color-neutral-300)' : TONE[c.tone].dot }}>{c.next}</td>
-                <td><ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag></td>
+                <td>
+                  <ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag>
+                  {/* Contrôle dépassé sans réserve ni action (les réserves sans action sont signalées dans la colonne suivante). */}
+                  {canManage && c.days < 0 && !c.archived && !c.actionId && !c.reserves && (
+                    <div style={{ ...muted, marginTop: 2, color: TONE.danger.dot, whiteSpace: 'nowrap' }}>Action à définir</div>
+                  )}
+                </td>
                 <td style={{ color: 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>
                   {c.reserves ?? '—'}
                   {c.actionId ? (
@@ -157,7 +164,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, require
   const [view, setView] = useState<View>(editable ? initialView : 'historique');
   // Confirmation après un enregistrement (la vue bascule sur l'historique) ou une restauration.
   const [notice, setNotice] = useState<string | null>(null);
-  // « Lever les réserves » s'affiche dans cette fenêtre (pas de NewActionButton imbriqué : identifiants de champs en double).
+  // « Lever les réserves » / « Créer une action » s'affichent dans cette fenêtre (pas de NewActionButton imbriqué : identifiants de champs en double).
   const [creating, setCreating] = useState(false);
   const show = (v: View) => { setNotice(null); setView(v); };
   const current = editable ? view : 'historique';
@@ -195,7 +202,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, require
 
       {notice && <Notice>{notice}</Notice>}
 
-      <Reserves c={c} today={today} options={options} editable={editable} creating={creating} setCreating={setCreating}
+      <FollowUp c={c} today={today} options={options} editable={editable} creating={creating} setCreating={setCreating}
         onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
 
       {!creating && (
@@ -231,11 +238,13 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, require
   );
 }
 
+const equipShort = (equipment: string) => equipment.split(' — ')[0];
+
 /** Action de levée des réserves : titre « Lever les réserves « … » : équipement », échéance au plus tard dans 30 jours. */
 function reserveDefaults(c: ControlView, today: string): ActionDefaults {
   const limit = addDays(today, 30);
   return {
-    title: `Lever les réserves « ${c.reserves} » : ${c.equipment.split(' — ')[0]}`.slice(0, 200),
+    title: `Lever les réserves « ${c.reserves} » : ${equipShort(c.equipment)}`.slice(0, 200),
     origin: 'watch',
     originRef: c.equipment.slice(0, 120),
     lockOrigin: true,
@@ -247,11 +256,31 @@ function reserveDefaults(c: ControlView, today: string): ActionDefaults {
   };
 }
 
-/** Réserves en cours : action liée (détachable), ou « Lever les réserves » / rattachement d'une action existante. */
-function Reserves({ c, today, options, editable, creating, setCreating, onCreated }: {
+/** Contrôle dépassé sans action : « Réaliser le contrôle « … » : équipement », sous 15 jours (VEI-02). */
+function overdueDefaults(c: ControlView, today: string): ActionDefaults {
+  return {
+    title: `Réaliser le contrôle « ${c.controlType} » : ${equipShort(c.equipment)}`.slice(0, 200),
+    description: `Contrôle dépassé depuis le ${c.next} (tous les ${months(c.periodMonths)}, ${c.organization}).`,
+    origin: 'watch',
+    originRef: c.equipment.slice(0, 120),
+    lockOrigin: true,
+    link: `control:${c.id}`,
+    pilotId: c.responsibleId ?? undefined,
+    dueOn: addDays(today, 15),
+    kind: 'C',
+    siteId: c.siteId,
+  };
+}
+
+/**
+ * Suivi du contrôle dans le plan d'actions : action liée (détachable) ; sinon, réserves en cours ou contrôle dépassé,
+ * avec « Lever les réserves » / « Créer une action » ou le rattachement d'une action existante.
+ */
+function FollowUp({ c, today, options, editable, creating, setCreating, onCreated }: {
   c: ControlView; today: string; options: Opts; editable: boolean; creating: boolean; setCreating: (v: boolean) => void; onCreated: () => void;
 }) {
-  if (!c.reserves && !c.actionId) return null;
+  const overdue = c.days < 0 && !c.archived;
+  if (!c.reserves && !c.actionId && !overdue) return null;
   const box = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', fontSize: 12.5 } as const;
   const link = `control:${c.id}`;
   if (c.actionId) {
@@ -272,10 +301,30 @@ function Reserves({ c, today, options, editable, creating, setCreating, onCreate
   if (creating && editable && options.origins) {
     return (
       <>
-        <div className="vg-eyebrow">Lever les réserves · plan d&apos;actions unique</div>
+        <div className="vg-eyebrow">{c.reserves ? 'Lever les réserves' : 'Contrôle dépassé'} · plan d&apos;actions unique</div>
         {/* Rendu sur un état local seulement : l'action liée arrive avec le même rafraîchissement que le succès du formulaire. */}
-        <ActionFields options={{ ...options, origins: options.origins }} defaults={reserveDefaults(c, today)} onCancel={() => setCreating(false)} onDone={onCreated} />
+        <ActionFields options={{ ...options, origins: options.origins }} defaults={c.reserves ? reserveDefaults(c, today) : overdueDefaults(c, today)}
+          onCancel={() => setCreating(false)} onDone={onCreated} />
       </>
+    );
+  }
+  if (!c.reserves) {
+    // Contrôle dépassé, sans réserve ni action : signalé à qui peut agir seulement (le statut « Dépassé » suffit sinon).
+    if (!editable) return null;
+    return (
+      <div className="vg-inset" style={{ ...box, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${TONE.danger.dot} 45%, transparent)` }}>
+        <Icon name="ph-warning-octagon" size={15} style={{ color: TONE.danger.dot }} />
+        <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
+          <span style={{ color: 'var(--color-neutral-500)' }}>Contrôle dépassé depuis le </span>{c.next}
+          <span style={{ ...muted, display: 'block' }}>Aucune action dans le plan d&apos;actions.</span>
+        </span>
+        <LinkActionButton link={link} actions={options.actions} label="Rattacher" />
+        {options.origins && (
+          <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setCreating(true)}>
+            <Icon name="ph-plus" size={13} />Créer une action
+          </button>
+        )}
+      </div>
     );
   }
   return (
@@ -377,6 +426,9 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
   const reqs = c?.requirement && !requirementOptions.some(([v]) => v === String(c.requirement!.id))
     ? [...requirementOptions, [String(c.requirement.id), `${c.requirement.text} (archivée)`] as const]
     : requirementOptions;
+  // Responsable sorti de l'effectif, site archivé : conservés comme choix tant qu'un autre n'est pas fait (VEI-01).
+  const responsibles = withCurrent(options.people, c?.responsibleId, c ? `${c.responsible || c.responsibleId}${LEFT_SUFFIX}` : undefined);
+  const sites = withCurrent(options.sites, c?.siteId, c ? `${c.siteLabel}${ARCHIVED_SITE_SUFFIX}` : undefined);
   const [lastOn, setLastOn] = useState(c?.lastOn ?? '');
   const [period, setPeriod] = useState(c ? String(c.periodMonths) : '12');
   // Échéance saisie à la main (null = calculée).
@@ -401,13 +453,13 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
         <Field name="organization" label="Organisme" hint="Organisme agréé ou « Interne — service ».">
           <Input name="organization" defaultValue={c?.organization} placeholder="Ex. [Apave]" list={`${uid}-orgs`} maxLength={120} />
         </Field>
-        <Field name="responsibleId" label="Responsable">
-          <Select name="responsibleId" options={options.people} defaultValue={c?.responsibleId ?? ''} placeholder="Non désigné" />
+        <Field name="responsibleId" label="Responsable" hint={responsibles !== options.people ? "Sorti de l'effectif : conservé tant qu'aucun successeur n'est choisi." : undefined}>
+          <Select name="responsibleId" options={responsibles} defaultValue={c?.responsibleId ?? ''} placeholder="Non désigné" />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="siteId" label="Site">
-          <Select name="siteId" options={options.sites} defaultValue={c ? c.siteId ?? '' : defaultSite} placeholder="Tous les sites" />
+        <Field name="siteId" label="Site" hint={sites !== options.sites ? "Site archivé : conservé tant qu'aucun autre site n'est choisi." : undefined}>
+          <Select name="siteId" options={sites} defaultValue={c ? c.siteId ?? '' : defaultSite} placeholder="Tous les sites" />
         </Field>
         <Field name="reserves" label="Réserves en cours" hint="Vide = aucune. Mises à jour à chaque contrôle enregistré.">
           <Input name="reserves" defaultValue={c?.reserves ?? ''} placeholder="Ex. 1 · fin de course à régler" maxLength={160} />

@@ -10,7 +10,7 @@ import { TODO_HORIZON_DAYS, columnOf, isClosedActionStatus, isEmployee, type Ski
 import { hasLeft } from '../people';
 import { actionColumn, lcfirst, loadPeople, skillState, type Person } from '../queries';
 import { loadQhseLeads } from './leads';
-import { currentSiteId, getSession, inSite } from '../session';
+import { getSession, siteFilter, type SiteScope } from '../session';
 
 // ─── Habilitations ──────────────────────────────────────────────────────────
 
@@ -105,19 +105,20 @@ export type ArchivedRecord = { person: Person; title: TrainingTitle; entries: Qu
 export { hasLeft };
 
 /**
- * Matrice du site sélectionné, sans filtre de rôle (signaux, revue de direction) : titres actifs en colonnes,
- * salariés présents en lignes, historique des formations et attestations par case.
+ * Matrice du site sélectionné (scope 'site') ou de tout le périmètre (scope 'perimeter' : échéances, TDB-05), sans filtre
+ * de rôle (signaux, revue de direction) : titres actifs en colonnes, salariés présents en lignes, historique des
+ * formations et attestations par case.
  */
-export const loadSkillData = cache(async () => {
+export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [people, allTitles, reqs, quals, assignments, site, leads] = await Promise.all([
+  const [people, allTitles, reqs, quals, assignments, keep, leads] = await Promise.all([
     loadPeople(),
     db.select().from(t.trainingTitles).orderBy(asc(t.trainingTitles.sort)),
     db.select().from(t.qualificationRequirements),
     db.select().from(t.qualifications).orderBy(desc(t.qualifications.obtainedOn), desc(t.qualifications.id)),
     db.select().from(t.keystoneAssignments).orderBy(asc(t.keystoneAssignments.startOn)),
-    currentSiteId(),
+    siteFilter(scope),
     loadQhseLeads(),
   ]);
   // Titres archivés : hors matrice, formulaires et échéances ; listés dans « Titres suivis » (restauration).
@@ -165,7 +166,7 @@ export const loadSkillData = cache(async () => {
     history.set(key, list);
   });
 
-  const visible = [...people.values()].filter((p) => inSite(site, p.siteId));
+  const visible = [...people.values()].filter((p) => keep(p.siteId));
   // Sortis de l'effectif : archivés, hors matrice et signaux (filtre « Sortis » de l'encadrement).
   const active = visible.filter((p) => !hasLeft(p, now));
   const departed = visible.filter((p) => hasLeft(p, now)).sort((a, b) => b.leftOn!.localeCompare(a.leftOn!));
@@ -256,12 +257,12 @@ export type SkillMatrixData = Awaited<ReturnType<typeof loadSkillMatrix>>;
  * Un recyclage (ou une formation initiale) planifié, à lancer ou en cours, suffit : l'action porte sa propre échéance.
  * Une action en « Efficacité à vérifier » ne suffit pas (formation annulée depuis, par exemple) : le signal la mentionne.
  * Destinataires : le responsable QHSE du site du salarié (pilote proposé des recyclages ; animateurs QHSE si le poste
- * est vacant) et le salarié concerné ; lien profond vers la case.
+ * est vacant) et le salarié concerné ; lien profond vers la case. Tous les sites du périmètre (TDB-05) : site du salarié.
  */
 export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [skills, session, leads] = await Promise.all([loadSkillData(), getSession(), loadQhseLeads()]);
+  const [skills, session, leads] = await Promise.all([loadSkillData('perimeter'), getSession(), loadQhseLeads()]);
   const inWindow = (d: string | null): d is string => !!d && d >= now && d <= horizon;
   // Veille d'une affectation, au plus tôt aujourd'hui (affectation en cours ou débutant aujourd'hui).
   const eveOf = (startOn: string) => { const d = addDays(startOn, -1); return d < now ? now : d; };
@@ -273,7 +274,7 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
     row.cells.forEach((c) => {
       if (c.state === 'n' || c.renewal?.planned) return;
       const ti = c.title;
-      const base = { kind: 'Habilitation', who, href: `/habilitations?salarie=${p.id}&titre=${ti.id}`, ownerIds: [...new Set([...lead.ownerIds, p.id])] };
+      const base = { kind: 'Habilitation', who, href: `/habilitations?salarie=${p.id}&titre=${ti.id}`, ownerIds: [...new Set([...lead.ownerIds, p.id])], siteId: p.siteId };
       const name = `${p.name} · ${lcfirst(ti.label)}`;
       // Première affectation à venir que le titre ne couvre pas : l'échéance suit cette affectation, pas la première.
       const a = row.assignments.find((x) => lapseFor(c.state, c.expiresOn, x, now) !== null);

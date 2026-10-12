@@ -4,11 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/components/audits/shared';
-import { planItemAuditLabel } from '@/lib/data/audits';
+import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { FINDING_KINDS, canSee } from '@/lib/domain';
+import { FINDING_KINDS, canEdit } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireApprover, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
@@ -17,18 +17,19 @@ import { diffFields, logChange, loggedIds } from './changelog';
 
 type Result = { error?: string };
 
-// Traçabilité : un référentiel certifié, un audit réalisé ou un constat ne sont jamais supprimés. Le constat s'annule avec
-// un motif ; seuls un référentiel jamais certifié ou un élément du programme jamais réalisé (sans action, constat ni
-// rapport) se retirent. Toute modification est inscrite au journal (change_log), affiché dans les fenêtres de l'écran.
+// Traçabilité : un référentiel certifié, un élément du programme ou un constat ne sont jamais supprimés. Le constat et
+// l'élément du programme s'annulent avec un motif (AUD-03) ; seul un référentiel jamais certifié se retire. La planification
+// d'un élément existant ne change que par « Reporter » (motif obligatoire). Toute modification est inscrite au journal
+// (change_log), affiché dans les fenêtres de l'écran.
 
 /**
- * Programme et constats : rôles qui saisissent (canManage) ET qui ont accès à l'écran « Audits ».
- * Le chef de service et le chef de projet peuvent saisir ailleurs mais n'ont pas cet écran : ils ne modifient rien ici.
+ * Programme et constats : rôles qui saisissent sur l'écran « Audits » (canEdit : animateur QHSE, direction).
+ * Le chef de service et le chef de projet le consultent seulement (AUD-02) : ils ne modifient rien ici.
  */
 async function requireAuditEditor() {
   const r = await requireManager();
   if (r.error) return r;
-  return canSee(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
+  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
 }
 
 const nextSort = (rows: { sort: number }[]) => Math.max(-1, ...rows.map((r) => r.sort)) + 1;
@@ -42,8 +43,6 @@ async function attachmentOf(id: unknown, entityType: string) {
   const [row] = await db.select().from(t.attachments).where(and(eq(t.attachments.id, id), eq(t.attachments.entityType, entityType)));
   return row ?? null;
 }
-/** Identifiant numérique reçu du client (les server actions sont appelables avec n'importe quelle valeur). */
-const validId = (id: unknown): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0;
 
 /** Fichiers d'un même envoi : au-delà, la requête dépasserait la limite des server actions (next.config). */
 function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[]) {
@@ -165,17 +164,32 @@ type PlanFields = {
   doneOn: string | null; auditor: string | null; scope: string | null; certificationId: string | null;
 };
 
+/** Élément porté par une revue de direction (AUD-01) : verrouillé dans le programme. */
+const LOCKED = "Échéance d'une revue de direction : sa date et sa réalisation suivent la revue (carte Revue de direction).";
+const PLAN_NOT_FOUND = 'Élément du programme introuvable.';
+
+/**
+ * Ajout d'un élément au programme, ou modification d'un élément existant (ligne, libellés, responsable, auditeur,
+ * réalisation, rapport). Planification d'un élément existant (année, mois, date prévue) : « Reporter » seulement
+ * (reschedulePlanItem, motif obligatoire) — les champs reçus sont ignorés.
+ */
 export async function savePlanItem(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireAuditEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id');
-  const year = f.int('year', { required: true, min: 2000, max: 2100 });
+  const db = await getDb();
+  const [before] = id ? await db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, id)) : [];
+  if (id && !before) return { error: PLAN_NOT_FOUND };
+  if (before?.cancelledAt) return { error: 'Élément annulé : il ne peut plus être modifié.' };
+  if (before?.reviewId != null) return { error: LOCKED };
+
+  const year = before ? before.year : f.int('year', { required: true, min: 2000, max: 2100 });
   const trackChoice = f.str('track', { required: true });
   const track = trackChoice === NEW_TRACK ? f.str('newTrack', { required: true, max: 40 }) : trackChoice;
-  const month = f.int('month', { required: true, min: 1, max: 12 });
+  const month = before ? before.month : f.int('month', { required: true, min: 1, max: 12 });
   const label = f.str('label', { required: true, max: 30 });
-  const plannedOn = f.date('plannedOn');
+  const plannedOn = before ? before.plannedOn : f.date('plannedOn');
   const detail = f.str('detail', { max: 160 }) || null;
   const ownerId = f.opt('ownerId');
   const done = f.bool('done');
@@ -187,7 +201,7 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
   const auditor = review ? null : f.str('auditor', { max: 120 }) || null;
   const scope = review ? null : f.str('scope', { max: 200 }) || null;
   const now = today();
-  if (year && month && plannedOn && (yearOf(plannedOn) !== year || monthOf(plannedOn) !== month)) {
+  if (!before && year && month && plannedOn && (yearOf(plannedOn) !== year || monthOf(plannedOn) !== month)) {
     f.fail('plannedOn', `La date prévue doit tomber en ${monthName(month)} ${year}.`);
   }
   if (doneOnInput && doneOnInput > now) f.fail('doneOn', 'Date de réalisation future.');
@@ -195,10 +209,7 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
   checkFiles(f, 'report', files);
   if (!f.ok) return f.state();
 
-  const db = await getDb();
   const byId = session.user.id;
-  const [before] = id ? await db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, id)) : [];
-  if (id && !before) return { error: 'Élément du programme introuvable.' };
   if (ownerId) {
     const [p] = await db.select({ id: t.people.id }).from(t.people).where(eq(t.people.id, ownerId));
     if (!p) return { error: 'Responsable introuvable.', fieldErrors: { ownerId: 'Choisissez une personne de la liste.' } };
@@ -215,10 +226,12 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
     ]);
     if (finding || reports.length) return { error: 'Cet audit porte des constats ou un rapport : il ne peut pas devenir une revue de direction (ligne ou intitulé « revue de direction »).' };
   }
+  // Un élément en vigueur par ligne et par mois (un élément annulé libère le mois).
   const clash = await db.select({ id: t.auditPlanItems.id }).from(t.auditPlanItems)
-    .where(and(eq(t.auditPlanItems.year, year!), eq(t.auditPlanItems.track, track), eq(t.auditPlanItems.month, month!), id ? ne(t.auditPlanItems.id, id) : undefined));
+    .where(and(eq(t.auditPlanItems.year, year!), eq(t.auditPlanItems.track, track), eq(t.auditPlanItems.month, month!), isNull(t.auditPlanItems.cancelledAt), id ? ne(t.auditPlanItems.id, id) : undefined));
   if (clash.length) {
-    return { error: `Un élément est déjà prévu en ${monthName(month!)} sur la ligne « ${track} ». Modifiez-le ou choisissez un autre mois.`, fieldErrors: { month: 'Mois déjà occupé sur cette ligne.' } };
+    const field = before ? 'track' : 'month';
+    return { error: `Un élément est déjà prévu en ${monthName(month!)} sur la ligne « ${track} ». Modifiez-le ou choisissez un autre mois.`, fieldErrors: { [field]: 'Mois déjà occupé sur cette ligne.' } };
   }
 
   // Réalisé sans date : la date prévue si elle est passée, sinon aujourd'hui ; non réalisé : pas de date de réalisation.
@@ -236,8 +249,11 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
       owner: p.ownerId ? people.get(p.ownerId)?.name ?? p.ownerId : null,
       certification: p.certificationId ? certs.find((c) => c.id === p.certificationId)?.standard ?? p.certificationId : null,
     });
-    await db.transaction(async (tx) => {
-      await tx.update(t.auditPlanItems).set(values).where(eq(t.auditPlanItems.id, before.id));
+    const saved = await db.transaction(async (tx) => {
+      const rows = await tx.update(t.auditPlanItems).set(values)
+        .where(and(eq(t.auditPlanItems.id, before.id), isNull(t.auditPlanItems.cancelledAt), isNull(t.auditPlanItems.reviewId)))
+        .returning({ id: t.auditPlanItems.id });
+      if (!rows.length) return false;
       // Les constats rattachés reprennent le libellé de l'audit (intitulé, mois, année).
       await tx.update(t.auditFindings).set({ audit: planItemAuditLabel(values) }).where(eq(t.auditFindings.planItemId, before.id));
       const details = diffFields(shown(before), shown(values), PLAN_FIELDS);
@@ -245,7 +261,9 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
         const summary = done && !before.done ? `Réalisé le ${fmtDate(doneOn!)}` : !done && before.done ? 'Réalisation annulée' : 'Élément modifié';
         await logChange(tx, { entityType: 'audit_plan_item', entityId: before.id, action: 'update', summary, details, byId });
       }
+      return true;
     });
+    if (!saved) return { error: 'Élément annulé ou rattaché à une revue entre-temps : rechargez la page.' };
   } else {
     const [row] = await db.insert(t.auditPlanItems).values(values).returning({ id: t.auditPlanItems.id });
     itemId = row.id;
@@ -280,30 +298,112 @@ export async function removePlanItemReport(attachmentId: string): Promise<Result
   return {};
 }
 
-/** Retire du programme un élément jamais réalisé, sans action, constat ni rapport (planification erronée, revue annulée). */
-export async function deletePlanItem(id: number): Promise<Result> {
+/**
+ * Reporte un élément du programme (AUD-03) : nouvelle année, mois et date prévue, motif obligatoire. La première
+ * planification est conservée (postponedFrom) ; les constats rattachés reprennent le libellé de l'audit. Un élément réalisé,
+ * annulé ou porté par une revue de direction (reportée depuis sa carte) ne se reporte pas.
+ */
+export async function reschedulePlanItem(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireAuditEditor();
   if (error) return { error };
-  if (!validId(id)) return { error: 'Élément du programme introuvable.' };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const year = f.int('year', { required: true, min: 2000, max: 2100 });
+  const month = f.int('month', { required: true, min: 1, max: 12 });
+  const plannedOn = f.date('plannedOn');
+  const reason = f.reason();
+  if (year && month && plannedOn && (yearOf(plannedOn) !== year || monthOf(plannedOn) !== month)) {
+    f.fail('plannedOn', `La date prévue doit tomber en ${monthName(month)} ${year}.`);
+  }
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const [before] = await db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, id!));
+  if (!before) return { error: PLAN_NOT_FOUND };
+  if (before.cancelledAt) return { error: 'Élément annulé : il ne se reporte plus.' };
+  if (before.done) return { error: 'Élément réalisé : il ne se reporte pas.' };
+  if (before.reviewId != null) return { error: "Échéance d'une revue de direction : reportez la revue depuis sa carte." };
+  if (before.year === year && before.month === month && before.plannedOn === plannedOn) {
+    return { error: 'Choisissez une autre date ou un autre mois.', fieldErrors: { month: 'Planification inchangée.' } };
+  }
+  const [clash] = await db.select({ label: t.auditPlanItems.label }).from(t.auditPlanItems)
+    .where(and(eq(t.auditPlanItems.year, year!), eq(t.auditPlanItems.track, before.track), eq(t.auditPlanItems.month, month!), isNull(t.auditPlanItems.cancelledAt), ne(t.auditPlanItems.id, before.id)));
+  if (clash) {
+    return {
+      error: `Le programme prévoit déjà « ${clash.label} » en ${monthName(month!)} ${year} sur la ligne « ${before.track} ». Choisissez un autre mois.`,
+      fieldErrors: { month: 'Mois déjà occupé sur cette ligne.' },
+    };
+  }
+
+  const byId = session.user.id;
+  const values = {
+    year: year!, month: month!, plannedOn, label: relabelDay(before.label, before.plannedOn, plannedOn),
+    postponedFrom: before.postponedFrom ?? planStart(before),
+  };
+  const details = diffFields(
+    { month: monthName(before.month), plannedOn: shownDate(before.plannedOn), year: String(before.year) },
+    { month: monthName(month!), plannedOn: shownDate(plannedOn), year: String(year) },
+    { month: 'Mois', plannedOn: 'Date prévue', year: 'Année' },
+  );
+  const moved = await db.transaction(async (tx) => {
+    const rows = await tx.update(t.auditPlanItems).set(values)
+      .where(and(eq(t.auditPlanItems.id, before.id), isNull(t.auditPlanItems.cancelledAt), eq(t.auditPlanItems.done, false), isNull(t.auditPlanItems.reviewId)))
+      .returning({ id: t.auditPlanItems.id });
+    if (!rows.length) return false;
+    // Les constats rattachés reprennent le libellé de l'audit (intitulé, mois, année).
+    await tx.update(t.auditFindings).set({ audit: planItemAuditLabel({ ...before, ...values }) }).where(eq(t.auditFindings.planItemId, before.id));
+    await logChange(tx, {
+      entityType: 'audit_plan_item', entityId: before.id, action: 'update', reason, details, byId,
+      summary: plannedOn ? `Reporté au ${fmtDate(plannedOn)}` : `Reporté en ${monthName(month!)} ${year}`,
+    });
+    return true;
+  });
+  if (!moved) return { error: 'Élément réalisé, annulé ou rattaché à une revue entre-temps : rechargez la page.' };
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(before.id) };
+}
+
+/**
+ * Annule un élément du programme (AUD-03), motif obligatoire : jamais supprimé, il sort de la grille, des échéances, des
+ * constats et du dossier de revue, et reste consultable dans « Éléments annulés ». Refusé quand l'audit a eu lieu (réalisé,
+ * constats ou rapport), quand une action porte l'échéance, ou pour une revue de direction (annulée depuis sa carte).
+ */
+export async function cancelPlanItem(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireAuditEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+
   const db = await getDb();
   const [[item], [finding], files] = await Promise.all([
-    db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, id)),
-    db.select({ id: t.auditFindings.id }).from(t.auditFindings).where(eq(t.auditFindings.planItemId, id)).limit(1),
+    db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, id!)),
+    db.select({ id: t.auditFindings.id }).from(t.auditFindings).where(eq(t.auditFindings.planItemId, id!)).limit(1),
     listAttachments('audit_plan_item', String(id)),
   ]);
-  if (!item) return { error: 'Élément du programme introuvable.' };
+  if (!item) return { error: PLAN_NOT_FOUND };
+  if (item.cancelledAt) return { error: 'Élément déjà annulé.' };
   if (item.done) return { error: 'Élément réalisé : il reste au programme.' };
-  if (item.actionId) return { error: `Échéance portée par l'action ${item.actionId} : détachez-la avant de retirer l'élément.` };
-  if (finding || files.length) return { error: 'Des constats ou un rapport sont rattachés à cet audit.' };
-  await db.transaction(async (tx) => {
-    await tx.delete(t.auditPlanItems).where(eq(t.auditPlanItems.id, id));
+  if (item.reviewId != null) return { error: "Échéance d'une revue de direction : annulez la revue depuis sa carte." };
+  if (item.actionId) return { error: `Échéance portée par l'action ${item.actionId} : détachez-la ou annulez-la d'abord.` };
+  if (finding || files.length) return { error: "Des constats ou un rapport sont rattachés à cet audit : l'audit a eu lieu, déclarez-le réalisé." };
+
+  const byId = session.user.id;
+  const cancelled = await db.transaction(async (tx) => {
+    const rows = await tx.update(t.auditPlanItems).set({ cancelledAt: new Date(), cancelledById: byId, cancelReason: reason })
+      .where(and(eq(t.auditPlanItems.id, item.id), isNull(t.auditPlanItems.cancelledAt), eq(t.auditPlanItems.done, false), isNull(t.auditPlanItems.reviewId), isNull(t.auditPlanItems.actionId)))
+      .returning({ id: t.auditPlanItems.id });
+    if (!rows.length) return false;
     await logChange(tx, {
-      entityType: 'audit_plan_item', entityId: id, action: 'delete', byId: session.user.id,
-      summary: `Retiré du programme ${item.year} : ${item.detail ?? item.label} (${item.track}, ${monthName(item.month)})`,
+      entityType: 'audit_plan_item', entityId: item.id, action: 'cancel', reason, byId,
+      summary: `Annulé · retiré du programme ${item.year} (${item.track}, ${monthName(item.month)})`,
     });
+    return true;
   });
+  if (!cancelled) return { error: 'Élément modifié entre-temps : rechargez la page.' };
   revalidatePath('/', 'layout');
-  return {};
+  return { ok: true, id: String(item.id) };
 }
 
 // ─── Constats d'audit ───────────────────────────────────────────────────────

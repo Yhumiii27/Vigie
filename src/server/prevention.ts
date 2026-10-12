@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, gte, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
-  FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PERMIT_TYPE_KEYS,
-  addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, inspectionDone, isMandatory, isPlanEnded, lcfirst, missingPresets,
-  parseChecklist, permitDays, permitPlanIssue, planCovers, planEndIssue, planStatus, referenceNow, validityOver,
-  type ChecklistItem, type SiteRule,
+  EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
+  addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, fullSignatureOn, isMandatory, isPlanEnded, lcfirst, missingPresets,
+  parseChecklist, permitDays, permitPlanIssue, planCovers, planEndIssue, planSignIssue, planStatus, referenceNow, signedBeforeStart, validityOver,
+  type ChecklistItem, type PlanContentKey, type SiteRule,
 } from '@/components/prevention/model';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -25,8 +25,10 @@ const MAX_CHECKLIST = 30;
 /** Permis encore actifs (demandés ou délivrés) : ils suivent le site et l'entreprise de leur plan. */
 const isOpenPermit = (p: { status: string }) => p.status === 'demande' || p.status === 'delivre';
 
+type Db = Awaited<ReturnType<typeof getDb>>;
+
 /** Règle de prévention du site (classement Seveso, plan « dès la première minute »). */
-async function siteRule(db: Awaited<ReturnType<typeof getDb>>, siteId: string): Promise<SiteRule | undefined> {
+async function siteRule(db: Db, siteId: string): Promise<SiteRule | undefined> {
   const [site] = await db.select({ seveso: t.sites.seveso, ppFromFirstMinute: t.sites.ppFromFirstMinute }).from(t.sites).where(eq(t.sites.id, siteId));
   return site;
 }
@@ -132,14 +134,29 @@ export async function restoreContractor(id: string): Promise<Result> {
 
 /** Champs dont la modification annule les signatures d'un plan (le plan modifié doit être signé à nouveau). */
 const MATERIAL_FIELDS = ['siteId', 'contractorId', 'title', 'location', 'startOn', 'endOn', 'estimatedHours', 'dangerousWork', 'interferenceRisks', 'measures'] as const;
+/**
+ * Contenu réglementaire (PRV-02, R. 4511-10, R. 4512-8, R. 4512-9) : modifier une section déjà renseignée annule les
+ * signatures ; compléter une section vide d'un plan signé (plan antérieur au contenu structuré) les conserve.
+ */
+const CONTENT_FIELDS = ['eeHeadcount', ...PLAN_CONTENT_KEYS] as const;
+
+/** Actions du plan d'actions unique rattachées au plan (actions.preventionPlanId, ACT-01), annulées comprises sur demande. */
+async function planActionIds(db: Db, planId: string, { includeCancelled = false }: { includeCancelled?: boolean } = {}) {
+  const rows = await db.select({ id: t.actions.id }).from(t.actions)
+    .where(and(eq(t.actions.preventionPlanId, planId), includeCancelled ? undefined : ne(t.actions.status, 'cancelled')));
+  return rows.map((r) => r.id);
+}
 
 /** Crée ou modifie un plan de prévention ; le statut est dérivé (inspection commune, signatures). */
 export async function savePlan(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireManager();
   if (error) return { error };
   // « 1 200 » : séparateur de milliers usuel en français, accepté comme dans le formulaire.
-  const hoursRaw = fd.get('estimatedHours');
-  if (typeof hoursRaw === 'string') fd.set('estimatedHours', hoursRaw.replace(/\s/g, ''));
+  for (const name of ['estimatedHours', 'eeHeadcount']) {
+    const raw = fd.get(name);
+    if (typeof raw === 'string') fd.set(name, raw.replace(/\s/g, ''));
+  }
+  const now = today();
   const f = formReader(fd);
   const id = f.opt('id');
   const contractorId = f.str('contractorId', { required: true });
@@ -154,6 +171,8 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   const inspectionOn = f.date('inspectionOn');
   const interferenceRisks = f.str('interferenceRisks', { max: 4000 });
   const measures = f.str('measures', { max: 4000 });
+  const eeHeadcount = f.int('eeHeadcount', { min: 1, max: EE_HEADCOUNT_MAX });
+  const content = Object.fromEntries(PLAN_CONTENT.map((c) => [c.key, f.str(c.key, { max: c.max })])) as Record<PlanContentKey, string>;
   const ownerId = f.opt('ownerId');
   if (startOn && endOn && endOn < startOn) f.fail('endOn', 'La fin ne peut pas précéder le début.');
   if (inspectionOn && endOn && inspectionOn > endOn) f.fail('inspectionOn', "L'inspection commune doit avoir lieu au plus tard le dernier jour de l'intervention.");
@@ -196,17 +215,24 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       if (after.length) f.fail('endOn', `Permis actifs rattachés après cette date (${refs(after)}) : modifiez-les ou annulez-les avant de réduire la période.`);
     }
   }
+  // Intervention commencée : déplacer sa date de début pourrait effacer un écart R. 4512-6 (plan signé après le début,
+  // intervention sans plan signé) ; la modification exige un motif, conservé dans le journal.
+  const startMoved = !!existing && existing.startOn <= now && !!startOn && startOn !== existing.startOn;
+  const reason = startMoved ? f.reason() : null;
   if (!f.ok) return f.state();
 
   const values = {
     siteId, contractorId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
-    keystoneProject, inspectionOn, interferenceRisks, measures, ownerId,
+    keystoneProject, inspectionOn, interferenceRisks, measures, eeHeadcount, ...content, ownerId,
   };
-  const now = today();
 
   if (existing) {
-    const changed = MATERIAL_FIELDS.some((k) => existing[k] !== values[k]);
-    const signatures = changed ? { signedEuOn: null, signedEeOn: null } : { signedEuOn: existing.signedEuOn, signedEeOn: existing.signedEeOn };
+    const changed = MATERIAL_FIELDS.some((k) => existing[k] !== values[k])
+      || CONTENT_FIELDS.some((k) => existing[k] != null && existing[k] !== '' && existing[k] !== values[k]);
+    // Signatures effacées : la date de la première signature complète reste (écart R. 4512-6 jugé sur celle-ci).
+    const signatures = changed
+      ? { signedEuOn: null, signedEeOn: null, firstSignedOn: existing.firstSignedOn ?? fullSignatureOn(existing) }
+      : { signedEuOn: existing.signedEuOn, signedEeOn: existing.signedEeOn };
     // Signatures conservées : l'inspection commune préalable doit rester antérieure (ou du même jour) à la première signature.
     const firstSignature = [signatures.signedEuOn, signatures.signedEeOn].filter((d): d is string => !!d).sort()[0];
     if (firstSignature && (!inspectionOn || inspectionOn > firstSignature)) {
@@ -219,7 +245,7 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
     await db.transaction(async (tx) => {
       await tx.update(t.preventionPlans).set({ ...values, ...signatures, status }).where(eq(t.preventionPlans.id, existing.id));
       if (details.length) {
-        await logChange(tx, { entityType: 'prevention_plan', entityId: existing.id, action: 'update', summary: unsigned ? 'Plan modifié, signatures effacées' : 'Plan modifié', details });
+        await logChange(tx, { entityType: 'prevention_plan', entityId: existing.id, action: 'update', summary: unsigned ? 'Plan modifié, signatures effacées' : 'Plan modifié', details, reason });
       }
     });
     return done(existing.id);
@@ -243,6 +269,9 @@ const PLAN_LABELS = {
   siteId: 'Site', contractorId: 'Entreprise', title: 'Nature des travaux', location: 'Lieu', startOn: 'Début', endOn: 'Fin',
   estimatedHours: 'Heures sur 12 mois', dangerousWork: 'Travaux dangereux', keystoneProject: 'Projet Keystone', inspectionOn: 'Inspection commune',
   interferenceRisks: "Risques d'interférence", measures: 'Mesures de prévention', ownerId: 'Responsable',
+  eeHeadcount: 'Effectif prévisible', eeSupervisor: "Responsable de l'intervention (entreprise extérieure)", subcontracting: 'Sous-traitance',
+  dangerousPhases: 'Phases dangereuses', equipment: 'Matériels et installations', workerInstructions: 'Instructions aux travailleurs',
+  emergencyOrganisation: 'Premiers secours et évacuation', coordination: 'Coordination et commandement', sirPosts: 'Suivi individuel renforcé',
 } as const;
 
 async function loadPlan(id: string) {
@@ -257,7 +286,20 @@ async function editablePlanError(plan: { siteId: string; status: string } | unde
   return (await requireInSite(plan.siteId)) ?? (isPlanEnded(plan) ? ENDED_PLAN(plan) : null);
 }
 
-/** Signature du plan par l'entreprise utilisatrice (date du jour). */
+/**
+ * Signature tardive (écart R. 4512-6, règle du site) : plan obligatoire signé après le début de l'intervention, alors
+ * qu'il n'avait jamais été signé par les deux entreprises au plus tard le jour du début (dates déclarées, même jour admis).
+ */
+const lateSignature = (plan: typeof t.preventionPlans.$inferSelect, signedOn: string, mandatory: boolean) =>
+  mandatory && signedOn > plan.startOn && !signedBeforeStart(plan);
+
+/** Première signature complète à enregistrer quand la signature complète le plan (jamais remplacée ensuite). */
+const firstSignedUpdate = (plan: typeof t.preventionPlans.$inferSelect, next: { signedEuOn: string | null; signedEeOn: string | null }) => {
+  const full = fullSignatureOn(next);
+  return full && !plan.firstSignedOn ? { firstSignedOn: full } : {};
+};
+
+/** Signature du plan par l'entreprise utilisatrice (date du jour) ; une signature après le début de l'intervention est tracée comme écart. */
 export async function signPlanEu(id: string): Promise<Result> {
   const { session, error } = await requireManager();
   if (error) return { error };
@@ -266,12 +308,16 @@ export async function signPlanEu(id: string): Promise<Result> {
   const blocked = await editablePlanError(plan);
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   if (plan.signedEuOn) return { error: "Le plan est déjà signé par l'entreprise utilisatrice." };
-  if (!inspectionDone(plan, now)) return { error: "Réalisez l'inspection commune préalable avant de signer le plan." };
-  if (!plan.measures.trim()) return { error: 'Complétez les mesures de prévention avant de signer le plan.' };
+  const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
+  const issue = planSignIssue(plan, { now, mandatory, verb: 'signer' });
+  if (issue) return { error: issue };
   const next = { ...plan, signedEuOn: now };
+  const summary = lateSignature(plan, now, mandatory)
+    ? `Signé pour l'entreprise utilisatrice après le début de l'intervention (${fmtDate(plan.startOn)}) : écart R. 4512-6`
+    : "Signé pour l'entreprise utilisatrice";
   await db.transaction(async (tx) => {
-    await tx.update(t.preventionPlans).set({ signedEuOn: now, status: planStatus(next, now) }).where(eq(t.preventionPlans.id, plan.id));
-    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'sign', summary: "Signé pour l'entreprise utilisatrice", byId: session.user.id });
+    await tx.update(t.preventionPlans).set({ signedEuOn: now, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'sign', summary, byId: session.user.id });
   });
   return ok();
 }
@@ -293,17 +339,19 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   const blocked = await editablePlanError(plan);
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   if (plan.signedEeOn) return { error: "La signature de l'entreprise extérieure est déjà enregistrée." };
-  if (!inspectionDone(plan, now)) return { error: "Réalisez l'inspection commune préalable avant de recueillir les signatures." };
-  if (!plan.measures.trim()) return { error: 'Complétez les mesures de prévention avant de recueillir les signatures.' };
+  const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
+  const issue = planSignIssue(plan, { now, mandatory, verb: 'recueillir' });
+  if (issue) return { error: issue };
   if (plan.inspectionOn && signedOn! < plan.inspectionOn) {
     return { error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEeOn: `Au plus tôt le jour de l'inspection commune.` } };
   }
   const next = { ...plan, signedEeOn: signedOn };
+  const late = lateSignature(plan, signedOn!, mandatory) ? ", après le début de l'intervention : écart R. 4512-6" : '';
   await db.transaction(async (tx) => {
-    await tx.update(t.preventionPlans).set({ signedEeOn: signedOn, status: planStatus(next, now) }).where(eq(t.preventionPlans.id, id));
+    await tx.update(t.preventionPlans).set({ signedEeOn: signedOn, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, id));
     await logChange(tx, {
       entityType: 'prevention_plan', entityId: id, action: 'sign',
-      summary: `Signature de l'entreprise extérieure enregistrée (${fmtDate(signedOn!)})${files.length ? ', exemplaire signé joint' : ''}`, byId: session.user.id,
+      summary: `Signature de l'entreprise extérieure enregistrée (${fmtDate(signedOn!)})${late}${files.length ? ', exemplaire signé joint' : ''}`, byId: session.user.id,
     });
   });
   for (const file of files) await saveUpload(file, PLAN_ATTACHMENT, id, session.user.id);
@@ -312,14 +360,13 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
 
 /**
  * Motif empêchant de clore ou d'annuler le plan (voir planEndIssue) : jamais pendant une intervention sans le plan
- * obligatoire signé ; après une intervention réalisée sans plan signé, une fois l'écart tracé par une action du plan
- * d'actions unique ; les permis rattachés doivent être clos ou annulés.
+ * obligatoire signé ; après une intervention réalisée sans plan signé, ou avec un plan signé après son début, une fois
+ * l'écart tracé par une action du plan d'actions unique ; les permis rattachés doivent être clos ou annulés.
  */
-async function planEndBlock(db: Awaited<ReturnType<typeof getDb>>, plan: typeof t.preventionPlans.$inferSelect, verb: 'clore' | 'annuler') {
+async function planEndBlock(db: Db, plan: typeof t.preventionPlans.$inferSelect, verb: 'clore' | 'annuler') {
   const [rule, actions, permits] = await Promise.all([
     siteRule(db, plan.siteId),
-    db.select({ id: t.actions.id }).from(t.actions)
-      .where(and(eq(t.actions.origin, 'prevention'), eq(t.actions.originRef, plan.id), ne(t.actions.status, 'cancelled'))),
+    planActionIds(db, plan.id),
     db.select().from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
   ]);
   return planEndIssue(plan, {
@@ -384,14 +431,14 @@ export async function deletePlan(id: string): Promise<Result> {
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   const [permits, actions, activities, events] = await Promise.all([
     db.select({ id: t.permits.id }).from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
-    db.select({ id: t.actions.id }).from(t.actions).where(and(eq(t.actions.origin, 'prevention'), eq(t.actions.originRef, plan.id))),
+    planActionIds(db, plan.id, { includeCancelled: true }),
     db.select({ id: t.siteActivities.id }).from(t.siteActivities).where(eq(t.siteActivities.preventionPlanId, plan.id)),
     db.select({ id: t.events.id }).from(t.events).where(eq(t.events.preventionPlanId, plan.id)),
   ]);
   const engaged = [
     planStatus(plan, today()) !== 'brouillon' || plan.signedEuOn || plan.signedEeOn ? 'inspection commune ou signature enregistrée' : null,
     permits.length ? `permis ${permits.map((p) => p.id).join(', ')}` : null,
-    actions.length ? `actions ${actions.map((a) => a.id).join(', ')}` : null,
+    actions.length ? `actions ${actions.join(', ')}` : null,
     activities.length ? 'activités de la carte' : null,
     events.length ? `événements ${events.map((e) => e.id).join(', ')}` : null,
   ].filter(Boolean);
@@ -600,7 +647,7 @@ export async function deliverPermit(id: string): Promise<Result> {
   }
   await db.transaction(async (tx) => {
     await tx.update(t.permits).set({ status: 'delivre', issuerId: session.user.id }).where(eq(t.permits.id, permit.id));
-    await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: 'Permis délivré', byId: session.user.id });
+    await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: PERMIT_DELIVERED, byId: session.user.id });
   });
   return ok();
 }

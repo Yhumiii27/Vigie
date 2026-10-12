@@ -26,9 +26,10 @@ function slug(label: string) {
 }
 
 /**
- * Création (id vide) ou modification d'un site : libellé, ordre d'affichage et responsable QHSE (champ `qhseLeadId`,
- * vide = poste vacant ; absent du formulaire = inchangé). Le premier site créé (amorçage d'une base vide) devient
- * le site de rattachement de la personne qui le crée, si elle n'en a pas.
+ * Création (id vide) ou modification d'un site : libellé, ordre d'affichage, responsable QHSE (champ `qhseLeadId`,
+ * vide = poste vacant ; absent du formulaire = inchangé) et droit local d'Alsace-Moselle (case `alsaceMoselle`, lue
+ * seulement si le formulaire porte `alsaceMoselleField` ; jours fériés du délai de déclaration CPAM, EVT-03). Le premier
+ * site créé (amorçage d'une base vide) devient le site de rattachement de la personne qui le crée, si elle n'en a pas.
  */
 export async function saveSite(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireApprover();
@@ -49,6 +50,7 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   const leadField = fd.has('qhseLeadId');
   const leadChoices = people.filter((p) => !hasLeft(p, now) || p.id === before?.qhseLeadId).map((p) => p.id);
   const qhseLeadId = leadField ? f.oneOf('qhseLeadId', leadChoices) : before?.qhseLeadId ?? null;
+  const alsaceMoselle = fd.has('alsaceMoselleField') ? f.bool('alsaceMoselle') : before?.alsaceMoselle ?? false;
   if (!f.ok) return f.state();
   if (sites.some((s) => s.id !== id && s.label.toLowerCase() === label.toLowerCase())) {
     return { error: 'Certains champs sont à corriger.', fieldErrors: { label: 'Un site porte déjà ce nom.' } };
@@ -62,13 +64,13 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
     for (let i = 2; newId === ALL_SITES || sites.some((s) => s.id === newId); i++) newId = `${base}-${i}`;
     const order = sort ?? Math.max(-1, ...sites.map((s) => s.sort)) + 1;
     await db.transaction(async (tx) => {
-      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId });
+      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId, alsaceMoselle });
       if (!sites.length) {
         await tx.update(t.people).set({ siteId: newId }).where(and(eq(t.people.id, session.user.id), isNull(t.people.siteId)));
       }
       await logChange(tx, {
         byId: session.user.id, entityType: 'site', entityId: newId, action: 'create',
-        summary: `Site « ${label} » créé${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}`,
+        summary: `Site « ${label} » créé${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}${alsaceMoselle ? ' · droit local d’Alsace-Moselle' : ''}`,
       });
     });
     revalidatePath('/', 'layout');
@@ -78,11 +80,12 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   if (!before) return { error: 'Site inconnu.' };
   const order = sort ?? before.sort;
   await db.transaction(async (tx) => {
-    await tx.update(t.sites).set({ label, sort: order, qhseLeadId }).where(eq(t.sites.id, id));
+    await tx.update(t.sites).set({ label, sort: order, qhseLeadId, alsaceMoselle }).where(eq(t.sites.id, id));
     const details = [
       ...(before.label !== label ? [{ field: 'Libellé', from: before.label, to: label }] : []),
       ...(before.sort !== order ? [{ field: 'Ordre', from: String(before.sort), to: String(order) }] : []),
       ...(before.qhseLeadId !== qhseLeadId ? [{ field: 'Responsable QHSE', from: leadName(before.qhseLeadId), to: leadName(qhseLeadId) }] : []),
+      ...(before.alsaceMoselle !== alsaceMoselle ? [{ field: 'Droit local d’Alsace-Moselle', from: before.alsaceMoselle ? 'oui' : 'non', to: alsaceMoselle ? 'oui' : 'non' }] : []),
     ];
     if (details.length) await logChange(tx, { byId: session.user.id, entityType: 'site', entityId: id, action: 'update', summary: 'Site modifié', details });
   });

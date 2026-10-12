@@ -14,6 +14,7 @@ import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { addDays, fmtDate } from '@/lib/dates';
 import { REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, TONE } from '@/lib/domain';
 import type { FormOptions } from '@/lib/data/options';
+import { LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
 import { archiveRequirement, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
 import { ArchivedBanner, FILES_HINT, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
@@ -408,6 +409,8 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
   r?: RequirementView; options: Opts; featured: Featured; onDone: () => void; onCancel: () => void;
 }) {
   const computed = r?.projects.computed;
+  // Pilote sorti de l'effectif : conservé comme choix tant qu'aucun successeur n'est désigné (VEI-01).
+  const pilots = withCurrent(options.people, r?.pilotId, r ? `${r.pilot || r.pilotId}${LEFT_SUFFIX}` : undefined);
   return (
     <ActionForm action={saveRequirement} hidden={{ id: r?.id }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
       <FormRow>
@@ -438,8 +441,8 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="pilotId" label="Pilote">
-          <Select name="pilotId" options={options.people} defaultValue={r?.pilotId ?? ''} placeholder="Non désigné" />
+        <Field name="pilotId" label="Pilote" hint={pilots !== options.people ? "Pilote sorti de l'effectif : désignez un successeur." : undefined}>
+          <Select name="pilotId" options={pilots} defaultValue={r?.pilotId ?? ''} placeholder="Non désigné" />
         </Field>
         <Field name="keystoneProjects" label="Surcharge du nombre de projets"
           hint={computed != null ? `Vide = calculé (${plural(computed, 'projet', 'projets')})` : 'Vide = calculé depuis Keystone (case ci-dessous).'}>

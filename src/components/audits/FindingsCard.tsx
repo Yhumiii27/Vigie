@@ -34,7 +34,8 @@ type Props = {
   /** Audits du programme proposés au rattachement (hors revues), le plus récent d'abord. */
   auditOptions: Option[];
   defaultAudit: string;
-  canManage: boolean;
+  /** Saisie sur l'écran Audits (animateur QHSE, direction) ; consultation seule sinon (AUD-02). */
+  canEdit: boolean;
   options: Opts;
   /** Constat à ouvrir d'emblée (lien profond `?constat=<id>`). */
   initialFindingId?: number;
@@ -43,14 +44,14 @@ type Props = {
 };
 
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canManage, options, initialFindingId, closeHref }: Props) {
+export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canEdit, options, initialFindingId, closeHref }: Props) {
   const router = useRouter();
   // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
   // un constat annulé s'affiche dans le filtre « Annulés ».
   const linkGroup = initialFindingId != null ? groups.find((g) => g.findings.some((f) => f.id === initialFindingId)) : undefined;
   const linkCancelled = initialFindingId != null && !linkGroup && cancelled.some((f) => f.id === initialFindingId);
-  const linkEdit: Editing = linkGroup && canManage ? { id: initialFindingId! } : null;
-  const linkFlash = (linkGroup && !canManage) || linkCancelled ? initialFindingId : undefined;
+  const linkEdit: Editing = linkGroup && canEdit ? { id: initialFindingId! } : null;
+  const linkFlash = (linkGroup && !canEdit) || linkCancelled ? initialFindingId : undefined;
   const [selected, setSelected] = useState(linkGroup?.key ?? groups[0]?.key ?? '');
   const [showCancelled, setShowCancelled] = useState(linkCancelled);
   const [editing, setEditing] = useState<Editing>(linkEdit);
@@ -120,12 +121,12 @@ export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, ca
       {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} flash={f.id === flashId} />) : (
         <>
           {group?.findings.map((f) => (
-            <FindingRow key={f.id} finding={f} canManage={canManage} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
+            <FindingRow key={f.id} finding={f} canEdit={canEdit} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
           ))}
           {!group && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré.</div>}
         </>
       )}
-      {canManage && !showCancelled && (
+      {canEdit && !showCancelled && (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setEditing({ id: null })}>
           <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
         </button>
@@ -184,7 +185,7 @@ function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; fl
   );
 }
 
-function FindingRow({ finding: f, canManage, options, flash, onEdit }: { finding: FindingView; canManage: boolean; options: Opts; flash?: boolean; onEdit: () => void }) {
+function FindingRow({ finding: f, canEdit, options, flash, onEdit }: { finding: FindingView; canEdit: boolean; options: Opts; flash?: boolean; onEdit: () => void }) {
   const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as const };
   const needsAction = f.kind !== 'point_fort';
   const text = (
@@ -196,7 +197,7 @@ function FindingRow({ finding: f, canManage, options, flash, onEdit }: { finding
   return (
     <div className={`vg-rule-bottom${flash ? ` ${styles.flash}` : ''}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
       <ToneTag tone={k.tone} style={{ whiteSpace: 'nowrap' }}>{k.label}</ToneTag>
-      {canManage ? (
+      {canEdit ? (
         <button type="button" className={styles.textBtn} style={{ fontSize: 12.5, textWrap: 'pretty' }} title="Modifier le constat" onClick={onEdit}>{text}</button>
       ) : (
         <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{text}</span>
@@ -204,7 +205,7 @@ function FindingRow({ finding: f, canManage, options, flash, onEdit }: { finding
       <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
         {f.actionId ? (
           <ActionLink action={f.action} id={f.actionId} compact />
-        ) : needsAction && canManage ? (
+        ) : needsAction && canEdit ? (
           <>
             <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}

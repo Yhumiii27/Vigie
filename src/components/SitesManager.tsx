@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ActionForm, Field, FormRow, Input, Select, TextArea } from './form';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from './form';
 import { Dialog } from './Dialog';
 import { SEVESO_LEVELS } from './prevention/model';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
@@ -52,6 +52,7 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
                   {s.label}
                   <span className="vg-muted" style={{ fontSize: 11 }}>ordre {s.sort}</span>
                   {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 10 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
+                  {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 10 }} title="Droit local d'Alsace-Moselle">Alsace-Moselle</span>}
                   <span className="vg-muted" style={{ fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     title="Responsable QHSE">{s.qhseLead ?? 'Responsable QHSE à désigner'}</span>
                 </span>
@@ -89,7 +90,7 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
       )}
 
       {view !== 'list' && 'edit' in view && (
-        <ActionForm action={saveSite} hidden={{ id: view.edit?.id ?? '' }} onDone={back} onCancel={back} submitLabel={view.edit ? 'Enregistrer' : 'Créer le site'}>
+        <ActionForm action={saveSite} hidden={{ id: view.edit?.id ?? '', alsaceMoselleField: '1' }} onDone={back} onCancel={back} submitLabel={view.edit ? 'Enregistrer' : 'Créer le site'}>
           <FormRow>
             <Field name="label" label="Libellé">
               <Input name="label" defaultValue={view.edit?.label} maxLength={120} required autoFocus />
@@ -99,6 +100,9 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
             </Field>
           </FormRow>
           <QhseLeadField options={leadOptions} current={view.edit ?? undefined} />
+          <Field name="alsaceMoselle" label="Calendrier" hint="Délai de déclaration d'un accident du travail : le Vendredi saint et le 26 décembre y sont aussi fériés.">
+            <Checkbox name="alsaceMoselle" label="Droit local d'Alsace-Moselle (Bas-Rhin, Haut-Rhin, Moselle)" defaultChecked={view.edit?.alsaceMoselle ?? false} />
+          </Field>
         </ActionForm>
       )}
 

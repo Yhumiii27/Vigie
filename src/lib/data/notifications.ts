@@ -4,11 +4,11 @@ import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { addDays } from '../dates';
 import { today } from '@/lib/today';
-import { NOTIFY_HORIZON_DAYS, todoKey, type TodoItem } from '../domain';
+import { NOTIFY_HORIZON_DAYS } from '../domain';
 import { getSession } from '../session';
-import { loadVisibleTodo } from './todo';
+import { loadVisibleTodo, type VisibleTodo } from './todo';
 
-export type Notification = TodoItem & { urgent: boolean; key: string; read: boolean };
+export type Notification = VisibleTodo & { urgent: boolean; read: boolean };
 
 /** Clés des échéances déjà lues par la personne connectée (table notification_reads). */
 export const loadReadKeys = cache(async (): Promise<Set<string>> => {
@@ -19,17 +19,15 @@ export const loadReadKeys = cache(async (): Promise<Set<string>> => {
 });
 
 /**
- * Notifications de l'en-tête : dépassements et échéances des 7 prochains jours, parmi les échéances visibles
- * de la personne connectée. `read` : clé présente dans notification_reads pour cette personne.
+ * Notifications de l'en-tête : dépassements et échéances des 7 prochains jours, parmi les échéances visibles de la personne
+ * connectée — ses propres échéances des autres sites de son périmètre comprises (elsewhere, TDB-05).
+ * `read` : clé présente dans notification_reads pour cette personne.
  */
 export const loadNotifications = cache(async (): Promise<Notification[]> => {
   const week = addDays(today(), NOTIFY_HORIZON_DAYS);
   const [todo, reads] = await Promise.all([loadVisibleTodo(), loadReadKeys()]);
   return todo
     .filter((n) => n.overdue || n.date <= week)
-    .map((n) => {
-      const key = todoKey(n);
-      return { ...n, key, urgent: n.tone === 'danger' || !!n.overdue, read: reads.has(key) };
-    })
+    .map((n) => ({ ...n, urgent: n.tone === 'danger' || !!n.overdue, read: reads.has(n.key) }))
     .sort((a, b) => Number(b.urgent) - Number(a.urgent) || a.date.localeCompare(b.date));
 });

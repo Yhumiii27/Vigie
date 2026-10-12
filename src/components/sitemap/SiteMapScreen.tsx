@@ -79,7 +79,7 @@ type Props = {
   canManage: boolean;
   /** Date demandée (?date=) ou date du jour. */
   initialDate: string;
-  actionOptions: Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+  actionOptions: Pick<FormOptions, 'people' | 'origins' | 'sites' | 'allSites'>;
 };
 
 export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: Props) {

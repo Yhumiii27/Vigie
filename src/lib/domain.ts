@@ -31,7 +31,48 @@ export const STEP_CLOSED = EVENT_STEPS.length - 1;
 export const EVENT_DISMISSED = 'Classé sans suite';
 /** Délais suivis par les échéances (jours calendaires). */
 export const QUALIFY_DELAY_DAYS = 2; // qualification sous 48 h après la déclaration
-export const CPAM_DELAY_DAYS = 2; // déclaration d'accident du travail à la CPAM sous 48 h
+/** Accident du travail (code de la sécurité sociale) : déclaration CPAM 48 h après la connaissance de l'accident, dimanches
+ * et jours fériés non compris (R. 441-3) ; réserves motivées sous 10 jours francs après la déclaration (R. 441-6). */
+export const CPAM_DELAY_HOURS = 48;
+export const RESERVES_DELAY_DAYS = 10;
+/** AT d'un intérimaire : l'entreprise utilisatrice informe l'entreprise de travail temporaire dans les 24 heures, copie à la
+ * CARSAT et à l'inspection du travail (R. 412-2 CSS) ; délai décompté d'heure à heure. */
+export const ETT_DELAY_HOURS = 24;
+
+/** Victime d'un accident du travail (EVT-01). */
+export type VictimKind = 'salarie' | 'interimaire' | 'externe';
+export const VICTIM_KINDS: Record<VictimKind, string> = {
+  salarie: "Salarié de l'effectif",
+  interimaire: 'Intérimaire',
+  externe: 'Personne extérieure (entreprise extérieure, visiteur…)',
+};
+export const VICTIM_KIND_KEYS = Object.keys(VICTIM_KINDS) as VictimKind[];
+
+/** Événement environnemental : aspect et milieu concerné (EVT-05). */
+export const ENV_ASPECTS = ['Déversement', 'Rejet aqueux', 'Émission atmosphérique', 'Déchets', 'Bruit', 'Odeur', 'Consommation de ressources', 'Autre'];
+export const ENV_MEDIA = ['Eau', 'Sol', 'Air', 'Voisinage', 'Ressources naturelles'];
+
+/** Données exigées au passage à « Qualifié » (en plus du pilote), puis tant que l'événement reste qualifié (EVT-05). */
+export type QualificationField = 'victim' | 'circumstances' | 'location' | 'severity' | 'ncOrigin' | 'customer' | 'customerRef' | 'envAspect' | 'envMedium';
+export const QUALIFICATION_LABELS: Record<QualificationField, string> = {
+  victim: 'victime', circumstances: 'circonstances', location: 'lieu', severity: 'gravité potentielle', ncOrigin: 'origine',
+  customer: 'client', customerRef: 'référence client (commande, affaire ou projet Keystone)', envAspect: 'aspect environnemental', envMedium: 'milieu concerné',
+};
+export const QUALIFICATION_FIELDS: Record<EventType, QualificationField[]> = {
+  AT: ['victim', 'circumstances', 'location'],
+  PA: ['location', 'severity'],
+  SD: ['location', 'severity'],
+  NC: ['ncOrigin'],
+  RC: ['customer', 'customerRef'],
+  ENV: ['envAspect', 'envMedium'],
+};
+
+/** Donneur de soins d'un accident bénin (D. 441-1 CSS) : secouriste du travail de l'effectif, ou professionnel de santé. */
+export type BenignCaregiverKind = 'sst' | 'infirmier' | 'medecin' | 'pharmacien';
+export const BENIGN_CAREGIVER_KINDS: Record<BenignCaregiverKind, string> = {
+  sst: 'Sauveteur secouriste du travail (SST)', infirmier: 'Infirmier ou infirmière', medecin: 'Médecin', pharmacien: 'Pharmacien',
+};
+export const BENIGN_CAREGIVER_KEYS = Object.keys(BENIGN_CAREGIVER_KINDS) as BenignCaregiverKind[];
 
 export type EventTransition = 'advance' | 'revert' | 'reopen' | 'dismiss' | 'restore';
 export const EVENT_TRANSITIONS: Record<EventTransition, { label: string; icon: string }> = {
@@ -100,11 +141,6 @@ export const REASON_MAX = 1000;
 /** @deprecated alias de REASON_MAX (plan du domaine actions). */
 export const CANCEL_REASON_MAX = REASON_MAX;
 
-/** Lien vers la source d'une action d'origine « prevention » : plan (PP-…) ou permis (PF-… / PE-…). */
-export const preventionRefHref = (ref: string) =>
-  /^PP-/.test(ref) ? `/prevention?plan=${encodeURIComponent(ref)}`
-    : /^P[FE]-/.test(ref) ? `/prevention?onglet=permis&permis=${encodeURIComponent(ref)}`
-      : '/prevention';
 /** Domaine d'exigence de veille relié aux écarts calculés des plans de prévention (R. 4512-6). */
 export const PREVENTION_REQUIREMENT_DOMAIN = 'Plans de prévention';
 
@@ -129,6 +165,40 @@ export const RISK_FLAGS: Record<RiskFlag, { label: string; tone: Tone; hint: str
 export const RISK_TODO_KIND = 'DUERP';
 /** Valeur de requirements.linkedTo pour l'exigence « Document unique » (R. 4121-1). */
 export const DUERP_REQUIREMENT_LINK = 'duerp';
+
+// ─── DUERP : mise à disposition et programme annuel ─────────────────────────
+
+/** Demandeurs d'accès au DUERP (R. 4121-4) : registre des mises à disposition. */
+export const DUERP_REQUESTERS = {
+  salarie: 'Salarié',
+  ancien_salarie: 'Ancien salarié',
+  cse: 'CSE',
+  medecin: 'Médecin du travail (SPST)',
+  inspection: 'Inspection du travail',
+  carsat: 'CARSAT (prévention de la sécurité sociale)',
+  autre: 'Autre organisme habilité',
+} as const;
+export type DuerpRequester = keyof typeof DUERP_REQUESTERS;
+export const DUERP_REQUESTER_KEYS = Object.keys(DUERP_REQUESTERS) as DuerpRequester[];
+
+/** Modalité de mise à disposition du DUERP. */
+export const DUERP_ACCESS_CHANNELS = {
+  vigie: 'Consultation dans Vigie',
+  sur_place: 'Consultation sur place',
+  papier: 'Copie papier remise',
+  electronique: 'Copie électronique transmise',
+} as const;
+export type DuerpAccessChannel = keyof typeof DUERP_ACCESS_CHANNELS;
+export const DUERP_ACCESS_CHANNEL_KEYS = Object.keys(DUERP_ACCESS_CHANNELS) as DuerpAccessChannel[];
+
+/** Programme annuel de prévention (PAPRIPACT, L. 4121-3-1) : états. */
+export const PROGRAM_STATES = {
+  draft: { label: 'En préparation', tone: 'warn' },
+  frozen: { label: 'Arrêté', tone: 'ok' },
+} as const satisfies Record<string, { label: string; tone: Tone }>;
+export type ProgramState = keyof typeof PROGRAM_STATES;
+/** Libellé court du programme annuel (échéances, navigation de l'écran DUERP). */
+export const PROGRAM_SHORT = 'PAPRIPACT';
 
 export const REQUIREMENT_EVAL: Record<string, { label: string; tone: Tone }> = {
   conforme: { label: 'Conforme', tone: 'ok' },
@@ -170,11 +240,12 @@ export const PLAN_TRACK_KINDS: Record<string, string> = {
 };
 export const planTrackKind = (track: string) => PLAN_TRACK_KINDS[track] ?? track;
 
-/** État calculé d'un élément du programme : réalisé, échéance passée non confirmée, à venir. */
+/** État calculé d'un élément du programme : réalisé, échéance passée non confirmée, à venir, annulé (AUD-03). */
 export const PLAN_ITEM_STATES = {
   done: { label: 'Réalisé', tone: 'ok' },
   late: { label: 'À confirmer', tone: 'warn' },
   upcoming: { label: 'À venir', tone: 'neutral' },
+  cancelled: { label: 'Annulé', tone: 'neutral' },
 } as const satisfies Record<string, { label: string; tone: Tone }>;
 export type PlanItemState = keyof typeof PLAN_ITEM_STATES;
 
@@ -229,11 +300,20 @@ export const REVIEW_DECISION_KEYS = Object.keys(REVIEW_DECISION_KINDS) as Review
 /** Revue tenue non clôturée : échéance « dossier à clôturer » au-delà de ce délai (jours). */
 export const REVIEW_CLOSE_DAYS = 30;
 
+/**
+ * Suivi des décisions des revues précédentes (dossier § 1, ISO 9001 §9.3.2 a) : décision sans action au plan, action annulée.
+ * Les statuts d'action gardent columnOf ; un objectif ou un besoin en ressources sans action prend le ton neutral (chargement).
+ */
+export const REVIEW_FOLLOW_UP = {
+  no_action: { label: 'Sans action au plan', tone: 'warn' },
+  cancelled: { label: 'Action annulée', tone: 'neutral' },
+} as const satisfies Record<string, { label: string; tone: Tone }>;
+
 // ─── Navigation, écrans et rôles ────────────────────────────────────────────
 
 export type ScreenKey =
   | 'dashboard' | 'todo' | 'events' | 'actions' | 'prevention' | 'risks' | 'skills'
-  | 'watch' | 'audits' | 'docs' | 'env' | 'mobile';
+  | 'watch' | 'audits' | 'docs' | 'env' | 'mobile' | 'contributions';
 
 export const SCREENS: Record<ScreenKey, { path: string; title: string; label: string; icon: string }> = {
   dashboard: { path: '/', title: 'Tableau de bord QHSE', label: 'Tableau de bord', icon: 'ph-gauge' },
@@ -248,6 +328,8 @@ export const SCREENS: Record<ScreenKey, { path: string; title: string; label: st
   docs: { path: '/documents', title: 'Documents maîtrisés', label: 'Documents maîtrisés', icon: 'ph-files' },
   env: { path: '/environnement', title: 'Environnement et déchets', label: 'Environnement et déchets', icon: 'ph-leaf' },
   mobile: { path: '/apercu-mobile', title: 'Signalement terrain', label: 'Aperçu mobile · signalement terrain', icon: 'ph-device-mobile' },
+  // Hors navigation (AUD-04) : contributions, participations et décisions de la personne pour la revue de direction.
+  contributions: { path: '/audits/contributions', title: 'Mes contributions à la revue de direction', label: 'Mes contributions', icon: 'ph-hand-arrow-up' },
 };
 
 export const NAV: { label: string; items: ScreenKey[] }[] = [
@@ -261,13 +343,15 @@ export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de
 
 // Rôle → écrans autorisés (null = tous) et écrans en consultation seule.
 // « docs » reste en dernier dans chaque liste : homeOf() prend le premier écran.
+// Évaluation des risques : consultation par tous les rôles (DUERP, R. 4121-4, DUE-01) ; saisie : canEdit(role, 'risks').
+// Audits et certifications : consultation par le chef de service et le chef de projet (AUD-02) ; saisie : canEdit(role, 'audits').
 // Personnes de démonstration associées aux rôles : src/lib/demo.ts (mode démonstration seulement).
 export const ROLES: Record<Role, { screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
   'Animateur QHSE': { screens: null },
   Direction: { screens: null },
-  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'docs'], readOnly: ['docs'] },
-  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'docs'], readOnly: ['docs'] },
-  Salarié: { screens: ['events', 'actions', 'skills', 'docs'], readOnly: ['docs'] },
+  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'docs'], readOnly: ['audits', 'docs'] },
+  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'docs'], readOnly: ['risks', 'audits', 'docs'] },
+  Salarié: { screens: ['events', 'actions', 'risks', 'skills', 'docs'], readOnly: ['risks', 'docs'] },
 };
 export const ROLE_KEYS = Object.keys(ROLES) as Role[];
 /** Rôles du plus élevé au moins élevé : une personne qui porte plusieurs rôles Entra reçoit le premier de cette liste. */
@@ -275,16 +359,20 @@ export const ROLE_PRECEDENCE: Role[] = ['Direction', 'Animateur QHSE', 'Chef de 
 /** Identifiant du choix « Tous les sites » (sélecteur de site, champ Site des formulaires). */
 export const ALL_SITES = 'all';
 
-// « À faire » est ouvert à tous : chaque rôle n'y voit que les échéances qu'il peut ouvrir (loadVisibleTodo).
+// « À faire » est ouvert à tous. visibleTodo (src/lib/todo-visibility.ts) décide : échéances du site sélectionné sur les
+// écrans que le rôle modifie, plus les échéances de la personne (ownerIds) sur tous les sites de son périmètre, sans lien
+// quand l'écran source lui est fermé (TDB-02, TDB-05).
+// « Mes contributions » (/audits/contributions) : ouvert à tous, la page ne montre que les contributions, participations
+// et décisions de la personne (AUD-04).
 export const canSee = (role: Role, screen: ScreenKey) => {
   const allowed = ROLES[role].screens;
-  return screen === 'mobile' || screen === 'todo' || !allowed || allowed.includes(screen);
+  return screen === 'mobile' || screen === 'todo' || screen === 'contributions' || !allowed || allowed.includes(screen);
 };
-/** Écran correspondant à un lien interne (pour filtrer les échéances selon les droits du rôle). */
+/** Écran correspondant à un lien interne (filtre des échéances selon les droits du rôle, badges) : le chemin le plus long l'emporte. */
 export function screenOfHref(href: string): ScreenKey {
-  const path = href.split('?')[0];
-  const hit = (Object.entries(SCREENS) as [ScreenKey, { path: string }][]).find(([, s]) => s.path !== '/' && (path === s.path || path.startsWith(`${s.path}/`)));
-  return hit?.[0] ?? 'dashboard';
+  const path = href.split(/[?#]/)[0];
+  const hits = (Object.entries(SCREENS) as [ScreenKey, { path: string }][]).filter(([, s]) => s.path !== '/' && (path === s.path || path.startsWith(`${s.path}/`)));
+  return hits.sort((a, b) => b[1].path.length - a[1].path.length)[0]?.[0] ?? 'dashboard';
 }
 export const canOpen = (role: Role, href?: string) => !href || canSee(role, screenOfHref(href));
 
@@ -297,13 +385,18 @@ export const canApprove = (role: Role) => role === 'Animateur QHSE' || role === 
 /** Rôle Salarié : ne voit que ses propres données (habilitations, signalements, actions dont il est pilote). */
 export const isEmployee = (role: Role) => role === 'Salarié';
 /**
- * Données de santé d'un accident du travail (blessure, jours perdus, déclaration CPAM, toute donnée médicale) :
- * visibles et modifiables par l'animateur QHSE et la direction seulement (SEC-06) ; les indicateurs agrégés restent visibles.
+ * Données de santé d'un accident du travail (blessure, jours perdus, lésions, soins, déclaration CPAM, pièces médicales,
+ * registre des accidents bénins, toute donnée médicale) : visibles et modifiables par l'animateur QHSE et la direction
+ * seulement (SEC-06) ; les indicateurs agrégés restent visibles.
  */
 export const canSeeHealth = (role: Role) => role === 'Animateur QHSE' || role === 'Direction';
 /** Saisie sur un écran : encadrement, écran autorisé et non limité à la consultation. */
 export const canEdit = (role: Role, screen: ScreenKey) =>
   canManage(role) && canSee(role, screen) && !(ROLES[role].readOnly ?? []).includes(screen);
+/** Écran ouvert au rôle en consultation seule (ROLES[role].readOnly). */
+export const isReadOnly = (role: Role, screen: ScreenKey) => (ROLES[role].readOnly ?? []).includes(screen);
+/** Dossier consolidé de la revue (/revue-de-direction, données de tous les modules) : rôles qui saisissent sur l'écran Audits (animateur QHSE, direction). */
+export const canReadReviewDossier = (role: Role) => canEdit(role, 'audits');
 
 /** Destinataire affiché d'une alerte de site sans responsable QHSE (sites.qhse_lead_id vide ou sorti de l'effectif). */
 export const VACANT_QHSE_LEAD = 'Responsable QHSE à désigner';
@@ -319,12 +412,28 @@ export const TODO_HORIZON_DAYS = 15;
 export const CONTROL_HORIZON_DAYS = 30;
 /** Panneau de notifications : dépassements + échéances des 7 prochains jours. */
 export const NOTIFY_HORIZON_DAYS = 7;
+/** TF1/TG : les 12 derniers mois complets (mois en cours exclu), base de « 12 mois glissants » (TDB-04). */
+export const SAFETY_WINDOW_MONTHS = 12;
 
 /** Échéance affichée dans « À traiter », la page À faire, les notifications et les badges. */
 export type TodoItem = {
   date: string; kind: string; tone: Tone; title: string; who: string;
-  /** Lien vers l'élément (obligatoire en pratique : filtre par rôle et badge de l'écran, via screenOfHref). */
+  /**
+   * Site de l'élément (null : commun à tous les sites — version du DUERP, exigences, audits, revue). Les signaux sont
+   * calculés sur tout le périmètre de la personne (TDB-05) ; visibleTodo le compare au site sélectionné.
+   */
+  siteId: string | null;
+  /**
+   * Lien vers l'élément (obligatoire en pratique) : filtre d'accès à l'écran et badge de l'écran (screenOfHref) ; pour un
+   * responsable sans accès à l'écran, remplacé par readHref ou retiré (TDB-02).
+   */
   href?: string;
+  /**
+   * Vue en lecture de l'élément pour ses responsables quand l'écran source est fermé à leur rôle (TDB-02). Elle doit pouvoir
+   * être ouverte par toute personne de ownerIds, quel que soit son rôle (la vue vérifie elle-même que la personne est
+   * concernée). Sans elle, un responsable sans accès reçoit l'échéance sans lien.
+   */
+  readHref?: string;
   /** Personnes concernées (pilote, responsable, salarié) : filtre « Mes échéances » et vue Salarié. */
   ownerIds?: string[];
   /** Échéance dépassée ou retard : en tête de liste, urgente dans les notifications. */

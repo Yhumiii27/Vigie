@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionBrief, actionColumn, actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, eventView, isOpen,
-  lcfirst, skillState, type ActionRow, type EventRow, type Person,
+  lastFullMonths, lcfirst, safetyRates, skillState, workforceAccident, type ActionRow, type EventRow, type Person,
 } from './queries';
 
 // Règles de calcul de src/lib/queries.ts (QUA-03) : statuts déduits des données et de la date du jour, jamais stockés.
@@ -120,5 +120,109 @@ describe('lcfirst', () => {
     expect(lcfirst('Habilitation électrique')).toBe('habilitation électrique');
     expect(lcfirst('CACES R489')).toBe('CACES R489');
     expect(lcfirst('A')).toBe('A');
+  });
+});
+
+describe('TF1 / TG : 12 derniers mois complets (TDB-04)', () => {
+  const months = lastFullMonths(NOW);
+  const year = (siteId: string, value = 10_000, from = months) => from.map((m) => ({ month: `${m}-01`, siteId, hours: value }));
+  const at = (occurredOn: string, siteId: string | null = 'a', lostDays: number | null = 5, injury = 'arret', victimKind: string | null = 'salarie') =>
+    ({ type: 'AT', injury, lostDays, occurredOn, siteId, victimKind });
+  const A = { id: 'a', archivedOn: null };
+  const B = { id: 'b', archivedOn: null };
+
+  it('fenêtre : mois en cours exclu, 12e mois en arrière inclus, jamais de 13e mois', () => {
+    expect(months).toHaveLength(12);
+    expect(months[0]).toBe('2025-10');
+    expect(months[11]).toBe('2026-09');
+    expect(lastFullMonths('2026-01-31', 2)).toEqual(['2025-11', '2025-12']);
+    const r = safetyRates({ months, sites: [A], hours: [...year('a'), { month: '2025-09-01', siteId: 'a', hours: 99 }, { month: '2026-10-01', siteId: 'a', hours: 99 }], events: [at('2025-09-30'), at('2026-10-01'), at('2025-10-01')] });
+    expect(r.hours).toBe(120_000);
+    expect(r.accidents).toBe(1);
+    expect(r.tf1).toBeCloseTo(1e6 / 120_000);
+    expect(r.tg).toBeCloseTo(5e3 / 120_000);
+    expect(r.missing).toEqual([]);
+  });
+
+  it('mois manquant : signalé, et l’accident de ce mois sort du taux', () => {
+    const hours = year('a').filter((h) => h.month !== '2026-03-01');
+    const r = safetyRates({ months, sites: [A], hours, events: [at('2026-03-12'), at('2026-04-02', 'a', null)] });
+    expect(r.missing).toEqual([{ siteId: 'a', month: '2026-03' }]);
+    expect(r.accidents).toBe(1);
+    expect(r.lostDays).toBe(0); // jours perdus non renseignés : 0
+    expect(r.hours).toBe(110_000);
+  });
+
+  it('site créé en cours de fenêtre, site archivé en mars : pas de faux manquant', () => {
+    const late = months.filter((m) => m >= '2026-05');
+    const early = months.filter((m) => m <= '2026-03');
+    const r = safetyRates({
+      months, sites: [A, { id: 'c', archivedOn: '2026-03-20' }, { id: 'd', archivedOn: '2025-06-30' }],
+      hours: [...year('a', 1000, late), ...year('c', 1000, early)], events: [],
+    });
+    expect(r.missing).toEqual([]);
+    expect(r.hours).toBe(1000 * (late.length + early.length));
+  });
+
+  it('sans heures : taux nuls (null), site actif sans heures entièrement manquant', () => {
+    const r = safetyRates({ months, sites: [A, B], hours: year('a', 0), events: [at('2026-05-05')] });
+    expect(r.tf1).toBeNull();
+    expect(r.tg).toBeNull();
+    expect(r.missing).toHaveLength(12);
+    expect(r.missing.every((m) => m.siteId === 'b')).toBe(true);
+    expect(safetyRates({ months, sites: [], hours: [], events: [] })).toMatchObject({ tf1: null, tg: null, hours: 0, missing: [] });
+  });
+
+  it('AT avec arrêt avant le premier mois saisi : son mois est attendu, jamais un 0 silencieux', () => {
+    // Heures du site B à partir de mai 2026, accident en mars : mars et avril manquent (B seul ou consolidé).
+    const late = months.filter((m) => m >= '2026-05');
+    const only = safetyRates({ months, sites: [B], hours: year('b', 1000, late), events: [at('2026-03-12', 'b')] });
+    expect(only).toMatchObject({ tf1: 0, accidents: 0 });
+    expect(only.missing).toEqual([{ siteId: 'b', month: '2026-03' }, { siteId: 'b', month: '2026-04' }]);
+    const both = safetyRates({ months, sites: [A, B], hours: [...year('a'), ...year('b', 1000, late)], events: [at('2026-03-12', 'b')] });
+    expect(both.missing).toEqual([{ siteId: 'b', month: '2026-03' }, { siteId: 'b', month: '2026-04' }]);
+    // Seule ligne d'heures du site B : le mois en cours ; accidents dans la fenêtre → à partir du premier, tout manque.
+    const current = safetyRates({
+      months, sites: [A, B], hours: [...year('a'), { month: '2026-10-01', siteId: 'b', hours: 500 }],
+      events: [at('2026-06-03', 'b'), at('2026-08-20', 'b')],
+    });
+    expect(current.accidents).toBe(0);
+    expect(current.missing).toEqual(months.filter((m) => m >= '2026-06').map((month) => ({ siteId: 'b', month })));
+    // Accident d'un mois couvert : compté, rien ne manque.
+    expect(safetyRates({ months, sites: [B], hours: year('b', 1000, late), events: [at('2026-06-03', 'b')] })).toMatchObject({ accidents: 1, missing: [] });
+  });
+
+  it('site archivé sans heures mais avec un AT avec arrêt dans la fenêtre : suivi, mois manquants signalés', () => {
+    const C = { id: 'c', archivedOn: '2026-03-20' };
+    const r = safetyRates({ months, sites: [A, C], hours: year('a'), events: [at('2026-02-10', 'c')] });
+    expect(r.accidents).toBe(0);
+    expect(r.missing).toEqual(months.filter((m) => m <= '2026-03').map((month) => ({ siteId: 'c', month })));
+    // Accident postérieur à l'archivage (donnée incohérente) : sa case reste attendue.
+    const after = safetyRates({ months, sites: [A, { id: 'd', archivedOn: '2025-06-30' }], hours: year('a'), events: [at('2026-04-01', 'd')] });
+    expect(after.missing).toEqual([{ siteId: 'd', month: '2026-04' }]);
+    // AT sans arrêt : pas une preuve, le site archivé sans heures reste hors suivi.
+    expect(safetyRates({ months, sites: [A, C], hours: year('a'), events: [at('2026-02-10', 'c', 0, 'sans_arret')] }).missing).toEqual([]);
+  });
+
+  it('accident sans site : compté si son mois est couvert sur un site ; sites hors entrée ignorés', () => {
+    const r = safetyRates({ months, sites: [A], hours: [...year('a'), ...year('b')], events: [at('2026-06-01', null), at('2026-06-02', 'b'), at('2026-06-03', 'a', 2, 'sans_arret')] });
+    expect(r.accidents).toBe(1);
+    expect(r.hours).toBe(120_000);
+  });
+
+  it('accidents de l’effectif seulement : ni intérimaire, ni personne extérieure (heures de l’effectif)', () => {
+    const events = [
+      at('2026-06-01', 'a', 4), at('2026-06-02', 'a', 3, 'arret', null),
+      at('2026-06-03', 'a', 20, 'arret', 'externe'), at('2026-06-04', 'a', 10, 'arret', 'interimaire'),
+    ];
+    expect(safetyRates({ months, sites: [A], hours: year('a'), events })).toMatchObject({ accidents: 2, lostDays: 7 });
+    // AT avec arrêt d'une personne extérieure : pas une preuve d'activité d'un site archivé sans heures.
+    const C = { id: 'c', archivedOn: '2026-03-20' };
+    expect(safetyRates({ months, sites: [A, C], hours: year('a'), events: [at('2026-02-10', 'c', 5, 'arret', 'externe')] }).missing).toEqual([]);
+    expect(workforceAccident({ type: 'AT', victimKind: 'salarie' })).toBe(true);
+    expect(workforceAccident({ type: 'AT', victimKind: null })).toBe(true);
+    expect(workforceAccident({ type: 'AT', victimKind: 'externe' })).toBe(false);
+    expect(workforceAccident({ type: 'AT', victimKind: 'interimaire' })).toBe(false);
+    expect(workforceAccident({ type: 'PA', victimKind: null })).toBe(false);
   });
 });

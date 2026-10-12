@@ -67,7 +67,7 @@ export default async function SiteMapPage({ searchParams }: Props) {
           </span>
         </div>
         <SiteMapScreen key={`${data.site.id}|${plan ?? ''}|${permit ?? ''}`} data={data} canManage={canManage(role)} initialDate={initialDate}
-          actionOptions={{ people: options.people, origins: options.origins, sites: options.sites }} />
+          actionOptions={{ people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites }} />
       </div>
     </>
   );

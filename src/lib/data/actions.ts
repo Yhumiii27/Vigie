@@ -8,12 +8,12 @@ import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
 import {
-  ACTION_COLUMNS, EVENT_ORIGINS, ORIGINS, TODO_HORIZON_DAYS, canOpen, isEmployee, preventionRefHref,
+  ACTION_COLUMNS, EVENT_ORIGINS, ORIGINS, TODO_HORIZON_DAYS, canOpen, isEmployee,
   type ActionColumn, type TodoItem, type Tone,
 } from '../domain';
 import { actionColumn, actionView, loadActions, loadAllActions, loadPeople, type ActionView } from '../queries';
 import { loadQhseLeads } from './leads';
-import { getSession } from '../session';
+import { getSession, inPerimeter } from '../session';
 import { loadChangeLogs } from './changelog';
 
 // ─── Plan d'actions ─────────────────────────────────────────────────────────
@@ -136,16 +136,12 @@ function toPlanAction(a: ActionView, ctx: Context): PlanAction {
 
 async function loadContext() {
   const db = await getDb();
-  const [people, actions, sites, links, session, files, plans, permits, documents, streams, events] = await Promise.all([
+  const [people, actions, sites, links, session, files, events] = await Promise.all([
     loadPeople(), loadAllActions(),
     // Tous les sites, archivés compris : une action d'un site archivé garde son libellé (« Tous les sites » sélectionné).
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
     loadLinkSources(), getSession(),
     db.select().from(t.attachments).where(eq(t.attachments.entityType, 'action')),
-    db.select({ id: t.preventionPlans.id }).from(t.preventionPlans),
-    db.select({ id: t.permits.id }).from(t.permits),
-    db.select({ id: t.documents.id }).from(t.documents),
-    db.select({ id: t.wasteStreams.id }).from(t.wasteStreams),
     db.select({ id: t.events.id, title: t.events.title, declarantId: t.events.declarantId, anonymous: t.events.anonymous }).from(t.events),
   ]);
   const history = await loadChangeLogs('action', actions.map((a) => a.id));
@@ -155,11 +151,6 @@ async function loadContext() {
     filesOf.set(r.entityId, [...(filesOf.get(r.entityId) ?? []), toAttachmentItem(r, r.uploadedBy ? people.get(r.uploadedBy)?.name : undefined)]);
   });
 
-  const ids = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
-  const planIds = ids(plans);
-  const permitIds = ids(permits);
-  const docIds = ids(documents);
-  const streamIds = ids(streams);
   const eventTitles = new Map(events.map((e) => [e.id, e.title]));
   // Salarié : /evenements ne montre que ses propres signalements (non anonymes).
   const ownEvents = new Set(events.filter((e) => e.declarantId === session.user.id && !e.anonymous).map((e) => e.id));
@@ -170,24 +161,20 @@ async function loadContext() {
     ? { label: id, href: null }
     : { label: id, detail: eventTitles.get(id), href: `/evenements?sel=${enc(id)}` });
 
-  /** Lien déduit de l'origine et de sa référence (événements, plans de prévention, documents, environnement). */
+  /**
+   * Lien déduit de la référence d'origine quand elle ne désigne pas de fiche source : événement saisi librement
+   * (« EV-2026-131 ») sans événement lié, registre annuel des déchets. Les plans, permis, documents, filières et
+   * enlèvements ne sont plus déduits du texte : ils sont rattachés par leur colonne (ACT-01, registre action-links).
+   */
   const originSource = (key: string, ref: string): PlanSource | null => {
     const first = ref.split(/[\s·,]+/)[0] ?? '';
     if (EVENT_ORIGINS.includes(key)) {
-      // Référence saisie librement (« EV-2026-131 ») sans événement lié.
       const id = eventTitles.has(ref) ? ref : eventTitles.has(first) ? first : null;
       if (id) return { ...eventSource(id), label: ref };
     }
-    if (key === 'prevention') {
-      if (planIds.has(ref) || planIds.has(first)) return { label: ref, href: `/prevention?plan=${enc(planIds.has(ref) ? ref : first)}` };
-      if (permitIds.has(ref) || permitIds.has(first)) return { label: ref, href: `/prevention?onglet=permis&permis=${enc(permitIds.has(ref) ? ref : first)}` };
-      if (/^P[PFE]-/.test(ref)) return { label: ref, href: preventionRefHref(ref) };
-    }
-    if (key === 'docs' && docIds.has(first)) return { label: ref, href: `/documents?doc=${enc(first)}` };
     if (key === 'env') {
-      const year = /Registre des déchets (\d{4})/.exec(ref)?.[1];
+      const year = /^Registre des déchets (\d{4})$/.exec(ref)?.[1];
       if (year) return { label: ref, href: `/environnement?vue=bsd-manquants&annee=${year}` };
-      if (streamIds.has(first)) return { label: ref, href: `/environnement?filiere=${enc(first)}` };
     }
     return null;
   };
@@ -202,14 +189,21 @@ async function loadContext() {
     const list: PlanSource[] = [];
     if (a.eventId) list.push(eventSource(a.eventId));
     // L'événement lié (type « event » du registre) est celui de a.eventId, déjà listé.
-    (links.get(a.id) ?? []).filter((s) => s.kind !== 'event')
-      .forEach((s) => list.push({ label: s.label, href: s.href, detail: s.detail, detachOnCancel: !ACTION_LINKS[s.kind]?.keptOnCancel }));
+    // Source d'origine sur un écran fermé au rôle (plan de prévention pour le Salarié…) : référence seule, sans intitulé.
+    const closed = new Set<PlanSource>();
+    (links.get(a.id) ?? []).filter((s) => s.kind !== 'event').forEach((s) => {
+      const source: PlanSource = { label: s.label, href: s.href, detail: s.detail, detachOnCancel: !ACTION_LINKS[s.kind]?.keptOnCancel };
+      if (ACTION_LINKS[s.kind]?.origin && !canOpen(session.role, s.href)) closed.add(source);
+      list.push(source);
+    });
     const fromOrigin = originSource(key, a.originRef);
     const target = (s: PlanSource) => s.href ?? s.label;
     if (fromOrigin && !list.some((s) => target(s) === target(fromOrigin))) list.push(fromOrigin);
     const fallback = list.length === 0;
     if (fallback) list.push({ label: a.originRef, href: ORIGINS[key]?.path ?? null });
-    const sources = list.map((s) => ({ ...s, href: s.href && canOpen(session.role, s.href) ? s.href : null }));
+    const sources = list.map((s) => ({
+      ...s, href: s.href && canOpen(session.role, s.href) ? s.href : null, ...(closed.has(s) ? { detail: undefined } : {}),
+    }));
     return { sources, fallback };
   };
 
@@ -264,7 +258,8 @@ export async function loadLinkedAction(id: string): Promise<{ action: PlanAction
   }
   const db = await getDb();
   const [other] = await db.select({ siteId: t.actions.siteId, pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.id, id));
-  if (!other || (employee && other.pilotId !== session.user.id)) return { action: null, elsewhere: null };
+  // Action d'un site hors du périmètre : introuvable (aucune fuite de son site, SEC-02).
+  if (!other || !inPerimeter(session.allowedSiteIds, other.siteId) || (employee && other.pilotId !== session.user.id)) return { action: null, elsewhere: null };
   return { action: null, elsewhere: other.siteId ? sites.get(other.siteId) ?? other.siteId : ALL_SITES_LABEL };
 }
 
@@ -289,7 +284,7 @@ export function filterPlan(all: PlanAction[], { origin, pilotId, q }: PlanFilter
  * Échéances du plan d'actions (actions annulées exclues par loadActions) :
  * actions en retard, actions à échéance sous 15 jours (hors celles portées par le programme d'audit),
  * vérifications d'efficacité à venir et dépassées (datées du jour, urgentes). Les vérifications concernent aussi
- * l'animateur QHSE, qui les mène.
+ * l'animateur QHSE, qui les mène. Tous les sites du périmètre (TDB-05) : siteId de l'action (null = tous les sites).
  */
 export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const db = await getDb();
@@ -297,13 +292,13 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const inWindow = (d: string | null | undefined): d is string => !!d && d >= now && d <= horizon;
   const [actions, people, plan, leads] = await Promise.all([
-    loadActions(), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems), loadQhseLeads(),
+    loadActions('perimeter'), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems), loadQhseLeads(),
   ]);
   const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
   const todo: TodoItem[] = [];
   actions.forEach((a) => {
     const col = actionColumn(a, now);
-    const base = { who: people.get(a.pilotId)?.name ?? '', href: `/actions?action=${a.id}`, ownerIds: [a.pilotId] };
+    const base = { who: people.get(a.pilotId)?.name ?? '', href: `/actions?action=${a.id}`, ownerIds: [a.pilotId], siteId: a.siteId };
     // La vérification d'efficacité concerne aussi le responsable QHSE du site, qui la mène.
     const verify = { ...base, ownerIds: [...new Set([a.pilotId, ...leads.forSite(a.siteId).ownerIds])] };
     if (col === 'late') todo.push({ ...base, date: now, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${a.title} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });

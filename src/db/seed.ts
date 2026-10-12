@@ -3,10 +3,11 @@ import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { addDays, monthName } from '../lib/dates';
 import { DEMO_QHSE_LEAD, DEMO_ROLE_PEOPLE } from '../lib/demo';
 import type { Role } from '../lib/domain';
+import { backfillActionLinks } from '../lib/origin-links';
 import * as t from './schema';
 import type { Db } from './types';
 import { seedDocuments } from './seeds/documents';
-import { seedEnvironment } from './seeds/environment';
+import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { seedPrevention } from './seeds/prevention';
 import { seedSitemap } from './seeds/sitemap';
 
@@ -74,6 +75,60 @@ const NEW_REPORTS: [string, string, string, string, string, string, number, stri
     "Bouteilles d'argon debout sans chaîne au poste soudure.", 'Bouteilles arrimées.', '2026-09-19T16:00:00+02:00'],
 ];
 
+// Compléments des événements (colonnes au-delà du tuple EVENTS), fusionnés à l'insertion :
+// - AT : rubriques de la déclaration d'accident du travail (EVT-01) ; intitulé et description neutres, la lésion et les
+//   soins vont dans les champs restreints (lesionNature, lesionSite, careGiven : données de santé, SEC-06) ;
+// - réclamation client : client et référence (EVT-05) ; environnement : aspect et milieu (EVT-05).
+// Pas de témoin pour EV-2026-118 et EV-2026-120, et le mot « arrêt » hors des champs de santé (tests d'isolement).
+const EVENT_DETAILS: Record<string, Partial<typeof t.events.$inferInsert>> = {
+  'EV-2026-127': {
+    title: "Accident à l'ébavurage au tour T-4",
+    description: "Glissade de la main sur l'arête vive d'une bride pendant l'ébavurage ; gants anti-coupure non portés.",
+    victimKind: 'salarie', victimId: 'mgirard', occurredTime: '10:40', workSchedule: '7 h 30 – 12 h · 13 h – 16 h 30',
+    knownAt: new Date('2026-09-26T10:55:00+02:00'),
+    activity: "Ébavurage d'une bride au poste T-4",
+    circumstances: "En ébavurant une bride à la lime, la main a glissé sur l'arête vive de la pièce. Gants anti-coupure non portés.",
+    witnesses: '[P. Roux] (usineur, poste voisin)',
+    lesionNature: 'Coupure superficielle', lesionSite: 'Index gauche', careGiven: 'Pansement au poste de secours, puis consultation du médecin (points de suture)',
+  },
+  'EV-2026-120': {
+    title: 'Accident au poste de meulage',
+    description: 'Particule métallique projetée lors du meulage malgré les lunettes ; écran facial non porté.',
+    victimKind: 'salarie', victimId: 'mgirard', occurredTime: '14:10',
+    activity: "Meulage d'un cordon de soudure",
+    circumstances: "Particule projetée par la meuleuse d'angle, passée sous les lunettes de protection ; écran facial non porté.",
+    lesionNature: 'Corps étranger superficiel', lesionSite: 'Œil droit', careGiven: 'Rinçage oculaire au poste de secours',
+  },
+  'EV-2026-119': {
+    title: 'Chute en descendant de la plateforme PIRL',
+    description: 'Faux pas sur la dernière marche de la plateforme.',
+    victimKind: 'salarie', victimId: 'amartin', occurredTime: '15:45', knownAt: new Date('2026-09-08T16:10:00+02:00'),
+    activity: 'Descente de la plateforme individuelle roulante après un réglage',
+    circumstances: 'Faux pas sur la dernière marche en descendant, sans charge en main.',
+    witnesses: '[J. Petit]',
+    lesionNature: 'Entorse', lesionSite: 'Cheville droite', careGiven: 'Accompagné aux urgences par un collègue',
+  },
+  'EV-2026-118': {
+    title: "Accident à la fermeture d'un carter",
+    description: 'Main prise entre le carter et le bâti lors de la fermeture.',
+    victimKind: 'salarie', victimId: 'tnguyen', occurredTime: '10:50',
+    activity: "Fermeture d'un carter en mise en service",
+    circumstances: 'Main restée sur le bord du bâti pendant la fermeture du carter.',
+    lesionNature: 'Pincement', lesionSite: 'Majeur droit', careGiven: 'Désinfection et pansement',
+  },
+  'EV-2026-128': { customer: '[Client C]', customerRef: 'Presse PC-400 · affaire K-2024-097' },
+  'EV-2026-126': { envAspect: 'Déversement', envMedium: 'Sol' },
+};
+
+// Registre des accidents du travail bénins (EVT-04), un registre par site : soins sans arrêt ni soins médicaux donnés par
+// un SST de l'effectif (titre SST valide dans MATRIX). L'inscription n° 1 attend encore les visas du registre papier.
+const BENIGN: (typeof t.benignAccidents.$inferInsert)[] = [
+  { siteId: 'ville-a', number: 1, eventId: 'EV-2026-118', careGivenAt: new Date('2026-09-07T11:05:00+02:00'), caregiverId: 'sbenali', caregiverQualification: 'sst',
+    care: 'Désinfection, pansement compressif', signedOn: null, createdById: 'clefevre', createdAt: new Date('2026-09-07T11:30:00+02:00') },
+  { siteId: 'ville-a', number: 2, eventId: 'EV-2026-120', careGivenAt: new Date('2026-09-10T14:20:00+02:00'), caregiverId: 'proux', caregiverQualification: 'sst',
+    care: 'Rinçage oculaire au sérum physiologique, contrôle visuel', signedOn: '2026-09-11', createdById: 'clefevre', createdAt: new Date('2026-09-10T14:45:00+02:00') },
+];
+
 // Analyse des causes de EV-2026-131 (seul événement dont l'analyse est saisie dans la maquette).
 const ANALYSES: [string, string, unknown][] = [
   ['EV-2026-131', '5m', [['Matière', 'Élingue textile usée, étiquette CMU illisible'], ['Matériel', 'Oreille de levage sans linguet de sécurité'], ['Méthode', 'Aucun mode opératoire pour le retournement'], ["Main-d'œuvre", 'Monteur seul, formation élingage à renouveler'], ['Milieu', 'Zone encombrée, visibilité réduite']]],
@@ -107,7 +162,7 @@ const ACTIONS: [string, string, string, string, string, string, string, string, 
 
 // Actions complémentaires (champs au-delà du tuple ACTIONS) : historique, annulation, efficacité dépassée, origines
 // cliquables de chaque type, actions de la revue de direction, de la prévention, de la veille et de l'environnement.
-// Prochain numéro libre après ces ajouts : A-220.
+// Prochain numéro libre après ces ajouts : A-221.
 const MORE_ACTIONS: (typeof t.actions.$inferInsert)[] = [
   // Efficacité à vérifier, vérification dépassée depuis le 02/10.
   { id: 'A-178', title: 'Afficher les consignes de tri au poste de lavage des pièces', origin: 'env', originRef: 'Registre des déchets 2026', pilotId: 'rfontaine', dueOn: '2026-09-12', status: 'verify', kind: 'P', verifyDueOn: '2026-10-02', siteId: 'ville-a', createdAt: new Date('2026-09-01T10:00:00+02:00') },
@@ -131,6 +186,10 @@ const MORE_ACTIONS: (typeof t.actions.$inferInsert)[] = [
   // Environnement : action liée à un enlèvement, puis à une filière.
   { id: 'A-218', title: 'Relancer la raffinerie pour le certificat de traitement du BSD-20260818-M3QX7TBC', origin: 'env', originRef: 'FD-11 · 19/08/2026', siteId: 'ville-b', pilotId: 'rfontaine', dueOn: '2026-10-20', status: 'todo', kind: 'C', createdAt: new Date('2026-10-07T10:00:00+02:00') },
   { id: 'A-219', title: "Contrôler l'habilitation ICPE de l'exutoire des fluides de coupe", origin: 'env', originRef: 'FD-04', siteId: 'ville-a', pilotId: 'clefevre', dueOn: '2026-11-15', status: 'todo', kind: 'P', createdAt: new Date('2026-10-07T10:00:00+02:00') },
+  // Écart passé R. 4512-6 (PRV-01) : PP-2026-008 signé le lendemain du démarrage ; action menée et close.
+  { id: 'A-220', title: "Rappeler aux chefs d'atelier la signature du plan de prévention avant tout démarrage (écart PP-2026-008)", origin: 'prevention', originRef: 'PP-2026-008',
+    siteId: 'ville-a', pilotId: 'clefevre', dueOn: '2026-04-30', status: 'done', kind: 'C', closedOn: '2026-05-05',
+    efficacyNote: 'Rappel fait en réunion des chefs d’atelier le 28/04 ; aucun démarrage sans plan signé depuis.', verifiedById: 'hmarchand', createdAt: new Date('2026-04-15T10:00:00+02:00') },
 ];
 
 // Projets Keystone référencés : les 7 livrés après le 20/01/2027 sont concernés par le règlement 2023/1230 (calcul automatique,
@@ -259,7 +318,8 @@ const CERTS: (typeof t.certifications.$inferInsert)[] = [
   { id: 'iso14001', domain: 'Environnement', standard: 'ISO 14001:2015', status: '', tone: 'off', note: "Étude d'opportunité à la revue de direction du 10/12" },
 ];
 
-// [ligne, mois, libellé, date, intitulé d'échéance, responsable, action]
+// [ligne, mois, libellé, date, intitulé d'échéance, responsable, action] — index 13 et 14 : échéances des revues de direction
+// (audit_plan_items.review_id, AUD-01) ; index 15 : élément annulé (AUD-03).
 const PLAN: [string, number, string, string?, string?, string?, string?][] = [
   ['Audits internes', 2, 'Achats', undefined, 'Processus Achats'], ['Audits internes', 4, 'BE', undefined, 'Processus Conception BE'], ['Audits internes', 6, 'Production', undefined, 'Processus Production'],
   ['Audits internes', 10, 'BE · 17/10', '2026-10-17', 'Processus Conception BE', '[E. Dubois]'], ['Audits internes', 12, 'Mise en serv.'],
@@ -268,13 +328,15 @@ const PLAN: [string, number, string, string?, string?, string?, string?][] = [
   ['Visites sécurité', 1, 'Montage'], ['Visites sécurité', 4, 'Usinage'], ['Visites sécurité', 7, 'Magasin'],
   ['Visites sécurité', 10, 'Essais 12/10', '2026-10-12', "Visite trimestrielle — zone d'essais", '[S. Benali]', 'A-181'],
   ['Revues de direction', 6, 'Interm. 18/06', '2026-06-18', 'Revue de direction intermédiaire', '[H. Marchand]'], ['Revues de direction', 12, 'Annuelle 10/12', '2026-12-10', 'Revue de direction annuelle', '[H. Marchand]'],
+  ['Audits internes', 8, 'Logistique', undefined, 'Processus Logistique et expédition'],
 ];
 // Réalisation et périmètre des éléments du programme, par index de PLAN (un élément réalisé porte sa date de réalisation).
 const PLAN_EXTRA: Record<number, Partial<typeof t.auditPlanItems.$inferInsert>> = {
   0: { done: true, doneOn: '2026-02-12', auditor: '[L. Moreau]', scope: 'Achats et sous-traitance' },
   1: { done: true, doneOn: '2026-04-16', auditor: '[L. Moreau]' },
   2: { done: true, doneOn: '2026-06-11', auditor: '[L. Moreau]', scope: 'Usinage, montage, contrôle final' },
-  3: { auditor: '[L. Moreau]', scope: 'Processus Conception BE' },
+  // Reporté de septembre au 17/10 (AUD-03 : première date prévue conservée).
+  3: { auditor: '[L. Moreau]', scope: 'Processus Conception BE', postponedFrom: '2026-09-17' },
   5: { certificationId: 'iso9001', auditor: '[Organisme certificateur]', scope: 'Conception, fabrication et mise en service de machines spéciales' },
   6: { done: true, doneOn: '2026-03-19' },
   // 7 : [Fourn. G] (septembre) non confirmé — échéance passée « à confirmer ».
@@ -282,6 +344,8 @@ const PLAN_EXTRA: Record<number, Partial<typeof t.auditPlanItems.$inferInsert>> 
   10: { done: true, doneOn: '2026-04-09' },
   11: { done: true, doneOn: '2026-07-07' },
   13: { done: true, doneOn: '2026-06-18' },
+  // Annulé (jamais supprimé), motif conservé : hors grille, échéances, constats et dossier.
+  15: { cancelledAt: new Date('2026-07-15T09:00:00+02:00'), cancelledById: 'clefevre', cancelReason: "Processus intégré au périmètre de l'audit Production de juin" },
 };
 
 // [élément du programme (index de PLAN), date, type, exigence, constat, action] ; libellé d'audit : « intitulé · mois année ».
@@ -310,6 +374,11 @@ const REVIEW: [label: string, done: boolean, source: string, ownerId: string | n
 ];
 
 const iso = (y: number, m: number, d: number) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+/** SIRET fictifs des sites de démonstration (clé de Luhn valide, jamais un SIRET réel). */
+const DEMO_SIRET: Record<string, string> = { 'ville-a': '00000000000018', 'ville-b': '00000000000026' };
+/** Titre de secourisme du jeu de démonstration (training_titles.first_aid). */
+const FIRST_AID_TITLE = 'sst';
 
 // Historique du workflow des événements : étape k franchie J+1, J+3, J+7, J+14, J+21 après les faits, à 10 h,
 // sans dépasser la date de référence du jeu de données (09/10/2026).
@@ -343,6 +412,11 @@ const demoEmail = (name: string) =>
  * ensuite dans « Gérer les sites » n'est jamais écrasé.
  */
 async function upgradeDemo(db: Db) {
+  // Liens réels des actions (ACT-01) : reprise idempotente des références d'origine textuelles (src/lib/origin-links.ts).
+  await backfillActionLinks(db, { apply: true });
+  // Lot 2 (migration 0004) : rubriques des AT, registre des accidents bénins, mentions du registre des déchets.
+  await upgradeDemoAccidents(db);
+  await upgradeDemoWasteMentions(db);
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -367,6 +441,69 @@ async function upgradeDemo(db: Db) {
 }
 
 /**
+ * Base de démonstration remplie avant la migration 0004 : accidents du travail sans les rubriques de la déclaration (EVT-01),
+ * registre des accidents bénins vide (EVT-04), titre SST non signalé comme titre de secourisme. Sans cette reprise, modifier
+ * un AT qualifié échoue tant que la victime et les circonstances ne sont pas saisies (EVT-05). Une seule fois : événement
+ * EV-2026-119 présent, aucune victime renseignée sur les AT de démonstration et registre vide. Les intitulés et descriptions
+ * ne sont remplacés que s'ils sont restés ceux du jeu d'origine.
+ */
+async function upgradeDemoAccidents(db: Db) {
+  const demoAt = EVENTS.filter((e) => e[2] === 'AT').map((e) => e[0]);
+  const [[marker], [withVictim], [benign]] = await Promise.all([
+    db.select({ n: count() }).from(t.events).where(eq(t.events.id, 'EV-2026-119')),
+    db.select({ n: count() }).from(t.events).where(and(inArray(t.events.id, demoAt), isNotNull(t.events.victimKind))),
+    db.select({ n: count() }).from(t.benignAccidents),
+  ]);
+  if (marker.n === 0 || withVictim.n > 0 || benign.n > 0) return;
+  await db.transaction(async (tx) => {
+    const rows = await tx.select({ id: t.events.id, title: t.events.title, description: t.events.description })
+      .from(t.events).where(inArray(t.events.id, Object.keys(EVENT_DETAILS)));
+    for (const row of rows) {
+      const original = EVENTS.find((e) => e[0] === row.id);
+      const { title, description, ...details } = EVENT_DETAILS[row.id];
+      await tx.update(t.events).set({
+        ...details,
+        ...(original && row.title === original[3] && title ? { title } : {}),
+        ...(original && row.description === original[11] && description ? { description } : {}),
+      }).where(eq(t.events.id, row.id));
+    }
+    const present = new Set(rows.map((r) => r.id));
+    const people = new Set((await tx.select({ id: t.people.id }).from(t.people)).map((p) => p.id));
+    const register = BENIGN.filter((b) => present.has(b.eventId) && (!b.caregiverId || people.has(b.caregiverId)));
+    if (register.length) await tx.insert(t.benignAccidents).values(register);
+    const [flagged] = await tx.select({ n: count() }).from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true));
+    if (flagged.n === 0) await tx.update(t.trainingTitles).set({ firstAid: true }).where(eq(t.trainingTitles.id, FIRST_AID_TITLE));
+  });
+}
+
+/**
+ * Mentions du registre des déchets (DOC-02, arrêté du 31 mai 2021) d'une base de démonstration antérieure à la migration
+ * 0004 : SIRET des sites de démonstration, mentions des filières FD-01 à FD-12 et de leurs enlèvements — seulement les
+ * valeurs encore vides (idempotent, jamais d'écrasement d'une saisie).
+ */
+async function upgradeDemoWasteMentions(db: Db) {
+  const [marker] = await db.select({ n: count() }).from(t.wasteStreams).where(eq(t.wasteStreams.id, 'FD-01'));
+  if (marker.n === 0) return;
+  const defaults = demoWasteStreamMentions();
+  await db.transaction(async (tx) => {
+    for (const [id, siret] of Object.entries(DEMO_SIRET)) {
+      await tx.update(t.sites).set({ siret }).where(and(eq(t.sites.id, id), isNull(t.sites.siret)));
+    }
+    const streams = await tx.select().from(t.wasteStreams).where(inArray(t.wasteStreams.id, Object.keys(defaults)));
+    for (const s of streams) {
+      const d = defaults[s.id];
+      if (s.collectorSiret || s.destinationSiret || s.qualification) continue;
+      await tx.update(t.wasteStreams).set(d).where(eq(t.wasteStreams.id, s.id));
+      const filled = { ...s, ...d };
+      await tx.update(t.wasteEntries).set({ destinationSiret: filled.destinationSiret, destinationAddress: filled.destinationAddress, qualification: filled.qualification, pop: filled.pop })
+        .where(and(eq(t.wasteEntries.streamId, s.id), isNull(t.wasteEntries.destinationSiret), isNull(t.wasteEntries.qualification)));
+      await tx.update(t.wasteEntries).set({ transporterSiret: filled.collectorSiret, transporterAddress: filled.collectorAddress, transporterReceipt: filled.collectorReceipt })
+        .where(and(eq(t.wasteEntries.streamId, s.id), eq(t.wasteEntries.transporter, s.collector), isNull(t.wasteEntries.transporterSiret)));
+    }
+  });
+}
+
+/**
  * Jeu de démonstration (VIGIE_DEMO=1 seulement, voir src/db/index.ts) : chargé dans une base vide (ni site ni personne) ;
  * base déjà remplie : mise à niveau unique d'un jeu de démonstration antérieur (upgradeDemo).
  */
@@ -377,8 +514,9 @@ export async function seed(db: Db) {
   await db.transaction(async (tx) => {
     await tx.insert(t.sites).values([
       // Établissement Seveso seuil haut : plan de prévention écrit dès la première minute d'intervention.
-      { id: 'ville-a', label: 'Site de [Ville A] — siège et ateliers', seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 1 },
-      { id: 'ville-b', label: "Site de [Ville B] — zone d'essais", seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 2 },
+      // SIRET fictifs (clé de Luhn valide) : registre des déchets (DOC-02).
+      { id: 'ville-a', label: 'Site de [Ville A] — siège et ateliers', seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 1, siret: DEMO_SIRET['ville-a'] },
+      { id: 'ville-b', label: "Site de [Ville B] — zone d'essais", seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 2, siret: DEMO_SIRET['ville-b'] },
     ]);
     await tx.insert(t.people).values(PEOPLE.map(([id, name, job, inSkillsMatrix, service], sort) => ({
       id, name, job, inSkillsMatrix, service, sort, siteId: SITE_B_PEOPLE.has(id) ? 'ville-b' : 'ville-a', ...LEFT[id],
@@ -410,6 +548,7 @@ export async function seed(db: Db) {
       description: e[11], immediateMeasures: e[12], analysisMethod: e[13], ncOrigin: e[14] ?? null, injury: e[15] ?? null, lostDays: e[16] ?? null,
       cpamDeclaredOn: CPAM[e[0]] ?? null,
       createdAt: new Date(`${e[1]}T09:00:00+02:00`),
+      ...EVENT_DETAILS[e[0]],
     })));
     await tx.insert(t.events).values(NEW_REPORTS.map(([id, occurredOn, type, title, location, declarant, severity, description, immediateMeasures, createdAt]) => ({
       id, siteId: 'ville-a', occurredOn, type, title, location, declarant: PEOPLE.find((p) => p[0] === declarant)![1], declarantId: declarant,
@@ -421,6 +560,7 @@ export async function seed(db: Db) {
       { eventId: 'EV-2026-123', kind: 'dismiss', fromStep: 0, toStep: 0, reason: 'Doublon de EV-2026-124 (même constat, même déclarant).', byId: 'clefevre', at: new Date('2026-09-20T09:00:00+02:00') },
     ]);
     await tx.insert(t.eventAnalyses).values(ANALYSES.map(([eventId, method, content]) => ({ eventId, method, content })));
+    await tx.insert(t.benignAccidents).values(BENIGN);
 
     const eventSite = new Map(EVENTS.map((e) => [e[0], SITE_B_LOCATION.test(e[4]) ? 'ville-b' : 'ville-a']));
     await tx.insert(t.actions).values(ACTIONS.map((a) => ({
@@ -449,6 +589,21 @@ export async function seed(db: Db) {
     }))).returning({ id: t.risks.id });
     const links = RISKS.flatMap((r, i) => r[8].map((actionId) => ({ riskId: inserted[i].id, actionId })));
     if (links.length) await tx.insert(t.riskActions).values(links);
+
+    // Registre des mises à disposition du DUERP (DUE-01) : la demande de l'ancien salarié est encore à traiter.
+    await tx.insert(t.duerpAccessRequests).values([
+      { requestedOn: '2026-03-20', requesterKind: 'cse', requesterName: 'CSE — réunion ordinaire de mars', siteId: null, version: '2026.1', communicatedOn: '2026-03-20', channel: 'sur_place', note: 'Présentation de la mise à jour annuelle et consultation du CSE.', createdById: 'clefevre', createdAt: new Date('2026-03-20T16:00:00+01:00') },
+      { requestedOn: '2026-04-02', requesterKind: 'medecin', requesterName: 'Service de prévention et de santé au travail', siteId: 'ville-a', version: '2026.1', communicatedOn: '2026-04-03', channel: 'electronique', note: null, createdById: 'clefevre', createdAt: new Date('2026-04-03T10:00:00+02:00') },
+      { requestedOn: '2026-10-05', requesterKind: 'ancien_salarie', requesterName: '[G. Vasseur]', siteId: 'ville-a', version: '2024.1', communicatedOn: null, channel: null, note: 'Ancien monteur (2019–2024) : versions en vigueur pendant son activité.', createdById: 'clefevre', createdAt: new Date('2026-10-05T09:30:00+02:00') },
+    ]);
+    // PAPRIPACT 2026 en préparation (DUE-02) : sans consultation du CSE ni lignes figées.
+    await tx.insert(t.preventionPrograms).values({ year: 2026, duerpVersion: '2026.1', comment: 'Programme issu de la mise à jour 2026.1, à présenter au CSE.', createdById: 'clefevre', createdAt: new Date('2026-09-01T10:00:00+02:00') });
+    await tx.insert(t.preventionProgramActions).values([
+      { year: 2026, actionId: 'A-205', estimatedCost: 2400, resources: 'Organisme de formation agréé · 4 × 1 jour', indicator: '4 monteurs habilités BR à jour' },
+      { year: 2026, actionId: 'A-201', estimatedCost: 1800, resources: 'Services généraux · marquage sous-traité', indicator: 'Aucun presque-accident chariot / piéton sur 6 mois' },
+      { year: 2026, actionId: 'A-203', estimatedCost: 12000, resources: 'Électricien ATEX externe', indicator: 'Vérification ATEX sans écart' },
+      { year: 2026, actionId: 'A-214', estimatedCost: 950, resources: 'Magasin · fournisseur levage', indicator: '100 % des élingues textiles remplacées' },
+    ]);
     const riskId = (unit: string, hazard: string) => inserted[RISKS.findIndex((r) => r[0] === unit && r[1] === hazard)].id;
 
     const reqIds = (await tx.insert(t.requirements).values(REQUIREMENTS.map((r, sort) => ({
@@ -475,7 +630,8 @@ export async function seed(db: Db) {
       controlId: controlIds[+i], performedOn, organization, reserves, notes, recordedById: 'clefevre', createdAt: new Date(`${performedOn}T17:00:00+02:00`),
     }))));
 
-    await tx.insert(t.trainingTitles).values(TITLES.map(([id, label, validityMonths], sort) => ({ id, label, validityMonths, sort })));
+    // Titre SST : ses titulaires valides donnent les soins du registre des accidents bénins (EVT-04).
+    await tx.insert(t.trainingTitles).values(TITLES.map(([id, label, validityMonths], sort) => ({ id, label, validityMonths, sort, firstAid: id === FIRST_AID_TITLE })));
     // Titre retiré du suivi (archivé), sans exigence ni formation.
     await tx.insert(t.trainingTitles).values({
       id: 'pont-ancien', label: 'Pontier (ancien référentiel)', validityMonths: 60, sort: TITLES.length,
@@ -531,6 +687,9 @@ export async function seed(db: Db) {
     await tx.update(t.actions).set({ reviewId: r2025.id }).where(inArray(t.actions.id, ['A-152', 'A-158']));
     await tx.update(t.actions).set({ reviewId: r2026i.id }).where(eq(t.actions.id, 'A-174'));
     await tx.update(t.actions).set({ reviewId: r2026.id }).where(eq(t.actions.id, 'A-184'));
+    // Échéances du programme portées par les revues (AUD-01) ; la revue du 11/12/2025 n'a pas d'élément au programme 2026.
+    await tx.update(t.auditPlanItems).set({ reviewId: r2026i.id }).where(eq(t.auditPlanItems.id, planIds[13])); // 'Interm. 18/06'
+    await tx.update(t.auditPlanItems).set({ reviewId: r2026.id }).where(eq(t.auditPlanItems.id, planIds[14])); // 'Annuelle 10/12'
     await tx.insert(t.reviewDecisions).values([
       { reviewId: r2025.id, kind: 'objectif', text: 'Politique QHSE reconduite ; objectif 2026 : TF1 < 4', pilotId: 'hmarchand', sort: 0 },
       { reviewId: r2025.id, kind: 'decision', text: 'Développer la remontée des presque-accidents', pilotId: 'clefevre', dueOn: '2026-03-31', actionId: 'A-152', sort: 1 },
@@ -546,6 +705,17 @@ export async function seed(db: Db) {
     await seedDocuments(tx);
     await seedEnvironment(tx);
     await seedSitemap(tx);
+
+    // Sources d'origine des actions Prévention, Documents et Environnement (ACT-01), après l'insertion des plans, permis,
+    // documents et déchets. A-178 (« Registre des déchets 2026 ») n'a pas de fiche source : elle reste repérée par sa référence.
+    await tx.update(t.actions).set({ preventionPlanId: 'PP-2026-012' }).where(eq(t.actions.id, 'A-206'));
+    await tx.update(t.actions).set({ preventionPlanId: 'PP-2026-008' }).where(eq(t.actions.id, 'A-220'));
+    await tx.update(t.actions).set({ permitId: 'PF-2026-031' }).where(eq(t.actions.id, 'A-216'));
+    await tx.update(t.actions).set({ documentId: 'PR-QHSE-002' }).where(eq(t.actions.id, 'A-208'));
+    await tx.update(t.actions).set({ wasteStreamId: 'FD-04' }).where(eq(t.actions.id, 'A-219'));
+    const [fd11] = await tx.select({ id: t.wasteEntries.id }).from(t.wasteEntries)
+      .where(and(eq(t.wasteEntries.streamId, 'FD-11'), eq(t.wasteEntries.removedOn, '2026-08-19')));
+    await tx.update(t.actions).set({ wasteEntryId: fd11.id }).where(eq(t.actions.id, 'A-218'));
 
     // Rattachements facultatifs des événements (après l'insertion des contrôles, risques, documents, plans et permis).
     const EVENT_LINKS: [string, Partial<typeof t.events.$inferInsert>][] = [

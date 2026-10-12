@@ -1,4 +1,4 @@
-/* Documents imprimables de la prévention (plan de prévention, registre des permis) : lisibles à l'écran (thème sombre)
+/* Documents imprimables de la prévention (plan de prévention, fiche et registre des permis) : lisibles à l'écran (thème sombre)
    et imprimables (fond blanc, texte noir). Feuille globale : toutes les règles sont préfixées par .pp- ; les pages
    s'ouvrent dans un nouvel onglet par un lien HTML simple, pour que cette feuille ne reste pas chargée dans l'application. */
 
@@ -39,7 +39,28 @@
 .pp-blank { height: 22px; border-bottom: 1px dashed var(--color-divider); color: var(--color-neutral-500); font-size: 11px; display: flex; align-items: flex-end; }
 .pp-foot { font-size: 11px; color: var(--color-neutral-500); text-align: center; padding-top: 4px; }
 
+/* Cases du formulaire importé (annexe du plan) et check-list d'un permis : ☑ / ☐ suivis du libellé. */
+.pp-check { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
+.pp-check-box { flex: none; width: 1.1em; text-align: center; }
+.pp-check-off { color: var(--color-neutral-500); }
+.pp-check-value { display: block; white-space: pre-line; color: var(--color-neutral-300); }
+.pp-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.pp-sub { display: grid; gap: 3px; }
+.pp-sub h3 { margin: 0; font-size: 12px; font-weight: 500; }
+.pp-sub .pp-ref { font-weight: 400; color: var(--color-neutral-500); }
+
+/* Bandeau d'état d'un permis (délivré à afficher, demande non délivrée, expiré, clos, annulé). */
+.pp-banner { border: 1px solid var(--color-divider); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; font-weight: 500; display: flex; gap: 8px; align-items: baseline; }
+.pp-banner-danger { border-color: var(--tone-danger-dot); color: var(--tone-danger-fg); }
+.pp-banner-ok { border-color: var(--tone-ok-dot); color: var(--tone-ok-fg); }
+
+/* Filtres du registre (formulaire GET de la barre d'outils, non imprimé). */
+.pp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.pp-filters label { display: grid; gap: 3px; font-size: 11px; color: var(--color-neutral-500); }
+.pp-filters .input { font-size: 12.5px; padding: 5px 8px; min-width: 120px; }
+
 @media (max-width: 760px) {
+  .pp-checklist { grid-template-columns: minmax(0, 1fr); }
   .pp-doc { padding: 16px 12px 32px; }
   .pp-meta { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .pp-meta dd { margin-bottom: 6px; }
@@ -63,6 +84,9 @@
   .pp-doc .table th, .pp-doc .table td { border-bottom: 1px solid #bbb !important; padding: 3px 5px; }
   .pp-doc .tag { background: none !important; border: 1px solid #888; padding: 1px 6px; }
   .pp-sign > div { border: 1px solid #999 !important; }
+  .pp-banner { border: 2px solid #000 !important; font-size: 11pt; break-inside: avoid; }
+  .pp-checklist, .pp-check { break-inside: avoid; }
+  .pp-doc .pp-check-off, .pp-doc .pp-sub .pp-ref { color: #444 !important; }
   .pp-blank { border-bottom: 1px solid #999 !important; }
   .pp-doc a { text-decoration: none; }
 }

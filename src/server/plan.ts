@@ -8,7 +8,7 @@ import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { EVENT_ORIGINS, ORIGINS, canApprove, canManage } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
-import { applyActionLink, checkActionLink, linkLogEntity } from '@/lib/action-links';
+import { applyActionLink, checkActionLink, linkLogEntity, originLinkFor, originSiteOf } from '@/lib/action-links';
 import { ALL_SITES_RESERVED, requireInSite, requireManager } from '@/lib/guard';
 import { ALL_SITES, activeSiteIds, getSession, inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
@@ -26,7 +26,12 @@ const SITE_CHOICE = 'Une nouvelle action vaut pour le site sélectionné ou pour
  * Champ caché `link` pour rattacher la nouvelle action à son origine (registre src/lib/action-links.ts) :
  * event:<id> · risk:<id> · finding:<id> · requirement:<id> · control:<id> · plan:<id> · docversion:<id>
  * · qualification:<personId>:<titleId> · review:<id> · reviewdecision:<id>
+ * · preventionplan:<id> · permit:<id> · document:<id> · wastestream:<id> · wasteentry:<id>
  * — mêmes contrôles que « Rattacher une action existante » (checkActionLink : écran ouvert au rôle, site de la source).
+ * Origine Prévention, Documents ou Environnement sans lien explicite : la référence d'origine désignant un plan, un permis,
+ * un document, une filière ou un enlèvement y rattache l'action (originLinkFor, ACT-01).
+ * Origine verrouillée (ACT-01) : `origin` et `originRef` ne sont lus qu'à la création ; une modification les conserve
+ * (la référence suit seulement l'événement lié qui change, quand elle était celle de l'ancien événement).
  * Action en « Efficacité à vérifier » : la date de vérification reste obligatoire et ne peut être reportée dans le passé.
  */
 export async function saveAction(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -36,20 +41,24 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
   const id = f.opt('id');
   const title = f.str('title', { required: true, max: 200 });
   const description = f.opt('description');
-  const origin = f.oneOf('origin', ORIGIN_KEYS, { required: true });
+  // Origine et référence : lues à la création seulement (origine verrouillée ensuite).
+  const originField = id ? null : f.oneOf('origin', ORIGIN_KEYS, { required: true });
   const pilotId = f.str('pilotId', { required: true });
   const dueOn = f.date('dueOn', { required: true });
   const kind = f.oneOf('kind', ['C', 'P'] as const, { required: true });
   const verifyDueOn = f.date('verifyDueOn');
-  let originRef = f.str('originRef', { max: 120 });
+  const refField = id ? '' : f.str('originRef', { max: 120 });
   const siteField = f.opt('siteId');
   const link = f.opt('link');
   if (!f.ok) return f.state();
-  const eventId = origin && EVENT_ORIGINS.includes(origin) ? f.opt('eventId') : null;
 
   const db = await getDb();
   const [cur] = id ? await db.select().from(t.actions).where(eq(t.actions.id, id)) : [];
   if (id && !cur) return { error: 'Action introuvable.' };
+  const origin = cur ? cur.origin : originField!;
+  let originRef = cur ? cur.originRef : refField;
+  // Formulaire sans sélecteur « Événement lié » (modification depuis un autre écran) : l'événement lié est conservé.
+  const eventId = !EVENT_ORIGINS.includes(origin) ? null : cur && !fd.has('eventId') ? cur.eventId : f.opt('eventId');
   if (cur?.status === 'cancelled') return { error: CANCELLED };
   if (cur?.status === 'done' && !canApprove(session.role)) return { error: "Seuls l'animateur QHSE et la direction modifient une action clôturée." };
   if (cur) {
@@ -67,7 +76,7 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
     // Référence par défaut : celle de l'événement, mise à jour si l'événement lié change (sauf référence saisie à part).
     if (!originRef || (cur && eventId !== cur.eventId && originRef === cur.eventId)) originRef = ev.id;
   }
-  if (!originRef) return { error: "Précisez la référence d'origine (événement, audit, exigence…).", fieldErrors: { originRef: 'Champ obligatoire.' } };
+  if (!cur && !originRef) return { error: "Précisez la référence d'origine (événement, audit, exigence…).", fieldErrors: { originRef: 'Champ obligatoire.' } };
 
   // '' = site sélectionné (ou celui de l'événement lié) ; 'all' = tous les sites.
   const selected = session.site.id !== ALL_SITES ? session.site.id : null;
@@ -87,6 +96,12 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
       ? (session.allowedSiteIds ? ALL_SITES_RESERVED : null)
       : !(await activeSiteIds()).includes(siteId) ? 'Site archivé ou inconnu : choisissez un site actif.' : null;
     if (blocked) return { error: blocked, fieldErrors: { siteId: blocked } };
+    // L'action reste sur le site de sa source d'origine (plan, permis, document, filière, enlèvement) : origine verrouillée.
+    const sourceSite = await originSiteOf(db, cur);
+    if (sourceSite !== undefined && !inSite(sourceSite, siteId)) {
+      const error = `L'action doit concerner le site de sa source (${cur.originRef}) : choisissez ce site.`;
+      return { error, fieldErrors: { siteId: 'Site différent de celui de la source.' } };
+    }
   }
 
   if (cur?.status === 'verify') {
@@ -99,8 +114,15 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
     const checked = await checkActionLink(db, session.role, link);
     if ('error' in checked) return { error: checked.error };
   }
+  // Source d'origine (plan, permis, document, filière, enlèvement) : lien explicite ou référence d'origine résolue.
+  let originLink: string | null = null;
+  if (!cur) {
+    const found = await originLinkFor(db, { origin, originRef, link, siteId });
+    if ('error' in found) return found;
+    originLink = found.link;
+  }
 
-  const values = { title, description, origin: origin!, originRef, pilotId, dueOn: dueOn!, kind: kind!, verifyDueOn, siteId };
+  const values = { title, description, origin, originRef, pilotId, dueOn: dueOn!, kind: kind!, verifyDueOn, siteId };
 
   if (cur) {
     let linkError: string | null = null;
@@ -135,8 +157,9 @@ export async function saveAction(_prev: FormState, fd: FormData): Promise<FormSt
   await db.transaction(async (tx) => {
     await tx.insert(t.actions).values({ id: newId, ...values, status: 'todo' });
     await logChange(tx, { entityType: 'action', entityId: newId, action: 'create', summary: 'Action créée', byId: session.user.id });
-    // Rattachements (registre src/lib/action-links.ts) : événement lié, puis source de l'écran appelant ; un échec annule la création.
-    for (const l of [eventId ? `event:${eventId}` : null, link]) {
+    // Rattachements (registre src/lib/action-links.ts) : événement lié, source d'origine, puis source de l'écran appelant ;
+    // un échec annule la création.
+    for (const l of [eventId ? `event:${eventId}` : null, originLink, link === originLink ? null : link]) {
       if (!l) continue;
       linkError = await applyActionLink(tx, l, newId);
       if (linkError) return tx.rollback();

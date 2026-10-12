@@ -6,7 +6,7 @@ import { today } from '@/lib/today';
 import { canApprove, type TodoItem } from '../domain';
 import { hasLeft } from '../people';
 import { loadPeople } from '../queries';
-import { currentSiteId, getSession, inSite } from '../session';
+import { getSession, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 import type { Option } from './options';
 
@@ -15,6 +15,8 @@ export type SiteAdminRow = {
   id: string; label: string; sort: number; seveso: string | null;
   /** Responsable QHSE (people.id) ; null = poste vacant. */
   qhseLeadId: string | null;
+  /** Droit local d'Alsace-Moselle : Vendredi saint et 26 décembre fériés (délai de déclaration CPAM, EVT-03). */
+  alsaceMoselle: boolean;
   /** Nom du responsable QHSE ; « (sorti de l'effectif) » s'il a quitté l'entreprise. */
   qhseLead: string | null;
   /** Date d'archivage (AAAA-MM-JJ), null pour un site actif. */
@@ -34,6 +36,7 @@ export const loadSiteAdmin = cache(async (): Promise<SiteAdminRow[]> => {
     return {
       id: s.id, label: s.label, sort: s.sort, seveso: s.seveso,
       qhseLeadId: s.qhseLeadId,
+      alsaceMoselle: s.alsaceMoselle,
       qhseLead: lead ? `${lead.name}${hasLeft(lead, now) ? " (sorti de l'effectif)" : ''}` : null,
       archivedOn: s.archivedAt ? s.archivedAt.toISOString().slice(0, 10) : null,
       archivedBy: s.archivedById ? people.get(s.archivedById)?.name ?? s.archivedById : null,
@@ -51,23 +54,24 @@ export const loadQhseLeadOptions = cache(async (): Promise<Option[]> => {
 });
 
 /**
- * Échéance « responsable QHSE à désigner » (TDB-01) : un site actif sans responsable, ou dont le responsable a quitté
- * l'effectif. Pour l'animateur QHSE et la direction seulement (qui règlent le responsable dans « Gérer les sites… »).
+ * Échéance « responsable QHSE à désigner » (TDB-01) : un site actif du périmètre (TDB-05) sans responsable, ou dont le
+ * responsable a quitté l'effectif. Pour l'animateur QHSE et la direction seulement (qui règlent le responsable dans
+ * « Gérer les sites… »).
  */
 export const loadSiteSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const { role } = await getSession();
   if (!canApprove(role)) return { todo: [] };
   const db = await getDb();
-  const [sites, leads, selected] = await Promise.all([
+  const [sites, leads, keep] = await Promise.all([
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     loadQhseLeads(),
-    currentSiteId(),
+    siteFilter('perimeter'),
   ]);
   const now = today();
   const ownerIds = leads.approvers.map((p) => p.id);
   return {
-    todo: sites.filter((s) => inSite(selected, s.id) && !leads.lead(s.id)).map((s) => ({
-      date: now, kind: 'Site', tone: 'warn', key: `site-lead|${s.id}`, ownerIds,
+    todo: sites.filter((s) => keep(s.id) && !leads.lead(s.id)).map((s) => ({
+      date: now, kind: 'Site', tone: 'warn', key: `site-lead|${s.id}`, ownerIds, siteId: s.id,
       title: `${s.label} — responsable QHSE à désigner (Gérer les sites…)`, who: 'Animateur QHSE / Direction',
     } satisfies TodoItem)),
   };

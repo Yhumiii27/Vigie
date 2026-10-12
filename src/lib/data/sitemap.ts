@@ -15,7 +15,7 @@ import { addDays } from '../dates';
 import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';
 import { lcfirst, loadPeople } from '../queries';
-import { currentSiteId } from '../session';
+import { currentSiteId, siteFilter } from '../session';
 import { attachmentUrl } from '../uploads';
 import { loadFormOptions } from './options';
 
@@ -285,17 +285,18 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 /**
- * Badge et échéances de coactivité sur le site sélectionné (ou tous les sites).
+ * Badge et échéances de coactivité sur tous les sites actifs du périmètre (TDB-05, siteId du site) ; le lien porte
+ * toujours le site (&site=), la clé « lu » ne dépend donc pas du sélecteur.
  * badge = situations de coactivité distinctes aujourd'hui ;
  * todo = une échéance par jour (aujourd'hui et les 15 suivants) et par site ayant au moins une situation de coactivité ;
  * le titre signale les situations nouvelles par rapport à la veille.
  */
 export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
-  const [rows, people, selected] = await Promise.all([loadRows(), loadPeople(), currentSiteId()]);
+  const [rows, people, keep] = await Promise.all([loadRows(), loadPeople(), siteFilter('perimeter')]);
   const now = today();
   let badge = 0;
   const todo: TodoItem[] = [];
-  for (const site of rows.sites.filter((s) => !selected || s.id === selected)) {
+  for (const site of rows.sites.filter((s) => keep(s.id))) {
     const { input, zones, routes } = siteInput(rows, site.id, people, now);
     if (!input.activities.length) continue;
     const zoneName = new Map(zones.map((z) => [z.id, z.name]));
@@ -325,7 +326,8 @@ export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; to
         tone: list.some((c) => c.tone === 'danger') ? 'danger' : 'warn',
         title: `${head}${where ? ` · ${where}` : ''}`,
         who: '',
-        href: `/prevention/carte?date=${date}${selected ? '' : `&site=${site.id}`}`,
+        siteId: site.id,
+        href: `/prevention/carte?date=${date}&site=${site.id}`,
         // Badge : situations distinctes d'aujourd'hui ; les jours suivants n'ajoutent rien au badge.
         count: i === 0 ? list.length : 0,
       });

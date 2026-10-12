@@ -8,7 +8,9 @@ import type { SeedTx } from './types';
 // (sites.ppFromFirstMinute, voir seed.ts). Écarts les 07 et 08/10, à toute heure (interventions d'entreprises extérieures
 // sans plan signé : plans en cours et permis demandés ou délivrés) : exactement deux, sur le site A — PP-2026-013
 // (signature de l'entreprise extérieure manquante) et PP-2026-015 (brouillon, sans inspection commune) — repris dans
-// la veille (R. 4512-6 · « 2 interventions sans plan signé »). La demande PF-2026-032 relève de l'intervention
+// la veille (R. 4512-6 · « 2 interventions sans plan signé · 1 écart passé sur 12 mois »). Écart passé (PRV-01, indicateurs
+// de la veille et de la revue, pas le badge) : PP-2026-008 (clos), signé le lendemain du démarrage de l'intervention, écart
+// tracé par l'action A-220 (seed.ts). La demande PF-2026-032 relève de l'intervention
 // PP-2026-015 : elle est en écart, comptée avec son plan (« Écart · compté avec PP-2026-015 »), et sa délivrance est bloquée.
 // Les autres permis d'entreprises extérieures sont rattachés à un plan signé couvrant leur validité (PF-2026-029, PE-2026-009) ;
 // les autres permis sont réalisés par le personnel interne (sans entreprise extérieure ni intervenant d'une autre entreprise).
@@ -17,6 +19,8 @@ import type { SeedTx } from './types';
 // (intervention reportée, motif conservé) ; PF-2026-028 est annulé avec son motif. Échéances : PP-2026-011 est à clore (période
 // terminée), PP-2026-018 a une inspection commune prévue le 15/10, PE-2026-009 est à délivrer. Ces plans sont signés, clos, annulés
 // ou à venir : ils n'ajoutent aucun écart.
+// Contenu réglementaire (PRV-02, R. 4511-10, R. 4512-8 1° à 5°, R. 4512-9) : renseigné pour les plans signés ou clos (CONTENT) ;
+// PP-2026-015 et PP-2026-018 (brouillons) restent « contenu à compléter », PP-2026-010 (annulé) vide.
 
 // [id, raison sociale, corps de métier, contact, téléphone, e-mail]
 const CONTRACTORS: [string, string, string, string, string, string][] = [
@@ -38,9 +42,124 @@ type PlanSeed = {
   estimatedHours: number; dangerousWork: boolean; keystoneProject?: string; inspectionOn?: string;
   interferenceRisks: string; measures: string; status: string; signedEuOn?: string; signedEeOn?: string; ownerId: string;
   cancelledAt?: Date; cancelledById?: string; cancelReason?: string;
+  firstSignedOn?: string;
+};
+
+/** Contenu réglementaire du plan (PRV-02) : colonnes dédiées de prevention_plans. */
+type PlanContent = {
+  eeHeadcount?: number; eeSupervisor?: string; subcontracting?: string; dangerousPhases?: string; equipment?: string;
+  workerInstructions?: string; emergencyOrganisation?: string; coordination?: string; sirPosts?: string;
+};
+
+const EMERGENCY_A = 'évacuation selon le plan affiché, point de rassemblement parking nord ; secours 18/112, poste de garde 2222';
+const EMERGENCY_B = "évacuation selon le plan affiché de la zone d'essais ; secours 18/112, poste de garde 2222";
+
+const CONTENT: Record<string, PlanContent> = {
+  'PP-2025-033': {
+    eeHeadcount: 4, eeSupervisor: '[R. Blanc], conducteur de travaux revêtements de sols', subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Ponçage du support (poussières) ; application de la résine (vapeurs de solvants) ; circulation pendant le séchage',
+    equipment: "Ponceuse, aspirateur de chantier et ventilateurs d'extraction de l'entreprise extérieure ; aucun matériel prêté",
+    workerInstructions: "Accueil sécurité du site Seveso ; aucune source d'ignition dans l'atelier ; FDS de la résine affichées à l'entrée ; masque A2P2 pendant l'application",
+    emergencyOrganisation: `SST de l'atelier usinage, extincteurs CO2 et poudre à l'entrée de la zone ; ${EMERGENCY_A}`,
+    coordination: "Points d'ouverture et de fin de chantier avec le chef d'atelier usinage ; accès aux zones sèches validé par [S. Benali]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2025-041': {
+    eeHeadcount: 2, eeSupervisor: "[F. Mercier], chef d'équipe nettoyage industriel", subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Lavage des fosses de rétention (sols glissants, fluides de coupe) ; vidage des bacs à copeaux près des convoyeurs ; détergents alcalins',
+    equipment: "Autolaveuse et nettoyeur haute pression de l'entreprise extérieure ; convoyeurs à copeaux consignés par le personnel interne ; aucun matériel prêté",
+    workerInstructions: 'Accueil sécurité du site Seveso pour chaque nouvel intervenant ; convoyeurs consignés avant intervention ; zones lavées balisées ; FDS des produits remises au service QHSE',
+    emergencyOrganisation: `Intervention de 5 h à 8 h : poste de garde prévenu à l'arrivée ; douche de sécurité de l'atelier usinage ; ${EMERGENCY_A}`,
+    coordination: 'Planning mensuel validé par [S. Benali] ; fiche de liaison au poste de garde à chaque intervention',
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-008': {
+    eeHeadcount: 2, eeSupervisor: "[S. Garnier], chef d'équipe chaudronnerie", subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: "Soudage à l'arc dans la trémie (espace semi-confiné, fumées) ; meulage des cordons ; travail sur la passerelle de chargement",
+    equipment: "Postes de soudage et extracteur de fumées de l'entreprise extérieure ; passerelle et garde-corps du poste de chargement (installations du site)",
+    workerInstructions: 'Permis de feu journalier ; trémie vidée, nettoyée et consignée avant intervention ; surveillance de 2 h après les travaux par points chauds',
+    emergencyOrganisation: `SST de l'atelier montage, extincteurs à poudre au pied de la trémie ; ${EMERGENCY_A}`,
+    coordination: "Chargement suspendu pendant l'intervention ; point quotidien avec [S. Benali]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-009': {
+    eeHeadcount: 2, eeSupervisor: "[N. Carpentier], chargé d'affaires électricité industrielle (habilité BR, BC)",
+    subcontracting: 'Thermographie sous-traitée à [Cabinet Thermographie Ouest] (opérateur certifié)',
+    dangerousPhases: 'Ouverture des armoires sous tension pour la thermographie ; resserrage des connexions après consignation',
+    equipment: "Caméra thermique et outillage isolé de l'entreprise extérieure ; cadenas de consignation fournis par le site",
+    workerInstructions: 'Accueil sécurité du site Seveso ; habilitations BR et BC vérifiées ; périmètre balisé devant les armoires ouvertes ; EPI arc électrique',
+    emergencyOrganisation: `SST des ateliers, défibrillateur à l'accueil ; coupure d'urgence au TGBT ; ${EMERGENCY_A}`,
+    coordination: "Coupures programmées avec les chefs d'atelier ; consignation par le chargé de consignation interne",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-011': {
+    eeHeadcount: 1, eeSupervisor: '[C. Perrin], technicien de maintenance incendie', subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Circulation en zone ATEX 2 ; mise en eau des RIA',
+    equipment: "Outillage de l'entreprise extérieure ; aucun matériel prêté",
+    workerInstructions: "Accueil sécurité de la zone d'essais ; accompagnement par le chef de zone ; aucun appareil électrique non ATEX en zone 2",
+    emergencyOrganisation: `SST de la zone d'essais ; ${EMERGENCY_B}`,
+    coordination: "Intervention hors campagne d'essais, validée par [J. Petit]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-012': {
+    eeHeadcount: 2, eeSupervisor: "[S. Garnier], chef d'équipe chaudronnerie", subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Soudage par points chauds près du banc BE-1 ; travail en hauteur sur la plateforme ; levage des éléments de garde-corps',
+    equipment: "Postes de soudage de l'entreprise extérieure ; ligne de vie provisoire installée par l'entreprise extérieure",
+    workerInstructions: 'Permis de feu journalier ; essais suspendus pendant les points chauds ; harnais sur la plateforme',
+    emergencyOrganisation: `SST de la zone d'essais, extincteurs à poudre au pied de la plateforme ; ${EMERGENCY_B}`,
+    coordination: "Point quotidien avec [J. Petit] ; campagne d'essais décalée",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-013': {
+    eeHeadcount: 3, eeSupervisor: "[M. Lebrun], chef d'équipe maintenance levage", subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Travail en nacelle sur le chemin de roulement ; dépose et levage du câble ; essais des fins de course pont déconsigné',
+    equipment: "Nacelle de l'entreprise extérieure (VGP à jour) ; pont 5 t prêté par l'atelier pour les levages du poste M3, conduit par le personnel interne",
+    workerInstructions: "Accueil sécurité du site Seveso avant l'intervention ; consignation du pont par le chargé de consignation ; zone balisée interdite sous la nacelle",
+    emergencyOrganisation: "SST de l'atelier montage, alarme et évacuation selon le plan affiché, point de rassemblement parking nord ; secours 18/112, poste de garde 2222",
+    coordination: "Point quotidien 7 h 30 avec le chef d'atelier montage ; levages coordonnés par [S. Benali]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-014': {
+    eeHeadcount: 2, eeSupervisor: '[V. Rousseau], technicien ATEX (certification ISM-ATEX)', subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: "Ouverture d'enveloppes antidéflagrantes en zone 2 ; essais des matériels remis en état",
+    equipment: "Explosimètre et outillage antiétincelles de l'entreprise extérieure ; bancs BE-1 et BE-2 (installations du site) arrêtés",
+    workerInstructions: "Accueil sécurité de la zone d'essais ; mesure d'atmosphère avant ouverture ; permis d'essai suspendu pendant l'intervention",
+    emergencyOrganisation: `SST de la zone d'essais ; arrêt d'urgence des bancs ; ${EMERGENCY_B}`,
+    coordination: "Interventions planifiées hors campagnes d'essais avec [J. Petit]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-015': { eeHeadcount: 2, eeSupervisor: "[S. Garnier], chef d'équipe chaudronnerie" },
+  'PP-2026-016': {
+    eeHeadcount: 3, eeSupervisor: "[N. Carpentier], chargé d'affaires électricité industrielle (habilité B2V, BR)", subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: "Travaux au voisinage de pièces nues sous tension ; coupure générale de l'atelier montage le 20/10 ; raccordement du poste d'essais",
+    equipment: "Outillage isolé et VAT de l'entreprise extérieure ; TGBT consigné par le chargé de consignation interne",
+    workerInstructions: "Habilitations B2V et BR vérifiées ; consignation du TGBT avant intervention ; vérification d'absence de tension ; balisage et affichage",
+    emergencyOrganisation: `SST de l'atelier montage, défibrillateur à l'accueil ; ${EMERGENCY_A}`,
+    coordination: "Coupure du 20/10 programmée hors production avec [S. Benali] ; coordination avec le montage de la cellule [Client E] sur le poste voisin",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-017': {
+    eeHeadcount: 1, eeSupervisor: '[C. Perrin], technicien de maintenance incendie', subcontracting: 'Aucun sous-traitant',
+    dangerousPhases: 'Circulation dans les ateliers en production et au magasin ; mise en eau des RIA',
+    equipment: "Outillage et extincteurs de remplacement de l'entreprise extérieure ; aucun matériel prêté",
+    workerInstructions: 'Accueil sécurité du site Seveso ; accompagnement par le service QHSE ; gilet haute visibilité et chaussures de sécurité',
+    emergencyOrganisation: `SST des ateliers ; ${EMERGENCY_A}`,
+    coordination: "Passage poste par poste annoncé aux chefs d'atelier par [C. Lefèvre]",
+    sirPosts: 'Aucun poste',
+  },
+  'PP-2026-018': { dangerousPhases: "Travail en hauteur sur le chemin de roulement ; levage du moto-réducteur au-dessus des postes d'usinage" },
 };
 
 const PLANS: PlanSeed[] = [
+  {
+    // Écart passé (PRV-01) : plan signé par les deux entreprises le lendemain du démarrage (13/04), écart tracé par A-220.
+    id: 'PP-2026-008', siteId: 'ville-a', contractorId: 'EE-004',
+    title: 'Réparation par soudage de la trémie du poste de chargement',
+    location: 'Atelier montage · poste de chargement', startOn: '2026-04-13', endOn: '2026-04-15', estimatedHours: 18, dangerousWork: true,
+    inspectionOn: '2026-04-13', signedEuOn: '2026-04-14', signedEeOn: '2026-04-14', firstSignedOn: '2026-04-14', status: 'clos', ownerId: 'clefevre',
+    interferenceRisks: 'Soudage dans la trémie du poste de chargement ; chargement des bâtis suspendu ; circulation du chariot élévateur au pied du poste.',
+    measures: 'Trémie vidée et consignée ; permis de feu journalier ; balisage du pied de la trémie ; extracteur de fumées.',
+  },
   {
     // Historique de l'entreprise archivée EE-007.
     id: 'PP-2025-033', siteId: 'ville-a', contractorId: 'EE-007',
@@ -212,16 +331,30 @@ const instant = (local: string) => (local < '2026-03-29' || local >= '2026-10-25
 
 export async function seedPrevention(tx: SeedTx) {
   await tx.insert(t.contractors).values(CONTRACTORS.map(([id, name, trade, contactName, contactPhone, contactEmail]) => ({ id, name, trade, contactName, contactPhone, contactEmail, ...ARCHIVED[id] })));
-  await tx.insert(t.preventionPlans).values(PLANS.map((p) => ({
-    ...p,
-    keystoneProject: p.keystoneProject ?? null,
-    inspectionOn: p.inspectionOn ?? null,
-    signedEuOn: p.signedEuOn ?? null,
-    signedEeOn: p.signedEeOn ?? null,
-    cancelledAt: p.cancelledAt ?? null,
-    cancelledById: p.cancelledById ?? null,
-    cancelReason: p.cancelReason ?? null,
-  })));
+  await tx.insert(t.preventionPlans).values(PLANS.map((p) => {
+    const c = CONTENT[p.id] ?? {};
+    return {
+      ...p,
+      eeHeadcount: c.eeHeadcount ?? null,
+      eeSupervisor: c.eeSupervisor ?? '',
+      subcontracting: c.subcontracting ?? '',
+      dangerousPhases: c.dangerousPhases ?? '',
+      equipment: c.equipment ?? '',
+      workerInstructions: c.workerInstructions ?? '',
+      emergencyOrganisation: c.emergencyOrganisation ?? '',
+      coordination: c.coordination ?? '',
+      sirPosts: c.sirPosts ?? '',
+      // Première signature complète (la plus tardive des deux), comme la reprise de la migration 0004.
+      firstSignedOn: p.firstSignedOn ?? (p.signedEuOn && p.signedEeOn ? [p.signedEuOn, p.signedEeOn].sort()[1] : null),
+      keystoneProject: p.keystoneProject ?? null,
+      inspectionOn: p.inspectionOn ?? null,
+      signedEuOn: p.signedEuOn ?? null,
+      signedEeOn: p.signedEeOn ?? null,
+      cancelledAt: p.cancelledAt ?? null,
+      cancelledById: p.cancelledById ?? null,
+      cancelReason: p.cancelReason ?? null,
+    };
+  }));
   await tx.insert(t.permits).values(PERMITS.map((p) => ({
     id: p.id,
     type: p.type,
@@ -241,5 +374,10 @@ export async function seedPrevention(tx: SeedTx) {
     closedAt: p.closedAt ? instant(p.closedAt) : null,
     cancelledById: p.cancelledById ?? null,
     cancelReason: p.cancelReason ?? null,
+  })));
+  // Délivrance des permis en cours (PRV-03) : date affichée sur la fiche imprimée (« Délivré par X le … »).
+  await tx.insert(t.changeLog).values(PERMITS.filter((p) => p.status === 'delivre' && p.issuerId).map((p) => ({
+    entityType: 'permit', entityId: p.id, action: 'status', summary: 'Permis délivré', byId: p.issuerId!,
+    at: new Date(instant(p.validFrom).getTime() - 15 * 60_000),
   })));
 }

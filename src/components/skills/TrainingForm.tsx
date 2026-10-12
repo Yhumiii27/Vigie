@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
-import { ATTACH_ACCEPT, MAX_FILE_BYTES } from '@/lib/attachments';
+import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
+import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import type { SkillRow, TrainingTitle } from '@/lib/data/skills';
 import { saveQualification } from '@/server/skills';
@@ -49,6 +50,8 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
   const [expiresOn, setExpiresOn] = useState(initial ? initial.expiresOn ?? '' : expiryFor(title, startOn));
   // Échéance saisie à la main : conservée quand le titre choisi n'a pas de durée de validité.
   const [expiryTyped, setExpiryTyped] = useState(false);
+  // Attestations refusées avant l'envoi (au-delà des limites, la requête n'atteindrait pas le serveur : HAB-01).
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const cellOf = (pid: string, tid: string) => rows.find((r) => r.person.id === pid)?.cells.find((c) => c.title.id === tid);
   const cell = cellOf(personId, titleId);
@@ -112,9 +115,10 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
         <Input name="provider" list="vg-training-providers" value={provider} onChange={(e) => { setProvider(e.target.value); setProviderTyped(true); }} maxLength={120} />
         <datalist id="vg-training-providers">{providers.map((p) => <option key={p} value={p} />)}</datalist>
       </Field>
-      <Field name="files" label="Attestation (facultatif)" hint={`PDF ou photo · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier.`}>
-        <Input name="files" type="file" multiple accept={ATTACH_ACCEPT} />
+      <Field name="files" label="Attestation (facultatif)" hint={FILES_HINT}>
+        <Input name="files" type="file" multiple accept={ATTACH_ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
       </Field>
+      <FileError error={fileError} />
       {cell?.obtainedOn && !initial && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
           <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />

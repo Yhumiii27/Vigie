@@ -20,6 +20,7 @@
     "db:list": "tsx --conditions=react-server scripts/vigie-db.ts list",
     "db:check": "tsx --conditions=react-server scripts/vigie-db.ts check",
     "db:test-migrate": "tsx --conditions=react-server scripts/vigie-db.ts test-migrate",
+    "db:reprise-liens": "tsx --conditions=react-server scripts/vigie-db.ts reprise-liens",
     "uploads:encrypt": "tsx --conditions=react-server scripts/vigie-db.ts encrypt-uploads",
     "build:standalone": "VIGIE_STANDALONE=1 next build",
     "build:ops": "esbuild scripts/vigie-db.ts --bundle --platform=node --format=cjs --target=node22 --conditions=react-server --external:@electric-sql/pglite --external:drizzle-kit --external:pg-native --log-level=warning --outfile=.next/standalone/scripts/vigie-db.cjs"

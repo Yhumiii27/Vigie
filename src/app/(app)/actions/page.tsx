@@ -57,7 +57,7 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
   const manage = canManage(session.role);
   // Listes du formulaire (effectif, événements du site) : seulement pour l'encadrement, seul à créer et modifier une action.
   const formOptions = manage
-    ? { people: options.people, origins: options.origins, sites: options.sites, events: options.events }
+    ? { people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites, events: options.events }
     : { people: [], origins: [], sites: [] };
   // Création : le site sélectionné ou tous les sites (une modification peut transférer l'action vers un autre site).
   const newOptions = session.site.id === ALL_SITES ? formOptions : { ...formOptions, sites: formOptions.sites.filter(([id]) => id === session.site.id) };

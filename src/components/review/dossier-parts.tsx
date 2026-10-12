@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { ToneTag } from '@/components/ui';
 import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
-import { TONE, canOpen, type Role } from '@/lib/domain';
+import { REVIEW_FOLLOW_UP, TONE, canOpen, type Role } from '@/lib/domain';
+import type { FollowUpRow } from '@/lib/data/review';
 import type { ActionBrief } from '@/lib/queries';
 
 // Éléments de mise en page du dossier de revue de direction (classes rd-* de src/app/revue-de-direction/dossier.css).
@@ -112,6 +113,49 @@ export function ActionTable({ rows, role, review, extra }: {
       </tbody>
     </table>
   );
+}
+
+/**
+ * Suivi des décisions et actions des revues précédentes (§9.3.2 a, AUD-05) : suite donnée à chaque décision, objectif ou
+ * besoin en ressources (action et statut, « Sans action au plan », action annulée avec son motif).
+ */
+export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role }) {
+  return (
+    <table className="table rd-table">
+      <thead><tr><th>Revue</th><th>Nature</th><th style={{ width: '38%' }}>Décision ou action</th><th>Pilote</th><th>Échéance</th><th>Suite donnée</th></tr></thead>
+      <tbody>
+        {rows.map((x) => (
+          <tr key={x.key}>
+            <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{x.review}</td>
+            <td style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</td>
+            <td>{x.text}</td>
+            <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
+            <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
+            <td>
+              {x.state === 'no_action' && <span style={{ color: x.tone === 'neutral' ? undefined : TONE[x.tone].fg }}>{REVIEW_FOLLOW_UP.no_action.label}</span>}
+              {x.state === 'cancelled' && (
+                <span style={{ display: 'grid', gap: 2 }}>
+                  <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{REVIEW_FOLLOW_UP.cancelled.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
+                  {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>Motif : {x.cancelled.reason}</span>}
+                </span>
+              )}
+              {x.state === 'action' && (x.action
+                ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></span>
+                : <span className="rd-muted">{x.actionId}</span>)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** « 6 éléments · 2 ouverts · 1 sans action · 1 annulé ». */
+export function followUpAside(rows: FollowUpRow[]) {
+  const open = rows.filter((x) => x.open).length;
+  const none = rows.filter((x) => x.state === 'no_action').length;
+  const cancelled = rows.filter((x) => x.state === 'cancelled').length;
+  return `${plural(rows.length, 'élément', 'éléments')} · ${plural(open, 'ouvert', 'ouverts')} · ${none} sans action · ${plural(cancelled, 'annulé', 'annulés')}`;
 }
 
 // ─── Mise en forme ──────────────────────────────────────────────────────────

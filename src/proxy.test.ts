@@ -50,6 +50,23 @@ describe('démonstration (VIGIE_DEMO=1, application Mac)', () => {
     expect(origin.headers.get('content-security-policy')).toBe(REFUSAL_CSP);
   });
 
+  it('rôle du sélecteur (SEC-14) : écran fermé → accueil du rôle avant le rendu ; server actions et aperçu mobile passent', async () => {
+    useEnv({ VIGIE_DEMO: '1' });
+    const salarie = { cookie: 'vigie_role=Salarié' };
+    const closed = await proxy(req('http://localhost:3200/veille', { headers: salarie }));
+    expect(closed.status).toBe(307);
+    expect(closed.headers.get('location')).toBe('http://localhost:3200/evenements');
+    expect(closed.headers.get('content-security-policy')).toBe(REFUSAL_CSP);
+    expect(closed.headers.get('cache-control')).toBe('no-store');
+    expect(passes(await proxy(req('http://localhost:3200/evenements', { headers: salarie })))).toBe(true);
+    expect(passes(await proxy(req('http://localhost:3200/veille', { method: 'POST', headers: { ...salarie, origin: 'http://localhost:3200' } })))).toBe(true);
+    expect(passes(await proxy(req('http://localhost:3200/apercu-mobile', { headers: salarie })))).toBe(true);
+    // Cookie inconnu : rôle par défaut de la démonstration (animateur QHSE), tout est ouvert.
+    expect(passes(await proxy(req('http://localhost:3200/veille', { headers: { cookie: 'vigie_role=Inconnu' } })))).toBe(true);
+    // Route publique (signalement par QR code) : jamais redirigée selon le rôle.
+    expect(passes(await proxy(req('http://localhost:3200/signaler?jeton=jeton-de-poste-0123456789', { headers: salarie })))).toBe(true);
+  });
+
   it('pièces jointes : pas de CSP de page', async () => {
     useEnv({ VIGIE_DEMO: '1' });
     const r = await proxy(req('http://localhost:3200/fichiers/abc'));

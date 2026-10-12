@@ -1,8 +1,10 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
-import { lt, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
+import { RATE_LIMIT_RETENTION_MS, purgeExpiredRateLimits } from '@/db/maintenance';
+import { config } from './config';
 
 // Protections du signalement sans compte (EVT-07, formulaire public /signaler?jeton=…) : limite de débit en base
 // (table report_rate_limits, partagée par toutes les instances), adresse du client, contrôle du contenu des photos.
@@ -24,8 +26,8 @@ export const REPORT_LIMITS = {
 } as const;
 export type ReportLimitScope = keyof typeof REPORT_LIMITS;
 
-/** Durée de conservation des compteurs (les plus anciens sont purgés à chaque passage). */
-export const REPORT_LIMIT_RETENTION_MS = 24 * 3600_000;
+/** Durée de conservation des compteurs : purgés à chaque passage et toutes les heures (src/db/maintenance.ts). */
+export const REPORT_LIMIT_RETENTION_MS = RATE_LIMIT_RETENTION_MS;
 
 /** Seize bits de chaque groupe d'une adresse IPv6 valide (forme abrégée « :: » et IPv4 finale « ::ffff:a.b.c.d » comprises). */
 function ipv6Groups(addr: string): number[] {
@@ -62,15 +64,21 @@ export function normalizeClientIp(raw: string): string | null {
 }
 
 /**
- * Client de la requête : dernière entrée de X-Forwarded-For, c'est-à-dire celle qu'a vue le reverse proxy HTTPS placé
- * devant Vigie (Caddy la remplace, nginx l'ajoute en fin de liste) ; sans proxy, Next.js y met l'adresse de la connexion.
+ * Client d'une requête passée par `trustedProxies` reverse proxys de confiance (VIGIE_TRUSTED_PROXIES) : chaque proxy
+ * ajoute en fin de X-Forwarded-For l'adresse qu'il a vue, l'entrée retenue est donc la N-ième en partant de la fin (celle
+ * qu'a ajoutée le proxy le plus éloigné de Vigie) ; les entrées plus à gauche, fournies par le client, sont ignorées.
+ * Un proxy qui remplace l'en-tête au lieu de le compléter (Caddy) compte pour 1 ; Next.js n'y met l'adresse de la
+ * connexion que si l'en-tête est absent. Moins d'entrées que N : la plus à gauche. Sans l'en-tête : X-Real-IP.
  * Normalisée (normalizeClientIp) ; tout ce qui n'est pas une adresse partage le même compteur « inconnue ».
  */
-export function clientIp(headers: Headers): string {
-  const forwarded = headers.get('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean);
-  const raw = forwarded?.at(-1) ?? headers.get('x-real-ip')?.trim();
+export function clientIpFrom(headers: Headers, trustedProxies: number): string {
+  const forwarded = (headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const raw = forwarded.length ? forwarded[Math.max(0, forwarded.length - trustedProxies)] : headers.get('x-real-ip')?.trim();
   return (raw && normalizeClientIp(raw)) || 'inconnue';
 }
+
+/** Client de la requête, selon le nombre de reverse proxys de confiance configuré (clientIpFrom). */
+export const clientIp = (headers: Headers) => clientIpFrom(headers, config().trustedProxies);
 
 /** Clé de compteur : valeur hachée (aucune adresse IP en clair dans la base), préfixée par sa nature. */
 export const reportLimitKey = (scope: ReportLimitScope, value: string, secret: string) =>
@@ -91,7 +99,7 @@ export async function countReportHit(scope: ReportLimitScope, value: string, sec
   const windowMs = windowMinutes * 60_000;
   const windowStart = new Date(Math.floor(now.getTime() / windowMs) * windowMs);
   const db = opts.db ?? (await getDb());
-  if (!opts.db) await db.delete(t.reportRateLimits).where(lt(t.reportRateLimits.windowStart, new Date(now.getTime() - REPORT_LIMIT_RETENTION_MS)));
+  if (!opts.db) await purgeExpiredRateLimits(db, now);
   const [row] = await db.insert(t.reportRateLimits)
     .values({ key: reportLimitKey(scope, value, secret), windowStart, hits: 1 })
     .onConflictDoUpdate({ target: [t.reportRateLimits.key, t.reportRateLimits.windowStart], set: { hits: sql`${t.reportRateLimits.hits} + 1` } })
@@ -142,6 +150,18 @@ export function sniffImage(bytes: Uint8Array): string | null {
     if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
   }
   return null;
+}
+
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif',
+};
+
+/**
+ * Photo d'un signalement anonyme (SEC-09) : nom d'origine retiré (il peut désigner l'appareil ou la personne), remplacé
+ * par « photo-<n>.<extension du type> » ; contenu et type conservés.
+ */
+export function anonymousPhoto(file: File, index: number): File {
+  return new File([file], `photo-${index + 1}.${PHOTO_EXTENSIONS[file.type] ?? 'bin'}`, { type: file.type });
 }
 
 /** Photo du formulaire public : contenu contrôlé, type enregistré d'après le contenu ; null si ce n'est pas une image. */

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addHoursLocal, fmtLocalRange, fmtPeriod, fromParisLocal, isInProgress, isMandatory, lacksSignedPlan, lcfirst, legalReason, mandatoryReason,
-  missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan, permitPlanCheck, permitState, planEndIssue,
-  planPhase, planStatus, ruleBasis, sevesoLabel, toParisLocal, validityOver, type SiteRule,
+  PLAN_CONTENT, START_GAP_LABEL,
+  addHoursLocal, firstFullSignatureOn, fmtLocalRange, fmtPeriod, fromParisLocal, fullSignatureOn, inGapWindow, isInProgress, isMandatory, lacksSignedPlan,
+  lcfirst, legalReason, mandatoryReason, missingPlanContent, missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan,
+  permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
+  toParisLocal, validityOver, type PlanContent, type SiteRule,
 } from './model';
 
 // Règles des plans de prévention et des permis (QUA-03) : R. 4512-6 à R. 4512-12, règle « dès la première minute ».
@@ -14,7 +16,7 @@ const LEGAL: SiteRule = { seveso: null, ppFromFirstMinute: false };
 
 const plan = (over: Partial<Parameters<typeof planStatus>[0]> = {}) => ({
   status: 'brouillon', startOn: '2026-10-05', endOn: '2026-10-16', estimatedHours: 90, dangerousWork: false,
-  inspectionOn: null as string | null, signedEuOn: null as string | null, signedEeOn: null as string | null, ...over,
+  inspectionOn: null as string | null, signedEuOn: null as string | null, signedEeOn: null as string | null, firstSignedOn: null as string | null, ...over,
 });
 /** Instant à l'heure de Paris (heure d'été jusqu'au 25/10/2026). */
 const paris = (local: string) => fromParisLocal(local)!;
@@ -84,6 +86,97 @@ describe('planEndIssue : clore ou annuler un plan', () => {
     expect(planEndIssue(plan(), { ...opts, mandatory: false, openPermitIds: ['PF-1', 'PE-2'], verb: 'clore' })).toBe(
       'Permis rattachés encore actifs (PF-1, PE-2) : clôturez-les ou annulez-les avant de clore le plan.',
     );
+  });
+});
+
+describe('écarts R. 4512-6 au démarrage (PRV-01) : plan signé après le début, intervention sans plan signé', () => {
+  const signed = (on: string, over: Partial<Parameters<typeof planStatus>[0]> = {}) =>
+    plan({ status: 'signe', inspectionOn: '2026-10-02', signedEuOn: '2026-10-02', signedEeOn: on, ...over });
+  it('première signature complète : la plus tardive des deux, conservée quand les signatures sont effacées', () => {
+    expect(fullSignatureOn(signed('2026-10-03'))).toBe('2026-10-03');
+    expect(fullSignatureOn(plan({ signedEuOn: '2026-10-04' }))).toBeNull();
+    expect(firstFullSignatureOn(plan({ firstSignedOn: '2026-10-01' }))).toBe('2026-10-01');
+    expect(firstFullSignatureOn(signed('2026-10-03', { firstSignedOn: '2026-10-01' }))).toBe('2026-10-01');
+    expect(signedBeforeStart(signed('2026-10-05'))).toBe(true); // le jour même
+    expect(signedBeforeStart(signed('2026-10-06'))).toBe(false);
+  });
+  it('plan obligatoire signé après le début de l’intervention : écart, même une fois signé', () => {
+    expect(startGap(signed('2026-10-06'), NOW, SEVESO)).toBe('signe_apres');
+    expect(startGap(signed('2026-10-06', { status: 'clos', startOn: '2026-10-05', endOn: '2026-10-06' }), NOW, SEVESO)).toBe('signe_apres');
+    expect(START_GAP_LABEL.signe_apres).toBe("plan signé après le début de l'intervention");
+  });
+  it('signé le jour du début : pas d’écart', () => {
+    expect(startGap(signed('2026-10-05'), NOW, SEVESO)).toBeNull();
+  });
+  it('signatures effacées par une modification : la première signature complète fait foi', () => {
+    expect(startGap(plan({ firstSignedOn: '2026-10-03' }), NOW, SEVESO)).toBeNull();
+    expect(startGap(plan({ firstSignedOn: '2026-10-07' }), NOW, SEVESO)).toBe('signe_apres');
+    expect(startGap(signed('2026-10-08', { firstSignedOn: '2026-10-04' }), NOW, SEVESO)).toBeNull(); // signé à nouveau après le début
+  });
+  it('intervention terminée (ou en cours) sans plan signé : écart « non signé »', () => {
+    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, SEVESO)).toBe('non_signe');
+    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05', signedEuOn: '2026-09-01' }), NOW, LEGAL)).toBeNull(); // non obligatoire
+    expect(startGap(plan(), NOW, SEVESO)).toBe('non_signe'); // en cours : écart courant (lacksSignedPlan)
+  });
+  it('ni plan non obligatoire, ni plan annulé, ni intervention à venir', () => {
+    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, LEGAL)).toBeNull();
+    expect(startGap(plan({ status: 'annule', startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, SEVESO)).toBeNull();
+    expect(startGap(plan({ startOn: '2026-10-12', endOn: '2026-10-14' }), NOW, SEVESO)).toBeNull();
+    expect(startGap(plan({ startOn: NOW }), NOW, SEVESO)).toBe('non_signe'); // commencée aujourd'hui
+  });
+  it('fenêtre des indicateurs : interventions commencées dans les 12 derniers mois', () => {
+    expect(inGapWindow({ startOn: '2025-10-09' }, NOW)).toBe(false);
+    expect(inGapWindow({ startOn: '2025-10-10' }, NOW)).toBe(true);
+    expect(inGapWindow({ startOn: NOW }, NOW)).toBe(true);
+    expect(inGapWindow({ startOn: '2026-10-10' }, NOW)).toBe(false);
+  });
+  it('clore ou annuler un plan signé après le début : l’action qui trace l’écart d’abord', () => {
+    const opts = { mandatory: true, now: NOW, openPermitIds: [] as string[], actionCount: 0 };
+    const late = signed('2026-10-06');
+    expect(planEndIssue(late, { ...opts, verb: 'clore' })).toBe("Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant de clore le plan.");
+    expect(planEndIssue(late, { ...opts, verb: 'annuler' })).toBe("Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant d'annuler le plan.");
+    expect(planEndIssue(late, { ...opts, actionCount: 1, verb: 'clore' })).toBeNull();
+    expect(planEndIssue(late, { ...opts, actionCount: 1, openPermitIds: ['PF-1'], verb: 'clore' })).toMatch(/^Permis rattachés encore actifs \(PF-1\)/);
+    expect(planEndIssue(late, { ...opts, mandatory: false, verb: 'clore' })).toBeNull();
+    expect(planEndIssue(signed('2026-10-05'), { ...opts, verb: 'clore' })).toBeNull();
+  });
+});
+
+describe('contenu réglementaire du plan (PRV-02) : R. 4511-10, R. 4512-8, R. 4512-9', () => {
+  const FULL: PlanContent = {
+    eeHeadcount: 3, eeSupervisor: '[M. Lebrun]', subcontracting: 'Aucun', dangerousPhases: 'Nacelle', equipment: 'Nacelle de l’EE',
+    workerInstructions: 'Accueil sécurité', emergencyOrganisation: 'SST, évacuation', coordination: 'Point quotidien', sirPosts: 'Aucun poste',
+  };
+  const ready = (over: Partial<PlanContent> & { measures?: string; inspectionOn?: string | null } = {}) =>
+    ({ ...FULL, measures: 'Pont consigné.', inspectionOn: '2026-10-02', ...over });
+  it('sections exigées pour signer : R. 4512-8 1° à 5° et R. 4512-9 ; R. 4511-10 jamais bloquant', () => {
+    expect(PLAN_CONTENT.filter((c) => c.requiredToSign).map((c) => c.key))
+      .toEqual(['dangerousPhases', 'equipment', 'workerInstructions', 'emergencyOrganisation', 'coordination', 'sirPosts']);
+    expect(missingPlanContent(FULL)).toEqual([]);
+    expect(missingPlanContent({ ...FULL, eeSupervisor: '', subcontracting: '', emergencyOrganisation: ' ', coordination: '' }))
+      .toEqual(['premiers secours et évacuation', 'coordination et commandement']);
+    expect(planContentStats(FULL)).toEqual({ filled: 9, total: 9 });
+    expect(planContentStats({ ...FULL, eeHeadcount: null, sirPosts: '' })).toEqual({ filled: 7, total: 9 });
+  });
+  it('signature refusée : inspection commune, mesures, puis contenu d’un plan obligatoire (messages exacts)', () => {
+    const sign = { now: NOW, mandatory: true, verb: 'signer' as const };
+    const collect = { now: NOW, mandatory: true, verb: 'recueillir' as const };
+    expect(planSignIssue(ready({ inspectionOn: null }), sign)).toBe("Réalisez l'inspection commune préalable avant de signer le plan.");
+    expect(planSignIssue(ready({ inspectionOn: '2026-10-15' }), collect)).toBe("Réalisez l'inspection commune préalable avant de recueillir les signatures.");
+    expect(planSignIssue(ready({ measures: ' ' }), sign)).toBe('Complétez les mesures de prévention avant de signer le plan.');
+    expect(planSignIssue(ready({ measures: '' }), collect)).toBe('Complétez les mesures de prévention avant de recueillir les signatures.');
+    expect(planSignIssue(ready({ emergencyOrganisation: '', coordination: '' }), sign))
+      .toBe('Complétez le contenu du plan (R. 4512-8 et R. 4512-9) avant de signer le plan : premiers secours et évacuation, coordination et commandement.');
+    expect(planSignIssue(ready({ sirPosts: '' }), collect))
+      .toBe('Complétez le contenu du plan (R. 4512-8 et R. 4512-9) avant de recueillir les signatures : suivi individuel renforcé.');
+    expect(planSignIssue(ready({ eeSupervisor: '', subcontracting: '', eeHeadcount: null }), sign)).toBeNull();
+  });
+  it('plan non obligatoire : seules l’inspection commune et les mesures sont exigées', () => {
+    const empty = ready({ dangerousPhases: '', equipment: '', workerInstructions: '', emergencyOrganisation: '', coordination: '', sirPosts: '' });
+    expect(planSignIssue(empty, { now: NOW, mandatory: false, verb: 'signer' })).toBeNull();
+    expect(planSignIssue({ ...empty, measures: '' }, { now: NOW, mandatory: false, verb: 'signer' })).toBe('Complétez les mesures de prévention avant de signer le plan.');
+    expect(planSignIssue({ ...empty, inspectionOn: null }, { now: NOW, mandatory: false, verb: 'recueillir' }))
+      .toBe("Réalisez l'inspection commune préalable avant de recueillir les signatures.");
   });
 });
 

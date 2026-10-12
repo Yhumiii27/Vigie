@@ -13,7 +13,8 @@ import { MIGRATIONS_DIR } from '@/db/migrations';
 import { parseStorageConfig } from '@/lib/env';
 
 // `vigie-db restore --remplacer` sur PostgreSQL (PRD-02) : la base actuelle n'est remplacée qu'en une transaction ;
-// une copie que pg_restore ne sait pas lire (ex. faite par un pg_dump plus récent) laisse la base intacte.
+// une copie que pg_restore ne sait pas lire (ex. faite par un pg_dump plus récent) laisse la base intacte ; les
+// compteurs du signalement sans compte (report_rate_limits) ne sont pas sauvegardés.
 // Seulement en mode PostgreSQL (TEST_DATABASE_URL, base du fichier : test/setup-postgres.ts) avec le client PostgreSQL.
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -51,6 +52,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     await client.connect();
     await migrate(drizzle(client), { migrationsFolder: MIGRATIONS_DIR });
     await client.query("insert into sites (id, label, sort) values ('ville-a', 'Site A', 1), ('ville-b', 'Site B', 2)");
+    // Compteurs du signalement sans compte (empreintes d'adresses IP) : jamais copiés dans une sauvegarde PostgreSQL.
+    await client.query("insert into report_rate_limits (key, window_start, hits) values ('ip:empreinte', now(), 3)");
     await client.end();
   });
   afterAll(async () => {
@@ -86,5 +89,6 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     expect(restored.out).toMatch(/Base restaurée/);
     expect(restored.code).toBe(0);
     expect(await siteIds()).toEqual(['ville-a', 'ville-b']);
+    expect(await sql('select key from report_rate_limits')).toEqual([]);
   });
 });

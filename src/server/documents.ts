@@ -3,13 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
+import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
 import { today } from '@/lib/today';
 import { canApprove, canEdit } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { hasLeft } from '@/lib/people';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
-import { logChange } from './changelog';
+import { diffFields, logChange } from './changelog';
 
 // Documents maîtrisés : création, métadonnées et cycle de vie des versions
 // (brouillon → en revue → approuvée ; la version approuvée précédente est archivée).
@@ -19,8 +20,12 @@ const ENTITY = 'document_version';
 type Reader = ReturnType<typeof formReader>;
 type Db = Awaited<ReturnType<typeof getDb>>;
 
-/** Champs de métadonnées communs à la création et à la modification. */
-async function readMetadata(f: Reader, db: Db) {
+/**
+ * Champs de métadonnées communs à la création et à la modification. `current` : document modifié (null en création) ;
+ * son propriétaire sorti de l'effectif reste admis tant qu'il n'est pas remplacé (DOC-01), un nouveau choix doit viser
+ * une personne présente.
+ */
+async function readMetadata(f: Reader, db: Db, current: { ownerId: string } | null) {
   const title = f.str('title', { required: true, max: 200 });
   const type = f.oneOf('type', DOC_TYPE_KEYS, { required: true });
   const processCode = f.oneOf('process', PROCESS_KEYS, { required: true });
@@ -29,8 +34,9 @@ async function readMetadata(f: Reader, db: Db) {
   const distribution = f.str('distribution', { required: true, max: 300 });
   const siteId = f.opt('siteId');
   if (ownerId) {
-    const [p] = await db.select({ id: t.people.id }).from(t.people).where(eq(t.people.id, ownerId));
+    const [p] = await db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, ownerId));
     if (!p) f.fail('ownerId', 'Personne inconnue.');
+    else if (hasLeft(p, today()) && ownerId !== current?.ownerId) f.fail('ownerId', "Propriétaire sorti de l'effectif : choisissez une personne présente.");
   }
   if (siteId) {
     const [s] = await db.select({ id: t.sites.id }).from(t.sites).where(eq(t.sites.id, siteId));
@@ -99,7 +105,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   if (error) return { error };
   const db = await getDb();
   const f = formReader(fd);
-  const meta = await readMetadata(f, db);
+  const meta = await readMetadata(f, db, null);
   const rawRef = f.str('ref', { max: 30 }).toUpperCase().replace(/\s+/g, '');
   const summary = f.str('summary', { max: 300 }) || 'Création du document';
   const actionId = await readAction(f, db);
@@ -150,9 +156,9 @@ export async function updateDocument(_prev: FormState, fd: FormData): Promise<Fo
   const db = await getDb();
   const f = formReader(fd);
   const id = f.str('id', { required: true });
-  const meta = await readMetadata(f, db);
+  const [before] = id ? await db.select().from(t.documents).where(eq(t.documents.id, id)) : [];
+  const meta = await readMetadata(f, db, before ?? null);
   if (!f.ok) return f.state();
-  const [before] = await db.select().from(t.documents).where(eq(t.documents.id, id));
   if (!before) return { error: 'Document introuvable.' };
   const siteError = (await requireInSite(before.siteId)) ?? (before.siteId !== meta.siteId ? await requireInSite(meta.siteId, { create: true }) : null);
   if (siteError) return { error: siteError };
@@ -160,12 +166,44 @@ export async function updateDocument(_prev: FormState, fd: FormData): Promise<Fo
   const versions = await db.select({ status: t.documentVersions.status }).from(t.documentVersions).where(eq(t.documentVersions.documentId, id));
   if (!versions.length) return { error: 'Document introuvable.' };
   if (versions.every((v) => v.status === 'archive')) return { error: 'Document obsolète : ses informations ne sont plus modifiables.' };
-  const [row] = await db.update(t.documents).set({
+  const after = {
     title: meta.title, type: meta.type!, process: meta.process!, ownerId: meta.ownerId, reviewMonths: meta.reviewMonths!,
     distribution: meta.distribution, siteId: meta.siteId,
-  }).where(eq(t.documents.id, id)).returning({ id: t.documents.id });
-  if (!row) return { error: 'Document introuvable.' };
+  };
+  const details = diffFields(await metadataView(db, before), await metadataView(db, after), METADATA_LABELS);
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx.update(t.documents).set(after).where(eq(t.documents.id, id)).returning({ id: t.documents.id });
+    if (!row) return false;
+    if (details.length) await logChange(tx, { entityType: 'document', entityId: id, action: 'update', summary: 'Informations du document modifiées', details });
+    return true;
+  });
+  if (!updated) return { error: 'Document introuvable.' };
   return done(id);
+}
+
+/** Champs suivis par le journal de modification des informations d'un document. */
+const METADATA_LABELS = {
+  title: 'Titre', type: 'Type', process: 'Processus', ownerId: 'Propriétaire', reviewMonths: 'Périodicité de revue (mois)',
+  distribution: 'Diffusion', siteId: 'Site',
+} as const;
+
+type Metadata = { title: string; type: string; process: string; ownerId: string; reviewMonths: number; distribution: string; siteId: string | null };
+
+/** Informations d'un document telles que le journal les affiche (personne, site et type par leur libellé). */
+async function metadataView(db: Db, m: Metadata): Promise<Record<keyof typeof METADATA_LABELS, string>> {
+  const [[owner], [site]] = await Promise.all([
+    db.select({ name: t.people.name }).from(t.people).where(eq(t.people.id, m.ownerId)),
+    m.siteId ? db.select({ label: t.sites.label }).from(t.sites).where(eq(t.sites.id, m.siteId)) : Promise.resolve([]),
+  ]);
+  return {
+    title: m.title,
+    type: Object.hasOwn(DOC_TYPES, m.type) ? DOC_TYPES[m.type as DocType].label : m.type,
+    process: m.process,
+    ownerId: owner?.name ?? m.ownerId,
+    reviewMonths: String(m.reviewMonths),
+    distribution: m.distribution,
+    siteId: m.siteId ? site?.label ?? m.siteId : 'Tous les sites',
+  };
 }
 
 /**

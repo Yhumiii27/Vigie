@@ -193,9 +193,19 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
 
   it('pièces jointes : lecture refusée hors périmètre', async () => {
     const { canReadAttachment } = await import('@/lib/uploads');
-    const row = { id: 'x', entityType: 'prevention_plan', entityId: 'PP-2026-016', fileName: 'a.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy: null, createdAt: new Date() };
+    const row = { id: 'x', entityType: 'prevention_plan', entityId: 'PP-2026-016', fileName: 'a.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy: null, createdAt: new Date(), health: false };
     expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['ville-b'] })).toBe(false);
     expect(await canReadAttachment({ ...row, entityId: 'PP-2026-014' }, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['ville-b'] })).toBe(true);
     expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(true);
+  });
+
+  it('pièces jointes médicales : animateur QHSE et direction seulement (SEC-06)', async () => {
+    const { canReadAttachment } = await import('@/lib/uploads');
+    const row = { id: 'x', entityType: 'event', entityId: 'EV-2026-119', fileName: 'certificat.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy: null, createdAt: new Date(), health: true };
+    expect(await canReadAttachment(row, { role: 'Animateur QHSE', user: { id: 'clefevre' }, allowedSiteIds: null })).toBe(true);
+    expect(await canReadAttachment(row, { role: 'Direction', user: { id: 'x' }, allowedSiteIds: null })).toBe(true);
+    expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(false);
+    expect(await canReadAttachment(row, { role: 'Chef de projet', user: { id: 'x' }, allowedSiteIds: null })).toBe(false);
+    expect(await canReadAttachment({ ...row, health: false }, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(true);
   });
 });

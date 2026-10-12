@@ -50,6 +50,28 @@ export async function migrationState(query: Query, dir = MIGRATIONS_DIR): Promis
   };
 }
 
+/** Base migrée par une version plus récente de Vigie : refusée à l'ouverture (réserve PRD-06 du lot 1). */
+export class NewerDatabaseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NewerDatabaseError';
+  }
+}
+
+/**
+ * Refuse d'ouvrir une base dont la dernière migration appliquée est inconnue de cette version et postérieure à sa
+ * dernière migration (version plus récente de Vigie, puis retour à une version antérieure) : le migrator ne ferait rien,
+ * et le code lirait un schéma qu'il ne connaît pas. Appelée avant la sauvegarde automatique et les migrations.
+ */
+export async function refuseNewerDatabase(query: Query, dir = MIGRATIONS_DIR): Promise<void> {
+  const state = await migrationState(query, dir);
+  if (!state.newer) return;
+  const last = readJournal(dir).at(-1)?.tag ?? '—';
+  throw new NewerDatabaseError(`Base migrée par une version plus récente de Vigie (dernière migration appliquée datée du ${new Date(state.lastWhen!).toISOString()}, `
+    + `inconnue de cette version, dont la dernière migration est ${last}) : Vigie refuse de l'ouvrir pour ne pas l'altérer. `
+    + 'Installer la version qui l\'a migrée (ou une plus récente), ou restaurer une sauvegarde faite par cette version (vigie-db restore …).');
+}
+
 // ─── Empreintes des migrations publiées (drizzle/checksums.json) ────────────
 
 export type MigrationChecksum = { when: number; sql: string; snapshot: string | null };

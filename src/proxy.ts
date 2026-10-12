@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookieAttributes, openSession, sealSession, sessionCookieName, sessionMaxAge, sessionNeedsRenewal } from './lib/auth/cookie';
 import { AUTH_PREFIX, HEALTH_PATH, LOGIN_PATH, REPORT_PATH, REPORT_TOKEN_PARAM, accessHref, looksLikeReportToken } from './lib/auth/paths';
+import { NOT_FOUND_PATH, demoRoleOf, routeDecision } from './lib/auth/route-access';
+import { DEMO_ROLE_COOKIE } from './lib/demo';
+import { ROLE_KEYS, type Role } from './lib/domain';
 import { entraMissing, isDevServer, readConfig, secureCookies, type VigieConfig } from './lib/env';
 import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHost, originHost, requestHosts } from './lib/security';
 
@@ -9,8 +12,12 @@ import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHos
 // 2. SEC-01 — hors démonstration, renvoie vers la connexion Microsoft toute route applicative sans session valide,
 //    et repousse l'expiration glissante de la session ;
 // 3. SEC-05 — Content-Security-Policy à nonce (pages rendues dynamiquement) et HSTS en HTTPS ; les autres en-têtes
-//    de sécurité sont posés par next.config.ts.
-// Les pages, routes et server actions vérifient quand même la session (getSession) : le proxy n'est qu'une première barrière.
+//    de sécurité sont posés par next.config.ts ;
+// 4. SEC-14 — pour une page (GET, HEAD) d'un écran fermé au rôle de la session : redirection vers l'écran d'accueil du
+//    rôle avant tout rendu (src/lib/auth/route-access.ts) ; aperçu mobile hors démonstration : page introuvable (404).
+//    Les server actions (POST) gardent leurs propres contrôles.
+// Les pages, routes et server actions vérifient quand même la session (getSession) et le rôle (guard) : le proxy n'est
+// qu'une première barrière.
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -44,9 +51,19 @@ function hostCheck(req: NextRequest, c: VigieConfig): NextResponse | null {
   return null;
 }
 
+type AuthCheck = {
+  /** Réponse de refus (connexion, configuration incomplète, session expirée), ou null. */
+  deny: NextResponse | null;
+  /** Rôle de la session (ou du sélecteur de démonstration) ; absent pour une route publique. */
+  role?: Role;
+  /** Renouvellement de l'expiration glissante, à appliquer à la réponse. */
+  renew?: (res: NextResponse) => Promise<void>;
+};
+
 /** Session Entra ID : null si elle est valide (et la réponse à renouveler éventuelle), sinon la réponse de refus. */
-async function authCheck(req: NextRequest, c: VigieConfig): Promise<{ deny: NextResponse | null; renew?: (res: NextResponse) => Promise<void> }> {
-  if (c.demo || isPublic(req)) return { deny: null };
+async function authCheck(req: NextRequest, c: VigieConfig): Promise<AuthCheck> {
+  if (isPublic(req)) return { deny: null };
+  if (c.demo) return { deny: null, role: demoRoleOf(req.cookies.get(DEMO_ROLE_COOKIE)?.value) };
   const safe = SAFE_METHODS.has(req.method);
   if (entraMissing(c).length) {
     return { deny: safe ? NextResponse.redirect(absolute(accessHref('configuration'), req, c)) : text('Authentification non configurée.', 503) };
@@ -64,10 +81,12 @@ async function authCheck(req: NextRequest, c: VigieConfig): Promise<{ deny: Next
     if (token) deny.cookies.set(name, '', cookieAttributes(secure, 0));
     return { deny };
   }
-  if (!sessionNeedsRenewal(session, now)) return { deny: null };
+  const role = (ROLE_KEYS as string[]).includes(session.role) ? session.role : undefined;
+  if (!sessionNeedsRenewal(session, now)) return { deny: null, role };
   const renewed = { ...session, seen: now };
   return {
     deny: null,
+    role,
     renew: async (res) => { res.cookies.set(name, await sealSession(renewed, c.sessionSecret!), cookieAttributes(secure, sessionMaxAge(renewed, now))); },
   };
 }
@@ -85,8 +104,16 @@ export async function proxy(req: NextRequest) {
   const https = secureCookies(c);
   const refused = hostCheck(req, c);
   if (refused) return refusal(refused, https);
-  const { deny, renew } = await authCheck(req, c);
+  const { deny, renew, role } = await authCheck(req, c);
   if (deny) return refusal(deny, https);
+
+  // Écran fermé au rôle (SEC-14) : décidé avant le rendu, pour les pages seulement (jamais les server actions).
+  const decision = role && (req.method === 'GET' || req.method === 'HEAD') ? routeDecision(req.nextUrl.pathname, role, c.demo) : null;
+  if (decision?.kind === 'redirect') {
+    const res = refusal(NextResponse.redirect(absolute(decision.to, req, c)), https);
+    await renew?.(res);
+    return res;
+  }
 
   let res: NextResponse;
   // Pièces jointes servies telles quelles (PDF affiché par le navigateur) : pas de CSP de page.
@@ -98,7 +125,10 @@ export async function proxy(req: NextRequest) {
     const headers = new Headers(req.headers);
     headers.set('content-security-policy', csp);
     headers.set('x-nonce', nonce);
-    res = NextResponse.next({ request: { headers } });
+    // Page masquée : réécrite vers un chemin jamais routable, la page introuvable répond 404 (avec son nonce).
+    res = decision?.kind === 'notFound'
+      ? NextResponse.rewrite(new URL(NOT_FOUND_PATH, req.url), { request: { headers } })
+      : NextResponse.next({ request: { headers } });
     res.headers.set('Content-Security-Policy', csp);
   }
   if (https) res.headers.set('Strict-Transport-Security', HSTS_HEADER);

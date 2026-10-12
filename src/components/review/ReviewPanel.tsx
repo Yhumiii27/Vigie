@@ -10,7 +10,7 @@ import { ActionLink } from '@/components/audits/parts';
 import { Aside, CardHead, Icon, ToneTag, hrefWith } from '@/components/ui';
 import { fmtDate, fmtDayMonth, yearOf } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { ReviewCardData, ReviewItemView } from '@/lib/data/review';
+import type { ReviewCardData } from '@/lib/data/review';
 import { setReviewItemDone } from '@/server/review';
 import { CancelReviewButton, CloseReviewButton, CreateReviewForm, DecisionForm, HoldForm, ItemForm, RescheduleForm } from './ReviewDialogs';
 import styles from './review.module.css';
@@ -30,7 +30,7 @@ const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 export function ReviewPanel({ data, params, showCancelled, allSites }: {
   data: ReviewCardData; params: Record<string, string | undefined>; showCancelled: boolean; allSites: boolean;
 }) {
-  const { now, review, items, decisions, extraActions, previous, changes, options, defaults, flags } = data;
+  const { now, review, items, decisions, extraActions, previous, changes, options, defaults, flags, programme } = data;
   const [list, setDone] = useOptimistic(items, (state, { id, done }: { id: number; done: boolean }) => state.map((r) => (r.id === id ? { ...r, done } : r)));
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
   const notYet = !!review && review.reviewOn > now;
   const held = review && (review.status === 'tenue' || review.status === 'cloturee');
 
-  const toggle = (r: ReviewItemView) => start(async () => {
+  const toggle = (r: (typeof items)[number]) => start(async () => {
     setError(null);
     setDone({ id: r.id, done: !r.done });
     const res = await setReviewItemDone(r.id, !r.done);
@@ -88,7 +88,8 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0', fontSize: 12.5 }}>
               {r.auto ? (
                 <span className={styles.auto} title={`Calculé par Vigie · ${r.done ? 'données disponibles' : 'pas encore de données'}`}>{icon}</span>
-              ) : edit ? (
+              ) : r.canToggle ? (
+                // Rôles qui saisissent, ou le contributeur lui-même (consultation de l'écran comprise, AUD-04).
                 <button type="button" className={styles.check} aria-pressed={r.done} aria-label={r.label} title={r.done ? 'Marquer comme non fourni' : 'Marquer comme fourni'} onClick={() => toggle(r)}>{icon}</button>
               ) : <span className={styles.auto}>{icon}</span>}
               {edit ? (
@@ -105,8 +106,16 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
         {review && !list.length && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun élément à préparer pour l&apos;instant.</div>}
         {!review && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Planifiez la prochaine revue pour préparer sa check-list.</div>}
         {error && <div role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</div>}
+        {review && review.status !== 'annulee' && (
+          // Échéance de la revue au programme annuel (AUD-01).
+          <div style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>
+            {programme ? (
+              <>Au programme : <Link href={`/audits?annee=${programme.year}&element=${programme.id}`} scroll={false} className="vg-link">{programme.label}</Link> · {programme.stateLabel}</>
+            ) : 'Hors programme annuel'}
+          </div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          {review && review.status !== 'annulee' && (
+          {review && review.status !== 'annulee' && flags.canDossier && (
             // Lien HTML simple : la feuille globale du dossier ne doit pas rester chargée dans l'application.
             <a href={`/revue-de-direction?revue=${review.id}`} target="_blank" rel="noopener" className="btn btn-primary vg-btn-sm">
               <i className="ph ph-file-text" style={{ fontSize: 13 }} />{review.status === 'cloturee' ? 'Consulter le dossier' : 'Générer le dossier de revue'}
@@ -123,6 +132,11 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             </button>
           )}
           {flags.canApprove && review?.status === 'planifiee' && <CancelReviewButton review={review} />}
+          {flags.mine && (
+            <Link href={review ? `/audits/contributions?revue=${review.id}` : '/audits/contributions'} className="vg-link" style={{ fontSize: 12 }}>
+              Mes contributions
+            </Link>
+          )}
         </div>
       </div>
 
@@ -226,7 +240,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                 </Link>
                 <span style={{ color: 'var(--color-neutral-400)', minWidth: 64 }}>{r.kindShort}</span>
                 <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap', fontSize: 10.5 }}>{r.statusLabel}</ToneTag>
-                {!r.cancelled && (
+                {!r.cancelled && flags.canDossier && (
                   <a href={`/revue-de-direction?revue=${r.id}`} target="_blank" rel="noopener" className="vg-link" style={{ marginLeft: 'auto' }}>
                     <i className="ph ph-file-text" style={{ fontSize: 12 }} /> Dossier
                   </a>
@@ -246,7 +260,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
         {editing?.kind === 'decision' && review && (
           <DecisionForm reviewId={review.id} decision={decision} people={options.people} canDelete={review.status === 'planifiee'} onClose={close} />
         )}
-        {editing?.kind === 'hold' && review && <HoldForm review={review} people={options.people} now={now} next={defaults.holdNext} onClose={close} />}
+        {editing?.kind === 'hold' && review && <HoldForm review={review} people={options.people} now={now} next={defaults.holdNext} allSites={allSites} onClose={close} />}
         {editing?.kind === 'reschedule' && review && <RescheduleForm review={review} onClose={close} />}
         {editing?.kind === 'create' && (
           <CreateReviewForm nextOn={defaults.nextOn} kind={review?.kind === 'ordinaire' ? 'intermediaire' : 'ordinaire'} copyFrom={defaults.copyFrom}
