@@ -81,7 +81,7 @@ async function open(): Promise<Opened> {
   const opened = c.databaseUrl ? await openPostgres(c.databaseUrl, c) : await openPglite(c.dataDir, c);
   if (c.demo) {
     const { seed } = await import('./seed');
-    await seed(opened.db);
+    await seed(opened.db, { files: true });
   }
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
   const stop = startMaintenance(opened.db);

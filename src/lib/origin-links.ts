@@ -8,9 +8,11 @@ import type { DbOrTx } from '../db/types';
 //
 // Une action d'origine Prévention, Documents ou Environnement porte sa source dans une colonne dédiée (plan de
 // prévention, permis, document maîtrisé, filière ou enlèvement du registre des déchets), comme eventId et reviewId : une
-// au plus, posée à la création (lien explicite de l'écran appelant, ou référence d'origine résolue par resolveOriginRef),
-// conservée sur une action annulée, jamais remplacée ensuite (origine verrouillée). Les écrans retrouvent leurs actions
-// par ces colonnes, plus par la référence textuelle (originRef), qui reste affichée telle qu'elle a été saisie.
+// au plus, posée à la création (lien explicite de l'écran appelant) ou par la reprise des références textuelles des
+// actions anciennes (resolveOriginRef, backfillActionLinks), conservée sur une action abandonnée, jamais remplacée ensuite
+// (origine verrouillée). Les écrans retrouvent leurs actions par ces colonnes, plus par la référence textuelle
+// (originRef), qui reste affichée telle qu'elle a été saisie. Plans de prévention et permis : liens repris seulement
+// (aucune action QSE n'est plus créée depuis la Prévention, réponses du service QHSE du 15/10/2026).
 //
 // Module sans dépendance au serveur Next (session, cookies) : utilisé par le registre des rattachements
 // (src/lib/action-links.ts), par la mise à niveau d'une base de démonstration (src/db/seed.ts) et par le script de reprise
@@ -20,7 +22,10 @@ import type { DbOrTx } from '../db/types';
 export const ORIGIN_COLUMNS = ['preventionPlanId', 'permitId', 'documentId', 'wasteStreamId', 'wasteEntryId'] as const;
 export type OriginColumn = (typeof ORIGIN_COLUMNS)[number];
 
-/** Origines (clés de ORIGINS) dont l'action est rattachée à une fiche source par ces colonnes. */
+/**
+ * Anciennes origines (avant 0005 : actions.legacy_origin, libellés LEGACY_ORIGIN_LABELS de src/lib/domain.ts) dont
+ * l'action est rattachée à une fiche source par ces colonnes.
+ */
 export const ORIGINS_WITH_SOURCE = ['prevention', 'docs', 'env'] as const;
 
 /** Par colonne : type de lien du registre (`<kind>:<id>`, src/lib/action-links.ts), origine de l'action, libellé. */
@@ -137,7 +142,7 @@ export async function loadOriginCatalog(db: DbOrTx, originRef?: string): Promise
 
 // ─── Reprise des références d'origine textuelles ────────────────────────────
 
-/** Rapport de la reprise : liens posés (ou à poser en essai), références sans fiche source. */
+/** Rapport de la reprise : liens posés (ou à poser en essai), références sans fiche source (`origin` : legacy_origin). */
 export type ActionLinksBackfillReport = {
   applied: boolean;
   /** Actions d'origine Prévention, Documents ou Environnement examinées. */
@@ -155,9 +160,12 @@ export type ActionLinksBackfillReport = {
  * colonne de la source trouvée par resolveOriginRef, une entrée « Origine rattachée » au journal de l'action (auteur
  * vide : reprise automatique), dans une transaction. Idempotente : une action déjà rattachée à une source n'est jamais
  * modifiée (aucun lien remplacé), une relance ne pose que les liens restants. `apply: false` : essai, rapport sans écriture.
+ *
+ * Depuis la migration 0005, l'origine lue est l'ancienne origine conservée par la reprise (actions.legacy_origin, D9) :
+ * une action créée après 0005 (legacy_origin vide) n'est jamais examinée — elle porte sa source dès la création.
  */
 export async function backfillActionLinks(db: DbOrTx, opts: { apply: boolean }): Promise<ActionLinksBackfillReport> {
-  const actions = await db.select().from(t.actions).where(inArray(t.actions.origin, [...ORIGINS_WITH_SOURCE]));
+  const actions = await db.select().from(t.actions).where(inArray(t.actions.legacyOrigin, [...ORIGINS_WITH_SOURCE]));
   const catalog = await loadOriginCatalog(db);
   const entries = new Map(catalog.entries.map((e) => [e.id, e]));
   const report: ActionLinksBackfillReport = { applied: opts.apply, examined: actions.length, alreadyLinked: 0, linked: [], unresolved: [] };
@@ -166,10 +174,11 @@ export async function backfillActionLinks(db: DbOrTx, opts: { apply: boolean }):
       report.alreadyLinked++;
       continue;
     }
-    const found = resolveOriginRef(a.origin, a.originRef, catalog);
+    const origin = a.legacyOrigin!; // filtré par la requête (inArray)
+    const found = resolveOriginRef(origin, a.originRef, catalog);
     if (!found) continue;
     if (found.column === null) {
-      report.unresolved.push({ actionId: a.id, origin: a.origin, originRef: a.originRef, reason: found.reason });
+      report.unresolved.push({ actionId: a.id, origin, originRef: a.originRef, reason: found.reason });
       continue;
     }
     const entry = found.column === 'wasteEntryId' ? entries.get(Number(found.target)) : undefined;

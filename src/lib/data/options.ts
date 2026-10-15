@@ -1,9 +1,10 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, desc } from 'drizzle-orm';
+import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { today } from '@/lib/today';
-import { ORIGINS, STEP_CLOSED, isOpenActionStatus } from '../domain';
+import { actionLabel } from '../action-rules';
+import { isClosedActionStatus } from '../domain';
 import { writableSites } from '../guard';
 import { ALL_SITES, getSession, inPerimeter, inSite } from '../session';
 
@@ -22,18 +23,19 @@ const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : 
  *   le site sélectionné, ou sous « Tous les sites » les sites actifs du périmètre (archivés et hors périmètre exclus).
  *   Un enregistrement d'un autre site (ou d'un site archivé) garde son site affiché par son identifiant (`withCurrent`).
  * - allSites : le choix « Tous les sites » (élément commun à tous les sites) est admis — périmètre complet seulement.
- * - events : événements du site sélectionné et du périmètre, ni clôturés ni classés sans suite (« Événement lié »).
- * - actions : actions ouvertes du site sélectionné et du périmètre (ni clôturées ni annulées), pour LinkActionButton.
+ * - actions : actions du site sélectionné et du périmètre qui ne sont pas closes (ni Vérifiées ni Abandonnées,
+ *   isClosedActionStatus), « A-n · libellé » (actionLabel du détail, 80 caractères au plus), pour LinkActionButton.
+ * Les éléments liables du formulaire d'action (événements, constats, risques…) sont chargés par le plan lui-même
+ * (loadActionTargets, src/lib/data/actions.ts) : plus de listes `origins` ni `events` ici.
  */
 export const loadFormOptions = cache(async () => {
   const db = await getDb();
   const now = today();
-  const [people, writable, projects, events, actions, session] = await Promise.all([
+  const [people, writable, projects, actions, session] = await Promise.all([
     db.select({ id: t.people.id, name: t.people.name, job: t.people.job, leftOn: t.people.leftOn }).from(t.people).orderBy(asc(t.people.sort)),
     writableSites(),
     db.select().from(t.keystoneProjects).orderBy(asc(t.keystoneProjects.id)),
-    db.select({ id: t.events.id, title: t.events.title, siteId: t.events.siteId, step: t.events.step, dismissedAt: t.events.dismissedAt }).from(t.events).orderBy(desc(t.events.id)),
-    db.select({ id: t.actions.id, title: t.actions.title, siteId: t.actions.siteId, status: t.actions.status }).from(t.actions),
+    db.select({ id: t.actions.id, detail: t.actions.detail, siteId: t.actions.siteId, status: t.actions.status }).from(t.actions),
     getSession(),
   ]);
   const site = session.site.id === ALL_SITES ? null : session.site.id;
@@ -44,14 +46,10 @@ export const loadFormOptions = cache(async () => {
     sites: writable.sites.map((s) => [s.id, s.label] as Option),
     allSites: writable.allSites,
     projects: projects.map((p) => [`${p.id} · ${p.client}`, `${p.id} · ${p.client} — ${p.title}`] as Option),
-    origins: Object.entries(ORIGINS).map(([k, o]) => [k, o.label] as Option),
-    events: events
-      .filter((e) => !e.dismissedAt && e.step < STEP_CLOSED && visible(e.siteId))
-      .map((e) => [e.id, clip(`${e.id} · ${e.title}`)] as Option),
     actions: actions
-      .filter((a) => isOpenActionStatus(a.status) && visible(a.siteId))
+      .filter((a) => !isClosedActionStatus(a.status) && visible(a.siteId))
       .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
-      .map((a) => [a.id, clip(`${a.id} · ${a.title}`)] as Option),
+      .map((a) => [a.id, clip(`${a.id} · ${actionLabel(a.detail)}`)] as Option),
   };
 });
 export type FormOptions = Awaited<ReturnType<typeof loadFormOptions>>;

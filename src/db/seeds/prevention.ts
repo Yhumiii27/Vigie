@@ -9,8 +9,8 @@ import type { SeedTx } from './types';
 // sans plan signé : plans en cours et permis demandés ou délivrés) : exactement deux, sur le site A — PP-2026-013
 // (signature de l'entreprise extérieure manquante) et PP-2026-015 (brouillon, sans inspection commune) — repris dans
 // la veille (R. 4512-6 · « 2 interventions sans plan signé · 1 écart passé sur 12 mois »). Écart passé (PRV-01, indicateurs
-// de la veille et de la revue, pas le badge) : PP-2026-008 (clos), signé le lendemain du démarrage de l'intervention, écart
-// tracé par l'action A-220 (seed.ts). La demande PF-2026-032 relève de l'intervention
+// de la veille et de la revue, pas le badge) : PP-2026-008 (clos), signé le lendemain du démarrage de l'intervention (écart
+// traité sur place, sans action QSE : réponses du service QHSE du 15/10/2026). La demande PF-2026-032 relève de l'intervention
 // PP-2026-015 : elle est en écart, comptée avec son plan (« Écart · compté avec PP-2026-015 »), et sa délivrance est bloquée.
 // Les autres permis d'entreprises extérieures sont rattachés à un plan signé couvrant leur validité (PF-2026-029, PE-2026-009) ;
 // les autres permis sont réalisés par le personnel interne (sans entreprise extérieure ni intervenant d'une autre entreprise).
@@ -152,7 +152,7 @@ const CONTENT: Record<string, PlanContent> = {
 
 const PLANS: PlanSeed[] = [
   {
-    // Écart passé (PRV-01) : plan signé par les deux entreprises le lendemain du démarrage (13/04), écart tracé par A-220.
+    // Écart passé (PRV-01) : plan signé par les deux entreprises le lendemain du démarrage (13/04) ; aucune action QSE.
     id: 'PP-2026-008', siteId: 'ville-a', contractorId: 'EE-004',
     title: 'Réparation par soudage de la trémie du poste de chargement',
     location: 'Atelier montage · poste de chargement', startOn: '2026-04-13', endOn: '2026-04-15', estimatedHours: 18, dangerousWork: true,

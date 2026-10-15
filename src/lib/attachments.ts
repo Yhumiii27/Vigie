@@ -20,14 +20,28 @@ export function fileIcon(mime: string) {
   return 'ph-file';
 }
 
-/** Pièce jointe telle que la fiche l'affiche. */
+/**
+ * Pièce jointe telle que la fiche l'affiche. Preuve d'une action (ACT-25) : `commentId` = commentaire avec lequel elle a été
+ * déposée (null : déposée seule) ; `commentWithdrawn` : ce commentaire est retiré — preuve envoyée au QHSE seulement,
+ * signalée « commentaire retiré » (D23).
+ */
 export type AttachmentItem = {
   id: string; name: string; mime: string; size: number; url: string; isImage: boolean;
   uploadedById?: string | null; uploadedBy?: string; addedOn?: string;
+  commentId?: number | null; commentWithdrawn?: boolean;
 };
 
-/** Ligne de la table attachments → élément affichable (`url` = attachmentUrl(id), voir src/lib/uploads.ts). */
-export const toAttachmentItem = (r: { id: string; fileName: string; mimeType: string; size: number; uploadedBy: string | null; createdAt: Date }, uploadedBy?: string): AttachmentItem => ({
+/**
+ * Ligne de la table attachments → élément affichable (`url` = attachmentUrl(id), voir src/lib/uploads.ts). Le chargement
+ * passe `commentWithdrawn` pour une preuve dont le commentaire est retiré (D23).
+ */
+export const toAttachmentItem = (
+  r: { id: string; fileName: string; mimeType: string; size: number; uploadedBy: string | null; createdAt: Date; commentId?: number | null },
+  uploadedBy?: string,
+  opts: { commentWithdrawn?: boolean } = {},
+): AttachmentItem => ({
   id: r.id, name: r.fileName, mime: r.mimeType, size: r.size, url: `/fichiers/${r.id}`, isImage: r.mimeType.startsWith('image/'),
   uploadedById: r.uploadedBy, uploadedBy, addedOn: r.createdAt.toISOString().slice(0, 10),
+  ...(r.commentId != null ? { commentId: r.commentId } : {}),
+  ...(opts.commentWithdrawn ? { commentWithdrawn: true } : {}),
 });

@@ -90,3 +90,33 @@ export function addHoursLocal(local: string, hours: number): string {
 export function referenceNow(todayIso: string): Date {
   return fromParisLocal(`${todayIso}T${toParisLocal(new Date()).slice(11)}`) ?? new Date();
 }
+
+// ─── Semaines, jours de Paris (rappel du mercredi, ACT-32 ; journal des actions) ─────────────────────────────────
+
+/** Jour ISO de la semaine : 1 = lundi … 7 = dimanche. */
+export function isoWeekday(iso: string): number {
+  return ((new Date(ms(iso)).getUTCDay() + 6) % 7) + 1;
+}
+
+/** Semaine ISO avec son année ISO : « 2026-W42 » (2025-12-31 → « 2026-W01 »). */
+export function isoWeekKey(iso: string): string {
+  // L'année ISO est celle du jeudi de la semaine.
+  const thursday = addDays(iso, 4 - isoWeekday(iso));
+  return `${thursday.slice(0, 4)}-W${String(isoWeek(iso)).padStart(2, '0')}`;
+}
+
+/** Mercredi le plus récent ≤ iso (rappel du mercredi). */
+export function lastWednesday(iso: string): string {
+  return addDays(iso, -((isoWeekday(iso) - 3 + 7) % 7));
+}
+
+/** Date de Paris (AAAA-MM-JJ) d'un instant (QUA-09). */
+export function parisDay(d: Date): string {
+  return toParisLocal(d).slice(0, 10);
+}
+
+/** « 14/10/2026 à 09:12 », heure de Paris. */
+export function fmtParisDateTime(d: Date): string {
+  const local = toParisLocal(d);
+  return `${fmtDate(local.slice(0, 10))} à ${local.slice(11, 16)}`;
+}

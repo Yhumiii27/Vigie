@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { getDb, schema as t, type DbOrTx } from '@/db';
+import { canReadPlan, isQhse } from './action-rules';
 import { config } from './config';
 import { canEdit, canManage, canSee, canSeeHealth, isEmployee, type Role } from './domain';
 import { decryptBuffer, encryptBuffer, fileKeys, isEncrypted } from './encryption';
@@ -31,9 +32,13 @@ export function checkUpload(file: File): string | null {
 
 /**
  * Enregistre un fichier sur disque et le rattache à une entité (event, document_version, control_record…).
- * `health` : pièce médicale (certificat, avis d'arrêt, réserves…), réservée aux rôles canSeeHealth (SEC-06).
+ * - `health` : pièce médicale (certificat, avis d'arrêt, réserves…), réservée aux rôles canSeeHealth (SEC-06) ;
+ * - `db` : base ou transaction de la ligne (appel dans la transaction de l'écriture : la ligne et son logChange sont
+ *   atomiques). Le fichier est écrit sur disque avant la ligne : si la transaction est annulée, il reste orphelin sur
+ *   disque, sans ligne qui le désigne (réserve connue PRD-13) ;
+ * - `commentId` : preuve jointe à un commentaire du fil d'une action (entityType 'action', D10).
  */
-export async function saveUpload(file: File, entityType: string, entityId: string, uploadedBy: string | null, opts: { health?: boolean } = {}): Promise<Attachment> {
+export async function saveUpload(file: File, entityType: string, entityId: string, uploadedBy: string | null, opts: { health?: boolean; db?: DbOrTx; commentId?: number } = {}): Promise<Attachment> {
   const err = checkUpload(file);
   if (err) throw new Error(err);
   const id = randomUUID();
@@ -45,10 +50,10 @@ export async function saveUpload(file: File, entityType: string, entityId: strin
   if (isEncrypted(data)) throw new Error(`« ${file.name} » est refusé : son contenu imite un fichier chiffré par Vigie.`);
   const [key] = uploadKeys();
   await writeFile(path.join(/*turbopackIgnore: true*/ dir, id), key ? encryptBuffer(data, key) : data);
-  const db = await getDb();
+  const db = opts.db ?? (await getDb());
   const [row] = await db.insert(t.attachments).values({
     id, entityType, entityId, fileName: file.name.slice(0, 200) || 'fichier', mimeType: file.type, size: file.size, storagePath: id, uploadedBy,
-    health: !!opts.health,
+    health: !!opts.health, commentId: opts.commentId ?? null,
   }).returning();
   return row;
 }
@@ -90,9 +95,11 @@ export const attachmentUrl = (id: string) => `/fichiers/${id}`;
 // ─── Droit de lecture d'une pièce jointe (route /fichiers/[id]) ─────────────
 
 export type FileSession = { role: Role; user: { id: string }; allowedSiteIds: string[] | null };
+/** Ligne lue par les contrôles de lecture : `commentId` facultatif (lignes construites hors base, tests). */
+export type AttachmentAccess = Omit<Attachment, 'commentId'> & { commentId?: number | null };
 
 /** Site de l'entité propriétaire d'une pièce jointe (null = sans site, ou entité qui vaut pour tous les sites). */
-async function attachmentSiteId(row: Attachment): Promise<string | null> {
+async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
   const db = await getDb();
   const one = async (q: Promise<{ siteId: string | null }[]>) => (await q)[0]?.siteId ?? null;
   const num = Number(row.entityId);
@@ -114,22 +121,32 @@ async function attachmentSiteId(row: Attachment): Promise<string | null> {
   }
 }
 
+/** Responsable de l'action d'une preuve (pilot_id), ou null si l'action n'existe pas. */
+async function actionPilotId(row: AttachmentAccess): Promise<string | null> {
+  const db = await getDb();
+  const [a] = await db.select({ pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.id, row.entityId));
+  return a?.pilotId ?? null;
+}
+
 /**
  * Droit de lecture d'une pièce jointe : pièce médicale (attachments.health) réservée aux rôles canSeeHealth (SEC-06), quel
  * que soit l'entityType ; entité propriétaire dans le périmètre de sites de la personne (SEC-02), puis droit sur cette
  * entité. Refus par défaut pour un type inconnu (sauf encadrement). Chaque domaine qui ajoute un entityType ajoute sa
  * règle ici (et le site de l'entité dans attachmentSiteId).
+ * Preuve d'une action dont la personne est responsable : lisible quel que soit le site de l'action (D19 : le responsable
+ * consulte ses actions sur tous les sites) ; preuve jointe à un commentaire retiré : QHSE seulement (D23).
  */
-export async function canReadAttachment(row: Attachment, s: FileSession): Promise<boolean> {
+export async function canReadAttachment(row: AttachmentAccess, s: FileSession): Promise<boolean> {
   if (row.health && !canSeeHealth(s.role)) return false;
   if (s.allowedSiteIds) {
-    const siteId = await attachmentSiteId(row);
+    const ownAction = row.entityType === 'action' && (await actionPilotId(row)) === s.user.id;
+    const siteId = ownAction ? null : await attachmentSiteId(row);
     if (siteId && !s.allowedSiteIds.includes(siteId)) return false;
   }
   return canReadEntity(row, s);
 }
 
-async function canReadEntity(row: Attachment, s: FileSession): Promise<boolean> {
+async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boolean> {
   const db = await getDb();
   const { role, user } = s;
   switch (row.entityType) {
@@ -141,10 +158,15 @@ async function canReadEntity(row: Attachment, s: FileSession): Promise<boolean> 
       return !!ev && (ev.declarantId === user.id || row.uploadedBy === user.id);
     }
     case 'action': {
+      // Plan de son périmètre (QHSE, encadrement en lecture) ou ses propres actions (responsable, Salarié compris).
       if (!canSee(role, 'actions')) return false;
-      if (!isEmployee(role)) return true;
-      const [a] = await db.select({ pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.id, row.entityId));
-      return a?.pilotId === user.id;
+      if (!canReadPlan(role) && (await actionPilotId(row)) !== user.id) return false;
+      // Preuve jointe à un commentaire retiré : masquée à qui n'est pas QHSE (D23), le QHSE la retire au besoin.
+      if (row.commentId != null && !isQhse(role)) {
+        const [c] = await db.select({ withdrawnAt: t.actionComments.withdrawnAt }).from(t.actionComments).where(eq(t.actionComments.id, row.commentId));
+        if (!c || c.withdrawnAt) return false;
+      }
+      return true;
     }
     case 'document_version': {
       if (!canSee(role, 'docs')) return false;

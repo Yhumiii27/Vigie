@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cookieJar, form } from '../next-mocks';
 import { closeDb, getDb, schema as t } from '@/db';
@@ -5,15 +8,23 @@ import { resetConfig } from '@/lib/env';
 
 // Démonstration sur PGlite en mémoire : jeu de démonstration, responsables QHSE par site (TDB-01), fiches personne (SEC-03).
 
+// Pièces jointes dans un dossier temporaire : le jeu de démonstration écrit les preuves des actions (src/db/seeds/actions.ts),
+// jamais dans le .data/uploads du dépôt.
+const uploads = mkdtempSync(path.join(tmpdir(), 'vigie-test-uploads-'));
+
 beforeAll(async () => {
   process.env.VIGIE_DEMO = '1';
   process.env.VIGIE_DATA_DIR = 'memory://';
   process.env.VIGIE_TODAY = '2026-10-09';
+  process.env.VIGIE_UPLOAD_DIR = uploads;
   resetConfig();
   await closeDb();
 });
 afterAll(async () => {
   await closeDb();
+  delete process.env.VIGIE_UPLOAD_DIR;
+  resetConfig();
+  rmSync(uploads, { recursive: true, force: true });
 });
 
 describe('démonstration', () => {

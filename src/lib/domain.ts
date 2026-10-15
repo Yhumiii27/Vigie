@@ -1,5 +1,7 @@
 // Référentiels métier partagés (serveur et client).
 
+import { ACTION_AVANCEMENTS, OPEN_AVANCEMENTS, type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type SourceKey, type VerifyMethod } from './action-keys';
+
 export type Tone = 'danger' | 'warn' | 'ok' | 'neutral' | 'accent';
 
 // Couleurs de statut : variables définies dans vigie.css.
@@ -92,54 +94,165 @@ export const D8_STEPS = ['D1 · Équipe', 'D2 · Description', 'D3 · Actions im
 
 export const NC_ORIGINS = ['Fournisseurs', 'Fabrication', 'Conception BE', 'Mise en service', 'Réclamation client'];
 
-// Statuts d'action ; « late » est dérivé de l'échéance. « cancelled » est un statut stocké (annulation tracée),
-// sans colonne dans le Kanban.
-export type ActionColumn = 'todo' | 'doing' | 'late' | 'verify' | 'done' | 'cancelled';
-export const ACTION_COLUMNS: { key: ActionColumn; label: string; status: string; tone: Tone }[] = [
-  { key: 'todo', label: 'À lancer', status: 'À lancer', tone: 'neutral' },
-  { key: 'doing', label: 'En cours', status: 'En cours', tone: 'accent' },
-  { key: 'late', label: 'En retard', status: 'En retard', tone: 'danger' },
-  { key: 'verify', label: 'Efficacité à vérifier', status: 'Efficacité à vérifier', tone: 'warn' },
-  { key: 'done', label: 'Clôturées · 30 j', status: 'Clôturée', tone: 'ok' },
-];
-export const ACTION_CANCELLED = { key: 'cancelled' as ActionColumn, label: 'Annulées', status: 'Annulée', tone: 'neutral' as Tone };
-export const columnOf = (key: ActionColumn) => ACTION_COLUMNS.find((c) => c.key === key) ?? ACTION_CANCELLED;
-/** Statuts stockés d'une action. */
-export const ACTION_STATUSES = ['todo', 'doing', 'verify', 'done', 'cancelled'] as const;
-export type ActionStatus = (typeof ACTION_STATUSES)[number];
-/** Action encore à mener (ni clôturée, ni annulée). */
-export const isOpenActionStatus = (status: string) => status !== 'done' && status !== 'cancelled';
-/** Action terminée pour les règles de rattachement (recyclage planifié, blocages) : clôturée ou annulée. */
-export const isClosedActionStatus = (status: string) => !isOpenActionStatus(status);
-/** Libellé de la colonne Clôturées selon le filtre d'historique. */
-export const CLOSED_ALL_LABEL = 'Clôturées · toutes';
-/** Filtre d'affichage du plan (?etat=…). */
-export const PLAN_SCOPES = [
-  ['', 'Plan en cours', 'ph-kanban'], // ouvertes + clôturées 30 j (défaut)
-  ['historique', 'Historique complet', 'ph-clock-counter-clockwise'], // + toutes les clôturées
-  ['annulees', 'Annulées', 'ph-prohibit'],
-] as const;
+// ─── Plan d'actions (docs/specs/actions-qse.md § 5, § 12) ───────────────────
+// Clés stockées : src/lib/action-keys.ts (contraintes CHECK de la base) ; règles pures (retard, transitions, droits,
+// à compléter, filtres) : src/lib/action-rules.ts. Ici : libellés, tons et groupes.
 
-// `path` : écran d'arrivée quand la source précise d'une action ne peut pas être résolue (origine toujours cliquable).
-export const ORIGINS: Record<string, { label: string; icon: string; path: string }> = {
-  ev: { label: 'Événement', icon: 'ph-warning', path: '/evenements' },
-  audit: { label: 'Audit', icon: 'ph-certificate', path: '/audits' },
-  risk: { label: 'Risques', icon: 'ph-shield-check', path: '/risques' },
-  watch: { label: 'Veille', icon: 'ph-scales', path: '/veille' },
-  client: { label: 'Client', icon: 'ph-chat-centered-text', path: '/evenements?type=RC' },
-  rev: { label: 'Revue de direction', icon: 'ph-users-three', path: '/audits' },
-  skills: { label: 'Habilitations', icon: 'ph-identification-badge', path: '/habilitations' },
-  prevention: { label: 'Prévention', icon: 'ph-clipboard-text', path: '/prevention' },
-  docs: { label: 'Documents', icon: 'ph-files', path: '/documents' },
-  env: { label: 'Environnement', icon: 'ph-leaf', path: '/environnement' },
+export * from './action-keys';
+
+/** Groupes d'avancement (§ 5.1) : ouverte (À faire → 80 %), en attente (Reportée), réalisée (Terminée), close. */
+export type AvancementGroup = 'ouverte' | 'en_attente' | 'realisee' | 'close';
+/** Avancement (§ 5.1) : libellé Vigie, libellé Power Apps (import, ACT-39), groupe, ton ; « en retard » est calculé (§ 6.3). */
+export const AVANCEMENT: Record<Avancement, { label: string; powerApps: string; group: AvancementGroup; tone: Tone; canBeLate: boolean }> = {
+  a_faire: { label: 'À faire', powerApps: 'A faire', group: 'ouverte', tone: 'neutral', canBeLate: true },
+  initiee: { label: 'Budgétée ou initiée', powerApps: 'Budgétée ou initiée', group: 'ouverte', tone: 'accent', canBeLate: true },
+  p20: { label: '20 %', powerApps: '20 %', group: 'ouverte', tone: 'accent', canBeLate: true },
+  p40: { label: '40 %', powerApps: '40 %', group: 'ouverte', tone: 'accent', canBeLate: true },
+  p60: { label: '60 %', powerApps: '60 %', group: 'ouverte', tone: 'accent', canBeLate: true },
+  p80: { label: '80 %', powerApps: '80 %', group: 'ouverte', tone: 'accent', canBeLate: true },
+  reportee: { label: 'Reportée', powerApps: 'Reportée', group: 'en_attente', tone: 'neutral', canBeLate: false },
+  terminee: { label: 'Terminée — à vérifier', powerApps: 'Terminée', group: 'realisee', tone: 'warn', canBeLate: false },
+  verifiee: { label: 'Vérifiée', powerApps: 'Vérifiée', group: 'close', tone: 'ok', canBeLate: false },
+  abandonnee: { label: 'Abandonnée', powerApps: 'Abandonnée', group: 'close', tone: 'neutral', canBeLate: false },
 };
-/** Origines dont l'action peut être rattachée à un événement (sélecteur « Événement lié »). */
-export const EVENT_ORIGINS = ['ev', 'client'];
+export const isAvancement = (s: string): s is Avancement => (ACTION_AVANCEMENTS as readonly string[]).includes(s);
+/** Groupe « ouverte » (À faire → 80 %) : seules actions qui peuvent être en retard (§ 6.3), taux de retard. */
+export const isOpenAvancement = (s: string) => (OPEN_AVANCEMENTS as readonly string[]).includes(s);
+/**
+ * Actions du rappel du mercredi (ACT-32, § 15.2 révisé le 15/10/2026) : les ouvertes et les Terminées (en attente de
+ * vérification) ; ni Reportées, ni closes.
+ */
+export const isReminderAvancement = (s: string) => isOpenAvancement(s) || s === 'terminee';
+/** Close pour les écrans sources, rattachements et blocages : Vérifiée ou Abandonnée (Terminée et Reportée restent ouvertes). */
+export const isClosedActionStatus = (s: string) => s === 'verifiee' || s === 'abandonnee';
 
-/** Longueur maximale d'un motif (annulation, archivage, classement sans suite, réouverture). */
+export const ACTION_PRIORITIES: Record<ActionPriority, { label: string; tone: Tone }> = {
+  urgent: { label: 'Urgent', tone: 'danger' },
+  moyen_terme: { label: 'Moyen terme', tone: 'warn' },
+  long_terme: { label: 'Long terme', tone: 'neutral' },
+};
+export const ACTION_DOMAINS: Record<ActionDomain, string> = { qualite: 'Qualité', securite: 'Sécurité', sante: 'Santé', environnement: 'Environnement', surete: 'Sûreté' };
+/** Niveau de risque d'une action (§ 5.4) — distinct de RISK_LEVELS / riskLevel (cotation G × P du DUERP). */
+export const ACTION_RISK_LEVELS = ['Niveau 0 — Supprimé', 'Niveau 1 — Maîtrisé durablement', 'Niveau 2 — Maîtrisé ponctuellement', 'Niveau 3 — Maîtrise en cours', 'Niveau 4 — Non maîtrisé'] as const; // index = niveau
+export const VERIFY_METHODS: Record<VerifyMethod, string> = { audit_visite: 'Audit / visite', ecrit: 'Écrit', reunion: 'Réunion', visuelle: 'Visuelle', autre: 'Autre' };
+export const FOLLOW_REASONS: Record<FollowReason, string> = { non_efficace: 'Non efficace', nouveau_risque: 'Nouveau risque' };
+
+/** Cible d'une source (§ 12) : type d'élément Vigie qui peut lui être lié (free : référence d'origine seulement). */
+export type SourceTarget = 'event' | 'audit' | 'risk' | 'control' | 'requirement' | 'review' | 'objective' | 'document' | 'environment' | 'free';
+/**
+ * 24 sources (§ 12) dans l'ordre de la liste du QHSE : ses 22 sources, plus « Audit fournisseur » et « Déchets » (réponses
+ * du service QHSE du 15/10/2026, ACT-37). `path` : écran d'arrivée sans élément lié (null : source libre, sans élément
+ * Vigie) ; `hint` : précision affichée sous la liste des sources du formulaire.
+ */
+export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; target: SourceTarget; path: string | null; hint?: string }> = {
+  analyse_risque: {
+    label: 'Analyse de risque (AST-EST)', icon: 'ph-magnifying-glass', target: 'free', path: null,
+    hint: 'AST : analyse de sécurité des tâches en contexte pyrotechnique ; EST : étude de sécurité technique.',
+  },
+  analyse_chimique: { label: 'Analyse de risque chimique', icon: 'ph-flask', target: 'free', path: null },
+  analyse_environnementale: { label: 'Analyse environnementale', icon: 'ph-leaf', target: 'free', path: null },
+  audit_certification: { label: 'Audit de certification ISO', icon: 'ph-certificate', target: 'audit', path: '/audits' },
+  audit_fournisseur: { label: 'Audit fournisseur', icon: 'ph-truck', target: 'audit', path: '/audits' },
+  audit_interne: { label: 'Audit interne ISO', icon: 'ph-certificate', target: 'audit', path: '/audits' },
+  audit_terrain: { label: 'Audit terrain', icon: 'ph-hard-hat', target: 'audit', path: '/audits' },
+  autorite_publique: { label: 'Autorité publique', icon: 'ph-bank', target: 'free', path: null },
+  causerie: { label: 'Causerie QSE', icon: 'ph-chats', target: 'free', path: null },
+  comex: { label: 'COMEX', icon: 'ph-briefcase', target: 'free', path: null },
+  controle_reglementaire: { label: 'Contrôle réglementaire', icon: 'ph-gauge', target: 'control', path: '/veille?onglet=controles' },
+  dechets: { label: 'Déchets', icon: 'ph-recycle', target: 'environment', path: '/environnement' },
+  duerp: { label: 'DUERP', icon: 'ph-shield-check', target: 'risk', path: '/risques' },
+  evenement: { label: 'Évènement QSE', icon: 'ph-warning', target: 'event', path: '/evenements' },
+  objectif: { label: 'Objectif QSE', icon: 'ph-target', target: 'objective', path: '/audits' },
+  reclamation_client: { label: 'Réclamation client', icon: 'ph-chat-centered-text', target: 'event', path: '/evenements?type=RC' },
+  reunion_operationnelle: { label: 'Réunion opérationnelle', icon: 'ph-users', target: 'free', path: null },
+  revue_direction: { label: 'Revue de direction', icon: 'ph-users-three', target: 'review', path: '/audits' },
+  revue_documentaire: { label: 'Revue documentaire', icon: 'ph-files', target: 'document', path: '/documents' },
+  revue_processus: { label: 'Revue de processus', icon: 'ph-flow-arrow', target: 'free', path: null },
+  veille: { label: 'Veille réglementaire', icon: 'ph-scales', target: 'requirement', path: '/veille' },
+  hazop: { label: 'HAZOP', icon: 'ph-pipe', target: 'free', path: null },
+  reserves: {
+    label: 'Réserves', icon: 'ph-list-checks', target: 'free', path: null,
+    hint: 'Réserves de réception d\'un chantier ou d\'une installation.',
+  },
+  rex: { label: 'REX', icon: 'ph-arrow-u-up-left', target: 'free', path: null },
+};
+/**
+ * Types de lien (src/lib/action-links.ts) qui désignent l'élément de la source, par cible. Cohérent avec
+ * admissibleSources (src/lib/action-rules.ts, testé) : Déchets admet aussi l'exigence (action BSD de l'écran
+ * Environnement), Revue de direction l'élément du programme de la ligne « Revues de direction ».
+ */
+export const SOURCE_LINK_KINDS: Record<SourceTarget, readonly string[]> = {
+  event: ['event'], audit: ['finding', 'plan'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
+  review: ['review', 'reviewdecision', 'plan'], objective: ['reviewdecision'], document: ['document', 'docversion'],
+  environment: ['wastestream', 'wasteentry', 'requirement'], free: [],
+};
+/** L'unique événement ou audit d'une action : posé à la création seulement, jamais rattaché ni détaché ensuite (§ 12, D15). */
+export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan'] as const;
+/** Ancienne origine (avant 0005) → libellé : historique, indication d'une source à compléter (legacy_origin, D9). */
+export const LEGACY_ORIGIN_LABELS: Record<string, string> = {
+  ev: 'Événement', audit: 'Audit', risk: 'Risques', watch: 'Veille', client: 'Client', rev: 'Revue de direction',
+  skills: 'Habilitations', prevention: 'Prévention', docs: 'Documents', env: 'Environnement',
+};
+
+/** Rapprochement de libellés sans accents, casse ni espaces (§ 5 ; import Power Apps ACT-39). */
+export const normalizeListLabel = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, '');
+/** Clé dont le libellé (ou le libellé Power Apps) correspond à `raw` (normalizeListLabel) ; null : valeur non reconnue. */
+export function matchListLabel<K extends string>(labels: Record<K, string | { label: string; powerApps?: string }>, raw: string): K | null {
+  const want = normalizeListLabel(raw);
+  if (!want) return null;
+  for (const [key, value] of Object.entries(labels) as [K, string | { label: string; powerApps?: string }][]) {
+    const names = typeof value === 'string' ? [value] : [value.label, value.powerApps ?? value.label];
+    if (names.some((n) => normalizeListLabel(n) === want)) return key;
+  }
+  return null;
+}
+
+const SAFETY_DOMAIN_LABELS = ['Santé-sécurité', 'Santé - sécurité', 'Santé et sécurité', 'Sécurité'].map(normalizeListLabel);
+/**
+ * Domaine proposé d'après la source ou l'élément lié (§ 12), modifiable ; null : aucune proposition. Événement AT, PA, SD →
+ * Sécurité ; NC, RC → Qualité ; ENV → Environnement ; source DUERP → Sécurité ; Revue documentaire → Qualité ; Déchets ou
+ * Analyse environnementale → Environnement ; exigence de veille : son domaine (texte libre) quand il correspond à un domaine —
+ * texte entier, puis la partie avant « — » (thème : « Sécurité — machines » → Sécurité), puis la partie après
+ * (« Code du travail — Santé-sécurité » → Sécurité) ; « Santé-sécurité » et « Sécurité » → Sécurité. Écart assumé au plan
+ * du paquet 1 (§ 2.1 : partie après « — » seulement) : le domaine d'une exigence s'écrit « thème — précision ».
+ */
+export function proposedDomain(input: { eventType?: string | null; source?: SourceKey | null; requirementDomain?: string | null }): ActionDomain | null {
+  const { eventType, source, requirementDomain } = input;
+  if (eventType === 'AT' || eventType === 'PA' || eventType === 'SD') return 'securite';
+  if (eventType === 'NC' || eventType === 'RC') return 'qualite';
+  if (eventType === 'ENV') return 'environnement';
+  if (source === 'duerp') return 'securite';
+  if (source === 'revue_documentaire') return 'qualite';
+  if (source === 'dechets' || source === 'analyse_environnementale') return 'environnement';
+  if (requirementDomain) {
+    const parts = requirementDomain.split('—').map((p) => p.trim()).filter(Boolean);
+    for (const candidate of [requirementDomain, ...parts]) {
+      if (SAFETY_DOMAIN_LABELS.includes(normalizeListLabel(candidate))) return 'securite';
+      const hit = matchListLabel(ACTION_DOMAINS, candidate);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * Notifications d'information stockées (table notifications) : type → libellé. Action confiée au responsable (ACT-30) ;
+ * commentaire ou preuve ajoutés par le responsable, adressés à chaque animateur QHSE (ACT-31, une notification par
+ * commentaire ou par preuve).
+ */
+export const NOTIFICATION_KINDS = {
+  action_confiee: 'Action confiée',
+  action_commentaire: 'Commentaire du responsable',
+  action_preuve: 'Preuve ajoutée',
+} as const;
+export type NotificationType = keyof typeof NOTIFICATION_KINDS;
+/** Clés d'état lu de la cloche : notification stockée « notification:<id> », rappel du mercredi « rappel-actions|2026-W42 ». */
+export const STORED_NOTIFICATION_KEY_PREFIX = 'notification:';
+export const REMINDER_KEY_PREFIX = 'rappel-actions|';
+export const REMINDER_KIND = 'Rappel du mercredi';
+
+/** Longueur maximale d'un motif (abandon, archivage, classement sans suite, réouverture). */
 export const REASON_MAX = 1000;
-/** @deprecated alias de REASON_MAX (plan du domaine actions). */
-export const CANCEL_REASON_MAX = REASON_MAX;
 
 /** Domaine d'exigence de veille relié aux écarts calculés des plans de prévention (R. 4512-6). */
 export const PREVENTION_REQUIREMENT_DOMAIN = 'Plans de prévention';
@@ -301,12 +414,13 @@ export const REVIEW_DECISION_KEYS = Object.keys(REVIEW_DECISION_KINDS) as Review
 export const REVIEW_CLOSE_DAYS = 30;
 
 /**
- * Suivi des décisions des revues précédentes (dossier § 1, ISO 9001 §9.3.2 a) : décision sans action au plan, action annulée.
- * Les statuts d'action gardent columnOf ; un objectif ou un besoin en ressources sans action prend le ton neutral (chargement).
+ * Suivi des décisions des revues précédentes (dossier § 1, ISO 9001 §9.3.2 a) : décision sans action au plan, action abandonnée.
+ * Les autres avancements prennent leur libellé et leur ton (AVANCEMENT, « En retard ») ; un objectif ou un besoin en
+ * ressources sans action prend le ton neutral (chargement).
  */
 export const REVIEW_FOLLOW_UP = {
   no_action: { label: 'Sans action au plan', tone: 'warn' },
-  cancelled: { label: 'Action annulée', tone: 'neutral' },
+  cancelled: { label: 'Action abandonnée', tone: 'neutral' },
 } as const satisfies Record<string, { label: string; tone: Tone }>;
 
 // ─── Navigation, écrans et rôles ────────────────────────────────────────────
@@ -345,12 +459,16 @@ export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de
 // « docs » reste en dernier dans chaque liste : homeOf() prend le premier écran.
 // Évaluation des risques : consultation par tous les rôles (DUERP, R. 4121-4, DUE-01) ; saisie : canEdit(role, 'risks').
 // Audits et certifications : consultation par le chef de service et le chef de projet (AUD-02) ; saisie : canEdit(role, 'audits').
+// Plan d'actions : consultation seule par l'encadrement hors QHSE (ACT-22 tranché le 15/10/2026 : lecture du plan de son
+// périmètre) ; création, saisie et avancement réservés au service QHSE, donc canEdit(role, 'actions') === canApprove(role)
+// pour tout rôle, depuis le plan comme depuis un écran source (canCreateAction, src/lib/action-rules.ts). Le Salarié ne
+// voit que ses propres actions (canReadPlan, même module).
 // Personnes de démonstration associées aux rôles : src/lib/demo.ts (mode démonstration seulement).
 export const ROLES: Record<Role, { screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
   'Animateur QHSE': { screens: null },
   Direction: { screens: null },
-  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'docs'], readOnly: ['audits', 'docs'] },
-  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'docs'], readOnly: ['risks', 'audits', 'docs'] },
+  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'docs'], readOnly: ['actions', 'audits', 'docs'] },
+  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'docs'], readOnly: ['actions', 'risks', 'audits', 'docs'] },
   Salarié: { screens: ['events', 'actions', 'risks', 'skills', 'docs'], readOnly: ['risks', 'docs'] },
 };
 export const ROLE_KEYS = Object.keys(ROLES) as Role[];
@@ -380,9 +498,13 @@ export const homeOf = (role: Role): ScreenKey => ROLES[role].screens?.[0] ?? 'da
 
 // Droits : l'encadrement saisit et modifie ; l'animateur QHSE et la direction valident
 // (vérification d'efficacité, approbation des documents, versions du DUERP).
+// Plan d'actions (docs/specs/actions-qse.md § 3, § 8) : « QHSE » = canApprove (animateur QHSE et direction, D6 § 22.17) :
+// seul à créer une action (ACT-22) ; tous les droits sur les actions de son périmètre (champs, avancement, vérification,
+// abandon, réouverture, rattachements). Le responsable d'une action (pilot_id), quel que soit son rôle, la consulte, la
+// commente et y joint des preuves, sans transition (src/lib/action-rules.ts : actionRights).
 export const canManage = (role: Role) => role !== 'Salarié';
 export const canApprove = (role: Role) => role === 'Animateur QHSE' || role === 'Direction';
-/** Rôle Salarié : ne voit que ses propres données (habilitations, signalements, actions dont il est pilote). */
+/** Rôle Salarié : ne voit que ses propres données (habilitations, signalements, actions dont il est responsable). */
 export const isEmployee = (role: Role) => role === 'Salarié';
 /**
  * Données de santé d'un accident du travail (blessure, jours perdus, lésions, soins, déclaration CPAM, pièces médicales,

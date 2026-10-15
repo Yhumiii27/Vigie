@@ -10,6 +10,8 @@ import { MIGRATIONS_DIR } from '@/db/migrations';
 
 // Reprise des liens d'origine des actions (ACT-01, npm run db:reprise-liens = vigie-db reprise-liens), exécutée comme en production
 // (processus séparé, variables d'environnement) sur une base PGlite migrée : essai, application, relance idempotente.
+// Depuis la migration 0005, l'origine lue est l'ancienne origine conservée par la reprise (actions.legacy_origin) : les
+// actions créées ensuite (legacy_origin vide) ne sont jamais examinées.
 
 const ROOT = path.resolve(__dirname, '../..');
 const TSX = path.join(ROOT, 'node_modules/tsx/dist/cli.mjs');
@@ -46,10 +48,12 @@ beforeAll(async () => {
       insert into sites (id, label, sort) values ('ville-a', 'Site A', 1);
       insert into people (id, name, site_id) values ('clefevre', '[C. Lefèvre]', 'ville-a');
       insert into documents (id, title, type, process, owner_id) values ('PR-QHSE-002', 'Traitement des non-conformités', 'procedure', 'QHSE', 'clefevre');
-      insert into actions (id, title, origin, origin_ref, site_id, pilot_id, due_on, status, kind) values
-        ('A-001', 'Réviser la procédure', 'docs', 'PR-QHSE-002 après REX', 'ville-a', 'clefevre', '2026-11-15', 'todo', 'P'),
-        ('A-002', 'Plan supprimé', 'prevention', 'PP-2026-099', 'ville-a', 'clefevre', '2026-11-15', 'todo', 'P'),
-        ('A-003', 'Événement', 'ev', 'EV-2026-001', 'ville-a', 'clefevre', '2026-11-15', 'todo', 'C');
+      insert into actions (id, opened_on, detail, legacy_origin, source, origin_ref, site_id, pilot_id, due_on, initial_due_on, status) values
+        ('A-001', '2026-10-01', 'Réviser la procédure', 'docs', 'revue_documentaire', 'PR-QHSE-002 après REX', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
+        ('A-002', '2026-10-01', 'Plan supprimé', 'prevention', null, 'PP-2026-099', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
+        ('A-003', '2026-10-01', 'Événement', 'ev', 'evenement', 'EV-2026-001', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'initiee'),
+        -- Action créée après la migration 0005 (legacy_origin vide) : jamais examinée, même si sa référence désigne un document.
+        ('A-004', '2026-10-12', 'Action récente', null, 'revue_documentaire', 'PR-QHSE-002', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire');
     `);
   });
 }, 120_000);
@@ -77,6 +81,7 @@ describe('npm run db:reprise-liens', () => {
       { id: 'A-001', document_id: 'PR-QHSE-002', prevention_plan_id: null },
       { id: 'A-002', document_id: null, prevention_plan_id: null },
       { id: 'A-003', document_id: null, prevention_plan_id: null },
+      { id: 'A-004', document_id: null, prevention_plan_id: null },
     ]);
     expect(await linkLogs()).toEqual([{ entity_id: 'A-001', summary: "Origine rattachée : document PR-QHSE-002 (reprise de la référence d'origine)", by_id: null }]);
 
