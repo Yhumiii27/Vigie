@@ -1,6 +1,7 @@
 // État de la lecture des scans par l'API Claude, côté serveur (module node pur, sans 'server-only' : testable avec node).
 // La lecture n'est possible qu'avec une activation explicite (VIGIE_AI_IMPORT=1, le document étant transmis à Anthropic)
 // et des identifiants que le SDK Anthropic sait trouver : clé ou jeton d'API, profil `ant auth login`, fédération d'identité.
+// Les variables viennent de la configuration (src/lib/env.ts : aiImport, anthropicEnv).
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +18,7 @@ function configDir(env: Env): string | null {
 }
 
 /** Identifiants d'API Anthropic présents sur le serveur (mêmes sources que le SDK, sans les lire). */
-export function hasAnthropicCredentials(env: Env = process.env): boolean {
+export function hasAnthropicCredentials(env: Env): boolean {
   if (env.ANTHROPIC_API_KEY?.trim() || env.ANTHROPIC_AUTH_TOKEN?.trim()) return true;
   if (env.ANTHROPIC_FEDERATION_RULE_ID && (env.ANTHROPIC_IDENTITY_TOKEN_FILE || env.ANTHROPIC_IDENTITY_TOKEN)) return true;
   // Profils (ANTHROPIC_PROFILE ou profil actif) : fichiers du dossier de configuration.
@@ -30,7 +31,7 @@ export function hasAnthropicCredentials(env: Env = process.env): boolean {
 }
 
 /** Lecture des scans : désactivée, prête, ou activée sans identifiants. */
-export function aiStatus(env: Env = process.env): AiStatus {
-  if (env.VIGIE_AI_IMPORT !== '1') return 'off';
-  return hasAnthropicCredentials(env) ? 'ready' : 'no_credentials';
+export function aiStatus({ aiImport, anthropicEnv }: { aiImport: boolean; anthropicEnv: Env }): AiStatus {
+  if (!aiImport) return 'off';
+  return hasAnthropicCredentials(anthropicEnv) ? 'ready' : 'no_credentials';
 }

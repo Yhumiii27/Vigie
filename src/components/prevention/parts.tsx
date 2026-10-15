@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import Link from 'next/link';
+import { ToneTag } from '@/components/ui';
 import { TONE, type Tone } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
-import type { PlanChoice, SiteRuleView } from '@/lib/data/prevention';
+import type { LinkedEvent, PlanChoice, ProcedureLink, SiteRuleView } from '@/lib/data/prevention';
 
 // Éléments partagés par les fenêtres de l'écran « Plans de prévention et permis ».
 
@@ -22,12 +24,30 @@ export type PreventionOptions = Pick<FormOptions, 'people' | 'sites' | 'projects
   siteLocked: boolean;
   /** Date du jour Vigie « AAAA-MM-JJ ». */
   today: string;
+  /** Procédure de référence (PR-QHSE-005), rappelée au pied des fiches. */
+  procedure?: ProcedureLink | null;
 };
 
 export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as const;
 
 /** Règle de prévention d'un site parmi les options du formulaire. */
 export const ruleOf = (options: Pick<PreventionOptions, 'siteRules'>, siteId: string) => options.siteRules.find((r) => r.id === siteId);
+
+/** Entreprises proposées dans un formulaire : actives, plus l'entreprise déjà choisie si elle a été archivée depuis. */
+export function contractorChoices(options: Pick<PreventionOptions, 'contractors'>, current?: { id: string | null; name: string | null }): Option[] {
+  if (!current?.id || options.contractors.some(([v]) => v === current.id)) return options.contractors;
+  return [[current.id, `${current.name ?? current.id} (archivée)`], ...options.contractors];
+}
+
+/** Lien vers la procédure de référence de l'écran (gestion documentaire). */
+export function ProcedureNote({ procedure }: { procedure?: ProcedureLink | null }) {
+  if (!procedure) return null;
+  return (
+    <Link href={procedure.href} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <i className="ph ph-book-open" style={{ fontSize: 13 }} aria-hidden />Procédure {procedure.id} · {procedure.title}
+    </Link>
+  );
+}
 
 /** Aide du champ Site quand un site est sélectionné (l'enregistrement reste visible à l'écran). */
 export const SITE_LOCK_HINT = 'Site sélectionné dans la barre latérale ; choisissez « Tous les sites » pour saisir sur un autre site.';
@@ -130,5 +150,30 @@ export function SignChip({ label, on, title }: { label: string; on: boolean; tit
     }}>
       <i className={`ph ${on ? 'ph-check' : 'ph-minus'}`} style={{ fontSize: 10 }} aria-hidden />{label}
     </span>
+  );
+}
+
+/**
+ * Événements rattachés à un plan ou à un permis (accident, presque-accident pendant l'intervention), avec
+ * « Signaler un événement » prérempli sur /evenements (`reportHref`, encadrement seulement).
+ */
+export function LinkedEvents({ events, reportHref, emptyLabel }: { events: LinkedEvent[]; reportHref: string | null; emptyLabel: string }) {
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <SectionTitle aside={reportHref && (
+        <Link href={reportHref} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+        </Link>
+      )}>Événements liés</SectionTitle>
+      {events.length === 0 && <span style={muted}>{emptyLabel}</span>}
+      {events.map((e) => (
+        <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+          <Link href={`/evenements?sel=${encodeURIComponent(e.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{e.id}</Link>
+          <span style={{ flex: 1, minWidth: 180 }}>{e.typeLabel} · {e.title}</span>
+          <span style={muted}>{e.date}</span>
+          <ToneTag tone={e.tone}>{e.stepLabel}</ToneTag>
+        </div>
+      ))}
+    </div>
   );
 }

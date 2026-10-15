@@ -1,19 +1,22 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
-  FIRE_WATCH_HOURS, PERMIT_TYPES, PERMIT_TYPE_KEYS,
-  addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, inspectionDone, isFullySigned, isMandatory, lcfirst, missingPresets,
-  parseChecklist, permitDays, permitPlanIssue, planCovers, planStatus, referenceNow, validityOver,
-  type ChecklistItem, type SiteRule,
+  EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
+  addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, fullSignatureOn, isMandatory, isPlanEnded, lcfirst, missingPresets,
+  parseChecklist, permitDays, permitPlanIssue, planCovers, planEndIssue, planSignIssue, planStatus, referenceNow, signedBeforeStart, validityOver,
+  type ChecklistItem, type PlanContentKey, type SiteRule,
 } from '@/components/prevention/model';
-import { fmtDate, today } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
-import { requireManager } from '@/lib/guard';
-import { checkUpload, saveUpload } from '@/lib/uploads';
+import { MAX_BATCH_BYTES } from '@/lib/attachments';
+import { requireInSite, requireManager } from '@/lib/guard';
+import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
+import { diffFields, logChange, loggedIds } from './changelog';
 
 type Result = { error?: string };
 
@@ -22,8 +25,10 @@ const MAX_CHECKLIST = 30;
 /** Permis encore actifs (demandés ou délivrés) : ils suivent le site et l'entreprise de leur plan. */
 const isOpenPermit = (p: { status: string }) => p.status === 'demande' || p.status === 'delivre';
 
+type Db = Awaited<ReturnType<typeof getDb>>;
+
 /** Règle de prévention du site (classement Seveso, plan « dès la première minute »). */
-async function siteRule(db: Awaited<ReturnType<typeof getDb>>, siteId: string): Promise<SiteRule | undefined> {
+async function siteRule(db: Db, siteId: string): Promise<SiteRule | undefined> {
   const [site] = await db.select({ seveso: t.sites.seveso, ppFromFirstMinute: t.sites.ppFromFirstMinute }).from(t.sites).where(eq(t.sites.id, siteId));
   return site;
 }
@@ -32,6 +37,13 @@ const done = (id?: string): FormState => {
   revalidatePath('/', 'layout');
   return { ok: true, id };
 };
+const ok = (): Result => {
+  revalidatePath('/', 'layout');
+  return {};
+};
+
+const ARCHIVED_CONTRACTOR = 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.';
+const ENDED_PLAN = (p: { status: string }) => (p.status === 'annule' ? 'Ce plan est annulé.' : 'Ce plan est clos.');
 
 // ─── Entreprises extérieures ────────────────────────────────────────────────
 
@@ -50,34 +62,101 @@ export async function saveContractor(_prev: FormState, fd: FormData): Promise<Fo
   if (!f.ok) return f.state();
 
   const db = await getDb();
-  const all = await db.select({ id: t.contractors.id, name: t.contractors.name }).from(t.contractors);
+  const all = await db.select().from(t.contractors);
   const key = name.toLocaleLowerCase('fr');
   if (all.some((c) => c.id !== id && c.name.toLocaleLowerCase('fr') === key)) {
     return { error: 'Cette entreprise existe déjà.', fieldErrors: { name: 'Nom déjà utilisé.' } };
   }
   const values = { name, trade, contactName, contactPhone, contactEmail };
   if (id) {
-    const [row] = await db.update(t.contractors).set(values).where(eq(t.contractors.id, id)).returning({ id: t.contractors.id });
-    if (!row) return { error: 'Entreprise introuvable.' };
+    const before = all.find((c) => c.id === id);
+    if (!before) return { error: 'Entreprise introuvable.' };
+    const details = diffFields(before, values, { name: 'Raison sociale', trade: 'Corps de métier', contactName: 'Interlocuteur', contactPhone: 'Téléphone', contactEmail: 'E-mail' });
+    await db.transaction(async (tx) => {
+      await tx.update(t.contractors).set(values).where(eq(t.contractors.id, id));
+      if (details.length) await logChange(tx, { entityType: 'contractor', entityId: id, action: 'update', summary: 'Fiche modifiée', details });
+    });
     return done(id);
   }
   const newId = nextRef(all.map((c) => c.id), 'EE-', 3);
-  await db.insert(t.contractors).values({ id: newId, ...values });
+  await db.transaction(async (tx) => {
+    await tx.insert(t.contractors).values({ id: newId, ...values });
+    await logChange(tx, { entityType: 'contractor', entityId: newId, action: 'create', summary: 'Entreprise ajoutée' });
+  });
   return done(newId);
+}
+
+/**
+ * Archive une entreprise qui n'intervient plus (motif obligatoire) : elle n'est plus proposée dans les formulaires,
+ * ses plans et permis restent consultables. Refusé tant qu'elle a des plans ou des permis en cours, sur tout site.
+ * Pas de suppression : la fiche est tracée dès l'ajout, une entreprise saisie par erreur s'archive aussi.
+ */
+export async function archiveContractor(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select().from(t.contractors).where(eq(t.contractors.id, id));
+  if (!row) return { error: 'Entreprise introuvable.' };
+  if (row.archivedAt) return { error: 'Cette entreprise est déjà archivée.' };
+  const [plans, permits] = await Promise.all([
+    db.select({ id: t.preventionPlans.id, status: t.preventionPlans.status }).from(t.preventionPlans).where(eq(t.preventionPlans.contractorId, id)),
+    db.select({ id: t.permits.id, status: t.permits.status }).from(t.permits).where(eq(t.permits.contractorId, id)),
+  ]);
+  const busy = [...plans.filter((p) => !isPlanEnded(p)), ...permits.filter(isOpenPermit)].map((p) => p.id);
+  if (busy.length) return { error: `Plans ou permis en cours (${busy.join(', ')}) : clôturez-les ou annulez-les avant d'archiver.` };
+  await db.transaction(async (tx) => {
+    await tx.update(t.contractors).set({ archivedAt: new Date(), archivedById: session.user.id, archiveReason: reason }).where(eq(t.contractors.id, id));
+    await logChange(tx, { entityType: 'contractor', entityId: id, action: 'archive', summary: 'Entreprise archivée', reason, byId: session.user.id });
+  });
+  return done(id);
+}
+
+/** Réactive une entreprise archivée (de nouveau proposée dans les formulaires). */
+export async function restoreContractor(id: string): Promise<Result> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const db = await getDb();
+  const [row] = await db.select().from(t.contractors).where(eq(t.contractors.id, String(id)));
+  if (!row) return { error: 'Entreprise introuvable.' };
+  if (!row.archivedAt) return { error: "Cette entreprise n'est pas archivée." };
+  await db.transaction(async (tx) => {
+    await tx.update(t.contractors).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.contractors.id, row.id));
+    await logChange(tx, { entityType: 'contractor', entityId: row.id, action: 'restore', summary: 'Entreprise réactivée', byId: session.user.id });
+  });
+  return ok();
 }
 
 // ─── Plans de prévention ────────────────────────────────────────────────────
 
 /** Champs dont la modification annule les signatures d'un plan (le plan modifié doit être signé à nouveau). */
 const MATERIAL_FIELDS = ['siteId', 'contractorId', 'title', 'location', 'startOn', 'endOn', 'estimatedHours', 'dangerousWork', 'interferenceRisks', 'measures'] as const;
+/**
+ * Contenu réglementaire (PRV-02, R. 4511-10, R. 4512-8, R. 4512-9) : modifier une section déjà renseignée annule les
+ * signatures ; compléter une section vide d'un plan signé (plan antérieur au contenu structuré) les conserve.
+ */
+const CONTENT_FIELDS = ['eeHeadcount', ...PLAN_CONTENT_KEYS] as const;
+
+/** Actions du plan d'actions unique rattachées au plan (actions.preventionPlanId, ACT-01), annulées comprises sur demande. */
+async function planActionIds(db: Db, planId: string, { includeCancelled = false }: { includeCancelled?: boolean } = {}) {
+  const rows = await db.select({ id: t.actions.id }).from(t.actions)
+    .where(and(eq(t.actions.preventionPlanId, planId), includeCancelled ? undefined : ne(t.actions.status, 'cancelled')));
+  return rows.map((r) => r.id);
+}
 
 /** Crée ou modifie un plan de prévention ; le statut est dérivé (inspection commune, signatures). */
 export async function savePlan(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireManager();
   if (error) return { error };
   // « 1 200 » : séparateur de milliers usuel en français, accepté comme dans le formulaire.
-  const hoursRaw = fd.get('estimatedHours');
-  if (typeof hoursRaw === 'string') fd.set('estimatedHours', hoursRaw.replace(/\s/g, ''));
+  for (const name of ['estimatedHours', 'eeHeadcount']) {
+    const raw = fd.get(name);
+    if (typeof raw === 'string') fd.set(name, raw.replace(/\s/g, ''));
+  }
+  const now = today();
   const f = formReader(fd);
   const id = f.opt('id');
   const contractorId = f.str('contractorId', { required: true });
@@ -92,24 +171,31 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   const inspectionOn = f.date('inspectionOn');
   const interferenceRisks = f.str('interferenceRisks', { max: 4000 });
   const measures = f.str('measures', { max: 4000 });
+  const eeHeadcount = f.int('eeHeadcount', { min: 1, max: EE_HEADCOUNT_MAX });
+  const content = Object.fromEntries(PLAN_CONTENT.map((c) => [c.key, f.str(c.key, { max: c.max })])) as Record<PlanContentKey, string>;
   const ownerId = f.opt('ownerId');
   if (startOn && endOn && endOn < startOn) f.fail('endOn', 'La fin ne peut pas précéder le début.');
   if (inspectionOn && endOn && inspectionOn > endOn) f.fail('inspectionOn', "L'inspection commune doit avoir lieu au plus tard le dernier jour de l'intervention.");
 
   const db = await getDb();
   const [contractors, sites, people, projects] = await Promise.all([
-    db.select({ id: t.contractors.id }).from(t.contractors),
+    db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.people.id }).from(t.people),
     db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
   ]);
-  if (contractorId && !contractors.some((c) => c.id === contractorId)) f.fail('contractorId', 'Entreprise introuvable.');
   if (siteId && !sites.some((s) => s.id === siteId)) f.fail('siteId', 'Site inconnu.');
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
 
   const [existing] = id ? await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, id)) : [];
   if (id && !existing) return { error: 'Plan de prévention introuvable.' };
-  if (existing?.status === 'clos') return { error: 'Un plan clos ne peut plus être modifié.' };
+  if (existing && isPlanEnded(existing)) return { error: 'Un plan clos ou annulé ne peut plus être modifié.' };
+  const siteError = (existing ? await requireInSite(existing.siteId) : null)
+    ?? (siteId && siteId !== existing?.siteId ? await requireInSite(siteId, { create: true }) : null);
+  if (siteError) return { error: siteError };
+  const contractor = contractors.find((c) => c.id === contractorId);
+  if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
+  else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', ARCHIVED_CONTRACTOR);
   const knownProject = !keystoneProject || keystoneProject === existing?.keystoneProject || projects.some((p) => `${p.id} · ${p.client}` === keystoneProject);
   if (!knownProject) f.fail('keystoneProject', 'Projet Keystone inconnu.');
   if (existing) {
@@ -129,17 +215,24 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       if (after.length) f.fail('endOn', `Permis actifs rattachés après cette date (${refs(after)}) : modifiez-les ou annulez-les avant de réduire la période.`);
     }
   }
+  // Intervention commencée : déplacer sa date de début pourrait effacer un écart R. 4512-6 (plan signé après le début,
+  // intervention sans plan signé) ; la modification exige un motif, conservé dans le journal.
+  const startMoved = !!existing && existing.startOn <= now && !!startOn && startOn !== existing.startOn;
+  const reason = startMoved ? f.reason() : null;
   if (!f.ok) return f.state();
 
   const values = {
     siteId, contractorId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
-    keystoneProject, inspectionOn, interferenceRisks, measures, ownerId,
+    keystoneProject, inspectionOn, interferenceRisks, measures, eeHeadcount, ...content, ownerId,
   };
-  const now = today();
 
   if (existing) {
-    const changed = MATERIAL_FIELDS.some((k) => existing[k] !== values[k]);
-    const signatures = changed ? { signedEuOn: null, signedEeOn: null } : { signedEuOn: existing.signedEuOn, signedEeOn: existing.signedEeOn };
+    const changed = MATERIAL_FIELDS.some((k) => existing[k] !== values[k])
+      || CONTENT_FIELDS.some((k) => existing[k] != null && existing[k] !== '' && existing[k] !== values[k]);
+    // Signatures effacées : la date de la première signature complète reste (écart R. 4512-6 jugé sur celle-ci).
+    const signatures = changed
+      ? { signedEuOn: null, signedEeOn: null, firstSignedOn: existing.firstSignedOn ?? fullSignatureOn(existing) }
+      : { signedEuOn: existing.signedEuOn, signedEeOn: existing.signedEeOn };
     // Signatures conservées : l'inspection commune préalable doit rester antérieure (ou du même jour) à la première signature.
     const firstSignature = [signatures.signedEuOn, signatures.signedEeOn].filter((d): d is string => !!d).sort()[0];
     if (firstSignature && (!inspectionOn || inspectionOn > firstSignature)) {
@@ -147,38 +240,86 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       return f.state();
     }
     const status = planStatus({ ...values, ...signatures, status: existing.status }, now);
-    await db.update(t.preventionPlans).set({ ...values, ...signatures, status }).where(eq(t.preventionPlans.id, existing.id));
+    const details = diffFields(existing, values, PLAN_LABELS, fmtValue);
+    const unsigned = changed && !!(existing.signedEuOn || existing.signedEeOn);
+    await db.transaction(async (tx) => {
+      await tx.update(t.preventionPlans).set({ ...values, ...signatures, status }).where(eq(t.preventionPlans.id, existing.id));
+      if (details.length) {
+        await logChange(tx, { entityType: 'prevention_plan', entityId: existing.id, action: 'update', summary: unsigned ? 'Plan modifié, signatures effacées' : 'Plan modifié', details, reason });
+      }
+    });
     return done(existing.id);
   }
 
   const ids = (await db.select({ id: t.preventionPlans.id }).from(t.preventionPlans)).map((r) => r.id);
-  const newId = nextRef(ids, `PP-${now.slice(0, 4)}-`, 3);
+  const newId = nextRef([...ids, ...(await loggedIds(db, 'prevention_plan'))], `PP-${now.slice(0, 4)}-`, 3);
   const status = planStatus({ ...values, signedEuOn: null, signedEeOn: null, status: 'brouillon' }, now);
-  await db.insert(t.preventionPlans).values({ id: newId, ...values, status });
+  await db.transaction(async (tx) => {
+    await tx.insert(t.preventionPlans).values({ id: newId, ...values, status });
+    await logChange(tx, { entityType: 'prevention_plan', entityId: newId, action: 'create', summary: 'Plan de prévention créé' });
+  });
   return done(newId);
 }
 
+/** Valeur affichée dans l'historique (booléens en clair). */
+const fmtValue = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'Oui' : 'Non') : String(v));
+
+/** Libellés des champs suivis dans l'historique d'un plan. */
+const PLAN_LABELS = {
+  siteId: 'Site', contractorId: 'Entreprise', title: 'Nature des travaux', location: 'Lieu', startOn: 'Début', endOn: 'Fin',
+  estimatedHours: 'Heures sur 12 mois', dangerousWork: 'Travaux dangereux', keystoneProject: 'Projet Keystone', inspectionOn: 'Inspection commune',
+  interferenceRisks: "Risques d'interférence", measures: 'Mesures de prévention', ownerId: 'Responsable',
+  eeHeadcount: 'Effectif prévisible', eeSupervisor: "Responsable de l'intervention (entreprise extérieure)", subcontracting: 'Sous-traitance',
+  dangerousPhases: 'Phases dangereuses', equipment: 'Matériels et installations', workerInstructions: 'Instructions aux travailleurs',
+  emergencyOrganisation: 'Premiers secours et évacuation', coordination: 'Coordination et commandement', sirPosts: 'Suivi individuel renforcé',
+} as const;
+
 async function loadPlan(id: string) {
   const db = await getDb();
-  const [plan] = await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, id));
+  const [plan] = await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, String(id)));
   return { db, plan };
 }
 
-/** Signature du plan par l'entreprise utilisatrice (date du jour). */
+/** Plan modifiable : existant, du site sélectionné, ni clos ni annulé ; message d'erreur sinon. */
+async function editablePlanError(plan: { siteId: string; status: string } | undefined): Promise<string | null> {
+  if (!plan) return 'Plan de prévention introuvable.';
+  return (await requireInSite(plan.siteId)) ?? (isPlanEnded(plan) ? ENDED_PLAN(plan) : null);
+}
+
+/**
+ * Signature tardive (écart R. 4512-6, règle du site) : plan obligatoire signé après le début de l'intervention, alors
+ * qu'il n'avait jamais été signé par les deux entreprises au plus tard le jour du début (dates déclarées, même jour admis).
+ */
+const lateSignature = (plan: typeof t.preventionPlans.$inferSelect, signedOn: string, mandatory: boolean) =>
+  mandatory && signedOn > plan.startOn && !signedBeforeStart(plan);
+
+/** Première signature complète à enregistrer quand la signature complète le plan (jamais remplacée ensuite). */
+const firstSignedUpdate = (plan: typeof t.preventionPlans.$inferSelect, next: { signedEuOn: string | null; signedEeOn: string | null }) => {
+  const full = fullSignatureOn(next);
+  return full && !plan.firstSignedOn ? { firstSignedOn: full } : {};
+};
+
+/** Signature du plan par l'entreprise utilisatrice (date du jour) ; une signature après le début de l'intervention est tracée comme écart. */
 export async function signPlanEu(id: string): Promise<Result> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
   const { db, plan } = await loadPlan(id);
   const now = today();
-  if (!plan) return { error: 'Plan de prévention introuvable.' };
-  if (plan.status === 'clos') return { error: 'Ce plan est clos.' };
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   if (plan.signedEuOn) return { error: "Le plan est déjà signé par l'entreprise utilisatrice." };
-  if (!inspectionDone(plan, now)) return { error: "Réalisez l'inspection commune préalable avant de signer le plan." };
-  if (!plan.measures.trim()) return { error: 'Complétez les mesures de prévention avant de signer le plan.' };
+  const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
+  const issue = planSignIssue(plan, { now, mandatory, verb: 'signer' });
+  if (issue) return { error: issue };
   const next = { ...plan, signedEuOn: now };
-  await db.update(t.preventionPlans).set({ signedEuOn: now, status: planStatus(next, now) }).where(eq(t.preventionPlans.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  const summary = lateSignature(plan, now, mandatory)
+    ? `Signé pour l'entreprise utilisatrice après le début de l'intervention (${fmtDate(plan.startOn)}) : écart R. 4512-6`
+    : "Signé pour l'entreprise utilisatrice";
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans).set({ signedEuOn: now, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'sign', summary, byId: session.user.id });
+  });
+  return ok();
 }
 
 /** Enregistre la signature de l'entreprise extérieure (date) et, le cas échéant, l'exemplaire signé. */
@@ -195,42 +336,160 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   if (!f.ok) return f.state();
 
   const { db, plan } = await loadPlan(id);
-  if (!plan) return { error: 'Plan de prévention introuvable.' };
-  if (plan.status === 'clos') return { error: 'Ce plan est clos.' };
-  if (!inspectionDone(plan, now)) return { error: "Réalisez l'inspection commune préalable avant de recueillir les signatures." };
-  if (!plan.measures.trim()) return { error: 'Complétez les mesures de prévention avant de recueillir les signatures.' };
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  if (plan.signedEeOn) return { error: "La signature de l'entreprise extérieure est déjà enregistrée." };
+  const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
+  const issue = planSignIssue(plan, { now, mandatory, verb: 'recueillir' });
+  if (issue) return { error: issue };
   if (plan.inspectionOn && signedOn! < plan.inspectionOn) {
     return { error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEeOn: `Au plus tôt le jour de l'inspection commune.` } };
   }
   const next = { ...plan, signedEeOn: signedOn };
-  await db.update(t.preventionPlans).set({ signedEeOn: signedOn, status: planStatus(next, now) }).where(eq(t.preventionPlans.id, id));
+  const late = lateSignature(plan, signedOn!, mandatory) ? ", après le début de l'intervention : écart R. 4512-6" : '';
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans).set({ signedEeOn: signedOn, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, id));
+    await logChange(tx, {
+      entityType: 'prevention_plan', entityId: id, action: 'sign',
+      summary: `Signature de l'entreprise extérieure enregistrée (${fmtDate(signedOn!)})${late}${files.length ? ', exemplaire signé joint' : ''}`, byId: session.user.id,
+    });
+  });
   for (const file of files) await saveUpload(file, PLAN_ATTACHMENT, id, session.user.id);
   return done(id);
 }
 
 /**
- * Clôture du plan. Un plan obligatoire (selon la règle du site) non signé se clôt si l'intervention n'a pas commencé
- * (intervention annulée), ou après la fin de l'intervention une fois l'écart tracé par une action
- * du plan d'actions unique ; jamais pendant l'intervention. Les permis rattachés doivent être clos ou annulés.
+ * Motif empêchant de clore ou d'annuler le plan (voir planEndIssue) : jamais pendant une intervention sans le plan
+ * obligatoire signé ; après une intervention réalisée sans plan signé, ou avec un plan signé après son début, une fois
+ * l'écart tracé par une action du plan d'actions unique ; les permis rattachés doivent être clos ou annulés.
  */
+async function planEndBlock(db: Db, plan: typeof t.preventionPlans.$inferSelect, verb: 'clore' | 'annuler') {
+  const [rule, actions, permits] = await Promise.all([
+    siteRule(db, plan.siteId),
+    planActionIds(db, plan.id),
+    db.select().from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
+  ]);
+  return planEndIssue(plan, {
+    mandatory: isMandatory(plan, rule), now: today(), verb,
+    openPermitIds: permits.filter(isOpenPermit).map((p) => p.id), actionCount: actions.length,
+  });
+}
+
+/** Clôture du plan en fin d'intervention (voir planEndBlock). */
 export async function closePlan(id: string): Promise<Result> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const { db, plan } = await loadPlan(id);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  const issue = await planEndBlock(db, plan, 'clore');
+  if (issue) return { error: issue };
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans).set({ status: 'clos' }).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'status', summary: 'Plan clos', byId: session.user.id });
+  });
+  return ok();
+}
+
+/**
+ * Annule un plan (intervention n'ayant pas lieu ou interrompue), motif obligatoire ; le plan reste consultable.
+ * Mêmes conditions que la clôture, et aucune activité de la carte rattachée en cours ou à venir.
+ */
+export async function cancelPlan(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const { db, plan } = await loadPlan(id);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  const issue = await planEndBlock(db, plan, 'annuler');
+  if (issue) return { error: issue };
+  const live = await db.select({ id: t.siteActivities.id }).from(t.siteActivities)
+    .where(and(eq(t.siteActivities.preventionPlanId, plan.id), gte(t.siteActivities.endOn, today())));
+  if (live.length) return { error: "Activités de la carte en cours ou à venir rattachées au plan : retirez ou modifiez les activités de la carte rattachées avant d'annuler le plan." };
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans)
+      .set({ status: 'annule', cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason })
+      .where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'cancel', summary: 'Plan annulé', reason, byId: session.user.id });
+  });
+  return done(plan.id);
+}
+
+/**
+ * Supprime un brouillon saisi par erreur : sans signature ni inspection commune réalisée, sans permis, action, activité
+ * de la carte ni événement rattachés. Tout autre plan s'annule avec un motif. Ses pièces jointes et le fichier importé sont supprimés.
+ */
+export async function deletePlan(id: string): Promise<Result> {
   const { error } = await requireManager();
   if (error) return { error };
   const { db, plan } = await loadPlan(id);
-  if (!plan) return { error: 'Plan de prévention introuvable.' };
-  if (plan.status === 'clos') return { error: 'Ce plan est déjà clos.' };
-  const now = today();
-  if (isMandatory(plan, await siteRule(db, plan.siteId)) && !isFullySigned(plan) && plan.startOn <= now) {
-    if (plan.endOn >= now) return { error: 'Intervention en cours avec un plan obligatoire non signé : enregistrez les signatures des deux entreprises avant de clore le plan.' };
-    const actions = await db.select({ id: t.actions.id }).from(t.actions)
-      .where(and(eq(t.actions.origin, 'prevention'), eq(t.actions.originRef, plan.id)));
-    if (!actions.length) return { error: "Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant de clore le plan." };
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  const [permits, actions, activities, events] = await Promise.all([
+    db.select({ id: t.permits.id }).from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
+    planActionIds(db, plan.id, { includeCancelled: true }),
+    db.select({ id: t.siteActivities.id }).from(t.siteActivities).where(eq(t.siteActivities.preventionPlanId, plan.id)),
+    db.select({ id: t.events.id }).from(t.events).where(eq(t.events.preventionPlanId, plan.id)),
+  ]);
+  const engaged = [
+    planStatus(plan, today()) !== 'brouillon' || plan.signedEuOn || plan.signedEeOn ? 'inspection commune ou signature enregistrée' : null,
+    permits.length ? `permis ${permits.map((p) => p.id).join(', ')}` : null,
+    actions.length ? `actions ${actions.join(', ')}` : null,
+    activities.length ? 'activités de la carte' : null,
+    events.length ? `événements ${events.map((e) => e.id).join(', ')}` : null,
+  ].filter(Boolean);
+  if (engaged.length) return { error: `Plan déjà engagé (${engaged.join(', ')}) : annulez-le avec un motif.` };
+  const files = await listAttachments(PLAN_ATTACHMENT, plan.id);
+  await db.transaction(async (tx) => {
+    // La ligne du plan d'abord : elle référence le fichier importé (importedFromId).
+    await tx.delete(t.preventionPlans).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'delete', summary: `Brouillon supprimé (${plan.title})` });
+  });
+  for (const file of files) await deleteAttachment(file.id);
+  if (plan.importedFromId && !files.some((file) => file.id === plan.importedFromId)) await deleteAttachment(plan.importedFromId);
+  return ok();
+}
+
+/** Joint des fichiers à un plan non clos (exemplaire signé, compte rendu d'inspection commune, avenant…). */
+export async function addPlanAttachments(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const files = f.files('files');
+  if (!files.length) f.fail('files', 'Choisissez au moins un fichier.');
+  if (files.length > MAX_PLAN_FILES) f.fail('files', `${MAX_PLAN_FILES} fichiers au maximum par envoi.`);
+  else if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) f.fail('files', `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.`);
+  files.forEach((file) => { const err = checkUpload(file); if (err) f.fail('files', err); });
+  if (!f.ok) return f.state();
+  const { plan } = await loadPlan(id);
+  const blocked = await editablePlanError(plan);
+  if (blocked) return { error: blocked };
+  for (const file of files) {
+    await saveUpload(file, PLAN_ATTACHMENT, id, session.user.id);
+    await logChange(null, { entityType: 'prevention_plan', entityId: id, action: 'attach', summary: `Pièce jointe ajoutée : ${file.name}`, byId: session.user.id });
   }
-  const open = (await db.select().from(t.permits).where(eq(t.permits.preventionPlanId, plan.id))).filter(isOpenPermit);
-  if (open.length) return { error: `Permis rattachés encore actifs (${open.map((p) => p.id).join(', ')}) : clôturez-les ou annulez-les avant de clore le plan.` };
-  await db.update(t.preventionPlans).set({ status: 'clos' }).where(eq(t.preventionPlans.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  return done(id);
+}
+
+/** Retire une pièce jointe ajoutée par erreur (plan non clos) ; le fichier source d'un formulaire importé reste attaché au plan. */
+export async function removePlanAttachment(attachmentId: string): Promise<Result> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const db = await getDb();
+  const [row] = await db.select().from(t.attachments).where(eq(t.attachments.id, String(attachmentId)));
+  if (!row || row.entityType !== PLAN_ATTACHMENT) return { error: 'Pièce jointe introuvable.' };
+  const { plan } = await loadPlan(row.entityId);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  if (plan.importedFromId === row.id) return { error: 'Le formulaire importé reste attaché au plan.' };
+  await deleteAttachment(row.id);
+  await logChange(db, { entityType: 'prevention_plan', entityId: plan.id, action: 'detach', summary: `Pièce jointe retirée : ${row.fileName}`, byId: session.user.id });
+  return ok();
 }
 
 // ─── Permis de feu et permis d'essai ────────────────────────────────────────
@@ -284,20 +543,25 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   const db = await getDb();
   const [sites, contractors, plans, projects] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
-    db.select({ id: t.contractors.id, name: t.contractors.name }).from(t.contractors),
+    db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select().from(t.preventionPlans),
     db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
   ]);
   if (siteId && !sites.some((s) => s.id === siteId)) f.fail('siteId', 'Site inconnu.');
-  if (contractorId && !contractors.some((c) => c.id === contractorId)) f.fail('contractorId', 'Entreprise introuvable.');
   const [existing] = id ? await db.select().from(t.permits).where(eq(t.permits.id, id)) : [];
   if (id && !existing) return { error: 'Permis introuvable.' };
   if (existing && existing.status !== 'demande') return { error: 'Un permis délivré, clos ou annulé ne se modifie plus.' };
+  const siteError = (existing ? await requireInSite(existing.siteId) : null)
+    ?? (siteId && siteId !== existing?.siteId ? await requireInSite(siteId, { create: true }) : null);
+  if (siteError) return { error: siteError };
+  const contractor = contractors.find((c) => c.id === contractorId);
+  if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
+  else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', ARCHIVED_CONTRACTOR);
   if (existing && existing.type !== type) f.fail('type', "Le type d'un permis ne change pas après sa création.");
   if (preventionPlanId) {
     const plan = plans.find((p) => p.id === preventionPlanId);
     if (!plan) f.fail('preventionPlanId', 'Plan de prévention introuvable.');
-    else if (plan.status === 'clos' && plan.id !== existing?.preventionPlanId) f.fail('preventionPlanId', 'Ce plan de prévention est clos.');
+    else if (isPlanEnded(plan) && plan.id !== existing?.preventionPlanId) f.fail('preventionPlanId', `Ce plan de prévention est ${plan.status === 'annule' ? 'annulé' : 'clos'}.`);
     else if (plan.siteId !== siteId) f.fail('preventionPlanId', "Ce plan concerne un autre site.");
     else if (contractorId && plan.contractorId !== contractorId) f.fail('preventionPlanId', "Ce plan concerne une autre entreprise extérieure.");
     else if (validFrom && validTo && validTo > validFrom && !planCovers(plan, permitDays({ validFrom, validTo }).from, permitDays({ validFrom, validTo }).to)) {
@@ -313,27 +577,39 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
     validFrom: validFrom!, validTo: validTo!, watchUntil, checklist: checklist!,
   };
   if (existing) {
-    await db.update(t.permits).set(values).where(eq(t.permits.id, existing.id));
+    const details = diffFields(existing, values, { location: 'Lieu', description: 'Travaux', contractorId: 'Entreprise', performer: 'Intervenant(s)', preventionPlanId: 'Plan de prévention', keystoneProject: 'Projet Keystone' });
+    const moved = existing.validFrom.getTime() !== validFrom!.getTime() || existing.validTo.getTime() !== validTo!.getTime();
+    await db.transaction(async (tx) => {
+      await tx.update(t.permits).set(values).where(eq(t.permits.id, existing.id));
+      if (details.length || moved) {
+        await logChange(tx, { entityType: 'permit', entityId: existing.id, action: 'update', summary: moved ? 'Demande modifiée (validité)' : 'Demande modifiée', details });
+      }
+    });
     return done(existing.id);
   }
   const ids = (await db.select({ id: t.permits.id }).from(t.permits)).map((r) => r.id);
   const newId = nextRef(ids, `${PERMIT_TYPES[type!].prefix}-${today().slice(0, 4)}-`, 3);
-  await db.insert(t.permits).values({ id: newId, ...values, status: 'demande' });
+  await db.transaction(async (tx) => {
+    await tx.insert(t.permits).values({ id: newId, ...values, status: 'demande' });
+    await logChange(tx, { entityType: 'permit', entityId: newId, action: 'create', summary: 'Demande de permis enregistrée' });
+  });
   return done(newId);
 }
 
 async function loadPermit(id: string) {
   const db = await getDb();
-  const [permit] = await db.select().from(t.permits).where(eq(t.permits.id, id));
-  return { db, permit };
+  const [permit] = await db.select().from(t.permits).where(eq(t.permits.id, String(id)));
+  const siteError = permit ? await requireInSite(permit.siteId) : null;
+  return { db, permit, siteError };
 }
 
 /** Coche ou décoche un point de la check-list d'un permis demandé. */
 export async function setPermitCheck(id: string, index: number, checked: boolean): Promise<Result> {
   const { error } = await requireManager();
   if (error) return { error };
-  const { db, permit } = await loadPermit(id);
+  const { db, permit, siteError } = await loadPermit(id);
   if (!permit) return { error: 'Permis introuvable.' };
+  if (siteError) return { error: siteError };
   if (permit.status !== 'demande') return { error: 'La check-list est figée une fois le permis délivré.' };
   const items = parseChecklist(permit.checklist);
   if (!Number.isInteger(index) || index < 0 || index >= items.length) return { error: 'Point de contrôle introuvable.' };
@@ -347,8 +623,9 @@ export async function setPermitCheck(id: string, index: number, checked: boolean
 export async function deliverPermit(id: string): Promise<Result> {
   const { session, error } = await requireManager();
   if (error) return { error };
-  const { db, permit } = await loadPermit(id);
+  const { db, permit, siteError } = await loadPermit(id);
   if (!permit) return { error: 'Permis introuvable.' };
+  if (siteError) return { error: siteError };
   if (permit.status !== 'demande') return { error: "Seul un permis demandé peut être délivré." };
   const items = parseChecklist(permit.checklist);
   const type = PERMIT_TYPE_KEYS.find((k) => k === permit.type);
@@ -368,9 +645,11 @@ export async function deliverPermit(id: string): Promise<Result> {
     const reason = firstMinuteRule(rule) ? firstMinuteReason(rule) : '';
     return { error: `${issue} Délivrance impossible${reason ? ` (${lcfirst(reason)})` : ''}.` };
   }
-  await db.update(t.permits).set({ status: 'delivre', issuerId: session.user.id }).where(eq(t.permits.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  await db.transaction(async (tx) => {
+    await tx.update(t.permits).set({ status: 'delivre', issuerId: session.user.id }).where(eq(t.permits.id, permit.id));
+    await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: PERMIT_DELIVERED, byId: session.user.id });
+  });
+  return ok();
 }
 
 /**
@@ -381,13 +660,14 @@ export async function deliverPermit(id: string): Promise<Result> {
 export async function linkPermitPlan(id: string, planId: string): Promise<Result> {
   const { error } = await requireManager();
   if (error) return { error };
-  const { db, permit } = await loadPermit(id);
+  const { db, permit, siteError } = await loadPermit(id);
   if (!permit) return { error: 'Permis introuvable.' };
+  if (siteError) return { error: siteError };
   if (!isOpenPermit(permit)) return { error: 'Ce permis est clos ou annulé.' };
   if (!permit.contractorId) return { error: "Permis d'une intervention interne : indiquez l'entreprise extérieure en modifiant la demande." };
   const [plan] = await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, String(planId)));
   if (!plan) return { error: 'Plan de prévention introuvable.' };
-  if (plan.status === 'clos') return { error: `Le plan de prévention ${plan.id} est clos.` };
+  if (isPlanEnded(plan)) return { error: `Le plan de prévention ${plan.id} est ${plan.status === 'annule' ? 'annulé' : 'clos'}.` };
   if (plan.siteId !== permit.siteId) return { error: 'Ce plan concerne un autre site.' };
   if (plan.contractorId !== permit.contractorId) return { error: 'Ce plan concerne une autre entreprise extérieure.' };
   const { from, to } = permitDays(permit);
@@ -396,33 +676,51 @@ export async function linkPermitPlan(id: string, planId: string): Promise<Result
     const issue = permitPlanIssue({ ...permit, preventionPlanId: plan.id }, plan, await siteRule(db, permit.siteId));
     if (issue) return { error: `${issue} Un permis délivré ne peut être rattaché qu'à un plan en règle.` };
   }
-  await db.update(t.permits).set({ preventionPlanId: plan.id }).where(eq(t.permits.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  await db.transaction(async (tx) => {
+    await tx.update(t.permits).set({ preventionPlanId: plan.id }).where(eq(t.permits.id, permit.id));
+    await logChange(tx, {
+      entityType: 'permit', entityId: permit.id, action: 'link', summary: `Plan de prévention ${plan.id} rattaché`,
+      details: [{ field: 'Plan de prévention', from: permit.preventionPlanId, to: plan.id }],
+    });
+  });
+  return ok();
 }
 
 /** Clôt le permis en fin de travaux (après la ronde de surveillance pour un permis de feu, confirmée dans la fiche). */
 export async function closePermit(id: string): Promise<Result> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
-  const { db, permit } = await loadPermit(id);
+  const { db, permit, siteError } = await loadPermit(id);
   if (!permit) return { error: 'Permis introuvable.' };
+  if (siteError) return { error: siteError };
   if (permit.status !== 'delivre') return { error: 'Seul un permis délivré peut être clos.' };
   const now = referenceNow(today());
   if (permit.validFrom > now) return { error: "Les travaux n'ont pas commencé : annulez le permis plutôt que de le clore." };
-  await db.update(t.permits).set({ status: 'clos', closedAt: now }).where(eq(t.permits.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  await db.transaction(async (tx) => {
+    await tx.update(t.permits).set({ status: 'clos', closedAt: now }).where(eq(t.permits.id, permit.id));
+    await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: 'Permis clos (fin des travaux)', byId: session.user.id });
+  });
+  return ok();
 }
 
-/** Annule un permis demandé ou délivré. */
-export async function cancelPermit(id: string): Promise<Result> {
-  const { error } = await requireManager();
+/** Annule un permis demandé ou délivré (travaux n'ayant pas lieu ou arrêtés), motif obligatoire. */
+export async function cancelPermit(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
   if (error) return { error };
-  const { db, permit } = await loadPermit(id);
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const { db, permit, siteError } = await loadPermit(id);
   if (!permit) return { error: 'Permis introuvable.' };
-  if (permit.status !== 'demande' && permit.status !== 'delivre') return { error: 'Ce permis est déjà clos ou annulé.' };
-  await db.update(t.permits).set({ status: 'annule', closedAt: referenceNow(today()) }).where(eq(t.permits.id, id));
-  revalidatePath('/', 'layout');
-  return {};
+  if (siteError) return { error: siteError };
+  if (!isOpenPermit(permit)) return { error: 'Ce permis est déjà clos ou annulé.' };
+  const requested = permit.status === 'demande';
+  await db.transaction(async (tx) => {
+    await tx.update(t.permits)
+      .set({ status: 'annule', closedAt: referenceNow(today()), cancelledById: session.user.id, cancelReason: reason })
+      .where(eq(t.permits.id, permit.id));
+    await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'cancel', summary: requested ? 'Demande de permis annulée' : 'Permis annulé', reason, byId: session.user.id });
+  });
+  return done(permit.id);
 }

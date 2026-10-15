@@ -6,7 +6,7 @@ import { Dialog } from '@/components/Dialog';
 import { Icon, ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { DocumentRow } from '@/lib/data/documents';
+import type { DocumentRow, UnavailableDoc } from '@/lib/data/documents';
 import { NewDocumentButton, type DocFormOptions } from './DocumentForms';
 import { DocumentPanel } from './DocumentPanel';
 
@@ -23,6 +23,8 @@ type Props = {
   existingIds: string[];
   /** Documents rattachés à un autre site que celui sélectionné : référence → libellé du site. */
   elsewhere: Record<string, string>;
+  /** Consultation seule : documents sans version en vigueur (référence → raison), pour expliquer un lien ?doc= sans fiche. */
+  unavailable?: Record<string, UnavailableDoc>;
   /** Site sélectionné (null = « Tous les sites ») : site proposé pour un nouveau document. */
   siteId: string | null;
   suggestedDueOn: string;
@@ -31,7 +33,7 @@ type Props = {
 const muted = 'var(--color-neutral-400)';
 
 /** Registre des documents maîtrisés : tableau filtré et fiche du document en fenêtre modale. */
-export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, canApprove, options, existingIds, elsewhere, siteId, suggestedDueOn }: Props) {
+export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, canApprove, options, existingIds, elsewhere, unavailable = {}, siteId, suggestedDueOn }: Props) {
   // La fiche ouverte est portée par l'URL (?doc=PR-QHSE-003) : lien profond depuis les échéances et notifications.
   const openId = useSearchParams().get('doc');
   const open = (id: string | null) => {
@@ -46,6 +48,14 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
   const doc = openId ? byId.get(openId) ?? null : null;
   // Fiche demandée mais hors du site sélectionné (document créé ou déplacé vers un autre site) : on l'explique.
   const otherSite = openId && !doc && Object.hasOwn(elsewhere, openId) ? elsewhere[openId] : null;
+  const notInForce = openId && !doc && Object.hasOwn(unavailable, openId) ? unavailable[openId] : null;
+  const notice = otherSite
+    ? <>{openId} est rattaché au {otherSite.charAt(0).toLowerCase()}{otherSite.slice(1)} : sélectionnez ce site ou « Tous les sites » pour l&apos;afficher.</>
+    : notInForce === 'retired'
+      ? <>{openId} a été retiré de la diffusion (document obsolète) : il n&apos;est plus consultable. Adressez-vous à l&apos;animateur QHSE pour connaître le document qui le remplace.</>
+      : notInForce === 'draft'
+        ? <>{openId} n&apos;est pas encore en vigueur : il sera consultable ici dès l&apos;approbation de sa première version.</>
+        : null;
 
   return (
     <>
@@ -54,12 +64,10 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
         {canManage && <span style={{ marginLeft: 'auto' }}><NewDocumentButton options={options} existingIds={existingIds} defaultSiteId={siteId} onCreated={open} /></span>}
       </div>
 
-      {otherSite && (
+      {notice && (
         <div className="vg-inset" role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', fontSize: 12.5, boxShadow: `inset 2px 0 0 ${TONE.accent.dot}` }}>
           <Icon name="ph-info" size={15} style={{ color: TONE.accent.dot, flex: 'none' }} />
-          <span style={{ flex: 1, textWrap: 'pretty' }}>
-            {openId} est rattaché au {otherSite.charAt(0).toLowerCase()}{otherSite.slice(1)} : sélectionnez ce site ou « Tous les sites » pour l&apos;afficher.
-          </span>
+          <span style={{ flex: 1, textWrap: 'pretty' }}>{notice}</span>
           <button type="button" className="vg-text-btn" onClick={() => open(null)}>Fermer</button>
         </div>
       )}
@@ -91,7 +99,18 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                   </td>
                   <td style={{ color: muted, whiteSpace: 'nowrap' }}>{d.processLabel}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {d.current ? <span style={{ fontWeight: 500 }}>{d.current.version}</span> : <span className="vg-muted">—</span>}
+                    {d.current ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 500 }}>{d.current.version}</span>
+                        {d.current.file && (
+                          <a href={`/fichiers/${d.current.file.id}`} target="_blank" rel="noopener noreferrer" className="vg-link" onClick={(e) => e.stopPropagation()}
+                            title={`Ouvrir la version ${d.current.version} · ${d.current.file.name}`} aria-label={`Ouvrir la version ${d.current.version} de ${d.id}`}
+                            style={{ display: 'inline-flex' }}>
+                            <Icon name="ph-file-arrow-down" size={14} />
+                          </a>
+                        )}
+                      </span>
+                    ) : <span className="vg-muted">—</span>}
                     {d.pending && (
                       <span style={{ display: 'block', fontSize: 11, color: d.pending.status === 'en_revue' ? TONE.warn.dot : 'var(--color-neutral-500)' }}>
                         {d.current ? 'révision' : 'version'} {d.pending.version} {d.pending.status === 'en_revue' ? 'en revue' : 'en cours'}

@@ -1,9 +1,26 @@
-# Exclus de l'image : dépendances et builds locaux, données locales, secrets, application macOS.
+# Contexte de construction de l'image (Dockerfile) : sources de l'application seulement.
 .git
-node_modules
+.github
+.claude
 .next
 .data
-.env
-.env.*
-!.env.example
+node_modules
+*.tsbuildinfo
+next-env.d.ts
+# Secrets et configuration locale : jamais dans l'image (configuration lue au démarrage du conteneur).
+.env*
+*.pem
+*.key
+# Inutile à l'exécution
+design
 desktop-app
+docs
+samples
+test
+coverage
+vitest.config.mts
+**/*.test.ts
+Dockerfile
+docker-compose.yml
+*.log
+.DS_Store

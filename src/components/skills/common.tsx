@@ -2,24 +2,18 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import type { ActionDefaults } from '@/components/ActionFormDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import { daysBetween, fmtDate, monthName } from '@/lib/dates';
+import { fileIcon } from '@/lib/attachments';
+import { daysBetween, fmtDate } from '@/lib/dates';
 import { SKILL_STATES, type SkillState } from '@/lib/domain';
 import type { Person } from '@/lib/queries';
-import type { RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
+import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
 
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
-/** Animatrice QHSE : pilote par défaut des recyclages. */
-export const RENEWAL_PILOT = 'clefevre';
-
-/** « du 13 au 17 octobre » / « du 28 septembre au 2 octobre ». */
-export function period(start: string, end: string) {
-  const d1 = +start.slice(8, 10), d2 = +end.slice(8, 10), m1 = +start.slice(5, 7), m2 = +end.slice(5, 7);
-  if (start === end) return `le ${d1} ${monthName(m1)}`;
-  return m1 === m2 ? `du ${d1} au ${d2} ${monthName(m2)}` : `du ${d1} ${monthName(m1)} au ${d2} ${monthName(m2)}`;
-}
+/** Période d'une affectation (règle partagée avec le serveur, voir rules.ts). */
+export { period } from './rules';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
 export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');
@@ -34,14 +28,17 @@ export const canPlanRenewal = (c: Pick<SkillCell, 'renewalDueOn' | 'renewal'>) =
 
 export const validityLabel = (t: Pick<TrainingTitle, 'validityMonths'>) => (t.validityMonths ? `Validité ${t.validityMonths} mois` : 'Sans échéance');
 
-/** Valeurs de l'action « Planifier le recyclage » (plan d'actions unique, origine Habilitations). */
-export function renewalDefaults(person: Pick<Person, 'id' | 'name' | 'siteId'>, title: Pick<TrainingTitle, 'id' | 'label'>, state: SkillState, dueOn: string | null): ActionDefaults {
+/**
+ * Valeurs de l'action « Planifier le recyclage » (plan d'actions unique, origine Habilitations).
+ * `pilotId` : responsable QHSE du site du salarié, destinataire des alertes habilitation (vide si le poste est vacant).
+ */
+export function renewalDefaults(person: Pick<Person, 'id' | 'name' | 'siteId'>, title: Pick<TrainingTitle, 'id' | 'label'>, state: SkillState, dueOn: string | null, pilotId: string | null): ActionDefaults {
   return {
     title: `${state === 'r' ? 'Formation initiale' : 'Recyclage'} ${lcfirst(title.label)} — ${person.name}`,
     origin: 'skills',
     originRef: `Habilitations · ${person.name}`,
     lockOrigin: true,
-    pilotId: RENEWAL_PILOT,
+    pilotId: pilotId ?? undefined,
     dueOn: dueOn ?? undefined,
     kind: 'P',
     siteId: person.siteId,
@@ -104,5 +101,67 @@ export function RenewalTag({ renewal, state }: { renewal: RenewalInfo; state: Sk
     <Link href={`/actions?action=${encodeURIComponent(renewal.id)}`} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={`${renewal.title} — échéance ${fmtDate(renewal.dueOn)}`}>
       <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}
     </Link>
+  );
+}
+
+const isoDay = (iso: string) => fmtDate(iso.slice(0, 10));
+
+/**
+ * Historique des formations d'une case (annulées barrées, avec motif) ; attestations en lien.
+ * `onCancel` : bouton « Annuler » sur chaque formation non annulée (case de la matrice, encadrement) ; absent en consultation seule.
+ */
+export function HistoryTable({ entries, title = 'Historique des formations', onCancel }: {
+  entries: QualificationEntry[]; title?: ReactNode; onCancel?: (e: QualificationEntry) => void;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <h6 className="vg-h6">{title}{entries.length > 0 && <span style={{ color: 'var(--color-neutral-600)' }}> · {entries.length}</span>}</h6>
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune formation enregistrée.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Saisie</th><th aria-label="Attestations" /></tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => {
+                const struck = e.cancelled ? { textDecoration: 'line-through', color: 'var(--color-neutral-500)' } : undefined;
+                return (
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: 'nowrap', ...struck }}>{fmtDate(e.obtainedOn)}</td>
+                    <td style={{ whiteSpace: 'nowrap', ...struck }}>{e.expiresOn ? fmtDate(e.expiresOn) : 'Sans échéance'}</td>
+                    <td style={struck}>{e.provider ?? '—'}</td>
+                    <td>
+                      <span style={{ display: 'block', ...struck }}>{isoDay(e.recordedAt)} · {e.recordedBy}</span>
+                      {e.cancelled && (
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
+                          Annulée le {isoDay(e.cancelled.at)} par {e.cancelled.by} — {e.cancelled.reason}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {e.files.map((f) => (
+                          <a key={f.id} href={f.url} target="_blank" rel="noopener" title={f.name} aria-label={`Attestation ${f.name}`} className="vg-link">
+                            <Icon name={fileIcon(f.mime)} size={15} />
+                          </a>
+                        ))}
+                        {onCancel && !e.cancelled && (
+                          <button type="button" className="btn btn-ghost btn-icon" title="Annuler cette formation" aria-label={`Annuler la formation du ${fmtDate(e.obtainedOn)}`}
+                            onClick={() => onCancel(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>
+                            <Icon name="ph-prohibit" size={14} />
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

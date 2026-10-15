@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { today } from '@/lib/dates';
+import { today } from '@/lib/today';
 import { canSee } from '@/lib/domain';
 import { loadWasteRegisterCsv } from '@/lib/data/environment';
 import { getSession } from '@/lib/session';

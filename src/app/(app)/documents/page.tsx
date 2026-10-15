@@ -5,7 +5,7 @@ import { hrefWith } from '@/components/ui';
 import { DocumentRegister } from '@/components/documents/DocumentRegister';
 import { FilterMenu } from '@/components/documents/FilterMenu';
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/components/documents/meta';
-import { SCREENS, TONE, canApprove, canManage } from '@/lib/domain';
+import { SCREENS, TONE, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadDocuments, matchesSearch, type DocumentRow } from '@/lib/data/documents';
 import { loadFormOptions } from '@/lib/data/options';
@@ -15,6 +15,8 @@ import { currentSiteId } from '@/lib/session';
 export const metadata: Metadata = { title: SCREENS.docs.title };
 
 const PATH = '/documents';
+/** Consultation seule : aucun formulaire, donc aucune liste de choix (personnel, sites, actions) transmise au navigateur (QUA-06). */
+const READER_OPTIONS = { people: [], sites: [], origins: [], actions: [] };
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
@@ -31,13 +33,15 @@ function matchesStatus(d: DocumentRow, s: StatusFilter) {
 export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
   const { role } = await guard('docs');
   const sp = await searchParams;
-  const [data, formOptions, siteId] = await Promise.all([loadDocuments(), loadFormOptions(), currentSiteId()]);
+  // Rôles en consultation seule : documents en vigueur, sans cycle de vie ni brouillons.
+  const manager = canEdit(role, 'docs');
+  const [data, formOptions, siteId] = await Promise.all([loadDocuments({ readOnly: !manager }), loadFormOptions(), currentSiteId()]);
   const { rows, kpis } = data;
 
   const type = DOC_TYPE_KEYS.find((k) => k === str(sp.type));
   const rawProcess = str(sp.processus);
   const processCode = rawProcess && (PROCESS_KEYS.includes(rawProcess) || rows.some((r) => r.process === rawProcess)) ? rawProcess : undefined;
-  const statut = STATUS_FILTERS.find(([k]) => k === str(sp.statut))?.[0];
+  const statut = manager ? STATUS_FILTERS.find(([k]) => k === str(sp.statut))?.[0] : undefined;
   const q = (str(sp.q) ?? '').trim();
   const params = { type, processus: processCode, statut, q: q || undefined };
   const filtered = Boolean(type || processCode || statut || q);
@@ -58,11 +62,12 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
   const statusLabel = STATUS_FILTERS.find(([k]) => k === statut)?.[1];
 
   const inForce = kpis.find((k) => k.key === 'vigueur')!.value;
-  const sub = `${plural(inForce, 'document en vigueur', 'documents en vigueur')} · ${plural(data.overdueCount, 'révision en retard', 'révisions en retard')}`;
-  const manager = canManage(role);
+  const sub = manager
+    ? `${plural(inForce, 'document en vigueur', 'documents en vigueur')} · ${plural(data.overdueCount, 'révision en retard', 'révisions en retard')}`
+    : `${plural(inForce, 'document en vigueur', 'documents en vigueur')} · consultation`;
   const emptyText = rows.length
     ? 'Aucun document ne correspond aux filtres.'
-    : `${siteId ? 'Aucun document maîtrisé pour ce site.' : 'Aucun document maîtrisé.'}${manager ? ' Créez le premier avec « Nouveau document ».' : ''}`;
+    : `${siteId ? `Aucun document ${manager ? 'maîtrisé' : 'en vigueur'} pour ce site.` : `Aucun document ${manager ? 'maîtrisé' : 'en vigueur'}.`}${manager ? ' Créez le premier avec « Nouveau document ».' : ''}`;
 
   const toolbar = (
     <>
@@ -86,11 +91,13 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
           { href: hrefWith(PATH, params, { processus: undefined }), label: 'Tous les processus', on: !processCode, n: byProcess.length },
           ...processes.map((p) => ({ href: hrefWith(PATH, params, { processus: p }), label: processLabel(p), on: processCode === p, n: byProcess.filter((d) => d.process === p).length })),
         ]} />
-      <FilterMenu key={`s-${statut}`} label={`Statut : ${statusLabel ? lcfirst(statusLabel) : 'tous'}`}
-        options={[
-          { href: hrefWith(PATH, params, { statut: undefined }), label: 'Tous les statuts', on: !statut, n: byStatus.length },
-          ...STATUS_FILTERS.map(([k, label]) => ({ href: hrefWith(PATH, params, { statut: k }), label, on: statut === k, n: byStatus.filter((d) => matchesStatus(d, k)).length })),
-        ]} />
+      {manager && (
+        <FilterMenu key={`s-${statut}`} label={`Statut : ${statusLabel ? lcfirst(statusLabel) : 'tous'}`}
+          options={[
+            { href: hrefWith(PATH, params, { statut: undefined }), label: 'Tous les statuts', on: !statut, n: byStatus.length },
+            ...STATUS_FILTERS.map(([k, label]) => ({ href: hrefWith(PATH, params, { statut: k }), label, on: statut === k, n: byStatus.filter((d) => matchesStatus(d, k)).length })),
+          ]} />
+      )}
       {filtered && <Link href={PATH} scroll={false} className="vg-link">Réinitialiser</Link>}
     </>
   );
@@ -99,7 +106,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
     <>
       <PageHeader title={SCREENS.docs.title} sub={sub} />
       <div className="vg-page">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+        {manager && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
           {kpis.map((k) => {
             const on = statut === k.key;
             return (
@@ -115,7 +122,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
               </Link>
             );
           })}
-        </div>
+        </div>}
 
         <DocumentRegister
           docs={rows}
@@ -124,16 +131,26 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
           emptyText={emptyText}
           canManage={manager}
           canApprove={canApprove(role)}
-          options={{ people: formOptions.people, sites: formOptions.sites, origins: formOptions.origins, actions: data.actionOptions }}
+          options={manager ? { people: formOptions.people, sites: formOptions.sites, origins: formOptions.origins, actions: data.actionOptions } : READER_OPTIONS}
           existingIds={data.allIds}
           elsewhere={data.elsewhere}
+          unavailable={data.unavailable}
           siteId={siteId}
           suggestedDueOn={data.suggestedDueOn}
         />
 
         <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-          Maîtrise des informations documentées (ISO 9001 §7.5) : seule la version approuvée est diffusée ; la version remplacée est archivée et reste consultable.
-          L&apos;approbation est réservée à l&apos;animateur QHSE et à la direction.
+          {manager ? (
+            <>
+              Maîtrise des informations documentées (ISO 9001 §7.5) : seule la version approuvée est diffusée ; la version remplacée est archivée et reste consultable.
+              L&apos;approbation est réservée à l&apos;animateur QHSE et à la direction.
+            </>
+          ) : (
+            <>
+              Consultation des documents en vigueur (ISO 9001 §7.5) : seule la dernière version approuvée est diffusée. Pour signaler une erreur ou proposer une
+              modification, contactez le propriétaire du document ou l&apos;animateur QHSE.
+            </>
+          )}
         </p>
       </div>
     </>

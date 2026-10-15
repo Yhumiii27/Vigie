@@ -193,7 +193,61 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 
 @media (max-width: 760px) {
   .vg-app { flex-direction: column; }
-  .vg-side { width: auto; height: auto; position: static; background: none; }
   .vg-header, .vg-page { padding-left: 16px; padding-right: 16px; }
   .vg-form-row { grid-template-columns: minmax(0, 1fr) !important; }
+  .vg-wide-only { display: none !important; }
+}
+/* Élément réservé au téléphone (ex. « Nouveau signalement » vers /signaler au lieu de l'aperçu mobile de démonstration). */
+@media (min-width: 761px) {
+  .vg-narrow-only { display: none !important; }
+}
+
+/* ─── Squelettes de chargement (loading.tsx) et état non lu ─────────────── */
+.vg-skel { display: block; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-text) 7%, transparent); animation: vg-pulse 1.4s ease-in-out infinite; }
+@keyframes vg-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .vg-skel { animation: none; } }
+.vg-unread { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent); flex: none; }
+.vg-history > summary::-webkit-details-marker { display: none; }
+
+/* ─── Navigation mobile, notifications et fenêtres (UX-01, UX-03, TDB-02/05) ─ */
+/* Barre supérieure et tiroir de navigation : téléphone seulement (AppShell). */
+.vg-topbar { display: none; }
+.vg-topbar-site { flex: 1; min-width: 0; text-align: right; font-size: 12px; color: var(--color-neutral-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vg-side-close { margin-left: auto; width: 32px; height: 32px; color: var(--color-neutral-400); }
+/* Panneau de la cloche : largeur adaptée à l'écran. */
+.vg-notif-panel { right: 0; top: calc(100% + 6px); width: min(380px, calc(100vw - 32px)); max-height: 460px; overflow: auto; padding: 6px 6px 0; }
+/* Échéance sans lien (écran source fermé au rôle, TDB-02). */
+.vg-row-static { cursor: default; }
+.vg-row-static:hover { background: none; }
+/* Titre de fenêtre en <h2> (nom accessible) : rendu inchangé. */
+.vg-dialog h2.dialog-title { letter-spacing: normal; }
+/* Tableau de bord : carte sur deux colonnes seulement quand la grille en a deux (2 × 320 px + écart). */
+.vg-dash-grid { container-type: inline-size; }
+@container (min-width: 652px) { .vg-span-2 { grid-column: span 2; } }
+
+@media (max-width: 760px) {
+  .vg-topbar {
+    position: sticky; top: 0; z-index: 35; display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 8px 16px;
+    background: var(--rule-fade) no-repeat bottom / 100% 1px, var(--color-bg);
+  }
+  .vg-side {
+    position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); height: 100dvh; z-index: 45;
+    background: var(--color-surface); box-shadow: var(--shadow-lg);
+    transform: translateX(-100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s;
+  }
+  .vg-side.is-open { transform: none; visibility: visible; transition: transform .2s ease, visibility 0s; }
+  .vg-side-backdrop { position: fixed; inset: 0; z-index: 44; background: color-mix(in srgb, #292b31 60%, transparent); }
+  html:has(.vg-app.is-nav-open) { overflow: hidden; }
+  /* Cibles tactiles. */
+  .vg-item, .vg-menu-item { min-height: 44px; }
+  .vg-dropdown .vg-menu-item { display: flex; align-items: center; }
+  .vg-notif-panel { position: fixed; left: 16px; right: 16px; top: 60px; width: auto; max-height: calc(100dvh - 76px); }
+  /* Champs des fenêtres en 16 px : pas de zoom automatique de Safari iOS à la saisie (comme /signaler, UX-02). */
+  .vg-dialog .input { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-side, .vg-side.is-open { transition: none; }
+}
+@media print {
+  .vg-topbar, .vg-side-backdrop { display: none !important; }
 }

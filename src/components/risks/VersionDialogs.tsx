@@ -15,6 +15,15 @@ const d = (iso: string | null | undefined) => (iso ? fmtDate(iso) : '—');
 /** « 0 risque », « 1 risque », « 12 risques ». */
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 const csvHref = (version: string) => `/risques/export?version=${encodeURIComponent(version)}`;
+/** Version imprimable (nouvel onglet, lien HTML simple : la feuille d'impression ne reste pas chargée dans l'application). */
+const printHref = (version?: string) => (version ? `/risques/imprimer?version=${encodeURIComponent(version)}` : '/risques/imprimer');
+function PrintLink({ version, className = 'vg-link', label = 'Imprimer' }: { version?: string; className?: string; label?: string }) {
+  return (
+    <a href={printHref(version)} target="_blank" rel="noreferrer" className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <i className="ph ph-printer" style={{ fontSize: 12 }} />{label}
+    </a>
+  );
+}
 
 type View = { kind: 'list' } | { kind: 'snapshot'; version: string } | { kind: 'edit'; version: string };
 type Loaded = { version: string; detail?: DuerpVersionDetail; error?: string };
@@ -104,12 +113,14 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
                       <span style={{ color: 'var(--color-neutral-500)' }}>Pris à l&apos;archivage</span>
                       {canApprove && <button type="button" className="vg-text-btn" onClick={() => onEdit(v.version)}>Modifier</button>}
+                      <PrintLink />
                     </span>
                   ) : v.hasSnapshot ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
                       <span style={{ color: TONE.ok.fg }}>Oui{v.riskCount != null && <span style={{ color: 'var(--color-neutral-500)' }}> · {v.riskCount} risque{v.riskCount > 1 ? 's' : ''}</span>}</span>
                       <button type="button" className="vg-text-btn" onClick={() => onShow(v.version)}>Consulter</button>
                       <a href={csvHref(v.version)} download className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><i className="ph ph-download-simple" style={{ fontSize: 12 }} />CSV</a>
+                      <PrintLink version={v.version} />
                     </span>
                   ) : (
                     <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>Archivée hors Vigie</span>
@@ -154,9 +165,12 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
           {units.map((u) => <option key={u.id} value={u.id}>{multiSite ? `${u.label} · ${u.site}` : u.label}</option>)}
         </select>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{rows.length} risque{rows.length > 1 ? 's' : ''}</span>
-        <a href={csvHref(detail.version)} download className="btn btn-secondary vg-btn-sm" style={{ marginLeft: 'auto' }}>
-          <i className="ph ph-download-simple" style={{ fontSize: 13 }} />Télécharger le CSV
-        </a>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <PrintLink version={detail.version} className="btn btn-ghost vg-btn-sm" />
+          <a href={csvHref(detail.version)} download className="btn btn-secondary vg-btn-sm">
+            <i className="ph ph-download-simple" style={{ fontSize: 13 }} />Télécharger le CSV
+          </a>
+        </span>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 860 }}>

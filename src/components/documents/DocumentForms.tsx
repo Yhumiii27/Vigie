@@ -3,8 +3,10 @@
 import { useState, type ReactNode } from 'react';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea, type FormAction } from '@/components/form';
+import { FileError, checkPickedFiles } from '@/components/watch/parts';
 import type { DocumentRow, LinkedAction, VersionView } from '@/lib/data/documents';
 import type { FormOptions } from '@/lib/data/options';
+import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import { nextRef, type FormState } from '@/lib/forms';
 import { createDocument, reviseDocument, updateDocument, updateDraft } from '@/server/documents';
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocType } from './meta';
@@ -47,6 +49,7 @@ function NewDocumentForm({ options, existingIds, defaultSiteId, onDone, onCancel
   const [processCode, setProcessCode] = useState('QHSE');
   const [months, setMonths] = useState(String(DOC_TYPES.procedure.reviewMonths));
   const auto = nextRef(existingIds, refPrefix(type, processCode), 3);
+  const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={createDocument} onDone={onDone} onCancel={onCancel} submitLabel="Créer le document" encType="multipart/form-data">
       <FormRow>
@@ -88,15 +91,21 @@ function NewDocumentForm({ options, existingIds, defaultSiteId, onDone, onCancel
           <Select name="actionId" options={options.actions} placeholder="Aucune" defaultValue="" />
         </Field>
         <Field name="file" label="Fichier" hint={FILE_HINT}>
-          <Input name="file" type="file" accept={ACCEPT} />
+          <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>
       </FormRow>
+      <FileError error={fileError} />
     </ActionForm>
   );
 }
 
 /** Modification des informations du document. */
 export function MetadataForm({ doc, options, onDone, onCancel }: { doc: DocumentRow; options: DocFormOptions; onDone: () => void; onCancel: () => void }) {
+  // Propriétaire sorti de l'effectif, site archivé : conservés tels quels tant qu'un autre choix n'est pas fait (DOC-01).
+  const owners = withCurrent(options.people, doc.ownerId, `${doc.owner}${LEFT_SUFFIX}`);
+  const sites = withCurrent(options.sites, doc.siteId, `${doc.siteLabel}${ARCHIVED_SITE_SUFFIX}`);
+  const ownerLeft = owners !== options.people;
+  const siteArchived = sites !== options.sites;
   return (
     <ActionForm action={updateDocument} hidden={{ id: doc.id }} onDone={onDone} onCancel={onCancel}>
       <Field name="title" label="Titre">
@@ -111,8 +120,8 @@ export function MetadataForm({ doc, options, onDone, onCancel }: { doc: Document
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="ownerId" label="Propriétaire">
-          <Select name="ownerId" options={options.people} defaultValue={doc.ownerId} />
+        <Field name="ownerId" label="Propriétaire" hint={ownerLeft ? "Sorti de l'effectif : conservé tant qu'aucun successeur n'est choisi." : undefined}>
+          <Select name="ownerId" options={owners} defaultValue={doc.ownerId} />
         </Field>
         <Field name="reviewMonths" label="Périodicité de revue (mois)">
           <Input name="reviewMonths" type="number" min={1} max={120} defaultValue={doc.reviewMonths} />
@@ -122,8 +131,8 @@ export function MetadataForm({ doc, options, onDone, onCancel }: { doc: Document
         <Field name="distribution" label="Diffusion">
           <Input name="distribution" defaultValue={doc.distribution} />
         </Field>
-        <Field name="siteId" label="Site">
-          <Select name="siteId" options={options.sites} placeholder="Tous les sites" defaultValue={doc.siteId ?? ''} />
+        <Field name="siteId" label="Site" hint={siteArchived ? "Site archivé : conservé tant qu'aucun autre site n'est choisi." : undefined}>
+          <Select name="siteId" options={sites} placeholder="Tous les sites" defaultValue={doc.siteId ?? ''} />
         </Field>
       </FormRow>
     </ActionForm>
@@ -133,6 +142,7 @@ export function MetadataForm({ doc, options, onDone, onCancel }: { doc: Document
 /** Nouvelle révision d'un document en vigueur, ou relance d'un document abandonné avant approbation. */
 export function RevisionForm({ doc, version, options, onDone, onCancel }: { doc: DocumentRow; version: string; options: DocFormOptions; onDone: () => void; onCancel: () => void }) {
   const suggested = doc.reviewActions[0];
+  const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={reviseDocument} hidden={{ documentId: doc.id }} onDone={onDone} onCancel={onCancel} submitLabel={`Créer la version ${version}`} encType="multipart/form-data">
       <Note>
@@ -148,15 +158,17 @@ export function RevisionForm({ doc, version, options, onDone, onCancel }: { doc:
           <Select name="actionId" options={withAction(options.actions, suggested)} placeholder="Aucune" defaultValue={suggested?.id ?? ''} />
         </Field>
         <Field name="file" label="Fichier" hint={FILE_HINT}>
-          <Input name="file" type="file" accept={ACCEPT} />
+          <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>
       </FormRow>
+      <FileError error={fileError} />
     </ActionForm>
   );
 }
 
 /** Brouillon en cours : objet, action liée, dépôt ou remplacement du fichier. */
 export function DraftForm({ version, options, onDone, onCancel }: { version: VersionView; options: DocFormOptions; onDone: () => void; onCancel: () => void }) {
+  const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={updateDraft} hidden={{ versionId: version.id }} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer le brouillon" encType="multipart/form-data">
       <Field name="summary" label="Objet de la modification">
@@ -167,9 +179,10 @@ export function DraftForm({ version, options, onDone, onCancel }: { version: Ver
           <Select name="actionId" options={withAction(options.actions, version.action)} placeholder="Aucune" defaultValue={version.action?.id ?? ''} />
         </Field>
         <Field name="file" label={version.file ? 'Remplacer le fichier' : 'Fichier'} hint={version.file ? `Fichier actuel : ${version.file.name}` : FILE_HINT}>
-          <Input name="file" type="file" accept={ACCEPT} />
+          <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>
       </FormRow>
+      <FileError error={fileError} />
       {version.file && <Checkbox name="removeFile" label="Retirer le fichier actuel sans le remplacer" />}
     </ActionForm>
   );

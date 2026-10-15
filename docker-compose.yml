@@ -1,0 +1,76 @@
+# Vigie en production (PRD-01) : Vigie + PostgreSQL, volumes pour la base, les pièces jointes et les sauvegardes.
+# Variables dans un fichier .env à côté de ce fichier (modèle : .env.example ; procédure : docs/EXPLOITATION.md).
+#
+#   docker compose up -d --build                 Vigie sur http://127.0.0.1:3000, derrière votre reverse proxy HTTPS
+#   docker compose --profile https up -d --build avec Caddy : HTTPS automatique (Let's Encrypt) sur les ports 80/443
+#   docker compose exec vigie vigie-db backup    sauvegarde manuelle (voir vigie-db --help)
+
+name: vigie
+
+services:
+  db:
+    image: postgres:16-alpine # même version majeure que PG_MAJOR du Dockerfile (pg_dump)
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vigie
+      POSTGRES_USER: vigie
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD à définir dans .env (openssl rand -hex 24)}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vigie -d vigie"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  vigie:
+    image: ${VIGIE_IMAGE:-vigie:latest}
+    build:
+      context: .
+      args:
+        PG_MAJOR: "16"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Toutes les variables de Vigie (VIGIE_PUBLIC_URL, ENTRA_*, VIGIE_SESSION_SECRET, VIGIE_UPLOAD_KEY…).
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      DATABASE_URL: postgres://vigie:${POSTGRES_PASSWORD}@db:5432/vigie
+      # Chemins des volumes (fixés par l'image : ne pas les redéfinir dans .env).
+      VIGIE_UPLOAD_DIR: /data/uploads
+      VIGIE_BACKUP_DIR: /data/backups
+    ports:
+      # Local seulement : le reverse proxy HTTPS (Caddy ci-dessous, nginx, IIS…) publie Vigie.
+      - "127.0.0.1:${VIGIE_PORT:-3000}:3000"
+    volumes:
+      - uploads:/data/uploads
+      - backups:/data/backups
+
+  # HTTPS par Caddy (optionnel) : certificat automatique pour VIGIE_DOMAIN (DNS public pointant sur ce serveur,
+  # ports 80 et 443 ouverts). Avec un autre reverse proxy, ne pas activer ce profil.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      - vigie
+    environment:
+      VIGIE_DOMAIN: ${VIGIE_DOMAIN:?VIGIE_DOMAIN à définir dans .env (nom de domaine de VIGIE_PUBLIC_URL)}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db:
+  uploads:
+  backups:
+  caddy_data:
+  caddy_config:

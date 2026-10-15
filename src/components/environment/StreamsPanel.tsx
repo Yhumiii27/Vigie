@@ -1,32 +1,53 @@
 'use client';
 
+import Link from 'next/link';
 import { useId, useState } from 'react';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
-import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
-import { ToneTag } from '@/components/ui';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
+import { Icon, ToneTag, hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
+import { TONE } from '@/lib/domain';
 import type { StreamView } from '@/lib/data/environment';
 import { deleteWasteStream, saveWasteStream } from '@/server/environment';
-import { TREATMENT_CODES, WASTE_UNITS, fmtDelta, fmtQty, isHazardousCode, isRecovery, normalizeEwc, treatmentLabel } from './model';
-import { DeleteZone, Note, Suggestions, muted, rowOpener, shortSite } from './parts';
+import {
+  QUALIFICATION_KEYS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS, WASTE_UNITS, defaultQualification, fmtDelta, fmtQty, isHazardousCode, isRecovery,
+  isTransitCode, normalizeEwc, qualificationError, treatmentLabel,
+} from './model';
+import {
+  CompanyIdField, DeleteZone, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
+} from './parts';
 
 type Opt = readonly (readonly [string, string])[];
-export type StreamSuggestions = { channels: string[]; collectors: string[]; destinations: string[] };
+export type StreamSuggestions = {
+  channels: string[]; collectors: string[]; destinations: string[];
+  /** Identité connue des collecteurs et transporteurs, et des installations : préremplit les mentions vides à la saisie du nom. */
+  carriers: Record<string, Carrier>;
+  installations: Record<string, Installation>;
+};
+
+const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
+const RECEIPT_HINT = "Récépissé de déclaration de transport de déchets (R. 541-50) ; « Exempté » si le transport n'est pas soumis à déclaration.";
 
 const TREATMENT_OPTIONS = TREATMENT_CODES.map(([c, l]) => [c, `${c} — ${l}`] as const);
 
 // ─── Catalogue des filières ─────────────────────────────────────────────────
 
-export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, sites, suggestions }: {
+export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showSite, sites, suggestions, actionOptions }: {
   streams: StreamView[];
   year: number;
+  /** Paramètre `annee` de l'URL (absent pour l'année en cours) : liens vers le registre filtré. */
+  annee?: string;
   /** Année en cours : la variation se compare à N-1 arrêtée à la même date. */
   isCurrent: boolean;
   canManage: boolean;
   showSite: boolean;
   sites: Opt;
   suggestions: StreamSuggestions;
+  /** Listes de choix du formulaire d'action (null : création d'action non permise). */
+  actionOptions: ActionOptions | null;
 }) {
+  const registerHref = (id: string) => hrefWith('/environnement', { annee }, { filiere: id });
   const [selId, setSelId] = useState<string | null>(null);
   const stream = selId ? streams.find((s) => s.id === selId) ?? null : null;
   const close = () => setSelId(null);
@@ -63,8 +84,14 @@ export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, si
                     <span style={{ fontWeight: 500 }}>{s.treatmentCode}</span>
                     <span style={{ ...muted, marginLeft: 6 }}>{s.recovery ? 'valorisation' : 'élimination'}</span>
                   </td>
-                  <td style={{ color: 'var(--color-neutral-300)' }}>{s.collector}</td>
-                  <td style={{ color: 'var(--color-neutral-400)', minWidth: 170 }}>{s.destination}</td>
+                  <td style={{ color: 'var(--color-neutral-300)' }} title={s.gaps.length ? `À compléter : ${s.gaps.join(' · ')}` : undefined}>
+                    {s.collector}
+                    <SiretLine siret={s.collectorSiret} />
+                  </td>
+                  <td style={{ color: 'var(--color-neutral-400)', minWidth: 170 }}>
+                    {s.destination}
+                    <SiretLine siret={s.destinationSiret} />
+                  </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     {s.yearQty ? fmtQty(s.yearQty, s.unit) : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
                     {delta != null && s.yearQty > 0 && <div style={muted}>{fmtDelta(delta)} vs {year - 1}{isCurrent ? ' même période' : ''}</div>}
@@ -73,7 +100,7 @@ export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, si
                     {s.prevQty ? fmtQty(s.prevQty, s.unit) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {s.yearCount}
+                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={`Registre ${year} filtré sur cette filière`}>{s.yearCount}</Link> : 0}
                     {s.lastRemovedOn && <div style={muted}>dernier {fmtDate(s.lastRemovedOn)}</div>}
                   </td>
                 </tr>
@@ -86,8 +113,32 @@ export function StreamsPanel({ streams, year, isCurrent, canManage, showSite, si
       <Dialog open={!!stream} onClose={close} width={640} kicker={stream ? `Filière ${stream.id} · ${shortSite(stream.site)}` : undefined} title={stream?.label ?? ''}>
         {stream && (
           <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--color-neutral-300)', marginBottom: 12 }}>
+              <Icon name="ph-list-numbers" size={14} />
+              {stream.yearCount ? (
+                <Link href={registerHref(stream.id)} scroll={false} className="vg-link" onClick={close}>
+                  Voir {stream.yearCount > 1 ? `les ${stream.yearCount} enlèvements` : "l'enlèvement"} de {year} au registre
+                </Link>
+              ) : <span>Aucun enlèvement en {year}.</span>}
+              {stream.entryCount > stream.yearCount && <span style={muted}>· {stream.entryCount} toutes années</span>}
+              {stream.cancelledCount > 0 && <span style={muted}>· {stream.cancelledCount} annulé{stream.cancelledCount > 1 ? 's' : ''}</span>}
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <LinkedActions actions={stream.actions} options={actionOptions} canAct={!!actionOptions}
+                defaults={{ originRef: stream.id, siteId: stream.siteId, kind: 'P', description: `Filière ${stream.id} · ${stream.label} (${stream.ewcCode}) · exutoire ${stream.destination}.` }} />
+            </div>
+            {stream.gaps.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <Note icon="ph-warning" tone="warn">
+                  Mentions du registre à compléter (arrêté du 31 mai 2021) : {stream.gaps.join(' · ')}. Elles sont copiées sur chaque nouvel enlèvement.
+                </Note>
+              </div>
+            )}
             <StreamForm key={stream.id} stream={stream} sites={sites} defaultSite={stream.siteId} suggestions={suggestions} onDone={close} onCancel={close} />
-            {stream.entryCount === 0 && (
+            <div style={{ marginTop: 12 }}><ChangeLogList entries={stream.history} /></div>
+            {/* Les enlèvements annulés restent au registre et référencent la filière, comme les actions créées depuis sa fiche
+                (annulées comprises, ACT-01) : elle n'est alors plus supprimable. */}
+            {stream.entryCount + stream.cancelledCount === 0 && stream.sourceActionCount === 0 && (
               <DeleteZone label="Supprimer la filière" run={() => deleteWasteStream(stream.id)} onDone={close}
                 question={<>Supprimer la filière « {stream.label} » ? Aucun enlèvement n&apos;est inscrit au registre.</>} />
             )}
@@ -115,9 +166,36 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
   const uid = useId();
   const [code, setCode] = useState(stream?.ewcCode ?? '');
   const [treatment, setTreatment] = useState(stream?.treatmentCode ?? '');
+  // Qualification : proposée d'après le code de traitement tant qu'elle n'a pas été choisie à la main.
+  const proposed = (c: string) => defaultQualification(c) ?? '';
+  const [qualification, setQualification] = useState(stream ? stream.qualification ?? proposed(stream.treatmentCode) : '');
+  const [qualificationTyped, setQualificationTyped] = useState(!!stream?.qualification && stream.qualification !== proposed(stream.treatmentCode));
+  const transit = !!treatment && isTransitCode(treatment);
+  const qualificationIssue = treatment ? qualificationError(treatment, qualification) : null;
+  // Mentions du collecteur et de l'installation : préremplies depuis un nom connu, sans écraser une saisie.
+  const [collectorSiret, setCollectorSiret] = useState(stream?.collectorSiret ?? '');
+  const [collectorAddress, setCollectorAddress] = useState(stream?.collectorAddress ?? '');
+  const [collectorReceipt, setCollectorReceipt] = useState(stream?.collectorReceipt ?? '');
+  const [destinationSiret, setDestinationSiret] = useState(stream?.destinationSiret ?? '');
+  const [destinationAddress, setDestinationAddress] = useState(stream?.destinationAddress ?? '');
+  const onCollector = (name: string) => {
+    const known = suggestions.carriers[name.trim()];
+    if (!known) return;
+    setCollectorSiret((v) => v || known.siret || '');
+    setCollectorAddress((v) => v || known.address || '');
+    setCollectorReceipt((v) => v || known.receipt || '');
+  };
+  const onDestination = (name: string) => {
+    const known = suggestions.installations[name.trim()];
+    if (!known) return;
+    setDestinationSiret((v) => v || known.siret || '');
+    setDestinationAddress((v) => v || known.address || '');
+  };
   const normalized = normalizeEwc(code);
   const hazardous = isHazardousCode(code);
-  const locked = !!stream && stream.entryCount > 0;
+  // Annulés compris : ils restent au registre chronologique (même règle que le serveur).
+  const registered = stream ? stream.entryCount + stream.cancelledCount : 0;
+  const locked = registered > 0;
   const lockHint = locked ? 'Verrouillé.' : undefined;
 
   return (
@@ -127,8 +205,8 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
       </Field>
       {locked && (
         <Note icon="ph-lock-simple">
-          {stream!.entryCount} enlèvement{stream!.entryCount > 1 ? 's' : ''} au registre : site et unité sont verrouillés
-          pour ne pas réécrire le registre chronologique. Les enlèvements déjà inscrits conservent les codes et l&apos;exutoire enregistrés.
+          {registered} enlèvement{registered > 1 ? 's' : ''} au registre{stream!.cancelledCount ? ` (dont ${stream!.cancelledCount} annulé${stream!.cancelledCount > 1 ? 's' : ''})` : ''} : site et unité sont verrouillés
+          pour ne pas réécrire le registre chronologique. Les enlèvements déjà inscrits conservent les codes, l&apos;exutoire et les mentions enregistrés.
         </Note>
       )}
       <FormRow>
@@ -148,7 +226,8 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
       )}
       <FormRow>
         <Field name="treatmentCode" label="Code de traitement" hint={treatment ? (isRecovery(treatment) ? 'Valorisation (R1–R13).' : 'Élimination (D1–D15).') : undefined}>
-          <Select name="treatmentCode" options={TREATMENT_OPTIONS} placeholder="Choisir…" value={treatment} onChange={(e) => setTreatment(e.target.value)}
+          <Select name="treatmentCode" options={TREATMENT_OPTIONS} placeholder="Choisir…" value={treatment}
+            onChange={(e) => { setTreatment(e.target.value); if (!qualificationTyped) setQualification(proposed(e.target.value)); }}
             title={treatment ? treatmentLabel(treatment) : undefined} />
         </Field>
         <Field name="channel" label="Filière de traitement">
@@ -156,16 +235,45 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="collector" label="Collecteur" hint="Transporteur proposé par défaut à chaque enlèvement.">
-          <Input name="collector" defaultValue={stream?.collector} placeholder="Ex. [Collecteur Huiles Ouest]" list={`${uid}-collectors`} maxLength={160} />
+        <Field name="qualification" label="Qualification du traitement final"
+          hint={qualificationIssue
+            ? <span style={{ color: TONE.warn.fg }}>{qualificationIssue}</span>
+            : transit ? 'Opération de transit : le traitement final se précise à chaque enlèvement.' : 'Hiérarchie des modes de traitement (C. env. L. 541-1).'}>
+          <Select name="qualification" options={QUALIFICATION_OPTIONS} placeholder={transit ? 'À préciser à chaque enlèvement' : 'Choisir…'} value={qualification}
+            onChange={(e) => { setQualification(e.target.value); setQualificationTyped(true); }} />
         </Field>
         <Field name="siteId" label="Site" hint={lockHint}>
           <Select name="siteId" options={sites} defaultValue={stream?.siteId ?? defaultSite} disabled={locked} />
         </Field>
       </FormRow>
-      <Field name="destination" label="Installation de destination (exutoire)">
-        <Input name="destination" defaultValue={stream?.destination} placeholder="Raison sociale et commune de l'installation de traitement" list={`${uid}-destinations`} maxLength={200} />
+      <Checkbox name="pop" label="Contient des polluants organiques persistants (POP)" defaultChecked={stream?.pop} />
+
+      <h6 className="vg-h6" style={{ marginTop: 4 }}>Collecteur</h6>
+      <Field name="collector" label="Raison sociale" hint="Transporteur proposé par défaut à chaque enlèvement, avec ses mentions.">
+        <Input name="collector" defaultValue={stream?.collector} placeholder="Ex. [Collecteur Huiles Ouest]" list={`${uid}-collectors`} maxLength={160}
+          onChange={(e) => onCollector(e.target.value)} />
       </Field>
+      <FormRow>
+        <CompanyIdField name="collectorSiret" label="SIRET" value={collectorSiret} onChange={setCollectorSiret} foreign />
+        <Field name="collectorReceipt" label="N° de récépissé" hint={RECEIPT_HINT}>
+          <Input name="collectorReceipt" value={collectorReceipt} onChange={(e) => setCollectorReceipt(e.target.value)} maxLength={60} autoComplete="off" />
+        </Field>
+      </FormRow>
+      <Field name="collectorAddress" label="Adresse">
+        <Input name="collectorAddress" value={collectorAddress} onChange={(e) => setCollectorAddress(e.target.value)} maxLength={300} placeholder="N°, voie, code postal, commune" />
+      </Field>
+
+      <h6 className="vg-h6" style={{ marginTop: 4 }}>Destination</h6>
+      <Field name="destination" label="Installation de destination (exutoire)">
+        <Input name="destination" defaultValue={stream?.destination} placeholder="Raison sociale et commune de l'installation de traitement" list={`${uid}-destinations`} maxLength={200}
+          onChange={(e) => onDestination(e.target.value)} />
+      </Field>
+      <FormRow>
+        <CompanyIdField name="destinationSiret" label="SIRET de l'installation" value={destinationSiret} onChange={setDestinationSiret} foreign />
+        <Field name="destinationAddress" label="Adresse de l'installation">
+          <Input name="destinationAddress" value={destinationAddress} onChange={(e) => setDestinationAddress(e.target.value)} maxLength={300} placeholder="N°, voie, code postal, commune" />
+        </Field>
+      </FormRow>
       <Suggestions id={`${uid}-channels`} values={suggestions.channels} />
       <Suggestions id={`${uid}-collectors`} values={suggestions.collectors} />
       <Suggestions id={`${uid}-destinations`} values={suggestions.destinations} />

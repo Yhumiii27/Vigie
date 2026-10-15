@@ -4,28 +4,58 @@ import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ActionFields, NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
-import { addDays, fmtDate } from '@/lib/dates';
+import { MAX_BATCH_BYTES, MAX_FILE_BYTES } from '@/lib/attachments';
+import { addDays, fmtDate, fmtDayMonth } from '@/lib/dates';
 import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
-import { closePlan, recordPlanEeSignature, savePlan, signPlanEu } from '@/server/prevention';
-import { DANGEROUS_WORK_HINT, MANDATORY_HOURS, PERMIT_TYPES, lcfirst, ruleBasis } from './model';
+import { addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSignature, removePlanAttachment, savePlan, signPlanEu } from '@/server/prevention';
 import {
-  ConfirmButton, ErrorLine, Facts, Notice, SITE_LOCK_HINT, SectionTitle, SignChip,
-  dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
+  DANGEROUS_WORK_HINT, EE_HEADCOUNT, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS,
+  lcfirst, ruleBasis, type PlanContentField, type PlanContentGroup,
+} from './model';
+import {
+  ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
+  contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
 
-/** Action proposée depuis un plan (plan d'actions unique, origine Prévention) : corrective pour une intervention sans plan signé. */
+/** Pièces jointes acceptées sur un plan : PDF, images, Word. */
+const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
+const MB = 1024 * 1024;
+
+/**
+ * Contrôle des fichiers choisis, avant l'envoi : au-delà de la limite des server actions (next.config), l'envoi
+ * échouerait sans message. Vide le champ et renvoie le motif du refus, ou null.
+ */
+function checkPicked(input: HTMLInputElement, maxFiles: number): string | null {
+  const picked = Array.from(input.files ?? []);
+  const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
+  const issue = tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
+    : picked.length > maxFiles ? `${maxFiles} fichiers au maximum par envoi.`
+      : picked.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : ajoutez-les en plusieurs fois.`
+        : null;
+  if (issue) input.value = '';
+  return issue;
+}
+
+/**
+ * Action proposée depuis un plan (plan d'actions unique, origine Prévention) : corrective pour une intervention sans plan
+ * signé, ou pour tracer l'écart R. 4512-6 d'un plan signé après le début de l'intervention.
+ */
 export function planActionDefaults(plan: PlanView, todayIso: string): ActionDefaults {
   const signed = !!plan.signedEuOn && !!plan.signedEeOn;
-  const title = signed ? undefined
-    : !plan.inspectionDone ? `Réaliser l'inspection commune et faire signer le plan de prévention ${plan.id} (${plan.contractor})`
-      : !plan.signedEuOn && !plan.signedEeOn ? `Faire signer le plan de prévention ${plan.id} par les deux entreprises (${plan.contractor})`
-        : !plan.signedEuOn ? `Signer le plan de prévention ${plan.id} pour l'entreprise utilisatrice (${plan.contractor})`
-          : `Obtenir la signature du plan de prévention ${plan.id} par ${plan.contractor}`;
-  const when = plan.phase === 'clos' ? 'terminée' : plan.inProgress ? 'en cours' : plan.overdue ? 'terminée, plan non clos' : 'prévue';
+  const title = plan.startGap?.kind === 'signe_apres'
+    ? `Tracer l'écart R. 4512-6 du plan de prévention ${plan.id} : plan signé après le début de l'intervention (${plan.contractor})`
+    : signed ? undefined
+      : !plan.inspectionDone ? `Réaliser l'inspection commune et faire signer le plan de prévention ${plan.id} (${plan.contractor})`
+        : !plan.signedEuOn && !plan.signedEeOn ? `Faire signer le plan de prévention ${plan.id} par les deux entreprises (${plan.contractor})`
+          : !plan.signedEuOn ? `Signer le plan de prévention ${plan.id} pour l'entreprise utilisatrice (${plan.contractor})`
+            : `Obtenir la signature du plan de prévention ${plan.id} par ${plan.contractor}`;
+  const when = plan.phase === 'clos' || plan.phase === 'annule' ? 'terminée' : plan.inProgress ? 'en cours' : plan.overdue ? 'terminée, plan non clos' : 'prévue';
   const obligation = !plan.mandatory ? ''
     : plan.ruleBasis ? ` ; plan écrit et signé obligatoire dès la première minute d'intervention (${lcfirst(plan.ruleBasis)})`
       : ` ; plan écrit obligatoire (${plan.legalReason})`;
@@ -39,14 +69,39 @@ export function planActionDefaults(plan: PlanView, todayIso: string): ActionDefa
     pilotId: plan.ownerId ?? undefined,
     // Avant le démarrage pour une intervention à venir, sinon dès le lendemain.
     dueOn: plan.startOn > addDays(todayIso, 1) ? addDays(plan.startOn, -1) : addDays(todayIso, 1),
-    kind: plan.missingSignature ? 'C' : 'P',
+    kind: plan.missingSignature || plan.startGap ? 'C' : 'P',
   };
 }
 
 // ─── Formulaire ─────────────────────────────────────────────────────────────
 
+/** Section de texte du contenu réglementaire (PRV-02) dans le formulaire du plan. */
+function ContentField({ field, plan }: { field: PlanContentField; plan?: PlanView }) {
+  return (
+    <Field name={field.key} label={<>{field.label} <span style={muted}>{field.ref}</span></>} hint={field.hint}>
+      {field.max <= 200
+        ? <Input name={field.key} defaultValue={plan?.[field.key] ?? ''} placeholder={field.placeholder} />
+        : <TextArea name={field.key} rows={2} defaultValue={plan?.[field.key] ?? ''} placeholder={field.placeholder} />}
+    </Field>
+  );
+}
+
+/** En-tête d'un bloc du contenu réglementaire : « Mesures du plan · R. 4512-8 ». */
+function ContentGroupTitle({ group, note }: { group: PlanContentGroup; note?: ReactNode }) {
+  const g = PLAN_CONTENT_GROUPS[group];
+  return (
+    <div style={{ display: 'grid', gap: 2, paddingTop: 4, borderTop: '1px solid var(--color-divider)' }}>
+      <span style={{ fontSize: 12.5, fontWeight: 500, paddingTop: 8 }}>{g.label} <span style={{ ...muted, fontWeight: 400 }}>· {g.ref}</span></span>
+      {note && <span className="vg-field-hint" style={{ marginTop: 0 }}>{note}</span>}
+    </div>
+  );
+}
+
+const contentOf = (group: PlanContentGroup) => PLAN_CONTENT.filter((c) => c.group === group);
+
 function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; options: PreventionOptions; onDone: (id?: string) => void; onCancel: () => void }) {
   const [hours, setHours] = useState(plan ? String(plan.estimatedHours) : '');
+  const [start, setStart] = useState(plan?.startOn ?? '');
   const [dangerous, setDangerous] = useState(plan?.dangerousWork ?? false);
   const [siteId, setSiteId] = useState(plan?.siteId ?? options.defaultSiteId);
   const rule = ruleOf(options, siteId);
@@ -57,6 +112,8 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
   const legal = overHours || dangerous;
   const legalText = [overHours && `${hours.trim()} h ≥ ${MANDATORY_HOURS} h sur 12 mois`, dangerous && 'travaux dangereux'].filter(Boolean).join(' et ');
   const signed = !!(plan?.signedEuOn || plan?.signedEeOn);
+  // Intervention commencée : déplacer la date de début exige un motif (un écart R. 4512-6 ne s'efface pas sans trace).
+  const startMoved = !!plan && plan.startOn <= options.today && start !== plan.startOn;
   const projects = plan?.keystoneProject && !options.projects.some(([v]) => v === plan.keystoneProject)
     ? [[plan.keystoneProject, plan.keystoneProject] as const, ...options.projects]
     : options.projects;
@@ -65,12 +122,13 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
     <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id }}>
       {signed && (
         <Notice tone="warn" icon="ph-pen-nib">
-          Modifier l&apos;entreprise, la nature des travaux, le lieu, la période, les heures ou les mesures d&apos;un plan signé efface les signatures : le plan mis à jour doit être signé à nouveau.
+          Modifier l&apos;entreprise, la nature des travaux, le lieu, la période, les heures, les mesures ou une section déjà renseignée du contenu réglementaire d&apos;un plan signé efface les signatures : le plan mis à jour doit être signé à nouveau.
+          Compléter une section encore vide conserve les signatures.
         </Notice>
       )}
       <FormRow>
         <Field name="contractorId" label="Entreprise extérieure" hint={options.contractors.length ? undefined : "Ajoutez d'abord l'entreprise dans l'onglet « Entreprises extérieures »."}>
-          <Select name="contractorId" options={options.contractors} defaultValue={plan?.contractorId ?? ''} placeholder="Choisir…" autoFocus={!plan} />
+          <Select name="contractorId" options={contractorChoices(options, plan && { id: plan.contractorId, name: plan.contractor })} defaultValue={plan?.contractorId ?? ''} placeholder="Choisir…" autoFocus={!plan} />
         </Field>
         <Field name="siteId" label="Site" hint={options.siteLocked ? SITE_LOCK_HINT : undefined}>
           <Select name="siteId" options={options.recordSites} value={siteId} onChange={(e) => setSiteId(e.target.value)} />
@@ -84,7 +142,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
       </Field>
       <FormRow cols={3}>
         <Field name="startOn" label="Début">
-          <Input name="startOn" type="date" defaultValue={plan?.startOn} />
+          <Input name="startOn" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
         <Field name="endOn" label="Fin">
           <Input name="endOn" type="date" defaultValue={plan?.endOn} />
@@ -93,6 +151,11 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
           <Input name="estimatedHours" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Ex. 120" />
         </Field>
       </FormRow>
+      {startMoved && (
+        <Field name="reason" label="Motif de la modification de la date de début" hint="Intervention déjà commencée : la modification est tracée avec son motif.">
+          <TextArea name="reason" rows={2} placeholder="Ex. Date de début saisie par erreur : l'intervention a commencé le 06/10" />
+        </Field>
+      )}
       <div style={{ display: 'grid', gap: 4 }}>
         <label className="vg-check">
           <input type="checkbox" name="dangerousWork" checked={dangerous} onChange={(e) => setDangerous(e.target.checked)} />
@@ -128,9 +191,22 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
       <Field name="interferenceRisks" label="Risques d'interférence" hint="Coactivité, circulation, énergies, produits, zones à risque…">
         <TextArea name="interferenceRisks" rows={3} defaultValue={plan?.interferenceRisks ?? ''} />
       </Field>
+      <ContentGroupTitle group="ee" note="Communiquées par l'entreprise extérieure avant l'intervention ; elles ne bloquent pas la signature." />
+      <FormRow>
+        <Field name="eeHeadcount" label={<>{EE_HEADCOUNT.label} <span style={muted}>{EE_HEADCOUNT.ref}</span></>} hint="Nombre de travailleurs affectés à l'intervention.">
+          <Input name="eeHeadcount" inputMode="numeric" defaultValue={plan?.eeHeadcount ?? ''} placeholder="Ex. 3" />
+        </Field>
+        <ContentField field={PLAN_CONTENT.find((c) => c.key === 'eeSupervisor')!} plan={plan} />
+      </FormRow>
+      <ContentField field={PLAN_CONTENT.find((c) => c.key === 'subcontracting')!} plan={plan} />
+      <ContentGroupTitle group="measures"
+        note={<>Exigées pour signer un plan obligatoire ; indiquez « Aucun » ou « Sans objet » quand une section ne s&apos;applique pas.</>} />
       <Field name="measures" label="Mesures de prévention" hint="Répartition des mesures entre l'entreprise utilisatrice et l'entreprise extérieure.">
         <TextArea name="measures" rows={3} defaultValue={plan?.measures ?? ''} />
       </Field>
+      {contentOf('measures').map((c) => <ContentField key={c.key} field={c} plan={plan} />)}
+      <ContentGroupTitle group="sir" note="Exigé pour signer un plan obligatoire." />
+      {contentOf('sir').map((c) => <ContentField key={c.key} field={c} plan={plan} />)}
     </ActionForm>
   );
 }
@@ -138,6 +214,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
 // ─── Fiche ──────────────────────────────────────────────────────────────────
 
 function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
+  const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={recordPlanEeSignature} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" encType="multipart/form-data" hidden={{ id: plan.id }}>
       <FormRow>
@@ -145,9 +222,10 @@ function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; to
           <Input name="signedEeOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
         </Field>
         <Field name="file" label="Exemplaire signé" hint="Facultatif : PDF ou photo, 10 Mo au maximum.">
-          <Input name="file" type="file" accept="application/pdf,image/*" />
+          <Input name="file" type="file" accept="application/pdf,image/*" onChange={(e) => setFileError(checkPicked(e.currentTarget, 1))} />
         </Field>
       </FormRow>
+      <ErrorLine error={fileError} />
     </ActionForm>
   );
 }
@@ -214,15 +292,108 @@ function ImportedForm({ form }: { form: PlanFormView }) {
   );
 }
 
-function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void }) {
+/** Pièces jointes du plan : consultation, ajout et retrait tant que le plan n'est ni clos ni annulé. */
+function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean }) {
+  const [adding, setAdding] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const { pending, error, run } = useRun();
+  const closeForm = () => { setAdding(false); setFileError(null); };
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <SectionTitle aside={editable && !adding && (
+        <button type="button" className="vg-text-btn" onClick={() => setAdding(true)}><Icon name="ph-paperclip" size={13} />Joindre un fichier</button>
+      )}>Pièces jointes</SectionTitle>
+      {plan.attachments.length === 0 && !adding && (
+        <span style={muted}>Aucune pièce jointe (exemplaire signé, compte rendu d&apos;inspection commune, avenant…).</span>
+      )}
+      {plan.attachments.length > 0 && (
+        <div className="vg-thumbs">
+          {plan.attachments.map((a) => (
+            <div key={a.id} style={{ display: 'grid', gap: 3, justifyItems: 'center', alignContent: 'start' }}>
+              <a href={a.url} target="_blank" rel="noreferrer" className="vg-thumb" title={a.name}>
+                {a.isImage
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={a.url} alt={a.name} />
+                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
+              </a>
+              {editable && (
+                <ConfirmButton label="Retirer" confirmLabel="Retirer" question="Retirer ?" icon="ph-x" pending={pending} className="vg-text-btn"
+                  onConfirm={() => run(() => removePlanAttachment(a.id))} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <ErrorLine error={error} />
+      {adding && (
+        <div className="vg-inset" style={{ padding: '10px 12px' }}>
+          <ActionForm action={addPlanAttachments} encType="multipart/form-data" hidden={{ id: plan.id }} submitLabel="Joindre" submitIcon="ph-paperclip"
+            onDone={closeForm} onCancel={closeForm}>
+            <Field name="files" label="Fichiers" hint={`PDF, image ou Word · ${MAX_PLAN_FILES} fichiers et ${MAX_BATCH_BYTES / MB} Mo au maximum par envoi.`}>
+              <Input name="files" type="file" multiple accept={PLAN_FILE_ACCEPT} onChange={(e) => setFileError(checkPicked(e.currentTarget, MAX_PLAN_FILES))} />
+            </Field>
+            <ErrorLine error={fileError} />
+          </ActionForm>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const contentText = (value: string | number | null, empty = 'Non renseigné') => (
+  <span style={{ fontSize: 12.5, color: value != null && value !== '' ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>
+    {value != null && value !== '' ? value : empty}
+  </span>
+);
+
+/** Contenu réglementaire du plan (PRV-02) : entreprise extérieure (R. 4511-10), mesures (R. 4512-8), suivi individuel renforcé (R. 4512-9). */
+function PlanContentView({ plan }: { plan: PlanView }) {
+  const section = (c: PlanContentField) => (
+    <div key={c.key} style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
+      <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{c.label} · {c.ref}</span>
+      {contentText(plan[c.key])}
+    </div>
+  );
+  return (
+    <>
+      <div style={{ display: 'grid', gap: 6 }}>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.ee.ref}</span>}>{PLAN_CONTENT_GROUPS.ee.label}</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{EE_HEADCOUNT.label}</span>
+            {contentText(plan.eeHeadcount != null ? `${plan.eeHeadcount} ${plan.eeHeadcount > 1 ? 'personnes' : 'personne'}` : null)}
+          </div>
+          {contentOf('ee').map(section)}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.measures.ref}</span>}>{PLAN_CONTENT_GROUPS.measures.label}</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+          {contentOf('measures').map(section)}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 6 }}>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.sir.ref}</span>}>{PLAN_CONTENT_GROUPS.sir.label}</SectionTitle>
+        {contentOf('sir').map(section)}
+      </div>
+    </>
+  );
+}
+
+function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelPlan, onDeleted }: {
+  plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void; onCancelPlan: () => void; onDeleted: () => void;
+}) {
   const [eeOpen, setEeOpen] = useState(false);
   const { pending, error, run } = useRun();
-  const closed = plan.status === 'clos';
-  const editable = canManage && !closed;
+  const ended = plan.status === 'clos' || plan.status === 'annule';
+  const editable = canManage && !ended;
   // Plan obligatoire non signé, intervention terminée : clôture possible, l'écart reste tracé par l'action rattachée.
   const unsignedAfterWork = plan.mandatory && !(plan.signedEuOn && plan.signedEeOn) && plan.startOn <= options.today;
+  const signedLate = plan.startGap?.kind === 'signe_apres';
+  // Même règle que planSignIssue (serveur) : inspection commune, mesures, puis contenu R. 4512-8 et R. 4512-9 d'un plan obligatoire.
   const signBlock = !plan.inspectionDone ? "Inspection commune préalable à réaliser avant toute signature."
-    : !plan.measures.trim() ? 'Mesures de prévention à compléter avant toute signature.' : null;
+    : !plan.measures.trim() ? 'Mesures de prévention à compléter avant toute signature.'
+      : plan.contentMissing.length ? `Contenu réglementaire à compléter avant toute signature : ${plan.contentMissing.join(', ')}.` : null;
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -233,10 +404,36 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
           : <span className="tag tag-neutral">Plan écrit non obligatoire</span>}
         {plan.missingSignature && <ToneTag tone="danger">Intervention en cours sans plan signé</ToneTag>}
         {plan.overdue && <ToneTag tone="warn">Période échue · à clore</ToneTag>}
-        <Link href={`/prevention/carte?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-          <Icon name="ph-map-trifold" size={13} />Voir sur la carte
-        </Link>
+        {plan.startGap?.past && (
+          <span title="Écart compté dans l'indicateur « Écarts R. 4512-6 sur 12 mois »" style={{ display: 'inline-flex' }}>
+            <ToneTag tone="warn">
+              Écart R. 4512-6 · {plan.startGap.signedOn
+                ? `signé le ${fmtDayMonth(plan.startGap.signedOn)} après le début (${fmtDayMonth(plan.startOn)})`
+                : 'réalisée sans plan signé'}
+            </ToneTag>
+          </span>
+        )}
+        <span className="tag tag-neutral" title="Sections renseignées : effectif prévisible, responsable, sous-traitance, R. 4512-8 1° à 5°, R. 4512-9">
+          Contenu R. 4512-8/9 : {plan.contentStats.filled}/{plan.contentStats.total}
+        </span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+          {/* Lien HTML simple (navigation complète, nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application. */}
+          <a href={`/prevention/imprimer/plan/${encodeURIComponent(plan.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+            <Icon name="ph-printer" size={13} />Imprimer
+          </a>
+          {plan.status !== 'annule' && (
+            <Link href={`/prevention/carte?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm">
+              <Icon name="ph-map-trifold" size={13} />Voir sur la carte
+            </Link>
+          )}
+        </span>
       </div>
+
+      {plan.cancelled && (
+        <Notice tone="neutral" icon="ph-prohibit">
+          Plan annulé le {plan.cancelled.on}{plan.cancelled.by ? ` par ${plan.cancelled.by}` : ''}{plan.cancelled.reason ? ` : ${plan.cancelled.reason}` : '.'}
+        </Notice>
+      )}
 
       {plan.missingSignature && (
         <Notice tone="danger">
@@ -273,6 +470,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
         </div>
       </div>
 
+      <PlanContentView plan={plan} />
+
       <div style={{ display: 'grid', gap: 6 }}>
         <SectionTitle>Signatures</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
@@ -306,21 +505,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
         )}
       </div>
 
-      {plan.attachments.length > 0 && (
-        <div style={{ display: 'grid', gap: 6 }}>
-          <SectionTitle>Pièces jointes</SectionTitle>
-          <div className="vg-thumbs">
-            {plan.attachments.map((a) => (
-              <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="vg-thumb" title={a.name}>
-                {a.isImage
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={a.url} alt={a.name} />
-                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+      <PlanAttachments plan={plan} editable={editable} />
 
       {plan.form && <ImportedForm form={plan.form} />}
 
@@ -355,34 +540,59 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction }: { plan:
         ))}
       </div>
 
+      <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
+        reportHref={canManage ? `/evenements?nouveau=1&plan=${encodeURIComponent(plan.id)}` : null} />
+
+      <ChangeLogList entries={plan.history} />
+
       <ErrorLine error={error} />
       {editable && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCreateAction}><Icon name="ph-list-plus" size={13} />Créer l&apos;action</button>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+          {plan.deletable
+            ? <ConfirmButton label="Supprimer le brouillon" confirmLabel="Supprimer" icon="ph-trash" pending={pending}
+              question="Supprimer ce brouillon saisi par erreur ? Ses pièces jointes sont supprimées."
+              onConfirm={() => run(() => deletePlan(plan.id), onDeleted)} />
+            : <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} title={plan.cancelBlock ?? undefined} onClick={onCancelPlan}>
+              <Icon name="ph-prohibit" size={13} />Annuler le plan
+            </button>}
           <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
-            question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé par l'action rattachée." : 'Clore définitivement ce plan ?'}
+            question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé par l'action rattachée."
+              : signedLate ? "Clore ce plan signé après le début de l'intervention ? L'écart R. 4512-6 reste tracé par l'action rattachée."
+                : 'Clore définitivement ce plan ?'}
             disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
             onConfirm={() => run(() => closePlan(plan.id))} />
         </div>
       )}
+      {options.procedure && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><ProcedureNote procedure={options.procedure} /></div>}
     </div>
   );
 }
 
-type Mode = 'view' | 'edit' | 'action';
+type Mode = 'view' | 'edit' | 'action' | 'cancel';
 
 /** Fiche d'un plan de prévention (consultation, signatures, modification, création d'une action). */
 export function PlanDialog({ plan, open, onClose, options, canManage }: { plan: PlanView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
-  const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}` : mode === 'action' ? `Plan d'actions unique · ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
+  const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}`
+    : mode === 'action' ? `Plan d'actions unique · ${plan?.id ?? ''}`
+      : mode === 'cancel' ? `Annuler le plan ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
   return (
     <Dialog open={open && !!plan} onClose={close} width={760} kicker={kicker} title={plan ? (mode === 'action' ? 'Nouvelle action' : `${plan.id} · ${plan.contractor}`) : ''}>
       {plan && mode === 'edit' && <PlanForm plan={plan} options={options} onDone={back} onCancel={back} />}
       {plan && mode === 'action' && <ActionFields options={options} defaults={planActionDefaults(plan, options.today)} onDone={back} onCancel={back} />}
-      {plan && mode === 'view' && <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')} />}
+      {plan && mode === 'cancel' && (
+        <ReasonForm action={cancelPlan} hidden={{ id: plan.id }} submitLabel="Annuler le plan" submitIcon="ph-prohibit" onDone={back} onCancel={back}
+          placeholder="Ex. Intervention reportée à 2027 : un nouveau plan sera établi"
+          message={<>Le plan reste consultable avec le motif de l&apos;annulation ; il ne compte plus dans les interventions ni dans les plans à signer.</>} />
+      )}
+      {plan && mode === 'view' && (
+        <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')}
+          onCancelPlan={() => setMode('cancel')} onDeleted={close} />
+      )}
     </Dialog>
   );
 }
@@ -418,7 +628,7 @@ export function PlanAlertActions({ plan, options }: { plan: PlanView; options: P
 
 const inspectionCell = (p: PlanView) => {
   if (p.inspectionOn) return <span style={{ color: p.inspectionDone ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{p.inspectionDone ? fmtDate(p.inspectionOn) : `Prévue le ${fmtDate(p.inspectionOn)}`}</span>;
-  if (p.status === 'clos') return <span style={muted}>—</span>;
+  if (p.status === 'clos' || p.status === 'annule') return <span style={muted}>—</span>;
   return <span style={{ color: p.mandatory ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>À réaliser</span>;
 };
 
@@ -463,6 +673,9 @@ export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { 
                   <td style={{ whiteSpace: 'nowrap' }} title={p.mandatory ? `Obligatoire — ${p.mandatoryReason}` : `Moins de ${MANDATORY_HOURS} h sur 12 mois, sans travaux dangereux`}>
                     {p.mandatory ? 'Obligatoire' : <span style={muted}>Non requis</span>}
                     {p.firstMinute && <span style={{ display: 'block', ...muted }}>dès la 1re minute</span>}
+                    {p.contentMissing.length > 0 && p.status !== 'clos' && p.status !== 'annule' && (
+                      <span style={{ display: 'block', ...muted }} title={`À compléter : ${p.contentMissing.join(', ')}`}>contenu incomplet</span>
+                    )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{inspectionCell(p)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -474,6 +687,11 @@ export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { 
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <ToneTag tone={p.tone}>{p.statusLabel}</ToneTag>
                     {p.missingSignature && <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}>Écart · sans plan signé</span>}
+                    {p.startGap?.past && (
+                      <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-warn-fg)' }}>
+                        Écart passé · {p.startGap.kind === 'signe_apres' ? 'signé après le démarrage' : 'réalisé sans plan signé'}
+                      </span>
+                    )}
                   </td>
                   <td style={{ whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }} title={p.keystoneProject ?? undefined}>
                     {p.keystoneProject ? p.keystoneProject : <span style={muted}>—</span>}

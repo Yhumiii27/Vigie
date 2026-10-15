@@ -97,7 +97,7 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
           <div key={tb.siteId} className="card" style={{ padding: '10px 14px', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <span className="card-title" style={{ fontSize: 14 }}>{shortSite(tb.site)}</span>
-              <span style={muted}>{tb.missingMonths ? `${tb.missingMonths} mois sans relevé` : '12 derniers mois'}</span>
+              <span style={muted}>{tb.archived ? 'Site archivé · 12 derniers mois' : tb.missingMonths ? `${tb.missingMonths} mois sans relevé` : '12 derniers mois'}</span>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="table" style={{ fontSize: 12.5, minWidth: 360 }}>
@@ -110,10 +110,14 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
                 <tbody>
                   {tb.rows.map((r) => {
                     const empty = CONSUMPTION_KINDS.every((k) => r.values[k.key] == null);
+                    // Site archivé : relevés consultables, plus de saisie.
+                    const editable = canManage && !tb.archived;
                     return (
-                      <tr key={r.month} {...(canManage ? rowOpener(() => setEdit({ siteId: tb.siteId, month: r.month })) : {})}>
+                      <tr key={r.month} {...(editable ? rowOpener(() => setEdit({ siteId: tb.siteId, month: r.month })) : {})}>
                         <td style={{ whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{monthLong(r.month)}</td>
-                        {empty ? (
+                        {empty && tb.archived ? (
+                          <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: 'var(--color-neutral-600)' }}>—</td>
+                        ) : empty ? (
                           <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: TONE.warn.fg }}>
                             {canManage ? 'Non saisi · cliquer pour saisir' : 'Non saisi'}
                           </td>

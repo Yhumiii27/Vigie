@@ -492,6 +492,8 @@ struct NodeRuntime: Sendable {
         environment["NPM_CONFIG_UPDATE_NOTIFIER"] = "false"
         environment["NPM_CONFIG_FUND"] = "false"
         environment["VIGIE_DESKTOP"] = "1"
+        // Application Mac : toujours la démonstration (sélecteur de rôle, jeu de démonstration, base PGlite locale).
+        environment["VIGIE_DEMO"] = "1"
         if let watchdog {
             // Guillemets : le chemin contient des espaces (« Application Support »).
             let escaped = watchdog.path.replacingOccurrences(of: "\\", with: "\\\\")

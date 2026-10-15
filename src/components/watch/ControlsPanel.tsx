@@ -1,19 +1,26 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useState } from 'react';
+import { useId, useState, useTransition } from 'react';
+import { ActionFields, type ActionDefaults } from '@/components/ActionFormDialog';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { LinkActionButton } from '@/components/LinkActionButton';
+import { ReasonButton } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import { fmtDate } from '@/lib/dates';
+import { addDays, addMonths, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { FormOptions } from '@/lib/data/options';
+import type { FormOptions, Option } from '@/lib/data/options';
+import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
-import { recordControl, saveControl } from '@/server/watch';
-import { Facts, ViewSwitch, muted, rowOpener } from './parts';
-import { addMonthsClamped } from './period';
+import {
+  archiveControl, cancelControlRecord, recordControl, removeControlRecordFile, restoreControl, saveControl, type CancelRecordState,
+} from '@/server/watch';
+import { ArchivedBanner, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
-type Opts = Pick<FormOptions, 'people' | 'sites'>;
+type Opts = Pick<FormOptions, 'people' | 'sites'> & Partial<Pick<FormOptions, 'origins' | 'actions'>>;
 export type ControlSuggestions = { types: string[]; organizations: string[] };
 type View = 'fiche' | 'historique' | 'realise';
 
@@ -25,16 +32,21 @@ const months = (n: number) => (n === 1 ? 'mois' : `${n} mois`);
 /** Prochain contrôle = dernier + périodicité (vide tant que la saisie est incomplète). */
 function nextFrom(lastOn: string, period: string) {
   const n = Number(period);
-  return ISO.test(lastOn) && Number.isInteger(n) && n >= 1 && n <= 120 ? addMonthsClamped(lastOn, n) : '';
+  return ISO.test(lastOn) && Number.isInteger(n) && n >= 1 && n <= 120 ? addMonths(lastOn, n) : '';
 }
 
 // ─── Tableau des contrôles ──────────────────────────────────────────────────
 
-export function ControlsPanel({ rows, filter, canManage, options, today, showSite, suggestions, initialId, closeHref }: {
+export function ControlsPanel({ rows, filter, canManage, canApprove, options, requirementOptions, today, showSite, suggestions, initialId, closeHref }: {
+  /** Contrôles du site, archivés compris (filtre « Archivés ») : la fiche ouverte reste affichée après son archivage. */
   rows: ControlView[];
   filter?: ControlFilter;
   canManage: boolean;
+  /** Animateur QHSE, direction : annulation d'un enregistrement, restauration d'un contrôle archivé. */
+  canApprove: boolean;
   options: Opts;
+  /** Exigences en vigueur, pour rattacher le contrôle à son exigence réglementaire. */
+  requirementOptions: readonly Option[];
   today: string;
   /** « Tous les sites » : rappelle le site de chaque équipement. */
   showSite: boolean;
@@ -45,9 +57,11 @@ export function ControlsPanel({ rows, filter, canManage, options, today, showSit
   closeHref?: string;
 }) {
   const router = useRouter();
-  const [sel, setSel] = useState<{ id: number; view: View } | null>(initialId ? { id: initialId, view: canManage ? 'fiche' : 'historique' } : null);
+  const firstView = (c?: ControlView): View => (canManage && c && !c.archived ? 'fiche' : 'historique');
+  const [sel, setSel] = useState<{ id: number; view: View } | null>(initialId ? { id: initialId, view: firstView(rows.find((c) => c.id === initialId)) } : null);
   const control = sel ? rows.find((c) => c.id === sel.id) ?? null : null;
-  const shown = filter ? rows.filter((c) => c.filter === filter) : rows;
+  // « Tous » : contrôles en service ; les équipements réformés ne s'affichent qu'avec le filtre « Archivés ».
+  const shown = filter ? rows.filter((c) => c.filter === filter) : rows.filter((c) => !c.archived);
   const open = (id: number, view: View) => setSel({ id, view });
   const close = () => {
     setSel(null);
@@ -67,30 +81,49 @@ export function ControlsPanel({ rows, filter, canManage, options, today, showSit
           <tbody>
             {shown.length === 0 && (
               <tr><td colSpan={canManage ? 9 : 8} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-                {rows.length ? 'Aucun contrôle dans cette catégorie.' : showSite ? 'Aucun contrôle périodique suivi.' : 'Aucun contrôle périodique suivi sur ce site.'}
+                {filter === 'archives' ? 'Aucun contrôle archivé.' : rows.some((c) => !c.archived) ? 'Aucun contrôle dans cette catégorie.' : showSite ? 'Aucun contrôle périodique suivi.' : 'Aucun contrôle périodique suivi sur ce site.'}
               </td></tr>
             )}
             {shown.map((c) => (
-              <tr key={c.id} {...rowOpener(() => open(c.id, canManage ? 'fiche' : 'historique'))}>
+              <tr key={c.id} {...rowOpener(() => open(c.id, firstView(c)))} style={c.archived ? { opacity: 0.75 } : undefined}>
                 <td style={{ fontWeight: 500, minWidth: 180 }}>
                   {c.equipment}
                   {(showSite || c.responsible) && (
                     <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{[showSite && c.siteLabel, c.responsible].filter(Boolean).join(' · ')}</div>
                   )}
+                  {c.archivedLabel && <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{c.archivedLabel}</div>}
                 </td>
                 <td style={{ color: 'var(--color-neutral-300)' }}>{c.controlType}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{c.period}</td>
                 <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{c.organization}</td>
                 <td style={{ whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{c.last}</td>
                 <td style={{ whiteSpace: 'nowrap', color: c.tone === 'neutral' ? 'var(--color-neutral-300)' : TONE[c.tone].dot }}>{c.next}</td>
-                <td><ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag></td>
-                <td style={{ color: 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>{c.reserves ?? '—'}</td>
+                <td>
+                  <ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag>
+                  {/* Contrôle dépassé sans réserve ni action (les réserves sans action sont signalées dans la colonne suivante). */}
+                  {canManage && c.days < 0 && !c.archived && !c.actionId && !c.reserves && (
+                    <div style={{ ...muted, marginTop: 2, color: TONE.danger.dot, whiteSpace: 'nowrap' }}>Action à définir</div>
+                  )}
+                </td>
+                <td style={{ color: 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>
+                  {c.reserves ?? '—'}
+                  {c.actionId ? (
+                    <div style={{ marginTop: 2 }}>
+                      <Link href={`/actions?action=${c.actionId}`} className="vg-link" style={{ fontSize: 11 }}>{c.actionId}</Link>
+                      {c.action && <span style={{ ...muted, color: c.action.late ? TONE.danger.dot : muted.color }}> · {c.action.statusLabel}</span>}
+                    </div>
+                  ) : c.reserves && canManage && !c.archived ? (
+                    <div style={{ ...muted, marginTop: 2, color: TONE.danger.dot }}>Action à définir</div>
+                  ) : null}
+                </td>
                 {canManage && (
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    <button type="button" className="vg-text-btn" title="Enregistrer un contrôle réalisé" onClick={() => open(c.id, 'realise')}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="ph-check-square-offset" size={13} />Réalisé
-                    </button>
+                    {!c.archived && (
+                      <button type="button" className="vg-text-btn" title="Enregistrer un contrôle réalisé" onClick={() => open(c.id, 'realise')}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Icon name="ph-check-square-offset" size={13} />Réalisé
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>
@@ -100,10 +133,10 @@ export function ControlsPanel({ rows, filter, canManage, options, today, showSit
       </div>
 
       <Dialog open={!!control} onClose={close} width={660}
-        kicker={control ? `Contrôle périodique · ${control.siteLabel}` : undefined} title={control?.equipment ?? ''}>
+        kicker={control ? `Contrôle périodique · ${control.siteLabel}${control.archived ? ' · archivé' : ''}` : undefined} title={control?.equipment ?? ''}>
         {control && sel && (
-          <ControlDetail key={control.id} c={control} initialView={sel.view} canManage={canManage} options={options}
-            today={today} suggestions={suggestions} onClose={close} />
+          <ControlDetail key={control.id} c={control} initialView={sel.view} canManage={canManage} canApprove={canApprove} options={options}
+            requirementOptions={requirementOptions} today={today} suggestions={suggestions} onClose={close} />
         )}
       </Dialog>
     </div>
@@ -111,24 +144,31 @@ export function ControlsPanel({ rows, filter, canManage, options, today, showSit
 }
 
 /** Bouton « Ajouter un contrôle ». */
-export function AddControlButton({ options, defaultSite, suggestions, today }: { options: Opts; defaultSite: string; suggestions: ControlSuggestions; today: string }) {
+export function AddControlButton({ options, requirementOptions, defaultSite, suggestions, today }: {
+  options: Opts; requirementOptions: readonly Option[]; defaultSite: string; suggestions: ControlSuggestions; today: string;
+}) {
   return (
     <DialogButton label="Ajouter un contrôle" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouveau contrôle périodique" kicker="Contrôles périodiques" width={660}>
-      {(close) => <ControlForm options={options} defaultSite={defaultSite} suggestions={suggestions} today={today} onDone={close} onCancel={close} />}
+      {(close) => <ControlForm options={options} requirementOptions={requirementOptions} defaultSite={defaultSite} suggestions={suggestions} today={today} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }
 
 // ─── Fiche d'un contrôle ────────────────────────────────────────────────────
 
-function ControlDetail({ c, initialView, canManage, options, today, suggestions, onClose }: {
-  c: ControlView; initialView: View; canManage: boolean; options: Opts; today: string; suggestions: ControlSuggestions; onClose: () => void;
+function ControlDetail({ c, initialView, canManage, canApprove, options, requirementOptions, today, suggestions, onClose }: {
+  c: ControlView; initialView: View; canManage: boolean; canApprove: boolean; options: Opts; requirementOptions: readonly Option[];
+  today: string; suggestions: ControlSuggestions; onClose: () => void;
 }) {
-  const [view, setView] = useState<View>(canManage ? initialView : 'historique');
-  // Confirmation après « Enregistrer le contrôle » (la vue bascule sur l'historique).
-  const [recorded, setRecorded] = useState(false);
-  const show = (v: View) => { setRecorded(false); setView(v); };
-  const views: (readonly [View, string, string])[] = canManage
+  const editable = canManage && !c.archived;
+  const [view, setView] = useState<View>(editable ? initialView : 'historique');
+  // Confirmation après un enregistrement (la vue bascule sur l'historique) ou une restauration.
+  const [notice, setNotice] = useState<string | null>(null);
+  // « Lever les réserves » / « Créer une action » s'affichent dans cette fenêtre (pas de NewActionButton imbriqué : identifiants de champs en double).
+  const [creating, setCreating] = useState(false);
+  const show = (v: View) => { setNotice(null); setView(v); };
+  const current = editable ? view : 'historique';
+  const views: (readonly [View, string, string])[] = editable
     ? [['fiche', 'Fiche', 'ph-pencil-simple'], ['historique', `Historique · ${c.records.length}`, 'ph-clock-counter-clockwise'], ['realise', 'Contrôle réalisé', 'ph-check-square-offset']]
     : [];
 
@@ -142,28 +182,188 @@ function ControlDetail({ c, initialView, canManage, options, today, suggestions,
         ['Organisme', c.organization],
         ['Responsable', c.responsible || '—'],
         ['Réserves', c.reserves ?? 'Aucune'],
+        c.requirement && ['Exigence', (
+          <Link key="r" href={`/veille?exigence=${c.requirement.id}`} className="vg-link" style={{ fontSize: 12.5 }}>
+            {c.requirement.text}{c.requirement.archived ? ' (archivée)' : ''}
+          </Link>
+        )],
       ]} />
 
-      {views.length > 0 && <ViewSwitch name={`control-view-${c.id}`} value={view} onChange={show} options={views} />}
+      {c.archived && (
+        <ArchivedBanner title="Équipement réformé · contrôle archivé" label={c.archivedLabel}>
+          {canApprove && (
+            <ReasonButton label="Restaurer" icon="ph-arrow-counter-clockwise" title={`Restaurer « ${c.equipment} »`} kicker="Contrôles périodiques"
+              action={restoreControl} hidden={{ id: c.id }} submitLabel="Restaurer le contrôle" submitIcon="ph-arrow-counter-clockwise"
+              message="Le contrôle revient dans le suivi, avec ses échéances et son historique."
+              placeholder="Ex. archivage par erreur, équipement remis en service" onDone={() => setNotice('Contrôle restauré dans le suivi.')} />
+          )}
+        </ArchivedBanner>
+      )}
 
-      {/* Pas de `key` dérivée des données : l'enregistrement les modifie et remonterait le formulaire avant son onDone. */}
-      {view === 'fiche' && canManage && (
-        <ControlForm c={c} options={options} defaultSite={c.siteId ?? ''} suggestions={suggestions} today={today} onDone={onClose} onCancel={onClose} />
-      )}
-      {view === 'historique' && recorded && (
-        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: TONE.ok.fg }}>
-          <Icon name="ph-check-circle" size={15} style={{ color: TONE.ok.dot }} />Contrôle réalisé enregistré dans l&apos;historique.
-        </div>
-      )}
-      {view === 'historique' && <History c={c} />}
-      {view === 'realise' && canManage && (
-        <RecordForm c={c} today={today} suggestions={suggestions} onDone={() => { setView('historique'); setRecorded(true); }} onCancel={onClose} />
+      {notice && <Notice>{notice}</Notice>}
+
+      <FollowUp c={c} today={today} options={options} editable={editable} creating={creating} setCreating={setCreating}
+        onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
+
+      {!creating && (
+        <>
+          {views.length > 0 && <ViewSwitch name={`control-view-${c.id}`} value={current} onChange={show} options={views} />}
+
+          {/* Pas de `key` dérivée des données : l'enregistrement les modifie et remonterait le formulaire avant son onDone. */}
+          {current === 'fiche' && (
+            <>
+              <ControlForm c={c} options={options} requirementOptions={requirementOptions} defaultSite={c.siteId ?? ''} suggestions={suggestions} today={today} onDone={onClose} onCancel={onClose} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 10, borderTop: '1px solid var(--color-divider)' }}>
+                <span style={{ ...muted, flex: 1, minWidth: 200, textWrap: 'pretty' }}>Équipement réformé ? Le contrôle est archivé avec son motif ; son historique est conservé.</span>
+                <ReasonButton label="Archiver le contrôle" icon="ph-archive" title={`Archiver « ${c.equipment} »`} kicker="Contrôles périodiques · équipement réformé"
+                  action={archiveControl} hidden={{ id: c.id }} submitLabel="Archiver" submitIcon="ph-archive"
+                  message="Le contrôle sort du suivi et des échéances. L'historique des contrôles réalisés et l'action liée sont conservés."
+                  placeholder="Ex. équipement réformé, remplacé par …" />
+              </div>
+            </>
+          )}
+          {current === 'historique' && (
+            <>
+              <History c={c} canApprove={canApprove && !c.archived} canRemoveFiles={editable} onNotice={setNotice} />
+              <ChangeLogList entries={c.log} title="Journal des modifications" />
+            </>
+          )}
+          {current === 'realise' && (
+            <RecordForm c={c} today={today} suggestions={suggestions}
+              onDone={() => { setView('historique'); setNotice("Contrôle réalisé enregistré dans l'historique."); }} onCancel={onClose} />
+          )}
+        </>
       )}
     </>
   );
 }
 
-function History({ c }: { c: ControlView }) {
+const equipShort = (equipment: string) => equipment.split(' — ')[0];
+
+/** Action de levée des réserves : titre « Lever les réserves « … » : équipement », échéance au plus tard dans 30 jours. */
+function reserveDefaults(c: ControlView, today: string): ActionDefaults {
+  const limit = addDays(today, 30);
+  return {
+    title: `Lever les réserves « ${c.reserves} » : ${equipShort(c.equipment)}`.slice(0, 200),
+    origin: 'watch',
+    originRef: c.equipment.slice(0, 120),
+    lockOrigin: true,
+    link: `control:${c.id}`,
+    pilotId: c.responsibleId ?? undefined,
+    dueOn: c.nextOn > today && c.nextOn < limit ? c.nextOn : limit,
+    kind: 'C',
+    siteId: c.siteId,
+  };
+}
+
+/** Contrôle dépassé sans action : « Réaliser le contrôle « … » : équipement », sous 15 jours (VEI-02). */
+function overdueDefaults(c: ControlView, today: string): ActionDefaults {
+  return {
+    title: `Réaliser le contrôle « ${c.controlType} » : ${equipShort(c.equipment)}`.slice(0, 200),
+    description: `Contrôle dépassé depuis le ${c.next} (tous les ${months(c.periodMonths)}, ${c.organization}).`,
+    origin: 'watch',
+    originRef: c.equipment.slice(0, 120),
+    lockOrigin: true,
+    link: `control:${c.id}`,
+    pilotId: c.responsibleId ?? undefined,
+    dueOn: addDays(today, 15),
+    kind: 'C',
+    siteId: c.siteId,
+  };
+}
+
+/**
+ * Suivi du contrôle dans le plan d'actions : action liée (détachable) ; sinon, réserves en cours ou contrôle dépassé,
+ * avec « Lever les réserves » / « Créer une action » ou le rattachement d'une action existante.
+ */
+function FollowUp({ c, today, options, editable, creating, setCreating, onCreated }: {
+  c: ControlView; today: string; options: Opts; editable: boolean; creating: boolean; setCreating: (v: boolean) => void; onCreated: () => void;
+}) {
+  const overdue = c.days < 0 && !c.archived;
+  if (!c.reserves && !c.actionId && !overdue) return null;
+  const box = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', fontSize: 12.5 } as const;
+  const link = `control:${c.id}`;
+  if (c.actionId) {
+    return (
+      <div className="vg-inset" style={box}>
+        <Icon name="ph-list-checks" size={15} style={{ color: 'var(--color-accent)' }} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ color: 'var(--color-neutral-500)' }}>{c.reserves ? `Réserves en cours · ${c.reserves} · action ` : 'Action liée '}</span>
+          <Link href={`/actions?action=${c.actionId}`} className="vg-link" style={{ fontSize: 12.5 }}>{c.actionId}</Link>
+          {c.action && <span> · {c.action.title}</span>}
+          {c.action && <span style={{ ...muted, display: 'block', color: c.action.late ? TONE.danger.dot : muted.color }}>Échéance {c.action.due}</span>}
+        </span>
+        {c.action && <ToneTag tone={c.action.tone} style={{ whiteSpace: 'nowrap' }}>{c.action.statusLabel}</ToneTag>}
+        {editable && <LinkActionButton link={link} current={c.actionId} />}
+      </div>
+    );
+  }
+  if (creating && editable && options.origins) {
+    return (
+      <>
+        <div className="vg-eyebrow">{c.reserves ? 'Lever les réserves' : 'Contrôle dépassé'} · plan d&apos;actions unique</div>
+        {/* Rendu sur un état local seulement : l'action liée arrive avec le même rafraîchissement que le succès du formulaire. */}
+        <ActionFields options={{ ...options, origins: options.origins }} defaults={c.reserves ? reserveDefaults(c, today) : overdueDefaults(c, today)}
+          onCancel={() => setCreating(false)} onDone={onCreated} />
+      </>
+    );
+  }
+  if (!c.reserves) {
+    // Contrôle dépassé, sans réserve ni action : signalé à qui peut agir seulement (le statut « Dépassé » suffit sinon).
+    if (!editable) return null;
+    return (
+      <div className="vg-inset" style={{ ...box, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${TONE.danger.dot} 45%, transparent)` }}>
+        <Icon name="ph-warning-octagon" size={15} style={{ color: TONE.danger.dot }} />
+        <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
+          <span style={{ color: 'var(--color-neutral-500)' }}>Contrôle dépassé depuis le </span>{c.next}
+          <span style={{ ...muted, display: 'block' }}>Aucune action dans le plan d&apos;actions.</span>
+        </span>
+        <LinkActionButton link={link} actions={options.actions} label="Rattacher" />
+        {options.origins && (
+          <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setCreating(true)}>
+            <Icon name="ph-plus" size={13} />Créer une action
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="vg-inset" style={{ ...box, boxShadow: editable ? `inset 0 0 0 1px color-mix(in srgb, ${TONE.warn.dot} 45%, transparent)` : undefined }}>
+      <Icon name="ph-warning" size={15} style={{ color: TONE.warn.dot }} />
+      <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
+        <span style={{ color: 'var(--color-neutral-500)' }}>Réserves en cours · </span>{c.reserves}
+        {editable && <span style={{ ...muted, display: 'block' }}>Aucune action de levée dans le plan d&apos;actions.</span>}
+      </span>
+      {editable && <LinkActionButton link={link} actions={options.actions} label="Rattacher" />}
+      {editable && options.origins && (
+        <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setCreating(true)}>
+          <Icon name="ph-plus" size={13} />Lever les réserves
+        </button>
+      )}
+    </div>
+  );
+}
+
+function History({ c, canApprove, canRemoveFiles, onNotice }: {
+  c: ControlView; canApprove: boolean; canRemoveFiles: boolean; onNotice: (msg: string) => void;
+}) {
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, start] = useTransition();
+  const remove = (id: string) => {
+    if (!window.confirm('Retirer cette pièce jointe ajoutée par erreur ? Le fichier est supprimé.')) return;
+    setRemoving(id);
+    start(async () => {
+      try {
+        const r = await removeControlRecordFile(id);
+        setError(r.error ?? null);
+      } catch {
+        setError("Le retrait a échoué. Réessayez.");
+      }
+      setRemoving(null);
+    });
+  };
+
   if (!c.records.length) {
     return (
       <div className="vg-inset" style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
@@ -173,32 +373,37 @@ function History({ c }: { c: ControlView }) {
   }
   return (
     <div style={{ display: 'grid' }}>
+      {error && <div role="alert" className="vg-form-error">{error}</div>}
       {c.records.map((r, i) => (
         <div key={r.id} className={i < c.records.length - 1 ? 'vg-rule-bottom' : undefined}
-          style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 12, padding: '10px 0' }}>
+          style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 12, padding: '10px 0', opacity: r.cancelled ? 0.6 : undefined }}>
           <div style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 500 }}>{r.date}</span>
-            {r.performedOn === c.lastOn && i === 0 && <span style={muted}>Dernier</span>}
+            <span style={{ fontSize: 12.5, fontWeight: 500, textDecoration: r.cancelled ? 'line-through' : undefined }}>{r.date}</span>
+            {r.latest && <span style={muted}>Dernier</span>}
+            {r.cancelled && <span style={muted}>Annulé</span>}
           </div>
           <div style={{ display: 'grid', gap: 5, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, textDecoration: r.cancelled ? 'line-through' : undefined }}>
               <span>{r.organization}</span>
-              <ToneTag tone={r.reserves ? 'warn' : 'ok'}>{r.reserves ? `Réserves · ${r.reserves}` : 'Sans réserve'}</ToneTag>
+              <ToneTag tone={r.cancelled ? 'neutral' : r.reserves ? 'warn' : 'ok'}>{r.reserves ? `Réserves · ${r.reserves}` : 'Sans réserve'}</ToneTag>
             </div>
+            {r.cancelLabel && <span style={{ ...muted, fontSize: 11.5, color: 'var(--color-neutral-300)' }}>{r.cancelLabel}</span>}
             {r.notes && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{r.notes}</p>}
-            {r.files.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {r.files.map((f) => (
-                  <a key={f.id} href={f.url} target="_blank" rel="noopener noreferrer" className="vg-chip" title={`Ouvrir ${f.name}`} style={{ maxWidth: '100%' }}>
-                    <Icon name={f.icon} size={13} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{f.name}</span>
-                    <span style={{ opacity: 0.6, whiteSpace: 'nowrap' }}>{f.size}</span>
-                  </a>
-                ))}
-              </div>
-            )}
-            {!r.files.length && <span style={muted}>Pas de rapport joint.</span>}
-            {r.recordedBy && <span style={muted}>Saisi par {r.recordedBy}</span>}
+            <FileChips files={r.files} empty="Pas de rapport joint." removing={removing}
+              onRemove={canRemoveFiles && !r.cancelled ? remove : undefined} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {r.recordedBy && <span style={muted}>Saisi par {r.recordedBy}</span>}
+              {canApprove && !r.cancelled && (
+                <ReasonButton label="Annuler l'enregistrement" icon="ph-arrow-u-up-left" className="vg-text-btn" style={{ fontSize: 11.5 }}
+                  title={`Annuler le contrôle du ${r.date}`} kicker={c.equipment}
+                  action={cancelControlRecord} hidden={{ id: r.id }} submitLabel="Annuler l'enregistrement" submitIcon="ph-arrow-u-up-left"
+                  message={r.latest
+                    ? "Saisie erronée : l'enregistrement reste visible, barré, avec son motif. L'état du contrôle (dernier, prochain, réserves) est recalculé."
+                    : "Saisie erronée : l'enregistrement reste visible, barré, avec son motif. L'échéance du contrôle n'est pas modifiée."}
+                  placeholder="Ex. date erronée, contrôle saisi sur le mauvais équipement"
+                  onDone={(s) => onNotice((s as CancelRecordState).notice ?? `Enregistrement du ${r.date} annulé.`)} />
+              )}
+            </div>
           </div>
         </div>
       ))}
@@ -212,10 +417,18 @@ function Suggestions({ id, values }: { id: string; values: string[] }) {
   return <datalist id={id}>{values.map((v) => <option key={v} value={v} />)}</datalist>;
 }
 
-function ControlForm({ c, options, defaultSite, suggestions, today, onDone, onCancel }: {
-  c?: ControlView; options: Opts; defaultSite: string; suggestions: ControlSuggestions; today: string; onDone: () => void; onCancel: () => void;
+function ControlForm({ c, options, requirementOptions, defaultSite, suggestions, today, onDone, onCancel }: {
+  c?: ControlView; options: Opts; requirementOptions: readonly Option[]; defaultSite: string; suggestions: ControlSuggestions; today: string;
+  onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
+  // Exigence archivée encore rattachée : conservée comme choix (la modification renvoie toujours une valeur).
+  const reqs = c?.requirement && !requirementOptions.some(([v]) => v === String(c.requirement!.id))
+    ? [...requirementOptions, [String(c.requirement.id), `${c.requirement.text} (archivée)`] as const]
+    : requirementOptions;
+  // Responsable sorti de l'effectif, site archivé : conservés comme choix tant qu'un autre n'est pas fait (VEI-01).
+  const responsibles = withCurrent(options.people, c?.responsibleId, c ? `${c.responsible || c.responsibleId}${LEFT_SUFFIX}` : undefined);
+  const sites = withCurrent(options.sites, c?.siteId, c ? `${c.siteLabel}${ARCHIVED_SITE_SUFFIX}` : undefined);
   const [lastOn, setLastOn] = useState(c?.lastOn ?? '');
   const [period, setPeriod] = useState(c ? String(c.periodMonths) : '12');
   // Échéance saisie à la main (null = calculée).
@@ -240,18 +453,21 @@ function ControlForm({ c, options, defaultSite, suggestions, today, onDone, onCa
         <Field name="organization" label="Organisme" hint="Organisme agréé ou « Interne — service ».">
           <Input name="organization" defaultValue={c?.organization} placeholder="Ex. [Apave]" list={`${uid}-orgs`} maxLength={120} />
         </Field>
-        <Field name="responsibleId" label="Responsable">
-          <Select name="responsibleId" options={options.people} defaultValue={c?.responsibleId ?? ''} placeholder="Non désigné" />
+        <Field name="responsibleId" label="Responsable" hint={responsibles !== options.people ? "Sorti de l'effectif : conservé tant qu'aucun successeur n'est choisi." : undefined}>
+          <Select name="responsibleId" options={responsibles} defaultValue={c?.responsibleId ?? ''} placeholder="Non désigné" />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="siteId" label="Site">
-          <Select name="siteId" options={options.sites} defaultValue={c ? c.siteId ?? '' : defaultSite} placeholder="Tous les sites" />
+        <Field name="siteId" label="Site" hint={sites !== options.sites ? "Site archivé : conservé tant qu'aucun autre site n'est choisi." : undefined}>
+          <Select name="siteId" options={sites} defaultValue={c ? c.siteId ?? '' : defaultSite} placeholder="Tous les sites" />
         </Field>
         <Field name="reserves" label="Réserves en cours" hint="Vide = aucune. Mises à jour à chaque contrôle enregistré.">
           <Input name="reserves" defaultValue={c?.reserves ?? ''} placeholder="Ex. 1 · fin de course à régler" maxLength={160} />
         </Field>
       </FormRow>
+      <Field name="requirementId" label="Exigence réglementaire" hint="Texte dont relève le contrôle : un contrôle dépassé y suggère un écart.">
+        <Select name="requirementId" options={reqs} defaultValue={c?.requirementId != null ? String(c.requirementId) : ''} placeholder="Aucune" />
+      </Field>
       <FormRow>
         <Field name="lastOn" label="Dernier contrôle">
           <Input name="lastOn" type="date" value={lastOn} max={today} onChange={(e) => setLastOn(e.target.value)} />
@@ -276,6 +492,7 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
 }) {
   const uid = useId();
   const [date, setDate] = useState(today);
+  const [fileError, setFileError] = useState<string | null>(null);
   const valid = ISO.test(date);
   const older = valid && date < c.lastOn;
 
@@ -290,15 +507,18 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
           <Input name="organization" defaultValue={c.organization} list={`${uid}-orgs`} maxLength={120} />
         </Field>
       </FormRow>
-      <Field name="reserves" label="Réserves" hint="Nombre et objet, ex. « 1 · fin de course à régler ». Vide = aucune réserve.">
+      <Field name="reserves" label="Réserves"
+        hint={`Nombre et objet, ex. « 1 · fin de course à régler ». Vide = aucune réserve.${c.actionId ? ` Des réserves différentes détachent ${c.actionId}, qui reste dans le plan d'actions.` : ''}`}>
         <Input name="reserves" placeholder="Aucune" maxLength={160} />
       </Field>
       <Field name="notes" label="Observations">
         <TextArea name="notes" rows={2} maxLength={2000} placeholder="Points relevés, levée de réserves, suites données…" style={{ minHeight: 56 }} />
       </Field>
       <Field name="report" label="Rapport" hint="PDF, image ou document Office · 10 Mo maximum.">
-        <Input name="report" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,.doc,.docx,.xls,.xlsx,.pptx,.txt,.csv" />
+        <Input name="report" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,image/gif,.doc,.docx,.xls,.xlsx,.pptx,.txt,.csv"
+          onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
       </Field>
+      <FileError error={fileError} />
       <div className="vg-inset" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', fontSize: 12, color: 'var(--color-neutral-300)' }}>
         <Icon name="ph-calendar-check" size={15} style={{ color: older ? 'var(--color-neutral-500)' : 'var(--color-accent)', flex: 'none' }} />
         <span style={{ textWrap: 'pretty' }}>
@@ -306,7 +526,7 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
             ? 'Saisissez la date du contrôle réalisé.'
             : older
               ? `Antérieur au dernier contrôle connu (${c.last}) : ajouté à l'historique sans modifier l'échéance.`
-              : <>Prochain contrôle le <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtDate(addMonthsClamped(date, c.periodMonths))}</strong> (tous les {months(c.periodMonths)}).</>}
+              : <>Prochain contrôle le <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtDate(addMonths(date, c.periodMonths))}</strong> (tous les {months(c.periodMonths)}).</>}
         </span>
       </div>
       <Suggestions id={`${uid}-orgs`} values={suggestions.organizations} />

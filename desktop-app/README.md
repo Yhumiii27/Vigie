@@ -20,7 +20,7 @@ Le script :
 4. signe l'application ad hoc (`codesign --sign -`), la vérifie, puis l'installe dans `~/Desktop/Vigie.app` en remplaçant l'ancienne version. Si Vigie est ouvert, le script le ferme d'abord, et l'application arrête proprement le serveur qu'elle avait lancé ;
 5. vérifie la signature installée avec `codesign --verify --deep --strict`. Si iCloud Drive synchronise le Bureau, voir « Bureau synchronisé par iCloud Drive » plus bas : le script l'indique explicitement.
 
-Prérequis : les outils de ligne de commande Apple (`xcode-select --install`, Xcode n'est pas nécessaire), Node.js 20 ou plus récent (`brew install node`) et les dépendances du projet (`npm install`).
+Prérequis : les outils de ligne de commande Apple (`xcode-select --install`, Xcode n'est pas nécessaire), Node.js 22 ou plus récent (`brew install node`, version du champ `engines` de package.json) et les dépendances du projet (`npm install`).
 
 Options :
 
@@ -37,7 +37,7 @@ Il faut reconstruire l'application après une modification de `desktop-app/`, ap
 2. **Si un serveur répond déjà sur le port 3200**, l'application l'utilise tel quel, par exemple un `npm run dev` lancé par un développeur. Elle ne l'arrêtera jamais.
 3. **Sinon**, elle lance son propre serveur :
    - elle compile d'abord (`npm run build`) quand c'est nécessaire, ce qui prend environ une minute ; le temps écoulé et la dernière ligne de la compilation s'affichent. Voir « Quand l'application recompile » ;
-   - elle démarre ensuite `next start --port 3200 --hostname ::1` (Node directement, `NODE_ENV=production`) et attend la première réponse, au plus 90 secondes. Le serveur n'est joignable que depuis ce Mac (voir « Accès réseau »).
+   - elle démarre ensuite `next start --port 3200 --hostname ::1` (Node directement, `NODE_ENV=production`, `VIGIE_DEMO=1` : l'application Mac est toujours en mode démonstration, compilation comprise) et attend la première réponse, au plus 90 secondes. Le serveur n'est joignable que depuis ce Mac (voir « Accès réseau »).
 4. Elle affiche ensuite `http://localhost:3200`.
 
 Pour savoir si un serveur répond, l'application demande `/_next/static/vigie-desktop-probe` (requête `HEAD`) : Next.js y répond aussitôt « 404 » sans rendre de page ni ouvrir la base, y compris un `npm run dev` qui n'a encore rien compilé.

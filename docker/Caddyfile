@@ -1,0 +1,11 @@
+# Reverse proxy HTTPS de Vigie (profil « https » de docker-compose.yml) : certificat Let's Encrypt automatique.
+# Caddy transmet l'en-tête Host d'origine et X-Forwarded-Host/Proto : Vigie contrôle l'hôte (VIGIE_PUBLIC_URL) et
+# pose ses propres en-têtes de sécurité (CSP, HSTS…).
+{$VIGIE_DOMAIN} {
+	encode zstd gzip
+	# Pièces jointes jusqu'à 10 Mo (photos, documents) : marge pour l'encodage multipart.
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy vigie:3000
+}

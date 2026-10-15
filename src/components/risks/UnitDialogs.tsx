@@ -4,11 +4,12 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, Input, Select } from '@/components/form';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { TONE } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
-import type { WorkUnitView } from '@/lib/data/risks';
+import type { ArchivedUnitView, WorkUnitView } from '@/lib/data/risks';
 import type { FormState } from '@/lib/forms';
-import { deleteWorkUnit, saveWorkUnit } from '@/server/risks';
+import { archiveWorkUnit, moveWorkUnit, restoreWorkUnit, saveWorkUnit } from '@/server/risks';
 
 /** URL de l'écran sur une unité donnée, en conservant le mode brut / résiduel. */
 const unitHref = (id: string | null, residual: boolean) => {
@@ -65,23 +66,25 @@ export function AddUnitButton({ sites, defaultSiteId, viewSite, residual }: { si
   );
 }
 
-/** Crayon à côté du nom de l'unité : renomme l'unité, change son site, ou la supprime si elle est vide. */
-export function EditUnitButton({ unit, sites, viewSite, residual }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'count'>; sites: readonly Option[]; viewSite: ViewSite; residual: boolean }) {
+type Position = { isFirst: boolean; isLast: boolean };
+
+/** Crayon à côté du nom de l'unité : renomme l'unité, change son site, la déplace dans la liste ou l'archive si elle n'a plus de risque en vigueur. */
+export function EditUnitButton({ unit, sites, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'count'>; sites: readonly Option[]; viewSite: ViewSite; residual: boolean } & Position) {
   return (
     <DialogButton label="" icon="ph-pencil-simple" className="btn btn-ghost btn-icon" tooltip="Modifier l'unité de travail"
       style={{ width: 22, height: 22, color: 'var(--color-neutral-500)' }} title={unit.label} kicker="Modifier l'unité de travail" width={480}>
-      {(close) => <UnitEditor unit={unit} sites={sites} viewSite={viewSite} residual={residual} onClose={close} />}
+      {(close) => <UnitEditor unit={unit} sites={sites} viewSite={viewSite} residual={residual} isFirst={isFirst} isLast={isLast} onClose={close} />}
     </DialogButton>
   );
 }
 
-function UnitEditor({ unit, sites, viewSite, residual, onClose }: {
+function UnitEditor({ unit, sites, viewSite, residual, isFirst, isLast, onClose }: {
   unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'count'>;
   sites: readonly Option[];
   viewSite: ViewSite;
   residual: boolean;
   onClose: () => void;
-}) {
+} & Position) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,39 +92,51 @@ function UnitEditor({ unit, sites, viewSite, residual, onClose }: {
 
   if (confirming) {
     return (
-      <div style={{ display: 'grid', gap: 12 }}>
-        <p className="dialog-body" style={{ margin: 0, fontSize: 13 }}>Supprimer l&apos;unité de travail « {unit.label} » ? Elle ne porte aucun risque.</p>
-        {error && <div role="alert" className="vg-form-error">{error}</div>}
-        <div className="dialog-actions">
-          <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => { setConfirming(false); setError(null); }}>Annuler</button>
-          <button type="button" className="btn" style={{ color: TONE.danger.fg, borderColor: TONE.danger.dot }} disabled={pending}
-            onClick={() => start(async () => {
-              const r = await deleteWorkUnit(unit.id);
-              if (r.error) { setError(r.error); return; }
-              onClose();
-              router.push(unitHref(null, residual), { scroll: false });
-            })}>
-            <i className="ph ph-trash" style={{ fontSize: 14 }} />{pending ? 'Suppression…' : "Supprimer l'unité"}
-          </button>
-        </div>
-      </div>
+      <ReasonForm action={archiveWorkUnit} hidden={{ id: unit.id }} submitLabel="Archiver l'unité" submitIcon="ph-archive"
+        placeholder="Ex. atelier fermé, activité regroupée avec une autre unité…" onCancel={() => setConfirming(false)}
+        onDone={() => { onClose(); router.push(unitHref(null, residual), { scroll: false }); }}
+        message={<>L&apos;unité « {unit.label} » ne porte plus de risque en vigueur : elle sera retirée de la liste et du document unique, et restera consultable avec ses risques archivés via le filtre « Archivés ».</>} />
     );
   }
 
   return (
     <div style={{ position: 'relative' }}>
+      {error && <div role="alert" className="vg-form-error" style={{ marginBottom: 8 }}>{error}</div>}
       <UnitFields unit={unit} sites={sites} defaultSiteId={unit.siteId ?? sites[0]?.[0] ?? ''} viewSite={viewSite} onCancel={onClose}
         onDone={(_, siteId) => {
           onClose();
           // Unité déplacée vers un autre site : elle quitte la liste affichée, on revient à la première unité.
           if (hiddenFrom(viewSite, siteId)) router.push(unitHref(null, residual), { scroll: false });
         }} />
-      <button type="button" className="btn btn-ghost" disabled={unit.count > 0}
-        title={unit.count > 0 ? `Unité non vide : ${unit.count} risque${unit.count > 1 ? 's' : ''} à supprimer ou déplacer d'abord.` : undefined}
-        style={{ position: 'absolute', left: 0, bottom: 0, color: unit.count > 0 ? 'var(--color-neutral-600)' : TONE.danger.fg }}
-        onClick={() => setConfirming(true)}>
-        <i className="ph ph-trash" style={{ fontSize: 14 }} />Supprimer
-      </button>
+      {/* Groupe à gauche des boutons du formulaire (Annuler / Enregistrer restent à droite). */}
+      <span style={{ position: 'absolute', left: 0, bottom: 0, display: 'flex', gap: 4, alignItems: 'center' }}>
+        <button type="button" className="btn btn-ghost" disabled={unit.count > 0 || pending}
+          title={unit.count > 0 ? `Unité non vide : ${unit.count} risque${unit.count > 1 ? 's' : ''} en vigueur à archiver ou déplacer d'abord.` : "Retirer l'unité du document unique (motif obligatoire, historique conservé)"}
+          style={{ color: unit.count > 0 ? 'var(--color-neutral-600)' : 'var(--color-neutral-400)' }}
+          onClick={() => { setError(null); setConfirming(true); }}>
+          <i className="ph ph-archive" style={{ fontSize: 14 }} />Archiver
+        </button>
+        <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans la liste" disabled={isFirst || pending}
+          onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'up'); setError(r.error ?? null); })}>
+          <i className="ph ph-arrow-up" style={{ fontSize: 14 }} />
+        </button>
+        <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans la liste" disabled={isLast || pending}
+          onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'down'); setError(r.error ?? null); })}>
+          <i className="ph ph-arrow-down" style={{ fontSize: 14 }} />
+        </button>
+      </span>
     </div>
+  );
+}
+
+/** Restauration d'une unité archivée (animateur QHSE, direction), depuis le filtre « Archivés » ; ses risques archivés le restent. */
+export function RestoreUnitButton({ unit, residual }: { unit: Pick<ArchivedUnitView, 'id' | 'label'>; residual: boolean }) {
+  const router = useRouter();
+  return (
+    <ReasonButton action={restoreWorkUnit} hidden={{ id: unit.id }} label="Restaurer" icon="ph-arrow-counter-clockwise" className="vg-text-btn"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} title={unit.label} kicker="Restaurer l'unité de travail"
+      submitLabel="Restaurer l'unité" submitIcon="ph-arrow-counter-clockwise"
+      message={<>L&apos;unité « {unit.label} » reviendra dans la liste des unités de travail. Ses risques archivés le restent : restaurez-les un par un si besoin.</>}
+      onDone={() => router.push(unitHref(unit.id, residual), { scroll: false })} />
   );
 }

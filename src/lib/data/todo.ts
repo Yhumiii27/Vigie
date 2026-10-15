@@ -1,56 +1,68 @@
 import 'server-only';
 import { cache } from 'react';
+import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addDays, fmtDayMonth, today } from '../dates';
-import type { TodoItem } from '../domain';
-import { actionColumn, controlStatus, lcfirst, loadActions, loadControls, loadPeople } from '../queries';
+import { ALL_SITES, byUrgency, type TodoItem } from '../domain';
+import { currentSiteId, getSession } from '../session';
+import { visibleTodo, type VisibleTodo } from '../todo-visibility';
+import { loadActionSignals } from './actions';
+import { loadAuditSignals } from './audits';
 import { loadDocumentSignals } from './documents';
 import { loadEnvironmentSignals } from './environment';
+import { loadEventSignals } from './events';
 import { loadPreventionSignals } from './prevention';
+import { loadReportPostSignals } from './report-posts';
+import { loadReviewSignals } from './review';
+import { loadRiskSignals } from './risks';
+import { loadSiteSignals } from './sites';
+import { loadSkillSignals } from './skills';
 import { loadCoactivitySignals } from './sitemap';
-import { loadSkillMatrix } from './skills';
+import { loadWatchSignals } from './watch';
 
-export const TODO_HORIZON_DAYS = 15;
+// Source unique des échéances : « À traiter » du tableau de bord, page À faire, notifications et badges.
+// Chaque domaine fournit `load<Domaine>Signals(): Promise<{ todo: TodoItem[] }>` (mémorisé avec cache()) ;
+// son horizon est TODO_HORIZON_DAYS (CONTROL_HORIZON_DAYS pour les contrôles), dépassements compris. Les signaux sont
+// calculés sur tout le périmètre de la personne (scope 'perimeter', TDB-05) et portent le site de l'élément (siteId).
 
-const PLAN_KIND: Record<string, string> = { 'Audits internes': 'Audit interne', 'Visites sécurité': 'Visite sécurité', Certification: 'Certification', Fournisseurs: 'Audit fournisseur', 'Revues de direction': 'Revue de direction' };
-const equipShort = (e: string) => e.split(' — ')[0];
-
-/** Échéances des 15 prochains jours et dépassements, tous domaines confondus (tableau de bord, notifications). */
+/**
+ * Toutes les échéances du périmètre de la personne, chaque échéance portant son site (siteId), avant filtre par rôle et par
+ * site sélectionné (loadVisibleTodo) : dépassements d'abord, puis par date.
+ */
 export const loadTodo = cache(async (): Promise<TodoItem[]> => {
-  const db = await getDb();
-  const now = today();
-  const [people, actions, controls, plan, skills, ...signals] = await Promise.all([
-    loadPeople(), loadActions(), loadControls(), db.select().from(t.auditPlanItems), loadSkillMatrix(),
-    loadPreventionSignals(), loadDocumentSignals(), loadEnvironmentSignals(), loadCoactivitySignals(),
+  const signals = await Promise.all([
+    loadEventSignals(), loadActionSignals(), loadWatchSignals(), loadSkillSignals(), loadRiskSignals(),
+    loadAuditSignals(), loadReviewSignals(), loadPreventionSignals(), loadCoactivitySignals(),
+    loadDocumentSignals(), loadEnvironmentSignals(), loadSiteSignals(), loadReportPostSignals(),
   ]);
-  const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const inWindow = (d: string | null | undefined): d is string => !!d && d >= now && d <= horizon;
-  const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
-  const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
-  const todo: TodoItem[] = [];
+  return signals.flatMap((s) => s.todo).sort(byUrgency);
+});
 
-  controls.forEach((c) => {
-    const s = controlStatus(c, now);
-    const who = [c.organization, name(c.responsibleId)].filter(Boolean).join(' · ');
-    const title = `${c.controlType} · ${lcfirst(equipShort(c.equipment))}`;
-    const href = `/veille?onglet=controles&controle=${c.id}`;
-    if (s.days < 0) todo.push({ date: now, kind: 'Contrôle', tone: 'danger', title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}`, who, href });
-    else if (inWindow(c.nextOn)) todo.push({ date: c.nextOn, kind: 'Contrôle', tone: 'warn', title, who, href });
-  });
-  actions.forEach((a) => {
-    const col = actionColumn(a, now);
-    const href = `/actions?action=${a.id}`;
-    if ((col === 'todo' || col === 'doing') && inWindow(a.dueOn) && !planActions.has(a.id)) todo.push({ date: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${a.title}`, who: name(a.pilotId), href });
-    if (col === 'verify' && inWindow(a.verifyDueOn)) todo.push({ date: a.verifyDueOn, kind: 'Efficacité', tone: 'accent', title: `${a.eventId ?? a.originRef} · vérification d'efficacité de ${a.id}`, who: name(a.pilotId), href });
-  });
-  plan.forEach((p) => {
-    if (!p.done && inWindow(p.plannedOn)) todo.push({ date: p.plannedOn, kind: PLAN_KIND[p.track] ?? p.track, tone: 'neutral', title: p.detail ?? p.label, who: name(p.ownerId), href: '/audits' });
-  });
-  skills.alerts.forEach((al) => {
-    const d = al.assignment.startOn < now ? now : al.assignment.startOn;
-    if (d <= horizon) todo.push({ date: d, kind: 'Habilitation', tone: 'danger', title: `${al.person.name} · ${lcfirst(al.title)} ${al.state === 'x' ? 'expiré' : 'jamais suivi'}, affecté à ${al.assignment.project.split(' · ')[0]}`, who: name('clefevre'), href: '/habilitations' });
-  });
+/** Sites de la base, archivés compris (libellés des échéances d'un autre site, périmètre des indicateurs). */
+export const loadSiteDirectory = cache(async () => {
+  const db = await getDb();
+  return db.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites).orderBy(asc(t.sites.sort));
+});
 
-  signals.forEach((s) => todo.push(...s.todo));
-  return todo.sort((a, b) => a.date.localeCompare(b.date));
+/** Libellé court d'un site (« Site de [Ville B] » pour « Site de [Ville B] — zone d'essais »). */
+export const shortSiteLabel = (label: string) => label.split(' — ')[0];
+
+export type { VisibleTodo };
+
+/**
+ * Échéances visibles par la personne connectée (visibleTodo, src/lib/todo-visibility.ts) : « Toutes » = échéances du site
+ * sélectionné que son rôle peut traiter, plus ses propres échéances (ownerIds) sur tous les sites de son périmètre (TDB-05),
+ * y compris sur un écran qui lui est fermé (vue en lecture, sinon sans lien : TDB-02) ; jamais une échéance qui révèle une
+ * donnée de santé pour un rôle non habilité (SEC-06) ; pour un salarié, les siennes seulement.
+ * Échéance d'un autre site : libellé court du site (siteLabel) ; sans lien si ce site ne peut pas être sélectionné
+ * (site archivé hors « Tous les sites »), puisque l'écran cible, filtré sur le site sélectionné, ne la trouverait pas.
+ */
+export const loadVisibleTodo = cache(async (): Promise<VisibleTodo[]> => {
+  const [{ role, user, siteOptions }, todo, siteId, sites] = await Promise.all([getSession(), loadTodo(), currentSiteId(), loadSiteDirectory()]);
+  const selectable = new Set(siteOptions.map((s) => s.id));
+  const labels = new Map(sites.map((s) => [s.id, shortSiteLabel(s.label)]));
+  return visibleTodo(todo, { role, user, siteId }).map((x) => {
+    if (!x.elsewhere || !x.siteId) return x;
+    const reachable = selectable.has(x.siteId) || selectable.has(ALL_SITES);
+    return { ...x, siteLabel: labels.get(x.siteId) ?? x.siteId, href: reachable ? x.href : undefined };
+  });
 });

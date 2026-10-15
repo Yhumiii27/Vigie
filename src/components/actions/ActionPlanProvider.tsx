@@ -21,15 +21,17 @@ function useActionPlan() {
 type ProviderProps = {
   /** Actions affichées (après filtres). */
   actions: PlanAction[];
-  /** Action ouverte par lien direct, même hors filtres ou clôturée depuis plus de 30 jours. */
+  /** Action ouverte par lien direct, même hors filtres, annulée ou clôturée depuis plus de 30 jours. */
   linked: PlanAction | null;
   /** Identifiant passé dans ?action=… (fiche à ouvrir au chargement). */
   initialOpenId: string | null;
   /** Action demandée par ?action=… mais rattachée à un autre site que celui sélectionné (libellé « site de [Ville B] »). */
   moved: { id: string; site: string } | null;
-  options: Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+  options: Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'events'>>;
   canManage: boolean;
   canApprove: boolean;
+  /** Personne connectée (pilote salarié : Démarrer, Déclarer réalisée, preuves). */
+  currentUserId: string;
   today: string;
   /** Date proposée pour la vérification d'efficacité (J+30). */
   verifyDefault: string;
@@ -40,7 +42,7 @@ type ProviderProps = {
  * Fiche d'action en fenêtre modale, partagée par les trois vues du plan.
  * L'URL porte l'action ouverte (?action=A-214) pour les liens directs ; la fermeture retire le paramètre.
  */
-export function ActionPlanProvider({ actions, linked, initialOpenId, moved, options, canManage, canApprove, today, verifyDefault, children }: ProviderProps) {
+export function ActionPlanProvider({ actions, linked, initialOpenId, moved, options, canManage, canApprove, currentUserId, today, verifyDefault, children }: ProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const byId = useMemo(() => new Map([...actions, ...(linked ? [linked] : [])].map((a) => [a.id, a])), [actions, linked]);
@@ -84,7 +86,7 @@ export function ActionPlanProvider({ actions, linked, initialOpenId, moved, opti
       {children}
       <Dialog open={!!(current || away)} onClose={close} title={title} kicker="Plan d'actions unique" width={640}>
         {current && (
-          <ActionDetail key={current.id} a={current} options={options} canManage={canManage} canApprove={canApprove} today={today} verifyDefault={verifyDefault} />
+          <ActionDetail key={current.id} a={current} options={options} canManage={canManage} canApprove={canApprove} currentUserId={currentUserId} today={today} verifyDefault={verifyDefault} />
         )}
         {away && <MovedNotice id={away.id} site={away.site} onClose={close} />}
       </Dialog>

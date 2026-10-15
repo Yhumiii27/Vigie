@@ -1,70 +1,160 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
+import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
-import { ActionForm, Field, Input, TextArea } from '@/components/form';
+import { LinkActionButton } from '@/components/LinkActionButton';
+import { ReasonButton } from '@/components/ReasonDialog';
+import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Aside, CardHead, ToneTag } from '@/components/ui';
+import { fmtDate } from '@/lib/dates';
 import { FINDING_KINDS, TONE } from '@/lib/domain';
-import type { AuditGroup, FindingView } from '@/lib/data/audits';
-import type { FormOptions } from '@/lib/data/options';
-import { deleteFinding, saveFinding } from '@/server/audits';
-import { ActionLink, DeleteButton, DialogFooter, RadioSeg } from './parts';
-import { FINDING_KEYS } from './shared';
+import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/audits';
+import type { FormOptions, Option } from '@/lib/data/options';
+import { cancelFinding, saveFinding } from '@/server/audits';
+import { ActionLink, DialogFooter, RadioSeg, fileUrl } from './parts';
+import { FINDING_KEYS, OTHER_AUDIT } from './shared';
 import styles from './audits.module.css';
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites' | 'actions'>;
 type Editing = { id: number | null } | null;
 
 const KIND_OPTIONS = FINDING_KEYS.map((k) => [k, FINDING_KINDS[k].label, TONE[FINDING_KINDS[k].tone].dot] as const);
 
+/** Clé du groupe de constats : élément du programme, sinon libellé libre (même règle que readAudits). */
+const groupKey = (planItemId: number | null, audit: string) => (planItemId != null ? `p${planItemId}` : `l${audit}`);
+
+type Props = {
+  groups: AuditGroup[];
+  /** Constats annulés (filtre « Annulés »), les plus récents d'abord. */
+  cancelled: CancelledFindingView[];
+  /** Audits du programme proposés au rattachement (hors revues), le plus récent d'abord. */
+  auditOptions: Option[];
+  defaultAudit: string;
+  /** Saisie sur l'écran Audits (animateur QHSE, direction) ; consultation seule sinon (AUD-02). */
+  canEdit: boolean;
+  options: Opts;
+  /** Constat à ouvrir d'emblée (lien profond `?constat=<id>`). */
+  initialFindingId?: number;
+  /** URL sans le lien profond, rétablie à la fermeture. */
+  closeHref?: string;
+};
+
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, defaultAudit, canManage, options }: { groups: AuditGroup[]; defaultAudit: string; canManage: boolean; options: Opts }) {
-  const [selected, setSelected] = useState(groups[0]?.label ?? defaultAudit);
-  const [editing, setEditing] = useState<Editing>(null);
-  const close = () => setEditing(null);
-  const group = groups.find((g) => g.label === selected) ?? groups[0];
+export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canEdit, options, initialFindingId, closeHref }: Props) {
+  const router = useRouter();
+  // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
+  // un constat annulé s'affiche dans le filtre « Annulés ».
+  const linkGroup = initialFindingId != null ? groups.find((g) => g.findings.some((f) => f.id === initialFindingId)) : undefined;
+  const linkCancelled = initialFindingId != null && !linkGroup && cancelled.some((f) => f.id === initialFindingId);
+  const linkEdit: Editing = linkGroup && canEdit ? { id: initialFindingId! } : null;
+  const linkFlash = (linkGroup && !canEdit) || linkCancelled ? initialFindingId : undefined;
+  const [selected, setSelected] = useState(linkGroup?.key ?? groups[0]?.key ?? '');
+  const [showCancelled, setShowCancelled] = useState(linkCancelled);
+  const [editing, setEditing] = useState<Editing>(linkEdit);
+  const [deepLink, setDeepLink] = useState(initialFindingId != null);
+  const [flashId, setFlashId] = useState(linkFlash);
+  // Lien profond suivant reçu sans remonter la carte (pas de `key`) : la fermeture retire ?constat= de l'URL sans perdre
+  // le groupe affiché.
+  const [prevLink, setPrevLink] = useState(initialFindingId);
+  if (initialFindingId !== prevLink) {
+    setPrevLink(initialFindingId);
+    if (initialFindingId != null) {
+      if (linkGroup) setSelected(linkGroup.key);
+      setShowCancelled(linkCancelled);
+      setEditing(linkEdit);
+      setDeepLink(true);
+      setFlashId(linkFlash);
+    }
+  }
+  const scrollTo = linkGroup || linkCancelled ? initialFindingId : undefined;
+  useEffect(() => {
+    if (scrollTo != null) document.getElementById('constats')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [scrollTo]);
+
+  const close = () => {
+    setEditing(null);
+    if (deepLink && closeHref) { setDeepLink(false); router.replace(closeHref, { scroll: false }); }
+  };
+  const group = groups.find((g) => g.key === selected) ?? groups[0];
   const finding = editing?.id != null ? groups.flatMap((g) => g.findings).find((f) => f.id === editing.id) : undefined;
-  const latest = !group || group.label === groups[0]?.label;
+  // Constat annulé depuis sa fenêtre : la fenêtre se ferme, sans basculer un instant sur « Nouveau constat ».
+  const justCancelled = editing?.id != null && !finding && cancelled.some((f) => f.id === editing.id);
+  const latest = !group || group.key === groups[0]?.key;
+  const report = group?.reports.at(-1);
+  const meta = group && [
+    group.date && fmtDate(group.date),
+    group.auditor,
+    report && <a key="r" href={fileUrl(report.id)} target="_blank" rel="noopener" className="vg-link" title={report.fileName}>Rapport</a>,
+    group.planItemId != null && (
+      <Link key="p" href={`/audits?annee=${group.year}&element=${group.planItemId}`} scroll={false} className="vg-link">Voir au programme</Link>
+    ),
+  ].filter(Boolean);
 
   return (
-    <div className="card" style={{ gap: 8 }}>
-      <CardHead title={latest ? 'Constats du dernier audit' : "Constats d'audit"} aside={group && <Aside>{group.label}</Aside>} />
-      {groups.length > 1 && (
+    <div id="constats" className="card" style={{ gap: 8, scrollMarginTop: 16 }}>
+      <CardHead title={showCancelled ? 'Constats annulés' : latest ? 'Constats du dernier audit' : "Constats d'audit"}
+        aside={!showCancelled && group && <Aside>{group.label}</Aside>} />
+      {!showCancelled && meta && meta.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 6px', fontSize: 11.5, color: 'var(--color-neutral-500)', marginTop: -4 }}>
+          {meta.map((m, i) => <span key={i} style={{ display: 'inline-flex', gap: 6 }}>{i > 0 && <span aria-hidden>·</span>}{m}</span>)}
+        </div>
+      )}
+      {(groups.length > 1 || cancelled.length > 0) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {groups.map((g) => (
-            <button key={g.label} type="button" className={`vg-chip${g.label === group?.label ? ' is-on' : ''}`} aria-pressed={g.label === group?.label} onClick={() => setSelected(g.label)}>
+          {!showCancelled && groups.length > 1 && groups.map((g) => (
+            <button key={g.key} type="button" className={`vg-chip${g.key === group?.key ? ' is-on' : ''}`} aria-pressed={g.key === group?.key} onClick={() => setSelected(g.key)}>
               {g.label}<span style={{ color: 'var(--color-neutral-500)' }}>{g.findings.length}</span>
             </button>
           ))}
+          {cancelled.length > 0 && (
+            <button type="button" className={`vg-chip${showCancelled ? ' is-on' : ''}`} aria-pressed={showCancelled} style={{ marginLeft: 'auto' }}
+              onClick={() => setShowCancelled((v) => !v)}>
+              <i className="ph ph-prohibit" style={{ fontSize: 12 }} aria-hidden />Annulés<span style={{ color: 'var(--color-neutral-500)' }}>{cancelled.length}</span>
+            </button>
+          )}
         </div>
       )}
-      {group?.findings.map((f) => (
-        <FindingRow key={f.id} finding={f} canManage={canManage} options={options} onEdit={() => setEditing({ id: f.id })} />
-      ))}
-      {!group && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré.</div>}
-      {canManage && (
+      {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} flash={f.id === flashId} />) : (
+        <>
+          {group?.findings.map((f) => (
+            <FindingRow key={f.id} finding={f} canEdit={canEdit} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
+          ))}
+          {!group && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré.</div>}
+        </>
+      )}
+      {canEdit && !showCancelled && (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setEditing({ id: null })}>
           <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
         </button>
       )}
 
-      <Dialog open={!!editing} onClose={close} kicker="Constats d'audit" title={finding ? 'Modifier le constat' : 'Nouveau constat'} width={540}>
-        {editing && (
+      <Dialog open={!!editing} onClose={close} kicker="Constats d'audit" title={finding ? 'Modifier le constat' : 'Nouveau constat'} width={560}>
+        {editing && !justCancelled && (
           <>
-            <FindingForm finding={finding} defaultAudit={group?.label ?? defaultAudit} audits={groups.map((g) => g.label)}
-              onDone={(audit) => { setSelected(audit); close(); }} onCancel={close} />
+            <FindingForm finding={finding} defaultPlanItemId={group ? group.planItemId : auditOptions.length ? +auditOptions[0][0] : null}
+              defaultAudit={group && group.planItemId == null ? group.label : defaultAudit}
+              audits={groups.filter((g) => g.planItemId == null).map((g) => g.label)} auditOptions={auditOptions}
+              onDone={(key) => { setSelected(key); close(); }} onCancel={close} />
             {finding && (
               <DialogFooter>
                 {finding.actionId && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-neutral-400)' }}>
                     Action liée <ActionLink action={finding.action} id={finding.actionId} />
+                    <LinkActionButton link={`finding:${finding.id}`} current={finding.actionId} />
                   </span>
                 )}
-                <DeleteButton run={() => deleteFinding(finding.id)} onDone={close}
-                  note={finding.actionId ? "L'action liée reste dans le plan d'actions." : undefined} />
+                <ReasonButton label="Annuler le constat" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm"
+                  style={{ color: 'var(--tone-danger-fg)', marginLeft: 'auto' }} title="Annuler le constat" kicker="Constats d'audit"
+                  action={cancelFinding} hidden={{ id: finding.id }} submitLabel="Annuler le constat" submitIcon="ph-prohibit"
+                  message={`Constat saisi par erreur ou en double : il n'est jamais supprimé. Il sort des constats, des échéances et du dossier de revue, et reste consultable avec le filtre « Annulés ».${finding.actionId ? ` L'action ${finding.actionId} reste dans le plan d'actions.` : ''}`}
+                  placeholder="Ex. doublon du constat saisi le …" onDone={close} />
               </DialogFooter>
             )}
+            {finding && <ChangeLogList entries={finding.log} />}
           </>
         )}
       </Dialog>
@@ -72,27 +162,60 @@ export function FindingsCard({ groups, defaultAudit, canManage, options }: { gro
   );
 }
 
-function FindingRow({ finding: f, canManage, options, onEdit }: { finding: FindingView; canManage: boolean; options: Opts; onEdit: () => void }) {
+/** Constat annulé (filtre « Annulés ») : lecture seule, avec le motif et l'historique. */
+function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; flash?: boolean }) {
+  const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as const };
+  return (
+    <div className={`vg-rule-bottom${flash ? ` ${styles.flash}` : ''}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
+      <ToneTag tone="neutral" style={{ whiteSpace: 'nowrap' }}>{k.label}</ToneTag>
+      <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
+        <span style={{ fontSize: 12.5, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+          {f.clause && <span style={{ marginRight: 6 }}>{f.clause}</span>}{f.text}
+        </span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
+          {f.groupLabel} · annulé le {fmtDate(f.cancelled.on)}{f.cancelled.by && ` par ${f.cancelled.by}`}
+        </span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>Motif : {f.cancelled.reason}</span>
+        <ChangeLogList entries={f.log} />
+      </div>
+      <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+        {f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+      </div>
+    </div>
+  );
+}
+
+function FindingRow({ finding: f, canEdit, options, flash, onEdit }: { finding: FindingView; canEdit: boolean; options: Opts; flash?: boolean; onEdit: () => void }) {
   const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as const };
   const needsAction = f.kind !== 'point_fort';
+  const text = (
+    <>
+      {f.clause && <span className="tag tag-outline" style={{ fontSize: 10, fontFamily: 'ui-monospace, monospace', marginRight: 6, verticalAlign: '1px' }}>{f.clause}</span>}
+      {f.text}
+    </>
+  );
   return (
-    <div className="vg-rule-bottom" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
+    <div className={`vg-rule-bottom${flash ? ` ${styles.flash}` : ''}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
       <ToneTag tone={k.tone} style={{ whiteSpace: 'nowrap' }}>{k.label}</ToneTag>
-      {canManage ? (
-        <button type="button" className={styles.textBtn} style={{ fontSize: 12.5, textWrap: 'pretty' }} title="Modifier le constat" onClick={onEdit}>{f.text}</button>
+      {canEdit ? (
+        <button type="button" className={styles.textBtn} style={{ fontSize: 12.5, textWrap: 'pretty' }} title="Modifier le constat" onClick={onEdit}>{text}</button>
       ) : (
-        <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{f.text}</span>
+        <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{text}</span>
       )}
-      <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+      <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
         {f.actionId ? (
           <ActionLink action={f.action} id={f.actionId} compact />
-        ) : needsAction && canManage ? (
-          <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            defaults={{
-              description: `${k.label} — ${f.audit} : ${f.text}`, origin: 'audit', originRef: f.audit,
-              kind: f.kind === 'ecart_mineur' ? 'C' : 'P', link: `finding:${f.id}`, lockOrigin: true,
-            }} />
+        ) : needsAction && canEdit ? (
+          <>
+            <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              defaults={{
+                description: `${k.label} — ${f.audit}${f.clause ? ` (${f.clause})` : ''} : ${f.text}`, origin: 'audit', originRef: f.audit,
+                kind: f.kind === 'ecart_mineur' ? 'C' : 'P', link: `finding:${f.id}`, lockOrigin: true,
+              }} />
+            <LinkActionButton link={`finding:${f.id}`} actions={options.actions} label="Rattacher" className="vg-text-btn"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} />
+          </>
         ) : (
           <span style={{ color: 'var(--color-neutral-600)' }}>—</span>
         )}
@@ -101,23 +224,48 @@ function FindingRow({ finding: f, canManage, options, onEdit }: { finding: Findi
   );
 }
 
-function FindingForm({ finding, defaultAudit, audits, onDone, onCancel }: {
-  finding?: FindingView; defaultAudit: string; audits: string[]; onDone: (audit: string) => void; onCancel: () => void;
+/**
+ * Saisie d'un constat, rattaché à un audit du programme ou à un audit hors programme (libellé libre).
+ * Réutilisé par la fenêtre d'un élément du programme (audit présélectionné). `onDone` reçoit la clé du groupe.
+ */
+export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, auditOptions, onDone, onCancel }: {
+  finding?: FindingView; defaultPlanItemId: number | null; defaultAudit: string; audits: string[]; auditOptions: Option[];
+  onDone: (key: string) => void; onCancel: () => void;
 }) {
+  const initialPlan = finding ? finding.planItemId : defaultPlanItemId;
+  const known = initialPlan != null && auditOptions.some(([v]) => v === String(initialPlan));
+  const [choice, setChoice] = useState(known ? String(initialPlan) : OTHER_AUDIT);
   const [audit, setAudit] = useState(finding?.audit ?? defaultAudit);
+  const other = choice === OTHER_AUDIT;
   return (
-    <ActionForm action={saveFinding} onDone={() => onDone(audit.trim())} onCancel={onCancel} submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'}
-      hidden={{ id: finding?.id }}>
-      <Field name="audit" label="Audit" hint="Choisissez un audit existant ou saisissez-en un nouveau (ex. Audit de suivi ISO 9001 · novembre 2026).">
-        <Input name="audit" list="vg-audit-labels" value={audit} onChange={(e) => setAudit(e.target.value)} />
+    <ActionForm action={saveFinding} onDone={() => onDone(other ? groupKey(null, audit.trim()) : groupKey(+choice, ''))} onCancel={onCancel}
+      submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'} hidden={{ id: finding?.id }}>
+      <Field name="planItemId" label="Audit" hint={other ? undefined : "Le libellé et la date par défaut viennent de l'élément du programme."}>
+        <Select name="planItemId" value={choice} onChange={(e) => setChoice(e.target.value)}
+          options={[...auditOptions, [OTHER_AUDIT, 'Autre audit (hors programme)…'] as const]} />
       </Field>
-      <datalist id="vg-audit-labels">
-        {audits.map((a) => <option key={a} value={a} />)}
-      </datalist>
+      {other && (
+        <>
+          <Field name="audit" label="Audit hors programme" hint="Choisissez un audit existant ou saisissez-en un nouveau (ex. Audit client [Client A] · mars 2026).">
+            <Input name="audit" list="vg-audit-labels" value={audit} onChange={(e) => setAudit(e.target.value)} />
+          </Field>
+          <datalist id="vg-audit-labels">
+            {audits.map((a) => <option key={a} value={a} />)}
+          </datalist>
+        </>
+      )}
+      <FormRow>
+        <Field name="clause" label="Exigence" hint="Ex. §8.2.3">
+          <Input name="clause" defaultValue={finding?.clause ?? ''} maxLength={40} />
+        </Field>
+        <Field name="foundOn" label="Date du constat" hint={other ? undefined : "Par défaut, date de l'audit."}>
+          <Input name="foundOn" type="date" defaultValue={finding?.foundOn ?? ''} />
+        </Field>
+      </FormRow>
       <Field name="kind" label="Type de constat">
         <RadioSeg name="kind" options={KIND_OPTIONS} defaultValue={finding?.kind ?? 'ecart_mineur'} />
       </Field>
-      <Field name="text" label="Constat" hint="Pour un écart, citez l'exigence concernée (ex. §8.2.3).">
+      <Field name="text" label="Constat">
         <TextArea name="text" defaultValue={finding?.text} rows={3} autoFocus />
       </Field>
     </ActionForm>

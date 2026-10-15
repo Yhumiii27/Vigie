@@ -1,5 +1,4 @@
-import type { PgliteDatabase } from 'drizzle-orm/pglite';
-import type * as t from '../schema';
+import type { Tx } from '../types';
 
-/** Transaction Drizzle passée aux fonctions de jeu de données. */
-export type SeedTx = Parameters<Parameters<PgliteDatabase<typeof t>['transaction']>[0]>[0];
+/** Transaction Drizzle passée aux fonctions de jeu de données (moteur indifférent). */
+export type SeedTx = Tx;

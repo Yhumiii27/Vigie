@@ -57,3 +57,14 @@ export function OutOfScope({ title, text }: { title: string; text: string }) {
     </div>
   );
 }
+
+/** Paramètre de sélection (?sel=, ?action=, ?plan=…) qui ne correspond à rien : supprimé, archivé ou hors du site sélectionné. */
+export function MissingNotice({ text = 'Élément introuvable ou hors du site sélectionné.', closeHref }: { text?: string; closeHref: string }) {
+  return (
+    <div className="card" role="status" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: '10px 14px', fontSize: 12.5 }}>
+      <i className="ph ph-question" style={{ fontSize: 16, color: 'var(--color-neutral-500)' }} aria-hidden />
+      <span style={{ flex: 1 }}>{text}</span>
+      <Link href={closeHref} scroll={false} className="vg-link">Fermer</Link>
+    </div>
+  );
+}

@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
-import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, permitDays, planStatus, ruleBasis, toParisLocal } from '@/components/prevention/model';
+import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/components/prevention/model';
 import {
   activeOn, containingZone, detectConflicts, parseGeometry, parseIds, parsePoints,
   type CoInput, type Conflict,
@@ -11,10 +11,11 @@ import {
   COACTIVITY_HORIZON_DAYS, DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
   type ActivityView, type Choice, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
 } from '@/components/sitemap/model';
-import { addDays, today } from '../dates';
+import { addDays } from '../dates';
+import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';
 import { lcfirst, loadPeople } from '../queries';
-import { currentSiteId } from '../session';
+import { currentSiteId, siteFilter } from '../session';
 import { attachmentUrl } from '../uploads';
 import { loadFormOptions } from './options';
 
@@ -25,7 +26,8 @@ type Person = { name: string };
 
 async function fetchRows(db: Db) {
   const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles] = await Promise.all([
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    // Sites actifs uniquement (un site archivé n'a plus de carte ni de coactivité).
+    db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select().from(t.siteMaps),
     db.select().from(t.mapZones).orderBy(asc(t.mapZones.id)),
     db.select().from(t.mapRoutes).orderBy(asc(t.mapRoutes.id)),
@@ -102,7 +104,7 @@ function activityViews(rows: Rows, siteId: string, people: Map<string, Person>, 
       preventionPlanId: a.preventionPlanId,
       planStatus: status,
       planStatusLabel: status ? PLAN_STATUS[status].label : null,
-      planClosed: status === 'clos',
+      planClosed: !!plan && isPlanEnded(plan),
       planSigned: !!plan && isFullySigned(plan),
       planHasSignature: !!(plan?.signedEuOn || plan?.signedEeOn),
       planMandatory: !!plan && isMandatory(plan, site),
@@ -169,7 +171,7 @@ function candidates(rows: Rows, siteId: string, activities: ActivityView[], now:
   const inWindow = (start: string, end: string) => end >= now && (!horizon || start <= horizon);
 
   const fromPlans: PositionCandidate[] = rows.plans
-    .filter((p) => p.siteId === siteId && p.status !== 'clos' && !planned.has(p.id) && inWindow(p.startOn, p.endOn))
+    .filter((p) => p.siteId === siteId && !isPlanEnded(p) && !planned.has(p.id) && inWindow(p.startOn, p.endOn))
     .map((p) => {
       const name = contractor.get(p.contractorId) ?? p.contractorId;
       return {
@@ -238,11 +240,13 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
   // Listes de choix du formulaire d'activité : plans et permis du site, y compris ceux déjà liés à une activité.
   const used = (key: 'preventionPlanId' | 'permitId') => new Set(activities.map((a) => a[key]).filter(Boolean));
   const usedPlans = used('preventionPlanId'), usedPermits = used('permitId');
+  const usedContractors = new Set(activities.map((a) => a.contractorId).filter(Boolean));
   const contractorName = new Map(rows.contractors.map((c) => [c.id, c.name]));
-  const sitePlans = rows.plans.filter((p) => p.siteId === siteId && (p.status !== 'clos' || usedPlans.has(p.id))).sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }));
+  const sitePlans = rows.plans.filter((p) => p.siteId === siteId && (!isPlanEnded(p) || usedPlans.has(p.id))).sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }));
   const sitePermits = rows.permits.filter((p) => p.siteId === siteId && ((p.status !== 'clos' && p.status !== 'annule') || usedPermits.has(p.id))).sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }));
   const choices: SitemapChoices = {
-    contractors: [...rows.contractors]
+    // Entreprises archivées exclues, sauf celles des activités existantes (formulaire de modification).
+    contractors: rows.contractors.filter((c) => !c.archivedAt || usedContractors.has(c.id))
       .sort((a, b) => a.name.replace(/^\[/, '').localeCompare(b.name.replace(/^\[/, ''), 'fr', { sensitivity: 'base' }))
       .map((c): Choice => [c.id, `${c.name} — ${c.trade}`]),
     people: options.people,
@@ -281,17 +285,18 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 /**
- * Badge et échéances de coactivité sur le site sélectionné (ou tous les sites).
+ * Badge et échéances de coactivité sur tous les sites actifs du périmètre (TDB-05, siteId du site) ; le lien porte
+ * toujours le site (&site=), la clé « lu » ne dépend donc pas du sélecteur.
  * badge = situations de coactivité distinctes aujourd'hui ;
  * todo = une échéance par jour (aujourd'hui et les 15 suivants) et par site ayant au moins une situation de coactivité ;
  * le titre signale les situations nouvelles par rapport à la veille.
  */
-export async function loadCoactivitySignals(): Promise<{ badge: number; todo: TodoItem[] }> {
-  const [rows, people, selected] = await Promise.all([loadRows(), loadPeople(), currentSiteId()]);
+export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
+  const [rows, people, keep] = await Promise.all([loadRows(), loadPeople(), siteFilter('perimeter')]);
   const now = today();
   let badge = 0;
   const todo: TodoItem[] = [];
-  for (const site of rows.sites.filter((s) => !selected || s.id === selected)) {
+  for (const site of rows.sites.filter((s) => keep(s.id))) {
     const { input, zones, routes } = siteInput(rows, site.id, people, now);
     if (!input.activities.length) continue;
     const zoneName = new Map(zones.map((z) => [z.id, z.name]));
@@ -321,9 +326,12 @@ export async function loadCoactivitySignals(): Promise<{ badge: number; todo: To
         tone: list.some((c) => c.tone === 'danger') ? 'danger' : 'warn',
         title: `${head}${where ? ` · ${where}` : ''}`,
         who: '',
-        href: `/prevention/carte?date=${date}${selected ? '' : `&site=${site.id}`}`,
+        siteId: site.id,
+        href: `/prevention/carte?date=${date}&site=${site.id}`,
+        // Badge : situations distinctes d'aujourd'hui ; les jours suivants n'ajoutent rien au badge.
+        count: i === 0 ? list.length : 0,
       });
     }
   }
   return { badge, todo };
-}
+});

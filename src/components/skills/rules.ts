@@ -1,4 +1,4 @@
-import { addDays, daysBetween } from '@/lib/dates';
+import { addDays, daysBetween, monthName } from '@/lib/dates';
 import { SKILL_SOON_DAYS, type SkillState } from '@/lib/domain';
 
 // Règles métier des habilitations, partagées par le serveur (chargement, actions) et les formulaires.
@@ -6,6 +6,13 @@ import { SKILL_SOON_DAYS, type SkillState } from '@/lib/domain';
 
 /** Période d'une affectation Keystone. */
 export type Span = { startOn: string; endOn: string };
+
+/** « du 13 au 17 octobre » / « du 28 septembre au 2 octobre ». */
+export function period(start: string, end: string) {
+  const d1 = +start.slice(8, 10), d2 = +end.slice(8, 10), m1 = +start.slice(5, 7), m2 = +end.slice(5, 7);
+  if (start === end) return `le ${d1} ${monthName(m1)}`;
+  return m1 === m2 ? `du ${d1} au ${d2} ${monthName(m2)}` : `du ${d1} ${monthName(m1)} au ${d2} ${monthName(m2)}`;
+}
 
 /**
  * Manque d'un titre requis au regard d'une affectation :
@@ -36,14 +43,14 @@ export function heldState(expiresOn: string | null, now: string): SkillState {
  * Échéance proposée pour « Planifier le recyclage », null quand il n'y a rien à planifier.
  * À planifier : titre requis expiré, expirant sous 60 jours, jamais suivi, ou valide mais expirant avant la fin
  * d'une affectation Keystone à venir.
- * - la veille du début de la prochaine affectation Keystone (`upcoming` trié par date de début) ;
- * - sans affectation : l'échéance du titre, ou dans 30 jours pour un titre jamais suivi (formation initiale) ;
+ * - la veille du début de la première affectation Keystone à venir que le titre ne couvre pas (`upcoming` trié par date de début) ;
+ * - sinon : l'échéance du titre, ou dans 30 jours pour un titre jamais suivi (formation initiale) ;
  * - jamais avant aujourd'hui (titre déjà expiré, affectation en cours ou débutant aujourd'hui).
  */
 export function renewalDue(state: SkillState, expiresOn: string | null, upcoming: readonly Span[], now: string): string | null {
   if (state === 'n') return null;
-  if (state === 'v' && !upcoming.some((a) => lapseFor(state, expiresOn, a, now) !== null)) return null;
-  const next = upcoming[0];
+  const next = upcoming.find((a) => lapseFor(state, expiresOn, a, now) !== null);
+  if (state === 'v' && !next) return null;
   const due = next ? addDays(next.startOn, -1) : expiresOn ?? addDays(now, 30);
   return due < now ? now : due;
 }
