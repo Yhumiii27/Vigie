@@ -234,7 +234,7 @@ async function restorePglite(storage: StorageConfig, extracted: ExtractedBackup,
     throw new Error(`Copie PGlite illisible (${(err as Error).message}) : base actuelle inchangée.`);
   }
   // 2. Base actuelle : sauvegardée dans VIGIE_BACKUP_DIR (comme pour PostgreSQL), puis dossier vidé sur place
-  //    (jamais renommé : /data/pglite est un point de montage dans l'image Docker).
+  //    (jamais renommé : /data/db est un point de montage dans l'image Docker).
   let previous: Blob | null = null;
   let previousFile: string | null = null;
   if (occupied) {

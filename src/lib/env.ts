@@ -144,7 +144,7 @@ function readStorage(env: Env, read: Reader, problems: string[]): StorageConfig 
   // La restauration d'une base PGlite vide VIGIE_DATA_DIR : pièces jointes et sauvegardes jamais dans ce dossier.
   for (const [name, dir] of [['VIGIE_UPLOAD_DIR', uploadDir], ['VIGIE_BACKUP_DIR', backupDir]] as const) {
     if (isWithinDir(dataDir, dir)) {
-      problems.push(`${name} : à placer hors de VIGIE_DATA_DIR (${dataDir}), dossier réservé à la base PGlite et vidé par sa restauration (ex. /data/pglite, /data/uploads, /data/backups).`);
+      problems.push(`${name} : à placer hors de VIGIE_DATA_DIR (${dataDir}), dossier réservé à la base PGlite et vidé par sa restauration (ex. /data/db, /data/uploads, /data/backups).`);
     }
   }
   return {

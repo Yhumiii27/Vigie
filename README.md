@@ -98,3 +98,16 @@ Le **site** choisi en haut de la barre latérale filtre les données (événemen
 - Lecture des formulaires scannés : désactivée par défaut, car le document est envoyé à l'API Claude (Anthropic). Pour l'activer : `VIGIE_AI_IMPORT=1` et une clé `ANTHROPIC_API_KEY`. Les PDF remplissables et les fichiers Word sont lus localement. Des formulaires d'exemple sont dans `samples/` (`node scripts/pp-samples.mjs` pour les régénérer).
 - Authentification Microsoft Entra ID : en démonstration, le rôle se choisit dans le menu utilisateur (`src/lib/auth/demo.ts`) ; hors démonstration, connexion OIDC (code + PKCE, `/auth/connexion`, `/auth/retour`, `/auth/deconnexion`), session dans un cookie chiffré (`src/lib/auth/`), rôle tiré des rôles applicatifs Entra et sites des groupes (`VIGIE_SITE_GROUPS`). `src/proxy.ts` refuse les hôtes inconnus, renvoie vers la connexion sans session et pose la CSP. Test sans tenant : `node scripts/oidc-mock.mjs` (fournisseur factice) et `scripts/e2e-auth.sh` (parcours complet avec curl).
 - Données Keystone (projets, affectations) : référentiel local en attendant l'intégration.
+
+## Mise en ligne (Docker, Coolify)
+
+Le `Dockerfile` à la racine produit l'image décrite dans [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md) (serveur autonome, utilisateur non root, route de santé `/api/sante`). Réglages à donner à l'hébergeur (Coolify ou autre) :
+
+| Réglage | Valeur |
+| --- | --- |
+| Port interne | `3000` |
+| Volume persistant | `/data` : base PGlite dans `/data/db` (sans `DATABASE_URL`), pièces jointes dans `/data/uploads`, sauvegardes dans `/data/backups` — mêmes chemins que la première image Coolify : un volume existant est repris tel quel |
+| Instance de démonstration | `VIGIE_DEMO=1` et `VIGIE_PUBLIC_URL=https://<domaine>` (hôte admis) : jeu de démonstration, sélecteur de rôle, aucune connexion |
+| Production | variables de [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md) § 4 : `VIGIE_PUBLIC_URL` (https), Entra ID, secrets, `DATABASE_URL` recommandé |
+
+Sans `VIGIE_DEMO=1` ni configuration Entra ID, le serveur s'arrête au démarrage ou affiche « Configuration incomplète ». Le build télécharge la police Inter depuis Google Fonts : le serveur de build doit avoir accès à Internet. Une instance de démonstration n'a pas d'authentification : protéger l'accès au niveau de l'hébergeur (authentification HTTP de Coolify, par exemple).
