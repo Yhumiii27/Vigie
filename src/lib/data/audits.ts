@@ -9,7 +9,7 @@ import { today } from '@/lib/today';
 import {
   FINDING_KINDS, REVIEW_STATUS, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
-import { actionBrief, certificationStatus, loadPeople, type ActionBrief } from '../queries';
+import { actionBrief, certificationStatus, loadAllActions, loadPeople, type ActionBrief } from '../queries';
 import { loadQhseLeads } from './leads';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
@@ -53,6 +53,8 @@ export type PlanItemView = {
 export type FindingView = {
   id: number; audit: string; planItemId: number | null; clause: string | null; foundOn: string | null;
   kind: string; text: string; sort: number; actionId: string | null; action: ActionBrief | null;
+  /** Ligne du programme de l'élément rattaché (source de l'action, D20) ; null hors programme. */
+  track: string | null;
   /** Annulation (constat saisi par erreur ou en double) : hors groupes et échéances, visible avec le filtre « Annulés ». */
   cancelled: { on: string; by: string; reason: string } | null;
   log: ChangeEntry[];
@@ -141,8 +143,9 @@ const readAudits = cache(async () => {
     // Éléments annulés compris (AUD-03) : hors grille, échéances et constats, ils restent consultables (« Éléments annulés »).
     db.select().from(t.auditPlanItems).orderBy(asc(t.auditPlanItems.id)),
     db.select().from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
-    // Toutes les actions (sans filtre de site) : un constat ou une échéance garde son action liée quel que soit le site affiché.
-    db.select().from(t.actions),
+    // Actions de tout le périmètre de la personne (pas seulement du site sélectionné) : un constat ou une échéance, communs à
+    // l'entreprise, gardent leur action liée quel que soit le site affiché ; hors périmètre, la référence seule (ActionLink).
+    loadAllActions('perimeter'),
     loadPeople(),
     db.select({ id: t.attachments.id, entityType: t.attachments.entityType, entityId: t.attachments.entityId, fileName: t.attachments.fileName, createdAt: t.attachments.createdAt })
       .from(t.attachments).where(inArray(t.attachments.entityType, ['audit_plan_item', 'certification'])).orderBy(asc(t.attachments.createdAt)),
@@ -163,9 +166,11 @@ const readAudits = cache(async () => {
     .filter((f) => f.entityType === entityType && f.entityId === String(id))
     .map((f) => ({ id: f.id, fileName: f.fileName, createdAt: f.createdAt.toISOString() }));
 
+  const trackOf = new Map(items.map((p) => [p.id, p.track]));
   const findingViews: FindingView[] = findings.map((f) => ({
     id: f.id, audit: f.audit, planItemId: f.planItemId, clause: f.clause, foundOn: f.foundOn,
     kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId),
+    track: f.planItemId != null ? trackOf.get(f.planItemId) ?? null : null,
     cancelled: f.cancelledAt ? { on: f.cancelledAt.toISOString().slice(0, 10), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
     log: findingLogs.get(String(f.id)) ?? [],
   }));

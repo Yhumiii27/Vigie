@@ -9,15 +9,32 @@ import {
   addQualificationFiles, archiveTitle, cancelQualification, reinstatePerson, removeQualificationFile, restoreTitle, saveQualification,
   savePerson, saveTitle, setPersonLeft, setRequirement,
 } from '@/server/skills';
+import { loadSkillData, loadSkillMatrix } from '@/lib/data/skills';
 
 // Recette des server actions des habilitations et formations jamais exécutées jusqu'ici (QUA-05) : formations
 // (création, correction, annulation, attestations), exigences, personnel (sortie, réintégration), titres suivis.
-// Jeu de démonstration au 09/10/2026 : recyclage A-207 planifié pour l'habilitation électrique de [M. Girard].
+// Plan d'actions (réponses du service QHSE du 15/10/2026) : aucune formation ni aucun recyclage ne donne lieu à une action
+// QSE ; le jeu neuf n'en contient plus (ancienne A-207). Une action de recyclage d'une base reprise (A-907, source « à
+// compléter », origine historique skills) est simulée ici : jamais modifiée par l'écran, elle protège le rattachement de
+// l'exigence tant qu'elle n'est pas close (Terminée comprise). Jeu de démonstration au 09/10/2026.
 
 const uploads = freshDemoDatabase();
 
 const db = () => getDb();
 const action = async (id: string) => (await (await db()).select().from(t.actions).where(eq(t.actions.id, id)))[0];
+
+/** Action de recyclage reprise (base mise à niveau par 0005) rattachée à l'exigence de la case. */
+async function legacyRenewal(id: string, personId: string, titleId: string, status: 'a_faire' | 'terminee' | 'verifiee' = 'a_faire') {
+  const db_ = await db();
+  await db_.insert(t.actions).values({
+    id, openedOn: '2026-09-01', pilotId: 'clefevre', status, dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null,
+    originRef: `Habilitations · ${personId}`, detail: `Recyclage ${titleId} — ${personId}`, siteId: 'ville-a', legacyOrigin: 'skills',
+    doneOn: status === 'a_faire' ? null : '2026-10-01', closedOn: status === 'verifiee' ? '2026-10-05' : null,
+  });
+  await db_.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
+  await db_.update(t.qualificationRequirements).set({ renewalActionId: id })
+    .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId)));
+}
 const quals = async (personId: string, titleId: string) =>
   (await db()).select().from(t.qualifications).where(and(eq(t.qualifications.personId, personId), eq(t.qualifications.titleId, titleId)));
 const requirement = async (personId: string, titleId: string) =>
@@ -68,10 +85,13 @@ describe('saveQualification : enregistrer une formation', () => {
     expect(await saveQualification({}, form({ personId: 'ylambert', titleId: 'sst', obtainedOn: '2026-10-01' }))).toMatchObject({ error: "Salarié sorti de l'effectif." });
   });
 
-  it('recyclage réalisé : échéance calculée, historique, attestation, action de recyclage à vérifier', async () => {
+  it('recyclage réalisé : échéance calculée, historique, attestation ; action de recyclage reprise jamais modifiée', async () => {
     actAs('Animateur QHSE');
-    expect((await action('A-207')).status).toBe('todo');
+    await legacyRenewal('A-907', 'mgirard', 'elec');
+    const stored = await action('A-907');
+    const actionLog = (await changeLog('action', 'A-907')).length;
     const before = (await quals('mgirard', 'elec')).length;
+    // Un ancien formulaire qui posterait encore « closeRenewal » ne change rien.
     const r = await saveQualification({}, formWith(
       { personId: 'mgirard', titleId: 'elec', obtainedOn: '2026-10-05', provider: '[Apave]', closeRenewal: 'on' },
       { files: [file('attestation.pdf')] },
@@ -82,7 +102,12 @@ describe('saveQualification : enregistrer une formation', () => {
     expect(list).toHaveLength(before + 1); // jamais écrasée
     expect(list.find((q) => q.id === id)).toMatchObject({ obtainedOn: '2026-10-05', expiresOn: '2029-10-05', provider: '[Apave]', recordedById: 'clefevre', cancelledAt: null });
     expect(await lastLog('qualification', id)).toMatchObject({ action: 'create', summary: 'Formation du 05/10/2026 (échéance 05/10/2029) enregistrée', byId: 'clefevre' });
-    expect(await action('A-207')).toMatchObject({ status: 'verify', verifyDueOn: '2026-11-08', closedOn: null });
+    expect(await action('A-907')).toEqual(stored);
+    expect(await changeLog('action', 'A-907')).toHaveLength(actionLog);
+    expect((await requirement('mgirard', 'elec')).renewalActionId).toBe('A-907');
+    // Matrice : action reprise affichée en consultation seule (libellé, avancement), encore à réaliser.
+    const cell = (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
+    expect(cell?.renewal).toMatchObject({ id: 'A-907', label: 'Recyclage elec — mgirard', statusLabel: 'À faire', planned: true });
     const [att] = await qualFiles(id);
     expect(att).toMatchObject({ fileName: 'attestation.pdf', uploadedBy: 'clefevre' });
     expect(existsSync(path.join(uploads, att.storagePath))).toBe(true);
@@ -95,20 +120,13 @@ describe('saveQualification : enregistrer une formation', () => {
     expect(await saveQualification({}, form({ qualificationId: String(id), personId: 'tnguyen', titleId: 'elec', obtainedOn: '2026-10-06' }))).toEqual({ error: 'Formation introuvable.' });
   });
 
-  it('formation qui ne couvre pas l’affectation Keystone à venir : le recyclage reste à réaliser', async () => {
+  it('aucune action créée par l’enregistrement d’une formation (recyclages hors actions QSE)', async () => {
     actAs('Animateur QHSE');
-    const db_ = await db();
-    // tnguyen, affecté du 13 au 17/10 : recyclage « Travail en hauteur » planifié (action à lancer).
-    await db_.insert(t.actions).values({
-      id: 'A-901', title: 'Recyclage travail en hauteur — [T. Nguyen]', origin: 'skills', originRef: 'Habilitations · [T. Nguyen]', siteId: 'ville-a',
-      pilotId: 'clefevre', dueOn: '2026-10-12', status: 'todo', kind: 'P',
-    });
-    await db_.update(t.qualificationRequirements).set({ renewalActionId: 'A-901' })
-      .where(and(eq(t.qualificationRequirements.personId, 'tnguyen'), eq(t.qualificationRequirements.titleId, 'hauteur')));
-    // Échéance saisie avant la fin de l'affectation : le besoin n'est pas réglé.
-    const r = await saveQualification({}, form({ personId: 'tnguyen', titleId: 'hauteur', obtainedOn: '2026-10-08', expiresOn: '2026-10-15', closeRenewal: 'on' }));
+    const count = async () => (await (await db()).select({ id: t.actions.id }).from(t.actions)).length;
+    const n = await count();
+    const r = await saveQualification({}, form({ personId: 'tnguyen', titleId: 'hauteur', obtainedOn: '2026-10-08', expiresOn: '2026-10-15' }));
     expect(r.ok).toBe(true);
-    expect((await action('A-901')).status).toBe('todo');
+    expect(await count()).toBe(n);
   });
 
   it('échéance bornée au mois d’arrivée (QUA-07) : 31/08 + 6 mois = 28/02', async () => {
@@ -120,6 +138,26 @@ describe('saveQualification : enregistrer une formation', () => {
     expect(q.expiresOn).toBe('2027-02-28');
     // Le titre devient requis pour le salarié.
     expect(await requirement('proux', 'echafaudage-roulant')).toBeDefined();
+  });
+});
+
+describe('action de recyclage reprise : lisible selon canReadAction (Integration, 15/10/2026)', () => {
+  it('Salarié : numéro seul pour l’action d’un autre responsable ; décrite quand il en est responsable', async () => {
+    actAs('Animateur QHSE');
+    await legacyRenewal('A-909', 'tnguyen', 'elec');
+    actAs('Salarié');
+    const cellOf = async () => (await loadSkillMatrix()).rows.find((x) => x.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'elec');
+    expect((await cellOf())?.renewal).toEqual({
+      id: 'A-909', label: '', dueOn: '', status: '', statusLabel: 'Action QSE reprise', tone: 'neutral', pilot: '', planned: true, readable: false,
+    });
+    await (await db()).update(t.actions).set({ pilotId: 'tnguyen' }).where(eq(t.actions.id, 'A-909'));
+    expect((await cellOf())?.renewal).toMatchObject({ id: 'A-909', label: 'Recyclage elec — tnguyen', statusLabel: 'À faire', readable: true });
+    // Le QHSE lit toujours l'action (plan de son périmètre).
+    actAs('Animateur QHSE');
+    const qhse = (await loadSkillData()).rows.find((x) => x.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'elec');
+    expect(qhse?.renewal).toMatchObject({ id: 'A-909', readable: true });
+    // Close pour la suite du fichier (archivage du titre « elec »).
+    await (await db()).update(t.actions).set({ status: 'abandonnee' }).where(eq(t.actions.id, 'A-909'));
   });
 });
 
@@ -149,10 +187,20 @@ describe('cancelQualification et attestations', () => {
 });
 
 describe('setRequirement : titre requis pour un salarié', () => {
-  it('retrait refusé tant que le recyclage rattaché est ouvert ; titre archivé, salarié sorti', async () => {
+  it('retrait refusé tant que le recyclage repris n’est pas clos (Terminée comprise) ; titre archivé, salarié sorti', async () => {
     actAs('Animateur QHSE');
-    expect(await setRequirement('mgirard', 'elec', false)).toEqual({ error: "L'action A-207 (recyclage) est encore ouverte : clôturez-la avant de retirer l'exigence." });
+    const refused = "L'action A-907 (recyclage) n'est pas close : le service QHSE doit la clôturer ou l'abandonner avant le retrait de l'exigence.";
+    expect(await setRequirement('mgirard', 'elec', false)).toEqual({ error: refused });
+    await (await db()).update(t.actions).set({ status: 'terminee', doneOn: '2026-10-06' }).where(eq(t.actions.id, 'A-907'));
+    expect(await setRequirement('mgirard', 'elec', false)).toEqual({ error: refused });
+    const cell = (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
+    expect(cell?.renewal).toMatchObject({ id: 'A-907', planned: false });
     expect(await requirement('mgirard', 'elec')).toBeDefined();
+    // Recyclage vérifié (clos) : le retrait est permis.
+    await legacyRenewal('A-908', 'kbernard', 'sst', 'verifiee');
+    expect((await requirement('kbernard', 'sst')).renewalActionId).toBe('A-908');
+    expect(await setRequirement('kbernard', 'sst', false)).toEqual({});
+    expect(await requirement('kbernard', 'sst')).toBeUndefined();
     expect(await setRequirement('tnguyen', 'pont-ancien', true)).toEqual({ error: 'Titre archivé : restaurez-le pour modifier ses exigences.' });
     expect(await setRequirement('ylambert', 'sst', true)).toEqual({ error: "Salarié sorti de l'effectif." });
     expect(await setRequirement('inconnu', 'sst', true)).toEqual({ error: 'Salarié ou titre introuvable.' });
@@ -163,7 +211,7 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
   it('sortie refusée tant qu’un recyclage est ouvert ; date et motif obligatoires', async () => {
     actAs('Animateur QHSE');
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'Démission' }))).toEqual({
-      error: "Recyclage encore ouvert (A-207) : clôturez ou annulez ces actions avant de déclarer la sortie.",
+      error: 'Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant la déclaration de sortie.',
     });
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Champ obligatoire.' } });
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2025-10-01', leftReason: 'Démission' })))
@@ -208,7 +256,7 @@ describe('titres suivis', () => {
     actAs('Animateur QHSE');
     expect(await archiveTitle({}, form({ id: 'elec', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     expect(await archiveTitle({}, form({ id: 'elec', reason: 'Plus suivi' }))).toEqual({
-      error: "Recyclage encore ouvert (A-207) : clôturez ou annulez ces actions avant d'archiver le titre.",
+      error: "Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant l'archivage du titre.",
     });
     expect(await archiveTitle({}, form({ id: 'echafaudage-roulant', reason: 'Plus d’échafaudage sur site' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
     const [ti] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'echafaudage-roulant'));

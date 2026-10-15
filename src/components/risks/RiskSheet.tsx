@@ -8,22 +8,36 @@ import { LinkActionButton, LinkActionForm } from '@/components/LinkActionButton'
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
-import { EVENT_TYPES, RISK_FLAGS, TONE, type EventType } from '@/lib/domain';
-import type { FormOptions } from '@/lib/data/options';
+import { admissibleSources } from '@/lib/action-rules';
+import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
+import { EVENT_TYPES, RISK_FLAGS, TONE, proposedDomain, type EventType } from '@/lib/domain';
 import type { ArchiveInfo, LinkedAction, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { archiveRisk, confirmResidual, moveRisk, restoreRisk } from '@/server/risks';
 import { Cotation, RiskFields } from './RiskForm';
 
 export type RiskSheetView = 'sheet' | 'edit' | 'newAction' | 'link' | 'archive' | 'restore';
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
-type Options = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
-
-/** Couleur du statut d'une action liée (tableau et fiche). */
+/** Couleur de l'avancement d'une action liée (tableau et fiche) : Abandonnée grisée, sinon ton de l'avancement (« En retard » : danger). */
 export function actionColor(a: LinkedAction) {
   if (a.cancelled) return 'var(--color-neutral-500)';
   if (a.late) return TONE.danger.fg;
   if (a.done) return TONE.ok.fg;
-  return 'var(--color-accent)';
+  return a.tone === 'neutral' || a.tone === 'accent' ? 'var(--color-accent)' : TONE[a.tone].fg;
+}
+
+/**
+ * Valeurs proposées à la création d'une action depuis un risque (ACT-28) : source DUERP imposée (D20), risque lié, domaine
+ * Sécurité (modifiable), problème = description du risque à la date du jour, site de l'unité (« Tous les sites » : le
+ * service QHSE choisit). Le niveau de risque de l'action n'est pas déduit de la cotation (échelles distinctes, § 5.4).
+ */
+export function riskActionDefaults(risk: Pick<RiskView, 'id' | 'hazard' | 'situation' | 'gravity' | 'probability'>, unit: Pick<Unit, 'siteId' | 'originRef'>): ActionDefaults {
+  const [source] = admissibleSources('risk');
+  return {
+    source, lockSource: true, link: `risk:${risk.id}`, linkLabel: risk.hazard, originRef: unit.originRef,
+    domain: proposedDomain({ source }) ?? 'securite',
+    problem: `Risque « ${risk.hazard} » : ${risk.situation} (cotation brute G${risk.gravity} × P${risk.probability} = ${risk.gravity * risk.probability}).`,
+    siteId: unit.siteId ?? undefined,
+  };
 }
 
 /** « Archivé le 30/06/2026 par Claire Lefèvre » (unité ou risque archivé). */
@@ -54,7 +68,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * rattachement d'actions, nouvelle action et archivage (jamais de suppression). Un risque archivé est en lecture seule ; l'animateur QHSE et la direction peuvent le restaurer.
  * Une seule fenêtre dont la vue change : pas de fenêtres imbriquées.
  */
-export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, showEvents = true, showHistory = true, options, linkableActions, isFirst, isLast, view, onView, onClose }: {
+export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, isFirst, isLast, view, onView, onClose }: {
   risk: RiskView;
   unit: Unit;
   /** Unité du risque archivée : restauration du risque impossible avant celle de l'unité. */
@@ -63,11 +77,13 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   canManage: boolean;
   /** Animateur QHSE, direction : restauration d'un risque archivé. */
   canApprove?: boolean;
+  /** Service QHSE (canCreateAction) : nouvelle action et rattachement d'une action existante (ACT-22). */
+  actionsQhse?: boolean;
   /** Événements liés (masqués pour le Salarié : signalements nominatifs de collègues). */
   showEvents?: boolean;
   /** Historique de la fiche (rôles qui modifient le DUERP). */
   showHistory?: boolean;
-  options: Options;
+  options: ActionFormOptions;
   linkableActions: RisksData['linkableActions'];
   isFirst: boolean;
   isLast: boolean;
@@ -94,11 +110,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
 
   if (view === 'newAction') {
     return (
-      <ActionFields options={options} onDone={() => onView('sheet')} onCancel={() => onView('sheet')}
-        defaults={{
-          origin: 'risk', originRef: unit.originRef, lockOrigin: true, siteId: unit.siteId, kind: 'P', link: `risk:${risk.id}`,
-          description: `Risque « ${risk.hazard} » : ${risk.situation} (cotation brute G${risk.gravity} × P${risk.probability} = ${risk.gravity * risk.probability}).`,
-        }} />
+      <ActionFields options={options} onDone={() => onView('sheet')} onCancel={() => onView('sheet')} defaults={riskActionDefaults(risk, unit)} />
     );
   }
 
@@ -135,6 +147,8 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   const flag = risk.flag ? RISK_FLAGS[risk.flag] : null;
   const archived = risk.archived;
   const editable = canManage && !archived;
+  // Actions QSE : créées et rattachées par le service QHSE seulement (ACT-22).
+  const actionable = editable && actionsQhse;
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -150,7 +164,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE[flag.tone].bg }}>
           <ToneTag tone={flag.tone} style={{ flexShrink: 0 }}>{flag.label}</ToneTag>
           <span style={{ fontSize: 12.5, color: TONE[flag.tone].fg, textWrap: 'pretty' }}>
-            {flag.hint}{risk.flag === 'toReview' && risk.lastClosedOn ? ` Dernière clôture le ${fmtDate(risk.lastClosedOn)}.` : ''}
+            {flag.hint}{risk.flag === 'toReview' && risk.lastClosedOn ? ` Dernière vérification le ${fmtDate(risk.lastClosedOn)}.` : ''}
           </span>
         </div>
       )}
@@ -177,25 +191,25 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
                 <Link href={`/actions?action=${encodeURIComponent(a.id)}`} className="vg-link" style={{ fontSize: 12.5, color: actionColor(a), textDecoration: a.cancelled ? 'line-through' : undefined }}>{a.id}</Link>
                 <span style={{ flex: 1, minWidth: 160 }}>{a.title}</span>
                 {a.cancelled
-                  ? <ToneTag tone="neutral">Annulée</ToneTag>
+                  ? <ToneTag tone="neutral">Abandonnée</ToneTag>
                   : <span style={{ color: actionColor(a), whiteSpace: 'nowrap' }}>{a.status}</span>}
                 {a.pilot && <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.pilot}</span>}
-                <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{a.done && a.closedOn ? `clôturée le ${fmtDate(a.closedOn)}` : `échéance ${fmtDate(a.dueOn)}`}</span>
-                {editable && <LinkActionButton link={`risk:${risk.id}`} current={a.id} />}
+                <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{a.done && a.closedOn ? `vérifiée le ${fmtDate(a.closedOn)}` : `date cible ${fmtDate(a.dueOn)}`}</span>
+                {actionable && <LinkActionButton link={`risk:${risk.id}`} current={a.id} />}
               </li>
             ))}
           </ul>
         ) : (
           <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucune action rattachée.</div>
         )}
-        {editable && (
+        {actionable && (
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => onView('newAction')}>
               <i className="ph ph-plus" style={{ fontSize: 13 }} />Nouvelle action
             </button>
             {/* Vue de la même fenêtre, pas une seconde fenêtre (Échap fermerait aussi la fiche). */}
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} disabled={!linkOptions.length}
-              title={linkOptions.length ? undefined : 'Aucune action ouverte à rattacher'} onClick={() => onView('link')}>
+              title={linkOptions.length ? undefined : 'Aucune action non close à rattacher'} onClick={() => onView('link')}>
               <i className="ph ph-link" style={{ fontSize: 13 }} />Rattacher une action existante
             </button>
           </div>

@@ -2,24 +2,28 @@
 
 import { useState } from 'react';
 import { Dot, Icon } from '@/components/ui';
-import type { PlanAction } from '@/lib/data/actions';
-import { TONE, type ActionColumn, type Tone } from '@/lib/domain';
+import type { KanbanKey } from '@/lib/action-rules';
+import type { ActionListItem } from '@/lib/action-view';
+import { TONE, type Tone } from '@/lib/domain';
 import { ActionLink } from './ActionPlanProvider';
 
 const MAX_CARDS = 8;
 
-/** `label` : libellé de la colonne (« Clôturées · toutes » en historique complet). */
-export type KanbanColumnData = { key: ActionColumn; label: string; tone: Tone; cards: PlanAction[] };
+/** `label` : libellé de la colonne (« Vérifiées · toutes » en historique complet). */
+export type KanbanColumnData = { key: KanbanKey; label: string; tone: Tone; cards: ActionListItem[] };
 
 const NOTE = { fontSize: 11, color: 'var(--color-neutral-500)', padding: '8px 10px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)', textWrap: 'pretty' } as const;
 
-const dueColor = (a: PlanAction) => (a.late ? TONE.danger.dot : 'var(--color-neutral-300)');
-
-/** Vue Kanban du plan d'actions : cinq colonnes, les huit premières cartes puis dépliage sur place. */
+/**
+ * Vue Kanban du plan d'actions (spec § 16) : six colonnes (À faire · En cours · En retard · Reportée · Terminée — à
+ * vérifier · Vérifiée), les huit premières cartes puis dépliage sur place ; le défilement horizontal reste dans le tableau.
+ */
 export function KanbanBoard({ columns }: { columns: KanbanColumnData[] }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(200px, 1fr))', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
-      {columns.map((c) => <KanbanColumn key={c.key} column={c} />)}
+    <div style={{ overflowX: 'auto', paddingBottom: 4, maxWidth: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(190px, 1fr))`, gap: 10, minWidth: columns.length * 200 }}>
+        {columns.map((c) => <KanbanColumn key={c.key} column={c} />)}
+      </div>
     </div>
   );
 }
@@ -33,7 +37,7 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 2px 4px' }}>
         <Dot color={TONE[c.tone].dot} /><span style={{ fontSize: 12, fontWeight: 500 }}>{c.label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{c.cards.length}</span>
       </div>
-      {cards.map((a) => <KanbanCard key={a.id} a={a} />)}
+      {cards.map((a) => <KanbanCard key={a.id} a={a} step={c.key === 'en_cours' || c.key === 'en_retard'} />)}
       {hidden > 0 && (
         <button type="button" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}
           style={{ justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', fontSize: 11.5, color: 'var(--color-neutral-500)', padding: '2px 4px' }}>
@@ -42,35 +46,43 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
         </button>
       )}
       {c.cards.length === 0 && <div style={NOTE}>Aucune action</div>}
-      {c.key === 'done' && (
-        <div style={NOTE}>
-          Une action n&apos;est clôturée qu&apos;après vérification de son efficacité par l&apos;animateur QHSE ou la direction.
-        </div>
+      {c.key === 'terminee' && (
+        <div style={NOTE}>Une action Terminée n&apos;est close qu&apos;après la vérification de son efficacité par le service QHSE.</div>
       )}
     </div>
   );
 }
 
-function KanbanCard({ a }: { a: PlanAction }) {
+/** Carte : source et référence, numéro, libellé, palier (En cours, En retard), responsable, date cible, vérification. */
+function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
   return (
     <ActionLink id={a.id} className="card elev-sm vg-kcard" style={{ gap: 7, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--color-neutral-500)', minWidth: 0 }}>
-        <Icon name={a.origin.icon} size={12} style={{ flex: 'none' }} />
-        <span style={{ whiteSpace: 'nowrap' }}>{a.origin.label}</span>
-        <span style={{ flex: 1, minWidth: 0, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {a.originRef}</span>
+        <Icon name={a.sourceIcon} size={12} style={{ flex: 'none' }} />
+        <span style={{ whiteSpace: 'nowrap' }}>{a.sourceLabel}</span>
+        {a.originRef && <span style={{ flex: 1, minWidth: 0, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {a.originRef}</span>}
         <span style={{ marginLeft: 'auto', flex: 'none', color: 'var(--color-neutral-600)' }}>{a.id}</span>
       </div>
-      <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{a.title}</div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11, color: 'var(--color-neutral-400)' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--color-neutral-800)', display: 'grid', placeItems: 'center', fontSize: 9, color: 'var(--color-neutral-200)' }}>{a.pilotInitials}</span>{a.pilot}
+      <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{a.label}</div>
+      {(step || a.toComplete || a.priorityLabel) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 10.5, color: 'var(--color-neutral-400)' }}>
+          {step && <span title="Avancement">{a.avancement}</span>}
+          {a.priorityLabel && <span>{step ? '· ' : ''}{a.priorityLabel}</span>}
+          {a.toComplete && <span style={{ color: TONE.warn.dot }}>{step || a.priorityLabel ? '· ' : ''}À compléter</span>}
+        </div>
+      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 6px', fontSize: 11, color: 'var(--color-neutral-400)' }}>
+        {/* Responsable : jamais plus étroit que ses initiales ; deux dates d'une Terminée : les dates passent à la ligne. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 18, overflow: 'hidden' }} title={a.pilot}>
+          <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--color-neutral-800)', display: 'grid', placeItems: 'center', fontSize: 9, color: 'var(--color-neutral-200)', flex: 'none' }}>{a.pilotInitials}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.pilot}</span>
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
-          <span title={`Réalisation prévue le ${a.dueLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: dueColor(a) }}>
+          <span title={`Date cible : ${a.due}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }}>
             <Icon name="ph-calendar-blank" size={12} />{a.due}
           </span>
-          {a.col === 'verify' && a.verifyDue && (
-            <span title={`Vérification d'efficacité le ${a.verifyDueLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.verifyLate ? TONE.danger.dot : TONE.warn.dot }}>
+          {a.status === 'terminee' && a.verifyDue && (
+            <span title={`Vérification d'efficacité le ${a.verifyDue}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.verifyLate ? TONE.danger.dot : TONE.warn.dot }}>
               <Icon name="ph-seal-check" size={12} />{a.verifyDue}
             </span>
           )}

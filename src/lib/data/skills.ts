@@ -2,13 +2,14 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { lapseFor, period, renewalDue, type Lapse } from '@/components/skills/rules';
+import { lapseFor, period, type Lapse } from '@/components/skills/rules';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
-import { TODO_HORIZON_DAYS, columnOf, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone } from '../domain';
+import { TODO_HORIZON_DAYS, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone } from '../domain';
 import { hasLeft } from '../people';
-import { actionColumn, lcfirst, loadPeople, skillState, type Person } from '../queries';
+import { canReadAction } from '../action-rules';
+import { actionView, lcfirst, loadPeople, skillState, type Person } from '../queries';
 import { loadQhseLeads } from './leads';
 import { getSession, siteFilter, type SiteScope } from '../session';
 
@@ -17,17 +18,29 @@ import { getSession, siteFilter, type SiteScope } from '../session';
 export type TrainingTitle = typeof t.trainingTitles.$inferSelect;
 export type KeystoneAssignment = typeof t.keystoneAssignments.$inferSelect;
 
-/** Action de recyclage rattachée à l'exigence (qualification_requirements.renewalActionId), tant qu'elle n'est pas clôturée. */
+/**
+ * Action de recyclage reprise, rattachée à l'exigence (qualification_requirements.renewalActionId), tant qu'elle n'est
+ * pas close (Vérifiée ou Abandonnée). Consultation seule : depuis les réponses du service QHSE du 15/10/2026, aucun
+ * recyclage ni formation ne donne lieu à une action QSE (le service RH les gère) ; seules les actions d'une base reprise
+ * restent rattachées, et le service QHSE les clôt ou les abandonne dans le plan d'actions.
+ */
 export type RenewalInfo = {
   id: string;
-  title: string;
+  /** Libellé court de l'action (actionLabel du détail). */
+  label: string;
   dueOn: string;
   status: string;
   statusLabel: string;
   tone: Tone;
   pilot: string;
-  /** À lancer ou en cours (y compris en retard) : le recyclage est encore à réaliser. */
+  /** Ni close ni Terminée (À faire → 80 %, Reportée, y compris en retard) : le recyclage est encore à réaliser. */
   planned: boolean;
+  /**
+   * Action lisible par la session (canReadAction : plan de son périmètre, ou sa propre action). Sinon numéro seul :
+   * ni libellé, ni avancement, ni date cible, ni responsable, et pas de lien vers une fiche qui serait refusée (par
+   * exemple le Salarié pour l'action de recyclage reprise d'un autre responsable ; décision de l'Integration, 15/10/2026).
+   */
+  readable: boolean;
 };
 
 /** Formation enregistrée (historique d'une case : jamais écrasée ; annulée avec un motif si saisie par erreur). */
@@ -57,20 +70,14 @@ export type SkillCell = {
   files: AttachmentItem[];
   /** Toutes les formations de la case, annulées comprises, de la plus récente à la plus ancienne. */
   history: QualificationEntry[];
+  /** Action de recyclage reprise encore rattachée (consultation seule, voir RenewalInfo). */
   renewal: RenewalInfo | null;
-  /**
-   * Échéance proposée pour planifier le recyclage, null s'il n'y a rien à planifier (voir renewalDue) :
-   * titre expiré, expirant sous 60 jours, jamais suivi, ou expirant avant la fin d'une affectation Keystone.
-   */
-  renewalDueOn: string | null;
 };
 
 export type SkillRow = {
   person: Person; cells: SkillCell[]; assignments: KeystoneAssignment[];
   /** Sortie de l'effectif déjà déclarée, à une date future (« Sortie le … »). */
   leavingOn: string | null;
-  /** Pilote proposé des recyclages : responsable QHSE du site du salarié (null : poste vacant, pilote à choisir). */
-  renewalPilotId: string | null;
 };
 
 export type SkillAlert = {
@@ -88,11 +95,8 @@ export type SkillAlert = {
   expiresOn: string | null;
   assignment: KeystoneAssignment;
   renewal: RenewalInfo | null;
-  renewalDueOn: string | null;
   /** Titres requis du salarié (pour la fenêtre « Voir l'affectation »). */
   required: SkillCell[];
-  /** Pilote proposé du recyclage (voir SkillRow.renewalPilotId). */
-  renewalPilotId: string | null;
 };
 
 /**
@@ -112,14 +116,14 @@ export { hasLeft };
 export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [people, allTitles, reqs, quals, assignments, keep, leads] = await Promise.all([
+  const [people, allTitles, reqs, quals, assignments, keep, session] = await Promise.all([
     loadPeople(),
     db.select().from(t.trainingTitles).orderBy(asc(t.trainingTitles.sort)),
     db.select().from(t.qualificationRequirements),
     db.select().from(t.qualifications).orderBy(desc(t.qualifications.obtainedOn), desc(t.qualifications.id)),
     db.select().from(t.keystoneAssignments).orderBy(asc(t.keystoneAssignments.startOn)),
     siteFilter(scope),
-    loadQhseLeads(),
+    getSession(),
   ]);
   // Titres archivés : hors matrice, formulaires et échéances ; listés dans « Titres suivis » (restauration).
   const titles = allTitles.filter((ti) => !ti.archivedAt);
@@ -136,10 +140,15 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const renewals = new Map<string, RenewalInfo>();
   renewalActions.forEach((a) => {
     if (isClosedActionStatus(a.status)) return;
-    const col = columnOf(actionColumn(a, now));
+    const planned = a.status !== 'terminee';
+    if (!canReadAction(session.role, session.user.id, a, session.allowedSiteIds)) {
+      renewals.set(a.id, { id: a.id, label: '', dueOn: '', status: '', statusLabel: 'Action QSE reprise', tone: 'neutral', pilot: '', planned, readable: false });
+      return;
+    }
+    const v = actionView(a, people, now);
     renewals.set(a.id, {
-      id: a.id, title: a.title, dueOn: a.dueOn, status: a.status, statusLabel: col.status, tone: col.tone,
-      pilot: people.get(a.pilotId)?.name ?? '—', planned: a.status === 'todo' || a.status === 'doing',
+      id: a.id, label: v.label, dueOn: a.dueOn, status: a.status, statusLabel: v.statusLabel, tone: v.tone,
+      pilot: v.pilot, planned, readable: true,
     });
   });
 
@@ -177,7 +186,6 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
       person: p,
       assignments: upcoming,
       leavingOn: p.leftOn,
-      renewalPilotId: leads.lead(p.siteId)?.id ?? null,
       cells: titles.map((ti) => {
         const key = `${p.id}:${ti.id}`;
         const r = req.get(key);
@@ -197,7 +205,6 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
           files: q?.files ?? [],
           history: entries,
           renewal: r?.renewalActionId ? renewals.get(r.renewalActionId) ?? null : null,
-          renewalDueOn: renewalDue(state, expiresOn, upcoming, now),
         };
       }),
     };
@@ -211,8 +218,7 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
       if (!lapse) return [];
       return [{
         person: row.person, title: c.title.label, titleId: c.title.id, state: lapse === 'missing' ? 'r' : 'x', currentState: c.state, lapse,
-        expiresOn: c.expiresOn, assignment: a, renewal: c.renewal, renewalDueOn: c.renewalDueOn, required: row.cells.filter((x) => x.required),
-        renewalPilotId: row.renewalPilotId,
+        expiresOn: c.expiresOn, assignment: a, renewal: c.renewal, required: row.cells.filter((x) => x.required),
       }];
     })))
     .sort((x, y) => x.assignment.startOn.localeCompare(y.assignment.startOn));
@@ -254,10 +260,10 @@ export type SkillMatrixData = Awaited<ReturnType<typeof loadSkillMatrix>>;
  * - expiré ou jamais suivi : danger, daté du jour ;
  * - expirant sous 60 jours (état s) : à l'échéance du titre, ou à la veille d'une affectation qu'il ne couvre pas, sous 15 jours ;
  * - valide mais expirant avant la fin d'une affectation Keystone : à la veille de l'affectation, sous 15 jours.
- * Un recyclage (ou une formation initiale) planifié, à lancer ou en cours, suffit : l'action porte sa propre échéance.
- * Une action en « Efficacité à vérifier » ne suffit pas (formation annulée depuis, par exemple) : le signal la mentionne.
- * Destinataires : le responsable QHSE du site du salarié (pilote proposé des recyclages ; animateurs QHSE si le poste
- * est vacant) et le salarié concerné ; lien profond vers la case. Tous les sites du périmètre (TDB-05) : site du salarié.
+ * Une action de recyclage reprise encore à réaliser (ni close ni Terminée, voir RenewalInfo) suffit : elle porte sa propre
+ * échéance. Une action Terminée ne suffit pas (formation annulée depuis, par exemple) : le signal la mentionne. Aucune
+ * nouvelle action de recyclage (hors actions QSE, réponses du service QHSE du 15/10/2026).
+ * Destinataires : le responsable QHSE du site du salarié (animateurs QHSE si le poste est vacant) et le salarié concerné ; lien profond vers la case. Tous les sites du périmètre (TDB-05) : site du salarié.
  */
 export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const now = today();
@@ -280,7 +286,7 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
       const a = row.assignments.find((x) => lapseFor(c.state, c.expiresOn, x, now) !== null);
       const eve = a ? eveOf(a.startOn) : null;
       const project = a ? a.project.split(' · ')[0] : '';
-      const action = c.renewal ? ` · action ${c.renewal.id} (${lcfirst(c.renewal.statusLabel)})` : '';
+      const action = c.renewal ? ` · action ${c.renewal.id}${c.renewal.readable ? ` (${lcfirst(c.renewal.statusLabel)})` : ''}` : '';
       const suffix = `${a ? `, affecté à ${project} ${period(a.startOn, a.endOn)}` : ''}${action}`;
       if (c.state === 'x') {
         todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} expiré depuis le ${fmtDayMonth(c.expiresOn!)}${suffix}` });

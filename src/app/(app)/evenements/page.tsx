@@ -14,11 +14,13 @@ import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { NewEventButton } from '@/components/events/NewEventButton';
 import { BENIGN_REGISTER_PATH, addActionBlocker, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
+import { admissibleSources, canCreateAction } from '@/lib/action-rules';
+import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { fmtDate, fmtDayMonth, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
-  ALL_SITES, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
-  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeHealth, isEmployee, severityTone, type AnalysisMethod,
+  ACTION_PRIORITIES, ALL_SITES, AVANCEMENT, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
+  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod,
 } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
@@ -30,7 +32,6 @@ export const metadata: Metadata = { title: SCREENS.events.title };
 const H6 = ({ children }: { children: React.ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 
 type Tab = 'ouverts' | 'tous' | 'classes';
-type ActionOptions = Pick<FormOptions, 'people' | 'origins' | 'sites' | 'allSites'>;
 
 export default async function EventsPage({ searchParams }: PageProps<'/evenements'>) {
   const { role, user, site, siteOptions } = await guard('events');
@@ -79,8 +80,10 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     people: options.people, sites: options.sites, projects: options.projects,
     controls: linkOptions.controls, risks: linkOptions.risks, documents: linkOptions.documents, plans: linkOptions.plans, permits: linkOptions.permits,
   };
-  // Seules les listes utiles au formulaire d'action sont transmises au composant client (pas les événements ni les actions du site).
-  const actionOptions: ActionOptions = { people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites };
+  // Formulaire d'action : service QHSE seulement (ACT-22) ; listes vides pour les autres rôles (convention isReadOnly), qui
+  // lisent les actions liées et ouvrent leur fiche dans le plan. `today` : date du jour du serveur, jamais celle du navigateur.
+  const qhse = canCreateAction(role);
+  const actionOptions: ActionFormOptions = qhse ? { people: options.people, sites: options.sites, today: now } : { people: [], sites: [], today: now };
   const defaultSite = site.id !== ALL_SITES ? site.id : siteOptions[0]?.id;
   const health = canSeeHealth(role);
   const emptyText = tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' || q || type || origin ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
@@ -160,7 +163,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
-            : <EventCard key={detail.event.id} detail={detail} log={log} options={fieldOptions} actionOptions={actionOptions} canEdit={manager} canRevert={canApprove(role)}
+            : <EventCard key={detail.event.id} detail={detail} log={log} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={manager} canRevert={canApprove(role)}
               canSeeRisks={canSee(role, 'risks')} canEditRisks={canEditScreen(role, 'risks')} canSeeEnv={canSee(role, 'env')} today={now} />)}
         </div>
       </div>
@@ -209,7 +212,7 @@ function Narrative({ description, immediateMeasures }: { description: string | n
 
 /**
  * Fiche d'un signalement vue par son déclarant (Salarié, lecture seule) : avancement daté, description, mesures immédiates,
- * pièces jointes et suite donnée (titre et statut des actions). Ni l'analyse des causes, ni le pilote, ni les historiques.
+ * pièces jointes et suite donnée (libellé et avancement des actions). Ni l'analyse des causes, ni le pilote, ni les historiques.
  */
 function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions['sites'] }) {
   const { event: e, actions, attachments, stepDates, dismissal } = detail;
@@ -242,13 +245,13 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
         <H6>Suite donnée</H6>
         {actions.length > 0 ? (
           <table className="table" style={{ fontSize: 12.5 }}>
-            <thead><tr><th>Réf.</th><th>Action</th><th>Statut</th></tr></thead>
+            <thead><tr><th>N°</th><th>Action</th><th>Avancement</th></tr></thead>
             <tbody>
               {actions.map((a) => (
                 <tr key={a.id}>
                   <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.id}</td>
-                  <td>{a.title}</td>
-                  <td><ToneTag tone={a.tone}>{a.statusLabel}</ToneTag></td>
+                  <td>{a.label}</td>
+                  <td><ToneTag tone={AVANCEMENT[a.status].tone}>{a.avancement}</ToneTag></td>
                 </tr>
               ))}
             </tbody>
@@ -263,8 +266,10 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
   );
 }
 
-function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
-  detail: EventDetail; log: ChangeEntry[]; options: EventFieldOptions; actionOptions: ActionOptions; canEdit: boolean; canRevert: boolean;
+function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
+  detail: EventDetail; log: ChangeEntry[]; options: EventFieldOptions; actionOptions: ActionFormOptions; canEdit: boolean; canRevert: boolean;
+  /** Service QHSE (canCreateAction) : crée et modifie les actions de l'événement ; les autres rôles les consultent. */
+  qhse: boolean;
   /** Accès à l'écran « Évaluation des risques » : sinon le risque lié s'affiche sans lien. */
   canSeeRisks: boolean;
   /** Saisie sur l'écran « Évaluation des risques » (pas en consultation seule) : lien « Réévaluer le risque → ». */
@@ -342,11 +347,29 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
     plans: withCurrent(options.plans, e.preventionPlanId, links.plan?.label),
     permits: withCurrent(options.permits, e.permitId, links.permit?.label),
   };
+  // Avertissement « aucune donnée de santé » du formulaire d'action (§ 4) : événement de type AT.
+  const at = e.type === 'AT';
   const actionItems: EventActionItem[] = actions.map((a) => ({
-    id: a.id, title: a.title, description: a.description, origin: a.originKey, originRef: a.originRef, eventId: a.eventId, siteId: a.siteId, pilotId: a.pilotId, dueOn: a.dueOn, kind: a.kind === 'P' ? 'P' : 'C', verifyDueOn: a.verifyDueOn,
-    kindLabel: a.kindLabel, pilot: a.pilot, due: a.due, late: a.late, tone: a.tone, statusLabel: a.statusLabel,
+    id: a.id, label: a.label, pilot: a.pilot, due: a.due, late: a.late, tone: a.tone, statusLabel: a.statusLabel,
+    priority: a.priority ? ACTION_PRIORITIES[a.priority] : null,
+    site: a.siteId === e.siteId ? siteLabel : a.siteId ?? undefined,
+    // Modification depuis la fiche : service QHSE, action non abandonnée (lecture seule, D17) ; valeurs actuelles.
+    edit: qhse && a.status !== 'abandonnee' ? {
+      id: a.id, status: a.status, source: a.source, originRef: a.originRef, domain: a.domain, priority: a.priority, riskLevel: a.riskLevel,
+      problem: a.problem ?? '', detail: a.detail, siteId: a.siteId, pilotId: a.pilotId, pilotName: a.pilot, openedOn: a.openedOn,
+      dueOn: a.dueOn, verifyDueOn: a.verifyDueOn, doneOn: a.doneOn, verifyMethod: a.verifyMethod, efficacyNote: a.efficacyNote,
+      hours: a.hours, estimatedCost: a.estimatedCost, actualCost: a.actualCost, healthWarning: at,
+    } : undefined,
   }));
-  const openLinked = actions.filter((a) => a.status !== 'cancelled').length;
+  // Création depuis l'événement (QHSE) : source imposée par l'événement (Réclamation client pour une RC, sinon Évènement
+  // QSE, D20), événement lié, domaine proposé, problème = intitulé neutre de l'événement (jamais un champ de santé).
+  const [source] = admissibleSources('event', { eventType: e.type });
+  const newDefaults: ActionDefaults = {
+    source, lockSource: true, link: `event:${e.id}`, linkLabel: `${e.id} · ${e.title}`, originRef: e.id,
+    domain: proposedDomain({ eventType: e.type }), problem: e.title, siteId: e.siteId, pilotId: e.pilotId ?? undefined, healthWarning: at,
+  };
+  // Les actions abandonnées restent affichées mais ne retiennent plus l'événement (classement sans suite).
+  const openLinked = actions.filter((a) => a.status !== 'abandonnee').length;
   const method = e.analysisMethod as AnalysisMethod;
   const hint = !canEdit ? "Réservé à l'animateur QHSE et à l'encadrement." : closed && !e.dismissed ? undefined : blocker ?? undefined;
 
@@ -361,7 +384,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
           {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} benign={register?.entry ? (register.entry.escalatedAt ? 'escalated' : 'active') : null} />}
           {canRevert && !e.dismissed && !closed && (
             <DismissButton id={e.id} disabled={openLinked > 0}
-              tooltip={openLinked > 0 ? `${openLinked} action${openLinked > 1 ? 's' : ''} liée${openLinked > 1 ? 's' : ''} : annulez-${openLinked > 1 ? 'les' : 'la'} d'abord dans le plan d'actions.` : 'Doublon, faux signalement, hors sujet…'} />
+              tooltip={openLinked > 0 ? `${openLinked} action${openLinked > 1 ? 's' : ''} liée${openLinked > 1 ? 's' : ''} : abandonnez-${openLinked > 1 ? 'les' : 'la'} d'abord dans le plan d'actions.` : 'Doublon, faux signalement, hors sujet…'} />
           )}
           {canRevert && !e.dismissed && e.step > 0 && (
             <StepBackButton key={`back-${e.step}`} id={e.id} reopen={closed} label={closed ? "Rouvrir l'événement" : `Revenir à « ${EVENT_STEPS[e.step - 1]} »`} />
@@ -403,8 +426,7 @@ function EventCard({ detail, log, options, actionOptions, canEdit, canRevert, ca
         <Analysis method={method} content={analyses[method]} />
       </div>
 
-      <EventActions items={actionItems} options={actionOptions} canManage={canEdit}
-        newDefaults={{ origin: e.type === 'RC' ? 'client' : 'ev', originRef: e.id, eventId: e.id, siteId: e.siteId, pilotId: e.pilotId ?? undefined, kind: 'C', lockOrigin: true }}
+      <EventActions eventId={e.id} items={actionItems} options={actionOptions} canCreate={qhse} newDefaults={newDefaults}
         emptyNote={`Aucune action liée — l'analyse des causes doit en produire au moins une avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`}
         addBlocked={addActionBlocker(e.step, e.dismissed)} />
 

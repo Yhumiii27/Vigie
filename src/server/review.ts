@@ -567,7 +567,7 @@ export async function deleteReviewDecision(id: number): Promise<Result> {
     .innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, id));
   if (!row) return { error: 'Décision introuvable.' };
   if (row.review.status !== 'planifiee') return { error: 'Revue tenue : les décisions du compte rendu sont conservées (corrigez leur intitulé au besoin).' };
-  if (row.d.actionId) return { error: `Décision portée par l'action ${row.d.actionId} : détachez ou annulez l'action d'abord.` };
+  if (row.d.actionId) return { error: `Décision portée par l'action ${row.d.actionId} : détachez-la ou abandonnez-la d'abord dans le plan d'actions.` };
   await db.transaction(async (tx) => {
     await tx.delete(t.reviewDecisions).where(eq(t.reviewDecisions.id, id));
     await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: row.review.id, action: 'update', summary: `Décision retirée : ${row.d.text.slice(0, 80)}` });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nextVersion } from '@/components/documents/meta';
-import { RISK_TODO_KIND, VACANT_QHSE_LEAD, type RiskFlag } from '@/lib/domain';
+import { RISK_TODO_KIND, VACANT_QHSE_LEAD, type Avancement, type RiskFlag } from '@/lib/domain';
 import type { Recipients } from './leads';
 import {
   levelName, parseProgramSnapshot, parseVersion, programCandidateIds, programDefaultIds, programLinesInScope, programTotals, riskFlag,
@@ -20,7 +20,7 @@ describe('riskFlag : alerte calculée d’un risque', () => {
   it('actions en cours : aucune alerte', () => {
     expect(riskFlag(risk(4, 4, 4, 4), [{ done: true, closedOn: '2026-09-01' }, { done: false, closedOn: null }]).flag).toBeNull();
   });
-  it('toutes les actions clôturées : résiduel encore élevé, ou à recoter depuis la dernière clôture', () => {
+  it('toutes les actions vérifiées : résiduel encore élevé, ou à recoter depuis la dernière clôture', () => {
     const closed = [{ done: true, closedOn: '2026-09-01' }, { done: true, closedOn: '2026-09-20' }];
     expect(riskFlag(risk(4, 4, 3, 3), closed)).toEqual({ flag: 'residualHigh', lastClosedOn: '2026-09-20' });
     expect(riskFlag(risk(4, 4, 2, 2), closed)).toEqual({ flag: 'toReview', lastClosedOn: '2026-09-20' });
@@ -83,7 +83,7 @@ describe('unitRiskTodos : alertes des unités au responsable QHSE du site de l�
     }]);
     expect(find('Zone B')).toEqual([
       expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], siteId: 'ville-b', count: 1, title: 'Zone B · 1 risque au résiduel encore ≥ 8', href: '/risques?risque=4' }),
-      expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], tone: 'warn', title: 'Zone B · Hydraulique — résiduel à recoter (actions clôturées)', href: '/risques?risque=5' }),
+      expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], tone: 'warn', title: 'Zone B · Hydraulique — résiduel à recoter (actions vérifiées)', href: '/risques?risque=5' }),
     ]);
   });
 
@@ -95,28 +95,33 @@ describe('unitRiskTodos : alertes des unités au responsable QHSE du site de l�
 });
 
 describe('PAPRIPACT : actions reprises et proposées (DUE-02)', () => {
-  const actions = [
-    { id: 'A-1', dueOn: '2026-03-01', status: 'done', closedOn: '2026-03-05' },
-    { id: 'A-2', dueOn: '2025-11-01', status: 'doing', closedOn: null },
-    { id: 'A-3', dueOn: '2025-11-01', status: 'done', closedOn: '2025-11-02' },
-    { id: 'A-4', dueOn: '2026-05-01', status: 'cancelled', closedOn: null },
-    { id: 'A-5', dueOn: '2026-02-01', status: 'todo', closedOn: null },
-    { id: 'A-6', dueOn: '2027-01-10', status: 'todo', closedOn: null },
-    { id: 'A-10', dueOn: '2026-03-01', status: 'todo', closedOn: null },
-    { id: 'A-7', dueOn: '2025-12-31', status: 'verify', closedOn: null },
+  // Avancements du plan d'actions QSE : Vérifiée = close (closed_on = date de la vérification), Abandonnée exclue ;
+  // Terminée (à vérifier) et Reportée restent non closes.
+  const actions: { id: string; dueOn: string; status: Avancement; closedOn: string | null }[] = [
+    { id: 'A-1', dueOn: '2026-03-01', status: 'verifiee', closedOn: '2026-03-05' },
+    { id: 'A-2', dueOn: '2025-11-01', status: 'p40', closedOn: null },
+    { id: 'A-3', dueOn: '2025-11-01', status: 'verifiee', closedOn: '2025-11-02' },
+    { id: 'A-4', dueOn: '2026-05-01', status: 'abandonnee', closedOn: null },
+    { id: 'A-5', dueOn: '2026-02-01', status: 'a_faire', closedOn: null },
+    { id: 'A-6', dueOn: '2027-01-10', status: 'a_faire', closedOn: null },
+    { id: 'A-10', dueOn: '2026-03-01', status: 'initiee', closedOn: null },
+    { id: 'A-7', dueOn: '2025-12-31', status: 'terminee', closedOn: null },
+    { id: 'A-8', dueOn: '2025-06-30', status: 'reportee', closedOn: null },
+    // Vérifiée en 2026 d'une action à date cible 2025 : proposée à l'ajout en 2026, pas reprise d'office.
+    { id: 'A-9', dueOn: '2025-12-15', status: 'verifiee', closedOn: '2026-01-20' },
   ];
   // A-5 n'est rattachée à aucun risque en vigueur.
-  const linked = new Set(['A-1', 'A-2', 'A-3', 'A-4', 'A-6', 'A-7', 'A-10']);
+  const linked = new Set(['A-1', 'A-2', 'A-3', 'A-4', 'A-6', 'A-7', 'A-8', 'A-9', 'A-10']);
 
-  it('reprise : échéance dans l’année ou report d’une action encore ouverte ; annulées et non rattachées exclues', () => {
-    expect(programDefaultIds(actions, linked, 2026)).toEqual(['A-2', 'A-7', 'A-1', 'A-10']);
-    expect(programDefaultIds(actions, linked, 2027)).toEqual(['A-2', 'A-7', 'A-10', 'A-6']);
+  it('reprise : date cible dans l’année ou report d’une action non close ; abandonnées et non rattachées exclues', () => {
+    expect(programDefaultIds(actions, linked, 2026)).toEqual(['A-8', 'A-2', 'A-7', 'A-1', 'A-10']);
+    expect(programDefaultIds(actions, linked, 2027)).toEqual(['A-8', 'A-2', 'A-7', 'A-10', 'A-6']);
     expect(programDefaultIds(actions, new Set(), 2026)).toEqual([]);
   });
 
-  it('ajout : rattachées, non annulées, hors programme, ouvertes ou clôturées dans l’année', () => {
-    expect(programCandidateIds(actions, linked, new Set(['A-2']), 2026)).toEqual(['A-7', 'A-1', 'A-10', 'A-6']);
-    expect(programCandidateIds(actions, linked, new Set(), 2025)).toEqual(['A-2', 'A-3', 'A-7', 'A-10', 'A-6']);
+  it('ajout : rattachées, non abandonnées, hors programme, non closes ou vérifiées dans l’année', () => {
+    expect(programCandidateIds(actions, linked, new Set(['A-2']), 2026)).toEqual(['A-8', 'A-9', 'A-7', 'A-1', 'A-10', 'A-6']);
+    expect(programCandidateIds(actions, linked, new Set(), 2025)).toEqual(['A-8', 'A-2', 'A-3', 'A-7', 'A-10', 'A-6']);
   });
 
   it('totaux, lecture de l’instantané, périmètre', () => {

@@ -7,27 +7,36 @@ import {
 // Parcours d'un événement (règles de src/components/events/shared.ts, QUA-03) : passage d'étape, ajout d'action, verrou.
 
 const ctx = { pilotId: 'sbenali' as string | null, hasAnalysis: true, dismissed: false, methodLabel: 'Arbre des causes', missing: [] };
-const done = { status: 'done' }, open = { status: 'doing' }, cancelled = { status: 'cancelled' };
+// Avancements du plan d'actions QSE : Vérifiée (close), 40 % (ouverte), Abandonnée (non comptée), Terminée (à vérifier).
+const done = { status: 'verifiee' }, open = { status: 'p40' }, cancelled = { status: 'abandonnee' };
 
 describe('advanceBlocker : passage à l’étape suivante', () => {
   it('« Qualifié » exige un pilote', () => {
     expect(advanceBlocker(0, [], { ...ctx, pilotId: null })).toBe("Désignez un pilote (Modifier) avant le passage à l'étape « Qualifié ».");
     expect(advanceBlocker(0, [], ctx)).toBeNull();
   });
-  it('« Actions » exige l’analyse des causes puis une action liée (annulées non comptées)', () => {
+  it('« Actions » exige l’analyse des causes puis une action liée (abandonnées non comptées)', () => {
     expect(advanceBlocker(2, [done], { ...ctx, hasAnalysis: false })).toBe("Saisissez l'analyse des causes (méthode « Arbre des causes ») avant le passage à l'étape « Actions ».");
     expect(advanceBlocker(2, [cancelled], ctx)).toBe("Liez au moins une action avant le passage à l'étape « Actions ».");
     expect(advanceBlocker(2, [open], ctx)).toBeNull();
+    // Rôle qui ne crée pas d'action (ACT-22) : rappel que les actions QSE sont créées par le service QHSE.
+    expect(advanceBlocker(2, [], { ...ctx, canCreateActions: false })).toBe(
+      "Liez au moins une action avant le passage à l'étape « Actions ». Les actions QSE sont créées par le service QHSE.",
+    );
+    expect(advanceBlocker(2, [], { ...ctx, canCreateActions: true })).toBe("Liez au moins une action avant le passage à l'étape « Actions ».");
   });
-  it('« Efficacité vérifiée » et clôture : toutes les actions liées clôturées', () => {
+  it('« Efficacité vérifiée » et clôture : toutes les actions liées vérifiées (EVT-15)', () => {
     expect(advanceBlocker(3, [done, open, open, cancelled], ctx)).toBe(
-      "2 actions liées restent à clôturer après vérification d'efficacité avant le passage à l'étape « Efficacité vérifiée ».",
+      "2 actions liées ne sont pas encore vérifiées : vérifiez-les (ou abandonnez-les) dans le plan d'actions avant le passage à l'étape « Efficacité vérifiée ».",
     );
-    expect(advanceBlocker(4, [done, { status: 'verify' }], ctx)).toBe(
-      "1 action liée reste à clôturer après vérification d'efficacité avant le passage à l'étape « Clôturé ».",
+    // Terminée — à vérifier : réalisée, mais son efficacité n'est pas vérifiée ; Reportée : ouverte.
+    expect(advanceBlocker(4, [done, { status: 'terminee' }], ctx)).toBe(
+      "1 action liée n'est pas encore vérifiée : vérifiez-la (ou abandonnez-la) dans le plan d'actions avant le passage à l'étape « Clôturé ».",
     );
+    expect(advanceBlocker(3, [done, { status: 'reportee' }], ctx)).toMatch(/^1 action liée n'est pas encore vérifiée/);
     expect(advanceBlocker(4, [cancelled], ctx)).toBe("Aucune action liée : l'efficacité ne peut pas être vérifiée.");
     expect(advanceBlocker(4, [done, cancelled], ctx)).toBeNull();
+    expect(advanceBlocker(3, [{ status: 'a_faire' }, { status: 'initiee' }, { status: 'p80' }, done], ctx)).toMatch(/^3 actions liées ne sont pas encore vérifiées/);
   });
   it('classé sans suite ou déjà clôturé', () => {
     expect(advanceBlocker(1, [], { ...ctx, dismissed: true })).toBe('Événement classé sans suite.');

@@ -3,13 +3,11 @@
 import { useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
 import { Dialog } from '@/components/Dialog';
 import { ConfirmButton, ErrorLine, Notice, muted, useRun } from '@/components/prevention/parts';
 import { Icon, ToneTag } from '@/components/ui';
-import { addDays, fmtDate, fmtDayMonth, fmtLong } from '@/lib/dates';
+import { addDays, fmtDate, fmtLong } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { FormOptions } from '@/lib/data/options';
 import type { SitemapData } from '@/lib/data/sitemap';
 import { addConflictToPlan, moveActivity, saveShape } from '@/server/sitemap';
 import { activeOn, centroid, detectConflicts, dist, interferenceLine, type CoInput, type Conflict, type Pt } from './coactivity';
@@ -79,10 +77,13 @@ type Props = {
   canManage: boolean;
   /** Date demandée (?date=) ou date du jour. */
   initialDate: string;
-  actionOptions: Pick<FormOptions, 'people' | 'origins' | 'sites' | 'allSites'>;
 };
 
-export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: Props) {
+/**
+ * Carte du site. Coactivité : report des mesures dans le plan de prévention seulement ; aucune action QSE (réponses du
+ * service QHSE du 15/10/2026 : la prévention donne lieu à des actions immédiates, non enregistrées dans les actions QSE).
+ */
+export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   const { site, map, choices, toPosition, now, focus } = data;
   const rule = { seveso: site.seveso, ppFromFirstMinute: site.ppFromFirstMinute };
   const mapRef = useRef<MapHandle>(null);
@@ -218,24 +219,6 @@ export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: P
     setSelection({ kind: 'activity', id });
     setDialog(dialog?.type === 'activity' ? { type: 'activity', id, mode: 'view' } : null);
     if (startOn && endOn && !(startOn <= date && date <= endOn)) setDate(startOn);
-  };
-
-  // ─── Coactivité : action et report dans le plan de prévention ─────────
-
-  const actionDefaults = (c: Conflict): ActionDefaults => {
-    const a = byId.get(c.a), b = byId.get(c.b);
-    const tomorrow = addDays(now, 1);
-    return {
-      title: truncate(`Maîtriser la coactivité du ${fmtDayMonth(c.date)} · ${c.title}${c.place ? ` (${c.place})` : ''}`, 200),
-      description: `${c.description}\nMesures recommandées : ${c.measures.map(lcfirst).join(' ; ')}.`,
-      origin: 'prevention',
-      originRef: c.planIds[0] ?? `Coactivité ${fmtDate(c.date)}`,
-      lockOrigin: true,
-      siteId: site.id,
-      pilotId: a?.ownerId ?? b?.ownerId ?? undefined,
-      dueOn: c.date > tomorrow ? addDays(c.date, -1) : tomorrow,
-      kind: 'P',
-    };
   };
 
   // ─── Fenêtres ─────────────────────────────────────────────────────────
@@ -499,9 +482,8 @@ export function SiteMapScreen({ data, canManage, initialDate, actionOptions }: P
                       <summary className={styles.summary}><i className="ph ph-caret-right" aria-hidden />Mesures recommandées ({c.measures.length})</summary>
                       <ul className={styles.measures} style={{ marginTop: 4 }}>{c.measures.map((m) => <li key={m}>{m}</li>)}</ul>
                     </details>
-                    {canManage && (
+                    {canManage && c.planIds.length > 0 && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <NewActionButton options={actionOptions} defaults={actionDefaults(c)} label="Créer l'action" icon="ph-list-plus" className="btn btn-secondary vg-btn-sm" />
                         {c.planIds.map((planId) => (
                           <AddToPlan key={planId} siteId={site.id} conflict={c} planId={planId} single={c.planIds.length === 1}
                             linked={[byId.get(c.a), byId.get(c.b)].find((x) => x?.preventionPlanId === planId)} />

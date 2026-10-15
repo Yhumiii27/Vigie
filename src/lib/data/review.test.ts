@@ -61,14 +61,15 @@ describe('reviewFollowUp : suivi des revues précédentes (§9.3.2 a)', () => {
     id: 1, reviewId: 1, kind: 'decision', text: 'Décision', pilotId: 'p1', dueOn: '2026-06-30', actionId: null, sort: 0, ...over,
   });
   const action = (over: Partial<ActionRow>): ActionRow => ({
-    id: 'A-1', title: 'Action', origin: 'rev', originRef: '', pilotId: 'p1', dueOn: '2026-06-30', status: 'doing', kind: 'P', reviewId: null,
+    id: 'A-1', detail: 'Action', source: 'revue_direction', originRef: '', pilotId: 'p1', openedOn: '2025-12-11', dueOn: '2026-06-30', initialDueOn: '2026-06-30',
+    status: 'p40', reviewId: null,
     closedOn: null, cancelledAt: null, cancelledById: null, cancelReason: null, efficacyNote: null, siteId: null, createdAt: new Date('2026-01-01T10:00:00Z'),
     ...over,
   } as ActionRow);
   const prior = [{ id: 2, reviewOn: '2026-06-18' }, { id: 1, reviewOn: '2025-12-11' }, { id: 0, reviewOn: '2024-12-12' }];
   const base = { prior, people, asOf: '2026-12-10', from: '2025-12-11' };
 
-  it('décision sans action (warn), objectif sans action (neutral), action annulée avec son motif', () => {
+  it('décision sans action (warn), objectif sans action (neutral), action abandonnée avec son motif', () => {
     const rows = reviewFollowUp({
       ...base,
       decisions: [
@@ -76,7 +77,7 @@ describe('reviewFollowUp : suivi des revues précédentes (§9.3.2 a)', () => {
         decision({ id: 2, text: 'Développer', kind: 'decision' }),
         decision({ id: 3, text: 'Étudier', actionId: 'A-2' }),
       ],
-      actions: [action({ id: 'A-2', status: 'cancelled', cancelledAt: new Date('2026-09-24T09:00:00Z'), cancelReason: 'Doublon', reviewId: 1 })],
+      actions: [action({ id: 'A-2', status: 'abandonnee', cancelledAt: new Date('2026-09-24T09:00:00Z'), cancelReason: 'Doublon', reviewId: 1 })],
     });
     const by = new Map(rows.map((r) => [r.text, r]));
     expect(by.get('Recruter')).toMatchObject({ state: 'no_action', tone: 'neutral', review: 'Revue du 11/12/2025', pilot: '[P. Un]' });
@@ -93,13 +94,18 @@ describe('reviewFollowUp : suivi des revues précédentes (§9.3.2 a)', () => {
         decision({ id: 12, reviewId: 2, text: 'Dernière, close', actionId: 'A-3' }),
       ],
       actions: [
-        action({ id: 'A-3', status: 'done', closedOn: '2026-08-01', reviewId: 2 }),
-        action({ id: 'A-4', title: 'Rattachée sans décision', status: 'todo', dueOn: '2026-11-30', reviewId: 2 }),
-        action({ id: 'A-5', title: 'Ancienne action close', status: 'done', reviewId: 0 }),
-        action({ id: 'A-6', title: 'Ancienne action ouverte', status: 'doing', reviewId: 0, dueOn: '2025-06-30' }),
+        action({ id: 'A-3', status: 'verifiee', closedOn: '2026-08-01', reviewId: 2 }),
+        action({ id: 'A-4', detail: 'Rattachée sans décision', status: 'a_faire', dueOn: '2026-11-30', reviewId: 2 }),
+        action({ id: 'A-5', detail: 'Ancienne action close', status: 'verifiee', reviewId: 0 }),
+        action({ id: 'A-6', detail: 'Ancienne action ouverte\nDétail sur une deuxième ligne', status: 'p40', reviewId: 0, dueOn: '2025-06-30' }),
+        // Terminée — à vérifier, Reportée : encore à suivre (non closes).
+        action({ id: 'A-7', detail: 'Ancienne action terminée', status: 'terminee', reviewId: 0, dueOn: '2025-05-31' }),
+        action({ id: 'A-8', detail: 'Ancienne action reportée', status: 'reportee', reviewId: 0, dueOn: '2025-04-30' }),
       ],
     });
-    expect(rows.map((r) => r.text)).toEqual(['Rattachée sans décision', 'Ancienne action ouverte', 'Ancienne encore due', 'Dernière, close']);
+    expect(rows.map((r) => r.text)).toEqual([
+      'Rattachée sans décision', 'Ancienne action reportée', 'Ancienne action terminée', 'Ancienne action ouverte', 'Ancienne encore due', 'Dernière, close',
+    ]);
     expect(rows[0]).toMatchObject({ kind: 'action', state: 'action', open: true, action: { id: 'A-4' } });
     expect(rows.at(-1)).toMatchObject({ state: 'action', open: false, action: { id: 'A-3', status: expect.any(String) } });
   });

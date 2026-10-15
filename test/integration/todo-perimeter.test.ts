@@ -40,10 +40,12 @@ const changeLogCount = async () => (await (await getDb()).select({ id: t.changeL
 
 beforeAll(async () => {
   const db = await getDb();
+  const row = { openedOn: '2026-10-01', status: 'a_faire' as const, source: 'evenement' as const, originRef: 'EV-2026-128', pilotId: 'sbenali',
+    priority: 'moyen_terme' as const, domain: 'securite' as const, problem: 'Zone de test non balisée.', verifyDueOn: '2026-11-30' };
   await db.insert(t.actions).values([
-    { id: ID, title: 'Baliser la zone de test hydraulique', origin: 'ev', originRef: 'EV-2026-128', siteId: 'ville-b', pilotId: 'sbenali', dueOn: '2026-10-12', status: 'todo', kind: 'P' },
+    { ...row, id: ID, detail: 'Baliser la zone de test hydraulique', siteId: 'ville-b', dueOn: '2026-10-12', initialDueOn: '2026-10-12' },
     // Site archivé (ville-c) : échéance du périmètre dont le site ne peut plus être sélectionné.
-    { id: 'A-T06', title: 'Remettre les clés du dépôt fermé', origin: 'ev', originRef: 'EV-2026-128', siteId: 'ville-c', pilotId: 'sbenali', dueOn: '2026-10-13', status: 'todo', kind: 'P' },
+    { ...row, id: 'A-T06', detail: 'Remettre les clés du dépôt fermé', siteId: 'ville-c', dueOn: '2026-10-13', initialDueOn: '2026-10-13' },
   ]);
 });
 
@@ -74,6 +76,19 @@ describe('échéances de la personne sur les autres sites (TDB-05)', () => {
     expect((await find())).toMatchObject({ elsewhere: false });
     expect((await loadCounters()).badges.actions).toBe(await screenCount('actions'));
     expect((await loadVisibleTodo()).some((x) => x.title.startsWith(`${ID} ·`) && x.source === 'actions' && !x.elsewhere)).toBe(true);
+  });
+
+  it('encadrement en lecture seule du plan (ACT-22, D3) : plus les échéances d\'action des autres sur son site, toujours les siennes', async () => {
+    // A-201 : en retard, site A, responsable [R. Fontaine].
+    actAs('Animateur QHSE', 'ville-a');
+    expect(await find('A-201')).toMatchObject({ kind: 'Action en retard', elsewhere: false });
+    actAs('Chef de service', 'ville-a');
+    expect(await find('A-201')).toBeUndefined();
+    expect((await loadVisibleTodo()).filter((x) => x.source === 'actions').every((x) => x.ownerIds?.includes('sbenali'))).toBe(true);
+    expect(await find('A-214')).toMatchObject({ elsewhere: false }); // la sienne, site A
+    expect(await find()).toMatchObject({ elsewhere: true }); // la sienne, site B
+    actAs('Chef de projet', 'ville-a');
+    expect(await find('A-201')).toBeUndefined();
   });
 
   it('Animateur QHSE : l\'action d\'un autre (site B) n\'apparaît que sur le site B', async () => {

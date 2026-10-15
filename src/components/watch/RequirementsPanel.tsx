@@ -3,23 +3,32 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ActionFields, type ActionDefaults } from '@/components/ActionFormDialog';
+import { ActionFields } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
+import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
+import type { ActionFormOptions } from '@/lib/action-view';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
-import { addDays, fmtDate } from '@/lib/dates';
+import { fmtDate } from '@/lib/dates';
 import { REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, TONE } from '@/lib/domain';
 import type { FormOptions } from '@/lib/data/options';
-import { LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
+import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
 import { archiveRequirement, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
+import { requirementActionDefaults } from './action-defaults';
 import { ArchivedBanner, FILES_HINT, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'actions'>>;
+type Opts = Pick<FormOptions, 'people' | 'sites'>;
+/**
+ * Plan d'actions (ACT-22, réponses du service QHSE du 15/10/2026) : `actionOptions` (listes du formulaire d'action) et
+ * `linkActions` (actions ouvertes à rattacher) ne sont fournis qu'au service QHSE, seul à créer une action et à modifier
+ * ses rattachements ; absents pour les autres rôles.
+ */
+type ActionProps = { actionOptions?: ActionFormOptions | null; linkActions?: readonly Option[] };
 type Featured = { id: number; text: string } | null;
 type View = 'fiche' | 'evaluer' | 'historique';
 type EvalInitial = { evaluation: string; note: string | null };
@@ -31,7 +40,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 
 // ─── Tableau des exigences ──────────────────────────────────────────────────
 
-export function RequirementsPanel({ rows, archives = false, canManage, canApprove, options, today, initialId, closeHref }: {
+export function RequirementsPanel({ rows, archives = false, canManage, canApprove, options, actionOptions, linkActions, today, initialId, closeHref }: ActionProps & {
   /** Toutes les exigences (archivées comprises) : la fiche ouverte reste affichée après son archivage. */
   rows: RequirementView[];
   /** Liste des exigences archivées (`?archives=1`) au lieu des exigences en vigueur. */
@@ -101,7 +110,7 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {r.actionId ? (
                     <>
-                      <Link href={`/actions?action=${r.actionId}`} className="vg-link">{r.actionId}</Link>
+                      <Link href={actionHref(r.actionId)} className="vg-link">{r.actionId}</Link>
                       {r.action && <div style={{ ...muted, marginTop: 2, color: r.action.late ? TONE.danger.dot : muted.color }}>{r.action.statusLabel}</div>}
                     </>
                   ) : r.needsAction ? (
@@ -119,7 +128,8 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
       <Dialog open={!!sel} onClose={close} width={660}
         kicker={sel ? `Veille réglementaire · ${sel.domain}${sel.archived ? ' · archivée' : ''}` : undefined} title={sel?.text ?? ''}>
         {sel && (
-          <RequirementDetail key={sel.id} r={sel} canManage={canManage} canApprove={canApprove} options={options} today={today}
+          <RequirementDetail key={sel.id} r={sel} canManage={canManage} canApprove={canApprove} options={options} actionOptions={actionOptions}
+            linkActions={linkActions} today={today}
             featured={featured && featured.id !== sel.id ? { id: featured.id, text: featured.text } : null} onClose={close} />
         )}
       </Dialog>
@@ -138,10 +148,12 @@ export function AddRequirementButton({ options, featured }: { options: Opts; fea
 
 // ─── Fiche d'une exigence ───────────────────────────────────────────────────
 
-function RequirementDetail({ r, canManage, canApprove, options, today, featured, onClose }: {
+function RequirementDetail({ r, canManage, canApprove, options, actionOptions, linkActions, today, featured, onClose }: ActionProps & {
   r: RequirementView; canManage: boolean; canApprove: boolean; options: Opts; today: string; featured: Featured; onClose: () => void;
 }) {
   const editable = canManage && !r.archived;
+  // Création et rattachements d'actions : service QHSE seulement (ACT-22), sur une exigence en vigueur.
+  const creatable = !r.archived && actionOptions ? actionOptions : null;
   const [view, setView] = useState<View>('fiche');
   // « Créer l'action » s'affiche dans cette fenêtre, à la place du formulaire de la fiche : une fenêtre
   // NewActionButton imbriquée dupliquerait les identifiants de champs de la fiche (pilotId, dueOn).
@@ -206,14 +218,14 @@ function RequirementDetail({ r, canManage, canApprove, options, today, featured,
         </div>
       )}
 
-      <LinkedAction r={r} actions={editable ? options.actions : undefined}
-        onCreate={editable && !creating ? () => { setNotice(null); setCreating(true); } : undefined} />
+      <LinkedAction r={r} actions={linkActions && !r.archived ? linkActions : undefined} canUnlink={!!linkActions} showQhseNotice={editable && !creatable}
+        onCreate={creatable && !creating ? () => { setNotice(null); setCreating(true); } : undefined} />
 
-      {editable && creating ? (
+      {creatable && creating ? (
         <>
           <div className="vg-eyebrow">Nouvelle action · plan d&apos;actions unique</div>
           {/* Rendu sur un état local seulement : l'action liée arrive avec le même rafraîchissement que le succès du formulaire. */}
-          <ActionFields options={options} defaults={actionDefaults(r, today)}
+          <ActionFields options={creatable} defaults={requirementActionDefaults(r, today)}
             onCancel={() => setCreating(false)} onDone={() => { setCreating(false); setView('fiche'); setNotice('action'); }} />
         </>
       ) : (
@@ -348,8 +360,13 @@ function EvaluationHistory({ r }: { r: RequirementView }) {
   );
 }
 
-/** Action liée (lecture seule, détachable) ou « Créer l'action » / « Rattacher » pour un écart ou une analyse d'écart. */
-function LinkedAction({ r, actions, onCreate }: { r: RequirementView; actions?: FormOptions['actions']; onCreate?: () => void }) {
+/**
+ * Action liée (lecture seule ; détachable par le QHSE) ou, pour un écart ou une analyse d'écart sans action, « Créer
+ * l'action » / « Rattacher » (QHSE seulement, ACT-22) ; l'encadrement qui saisit la veille lit QHSE_ONLY_CREATE_MESSAGE.
+ */
+function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate }: {
+  r: RequirementView; actions?: readonly Option[]; canUnlink: boolean; showQhseNotice: boolean; onCreate?: () => void;
+}) {
   const box = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', fontSize: 12.5 } as const;
   const link = `requirement:${r.id}`;
   if (r.actionId) {
@@ -358,12 +375,12 @@ function LinkedAction({ r, actions, onCreate }: { r: RequirementView; actions?: 
         <Icon name="ph-list-checks" size={15} style={{ color: 'var(--color-accent)' }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ color: 'var(--color-neutral-500)' }}>Action liée </span>
-          <Link href={`/actions?action=${r.actionId}`} className="vg-link" style={{ fontSize: 12.5 }}>{r.actionId}</Link>
-          {r.action && <span> · {r.action.title}</span>}
-          {r.action && <span style={{ ...muted, display: 'block', color: r.action.late ? TONE.danger.dot : muted.color }}>Échéance {r.action.due}</span>}
+          <Link href={actionHref(r.actionId)} className="vg-link" style={{ fontSize: 12.5 }}>{r.actionId}</Link>
+          {r.action && <span> · {r.action.label}</span>}
+          {r.action && <span style={{ ...muted, display: 'block', color: r.action.late ? TONE.danger.dot : muted.color }}>Date cible {r.action.due}</span>}
         </span>
         {r.action && <ToneTag tone={r.action.tone} style={{ whiteSpace: 'nowrap' }}>{r.action.statusLabel}</ToneTag>}
-        {actions && <LinkActionButton link={link} current={r.actionId} />}
+        {canUnlink && !r.archived && <LinkActionButton link={link} current={r.actionId} />}
       </div>
     );
   }
@@ -375,6 +392,7 @@ function LinkedAction({ r, actions, onCreate }: { r: RequirementView; actions?: 
         {r.evaluation === 'ecart'
           ? "Écart sans action de mise en conformité dans le plan d'actions."
           : "Analyse d'écart à suivre dans le plan d'actions."}
+        {showQhseNotice && <span style={{ ...muted, display: 'block' }}>{QHSE_ONLY_CREATE_MESSAGE}</span>}
       </span>
       {actions && <LinkActionButton link={link} actions={actions} label="Rattacher" />}
       {onCreate && (
@@ -384,23 +402,6 @@ function LinkedAction({ r, actions, onCreate }: { r: RequirementView; actions?: 
       )}
     </div>
   );
-}
-
-/** Titre « verbe d'action + objet » : Analyser l'écart / Traiter l'écart « constat » / Mettre en conformité : texte. */
-function actionDefaults(r: RequirementView, today: string): ActionDefaults {
-  const note = r.evaluationNote ? ` « ${r.evaluationNote} »` : '';
-  const verb = r.evaluation === 'analyse' ? "Analyser l'écart" : note ? "Traiter l'écart" : 'Mettre en conformité';
-  return {
-    title: `${verb}${note} : ${r.text}`.slice(0, 200),
-    origin: 'watch',
-    originRef: r.text.slice(0, 120),
-    lockOrigin: true,
-    link: `requirement:${r.id}`,
-    pilotId: r.pilotId ?? undefined,
-    dueOn: r.dueOn && r.dueOn > today ? r.dueOn : addDays(today, 30),
-    kind: r.evaluation === 'ecart' ? 'C' : 'P',
-    siteId: null,
-  };
 }
 
 // ─── Formulaires ────────────────────────────────────────────────────────────

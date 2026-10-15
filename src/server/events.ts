@@ -10,6 +10,7 @@ import {
   advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
 } from '@/components/events/shared';
+import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';
 import { loadFirstAiders } from '@/lib/data/events';
@@ -69,7 +70,7 @@ function readLocalDateTime(f: Reader, name: string, opts: { required?: boolean; 
 
 /**
  * Passe l'événement à l'étape suivante du workflow (règles : pilote et données propres au type pour « Qualifié », analyse
- * puis action liée pour « Actions », actions clôturées pour « Efficacité vérifiée » ; clôture d'un AT par un rôle habilité,
+ * puis action liée pour « Actions », actions vérifiées pour « Efficacité vérifiée » ; clôture d'un AT par un rôle habilité,
  * déclaration CPAM saisie, inscription au registre des accidents bénins ou absence de déclaration motivée) et trace la transition.
  */
 export async function advanceEvent(id: string): Promise<{ error?: string }> {
@@ -90,6 +91,7 @@ export async function advanceEvent(id: string): Promise<{ error?: string }> {
     pilotId: ev.pilotId, hasAnalysis: analysisFilled(ev.analysisMethod, analysis?.content), dismissed: !!ev.dismissedAt,
     methodLabel: METHODS.find(([k]) => k === ev.analysisMethod)?.[1] ?? ev.analysisMethod,
     missing: missingQualification(ev),
+    canCreateActions: canCreateAction(session.role),
     accident: ev.type === 'AT' ? { health, cpamPending: cpamPending(ev, !!entry), benign: ev.injury === 'soins', duty: declarationDuty(ev) } : undefined,
   });
   if (blocker) return { error: blocker };
@@ -137,7 +139,8 @@ export async function revertEvent(_prev: FormState, fd: FormData): Promise<FormS
 
 /**
  * Classe un événement sans suite (doublon, faux signalement, hors sujet) : jamais supprimé, exclu des indicateurs.
- * Animateur QHSE et direction, motif obligatoire ; refusé s'il porte encore des actions non annulées.
+ * Animateur QHSE et direction, motif obligatoire ; refusé s'il porte encore des actions non abandonnées (une action
+ * Vérifiée compte : elle reste rattachée à l'événement, qui ne peut plus être classé sans suite).
  */
 export async function dismissEvent(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireApprover();
@@ -153,10 +156,10 @@ export async function dismissEvent(_prev: FormState, fd: FormData): Promise<Form
   if (siteError) return { error: siteError };
   const lock = eventLockReason(ev);
   if (lock) return { error: ev.dismissedAt ? 'Événement déjà classé sans suite.' : lock };
-  const linked = await db.select({ id: t.actions.id }).from(t.actions).where(and(eq(t.actions.eventId, id), ne(t.actions.status, 'cancelled')));
+  const linked = await db.select({ id: t.actions.id }).from(t.actions).where(and(eq(t.actions.eventId, id), ne(t.actions.status, 'abandonnee')));
   if (linked.length) {
     const s = linked.length > 1 ? 's' : '';
-    return { error: `${linked.length} action${s} liée${s} : annulez-${s ? 'les' : 'la'} d'abord dans le plan d'actions.` };
+    return { error: `${linked.length} action${s} liée${s} : abandonnez-${s ? 'les' : 'la'} d'abord dans le plan d'actions.` };
   }
   // Rôle validateur = rôle habilité aux données de santé : le message ne révèle rien à un autre rôle.
   if (await activeBenign(db, id)) return { error: "Annulez d'abord l'inscription au registre des accidents bénins." };

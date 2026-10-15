@@ -3,18 +3,30 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { NOTIFY_HORIZON_DAYS, TONE, type Tone } from '@/lib/domain';
+import type { NotificationFamily } from '@/lib/data/notifications';
 import { markAllRead } from '@/server/notifications';
 import { TodoLink } from './TodoLink';
 
 type Item = {
   key: string; date: string; kind: string; tone: Tone; title: string; who: string; href?: string; urgent: boolean; read: boolean;
-  /** Échéance d'un autre site du périmètre (TDB-05) : son site est sélectionné à l'ouverture. */
+  /** Élément d'un autre site du périmètre (TDB-05) : son site est sélectionné à l'ouverture. */
   elsewhere: boolean; siteLabel?: string;
+  /** Famille (src/lib/data/notifications.ts) : échéance (pastille de couleur) ou information (icône du type). */
+  family: NotificationFamily;
 };
 
 const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
-/** Cloche de l'en-tête : alertes et échéances proches ; la pastille compte les non lues (état lu par personne, en base). */
+/** Icône des informations : action confiée (ACT-30), commentaire ou preuve du responsable (ACT-31), rappel du mercredi (ACT-32). */
+const FAMILY_ICON: Record<Exclude<NotificationFamily, 'todo'>, string> = {
+  action_confiee: 'ph-user-plus', action_commentaire: 'ph-chat-circle-text', action_preuve: 'ph-paperclip', rappel: 'ph-calendar-check',
+  information: 'ph-info',
+};
+
+/**
+ * Cloche de l'en-tête : échéances proches et informations (notifications, rappel du mercredi) ; la pastille compte les non
+ * lues (état lu par personne, en base).
+ */
 export function NotificationBell({ items }: { items: Item[] }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -46,14 +58,16 @@ export function NotificationBell({ items }: { items: Item[] }) {
         <div className="vg-menu vg-notif-panel elev-md" role="dialog" aria-label="Notifications">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', padding: '4px 8px 6px' }}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>Notifications</span>
-            <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{unread} non lue{unread > 1 ? 's' : ''} · {NOTIFY_HORIZON_DAYS} prochains jours</span>
+            <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{unread} non lue{unread > 1 ? 's' : ''} · échéances à {NOTIFY_HORIZON_DAYS} jours et informations</span>
           </div>
           {items.length === 0 && <div style={{ padding: '10px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Rien à signaler.</div>}
           {items.map((n) => (
             <TodoLink key={n.key} item={n} markRead onOpen={() => setOpen(false)} className={n.href ? 'vg-menu-item' : undefined}
               style={{ display: 'grid', gridTemplateColumns: '18px 1fr', gap: 9, padding: '7px 8px', borderRadius: 'var(--radius-sm)', textDecoration: 'none', opacity: n.read ? 0.6 : 1 }}>
-              <span style={{ display: 'flex', gap: 4, marginTop: 5 }}>
-                <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[n.tone].dot }} />
+              <span style={{ display: 'flex', gap: 4, marginTop: n.family === 'todo' ? 5 : 1 }}>
+                {n.family === 'todo'
+                  ? <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[n.tone].dot }} />
+                  : <i className={`ph ${FAMILY_ICON[n.family]}`} style={{ fontSize: 13, color: TONE[n.tone].dot }} aria-hidden />}
                 {!n.read && <span className="vg-unread" title="Non lue" />}
               </span>
               <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>

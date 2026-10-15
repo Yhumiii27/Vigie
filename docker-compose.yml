@@ -42,6 +42,9 @@ services:
       # Chemins des volumes (fixés par l'image : ne pas les redéfinir dans .env).
       VIGIE_UPLOAD_DIR: /data/uploads
       VIGIE_BACKUP_DIR: /data/backups
+      # E-mails (rappel du mercredi) : transport « aucun » en production (défaut hors démonstration) tant que le compte
+      # d'envoi de l'entreprise n'est pas branché (relais SMTP ou Microsoft Graph, ACT-34) : pas de volume pour /data/mails.
+      # Une recette avec VIGIE_MAIL_TRANSPORT=fichier dans .env écrit les messages dans /data/mails (volume anonyme de l'image).
     ports:
       # Local seulement : le reverse proxy HTTPS (Caddy ci-dessous, nginx, IIS…) publie Vigie.
       - "127.0.0.1:${VIGIE_PORT:-3000}:3000"

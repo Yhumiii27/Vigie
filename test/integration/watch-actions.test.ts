@@ -4,8 +4,9 @@ import { actAs, freshDemoDatabase, lastLog } from '../helpers';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { loadCounters } from '@/lib/data/counters';
-import { loadWatchSignals } from '@/lib/data/watch';
+import { loadWatch, loadWatchSignals } from '@/lib/data/watch';
 import { linkAction } from '@/server/links';
+import { saveAction } from '@/server/plan';
 import { saveControl, saveRequirement } from '@/server/watch';
 
 // Veille et contrôles : pilote, responsable ou site conservés tant qu'ils ne sont pas remplacés (VEI-01) ; réserves sans
@@ -69,11 +70,18 @@ describe('réserves sans action de levée (VEI-02)', () => {
     const before = (await loadCounters()).badges.watch ?? 0;
     const db = await getDb();
     const [open] = await db.select({ id: t.actions.id }).from(t.actions)
-      .where(and(eq(t.actions.siteId, 'ville-a'), inArray(t.actions.status, ['todo', 'doing']))).orderBy(asc(t.actions.id));
+      .where(and(eq(t.actions.siteId, 'ville-a'), inArray(t.actions.status, ['a_faire', 'initiee', 'p20', 'p40', 'p60', 'p80']))).orderBy(asc(t.actions.id));
+    // Rattachement réservé au service QHSE (ACT-22, réponses du 15/10/2026) : l'encadrement qui suit le contrôle ne rattache rien.
+    actAs('Chef de service', 'ville-a');
+    expect((await linkAction(`control:${electrical.id}`, open.id)).error).toBeTruthy();
+    actAs('Animateur QHSE', 'ville-a');
     expect(await linkAction(`control:${electrical.id}`, open.id)).toEqual({});
     expect((await loadCounters()).badges.watch).toBe(before - 1);
     const { todo } = await loadWatchSignals();
     expect(todo.some((i) => i.href === `/veille?onglet=controles&controle=${electrical.id}` && i.title.includes('sans action de levée'))).toBe(false);
+    // Fiche du contrôle : action liée affichée par son libellé court et son avancement.
+    const { controls } = await loadWatch();
+    expect(controls.find((c) => c.id === electrical.id)?.action).toMatchObject({ id: open.id, label: expect.any(String), statusLabel: expect.any(String) });
   });
 
   it('contrôle archivé à réserves : aucune échéance', async () => {
@@ -146,5 +154,26 @@ describe('saveControl / saveRequirement (VEI-01)', () => {
     actAs('Animateur QHSE', 'ville-a');
     expect(await saveControl({}, await controlForm(doors.id, { responsibleId: 'rfontaine' }))).toEqual({ ok: true, id: String(doors.id) });
     expect((await lastLog('control', doors.id))?.details).toContainEqual({ field: 'Responsable', from: null, to: '[R. Fontaine]' });
+  });
+});
+
+describe('création d’une action depuis la Veille (paquet 1 Actions QSE, Integration)', () => {
+  it('exigence en écart : action « Veille réglementaire » créée par le QHSE et rattachée à l’exigence ; refusée à l’encadrement', async () => {
+    const db = await getDb();
+    const [req] = (await requirements()).filter((r) => !r.actionId && (r.evaluation === 'ecart' || r.evaluation === 'analyse'));
+    const fields = {
+      source: 'veille', link: `requirement:${req.id}`, originRef: req.text.slice(0, 120), pilotId: 'clefevre', priority: 'moyen_terme', domain: 'securite',
+      problem: `${req.text} — écart`, detail: `Mettre en conformité : ${req.text}`, dueOn: '2026-11-30', verifyDueOn: '2026-12-30', riskLevel: '', siteId: 'ville-a',
+    };
+    actAs('Chef de service', 'ville-a');
+    expect((await saveAction({}, form(fields))).error).toBeTruthy();
+    actAs('Animateur QHSE', 'ville-a');
+    const r = await saveAction({}, form(fields));
+    expect(r).toMatchObject({ ok: true });
+    const [after] = await db.select().from(t.requirements).where(eq(t.requirements.id, req.id));
+    expect(after.actionId).toBe(r.id);
+    // Source non admise pour une exigence (D20 révisée : Veille ou Déchets seulement).
+    const [other] = (await requirements()).filter((x) => !x.actionId && x.id !== req.id);
+    if (other) expect(await saveAction({}, form({ ...fields, link: `requirement:${other.id}`, source: 'duerp' }))).toMatchObject({ fieldErrors: { source: expect.any(String) } });
   });
 });

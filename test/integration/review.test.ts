@@ -8,7 +8,7 @@ import { buildReviewDossier, loadMyContributions, loadReviewCard, type Review } 
 import { loadVisibleTodo } from '@/lib/data/todo';
 import type { Role } from '@/lib/domain';
 import { savePlanItem } from '@/server/audits';
-import { cancelAction } from '@/server/plan-ui';
+import { abandonAction } from '@/server/plan-ui';
 import { cancelReview, closeReview, createReview, holdReview, rescheduleReview, saveReviewDecision, setReviewItemDone } from '@/server/review';
 
 // Revue de direction du lot 2 : consultation pour l'encadrement (AUD-02), contributions sans l'écran Audits (AUD-04),
@@ -122,7 +122,7 @@ describe('AUD-04 : contributeurs de la revue, quel que soit leur rôle', () => {
 });
 
 describe('AUD-05 : suivi des décisions et actions des revues précédentes', () => {
-  it('décisions sans action, objectifs, actions closes et en cours ; action annulée avec son motif', async () => {
+  it('décisions sans action, objectifs, actions closes et en cours ; action abandonnée avec son motif', async () => {
     actAs('Animateur QHSE', 'all');
     const db = await getDb();
     const reviews: Review[] = await db.select().from(t.reviews);
@@ -135,12 +135,14 @@ describe('AUD-05 : suivi des décisions et actions des revues précédentes', ()
     expect(byText('Former les chefs')).toMatchObject({ open: true, review: 'Revue du 18/06/2026' });
     expect(rows[0].open).toBe(true);
 
-    expect(await cancelAction({}, form({ id: 'A-174', from: 'doing', reason: 'Formation reportée au plan 2027' }))).toMatchObject({ ok: true });
+    // A-174 (Reportée) : encore à suivre ; abandonnée par le service QHSE (flux A, vérifié à l'Integration).
+    expect(byText('Former les chefs')).toMatchObject({ actionId: 'A-174', action: { status: 'Reportée' } });
+    expect(await abandonAction({}, form({ id: 'A-174', from: 'reportee', reason: 'Formation reportée au plan 2027' }))).toMatchObject({ ok: true });
     const after = (await buildReviewDossier(annual, await db.select().from(t.reviews))).previousFollowUp;
     expect(after.find((r) => r.actionId === 'A-174')).toMatchObject({
       state: 'cancelled', kind: 'action', open: false, cancelled: { reason: 'Formation reportée au plan 2027', on: expect.any(String) },
     });
-    // La décision détachée de son action annulée reste suivie : sans action au plan.
+    // La décision détachée de son action abandonnée reste suivie : sans action au plan.
     expect(after.find((r) => r.text.startsWith('Former les chefs') && r.kind === 'decision')).toMatchObject({ state: 'no_action', tone: 'warn' });
   });
 });

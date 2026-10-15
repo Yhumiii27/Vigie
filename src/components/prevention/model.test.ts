@@ -68,17 +68,19 @@ describe('plan de prévention : obligation et statut', () => {
 });
 
 describe('planEndIssue : clore ou annuler un plan', () => {
-  const opts = { mandatory: true, now: NOW, openPermitIds: [] as string[], actionCount: 0 };
+  const opts = { mandatory: true, now: NOW, openPermitIds: [] as string[] };
   it('jamais pendant une intervention sans le plan obligatoire signé', () => {
     expect(planEndIssue(plan(), { ...opts, verb: 'clore' })).toBe(
       'Intervention en cours avec un plan obligatoire non signé : enregistrez les signatures des deux entreprises avant de clore le plan.',
     );
-    expect(planEndIssue(plan(), { ...opts, actionCount: 1, verb: 'annuler' })).toMatch(/^Intervention en cours .* avant d'annuler le plan\.$/);
+    expect(planEndIssue(plan(), { ...opts, verb: 'annuler' })).toMatch(/^Intervention en cours .* avant d'annuler le plan\.$/);
   });
-  it('intervention réalisée sans plan signé : écart tracé par une action d’abord', () => {
+  it('intervention réalisée sans plan signé : clôture permise sans action QSE (actions immédiates, 15/10/2026)', () => {
     const past = plan({ startOn: '2026-09-01', endOn: '2026-09-05' });
-    expect(planEndIssue(past, { ...opts, verb: 'clore' })).toBe("Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant de clore le plan.");
-    expect(planEndIssue(past, { ...opts, actionCount: 1, verb: 'clore' })).toBeNull();
+    expect(planEndIssue(past, { ...opts, verb: 'clore' })).toBeNull();
+    expect(planEndIssue(past, { ...opts, verb: 'annuler' })).toBeNull();
+    // L'écart reste un indicateur.
+    expect(startGap(past, NOW, SEVESO)).toBe('non_signe');
   });
   it('intervention à venir ou plan non obligatoire : seuls les permis actifs bloquent', () => {
     expect(planEndIssue(plan({ startOn: '2026-11-01', endOn: '2026-11-02' }), { ...opts, verb: 'annuler' })).toBeNull();
@@ -130,13 +132,12 @@ describe('écarts R. 4512-6 au démarrage (PRV-01) : plan signé après le débu
     expect(inGapWindow({ startOn: NOW }, NOW)).toBe(true);
     expect(inGapWindow({ startOn: '2026-10-10' }, NOW)).toBe(false);
   });
-  it('clore ou annuler un plan signé après le début : l’action qui trace l’écart d’abord', () => {
-    const opts = { mandatory: true, now: NOW, openPermitIds: [] as string[], actionCount: 0 };
+  it('clore ou annuler un plan signé après le début : permis actifs seulement (aucune action QSE exigée)', () => {
+    const opts = { mandatory: true, now: NOW, openPermitIds: [] as string[] };
     const late = signed('2026-10-06');
-    expect(planEndIssue(late, { ...opts, verb: 'clore' })).toBe("Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant de clore le plan.");
-    expect(planEndIssue(late, { ...opts, verb: 'annuler' })).toBe("Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant d'annuler le plan.");
-    expect(planEndIssue(late, { ...opts, actionCount: 1, verb: 'clore' })).toBeNull();
-    expect(planEndIssue(late, { ...opts, actionCount: 1, openPermitIds: ['PF-1'], verb: 'clore' })).toMatch(/^Permis rattachés encore actifs \(PF-1\)/);
+    expect(planEndIssue(late, { ...opts, verb: 'clore' })).toBeNull();
+    expect(planEndIssue(late, { ...opts, verb: 'annuler' })).toBeNull();
+    expect(planEndIssue(late, { ...opts, openPermitIds: ['PF-1'], verb: 'clore' })).toMatch(/^Permis rattachés encore actifs \(PF-1\)/);
     expect(planEndIssue(late, { ...opts, mandatory: false, verb: 'clore' })).toBeNull();
     expect(planEndIssue(signed('2026-10-05'), { ...opts, verb: 'clore' })).toBeNull();
   });

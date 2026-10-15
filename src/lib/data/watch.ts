@@ -10,7 +10,8 @@ import {
   type TodoItem, type Tone,
 } from '../domain';
 import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople } from '../queries';
-import { currentSiteId, inSite } from '../session';
+import { canReadAction } from '../action-rules';
+import { currentSiteId, getSession, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import { loadChangeLogs } from './changelog';
 import { loadPreventionCompliance } from './prevention';
@@ -86,7 +87,8 @@ export async function loadWatch() {
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [people, reqs, allControls, sites, projects, site, duerp, prevention] = await Promise.all([
+  const [session, people, reqs, allControls, sites, projects, site, duerp, prevention] = await Promise.all([
+    getSession(),
     loadPeople(),
     db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
     db.select().from(t.controls).orderBy(asc(t.controls.sort), asc(t.controls.id)),
@@ -132,10 +134,14 @@ export async function loadWatch() {
       .orderBy(asc(t.attachments.createdAt))
     : [];
   const filesOf = (type: string, id: number) => files.filter((f) => f.entityType === type && f.entityId === String(id)).map(fileView);
-  const actionById = new Map(actions.map((a) => [a.id, actionView(a, people, now)]));
+  // Action liée : libellé court (actionLabel), avancement affiché (« En retard » le cas échéant), date cible — seulement
+  // pour une action que la personne peut lire (canReadAction : plan de son périmètre, ou ses propres actions) ; une
+  // exigence vaut pour toute l'entreprise, son action peut appartenir à un site hors du périmètre : numéro seul.
+  const readable = actions.filter((a) => canReadAction(session.role, session.user.id, a, session.allowedSiteIds));
+  const actionById = new Map(readable.map((a) => [a.id, actionView(a, people, now)]));
   const actionOf = (id: string | null) => {
     const a = id ? actionById.get(id) : undefined;
-    return a ? { id: a.id, title: a.title, statusLabel: a.statusLabel, tone: a.tone, due: fmtDate(a.dueOn), late: a.late } : null;
+    return a ? { id: a.id, label: a.label, statusLabel: a.statusLabel, tone: a.tone, due: fmtDate(a.dueOn), late: a.late } : null;
   };
 
   // Contrôles actifs du site, avec statut calculé (base des contrôles rattachés aux exigences).

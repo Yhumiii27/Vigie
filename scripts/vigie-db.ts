@@ -600,7 +600,7 @@ async function main() {
   const keepRaw = value('--conserver');
   const keep = keepRaw === undefined ? undefined : Number(keepRaw);
   if (keep !== undefined && !(Number.isInteger(keep) && keep >= 1)) throw new UsageError('--conserver : nombre de sauvegardes à garder attendu (1 ou plus).');
-  if (!command || command === 'help' || flags.has('--help')) return say(USAGE);
+  if (!command || command === 'help' || command === '--help' || command === '-h' || flags.has('--help')) return say(USAGE);
 
   loadEnvConfig(process.cwd(), false, { info: () => {}, error: console.error });
   const storage = parseStorageConfig(process.env);

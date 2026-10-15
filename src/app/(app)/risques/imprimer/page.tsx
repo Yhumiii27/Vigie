@@ -160,7 +160,7 @@ export default async function DuerpPrintPage({ searchParams }: { searchParams: P
                               return (
                                 <div key={id} style={{ marginBottom: 3 }}>
                                   <span className="pp-nowrap">{id}</span>{a ? ` · ${a.title}` : ''}
-                                  {a && <span className="pp-muted" style={{ display: 'block' }}>échéance {fmtDate(a.dueOn)} · {a.status}</span>}
+                                  {a && <span className="pp-muted" style={{ display: 'block' }}>date cible {fmtDate(a.dueOn)} · {a.status}</span>}
                                 </div>
                               );
                             }) : <span className="pp-nowrap">{r.actions.join(', ')}</span>}

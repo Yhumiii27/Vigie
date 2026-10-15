@@ -4,13 +4,12 @@ import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { loadPrevention, loadPreventionCompliance, loadPreventionSignals } from '@/lib/data/prevention';
-import { saveAction } from '@/server/plan';
 import { cancelPermit, closePlan, deliverPermit, recordPlanEeSignature, savePlan, setPermitCheck, signPlanEu } from '@/server/prevention';
 
 // Lot 2, plans de prévention et permis (src/db/seeds/prevention.ts, jeu de démonstration au 09/10/2026, sites Seveso seuil
 // haut « dès la première minute ») :
 // - PRV-01 : écarts R. 4512-6 passés (plan signé après le début, intervention réalisée sans plan signé) dans les
-//   indicateurs, jamais dans le badge ; signature tardive tracée ; clôture après l'action qui trace l'écart ; date de
+//   indicateurs, jamais dans le badge ; signature tardive tracée ; clôture sans action QSE (actions immédiates, 15/10/2026) ; date de
 //   début d'une intervention commencée modifiée avec un motif ;
 // - PRV-02 : contenu réglementaire structuré (R. 4511-10, R. 4512-8, R. 4512-9) enregistré, journalisé, exigé pour signer ;
 // - PRV-03 : date de délivrance d'un permis (fiche imprimable, registre).
@@ -180,7 +179,7 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect(signals.todo.some((s) => s.title.startsWith('PP-2026-012'))).toBe(false);
   });
 
-  it('signature tardive (PP-2026-015, commencée le 06/10) : tracée, puis clôture après l’action et les permis', async () => {
+  it('signature tardive (PP-2026-015, commencée le 06/10) : tracée, puis clôture après les permis (aucune action QSE exigée)', async () => {
     actAs('Animateur QHSE', 'ville-a');
     await setPlan('PP-2026-015', {
       inspectionOn: '2026-10-08', measures: 'Zone balisée sous la mezzanine ; permis de feu journalier.', subcontracting: 'Aucun sous-traitant',
@@ -199,15 +198,10 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect(await plan('PP-2026-015')).toMatchObject({ status: 'signe', signedEuOn: '2026-10-09', signedEeOn: '2026-10-09', firstSignedOn: '2026-10-09' });
     const view = await planView('PP-2026-015');
     expect(view).toMatchObject({ missingSignature: false, startGap: { kind: 'signe_apres', past: true, signedOn: '2026-10-09' } });
-    expect(view?.closeBlock).toBe("Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant de clore le plan.");
+    expect(view?.closeBlock).toBe('Permis rattachés encore actifs (PF-2026-032) : clôturez-les ou annulez-les avant de clore le plan.');
     // L'écart sort des écarts en cours et entre dans les écarts passés.
     expect(await kpi(GAP_KPI)).toMatchObject({ value: '3', sub: 'dont 1 en cours', note: '2 plans signés après le démarrage (PP-2026-015, PP-2026-008)' });
 
-    expect(await closePlan('PP-2026-015')).toEqual({ error: "Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant de clore le plan." });
-    expect(await saveAction({}, form({
-      title: "Tracer l'écart R. 4512-6 du plan de prévention PP-2026-015", origin: 'prevention', originRef: 'PP-2026-015',
-      pilotId: 'clefevre', dueOn: '2026-10-20', kind: 'C', siteId: '',
-    }))).toMatchObject({ ok: true });
     expect(await closePlan('PP-2026-015')).toEqual({ error: 'Permis rattachés encore actifs (PF-2026-032) : clôturez-les ou annulez-les avant de clore le plan.' });
     expect(await cancelPermit({}, form({ id: 'PF-2026-032', reason: 'Soudage réalisé sous le permis du jour, demande en double' }))).toEqual({ ok: true, id: 'PF-2026-032' });
     expect(await closePlan('PP-2026-015')).toEqual({});

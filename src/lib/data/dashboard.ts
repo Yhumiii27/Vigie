@@ -2,9 +2,10 @@ import 'server-only';
 import { getDb, schema as t } from '@/db';
 import { addDays, daysBetween, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
-import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, isMine, type ScreenKey, type Tone } from '../domain';
+import { isLate } from '../action-rules';
+import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, isMine, isOpenAvancement, type ScreenKey, type Tone } from '../domain';
 import {
-  actionColumn, controlStatus, eventView, isOpen, lastFullMonths, lcfirst, loadActions, loadControls, loadEvents, loadPeople, safetyRates, workforceAccident,
+  controlStatus, eventView, isOpen, lastFullMonths, lcfirst, loadActions, loadControls, loadEvents, loadPeople, safetyRates, workforceAccident,
   type EventRow, type SafetyRates,
 } from '../queries';
 import { currentSiteId, getSession, inPerimeter } from '../session';
@@ -108,9 +109,10 @@ export async function loadDashboard() {
   const old = open.filter((e) => daysBetween(e.occurredOn, now) > 30).length;
   const recent = events.filter((e) => daysBetween(e.occurredOn, now) <= 7).length;
 
-  const cols = actions.map((a) => ({ a, col: actionColumn(a, now) }));
-  const late = cols.filter((x) => x.col === 'late');
-  const openActions = cols.filter((x) => x.col !== 'done').length;
+  // Actions en retard (§ 6.3) : ouvertes (À faire → 80 %) dont la date cible est passée, sur les ouvertes du site ; ni les
+  // Reportées, ni les Terminées (en attente de vérification), ni les closes ne sont en retard.
+  const late = actions.filter((a) => isLate(a, now));
+  const openActions = actions.filter((a) => isOpenAvancement(a.status)).length;
 
   const ctrl = controls.map((c) => ({ c, s: controlStatus(c, now) }));
   const soon = ctrl.filter((x) => x.s.days <= CONTROL_HORIZON_DAYS);
@@ -130,7 +132,7 @@ export async function loadDashboard() {
     { label: 'Jours sans accident avec arrêt', value: lastArret ? String(daysBetween(lastArret.occurredOn, now)) : '—', sub: '', note: lastArret ? `Dernier AT avec arrêt le ${fmtLongDate(lastArret.occurredOn)}` : 'Aucun accident avec arrêt enregistré', tone: 'ok', href: atHref },
     { label: 'TF1 · 12 mois glissants', ...tfKpi, href: atHref },
     { label: 'Événements ouverts', value: String(open.length), sub: `dont ${old} > 30 j`, note: `${recent} déclaré${recent > 1 ? 's' : ''} sur les 7 derniers jours`, tone: 'warn', href: link('/evenements') },
-    { label: 'Actions en retard', value: String(late.length), sub: `sur ${openActions} ouvertes`, note: `${late.filter((x) => x.a.eventId).length} liées à des événements`, tone: 'danger', href: link('/actions') },
+    { label: 'Actions en retard', value: String(late.length), sub: `sur ${openActions} ouvertes`, note: `${late.filter((a) => a.eventId).length} liées à des événements`, tone: 'danger', href: link('/actions?retard=1') },
     { label: `Contrôles réglementaires < ${CONTROL_HORIZON_DAYS} j`, value: String(soon.length), sub: `dont ${overdue.length} dépassé${overdue.length > 1 ? 's' : ''}`, note: overdue[0] ? `${overdue[0].c.controlType.split(' ')[0]} ${lcfirst(equipShort(overdue[0].c.equipment))} · +${-overdue[0].s.days} j` : 'Aucun contrôle dépassé', tone: overdue.length ? 'danger' : 'warn', href: link(`/veille?onglet=controles&statut=${overdue.length ? 'depasses' : 'sous-30-j'}`) },
     { label: 'Non-conformités', value: String(ncOpen.length), sub: 'ouvertes', note: ncTop || '—', tone: 'neutral', href: link('/evenements?type=NC,RC') },
   ];

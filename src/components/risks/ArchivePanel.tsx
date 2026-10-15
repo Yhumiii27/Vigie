@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
-import type { FormOptions } from '@/lib/data/options';
+import type { ActionFormOptions } from '@/lib/action-view';
 import type { ArchivedUnitView, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { Cotation } from './RiskForm';
 import { RiskSheet, archivedLabel, riskSheetHeading, type RiskSheetView } from './RiskSheet';
@@ -11,7 +11,6 @@ import { rowOpener } from './RiskTable';
 import { RestoreUnitButton } from './UnitDialogs';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
-type Options = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 
@@ -26,7 +25,7 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
   units: WorkUnitView[];
   archivedUnits: ArchivedUnitView[];
   canApprove: boolean;
-  options: Options;
+  options: ActionFormOptions;
   linkableActions: RisksData['linkableActions'];
   /** « Tous les sites » : rappelle le site de chaque unité. */
   showSite: boolean;

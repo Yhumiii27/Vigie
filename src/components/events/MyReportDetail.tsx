@@ -15,7 +15,7 @@ const text = { margin: 0, fontSize: 13.5, lineHeight: 1.45, color: 'var(--color-
 
 /**
  * Détail d'un signalement pour son déclarant (parcours terrain, mobile, lecture seule) : avancement daté,
- * description, mesures immédiates et suite donnée (actions et statut). L'analyse des causes n'est pas montrée.
+ * description, mesures immédiates et suite donnée (actions et avancement). L'analyse des causes n'est pas montrée.
  */
 export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { report: Report; backHref: string; topPadding?: number }) {
   const closed = r.step >= STEP_CLOSED;
@@ -79,9 +79,9 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
           <div style={{ display: 'grid', gap: 8 }}>
             {r.actions.map((a) => (
               <div key={a.id} style={{ display: 'grid', gap: 6, padding: 10, background: 'var(--color-surface)', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}>
-                <span style={{ fontSize: 13.5, lineHeight: 1.35, textWrap: 'pretty' }}>{a.title}</span>
+                <span style={{ fontSize: 13.5, lineHeight: 1.35, textWrap: 'pretty' }}>{a.label}</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-                  {a.id}<ToneTag tone={a.tone} style={{ marginLeft: 'auto' }}>{a.statusLabel}</ToneTag>
+                  {a.id}<ToneTag tone={a.tone} style={{ marginLeft: 'auto' }}>{a.avancement}</ToneTag>
                 </span>
               </div>
             ))}

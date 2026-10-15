@@ -106,7 +106,7 @@ describe('AUD-03 : annuler un élément du programme', () => {
     actAs('Animateur QHSE');
     const essais = await planItem('Essais 12/10');
     expect(await cancelPlanItem({}, form({ id: String(essais.id), reason: 'x' })))
-      .toEqual({ error: "Échéance portée par l'action A-181 : détachez-la ou annulez-la d'abord." });
+      .toEqual({ error: "Échéance portée par l'action A-181 : abandonnez-la d'abord dans le plan d'actions." });
     const production = await planItem('Production');
     expect(await cancelPlanItem({}, form({ id: String(production.id), reason: 'x' }))).toEqual({ error: 'Élément réalisé : il reste au programme.' });
     const annual = await planItem('Annuelle 10/12');

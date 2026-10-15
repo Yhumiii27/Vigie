@@ -3,14 +3,14 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ActionFields, NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
+import { actionHref } from '@/lib/action-rules';
 import { MAX_BATCH_BYTES, MAX_FILE_BYTES } from '@/lib/attachments';
-import { addDays, fmtDate, fmtDayMonth } from '@/lib/dates';
+import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSignature, removePlanAttachment, savePlan, signPlanEu } from '@/server/prevention';
@@ -40,37 +40,6 @@ function checkPicked(input: HTMLInputElement, maxFiles: number): string | null {
         : null;
   if (issue) input.value = '';
   return issue;
-}
-
-/**
- * Action proposée depuis un plan (plan d'actions unique, origine Prévention) : corrective pour une intervention sans plan
- * signé, ou pour tracer l'écart R. 4512-6 d'un plan signé après le début de l'intervention.
- */
-export function planActionDefaults(plan: PlanView, todayIso: string): ActionDefaults {
-  const signed = !!plan.signedEuOn && !!plan.signedEeOn;
-  const title = plan.startGap?.kind === 'signe_apres'
-    ? `Tracer l'écart R. 4512-6 du plan de prévention ${plan.id} : plan signé après le début de l'intervention (${plan.contractor})`
-    : signed ? undefined
-      : !plan.inspectionDone ? `Réaliser l'inspection commune et faire signer le plan de prévention ${plan.id} (${plan.contractor})`
-        : !plan.signedEuOn && !plan.signedEeOn ? `Faire signer le plan de prévention ${plan.id} par les deux entreprises (${plan.contractor})`
-          : !plan.signedEuOn ? `Signer le plan de prévention ${plan.id} pour l'entreprise utilisatrice (${plan.contractor})`
-            : `Obtenir la signature du plan de prévention ${plan.id} par ${plan.contractor}`;
-  const when = plan.phase === 'clos' || plan.phase === 'annule' ? 'terminée' : plan.inProgress ? 'en cours' : plan.overdue ? 'terminée, plan non clos' : 'prévue';
-  const obligation = !plan.mandatory ? ''
-    : plan.ruleBasis ? ` ; plan écrit et signé obligatoire dès la première minute d'intervention (${lcfirst(plan.ruleBasis)})`
-      : ` ; plan écrit obligatoire (${plan.legalReason})`;
-  return {
-    title,
-    description: `${plan.title} (${plan.location}). Intervention ${when} du ${fmtDate(plan.startOn)} au ${fmtDate(plan.endOn)}${obligation}.`,
-    origin: 'prevention',
-    originRef: plan.id,
-    lockOrigin: true,
-    siteId: plan.siteId,
-    pilotId: plan.ownerId ?? undefined,
-    // Avant le démarrage pour une intervention à venir, sinon dès le lendemain.
-    dueOn: plan.startOn > addDays(todayIso, 1) ? addDays(plan.startOn, -1) : addDays(todayIso, 1),
-    kind: plan.missingSignature || plan.startGap ? 'C' : 'P',
-  };
 }
 
 // ─── Formulaire ─────────────────────────────────────────────────────────────
@@ -380,14 +349,15 @@ function PlanContentView({ plan }: { plan: PlanView }) {
   );
 }
 
-function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelPlan, onDeleted }: {
-  plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void; onCancelPlan: () => void; onDeleted: () => void;
+function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }: {
+  plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCancelPlan: () => void; onDeleted: () => void;
 }) {
   const [eeOpen, setEeOpen] = useState(false);
   const { pending, error, run } = useRun();
   const ended = plan.status === 'clos' || plan.status === 'annule';
   const editable = canManage && !ended;
-  // Plan obligatoire non signé, intervention terminée : clôture possible, l'écart reste tracé par l'action rattachée.
+  // Plan obligatoire non signé, intervention terminée : clôture possible, l'écart reste tracé par les indicateurs et le
+  // journal du plan (aucune action QSE : actions immédiates, réponses du service QHSE du 15/10/2026).
   const unsignedAfterWork = plan.mandatory && !(plan.signedEuOn && plan.signedEeOn) && plan.startOn <= options.today;
   const signedLate = plan.startGap?.kind === 'signe_apres';
   // Même règle que planSignIssue (serveur) : inspection commune, mesures, puis contenu R. 4512-8 et R. 4512-9 d'un plan obligatoire.
@@ -527,18 +497,20 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelP
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle>Actions du plan d&apos;actions unique</SectionTitle>
-        {plan.actions.length === 0 && <span style={muted}>Aucune action rattachée à ce plan.</span>}
-        {plan.actions.map((a) => (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
-            <Link href={`/actions?action=${a.id}`} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
-            <span style={{ flex: 1, minWidth: 180 }}>{a.title}</span>
-            <span style={muted}>{a.pilot} · {a.due}</span>
-            <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
-          </div>
-        ))}
-      </div>
+      {/* Actions reprises seulement (consultation) : la Prévention ne crée plus d'action QSE (15/10/2026). */}
+      {plan.actions.length > 0 && (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <SectionTitle>Actions reprises du plan d&apos;actions</SectionTitle>
+          {plan.actions.map((a) => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+              <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
+              <span style={{ flex: 1, minWidth: 180 }}>{a.label}</span>
+              <span style={muted}>{a.pilot} · {a.due}</span>
+              <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
+            </div>
+          ))}
+        </div>
+      )}
 
       <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
         reportHref={canManage ? `/evenements?nouveau=1&plan=${encodeURIComponent(plan.id)}` : null} />
@@ -548,7 +520,6 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelP
       <ErrorLine error={error} />
       {editable && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCreateAction}><Icon name="ph-list-plus" size={13} />Créer l&apos;action</button>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
           {plan.deletable
             ? <ConfirmButton label="Supprimer le brouillon" confirmLabel="Supprimer" icon="ph-trash" pending={pending}
@@ -558,8 +529,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelP
               <Icon name="ph-prohibit" size={13} />Annuler le plan
             </button>}
           <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
-            question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé par l'action rattachée."
-              : signedLate ? "Clore ce plan signé après le début de l'intervention ? L'écart R. 4512-6 reste tracé par l'action rattachée."
+            question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé dans les indicateurs et l'historique du plan."
+              : signedLate ? "Clore ce plan signé après le début de l'intervention ? L'écart R. 4512-6 reste tracé dans les indicateurs et l'historique du plan."
                 : 'Clore définitivement ce plan ?'}
             disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
             onConfirm={() => run(() => closePlan(plan.id))} />
@@ -570,27 +541,25 @@ function PlanSheet({ plan, options, canManage, onEdit, onCreateAction, onCancelP
   );
 }
 
-type Mode = 'view' | 'edit' | 'action' | 'cancel';
+type Mode = 'view' | 'edit' | 'cancel';
 
-/** Fiche d'un plan de prévention (consultation, signatures, modification, création d'une action). */
+/** Fiche d'un plan de prévention (consultation, signatures, modification, annulation). */
 export function PlanDialog({ plan, open, onClose, options, canManage }: { plan: PlanView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
   const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}`
-    : mode === 'action' ? `Plan d'actions unique · ${plan?.id ?? ''}`
-      : mode === 'cancel' ? `Annuler le plan ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
+    : mode === 'cancel' ? `Annuler le plan ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
   return (
-    <Dialog open={open && !!plan} onClose={close} width={760} kicker={kicker} title={plan ? (mode === 'action' ? 'Nouvelle action' : `${plan.id} · ${plan.contractor}`) : ''}>
+    <Dialog open={open && !!plan} onClose={close} width={760} kicker={kicker} title={plan ? `${plan.id} · ${plan.contractor}` : ''}>
       {plan && mode === 'edit' && <PlanForm plan={plan} options={options} onDone={back} onCancel={back} />}
-      {plan && mode === 'action' && <ActionFields options={options} defaults={planActionDefaults(plan, options.today)} onDone={back} onCancel={back} />}
       {plan && mode === 'cancel' && (
         <ReasonForm action={cancelPlan} hidden={{ id: plan.id }} submitLabel="Annuler le plan" submitIcon="ph-prohibit" onDone={back} onCancel={back}
           placeholder="Ex. Intervention reportée à 2027 : un nouveau plan sera établi"
           message={<>Le plan reste consultable avec le motif de l&apos;annulation ; il ne compte plus dans les interventions ni dans les plans à signer.</>} />
       )}
       {plan && mode === 'view' && (
-        <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')}
+        <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')}
           onCancelPlan={() => setMode('cancel')} onDeleted={close} />
       )}
     </Dialog>
@@ -614,13 +583,12 @@ export function NewPlanButton({ options }: { options: PreventionOptions }) {
   );
 }
 
-/** Boutons de l'alerte « intervention sans plan signé » : ouvrir la fiche pour signer, créer l'action. */
+/** Bouton de l'alerte « intervention sans plan signé » : ouvrir la fiche pour signer (aucune action QSE, 15/10/2026). */
 export function PlanAlertActions({ plan, options }: { plan: PlanView; options: PreventionOptions }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ display: 'flex', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
       <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name="ph-pen-nib" size={13} />Signer</button>
-      <NewActionButton options={options} defaults={planActionDefaults(plan, options.today)} label="Créer l'action" />
       <PlanDialog plan={plan} open={open} onClose={() => setOpen(false)} options={options} canManage />
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { FORM_SAVED_EVENT } from '@/components/form';
 
 type DialogProps = { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; width?: number; kicker?: ReactNode };
 
@@ -13,7 +14,7 @@ export const DISCARD_CONFIRM = 'Fermer sans enregistrer la saisie en cours ?';
  * Clic à l'extérieur : ferme seulement si l'appui a aussi commencé sur le fond (une sélection de texte relâchée hors de la
  * fenêtre ne la ferme pas) et si rien n'a été saisi ; Échap demande confirmation quand une saisie est en cours.
  * Focus initial : élément [autofocus], sinon premier champ de saisie, sinon comportement natif ; le navigateur rend le
- * focus à l'élément d'origine à la fermeture.
+ * focus à l'élément d'origine à la fermeture. Un ActionForm intérieur enregistré (FORM_SAVED_EVENT) remet la saisie à zéro.
  */
 export function Dialog({ open, onClose, title, children, width = 520, kicker }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -35,6 +36,14 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
     }
     if (!open && d.open) d.close();
   }, [open]);
+  // Formulaire intérieur enregistré (commentaire ajouté depuis la fiche…) : la saisie n'est plus « en cours ».
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    const saved = () => { dirty.current = false; };
+    d.addEventListener(FORM_SAVED_EVENT, saved);
+    return () => d.removeEventListener(FORM_SAVED_EVENT, saved);
+  }, []);
   const requestClose = () => {
     if (dirty.current && !window.confirm(DISCARD_CONFIRM)) return;
     onClose();

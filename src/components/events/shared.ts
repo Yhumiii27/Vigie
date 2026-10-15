@@ -1,5 +1,6 @@
 // Constantes et règles de l'écran « Signalements et événements », partagées par le serveur et les composants client.
 
+import { QHSE_ONLY_CREATE_MESSAGE } from '@/lib/action-rules';
 import {
   EVENT_STEPS, QUALIFICATION_FIELDS, QUALIFICATION_LABELS, STEP_ACTIONS, STEP_CLOSED, STEP_QUALIFIED, VICTIM_KINDS,
   type EventType, type QualificationField, type VictimKind,
@@ -7,7 +8,10 @@ import {
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-/** Étape « Efficacité vérifiée » : toutes les actions liées doivent être clôturées, jusqu'à la clôture comprise. */
+/**
+ * Étape « Efficacité vérifiée » : toutes les actions liées doivent être Vérifiées (ou Abandonnées), jusqu'à la clôture
+ * comprise (EVT-15) ; une action « Terminée — à vérifier » reste ouverte pour l'événement.
+ */
 export const STEP_EFFICACY = EVENT_STEPS.indexOf('Efficacité vérifiée');
 
 /** Données de la fiche qui conditionnent le passage à l'étape suivante. */
@@ -15,6 +19,11 @@ export type AdvanceContext = {
   pilotId: string | null; hasAnalysis: boolean; dismissed: boolean; methodLabel: string;
   /** Données exigées à la qualification et non saisies (missingQualification, EVT-05). */
   missing: readonly QualificationField[];
+  /**
+   * Le rôle crée les actions QSE (canCreateAction, ACT-22) ; `false` : le message de l'étape « Actions » rappelle que les
+   * actions sont créées par le service QHSE. Absent : message seul.
+   */
+  canCreateActions?: boolean;
   /**
    * Accident du travail (EVT-02) : `health` = rôle habilité aux données de santé (seul à clôturer un AT) ; `cpamPending` =
    * déclaration CPAM ni saisie ni motivée (cpamPending) ; `benign` = blessure « premiers soins » (registre des accidents bénins) ;
@@ -29,12 +38,12 @@ export const AT_CLOSE_RESTRICTED = "Clôture d'un accident du travail : réserv�
 /**
  * Pourquoi le passage à l'étape suivante est bloqué (null si possible) :
  * pilote désigné et données propres au type saisies pour « Qualifié », analyse saisie puis au moins une action pour
- * « Actions », actions clôturées pour « Efficacité vérifiée » et la clôture ; un accident du travail n'est clôturé que par
+ * « Actions », actions vérifiées pour « Efficacité vérifiée » et la clôture ; un accident du travail n'est clôturé que par
  * un rôle habilité, une fois sa déclaration CPAM saisie, son inscription au registre des accidents bénins, ou un motif.
  */
 export function advanceBlocker(step: number, allLinked: readonly { status: string }[], ctx: AdvanceContext): string | null {
-  // Les actions annulées restent affichées sur la fiche mais ne comptent ni comme liées ni comme ouvertes.
-  const linked = allLinked.filter((a) => a.status !== 'cancelled');
+  // Les actions abandonnées restent affichées sur la fiche mais ne comptent ni comme liées ni comme ouvertes.
+  const linked = allLinked.filter((a) => a.status !== 'abandonnee');
   if (ctx.dismissed) return 'Événement classé sans suite.';
   if (step >= STEP_CLOSED) return 'Événement déjà clôturé.';
   const next = step + 1;
@@ -46,15 +55,19 @@ export function advanceBlocker(step: number, allLinked: readonly { status: strin
   }
   if (next === STEP_ACTIONS) {
     if (!ctx.hasAnalysis) return `Saisissez l'analyse des causes (méthode « ${ctx.methodLabel} ») avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`;
-    if (linked.length === 0) return `Liez au moins une action avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`;
+    if (linked.length === 0) {
+      const who = ctx.canCreateActions === false ? ` ${QHSE_ONLY_CREATE_MESSAGE}` : '';
+      return `Liez au moins une action avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».${who}`;
+    }
   }
   // Revérifié à la clôture : une action a pu être ajoutée ou rouverte après « Efficacité vérifiée ».
   if (next >= STEP_EFFICACY) {
     if (linked.length === 0) return `Aucune action liée : l'efficacité ne peut pas être vérifiée.`;
-    const open = linked.filter((a) => a.status !== 'done').length;
+    // Close pour l'événement : « Vérifiée » seulement (Terminée attend encore sa vérification d'efficacité, EVT-15).
+    const open = linked.filter((a) => a.status !== 'verifiee').length;
     if (open) {
       const s = open > 1;
-      return `${open} action${s ? 's' : ''} liée${s ? 's' : ''} ${s ? 'restent' : 'reste'} à clôturer après vérification d'efficacité avant le passage à l'étape « ${EVENT_STEPS[next]} ».`;
+      return `${open} action${s ? 's' : ''} liée${s ? 's' : ''} ${s ? 'ne sont pas encore vérifiées' : "n'est pas encore vérifiée"} : vérifiez-${s ? 'les' : 'la'} (ou abandonnez-${s ? 'les' : 'la'}) dans le plan d'actions avant le passage à l'étape « ${EVENT_STEPS[next]} ».`;
     }
   }
   if (next === STEP_CLOSED && ctx.accident) {

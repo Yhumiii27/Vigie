@@ -18,11 +18,12 @@ import { loadFormOptions, type FormOptions } from '@/lib/data/options';
 import { loadDuerpAccessRegister, loadPreventionProgram, loadRisks } from '@/lib/data/risks';
 import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
+import type { ActionFormOptions } from '@/lib/action-view';
 
 export const metadata: Metadata = { title: SCREENS.risks.title };
 
 /** Rôles en consultation : aucune liste de choix (ni liste du personnel) transmise à la page. */
-const NO_OPTIONS: Pick<FormOptions, 'people' | 'origins' | 'sites'> = { people: [], origins: [], sites: [] };
+const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites'> = { people: [], sites: [] };
 
 export default async function RisksPage({ searchParams }: PageProps<'/risques'>) {
   const session = await guard('risks');
@@ -35,7 +36,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   // ?programme=<année> : programme annuel de prévention (tous les rôles) ; ?registre=1 : mises à disposition (approbateurs).
   const programYear = typeof sp.programme === 'string' && /^\d{4}$/.test(sp.programme) ? Number(sp.programme) : null;
   const registerOn = approve && sp.registre === '1' && programYear == null;
-  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, duerpRequirement }, options, register, program] =
+  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, actionsQhse, duerpRequirement }, options, register, program] =
     await Promise.all([
       loadRisks(),
       edit ? loadFormOptions() : Promise.resolve(NO_OPTIONS),
@@ -64,6 +65,10 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const viewSite = session.site.id === ALL_SITES ? null : { id: session.site.id, label: session.site.label };
   const defaultSiteId = viewSite?.id ?? session.siteOptions[0]?.id ?? '';
   const unitOptions = units.map(({ id, label, site }) => ({ id, label, site }));
+  // Formulaire d'action : service QHSE seulement (ACT-22) ; listes vides sinon. Date du jour du serveur (VIGIE_TODAY).
+  const actionOptions: ActionFormOptions = actionsQhse
+    ? { people: options.people, sites: options.sites, today: today() }
+    : { people: [], sites: [], today: today() };
 
   const cells: { t: string; bg: string; color: string; fs: number }[] = [];
   for (let g = 4; g >= 1; g--) {
@@ -133,7 +138,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
         {typeof sp.risque === 'string' && !deepRisk && !deepArchived && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 216px) minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
+        <div className="vg-split" style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
           <div style={{ display: 'grid', gap: 2 }}>
             <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>Unités de travail</div>
             {units.map((u) => (
@@ -145,7 +150,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                     style={{ fontSize: 10.5, fontWeight: 500, color: TONE.danger.fg, background: TONE.danger.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{u.alerts}</span>
                 )}
                 {u.toReview > 0 && (
-                  <span title={`${u.toReview} ${u.toReview > 1 ? 'résiduels' : 'résiduel'} à recoter (actions clôturées)`} style={{ display: 'inline-flex' }}>
+                  <span title={`${u.toReview} ${u.toReview > 1 ? 'résiduels' : 'résiduel'} à recoter (actions vérifiées)`} style={{ display: 'inline-flex' }}>
                     <Icon name="ph-arrows-clockwise" size={12} style={{ color: TONE.warn.dot }} />
                   </span>
                 )}
@@ -189,7 +194,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               defaultSiteId={viewSite?.id ?? ''} today={today()} currentVersion={version?.version ?? null} />
           ) : archives ? (
             <ArchivePanel key={deepArchived?.id ?? 'archives'} risks={archivedRisks} units={units} archivedUnits={archivedUnits} canApprove={approve}
-              options={{ people: options.people, origins: options.origins, sites: options.sites }} linkableActions={linkableActions}
+              options={actionOptions} linkableActions={linkableActions}
               showSite={!viewSite} residual={residual} initialRiskId={deepArchived?.id} />
           ) : unit ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
@@ -244,7 +249,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               <div className="card" style={{ padding: '6px 14px 10px' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <RiskTable key={`${unit.id}:${deepRisk?.id ?? ''}`} rows={rows} unit={unit} units={unitOptions} canManage={edit} showEvents={!employee} showHistory={edit}
-                    options={{ people: options.people, origins: options.origins, sites: options.sites }}
+                    actionsQhse={actionsQhse} options={actionOptions}
                     linkableActions={linkableActions} initialRiskId={deepRisk?.id} />
                 </div>
               </div>

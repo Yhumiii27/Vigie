@@ -20,15 +20,16 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   const sp = await searchParams;
   // Bandeaux : titres manquants ou expirés, mais aussi expirant avant ou pendant une affectation Keystone (`lapses`).
   // Rôle Salarié : sa seule ligne, ses échéances et ses affectations (filtrées par loadSkillMatrix).
-  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, self }, { people, sites, origins }, allSites] =
+  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, self }, { sites }, allSites] =
     await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin()]);
   // Même règle que les server actions du domaine (requireSkillsEditor).
   const manage = canEdit(session.role, 'skills');
   const now = today();
   // Nouveau salarié : site sélectionné, ou le premier site en vue « Tous les sites ».
   const defaultSiteId = session.site.id === ALL_SITES ? sites[0]?.[0] ?? '' : session.site.id;
-  // Vue Salarié : aucune saisie, donc pas de liste du personnel transmise au navigateur.
-  const options = self ? { people: [], sites: [], origins } : { people, sites, origins };
+  // Vue Salarié : aucune saisie, donc aucune liste de formulaire transmise au navigateur. Aucune liste du formulaire
+  // d'action : l'écran ne crée pas d'action QSE (recyclages gérés par le service RH, réponses du service QHSE du 15/10/2026).
+  const options = { sites: self ? [] : sites };
   // Fiche d'un salarié encore rattaché à un site archivé (vue « Tous les sites ») : son site reste affiché tel quel.
   const archivedSites = self ? [] : allSites.filter((s) => s.archivedOn).map((s) => [s.id, `${s.label} (archivé)`] as Option);
 
@@ -47,7 +48,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
       <PageHeader title={SCREENS.skills.title} sub={sub} />
       <div className="vg-page">
         {personId && !target && <MissingNotice text={self ? 'Fiche non accessible : seules vos habilitations sont affichées.' : 'Salarié introuvable, sorti des effectifs ou hors du site sélectionné.'} closeHref="/habilitations" />}
-        <SkillAlerts alerts={lapses} canManage={manage} options={options} today={now} />
+        <SkillAlerts alerts={lapses} today={now} />
         <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
           archivedSites={archivedSites} self={self}
           canManage={manage} options={options} today={now} defaultSiteId={defaultSiteId}

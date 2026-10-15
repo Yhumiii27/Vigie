@@ -6,7 +6,7 @@ import { getDb, schema as t } from '@/db';
 import { loadEnvironment, loadEnvironmentSignals, loadWasteRegisterCsv } from '@/lib/data/environment';
 import { deleteWasteStream, saveSiteSiret, saveWasteEntry, saveWasteStream } from '@/server/environment';
 import { saveAction } from '@/server/plan';
-import { cancelAction } from '@/server/plan-ui';
+import { abandonAction } from '@/server/plan-ui';
 
 // Registre chronologique des déchets : mentions de l'arrêté du 31 mai 2021 (DOC-02) — SIRET de l'établissement, mentions
 // du collecteur et de l'installation sur la filière, copies figées sur chaque enlèvement, signalement et export.
@@ -214,9 +214,10 @@ describe('deleteWasteStream : filière sans enlèvement', () => {
     return r.id!;
   };
   const actionFrom = async (streamId: string) => {
+    // Contrat FormData du paquet 1 (plan § 2.14) : source « Déchets » imposée par la filière (admissibleSources).
     const r = await saveAction({}, form({
-      title: `Action de test · ${streamId}`, origin: 'env', originRef: streamId, link: `wastestream:${streamId}`, pilotId: 'clefevre',
-      dueOn: '2026-11-15', kind: 'P', siteId: 'ville-a',
+      source: 'dechets', link: `wastestream:${streamId}`, originRef: streamId, pilotId: 'clefevre', priority: 'moyen_terme', domain: 'environnement',
+      problem: `Filière ${streamId} : test`, detail: `Action de test · ${streamId}`, dueOn: '2026-11-15', verifyDueOn: '2026-12-15', riskLevel: '', siteId: 'ville-a',
     }));
     expect(r).toMatchObject({ ok: true });
     return r.id!;
@@ -233,7 +234,7 @@ describe('deleteWasteStream : filière sans enlèvement', () => {
     expect(await stream(id)).toBeDefined();
   });
 
-  it('action créée depuis la filière (ACT-01), annulée comprise : suppression refusée sans exception, filière conservée', async () => {
+  it('action créée depuis la filière (ACT-01), abandonnée comprise : suppression refusée sans exception, filière conservée', async () => {
     actAs('Animateur QHSE', 'ville-a');
     const id = await newStream('Batteries (action)');
     const actionId = await actionFrom(id);
@@ -241,8 +242,13 @@ describe('deleteWasteStream : filière sans enlèvement', () => {
     expect(await deleteWasteStream(id)).toEqual({ error: `Cette filière porte 1 action du plan (${actionId}) : elle ne peut pas être supprimée.` });
     expect(await stream(id)).toBeDefined();
 
-    // Annulée, l'action garde son origine : la filière reste verrouillée.
-    expect(await cancelAction({}, form({ id: actionId, from: 'todo', reason: 'Doublon de test' }))).toMatchObject({ ok: true });
+    // Filière : action listée (libellé du détail), avec la filière pour source.
+    expect((await view(id)).actions).toEqual([expect.objectContaining({ id: actionId, label: `Action de test · ${id}`, wasteStreamId: id })]);
+    expect(await (await getDb()).select({ source: t.actions.source, wasteStreamId: t.actions.wasteStreamId }).from(t.actions).where(eq(t.actions.id, actionId)))
+      .toEqual([{ source: 'dechets', wasteStreamId: id }]);
+
+    // Abandonnée, l'action garde son origine : la filière reste verrouillée.
+    expect(await abandonAction({}, form({ id: actionId, from: 'a_faire', reason: 'Doublon de test' }))).toMatchObject({ ok: true });
     expect(await view(id)).toMatchObject({ actions: [], sourceActionCount: 1 });
     expect(await deleteWasteStream(id)).toEqual({ error: expect.stringContaining(actionId) });
     expect(await stream(id)).toBeDefined();
@@ -254,5 +260,41 @@ describe('deleteWasteStream : filière sans enlèvement', () => {
     expect(await view(id)).toMatchObject({ sourceActionCount: 0 });
     expect(await deleteWasteStream(id)).toEqual({});
     expect(await stream(id)).toBeUndefined();
+  });
+});
+
+describe('action « BSD manquants » du registre (paquet 1 Actions QSE)', () => {
+  const bsdRequirement = async () => {
+    const rows = await (await getDb()).select().from(t.requirements);
+    return rows.find((r) => /R\.\s?541-45/.test(r.text))!;
+  };
+
+  it('sans action rattachée à l’exigence : source « Déchets » proposée (Veille admise), exigence liée, domaine Environnement', async () => {
+    actAs('Animateur QHSE', 'ville-a');
+    const req = await bsdRequirement();
+    await (await getDb()).update(t.requirements).set({ actionId: null }).where(eq(t.requirements.id, req.id));
+    const d = await loadEnvironment();
+    expect(d.bsdAction).toBeNull();
+    expect(d.bsdActionDefaults).toMatchObject({
+      source: 'dechets', sourceChoices: ['dechets', 'veille'], link: `requirement:${req.id}`, domain: 'environnement', siteId: 'ville-a',
+      originRef: `Registre des déchets ${d.year}`, dueOn: '2026-10-24', verifyDueOn: '2026-11-23',
+    });
+    expect(d.bsdActionDefaults).not.toHaveProperty('lockSource');
+  });
+
+  it('action non close rattachée à l’exigence : retrouvée par ce rattachement (plus par la référence d’origine), sans nouvel élément lié', async () => {
+    actAs('Animateur QHSE', 'ville-a');
+    const db = await getDb();
+    const req = await bsdRequirement();
+    const open = (await db.select().from(t.actions)).filter((a) => a.siteId === 'ville-a' && ['a_faire', 'initiee', 'p20', 'p40', 'p60', 'p80', 'terminee'].includes(a.status))[0];
+    await db.update(t.requirements).set({ actionId: open.id }).where(eq(t.requirements.id, req.id));
+    const d = await loadEnvironment();
+    expect(d.bsdAction).toMatchObject({ id: open.id, label: expect.any(String) });
+    expect(d.bsdActionDefaults.link).toBeUndefined();
+    // Action close : plus retrouvée, une nouvelle action peut être créée et rattachée à l'exigence.
+    await db.update(t.actions).set({ status: 'abandonnee', cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Test' }).where(eq(t.actions.id, open.id));
+    const after = await loadEnvironment();
+    expect(after.bsdAction).toBeNull();
+    expect(after.bsdActionDefaults.link).toBe(`requirement:${req.id}`);
   });
 });

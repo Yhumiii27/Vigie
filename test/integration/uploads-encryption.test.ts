@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { closeDb, getDb, schema as t } from '@/db';
 import { resetConfig } from '@/lib/env';
 import { isEncrypted } from '@/lib/encryption';
@@ -67,7 +68,8 @@ describe('pièces jointes chiffrées au repos', () => {
     expect(log).toHaveBeenCalledWith(expect.stringMatching(/illisible : fichier chiffré altéré/));
     log.mockRestore();
     const db = await getDb();
-    expect((await db.select().from(t.attachments)).length).toBe(2);
+    // Les deux pièces de ce test (le jeu de démonstration porte aussi des preuves d'action, paquet 1 Actions QSE).
+    expect((await db.select().from(t.attachments).where(eq(t.attachments.entityId, 'EV-TEST'))).length).toBe(2);
   });
 
   it('refuse un contenu qui commence par l’en-tête de chiffrement de Vigie, avec ou sans clé', async () => {

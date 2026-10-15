@@ -2,19 +2,21 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { and, asc, eq, gte, isNotNull } from 'drizzle-orm';
-import { coversNeed } from '@/components/skills/rules';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { addDays, addMonths, fmtDate } from '@/lib/dates';
+import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { canEdit, isOpenActionStatus } from '@/lib/domain';
+import { canEdit, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { logChange } from './changelog';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
+// Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
+// 15/10/2026, le service RH gère cette partie) ; ces server actions ne lisent ni n'écrivent aucune action, sauf pour
+// protéger le rattachement d'une action de recyclage reprise (qualification_requirements.renewalActionId) encore non close.
 
 const clean = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -49,7 +51,10 @@ function checkFiles(files: File[]) {
   return files.map(checkUpload).find(Boolean) ?? null;
 }
 
-/** Actions de recyclage encore ouvertes rattachées aux exigences d'un titre ou d'un salarié. */
+/**
+ * Actions de recyclage reprises encore non closes (ni Vérifiée ni Abandonnée, Terminée comprise) rattachées aux exigences
+ * d'un titre ou d'un salarié.
+ */
 async function openRenewals(db: DbOrTx, by: { titleId: string } | { personId: string }) {
   const rows = await db.select({ id: t.actions.id, status: t.actions.status }).from(t.qualificationRequirements)
     .innerJoin(t.actions, eq(t.qualificationRequirements.renewalActionId, t.actions.id))
@@ -57,7 +62,7 @@ async function openRenewals(db: DbOrTx, by: { titleId: string } | { personId: st
       isNotNull(t.qualificationRequirements.renewalActionId),
       'titleId' in by ? eq(t.qualificationRequirements.titleId, by.titleId) : eq(t.qualificationRequirements.personId, by.personId),
     ));
-  return rows.filter((a) => isOpenActionStatus(a.status)).map((a) => a.id).sort();
+  return rows.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id).sort();
 }
 
 /** Formation, salarié et titre concernés, pour les contrôles communs (voir `frozenReason`). */
@@ -84,8 +89,8 @@ async function frozenReason(row: NonNullable<Awaited<ReturnType<typeof findQuali
  * Enregistre une formation : nouvelle ligne de l'historique (jamais écrasée), ou correction de la formation
  * `qualificationId` (saisie erronée, même salarié et même titre, formation non annulée).
  * Le titre devient requis pour le salarié s'il ne l'était pas ; l'échéance vaut obtention + validité du titre si elle est laissée vide.
- * `closeRenewal` fait passer l'action de recyclage rattachée à « Efficacité à vérifier », seulement si la formation
- * règle le besoin (titre valide au-delà de 60 jours et couvrant les affectations Keystone à venir) : sinon l'action reste à réaliser.
+ * Une action de recyclage reprise rattachée à l'exigence n'est jamais modifiée (le service QHSE la clôt ou l'abandonne
+ * dans le plan d'actions).
  * Attestations facultatives (`files`), jointes à la formation (pièces jointes 'qualification').
  */
 export async function saveQualification(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -98,7 +103,6 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
   const obtainedOn = f.date('obtainedOn', { required: true });
   let expiresOn = f.date('expiresOn');
   const provider = f.str('provider', { max: 120 }) || null;
-  const closeRenewal = f.bool('closeRenewal');
   const files = f.files('files');
   const now = today();
   if (obtainedOn && obtainedOn > now) f.fail('obtainedOn', "La date d'obtention ne peut pas être postérieure à aujourd'hui.");
@@ -108,12 +112,9 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
   if (!f.ok) return f.state();
 
   const db = await getDb();
-  const [[person], [title], upcoming] = await Promise.all([
+  const [[person], [title]] = await Promise.all([
     db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, personId)),
     db.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, titleId)),
-    db.select({ startOn: t.keystoneAssignments.startOn, endOn: t.keystoneAssignments.endOn }).from(t.keystoneAssignments)
-      .where(and(eq(t.keystoneAssignments.personId, personId), gte(t.keystoneAssignments.endOn, now)))
-      .orderBy(asc(t.keystoneAssignments.startOn)),
   ]);
   if (!person) return { error: 'Salarié introuvable.', fieldErrors: { personId: 'Salarié introuvable.' } };
   if (!title) return { error: 'Titre introuvable.', fieldErrors: { titleId: 'Titre introuvable.' } };
@@ -141,16 +142,6 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
       await logChange(tx, { entityType: 'qualification', entityId: id, action: 'create', summary: `${summary} enregistrée` });
     }
     await tx.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
-    // Formation ancienne ou trop courte : le recyclage reste à réaliser (case masquée côté formulaire).
-    if (!closeRenewal || !coversNeed(expiresOn, upcoming, now)) return { id };
-    const [req] = await tx.select({ actionId: t.qualificationRequirements.renewalActionId }).from(t.qualificationRequirements)
-      .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId)));
-    if (!req?.actionId) return { id };
-    const [action] = await tx.select().from(t.actions).where(eq(t.actions.id, req.actionId));
-    // Action à lancer ou en cours seulement (une action clôturée ou annulée n'est pas rouverte).
-    if (action && (action.status === 'todo' || action.status === 'doing')) {
-      await tx.update(t.actions).set({ status: 'verify', verifyDueOn: action.verifyDueOn ?? addDays(now, 30), closedOn: null }).where(eq(t.actions.id, action.id));
-    }
     return { id };
   });
   if ('error' in result) return { error: result.error };
@@ -176,7 +167,7 @@ export async function cancelQualification(_prev: FormState, fd: FormData): Promi
   if (row.q.cancelledAt) return { error: 'Cette formation est déjà annulée.' };
   const blocked = await frozenReason(row);
   if (blocked) return { error: blocked };
-  // Une action de recyclage passée en « Efficacité à vérifier » par cette formation reste en l'état (domaine actions).
+  // Aucune action n'est touchée : une action de recyclage reprise rattachée reste en l'état (plan d'actions, service QHSE).
   await db.transaction(async (tx) => {
     await tx.update(t.qualifications).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.qualifications.id, id!));
     await logChange(tx, { entityType: 'qualification', entityId: id!, action: 'cancel', summary: `Formation du ${fmtDate(row.q.obtainedOn)} annulée`, reason });
@@ -226,7 +217,7 @@ export async function removeQualificationFile(attachmentId: string): Promise<{ e
 
 /**
  * Rend un titre requis (ou non) pour un salarié. Les formations déjà enregistrées sont conservées.
- * Retirer l'exigence est refusé tant que l'action de recyclage rattachée est ouverte (le lien serait perdu).
+ * Retirer l'exigence est refusé tant que l'action de recyclage reprise rattachée n'est pas close (le lien serait perdu).
  */
 export async function setRequirement(personId: string, titleId: string, required: boolean): Promise<{ error?: string }> {
   const { error } = await requireSkillsEditor();
@@ -249,8 +240,8 @@ export async function setRequirement(personId: string, titleId: string, required
     const [action] = req?.actionId
       ? await db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions).where(eq(t.actions.id, req.actionId))
       : [];
-    if (action && isOpenActionStatus(action.status)) {
-      return { error: `L'action ${action.id} (recyclage) est encore ouverte : clôturez-la avant de retirer l'exigence.` };
+    if (action && !isClosedActionStatus(action.status)) {
+      return { error: `L'action ${action.id} (recyclage) n'est pas close : le service QHSE doit la clôturer ou l'abandonner avant le retrait de l'exigence.` };
     }
     await db.delete(t.qualificationRequirements).where(where);
   }
@@ -341,7 +332,7 @@ export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<For
   const blocked = await requireInSite(person.siteId);
   if (blocked) return { error: blocked };
   const open = await openRenewals(db, { personId: id });
-  if (open.length) return { error: `Recyclage encore ouvert (${open.join(', ')}) : clôturez ou annulez ces actions avant de déclarer la sortie.` };
+  if (open.length) return { error: `Recyclage encore ouvert (${open.join(', ')}) : le service QHSE doit clôturer ou abandonner ces actions avant la déclaration de sortie.` };
   await db.transaction(async (tx) => {
     await tx.update(t.people).set({ leftOn, leftReason }).where(eq(t.people.id, id));
     await logChange(tx, { entityType: 'person', entityId: id, action: 'archive', summary: `Sortie de l'effectif le ${fmtDate(leftOn!)}`, reason: leftReason });
@@ -432,7 +423,7 @@ export async function archiveTitle(_prev: FormState, fd: FormData): Promise<Form
   if (!title) return { error: 'Titre introuvable.' };
   if (title.archivedAt) return { error: 'Ce titre est déjà archivé.' };
   const open = await openRenewals(db, { titleId: id });
-  if (open.length) return { error: `Recyclage encore ouvert (${open.join(', ')}) : clôturez ou annulez ces actions avant d'archiver le titre.` };
+  if (open.length) return { error: `Recyclage encore ouvert (${open.join(', ')}) : le service QHSE doit clôturer ou abandonner ces actions avant l'archivage du titre.` };
   await db.transaction(async (tx) => {
     await tx.update(t.trainingTitles).set({ archivedAt: new Date(), archivedById: session.user.id, archiveReason: reason }).where(eq(t.trainingTitles.id, id));
     await logChange(tx, { entityType: 'training_title', entityId: id, action: 'archive', summary: `Titre « ${title.label} » archivé`, reason });

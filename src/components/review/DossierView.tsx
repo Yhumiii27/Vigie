@@ -27,6 +27,8 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
   const atSeance = asOf === h.reviewOn;
   const held = h.status !== 'planifiee';
   const n = sectionCounter();
+  // Plan d'actions : par source (dossier courant), ou par origine (dossier figé avant la refonte des actions, lu tel quel).
+  const actionRows = d.actions?.bySource ?? d.actions?.byOrigin;
   const others = page.reviews.filter((x) => x.id !== page.review.id);
   const kind = h.kind.replace(/^Revue\s+/i, '').toLowerCase();
   const done = d.checklist.filter((c) => c.done).length;
@@ -308,11 +310,14 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
 
       {d.actions && (
         <Section n={n()} title="Plan d'actions" aside={`${plural(d.actions.totals?.open ?? 0, 'ouverte', 'ouvertes')} · ${d.actions.totals?.late ?? 0} en retard`}>
-          {d.actions.byOrigin?.length ? (
+          {actionRows?.length ? (
             <table className="table rd-table">
-              <thead><tr><th>Origine</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Efficacité à vérifier</th><th className="rd-num-cell">Clôturées · 12 mois</th></tr></thead>
+              {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
+              {d.actions.bySource
+                ? <thead><tr><th>Source</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Terminées — à vérifier</th><th className="rd-num-cell">Vérifiées · période</th></tr></thead>
+                : <thead><tr><th>Origine</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Efficacité à vérifier</th><th className="rd-num-cell">Clôturées · 12 mois</th></tr></thead>}
               <tbody>
-                {d.actions.byOrigin.map((o) => (
+                {actionRows.map((o) => (
                   <tr key={o.key}>
                     <td>{o.label}</td>
                     <td className="rd-num-cell">{o.open}</td>
@@ -337,7 +342,9 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
             <>
               <h3 className="rd-h3">Actions en retard</h3>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th className="rd-num-cell">Retard</th></tr></thead>
+                {d.actions.bySource
+                  ? <thead><tr><th>N°</th><th>Action</th><th>Source</th><th>Responsable</th><th>Date cible</th><th className="rd-num-cell">Retard</th></tr></thead>
+                  : <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th className="rd-num-cell">Retard</th></tr></thead>}
                 <tbody>
                   {d.actions.lateActions.map((a) => (
                     <tr key={a.id}>
@@ -621,7 +628,7 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
             <ActionTable rows={d.extraActions} role={role} />
           </>
         )}
-        <p className="rd-empty rd-muted" style={{ marginTop: 4 }}>Les décisions retenues sont suivies dans le plan d&apos;actions unique avec l&apos;origine « Revue de direction ».</p>
+        <p className="rd-empty rd-muted" style={{ marginTop: 4 }}>Les décisions retenues sont suivies dans le plan d&apos;actions unique avec la source « Revue de direction » (« Objectif QSE » pour un objectif).</p>
         <div className="rd-sign">
           <div>Date de la prochaine revue{r.nextReviewOn && <div className="rd-sign-value">{fmtDate(r.nextReviewOn)}</div>}</div>
           <div>Visa de la direction{r.closedOn && <div className="rd-sign-value">{r.closedBy ?? '—'} le {fmtDate(r.closedOn)}</div>}</div>

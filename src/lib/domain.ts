@@ -271,8 +271,8 @@ export const RISK_ACTION_THRESHOLD = 8;
 export type RiskFlag = 'toDefine' | 'residualHigh' | 'toReview';
 export const RISK_FLAGS: Record<RiskFlag, { label: string; tone: Tone; hint: string }> = {
   toDefine: { label: 'À définir', tone: 'danger', hint: `Cotation brute ≥ ${RISK_ACTION_THRESHOLD} : une action de réduction est obligatoire.` },
-  residualHigh: { label: 'Résiduel encore élevé', tone: 'danger', hint: `Toutes les actions sont clôturées mais le résiduel reste ≥ ${RISK_ACTION_THRESHOLD} : nouvelle action nécessaire.` },
-  toReview: { label: 'Résiduel à recoter', tone: 'warn', hint: "Toutes les actions sont clôturées : recotez le risque résiduel après vérification d'efficacité." },
+  residualHigh: { label: 'Résiduel encore élevé', tone: 'danger', hint: `Toutes les actions sont vérifiées mais le résiduel reste ≥ ${RISK_ACTION_THRESHOLD} : nouvelle action nécessaire.` },
+  toReview: { label: 'Résiduel à recoter', tone: 'warn', hint: "Toutes les actions sont vérifiées : recotez le risque résiduel après vérification d'efficacité." },
 };
 /** Libellé « type » des échéances DUERP (tableau de bord, notifications, page À faire). */
 export const RISK_TODO_KIND = 'DUERP';

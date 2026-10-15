@@ -13,9 +13,10 @@ import {
 import { addDays, fmtDate, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {
-  ALL_SITES, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
+  ALL_SITES, AVANCEMENT, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
   canSeeHealth, isEmployee, type BenignCaregiverKind, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
 } from '../domain';
+import { canCreateAction } from '../action-rules';
 import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents, type Person } from '../queries';
 import { loadChangeLog } from './changelog';
 import { loadQhseLeads } from './leads';
@@ -305,13 +306,14 @@ export async function loadEventDetail(id: string) {
   // sans rien dire de la déclaration (SEC-06).
   const blocker = advanceBlocker(row.step, actions, {
     pilotId: row.pilotId, hasAnalysis: analysisFilled(row.analysisMethod, content[row.analysisMethod]), dismissed: !!row.dismissedAt, methodLabel, missing,
+    canCreateActions: canCreateAction(role),
     accident: at ? { health, cpamPending: health && cpamPending(row, !!entry), benign: health && row.injury === 'soins', duty: declarationDuty(row) } : undefined,
   });
   // Registre des accidents bénins : premiers soins non déclarés, victime de l'effectif, mentions du registre saisies.
   const registerBlocker = at && health && !entry && !lock ? benignRegisterBlocker(row) : null;
   return {
     event: eventView(e, people, now),
-    actions: actions.sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true })).map((a) => ({ ...actionView(a, people, now), originKey: a.origin })),
+    actions: actions.sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true })).map((a) => actionView(a, people, now)),
     analyses: content,
     attachments: files.files,
     /** Pièces médicales d'un AT (rôles habilités ; vide sinon). */
@@ -440,7 +442,8 @@ export type MyReport = Awaited<ReturnType<typeof loadMyReports>>[number];
 
 /**
  * Détail d'un signalement pour son déclarant (retour d'information) : étape et dates, description, mesures immédiates,
- * actions décidées (titre et statut). Ni l'analyse des causes ni le pilote ne sont transmis. null si ce n'est pas le sien.
+ * actions décidées (libellé court et avancement). Ni l'analyse des causes ni le pilote ne sont transmis. null si ce n'est
+ * pas le sien.
  */
 export async function loadMyReport(id: string) {
   const db = await getDb();
@@ -467,7 +470,8 @@ export async function loadMyReport(id: string) {
     dismissed: e.dismissedAt ? { on: isoDay(e.dismissedAt), reason: e.dismissReason ?? '' } : null,
     actions: actions
       .sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true }))
-      .map((a) => { const v = actionView(a, people, now); return { id: a.id, title: a.title, statusLabel: v.statusLabel, tone: v.tone }; }),
+      // Libellé court (actionLabel) et avancement (§ 5.1) seulement : ni problème, ni responsable, ni retard.
+      .map((a) => { const v = actionView(a, people, now); return { id: a.id, label: v.label, avancement: v.avancement, tone: AVANCEMENT[a.status].tone }; }),
   };
 }
 export type MyReportDetail = NonNullable<Awaited<ReturnType<typeof loadMyReport>>>;

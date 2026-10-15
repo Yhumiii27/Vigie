@@ -1,16 +1,12 @@
 'use client';
 
-import { NewActionButton } from '@/components/ActionFormDialog';
 import { DialogButton } from '@/components/Dialog';
 import { Icon, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { FormOptions } from '@/lib/data/options';
 import type { SkillAlert } from '@/lib/data/skills';
-import { Fact, RenewalTag, SkillDot, canPlanRenewal, lcfirst, period, planLabel, renewalDefaults, stateDetail } from './common';
+import { Fact, RenewalTag, SkillDot, lcfirst, period, stateDetail } from './common';
 import { isBlocking, lapseFor, type Lapse } from './rules';
-
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
 
 const HEADLINE: Record<Lapse, string> = {
   missing: 'Salarié au titre manquant affecté à une activité Keystone',
@@ -92,8 +88,12 @@ function AssignmentView({ alert, today }: { alert: SkillAlert; today: string }) 
   );
 }
 
-/** Bandeaux d'alerte : salarié affecté à une activité Keystone sans titre requis valide pendant toute l'affectation. */
-export function SkillAlerts({ alerts, canManage, options, today }: { alerts: SkillAlert[]; canManage: boolean; options: Opts; today: string }) {
+/**
+ * Bandeaux d'alerte : salarié affecté à une activité Keystone sans titre requis valide pendant toute l'affectation.
+ * Aucune action QSE n'est proposée (recyclages gérés par le service RH, réponses du service QHSE du 15/10/2026) ; une
+ * action de recyclage reprise encore rattachée reste affichée en lien.
+ */
+export function SkillAlerts({ alerts, today }: { alerts: SkillAlert[]; today: string }) {
   return (
     <>
       {alerts.map((a) => {
@@ -112,12 +112,7 @@ export function SkillAlerts({ alerts, canManage, options, today }: { alerts: Ski
               <DialogButton label="Voir l'affectation" title={`Affectation de ${a.person.name}`} kicker="Planning Keystone" width={560}>
                 {() => <AssignmentView alert={a} today={today} />}
               </DialogButton>
-              {a.renewal ? (
-                <RenewalTag renewal={a.renewal} state={a.currentState} />
-              ) : canManage && canPlanRenewal(a) && (
-                <NewActionButton options={options} label={planLabel(a.currentState)} icon="ph-calendar-plus"
-                  defaults={renewalDefaults(a.person, { id: a.titleId, label: a.title }, a.currentState, a.renewalDueOn, a.renewalPilotId)} />
-              )}
+              {a.renewal && <RenewalTag renewal={a.renewal} state={a.currentState} />}
             </div>
           </div>
         );

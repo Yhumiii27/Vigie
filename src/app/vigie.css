@@ -251,3 +251,50 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 @media print {
   .vg-topbar, .vg-side-backdrop { display: none !important; }
 }
+
+/* ─── Fiche et formulaires d'une action QSE (paquet 1, ACT-20 à ACT-26) ──── */
+.vg-action-detail { display: grid; gap: 16px; min-width: 0; }
+.vg-action-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11.5px; color: var(--color-neutral-500); min-width: 0; }
+.vg-action-label { flex-basis: 100%; font-size: 13px; color: var(--color-text); overflow-wrap: anywhere; }
+.vg-action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.vg-action-block { display: grid; gap: 6px; min-width: 0; }
+.vg-block-text { margin: 0; font-size: 12.5px; color: var(--color-neutral-300); white-space: pre-line; overflow-wrap: anywhere; text-wrap: pretty; }
+.vg-block-text.vg-muted { color: var(--color-neutral-500); }
+.vg-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px 16px; margin: 0; }
+.vg-facts > div { display: grid; gap: 3px; align-content: start; min-width: 0; }
+.vg-facts dt { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-600); }
+.vg-facts dd { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.vg-person { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vg-source-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.vg-source-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; overflow-wrap: anywhere; }
+.vg-notice { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; color: var(--color-neutral-400); text-wrap: pretty; }
+.vg-notice > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.vg-notice.is-warn { color: var(--tone-warn-fg); }
+.vg-flash { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tone-ok-fg, var(--color-neutral-300)); }
+.vg-step-note { margin: 0; font-size: 12px; color: var(--color-neutral-400); text-wrap: pretty; }
+.vg-warn-note { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px; color: var(--tone-warn-fg); border: 1px solid color-mix(in srgb, var(--tone-warn-fg) 40%, transparent); text-wrap: pretty; }
+.vg-warn-note > i { font-size: 14px; flex: none; margin-top: 1px; }
+.vg-warn-text { color: var(--tone-warn-fg); }
+.vg-readonly { display: flex; align-items: center; color: var(--color-neutral-400); cursor: default; min-height: 34px; overflow-wrap: anywhere; }
+.vg-fieldset { display: grid; gap: 12px; margin: 0; padding: 12px; min-width: 0; border: 1px solid var(--color-divider); border-radius: var(--radius-md); }
+.vg-fieldset > legend { padding: 0 6px; font-size: 12px; font-weight: 500; color: var(--color-text); }
+.vg-radios { display: flex; flex-wrap: wrap; gap: 8px 16px; min-height: 34px; align-items: center; }
+.vg-check > input:checked + .vg-radio-box { border-radius: 50%; }
+.vg-radio-box { border-radius: 50%; }
+.vg-check > input:checked + .vg-radio-box > i { font-weight: bold; }
+/* Fil de commentaires (§ 9). */
+.vg-thread { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.vg-thread > li { display: grid; gap: 4px; justify-items: start; padding-left: 10px; border-left: 2px solid var(--color-divider); min-width: 0; }
+.vg-thread > li:target { border-left-color: var(--color-accent); }
+.vg-thread-meta { font-size: 11px; color: var(--color-neutral-500); overflow-wrap: anywhere; }
+.vg-thread-body { margin: 0; font-size: 12.5px; color: var(--color-neutral-300); white-space: pre-line; overflow-wrap: anywhere; text-wrap: pretty; }
+.vg-thread-withdrawn { margin: 0; font-size: 12px; font-style: italic; color: var(--color-neutral-500); overflow-wrap: anywhere; }
+.vg-thread-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; overflow-wrap: anywhere; }
+.vg-thumb-caption { margin-top: 3px; max-width: 100%; font-size: 10.5px; color: var(--color-neutral-500); text-align: center; }
+/* Liste latérale + contenu (ex. unités de travail du DUERP) ; une seule colonne sur téléphone. */
+.vg-split { grid-template-columns: minmax(200px, 216px) minmax(0, 1fr); }
+@media (max-width: 760px) {
+  .vg-split { grid-template-columns: minmax(0, 1fr); }
+  .vg-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vg-action-buttons > .btn { flex: 1 1 auto; min-height: 40px; }
+}

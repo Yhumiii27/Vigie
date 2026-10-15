@@ -129,7 +129,11 @@ export type PlanView = {
   history: ChangeEntry[];
   /** gap : permis sans plan signé (écart compté avec ce plan quand le plan est lui-même en écart). */
   permits: { id: string; type: PermitType; stateLabel: string; tone: Tone; validity: string; requested: boolean; gap: boolean }[];
-  actions: { id: string; title: string; statusLabel: string; tone: Tone; due: string; pilot: string }[];
+  /**
+   * Actions reprises rattachées au plan (actions.preventionPlanId, ACT-01), consultation seule : la Prévention ne crée
+   * plus d'action QSE (réponses du service QHSE du 15/10/2026) ; abandonnées exclues.
+   */
+  actions: { id: string; label: string; statusLabel: string; tone: Tone; due: string; pilot: string }[];
   /** Événements rattachés au plan (accident, presque-accident… survenu pendant l'intervention). */
   events: LinkedEvent[];
   /** Pièces jointes (exemplaire signé…), hors fichier source d'un formulaire importé (voir form). */
@@ -197,7 +201,7 @@ export type PermitView = {
   /** Motif d'annulation (statut annule). */
   cancelReason: string | null;
   cancelledBy: string | null;
-  /** Actions du plan d'actions unique rattachées au permis (actions.permitId, ACT-01). */
+  /** Actions reprises rattachées au permis (actions.permitId, ACT-01), consultation seule (voir PlanView.actions). */
   actions: PlanView['actions'];
   /** Nombre d'actions rattachées au plan du permis (renvoi vers la fiche du plan). */
   planActions: number;
@@ -402,8 +406,8 @@ export async function loadPrevention() {
   const importIds = plans.map((p) => p.importedFromId).filter((id): id is string => !!id);
 
   const [preventionActions, attachments, imported, planLogs, permitLogs, contractorLogs, procedure] = await Promise.all([
-    // Actions annulées comprises : elles restent rattachées (un plan qui en a une n'est plus un brouillon supprimable).
-    // Source par les colonnes posées à la création (ACT-01), plus par la référence textuelle.
+    // Actions reprises (bases antérieures au 15/10/2026), abandonnées comprises : elles restent rattachées (un plan qui en
+    // a une n'est plus un brouillon supprimable). Source par les colonnes posées à la création (ACT-01).
     planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
     planIds.length ? db.select().from(t.attachments).where(eq(t.attachments.entityType, PLAN_ATTACHMENT)).orderBy(asc(t.attachments.createdAt)) : [],
     importIds.length ? db.select({ id: t.attachments.id }).from(t.attachments).where(inArray(t.attachments.id, importIds)) : [],
@@ -412,14 +416,14 @@ export async function loadPrevention() {
     loadChangeLogs('contractor', contractors.map((c) => c.id)),
     loadProcedure(db),
   ]);
-  const linkedActions = preventionActions.filter((a) => a.status !== 'cancelled');
+  const linkedActions = preventionActions.filter((a) => a.status !== 'abandonnee');
   const importedIds = new Set(imported.map((f) => f.id));
   const actionsOf = (key: 'preventionPlanId' | 'permitId', id: string) => linkedActions
     .filter((a) => a[key] === id)
     .sort(byIdDesc)
     .map((a) => {
       const v = actionView(a, people, now);
-      return { id: a.id, title: a.title, statusLabel: v.statusLabel, tone: v.tone, due: fmtDate(a.dueOn), pilot: v.pilot };
+      return { id: a.id, label: v.label, statusLabel: v.statusLabel, tone: v.tone, due: fmtDate(a.dueOn), pilot: v.pilot };
     });
 
   // Événements rattachés, le plus récent d'abord ; un événement classé sans suite reste listé avec ce statut.
@@ -508,7 +512,7 @@ export async function loadPrevention() {
     const contractor = contractorOf.get(p.contractorId);
     const actions = actionsOf('preventionPlanId', p.id);
     const openPermitIds = allPermits.filter((x) => x.preventionPlanId === p.id && isOpenPermit(x)).map((x) => x.id);
-    const endCheck = { mandatory, now, openPermitIds, actionCount: actions.length };
+    const endCheck = { mandatory, now, openPermitIds };
     const liveActivities = activities.filter((a) => a.planId === p.id && a.endOn >= now).length;
     const form = parseFormData(p.formData);
     const gapKind = startGap(p, now, rule);
@@ -762,7 +766,8 @@ export const loadPreventionCompliance = cache(async (): Promise<{
  *   permis expiré non clos ou demande échue ; demande à délivrer dont la validité commence sous l'horizon.
  * Les échéances ouvrent directement la fiche concernée (/prevention?plan=… ou ?onglet=permis&permis=…).
  * Les écarts R. 4512-6 passés (PRV-01 : plan signé après le début, intervention réalisée sans plan signé) restent des
- * indicateurs (écran, veille, revue de direction) : ni échéance ni badge ; l'action qui trace l'écart est exigée à la clôture.
+ * indicateurs (écran, veille, revue de direction) : ni échéance ni badge ; aucune action QSE n'est exigée à la clôture
+ * (actions immédiates hors actions QSE, réponses du service QHSE du 15/10/2026).
  */
 export const loadPreventionSignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
   const rows = await loadRows('perimeter');

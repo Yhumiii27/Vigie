@@ -1,4 +1,6 @@
 // Constantes partagées par les composants de l'écran Audits et par src/server/audits.ts.
+import { admissibleSources } from '@/lib/action-rules';
+import type { ActionDefaults } from '@/lib/action-view';
 import { MONTHS_SHORT, monthName } from '@/lib/dates';
 import { FINDING_KINDS, TONE } from '@/lib/domain';
 
@@ -32,3 +34,15 @@ export const MONTH_OPTIONS = MONTHS_SHORT.map((_, i) => {
 
 /** « Septembre 2026 » : mois et année d'un élément du programme (planification, report). */
 export const monthLabel = (month: number, year: number) => `${MONTH_OPTIONS[month - 1]?.[1] ?? month} ${year}`;
+
+/**
+ * Source d'une action créée depuis un constat ou un élément du programme (D20, ACT-28) : imposée par la ligne du programme
+ * (Certification → Audit de certification, Visites sécurité → Audit terrain, Audits internes → Audit interne, Fournisseurs →
+ * Audit fournisseur, élément « Revues de direction » → Revue de direction) ; constat hors programme ou ligne libre : l'une des
+ * quatre sources d'audit, Audit interne proposé.
+ */
+export function auditActionSource(kind: 'finding' | 'plan', track: string | null): Pick<ActionDefaults, 'source' | 'lockSource' | 'sourceChoices'> {
+  const sources = admissibleSources(kind, { track });
+  if (sources.length === 1) return { source: sources[0], lockSource: true };
+  return { source: sources.includes('audit_interne') ? 'audit_interne' : sources[0], sourceChoices: sources };
+}

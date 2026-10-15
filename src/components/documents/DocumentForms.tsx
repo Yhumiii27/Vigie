@@ -5,6 +5,7 @@ import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea, type FormAction } from '@/components/form';
 import { FileError, checkPickedFiles } from '@/components/watch/parts';
 import type { DocumentRow, LinkedAction, VersionView } from '@/lib/data/documents';
+import type { ActionFormOptions } from '@/lib/action-view';
 import type { FormOptions } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import { nextRef, type FormState } from '@/lib/forms';
@@ -12,7 +13,12 @@ import { createDocument, reviseDocument, updateDocument, updateDraft } from '@/s
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocType } from './meta';
 
 type Option = readonly [string, string];
-export type DocFormOptions = Pick<FormOptions, 'people' | 'sites' | 'origins'> & { actions: readonly Option[] };
+/**
+ * Listes des formulaires du domaine. `actions` (actions à rattacher à une version) et `actionForm` (formulaire d'action)
+ * ne sont fournis qu'au service QHSE, seul à créer une action et à modifier ses rattachements (ACT-22) : sans elles, le
+ * champ « Action liée » n'est pas affiché (le serveur conserve alors l'action actuelle).
+ */
+export type DocFormOptions = Pick<FormOptions, 'people' | 'sites'> & { actions: readonly Option[] | null; actionForm: ActionFormOptions | null };
 
 // Aligné sur checkUpload (src/lib/uploads.ts) : pas de .ppt (ancien format PowerPoint refusé par le serveur).
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.csv,.png,.jpg,.jpeg,.webp';
@@ -20,9 +26,9 @@ const FILE_HINT = 'Facultatif · PDF, Word, Excel, PowerPoint (.pptx) ou image, 
 const TYPE_OPTIONS: Option[] = DOC_TYPE_KEYS.map((k) => [k, DOC_TYPES[k].label]);
 const PROCESS_OPTIONS: Option[] = Object.entries(PROCESSES).map(([code, label]) => [code, `${label} (${code})`]);
 
-/** Ajoute l'action déjà liée à la liste si elle n'y figure pas (action clôturée ou d'un autre site). */
-const withAction = (options: readonly Option[], action: Pick<LinkedAction, 'id' | 'title'> | null | undefined): readonly Option[] =>
-  action && !options.some(([id]) => id === action.id) ? [[action.id, `${action.id} · ${action.title}`], ...options] : options;
+/** Ajoute l'action déjà liée à la liste si elle n'y figure pas (action close ou d'un autre site). */
+const withAction = (options: readonly Option[], action: Pick<LinkedAction, 'id' | 'label'> | null | undefined): readonly Option[] =>
+  action && !options.some(([id]) => id === action.id) ? [[action.id, `${action.id} · ${action.label}`], ...options] : options;
 
 const Note = ({ children }: { children: ReactNode }) => (
   <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{children}</div>
@@ -87,9 +93,11 @@ function NewDocumentForm({ options, existingIds, defaultSiteId, onDone, onCancel
         <Input name="summary" defaultValue="Création du document" />
       </Field>
       <FormRow>
-        <Field name="actionId" label="Action liée" hint="Facultatif : action du plan à l'origine du document.">
-          <Select name="actionId" options={options.actions} placeholder="Aucune" defaultValue="" />
-        </Field>
+        {options.actions && (
+          <Field name="actionId" label="Action liée" hint="Facultatif : action du plan à l'origine du document.">
+            <Select name="actionId" options={options.actions} placeholder="Aucune" defaultValue="" />
+          </Field>
+        )}
         <Field name="file" label="Fichier" hint={FILE_HINT}>
           <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>
@@ -154,9 +162,11 @@ export function RevisionForm({ doc, version, options, onDone, onCancel }: { doc:
         <TextArea name="summary" rows={3} autoFocus placeholder="Ce qui change et pourquoi (ex. suite à EV-2026-130, revue périodique sans modification…)" />
       </Field>
       <FormRow>
-        <Field name="actionId" label="Action liée" hint="Facultatif : action du plan à l'origine de la révision.">
-          <Select name="actionId" options={withAction(options.actions, suggested)} placeholder="Aucune" defaultValue={suggested?.id ?? ''} />
-        </Field>
+        {options.actions && (
+          <Field name="actionId" label="Action liée" hint="Facultatif : action du plan à l'origine de la révision.">
+            <Select name="actionId" options={withAction(options.actions, suggested)} placeholder="Aucune" defaultValue={suggested?.id ?? ''} />
+          </Field>
+        )}
         <Field name="file" label="Fichier" hint={FILE_HINT}>
           <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>
@@ -175,9 +185,11 @@ export function DraftForm({ version, options, onDone, onCancel }: { version: Ver
         <TextArea name="summary" rows={3} defaultValue={version.summary} autoFocus />
       </Field>
       <FormRow>
-        <Field name="actionId" label="Action liée">
-          <Select name="actionId" options={withAction(options.actions, version.action)} placeholder="Aucune" defaultValue={version.action?.id ?? ''} />
-        </Field>
+        {options.actions && (
+          <Field name="actionId" label="Action liée">
+            <Select name="actionId" options={withAction(options.actions, version.action)} placeholder="Aucune" defaultValue={version.action?.id ?? ''} />
+          </Field>
+        )}
         <Field name="file" label={version.file ? 'Remplacer le fichier' : 'Fichier'} hint={version.file ? `Fichier actuel : ${version.file.name}` : FILE_HINT}>
           <Input name="file" type="file" accept={ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
         </Field>

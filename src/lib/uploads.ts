@@ -82,11 +82,17 @@ export async function readAttachment(id: string) {
   }
 }
 
-export async function deleteAttachment(id: string) {
-  const db = await getDb();
+export async function deleteAttachment(id: string, opts: { db?: DbOrTx } = {}) {
+  const db = opts.db ?? await getDb();
   const [row] = await db.delete(t.attachments).where(eq(t.attachments.id, id)).returning();
-  if (row) await unlink(path.join(/*turbopackIgnore: true*/ uploadDir(), path.basename(row.storagePath))).catch(() => {});
+  // Dans une transaction (`opts.db`), le fichier n'est effacé qu'après validation, par l'appelant : removeStoredFile(row).
+  if (row && !opts.db) await removeStoredFile(row);
   return row ?? null;
+}
+
+/** Efface le fichier d'une pièce jointe dont la ligne a été supprimée (après validation de la transaction). */
+export async function removeStoredFile(row: { storagePath: string }) {
+  await unlink(path.join(/*turbopackIgnore: true*/ uploadDir(), path.basename(row.storagePath))).catch(() => {});
 }
 
 /** URL de consultation d'une pièce jointe. */

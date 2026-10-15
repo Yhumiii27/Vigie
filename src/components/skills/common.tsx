@@ -1,14 +1,16 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
-import type { ActionDefaults } from '@/components/ActionFormDialog';
 import { Icon, ToneTag } from '@/components/ui';
+import { actionHref } from '@/lib/action-rules';
 import { fileIcon } from '@/lib/attachments';
 import { daysBetween, fmtDate } from '@/lib/dates';
 import { SKILL_STATES, type SkillState } from '@/lib/domain';
-import type { Person } from '@/lib/queries';
 import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
+// Plan d'actions : aucun recyclage ni formation ne donne lieu à une action QSE (réponses du service QHSE du 15/10/2026,
+// le service RH gère cette partie) ; l'écran ne crée plus d'action et n'affiche, en consultation seule, que l'action
+// de recyclage d'une base reprise encore rattachée à l'exigence (RenewalInfo).
 
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
@@ -17,34 +19,9 @@ export { period } from './rules';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
 export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');
-export const planLabel = (state: SkillState) => (state === 'r' ? 'Planifier la formation' : 'Planifier le recyclage');
 export const plannedLabel = (state: SkillState) => (state === 'r' ? 'Formation planifiée' : 'Recyclage planifié');
-/**
- * Recyclage à planifier (échéance proposée par le serveur) et aucune action de recyclage rattachée.
- * Toute action non clôturée compte, y compris en « Efficacité à vérifier » : en créer une autre remplacerait
- * le rattachement de l'exigence (qualification_requirements.renewalActionId).
- */
-export const canPlanRenewal = (c: Pick<SkillCell, 'renewalDueOn' | 'renewal'>) => c.renewalDueOn !== null && !c.renewal;
 
 export const validityLabel = (t: Pick<TrainingTitle, 'validityMonths'>) => (t.validityMonths ? `Validité ${t.validityMonths} mois` : 'Sans échéance');
-
-/**
- * Valeurs de l'action « Planifier le recyclage » (plan d'actions unique, origine Habilitations).
- * `pilotId` : responsable QHSE du site du salarié, destinataire des alertes habilitation (vide si le poste est vacant).
- */
-export function renewalDefaults(person: Pick<Person, 'id' | 'name' | 'siteId'>, title: Pick<TrainingTitle, 'id' | 'label'>, state: SkillState, dueOn: string | null, pilotId: string | null): ActionDefaults {
-  return {
-    title: `${state === 'r' ? 'Formation initiale' : 'Recyclage'} ${lcfirst(title.label)} — ${person.name}`,
-    origin: 'skills',
-    originRef: `Habilitations · ${person.name}`,
-    lockOrigin: true,
-    pilotId: pilotId ?? undefined,
-    dueOn: dueOn ?? undefined,
-    kind: 'P',
-    siteId: person.siteId,
-    link: `qualification:${person.id}:${title.id}`,
-  };
-}
 
 /** Pastille d'état de la matrice (cercle coloré + icône). */
 export function SkillDot({ state, size = 22 }: { state: SkillState; size?: number }) {
@@ -83,13 +60,15 @@ export function Fact({ label, children, wide }: { label: string; children: React
   );
 }
 
-/** Lien vers l'action de recyclage dans le plan d'actions, avec son statut. */
+/** Lien vers l'action de recyclage reprise dans le plan d'actions, avec son avancement (consultation seule). */
 export function RenewalLink({ renewal, showDue = true }: { renewal: RenewalInfo; showDue?: boolean }) {
+  // Action qu'on ne peut pas lire (canReadAction) : numéro seul, sans lien vers une fiche refusée.
+  if (!renewal.readable) return <span style={{ fontSize: 12.5 }}>{renewal.id}</span>;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <Link href={`/actions?action=${encodeURIComponent(renewal.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{renewal.id}</Link>
+      <Link href={actionHref(renewal.id)} className="vg-link" style={{ fontSize: 12.5 }}>{renewal.id}</Link>
       <ToneTag tone={renewal.tone} style={{ padding: '1px 7px' }}>{renewal.statusLabel}</ToneTag>
-      {showDue && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>échéance {fmtDate(renewal.dueOn)} · {renewal.pilot}</span>}
+      {showDue && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>date cible {fmtDate(renewal.dueOn)} · {renewal.pilot}</span>}
     </span>
   );
 }
@@ -97,8 +76,11 @@ export function RenewalLink({ renewal, showDue = true }: { renewal: RenewalInfo;
 /** Étiquette « Recyclage planifié · A-xxx » (lien vers le plan d'actions). */
 export function RenewalTag({ renewal, state }: { renewal: RenewalInfo; state: SkillState }) {
   const label = renewal.planned ? plannedLabel(state) : `${state === 'r' ? 'Formation' : 'Recyclage'} · ${lcfirst(renewal.statusLabel)}`;
+  if (!renewal.readable) {
+    return <span className="tag tag-accent" style={{ gap: 6 }}><Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}</span>;
+  }
   return (
-    <Link href={`/actions?action=${encodeURIComponent(renewal.id)}`} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={`${renewal.title} — échéance ${fmtDate(renewal.dueOn)}`}>
+    <Link href={actionHref(renewal.id)} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={`${renewal.label} — date cible ${fmtDate(renewal.dueOn)}`}>
       <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}
     </Link>
   );

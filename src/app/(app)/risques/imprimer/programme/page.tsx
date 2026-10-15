@@ -65,7 +65,7 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
             {lines.length === 0 ? <p className="pp-empty">Aucune action du programme sur ce site.</p> : (
               <table className="table pp-table">
                 <thead>
-                  <tr><th>Action</th><th>Risques du DUERP</th><th>Échéance</th><th>Statut</th><th style={{ textAlign: 'right' }}>Coût estimé (HT)</th><th>Ressources</th><th>Indicateur</th></tr>
+                  <tr><th>Action</th><th>Risques du DUERP</th><th>Date cible</th><th>Avancement</th><th style={{ textAlign: 'right' }}>Coût estimé (HT)</th><th>Ressources</th><th>Indicateur</th></tr>
                 </thead>
                 <tbody>
                   {lines.map((l) => (
@@ -87,7 +87,7 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
                   ))}
                   <tr>
                     <td colSpan={4} style={{ fontWeight: 500 }}>
-                      Total · {totals.count} action{totals.count > 1 ? 's' : ''}{totals.done ? ` · ${totals.done} clôturée${totals.done > 1 ? 's' : ''}` : ''}
+                      Total · {totals.count} action{totals.count > 1 ? 's' : ''}{totals.done ? ` · ${totals.done} vérifiée${totals.done > 1 ? 's' : ''}` : ''}
                       {totals.count > totals.costed && <span className="pp-muted"> · {totals.count - totals.costed} sans coût estimé</span>}
                     </td>
                     <td className="pp-nowrap" style={{ textAlign: 'right', fontWeight: 500 }}>{fmtEuro(totals.cost)}</td>

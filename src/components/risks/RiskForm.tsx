@@ -41,7 +41,7 @@ export type RiskFormDefaults = Partial<Pick<RiskView, 'id' | 'unitId' | 'hazard'
 
 /**
  * Formulaire d'ajout / de modification d'un risque, avec cotation brute et résiduelle calculées en direct.
- * `reviewPrompt` : actions clôturées, résiduel à recoter — la case enregistre la recotation même sans changement de cotation.
+ * `reviewPrompt` : actions vérifiées, résiduel à recoter — la case enregistre la recotation même sans changement de cotation.
  */
 export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCancel }: {
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];

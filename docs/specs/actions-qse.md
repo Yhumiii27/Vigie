@@ -1,11 +1,11 @@
 # Actions QSE — spécification fonctionnelle de la refonte du plan d'actions
 
-*Rédigée le 15/10/2026. Statut : à valider. Points ouverts : [§ 22](#22-points-ouverts).*
+*Rédigée le 15/10/2026. Statut : **paquet 1 livré le 15/10/2026** (ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 sans objet, ACT-40 ; PRD-12 partiel), après le 3ᵉ tour de réponses du service QHSE (15/10/2026, 14:56 UTC), qui tranche les points 3 à 13 et 15 du [§ 22](#22-points-ouverts) ; propositions appliquées par défaut : points 14 et 17. Restent : ACT-34 (C4), ACT-36 et ACT-39 (C3), ACT-29 et ACT-02 (décidés, C1), ACT-41 (C4) et ACT-42 (C3), ajoutés le 15/10/2026. Les écarts de la réalisation à la rédaction initiale sont indiqués dans chaque section (« Livré : … »).*
 
 Sources, par ordre de priorité :
 
 1. le formulaire Power Apps « Créer Actions QSE » (capture reçue le 15/10/2026) ;
-2. les réponses du service QHSE au questionnaire (premier tour le 15/10/2026 à 08:41 UTC, questions de suivi à 09:07 UTC) ;
+2. les réponses du service QHSE au questionnaire (premier tour le 15/10/2026 à 08:41 UTC, questions de suivi à 09:07 UTC, troisième tour à 14:56 UTC sur les points ouverts du § 22) ;
 3. les arbitrages de l'utilisateur du 15/10/2026 (rappel du mercredi dans Vigie et par e-mail ; format des numéros AC en attente de recherche ; rôle du responsable validé ; extraction Power Apps fournie plus tard par le propriétaire de l'application ; d'autres formulaires Power Apps à venir) ;
 4. les décisions produit antérieures ([`docs/RESTE-A-FAIRE.md`](../RESTE-A-FAIRE.md), § 19 et § 20) et les conventions de [`CLAUDE.md`](../../CLAUDE.md) ;
 5. le code actuel (table `actions` de `src/db/schema.ts`, `src/lib/domain.ts`, `src/components/ActionFormDialog.tsx`, `src/lib/data/actions.ts`, `src/server/plan.ts`, `plan-ui.ts`, `plan-core.ts`).
@@ -52,6 +52,12 @@ Hors périmètre (décidé) : export Excel des actions, vues enregistrées, synt
 | Numérotation | Numéro unique, jamais réattribué ; format AC + année + numéro (ex. AC-260150) ; compteur annuel ou continu et nombre de chiffres **à rechercher** | QHSE + utilisateur, 15/10 |
 | Reprise | Toutes les actions Power Apps, avec leurs numéros AC ; extraction fournie plus tard par le propriétaire de l'application | QHSE + utilisateur, 15/10 |
 | Traçabilité | Jamais de suppression physique ; annulation ou archivage avec motif obligatoire ; journal de chaque création, modification, annulation | Décision du 10/10/2026 (§ 20 du backlog) |
+| Création et modification | **Les actions QSE sont créées uniquement par le service QHSE** ; toute modification d'une action (champs, avancement, liens) appartient au QHSE ; l'encadrement lit le plan de son périmètre. Un chef de service ou de projet crée ses actions dans un projet, remontées plus tard dans l'outil général (Keystone, ACT-41) | QHSE, 3ᵉ tour |
+| Sources | 24 : les 22 + « Déchets » et « Audit fournisseur » ; « Réserves » = réserves de réception d'un chantier ou d'une installation ; AST = analyse de sécurité des tâches en contexte pyrotechnique, EST = étude de sécurité technique | QHSE, 3ᵉ tour |
+| Habilitations, Prévention | Aucune action QSE pour un recyclage ou une formation (le RH les gère ; le QHSE consulte) ; les plans de prévention donnent lieu à des actions immédiates non enregistrées dans les actions QSE | QHSE, 3ᵉ tour |
+| Rattachements | Liens complémentaires gardés ; jamais un second événement ni audit ; lien à un équipement, un sous-équipement, un client ou un fournisseur souhaité (ACT-42) | QHSE, 3ᵉ tour |
+| Vérificateur, priorité | Autovérification admise sans restriction ; priorité au libre choix, sans proposition | QHSE, 3ᵉ tour |
+| Fil et preuves | Un commentaire ou une preuve du responsable avertit tous les animateurs QHSE dans la cloche, une notification par commentaire ou par preuve | QHSE, 3ᵉ tour |
 | Rôle Salarié | Ne voit que ses propres données. **Remplacé** pour les actions : il ne « déclare plus réalisée » une action ; comme tout responsable, il consulte, commente et joint des preuves | § 20, modifié par l'utilisateur le 15/10 |
 
 ## 3. Rôles
@@ -59,7 +65,7 @@ Hors périmètre (décidé) : export Excel des actions, vues enregistrées, synt
 - **Service QHSE** — dans ce document, « QHSE » désigne les rôles Animateur QHSE et Direction, ceux qui valident déjà dans Vigie (`canApprove`, `requireApprover`) : vérification d'efficacité, approbation des documents, versions du DUERP. Ils ont tous les droits sur les actions de leur périmètre (tous les sites).
 - **Responsable** — la personne désignée sur l'action (colonne `pilot_id`, libellée « Responsable » à l'écran), choisie dans la liste du personnel actif (`people` sans date de sortie passée), quel que soit son rôle.
 - **Responsable QHSE du site** — `sites.qhse_lead_id`, résolu par `loadQhseLeads()` (poste vacant : les animateurs QHSE) : destinataire des échéances de vérification d'efficacité.
-- **Encadrement hors QHSE** (Chef de service, Chef de projet) — aujourd'hui, il crée et modifie toutes les actions de son périmètre (`requireManager`). Après la refonte, il n'a plus que les droits d'un responsable sur ses propres actions ; la création depuis un écran source et la consultation du plan de son périmètre sont à trancher (**ACT-22**, [§ 8](#8-droits)).
+- **Encadrement hors QHSE** (Chef de service, Chef de projet) — avant la refonte, il créait et modifiait toutes les actions de son périmètre (`requireManager`). Depuis le paquet 1 (ACT-22 tranché), il lit le plan de son périmètre en lecture seule et n'a que les droits d'un responsable sur ses propres actions ; il ne crée aucune action (`canCreateAction(role)` = QHSE). Conséquence acceptée : « À faire », le tableau de bord, la cloche et les badges ne lui montrent plus les échéances des actions dont il n'est pas responsable (écran en lecture seule).
 
 ## 4. Champs
 
@@ -71,10 +77,11 @@ Ordre du formulaire = ordre du formulaire Power Apps. Colonnes proposées pour `
 | Date | **`opened_on`** | date | — | oui | Vigie (date du jour, heure de Paris) | à la création ; non modifiable ; reprise : date Power Apps |
 | Responsable | `pilot_id` | personne | personnel actif | oui | QHSE | à la création ; modifiable par le QHSE (journalisé) |
 | Avancement | `status` (valeurs nouvelles) | liste | 10 valeurs ([§ 5.1](#51-avancement)) | oui, « A faire » par défaut | QHSE | à tout moment ([§ 6](#6-cycle-de-vie)) |
-| Priorité | **`priority`** | liste | Urgent, Moyen terme, Long terme | oui | QHSE (proposée d'après le niveau de risque, **ACT-38**) | à la création ; modifiable |
+| Priorité | **`priority`** | liste | Urgent, Moyen terme, Long terme | oui | QHSE (libre choix, sans proposition : ACT-38 sans objet) | à la création ; modifiable |
 | Date cible | `due_on` + **`initial_due_on`** | date | — | oui | QHSE | à la création ; modifiable par le QHSE, date cible initiale conservée |
 | Date effective | **`done_on`** | date | — | oui au passage « Terminée » | QHSE | au passage « Terminée » (par défaut le jour même) |
-| Source | **`source`** (remplace `origin`) | liste | 22 sources ([§ 12](#12-sources-et-rattachements)) | oui | QHSE ou écran source | à la création ; verrouillée ensuite (ACT-01) |
+| Source | **`source`** (remplace `origin`) | liste | 24 sources ([§ 12](#12-sources-et-rattachements)) | oui | QHSE, imposée par l'élément lié | à la création ; verrouillée ensuite (ACT-01) ; une source vide d'une action reprise se complète une fois |
+| *(Vigie, reprise)* Origine avant reprise | **`legacy_origin`** | texte | ancienne clé `origin` | non | migration 0005 seulement | jamais écrite ni modifiée par l'application ; lue par `reprise-liens` et affichée comme indice d'une source « à compléter » ; à supprimer après le complément d'ACT-37 |
 | *(Vigie)* Élément lié et référence d'origine | `event_id`, colonnes de source, registre `action-links`, `origin_ref` | lien + texte | selon la source | référence obligatoire sans élément lié | QHSE ou écran source | à la création ; verrouillés ensuite |
 | Domaine | **`domain`** | liste | Qualité, Sécurité, Santé, Environnement, Sûreté | oui | QHSE (proposé par la source) | à la création ; modifiable |
 | Description du problème | **`problem`** | texte long (4 000 car.) | — | oui | QHSE (pré-rempli par l'écran source) | à la création ; modifiable |
@@ -90,7 +97,7 @@ Ordre du formulaire = ordre du formulaire Power Apps. Colonnes proposées pour `
 | Coûts (€) | **`estimated_cost`**, **`actual_cost`** | montant € TTC (2 décimales) | ≥ 0 | non | QHSE | à tout moment |
 | Commentaires | table **`action_comments`** | fil daté et signé | — | — | responsable, QHSE | à tout moment ([§ 9](#9-fil-de-commentaires)) |
 | *(Vigie)* Site | `site_id` | site actif du périmètre | un seul | oui | QHSE (proposé par la source) | à la création ; transfert par le QHSE |
-| *(Vigie)* Preuves | `attachments` (`entity_type = 'action'`) | fichiers | types et tailles actuels | non | responsable, QHSE | à tout moment ([§ 10](#10-preuves)) |
+| *(Vigie)* Preuves | `attachments` (`entity_type = 'action'`, **`comment_id`** quand la preuve accompagne un commentaire) | fichiers | types et tailles actuels | non | responsable, QHSE | à tout moment ([§ 10](#10-preuves)) |
 | *(Vigie)* Action précédente | **`follows_action_id`**, **`follow_reason`** | lien | non efficace, nouveau risque | automatique | Vigie | création d'une action de suite ([§ 7](#7-vérification-defficacité)) |
 | *(Vigie)* Abandon | `cancelled_at`, `cancelled_by_id`, `cancel_reason` | horodatage, personne, motif | — | motif obligatoire | QHSE | passage « Abandonnée » |
 | *(Vigie, retiré)* Nature C/P | `kind` | — | — | — | — | supprimée après reprise ([§ 18](#18-reprise-des-actions-existantes-de-vigie)) |
@@ -98,7 +105,7 @@ Ordre du formulaire = ordre du formulaire Power Apps. Colonnes proposées pour `
 
 Règles de saisie (contrôlées par le serveur, `formReader`) :
 
-- Date cible et vérification planifiée : pas avant la date d'ouverture ; une vérification planifiée antérieure à la date cible est signalée sans être refusée ; une date nouvellement saisie ne peut pas être dans le passé (sauf reprise et import).
+- Date cible et vérification planifiée : pas avant la date d'ouverture ; une vérification planifiée antérieure à la date cible est signalée sans être refusée ; une date nouvellement saisie ne peut pas être dans le passé (sauf reprise et import). Livré : ces règles et les longueurs (4 000 caractères) ne s'appliquent qu'aux valeurs que la requête pose ou change (`actionDateErrors(v, today, changed)`, `textTooLong`) : une valeur reprise incohérente reste acceptée tant que personne ne la change ; un champ obligatoire vide est exigé à la modification suivante.
 - Date effective : entre la date d'ouverture et aujourd'hui. Date de vérification : entre la date effective et aujourd'hui.
 - Responsable : personne active ; un responsable sorti de l'effectif reste affiché sur l'action existante (`withCurrent`) et signalé, jamais proposé pour un nouveau choix.
 - Libellé court affiché partout où Vigie montrait l'intitulé (échéances, Kanban, fiches des autres écrans, dossier de revue) : première ligne du détail de l'action, tronquée à 90 caractères (`actionLabel()`).
@@ -196,7 +203,8 @@ Règle pure unique (`actionLate()`, `src/lib/queries.ts` ou module de règles de
   - pointage (heures), proposé ici puisqu'il est saisi à la clôture ([§ 11](#11-pointage-et-coûts)).
 - **Non efficace** : l'action passe Vérifiée avec ce résultat, et la même fenêtre ouvre une section « Nouvelle action » pré-remplie : source, élément lié, référence d'origine, domaine, priorité, niveau de risque, site et responsable de l'action vérifiée ; description du problème « Action <numéro> jugée non efficace le JJ/MM/AAAA : <constat> » ; restent à saisir le détail de l'action, la date cible et la vérification planifiée. La vérification et la nouvelle action sont enregistrées dans la même transaction (aucune vérification non efficace sans sa suite). La nouvelle action porte `follows_action_id` et `follow_reason = 'non_efficace'` ; les deux fiches affichent le lien.
 - **Nouveau risque généré** : même mécanisme, `follow_reason = 'nouveau_risque'`, description du problème = description du risque saisie dans la fenêtre. Si l'action est à la fois non efficace et génératrice d'un nouveau risque, deux actions de suite sont créées.
-- **Rattachement de l'action de suite** : elle est rattachée à l'élément lié de l'action vérifiée quand il accepte encore une action (un événement clos ou classé sans suite la refuse aujourd'hui, `addActionBlocker`) ; sinon elle garde la référence d'origine et le lien vers l'action précédente (voir [§ 22](#22-points-ouverts), point 12).
+- **Rattachement de l'action de suite** : elle est rattachée à l'élément lié de l'action vérifiée quand il accepte encore une action (un événement clos ou classé sans suite la refuse, `addActionBlocker`) ; sinon elle garde la référence d'origine et le lien vers l'action précédente, sans rouvrir l'événement, et le responsable QHSE du site de l'événement reçoit l'échéance « Événement clos — action de suite ouverte : décider d'une réouverture » (point 12, confirmé le 15/10/2026). Livré, liens par type (`followUpLinkMode`) : l'élément de la source (événement, constat ou élément du programme) est repris (un constat ou un élément du programme, qui ne porte qu'une action, est déplacé vers la suite) ; les liens multiples (risque, revue, document, filière, enlèvement) sont rattachés aussi à la suite ; les éléments à action unique (exigence, contrôle, version de document, décision de revue) sont déplacés vers la première suite (non efficace, sinon nouveau risque), journalisés sur les deux actions et sur l'élément ; habilitation, plan de prévention et permis ne sont jamais repris. Une action à source vide donne une suite à source vide (« à compléter »).
+- **Après « Vérifiée »** : nature, constat, résultat et date de vérification ne changent que par « Rouvrir » (motif) puis une nouvelle vérification ; le QHSE peut encore corriger les autres champs (pointage, coûts, date effective, champs à compléter), sauf la vérification planifiée. Un membre du QHSE peut vérifier une action dont il est responsable, sans marque (point 13, 15/10/2026).
 - **Échéances** : vérification planifiée dans les 15 jours, puis dépassée, pour une action Terminée : adressées au responsable QHSE du site (`loadQhseLeads`) seulement, pas au responsable de l'action, qui ne peut pas la faire (ACT-14).
 - Effets sur les sources : une action Vérifiée compte comme close pour les écrans sources (événement « Efficacité vérifiée », risque « résiduel à recoter », exigence, contrôle) ; une action de suite ouverte rattachée au même élément le maintient ouvert.
 
@@ -204,9 +212,10 @@ Règle pure unique (`actionLate()`, `src/lib/queries.ts` ou module de règles de
 
 | Capacité | Responsable | QHSE (animateur QHSE, direction) | Encadrement hors QHSE | Salarié non responsable |
 |---|:-:|:-:|:-:|:-:|
-| Consulter ses actions (tous sites, comme ses échéances, TDB-05) | oui | oui | oui (les siennes) | — |
-| Consulter le plan de son périmètre | — | oui | à trancher (**ACT-22** ; proposition : lecture seule, comme aujourd'hui) | non |
-| Créer une action (plan, écrans sources) | — | oui | à trancher (**ACT-22**) | non |
+| Consulter ses actions (tous sites, même hors de son périmètre : `canReadAction`) | oui | oui | oui (les siennes) | — |
+| Consulter le plan de son périmètre | — | oui | oui, en lecture seule (ACT-22, 15/10/2026) | non |
+| Créer une action (plan, écrans sources) | — | oui | non (ACT-22 : QHSE seulement) | non |
+| Rattacher ou détacher un lien complémentaire | — | oui | non | non |
 | Modifier les champs | non | oui | non | non |
 | Changer l'avancement, reporter, terminer | non | oui | non | non |
 | Vérifier, créer les actions de suite | non | oui | non | non |
@@ -216,7 +225,7 @@ Règle pure unique (`actionLate()`, `src/lib/queries.ts` ou module de règles de
 | Retirer une preuve | la sienne, avant « Vérifiée » | oui, avant « Vérifiée » | non | non |
 | Statistiques | — | oui | selon la consultation du plan | non |
 
-Côté serveur : écritures sur les champs et l'avancement par `requireApprover()` puis `requireInSite(siteId)` après chargement (avec `{ create: true }` à la création et au transfert) ; commentaires et preuves : `requireInSite` puis contrôle « responsable de l'action ou QHSE ». Côté page : un rôle sans droit d'écriture reçoit la fiche sans listes de formulaire (convention `isReadOnly` / `canEdit`). Le Salarié ne reçoit que ses actions, leurs commentaires et leurs preuves (charge RSC contrôlée par `test/e2e/employee-payload.test.ts`).
+Côté serveur : écritures sur les champs, l'avancement et les liens par `requireApprover()` puis `requireInSite(siteId)` après chargement (avec `{ create: true }` à la création et au transfert) ; commentaires et preuves : responsable de l'action (sur tous les sites : contrôle « sa propre action » à la place de `requireInSite`) ou QHSE (`requireInSite`). Le site est contrôlé juste après le chargement, avant tout autre refus, pour ne rien révéler d'une action hors périmètre. Rien d'autre d'un autre site n'est révélé au responsable (sources réduites à leur référence). Les écrans communs à l'entreprise (audits, revue de direction, veille) ne décrivent une action que si la personne peut la lire (`canReadAction`), sinon son numéro seul. Côté page : un rôle sans droit d'écriture reçoit la fiche sans listes de formulaire (convention `isReadOnly` / `canEdit`). Le Salarié ne reçoit que ses actions, leurs commentaires et leurs preuves (charge RSC contrôlée par `test/e2e/employee-payload.test.ts`).
 
 ## 9. Fil de commentaires
 
@@ -226,13 +235,16 @@ Côté serveur : écritures sur les champs et l'avancement par `requireApprover(
 - Pas de modification. Un commentaire peut être retiré par son auteur ou par le QHSE, avec un motif : il reste au fil sous la mention « Commentaire retiré le … par … », texte masqué (jamais de suppression physique).
 - Journal : chaque ajout et retrait est tracé (`logChange`, entité `action`) ; le fil et l'historique sont chargés à l'ouverture de la fiche, pas pour toute la liste (QUA-11).
 - Recherche : le texte des commentaires n'entre pas dans la recherche libre de la vue générale (voir [§ 16](#16-vue-générale-et-filtres)).
-- Avertir le QHSE d'un nouveau commentaire ou d'une preuve : à trancher (**ACT-31**).
+- Avertir le QHSE (ACT-31, tranché et livré le 15/10/2026) : un commentaire du responsable (hors QHSE) notifie chaque animateur QHSE, sauf l'auteur, une notification par commentaire (fichiers joints nommés dans le titre) ; au retrait du commentaire, le titre de ses notifications est réécrit sans extrait (`notifications.comment_id`).
+- Livré : le texte d'un commentaire retiré reste en base et n'est jamais envoyé au navigateur ; le journal d'un commentaire ne reprend pas son texte (l'historique part au navigateur).
 
 ## 10. Preuves
 
 - Infrastructure actuelle : pièces jointes `entity_type = 'action'` (`addActionFiles`, `removeActionFile`, `src/lib/uploads.ts`, chiffrées au repos, servies par `/fichiers/[id]`), mêmes types et tailles.
 - Ajout : par le responsable et le QHSE (aujourd'hui : tout l'encadrement ou le pilote), seules ou avec un commentaire ; jamais sur une action Abandonnée.
-- Retrait (pièce ajoutée par erreur, seule suppression admise) : par l'auteur de l'envoi ou le QHSE, tant que l'action n'est pas Vérifiée ; journalisé.
+- Retrait (pièce ajoutée par erreur, seule suppression admise) : par l'auteur de l'envoi s'il est encore responsable de l'action, ou par le QHSE, tant que l'action n'est pas Vérifiée ; ligne supprimée et journal écrits dans la même transaction, fichier effacé après validation.
+- Preuve jointe à un commentaire : `attachments.comment_id`. Commentaire retiré : ses preuves ne sont plus visibles que du QHSE (absentes de la charge des autres lecteurs, refusées par `/fichiers`), signalées « commentaire retiré » ; le QHSE retire une preuve inappropriée par « Retirer ».
+- Une preuve du responsable (hors QHSE) notifie chaque animateur QHSE, une notification par fichier (ACT-31).
 - Preuve facultative : aucune transition ne l'exige (la question d'ACT-10 « preuve obligatoire ? » est tranchée par le formulaire Power Apps, qui n'en a pas).
 
 ## 11. Pointage et coûts
@@ -240,51 +252,55 @@ Côté serveur : écritures sur les champs et l'avancement par `requireApprover(
 - **Pointage (h)** : temps réellement passé, une seule valeur, saisie par le QHSE à la clôture (proposée dans la fenêtre de vérification), corrigeable ensuite par le QHSE.
 - **Coût estimé** et **coût réel** (€ TTC, sans le temps) : saisis par le QHSE à tout moment, y compris après la vérification.
 - Affichage : fiche (bloc « Pointage et coûts ») ; total des coûts et du pointage des actions affichées dans la vue Liste.
-- PAPRIPACT (DUE-02) : la ligne du programme annuel propose le coût estimé de l'action ; le coût de la ligne reste figé avec le programme à la consultation du CSE.
+- PAPRIPACT (DUE-02) : la ligne du programme annuel propose le coût estimé de l'action à l'ajout d'une ligne (modifiable ; TTC du plan, HT du programme : à confirmer) ; le coût de la ligne reste figé avec le programme à la consultation du CSE.
 
 ## 12. Sources et rattachements
 
-Une action a **une seule source**, choisie parmi les 22 du service QHSE, verrouillée après la création (ACT-01), et **un seul événement ou audit lié** (l'élément de sa source quand elle désigne un événement ou un audit). La référence d'origine (`origin_ref`, texte) reste : elle désigne l'élément quand la source n'a pas de fiche dans Vigie, et sert de libellé. Les écrans sources lisent les colonnes de rattachement, jamais la référence texte.
+Une action a **une seule source**, choisie parmi les **24** du service QHSE (les 22 du formulaire Power Apps, plus « Déchets » et « Audit fournisseur », 3ᵉ tour du 15/10/2026), verrouillée après la création (ACT-01), et **un seul événement ou audit lié** (l'élément de sa source quand elle désigne un événement ou un audit). La référence d'origine (`origin_ref`, texte) reste : elle désigne l'élément quand la source n'a pas de fiche dans Vigie, et sert de libellé. Les écrans sources lisent les colonnes de rattachement, jamais la référence texte.
 
-| # | Source (libellé QHSE) | Clé | Élément Vigie lié (cible) | Origine Vigie actuelle reprise |
+| # | Source (libellé QHSE) | Clé | Élément Vigie lié (cible) | Origine Vigie reprise |
 |--:|---|---|---|---|
-| 1 | Analyse de risque (AST-EST) | `analyse_risque` | libre (référence) — sens d'AST-EST à préciser (**ACT-37**) | — |
+| 1 | Analyse de risque (AST-EST) | `analyse_risque` | libre (référence) ; AST = analyse de sécurité des tâches en contexte pyrotechnique, EST = étude de sécurité technique (précision affichée sous la liste) | — |
 | 2 | Analyse de risque chimique | `analyse_chimique` | libre (référence) ; inventaire des produits à venir (CNF-06) | — |
-| 3 | Analyse environnementale | `analyse_environnementale` | filière, enlèvement ou registre des déchets (colonnes `waste_stream_id`, `waste_entry_id`), sinon libre | `env` (proposé, **ACT-37**) |
+| 3 | Analyse environnementale | `analyse_environnementale` | libre (aucun élément Vigie ; aspects et impacts à venir, DOC-23) | — |
 | 4 | Audit de certification ISO | `audit_certification` | élément du programme d'audit (ligne « Certification ») ou constat | `audit` (élément de la ligne Certification) |
-| 5 | Audit interne ISO | `audit_interne` | élément du programme (ligne « Audits internes ») ou constat | `audit` (par défaut) |
-| 6 | Audit terrain | `audit_terrain` | élément du programme (ligne « Visites sécurité ») ou constat | `audit` (ligne Visites sécurité) |
-| 7 | Autorité publique | `autorite_publique` | libre (courrier, mise en demeure, inspection) | — |
-| 8 | Causerie QSE | `causerie` | libre (causeries à venir, CNF-09) | — |
-| 9 | COMEX | `comex` | libre | — |
-| 10 | Contrôle réglementaire | `controle_reglementaire` | contrôle périodique (réserves) | `watch` rattachée à un contrôle |
-| 11 | DUERP | `duerp` | risque du DUERP | `risk` |
-| 12 | Évènement QSE | `evenement` | événement (`event_id`) | `ev` |
-| 13 | Objectif QSE | `objectif` | décision de revue de nature « Objectif » (objectifs mesurables à venir, AUD-13) | `rev` rattachée à une décision « objectif » |
-| 14 | Réclamation client | `reclamation_client` | événement de type RC (`event_id`) | `client` |
-| 15 | Réunion opérationnelle | `reunion_operationnelle` | libre | — |
-| 16 | Revue de direction | `revue_direction` | revue ou décision de revue | `rev` (autres cas) |
-| 17 | Revue documentaire | `revue_documentaire` | document ou version (`document_id`, `docversion`) | `docs` |
-| 18 | Revue de processus | `revue_processus` | libre | — |
-| 19 | Veille réglementaire | `veille` | exigence de veille | `watch` (autres cas) |
-| 20 | HAZOP | `hazop` | libre (référence de l'étude) | — |
-| 21 | Réserves | `reserves` | à préciser (**ACT-37**) : réserves d'un contrôle réglementaire, ou réserves de réception d'un chantier ; libre en attendant | — |
-| 22 | REX | `rex` | libre (référence du retour d'expérience) | — |
+| 5 | Audit fournisseur | `audit_fournisseur` | élément du programme (ligne « Fournisseurs ») ou constat | `audit` (ligne Fournisseurs) |
+| 6 | Audit interne ISO | `audit_interne` | élément du programme (ligne « Audits internes ») ou constat | `audit` (par défaut) |
+| 7 | Audit terrain | `audit_terrain` | élément du programme (ligne « Visites sécurité ») ou constat | `audit` (ligne Visites sécurité) |
+| 8 | Autorité publique | `autorite_publique` | libre (courrier, mise en demeure, inspection) | — |
+| 9 | Causerie QSE | `causerie` | libre (causeries à venir, CNF-09) | — |
+| 10 | COMEX | `comex` | libre | — |
+| 11 | Contrôle réglementaire | `controle_reglementaire` | contrôle périodique (réserves, contrôle dépassé) | `watch` rattachée à un contrôle |
+| 12 | Déchets | `dechets` | filière, enlèvement (`waste_stream_id`, `waste_entry_id`) ou exigence de veille (action « BSD manquants ») | `env` |
+| 13 | DUERP | `duerp` | risque du DUERP | `risk` |
+| 14 | Évènement QSE | `evenement` | événement (`event_id`) | `ev` |
+| 15 | Objectif QSE | `objectif` | décision de revue de nature « Objectif » (objectifs mesurables à venir, AUD-13) | `rev` rattachée à une décision « objectif » |
+| 16 | Réclamation client | `reclamation_client` | événement de type RC (`event_id`) | `client` |
+| 17 | Réunion opérationnelle | `reunion_operationnelle` | libre | — |
+| 18 | Revue de direction | `revue_direction` | revue, décision de revue, élément « Revues de direction » du programme | `rev` (autres cas), `audit` de la ligne « Revues de direction » |
+| 19 | Revue documentaire | `revue_documentaire` | document (`document_id`) ou version en cours de révision (`docversion`) | `docs` |
+| 20 | Revue de processus | `revue_processus` | libre | — |
+| 21 | Veille réglementaire | `veille` | exigence de veille | `watch` (autres cas) |
+| 22 | HAZOP | `hazop` | libre (référence de l'étude) | — |
+| 23 | Réserves | `reserves` | libre : réserves de réception d'un chantier ou d'une installation (précision affichée sous la liste) | — |
+| 24 | REX | `rex` | libre (référence du retour d'expérience) | — |
 
-Règles :
+Règles (livrées par le paquet 1) :
 
-- Création depuis un écran source (`NewActionButton`, champ `link`) : la source et l'élément lié sont imposés ; le domaine est proposé (événement AT, PA, SD → Sécurité ; NC, RC → Qualité ; ENV → Environnement ; risque du DUERP → Sécurité ; exigence → domaine de l'exigence quand il correspond ; document → Qualité), modifiable.
-- Création depuis le plan : la source est choisie ; pour une source à cible, un sélecteur propose l'élément (événements ouverts aux actions seulement, ACT-07 ; constats et éléments du programme ; risques ; exigences ; contrôles ; revues et décisions ; documents) ; à défaut d'élément, la référence d'origine est obligatoire (règle actuelle de `saveAction`).
-- Aucun autre événement ni audit ne peut être rattaché ensuite (`action-links` refuse) ; la source ne se change pas.
-- Écrans qui créent aujourd'hui des actions sans source correspondante dans la liste du QHSE : Habilitations (recyclage planifié), Prévention (plan de prévention, permis, coactivité), Environnement (filières, enlèvements, registre des déchets ; proposition : Analyse environnementale), audits fournisseurs : source à trancher (**ACT-37**). En attendant, le QHSE choisit la source dans le formulaire (pas de source imposée).
-- Rattachements complémentaires existants (risque du DUERP traité, ligne du PAPRIPACT, exigence, contrôle, recyclage) : maintenus en plus de la source tant que le point 10 du [§ 22](#22-points-ouverts) n'est pas tranché ; ils ne peuvent jamais ajouter d'autre événement ni d'audit.
+- **La source est imposée par l'élément lié** (`admissibleSources(type, faits)`, `src/lib/action-rules.ts`) : événement → Évènement QSE, ou Réclamation client pour une RC ; constat ou élément du programme → la source de sa ligne (Certification, Fournisseurs, Audits internes, Visites sécurité ; élément « Revues de direction » → Revue de direction), sinon les quatre sources d'audit ; risque → DUERP ; exigence → Veille réglementaire ou Déchets ; contrôle → Contrôle réglementaire ; document, version → Revue documentaire ; revue → Revue de direction ; décision → Objectif QSE (décision « objectif ») ou Revue de direction ; filière, enlèvement → Déchets. Aucune source libre pour un élément lié ; `saveAction` refuse toute autre combinaison. Sans élément : l'une des 24 sources, référence d'origine obligatoire.
+- **Aucune action QSE depuis Habilitations ni Prévention** (3ᵉ tour) : les types d'élément habilitation, plan de prévention et permis sont refusés à la création et au rattachement (« Ce type d'élément ne donne pas lieu à une action QSE. ») ; les actions reprises qui en portent un restent affichées en consultation (source « à compléter », le QHSE les abandonne avec un motif si besoin). Un plan de prévention se clôt après un écart R. 4512-6 sans action QSE (question PRV-21).
+- **Création depuis un écran source** (`NewActionButton`, champ `link`, QHSE seulement) : la source et l'élément lié sont imposés ; le domaine est proposé (événement AT, PA, SD → Sécurité ; NC, RC → Qualité ; ENV → Environnement ; risque du DUERP → Sécurité ; exigence → domaine de l'exigence quand il correspond ; document → Qualité ; Déchets → Environnement), modifiable. Documents : version en cours de révision sans action → lien `docversion` (pose aussi `document_id`), sinon `document`. Environnement : filière et enlèvement → Déchets imposé ; action « BSD manquants » → Déchets ou Veille, rattachée à l'exigence (retrouvée par ce lien seulement).
+- **Création depuis le plan** (QHSE) : la source est choisie ; un sélecteur propose les éléments que la source admet (événements ouverts aux actions, ACT-07 ; constats hors points forts et éléments du programme de l'année et de la précédente ; risques en vigueur ; contrôles ; exigences ; revues non closes et leurs décisions ; documents ; filières et enlèvements), d'un site actif du périmètre, sans élément à action unique déjà pris ; à défaut, la référence d'origine est obligatoire.
+- Aucun autre événement ni audit ne peut être rattaché ni détaché ensuite (`EVENT_AUDIT_LOCKED`) ; la source ne se change pas. Actions reprises portant plusieurs éléments ou un élément qui ne correspond pas à leur source : tolérées telles quelles (lecture de tous les éléments ; la suite ne reprend que l'élément conforme).
+- **Rattachements complémentaires** (risque du DUERP traité, ligne du PAPRIPACT, exigence, contrôle, document, revue, décision) : **gardés** (point 10, 3ᵉ tour), réservés au QHSE (`linkAction` / `unlinkAction`) ; jamais d'autre événement ni d'audit ; une version de document rattachée plus tard ne pose jamais `document_id`. Lien à un équipement, un sous-équipement, un client ou un fournisseur : souhaité, référentiels à identifier (**ACT-42**).
+- Source vide d'une action reprise (« à compléter ») : complétée une fois par le QHSE, parmi les sources admises par ses éléments événement ou audit, sinon parmi les 24 ; l'origine Vigie avant reprise (`legacy_origin`) est affichée comme indice.
 
 ## 13. Site
 
 - Une action porte **un seul site**, obligatoire : « Tous les sites » n'est plus proposé (ACT-06 et réserve de SEC-02 levés).
 - Site proposé : celui de l'élément lié quand il en a un ; sinon le site sélectionné ; sous « Tous les sites », à choisir. Liste : sites actifs que `requireInSite(…, { create: true })` accepte (`writableSites()`).
 - Éléments communs à l'entreprise (revue de direction et ses décisions, exigence de veille, programme d'audit et constats, qui n'ont pas de site) : le QHSE choisit le site de l'action (aujourd'hui, `ReviewPanel` crée ces actions sous « Tous les sites »).
-- Transfert vers un autre site : QHSE seulement, vers un site actif, et jamais hors du site de la source d'origine (règle actuelle `originSiteOf`).
+- Transfert vers un autre site : QHSE seulement, vers un site actif du périmètre, et jamais hors du site d'un élément lié.
 - Actions existantes sans site (« Tous les sites ») : conservées ainsi par la reprise, marquées « site à compléter » ([§ 18](#18-reprise-des-actions-existantes-de-vigie)) ; toute modification exige un site.
 
 ## 14. Numérotation
@@ -309,14 +325,16 @@ Mise en œuvre :
 
 - À la création d'une action, son responsable reçoit dans la cloche une notification d'information « Action <numéro> confiée par <auteur> : <libellé> », avec le lien vers la fiche. Jamais d'e-mail.
 - Pas de notification quand le responsable est l'auteur de la création.
-- Première notification d'information de Vigie (aujourd'hui la cloche ne montre que des échéances calculées, `src/lib/data/notifications.ts`) : table `notifications` (personne, type, entité, libellé, lien, créée le, lue le), affichée dans la cloche avec les échéances, comptée comme non lue, marquée lue au clic ou par « Tout marquer comme lu » ; réutilisable pour TDB-06.
+- Première notification d'information de Vigie : table `notifications` (personne, type, entité, libellé, lien, auteur, commentaire `comment_id`, créée le, lue le), écrite dans la transaction de l'écriture (`src/server/notify.ts`), affichée dans la cloche avec les échéances (icône par type ; clé `notification:<id>`), comptée comme non lue, marquée lue au clic ou par « Tout marquer comme lu » ; réutilisable pour TDB-06. Le lien n'est gardé que si la personne peut encore lire l'action (un ancien responsable garde la notification, sans lien).
+- Changement de responsable par le QHSE : même notification au nouveau responsable (point 15, confirmé).
+- Types : « Action confiée », « Commentaire du responsable », « Preuve ajoutée » (ACT-31, [§ 9](#9-fil-de-commentaires), [§ 10](#10-preuves)).
 
 ### 15.2 Rappel hebdomadaire du mercredi — dans Vigie et par e-mail
 
-- Destinataires : chaque responsable qui a au moins une action en cours ; pas de synthèse pour le QHSE (un membre du QHSE reçoit seulement le rappel de ses propres actions de responsable).
-- Contenu : toutes ses actions en cours — À faire, Budgétée ou initiée, 20 % à 80 % — sur tous les sites ; les actions en retard d'abord, signalées (jours de retard), puis par date cible ; pour chacune : numéro, libellé, avancement, date cible, site. Reportées et Terminées exclues (à confirmer, [§ 22](#22-points-ouverts) point 11).
+- Destinataires : chaque responsable qui a au moins une action en cours ou Terminée (3ᵉ tour) ; pas de synthèse pour le QHSE (un membre du QHSE reçoit seulement le rappel de ses propres actions de responsable).
+- Contenu : toutes ses actions en cours — À faire, Budgétée ou initiée, 20 % à 80 % — sur tous les sites ; les actions en retard d'abord, signalées (jours de retard), puis par date cible ; pour chacune : numéro, libellé, avancement, date cible, site ; puis un second groupe « Terminées — en attente de vérification » (jamais en retard). Reportées exclues (point 11, 3ᵉ tour : Terminées comprises).
 - **Dans Vigie** (**ACT-32**) : élément de la cloche daté du mercredi (heure de Paris), clé d'état lu par semaine (« rappel-actions|2026-W42 »), visible jusqu'à sa lecture ou jusqu'au mercredi suivant, lien vers la vue générale filtrée sur ses actions (`/actions?mes=1`). Calculé à partir de la date du jour (`today()`, `VIGIE_TODAY` en démonstration) : aucune tâche planifiée nécessaire.
-- **Par e-mail** (**ACT-33**, **ACT-34**) : un message par responsable le mercredi matin (heure fixée dans la configuration, 7 h de Paris par défaut), à l'adresse de sa fiche (`people.email`, issue d'Entra ID ou de l'import) ; objet « Vigie · vos actions QSE en cours (n, dont m en retard) » ; tableau des actions, lien vers Vigie (`publicOrigin()`). Personne sans adresse : rappel dans Vigie seulement, absence notée au journal d'envoi. Journal d'envoi en base (personne, semaine, statut, erreur) : un seul envoi par personne et par semaine, même après un redémarrage ; nouvel essai en cas d'échec. Exécution par les tâches planifiées (PRD-12, sur le modèle de `src/db/maintenance.ts`) ; en démonstration et dans les tests, transport « fichier » (aucun envoi réel). Envoi réel : compte d'envoi de l'entreprise (relais SMTP ou Microsoft Graph `Mail.Send` avec consentement de l'administrateur du tenant) ; variables dans `src/lib/env.ts`, `.env.example` et le § 4 de `docs/EXPLOITATION.md`.
+- **Par e-mail** (**ACT-33**, **ACT-34**) : un message par responsable le mercredi matin (heure fixée dans la configuration, 7 h de Paris par défaut), à l'adresse de sa fiche (`people.email`, issue d'Entra ID ou de l'import) ; objet « Vigie · vos actions QSE en cours (n, dont m en retard) » (n = en cours + Terminées, m = en retard) ; deux tableaux, liens vers Vigie par `VIGIE_PUBLIC_URL` (écart livré : `publicOrigin()` suppose une requête ; même valeur hors démonstration). Personne sans adresse : rappel dans Vigie seulement, absence notée au journal d'envoi. Journal d'envoi en base (personne, semaine, statut, erreur) : un seul envoi par personne et par semaine, même après un redémarrage ; nouvel essai en cas d'échec. Exécution par les tâches planifiées (PRD-12 : `src/db/scheduler.ts`, registre construit à l'ouverture de la base, `VIGIE_SCHEDULER`, le mercredi à partir de `VIGIE_REMINDER_TIME` jusqu'à 23:59, sans rattrapage d'un mercredi passé serveur arrêté ; 5 essais ; reprise d'un envoi bloqué après 30 min, doublon rare admis) ; en démonstration et dans les tests, transport « fichier » (aucun envoi réel). Envoi réel : compte d'envoi de l'entreprise (relais SMTP ou Microsoft Graph `Mail.Send` avec consentement de l'administrateur du tenant) ; variables dans `src/lib/env.ts`, `.env.example` et le § 4 de `docs/EXPLOITATION.md`.
 
 ### 15.3 Échéances calculées (`loadActionSignals`, À faire, badges)
 
@@ -326,7 +344,8 @@ Mise en œuvre :
 | Action à échéance | valeur ouverte, date cible dans les 15 jours | responsable |
 | Vérification à venir | Terminée, vérification planifiée dans les 15 jours | responsable QHSE du site |
 | Vérification dépassée | Terminée, vérification planifiée passée | responsable QHSE du site |
-| Action à compléter | action reprise ou importée sans un champ obligatoire | responsable QHSE du site |
+| Action à compléter | action reprise ou importée sans un champ obligatoire (calculé, jamais stocké) ; une échéance groupée par site | responsable QHSE du site |
+| Événement clos — action de suite ouverte | action de suite ouverte dont l'événement source est clos (point 12) | responsable QHSE du site de l'événement |
 
 Reportée et Abandonnée ne produisent aucune échéance. Les échéances portent `siteId` de l'action ; elles restent visibles pour le responsable sur tout son périmètre (TDB-02, TDB-05).
 
@@ -341,18 +360,18 @@ Reportée et Abandonnée ne produisent aucune échéance. Les échéances porten
 
 ## 17. Statistiques mensuelles
 
-Onglet « Statistiques » de `/actions` (`?vue=statistiques`, pas de nouvelle route), calculées à la demande dans `src/lib/queries.ts`, jamais stockées, sur le site sélectionné ou tout le périmètre ; mois choisi, avec les 12 mois précédents pour les évolutions. Abandonnées exclues des taux, comptées dans la répartition par avancement.
+Non livré par le paquet 1 (ACT-29, désormais C1 : le journal structuré des avancements est stocké depuis 0005). Onglet « Statistiques » de `/actions` (`?vue=statistiques`, pas de nouvelle route), calculées à la demande dans `src/lib/queries.ts`, jamais stockées, sur le site sélectionné ou tout le périmètre ; mois choisi, avec les 12 mois précédents pour les évolutions. Abandonnées exclues des taux, comptées dans la répartition par avancement.
 
 | Indicateur | Définition proposée |
 |---|---|
-| Répartition par avancement, source, domaine, responsable, niveau de risque | nombre d'actions (base à trancher : état du plan à la fin du mois, ou actions ouvertes dans le mois — **ACT-29**) |
+| Répartition par avancement, source, domaine, responsable, niveau de risque | nombre d'actions dans l'état de tout le plan à la fin du mois (tranché le 15/10/2026, **ACT-29**) |
 | Taux de retard | actions en retard / actions ouvertes (À faire à 80 %), à la fin du mois |
 | Délai moyen de clôture | moyenne, en jours, de (date de vérification − date d'ouverture) des actions Vérifiées dans le mois |
 | Taux d'efficacité | actions Vérifiées « Efficace » / actions Vérifiées dans le mois |
 | Évolution mensuelle ouvertes / clôturées | actions ouvertes (date d'ouverture) et clôturées (date de vérification) par mois, sur 12 mois |
-| Respect des dates cibles | actions Terminées dans le mois dont la date effective ≤ date cible (initiale ou actuelle : à trancher, **ACT-29**) / actions Terminées dans le mois |
+| Respect des dates cibles | actions Terminées dans le mois dont la date effective ≤ **dernière** date cible (tranché le 15/10/2026, **ACT-29** ; la date cible initiale reste affichée « Date cible initiale » et journalisée) / actions Terminées dans le mois |
 
-L'état d'une action à une date passée est reconstitué à partir du journal (détail structuré des changements d'avancement) ; pour les actions reprises ou importées sans historique, l'avancement connu est réputé atteint à la date de reprise. La section « Plan d'actions » du dossier de revue de direction (`src/lib/data/review.ts`, répartition par origine) passe aux sources ; les dossiers déjà figés restent lus tels quels.
+L'état d'une action à une date passée est reconstitué à partir du journal (détail structuré des changements d'avancement) ; pour les actions reprises ou importées sans historique, l'avancement connu est réputé atteint à la date de reprise. La section « Plan d'actions » du dossier de revue de direction (`src/lib/data/review.ts`) est passée aux sources avec le paquet 1 (colonnes ouvertes, Terminées — à vérifier, Vérifiées dans la période, en retard ; site sélectionné) ; les dossiers figés avant 0005 restent lus par origine.
 
 ## 18. Reprise des actions existantes de Vigie
 
@@ -366,15 +385,15 @@ Aucune base de production n'existe encore (connexion Entra non inscrite dans le 
 | `done` Clôturée | Vérifiée ; date de vérification = `closed_on` ; constat = `efficacy_note` ; résultat = Efficace (la clôture exigeait une efficacité vérifiée) ; nature vide ; date effective = date du dernier « Déclarée réalisée », sinon date de vérification |
 | `cancelled` Annulée | Abandonnée ; motif, auteur et date conservés |
 | `title` + `description` | Détail de l'action = intitulé, puis les précisions à la ligne |
-| — | Description du problème : vide (à compléter) |
-| `origin` | source : `ev` → Évènement QSE ; `client` → Réclamation client ; `risk` → DUERP ; `docs` → Revue documentaire ; `audit` → Audit de certification ISO, Audit terrain ou Audit interne ISO selon la ligne du programme de l'élément ou du constat lié (défaut : Audit interne ISO) ; `watch` → Contrôle réglementaire si un contrôle porte l'action, sinon Veille réglementaire ; `rev` → Objectif QSE si une décision « objectif » porte l'action, sinon Revue de direction ; `env`, `skills`, `prevention` → vide (à compléter) jusqu'à **ACT-37** |
+| — | Description du problème : vide (à compléter) ; précisions blanches (espaces, tabulations, retours à la ligne) comptées vides |
+| `origin` | source : `ev` → Évènement QSE ; `client` → Réclamation client ; `risk` → DUERP ; `docs` → Revue documentaire ; `env` → Déchets (3ᵉ tour) ; `audit` → selon la ligne du programme de l'élément ou du constat lié : Audit de certification ISO, Audit fournisseur (« Fournisseurs »), Audit terrain, Revue de direction (élément « Revues de direction » qui porte l'action), sinon Audit interne ISO ; `watch` → Contrôle réglementaire si un contrôle porte l'action, sinon Veille réglementaire ; `rev` → Objectif QSE si une décision « objectif » porte l'action, sinon Revue de direction ; action annulée d'origine `audit`, `watch` ou `rev` dont l'ancienne annulation a détaché l'élément qui décide → vide (« Non déterminée ») ; `skills`, `prevention` → vide (à compléter ; pas d'action QSE pour ces écrans, le QHSE les abandonne avec un motif si besoin). L'ancienne clé est gardée dans `legacy_origin` (indice affiché, `reprise-liens`) |
 | `kind` C/P | supprimé (valeur gardée dans l'entrée de journal de reprise) |
 | `created_at` | Date d'ouverture = date de Paris de `created_at` |
 | `due_on` | Date cible et date cible initiale |
 | `site_id` null (Tous les sites) | conservé, marqué « site à compléter » |
 | Domaine, priorité, niveau de risque, pointage, coûts | vides (domaine et priorité : à compléter) |
 
-Le jeu de démonstration (`src/db/seed.ts`, `src/db/seeds/*.ts`) est réécrit dans le nouveau modèle (toutes les valeurs d'avancement, commentaires, preuves, actions de suite, une action Reportée, des retards) ; `test/integration/demo-upgrade.test.ts` vérifie la mise à niveau d'une base de démonstration existante.
+Le jeu de démonstration (`src/db/seed.ts`, `src/db/seeds/*.ts`) est réécrit dans le nouveau modèle (toutes les valeurs d'avancement, commentaires, preuves, actions de suite, une action Reportée, des retards) ; `test/integration/migration-0005.test.ts` vérifie la reprise sur une base 0004 peuplée (PGlite et PostgreSQL) et `test/integration/demo-upgrade.test.ts` la mise à niveau d'une base de démonstration existante ; `npm run db:test-migrate -- <sauvegarde>` l'éprouve sur une copie restaurée. Le jeu neuf ne contient plus d'action de recyclage ni de prévention (anciennes A-206, A-207, A-216, A-220 : numéros jamais réutilisés) ; une base de démonstration mise à niveau les garde (source à compléter).
 
 ## 19. Import de l'extraction Power Apps
 
@@ -394,7 +413,7 @@ Prérequis : l'extraction, fournie plus tard par le propriétaire de l'applicati
 
 | Fichier | Aujourd'hui | Après la refonte |
 |---|---|---|
-| `src/db/schema.ts` (table `actions`, l. 211-243) | `title`, `description`, `origin` (10 valeurs), `status` (todo, doing, verify, done, cancelled), `kind`, `verify_due_on`, `efficacy_note`, `verified_by_id`, `closed_on`, annulation ; `site_id` null = tous les sites ; aucune date d'ouverture, priorité, domaine, problème, nature et date de vérification, niveau de risque, pointage, coûts, commentaires | colonnes du [§ 4](#4-champs) ; tables `action_comments`, `action_counters`, `notifications`, journal d'envoi des e-mails ; une seule migration `drizzle/0005_…` (enregistrée dans `drizzle/checksums.json`), reprise comprise ; `kind`, `title`, `description` supprimés après reprise |
+| `src/db/schema.ts` (table `actions`, l. 211-243) | `title`, `description`, `origin` (10 valeurs), `status` (todo, doing, verify, done, cancelled), `kind`, `verify_due_on`, `efficacy_note`, `verified_by_id`, `closed_on`, annulation ; `site_id` null = tous les sites ; aucune date d'ouverture, priorité, domaine, problème, nature et date de vérification, niveau de risque, pointage, coûts, commentaires | colonnes du [§ 4](#4-champs) ; tables `action_comments`, `action_counters`, `notifications` (avec `comment_id`), `action_reminder_sends` ; `attachments.comment_id`, `actions.legacy_origin` ; une seule migration `drizzle/0005_actions_qse.sql` (enregistrée dans `drizzle/checksums.json`), reprise comprise ; `kind`, `title`, `description` supprimés après reprise |
 | `src/lib/domain.ts` (l. 95-137) | `ACTION_COLUMNS`, `ACTION_STATUSES`, `isOpenActionStatus`, `PLAN_SCOPES`, `ORIGINS`, `EVENT_ORIGINS` | listes du [§ 5](#5-listes-de-valeurs) et des sources du [§ 12](#12-sources-et-rattachements), groupes d'avancement, règles pures (transitions, retard) ; `ROLES` selon **ACT-22** |
 | `src/lib/queries.ts` (`actionColumn` l. 62, `actionView` l. 204, `actionBrief` l. 226) | colonne déduite du statut et de l'échéance ; « Corrective / Préventive » | règle de retard du [§ 6.3](#63-en-retard), libellé `actionLabel()`, groupes Kanban |
 | `src/components/ActionFormDialog.tsx` | Action, Précisions, Origine, Référence d'origine, Événement lié, Pilote, Échéance, Nature, Site (avec « Tous les sites »), vérification en modification seulement | formulaire du [§ 4](#4-champs) dans l'ordre Power Apps ; source et élément lié par sélecteur selon la source ; site unique ; vérification planifiée obligatoire dès la création ; `ActionDefaults` : `detail`, `problem`, `source`, `domain` au lieu de `title`, `description`, `origin`, `kind` |
@@ -412,6 +431,8 @@ Prérequis : l'extraction, fournie plus tard par le propriétaire de l'applicati
 | `CLAUDE.md` | conventions du plan actuel | avancement, sources, rôles du QHSE et du responsable, notifications d'information |
 
 ## 21. Découpage en éléments du backlog
+
+**Au 15/10/2026, paquet 1 livré** : ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-40 ✅ (ACT-22, ACT-31 et ACT-37 tranchés par le 3ᵉ tour et livrés), ACT-38 clos sans objet, ACT-13 ✅, ACT-29 et ACT-02 décidés (C1) ; restent ACT-34 (C4), ACT-36 et ACT-39 (C3), et deux éléments ajoutés le 15/10/2026 : ACT-41 (actions des projets Keystone, C4) et ACT-42 (lien à un équipement, un client ou un fournisseur, C3). Statuts à jour : [`docs/RESTE-A-FAIRE.md`](../RESTE-A-FAIRE.md) § 5. Découpage initial ci-dessous (classes d'avant les réponses).
 
 24 éléments (ACT-17 à ACT-40) — P1 : 21 · P2 : 3 — S : 11 · M : 11 · L : 2 — charge indicative 22,5–64 j. Classes de dépendance :
 
@@ -514,26 +535,29 @@ Ordre conseillé (celui du paquet 1 de [`docs/RESTE-A-FAIRE.md`](../RESTE-A-FAIR
 
 ## 22. Points ouverts
 
-« Bloquant » : l'élément cité attend la réponse. « Non » : la proposition s'applique par défaut et la réponse peut la corriger sans retarder le développement.
+« Bloquant » : l'élément cité attend la réponse. « Non » : la proposition s'applique par défaut et la réponse peut la corriger sans retarder le développement. Points 3 à 13 et 15 tranchés par le service QHSE le 15/10/2026 (3ᵉ tour) ; nouveaux points nés des réponses : 20 à 22.
 
 | # | Point | Classe | Auprès de | Proposition | Bloquant | Élément |
 |--:|---|:-:|---|---|:-:|---|
 | 1 | Numérotation AC : compteur annuel ou continu, nombre de chiffres après l'année | C3 | service QHSE (recherche en cours) | — (hypothèse : identifiant de la liste SharePoint, compteur continu) | oui | ACT-36 |
 | 2 | Extraction Power Apps : format (Excel, CSV), colonnes (site ? responsable en e-mail ou en nom ?), historique des commentaires, pièces jointes | C3 | propriétaire de l'application | — | oui | ACT-39 |
-| 3 | Création d'une action par l'encadrement hors QHSE depuis un écran source (aujourd'hui, un chef de service pilote d'un événement crée ses actions, et l'étape « Actions » exige une action liée) | C2 | responsable produit, service QHSE | création permise à qui peut modifier l'écran source, formulaire complet ; ensuite tout est géré par le QHSE | oui | ACT-22 |
-| 4 | Consultation du plan par l'encadrement hors QHSE | C2 | responsable produit | lecture seule du plan de son périmètre, comme aujourd'hui | oui | ACT-22 |
-| 5 | Recyclage enregistré dans Habilitations : faire passer l'action « Terminée » d'office, ou seulement l'indiquer au fil et au QHSE | C2 | service QHSE | commentaire automatique « Formation enregistrée le … » et échéance du QHSE ; « Terminée » reste un geste du QHSE | oui | ACT-22 |
-| 6 | Source des actions créées par Habilitations (recyclage), Prévention (plan, permis, coactivité), Environnement et audits fournisseurs ; sens de « Réserves » et d'« Analyse de risque (AST-EST) » | C2 | service QHSE | Environnement → Analyse environnementale ; ajouter « Habilitations et formations » et « Prévention des entreprises extérieures » à la liste, ou les rattacher à « Contrôle réglementaire » et « Analyse de risque (AST-EST) » ; audits fournisseurs → Audit interne ISO | oui | ACT-37 |
-| 7 | Correspondance niveau de risque → priorité proposée | C2 | service QHSE | niveau 4 → Urgent ; niveau 3 → Moyen terme ; niveaux 0 à 2 → Long terme ; toujours modifiable | oui | ACT-38 |
-| 8 | Statistiques : répartitions sur l'état du plan à la fin du mois ou sur les actions ouvertes dans le mois ; respect des dates cibles sur la date cible initiale ou actuelle | C2 | service QHSE | état à la fin du mois ; date cible initiale (un report n'efface pas un retard) | oui | ACT-29 |
-| 9 | Avertir le QHSE d'un commentaire ou d'une preuve du responsable | C2 | service QHSE | notification d'information au responsable QHSE du site | oui | ACT-31 |
-| 10 | Rattachements complémentaires (risque du DUERP traité, PAPRIPACT, exigence, contrôle, recyclage) en plus de la source unique | C2 | service QHSE | maintenus (les écrans sources en dépendent) ; jamais d'autre événement ni d'audit | oui (ACT-02) | ACT-02 |
-| 11 | Actions Reportées et Terminées dans le rappel du mercredi | C2 | service QHSE | exclues (« actions en cours ») | non | ACT-32, ACT-33 |
-| 12 | Action de suite d'une vérification non efficace quand l'événement source est clos | C2 | service QHSE | rattachée à l'action précédente et à la référence de l'événement, sans rouvrir l'événement ; échéance du QHSE pour décider d'une réouverture | non | ACT-23 |
-| 13 | Indépendance du vérificateur : un membre du QHSE peut-il vérifier une action dont il est le responsable ? (reste d'ACT-13) | C2 | service QHSE | autorisé, signalé sur la fiche | non | ACT-23 |
-| 14 | Reprise : « En cours » devient « Budgétée ou initiée » ou « 20 % » (bases de démonstration et d'essai seulement) | C2 | responsable produit | Budgétée ou initiée | non | ACT-19 |
-| 15 | Notification quand le QHSE change le responsable d'une action | C2 | service QHSE | même notification « Action confiée » au nouveau responsable | non | ACT-30 |
+| 3 | Création d'une action par l'encadrement hors QHSE depuis un écran source (aujourd'hui, un chef de service pilote d'un événement crée ses actions, et l'étape « Actions » exige une action liée) | ✅ | responsable produit, service QHSE | création permise à qui peut modifier l'écran source, formulaire complet ; ensuite tout est géré par le QHSE — **Réponse (15/10/2026)** : les actions QSE sont créées uniquement par le service QHSE ; un chef de service/projet crée ses actions dans un projet (Keystone, ACT-41). Appliqué : l'étape « Actions » d'un événement indique « Les actions QSE sont créées par le service QHSE. » à qui ne peut pas créer. | tranché | ACT-22 |
+| 4 | Consultation du plan par l'encadrement hors QHSE | ✅ | responsable produit | lecture seule du plan de son périmètre, comme aujourd'hui — **Réponse** : lecture seule du plan de son périmètre (appliqué). | tranché | ACT-22 |
+| 5 | Recyclage enregistré dans Habilitations : faire passer l'action « Terminée » d'office, ou seulement l'indiquer au fil et au QHSE | ✅ | service QHSE | commentaire automatique « Formation enregistrée le … » et échéance du QHSE ; « Terminée » reste un geste du QHSE — **Réponse** : aucune action QSE pour un recyclage (le RH gère les formations, le QHSE consulte) ; l'enregistrement d'une formation ne touche aucune action. | tranché | ACT-22 |
+| 6 | Source des actions créées par Habilitations (recyclage), Prévention (plan, permis, coactivité), Environnement et audits fournisseurs ; sens de « Réserves » et d'« Analyse de risque (AST-EST) » | ✅ | service QHSE | Environnement → Analyse environnementale ; ajouter « Habilitations et formations » et « Prévention des entreprises extérieures » à la liste, ou les rattacher à « Contrôle réglementaire » et « Analyse de risque (AST-EST) » ; audits fournisseurs → Audit interne ISO — **Réponse** : sources « Déchets » et « Audit fournisseur » ajoutées (24) ; Environnement → Déchets ; aucune action depuis Habilitations ni Prévention ; « Réserves » = réserves de réception d'un chantier ou d'une installation ; AST = analyse de sécurité des tâches en contexte pyrotechnique, EST = étude de sécurité technique. | tranché | ACT-37 |
+| 7 | Correspondance niveau de risque → priorité proposée | ✅ | service QHSE | niveau 4 → Urgent ; niveau 3 → Moyen terme ; niveaux 0 à 2 → Long terme ; toujours modifiable — **Réponse** : priorité au libre choix, sans proposition (ACT-38 sans objet). | tranché | ACT-38 |
+| 8 | Statistiques : répartitions sur l'état du plan à la fin du mois ou sur les actions ouvertes dans le mois ; respect des dates cibles sur la date cible initiale ou actuelle | ✅ | service QHSE | état à la fin du mois ; date cible initiale (un report n'efface pas un retard) — **Réponse** : état de tout le plan à la fin du mois ; dernière date cible. | tranché | ACT-29 |
+| 9 | Avertir le QHSE d'un commentaire ou d'une preuve du responsable | ✅ | service QHSE | notification d'information au responsable QHSE du site — **Réponse** : tous les animateurs QHSE, une notification par commentaire ou par preuve (livré). | tranché | ACT-31 |
+| 10 | Rattachements complémentaires (risque du DUERP traité, PAPRIPACT, exigence, contrôle, recyclage) en plus de la source unique | ✅ | service QHSE | maintenus (les écrans sources en dépendent) ; jamais d'autre événement ni d'audit — **Réponse** : rattachements complémentaires gardés ; jamais un second événement ni audit ; lien à un équipement, un sous-équipement, un client ou un fournisseur souhaité (ACT-42). | tranché | ACT-02 |
+| 11 | Actions Reportées et Terminées dans le rappel du mercredi | ✅ | service QHSE | exclues (« actions en cours ») — **Réponse** : Terminées comprises (second groupe), Reportées exclues (livré). | tranché | ACT-32, ACT-33 |
+| 12 | Action de suite d'une vérification non efficace quand l'événement source est clos | ✅ | service QHSE | rattachée à l'action précédente et à la référence de l'événement, sans rouvrir l'événement ; échéance du QHSE pour décider d'une réouverture — **Réponse** : proposition confirmée (livrée). | tranché | ACT-23 |
+| 13 | Indépendance du vérificateur : un membre du QHSE peut-il vérifier une action dont il est le responsable ? (reste d'ACT-13) | ✅ | service QHSE | autorisé, signalé sur la fiche — **Réponse** : autovérification admise sans restriction, sans marque sur la fiche. | tranché | ACT-23 |
+| 14 | Reprise : « En cours » devient « Budgétée ou initiée » ou « 20 % » (bases de démonstration et d'essai seulement) | C2 | responsable produit | Budgétée ou initiée — appliquée par défaut (paquet 1) | non | ACT-19 |
+| 15 | Notification quand le QHSE change le responsable d'une action | ✅ | service QHSE | même notification « Action confiée » au nouveau responsable — **Réponse** : oui, confirmé (livré). | tranché | ACT-30 |
 | 16 | Responsables de l'extraction Power Apps absents de Vigie : créer leur fiche (nom, e-mail, rapprochée ensuite par Entra et Cursus) ou refuser la ligne | C2 / C3 | responsable produit, avec l'extraction | créer la fiche, sans rôle, rapprochée à la première connexion | oui | ACT-39, INT-03 |
-| 17 | Direction comptée dans le « service QHSE » pour les droits sur les actions | C2 | responsable produit | oui, comme pour toutes les validations de Vigie (`canApprove`) | non | ACT-21 |
+| 17 | Direction comptée dans le « service QHSE » pour les droits sur les actions | C2 | responsable produit | oui, comme pour toutes les validations de Vigie (`canApprove`) — appliquée par défaut (paquet 1) | non | ACT-21 |
 | 18 | Autres formulaires Power Apps (événements, audits, etc.) : ils peuvent changer les écrans sources et les éléments liés du [§ 12](#12-sources-et-rattachements) | C3 | utilisateur | spécifier chaque écran à réception de son formulaire | non | ACT-28 |
 | 19 | Compte d'envoi des e-mails ; heure d'envoi du rappel | C4 | informatique (messagerie, tenant Entra) | mercredi 7 h, boîte d'envoi dédiée | oui (envoi réel) | ACT-34 |
+| 20 | Actions créées par un chef de service ou de projet dans un projet Keystone, remontées dans le plan d'actions | C4 | équipe Keystone | intégration par l'API Keystone (INT-02) | non | ACT-41 |
+| 21 | Événement « modifié et suivi par QHSE » : l'encadrement garde-t-il la modification et l'avancement des événements de son site ? | C2 | service QHSE, avec le formulaire Power Apps Événements | à revoir avec ce formulaire | non | EVT-29 |
+| 22 | Clôture d'un plan de prévention après un écart R. 4512-6 sans action QSE : trace des mesures immédiates ? | C2 | service QHSE | motif « mesures immédiates prises » à la clôture | non | PRV-21 |

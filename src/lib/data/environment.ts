@@ -11,8 +11,9 @@ import {
 import { hrefWith } from '@/components/ui';
 import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
-import { EVENT_STEPS, REQUIREMENT_EVAL, columnOf, severityTone, type TodoItem, type Tone } from '../domain';
-import { actionColumn, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
+import type { ActionDefaults } from '../action-view';
+import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, severityTone, type TodoItem, type Tone } from '../domain';
+import { actionView, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
 
@@ -57,16 +58,17 @@ export type StreamView = {
   prevPeriodQty: number;
   yearCount: number;
   lastRemovedOn: string | null;
-  /** Actions du plan rattachées à la filière ou à l'un de ses enlèvements (origine « Environnement »). */
+  /** Actions du plan rattachées à la filière ou à l'un de ses enlèvements (source « Déchets »), abandonnées exclues. */
   actions: EnvAction[];
-  /** Actions créées depuis la filière (wasteStreamId), annulées et autres sites compris : empêchent la suppression. */
+  /** Actions créées depuis la filière (wasteStreamId), abandonnées et autres sites compris : empêchent la suppression. */
   sourceActionCount: number;
   /** Journal des modifications de la filière (création, valeurs par défaut des mentions…). */
   history: ChangeEntry[];
 };
 
+/** Action rattachée : libellé court (actionLabel du détail), avancement affiché (« En retard » le cas échéant), date cible. */
 export type EnvAction = {
-  id: string; title: string; statusLabel: string; tone: Tone; dueOn: string; pilot: string; ref: string;
+  id: string; label: string; statusLabel: string; tone: Tone; dueOn: string; pilot: string; ref: string;
   /** Source de l'action (ACT-01) : filière ou enlèvement du registre. */
   wasteStreamId: string | null; wasteEntryId: number | null;
 };
@@ -260,7 +262,7 @@ export async function loadEnvironment(requestedYear?: number) {
   const currentYear = +now.slice(0, 4);
   const [{ site, sites, consumptionSites, registrySites, siteLabel, streams, entries, cancelled, consumptions, people }, events, actions, requirements, streamSources] = await Promise.all([
     loadEnvironmentBase(), loadEvents(), loadActions(), loadWasteRequirements(),
-    // Sources des actions (annulées comprises) : seule la présence compte, pour verrouiller la suppression d'une filière.
+    // Sources des actions (abandonnées comprises) : seule la présence compte, pour verrouiller la suppression d'une filière.
     getDb().then((db) => db.select({ streamId: t.actions.wasteStreamId }).from(t.actions).where(isNotNull(t.actions.wasteStreamId))),
   ]);
 
@@ -286,9 +288,9 @@ export async function loadEnvironment(requestedYear?: number) {
   // ── Actions rattachées par leur source (colonnes posées à la création, ACT-01) : filière (wasteStreamId) ou enlèvement
   // (wasteEntryId) ; une filière liste aussi les actions de ses enlèvements, annulés compris.
   const brief = (a: ActionRow): EnvAction => {
-    const c = columnOf(actionColumn(a, now));
+    const v = actionView(a, people, now);
     return {
-      id: a.id, title: a.title, statusLabel: c.status, tone: c.tone, dueOn: a.dueOn, pilot: people.get(a.pilotId)?.name ?? '—', ref: a.originRef,
+      id: a.id, label: v.label, statusLabel: v.statusLabel, tone: v.tone, dueOn: a.dueOn, pilot: v.pilot, ref: a.originRef,
       wasteStreamId: a.wasteStreamId, wasteEntryId: a.wasteEntryId,
     };
   };
@@ -393,25 +395,30 @@ export async function loadEnvironment(requestedYear?: number) {
     return { id: r.id, text: r.text, label: ev.label, tone: ev.tone, note: r.evaluationNote };
   });
   const bsdRequirement = requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0];
-  const originRef = `Registre des déchets ${year}`;
+  // Action « BSD manquants » : retrouvée par le rattachement de l'exigence de la veille (requirements.action_id), tant
+  // qu'elle n'est pas close ; plus par son origine ni par sa référence d'origine (paquet 1 Actions QSE).
   const reqAction = bsdRequirement?.actionId ? actionById.get(bsdRequirement.actionId) : undefined;
-  const existing = actions.find((a) => a.origin === 'env' && a.originRef === originRef && actionColumn(a, now) !== 'done')
-    ?? (reqAction && actionColumn(reqAction, now) !== 'done' ? reqAction : undefined);
+  const existing = reqAction && !isClosedActionStatus(reqAction.status) ? reqAction : undefined;
   const listed = [...missing].reverse().slice(0, 6).map((e) => `${fmtDayMonth(e.removedOn)} · ${lcfirst(e.stream)} · ${fmtQty(e.quantity, e.unit)}`);
-  const bsdActionDefaults = {
-    title: `Compléter les BSD manquants du registre des déchets ${year}`,
-    description: missing.length
-      ? `${missing.length} enlèvement${missing.length > 1 ? 's' : ''} de déchets dangereux sans bordereau Trackdéchets : ${listed.join(' ; ')}${missing.length > listed.length ? ' ; …' : ''}. ${missing.length > 1 ? 'Obtenir les numéros auprès des collecteurs' : 'Obtenir le numéro auprès du collecteur'} et régulariser dans Trackdéchets (C. env. R. 541-45).`
-      : null,
-    origin: 'env',
-    originRef,
-    siteId: site,
+  const bsdDueOn = addDays(now, 15);
+  // Création réservée au service QHSE (la page ne transmet ces valeurs et le formulaire qu'à lui). Source « Déchets »
+  // proposée ; avec l'exigence de la veille (requirement:<id>), « Veille réglementaire » est aussi admise (D20 révisée) ;
+  // sans exigence, aucun élément lié (toute source, référence d'origine obligatoire). Site sélectionné ; « Tous les
+  // sites » : site choisi par le QHSE.
+  const bsdLink = bsdRequirement && !existing ? `requirement:${bsdRequirement.id}` : undefined;
+  const bsdActionDefaults: ActionDefaults = {
+    source: 'dechets',
+    ...(bsdLink ? { sourceChoices: ['dechets', 'veille'] as const, link: bsdLink, linkLabel: `Exigence · ${bsdRequirement!.text}` } : {}),
+    originRef: `Registre des déchets ${year}`.slice(0, ORIGIN_REF_MAX),
+    domain: 'environnement',
+    problem: missing.length
+      ? `${missing.length} enlèvement${missing.length > 1 ? 's' : ''} de déchets dangereux sans bordereau Trackdéchets : ${listed.join(' ; ')}${missing.length > listed.length ? ' ; …' : ''} (C. env. R. 541-45).`
+      : `Bordereaux Trackdéchets manquants au registre des déchets ${year} (C. env. R. 541-45).`,
+    detail: `Compléter les BSD manquants du registre des déchets ${year} : ${missing.length > 1 ? 'obtenir les numéros auprès des collecteurs' : 'obtenir le numéro auprès du collecteur'} et régulariser dans Trackdéchets`,
+    siteId: site ?? undefined,
     pilotId: bsdRequirement?.pilotId ?? undefined,
-    dueOn: addDays(now, 15),
-    kind: 'C' as const,
-    lockOrigin: true,
-    // Rattache l'action à l'exigence de la veille si celle-ci n'en porte pas d'ouverte.
-    link: bsdRequirement && (!bsdRequirement.actionId || (reqAction && actionColumn(reqAction, now) === 'done')) ? `requirement:${bsdRequirement.id}` : undefined,
+    dueOn: bsdDueOn,
+    verifyDueOn: addDays(bsdDueOn, 30),
   };
 
   // ── Bordereaux de l'année (déchets dangereux)

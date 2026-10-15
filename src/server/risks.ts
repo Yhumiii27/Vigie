@@ -718,7 +718,7 @@ export async function addProgramAction(_prev: FormState, fd: FormData): Promise<
   const ctx = await programLineContext(db, year!, actionId);
   if ('error' in ctx) return { error: ctx.error };
   const { action } = ctx;
-  if (action.status === 'cancelled') return { error: 'Action annulée : elle ne peut pas entrer au programme.' };
+  if (action.status === 'abandonnee') return { error: 'Action abandonnée : elle ne peut pas entrer au programme.' };
   if (!riskLinkedActionIds(await loadProgramSources(db)).has(action.id)) {
     return { error: "Action sans risque du DUERP en vigueur : rattachez-la d'abord à un risque." };
   }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
+import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
 import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
@@ -55,7 +55,9 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
 
   const cellOf = (pid: string, tid: string) => rows.find((r) => r.person.id === pid)?.cells.find((c) => c.title.id === tid);
   const cell = cellOf(personId, titleId);
-  const renewal = cell?.renewal?.planned ? cell.renewal : null;
+  // Action de recyclage reprise encore rattachée (consultation seule) : l'enregistrement ne la modifie pas (réponses du
+  // service QHSE du 15/10/2026 : les formations ne donnent pas lieu à des actions QSE).
+  const renewal = cell?.renewal ?? null;
   // Échéance retenue par le serveur (obtention + validité si laissée vide) : règle-t-elle le besoin de recyclage ?
   const effectiveExpiry = expiresOn || expiryFor(title, obtainedOn) || null;
   const assignments = rows.find((r) => r.person.id === personId)?.assignments ?? [];
@@ -131,14 +133,17 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
           <span>Ce titre deviendra requis pour ce salarié.</span>
         </div>
       )}
-      {renewal && covers && (
-        <Checkbox key={`renewal-${renewal.id}`} name="closeRenewal" defaultChecked label={<>Passer l&apos;action {renewal.id} à « Efficacité à vérifier »</>} />
-      )}
-      {renewal && !covers && (
+      {effectiveExpiry && !covers && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
           <i className="ph ph-calendar-x" style={{ fontSize: 14, marginTop: 1 }} />
+          <span style={{ textWrap: 'pretty' }}>{gapReason(effectiveExpiry, assignments, today)} : le recyclage reste à réaliser.</span>
+        </div>
+      )}
+      {renewal && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
           <span style={{ textWrap: 'pretty' }}>
-            {gapReason(effectiveExpiry, assignments, today)} : l&apos;action {renewal.id} reste à réaliser.
+            L&apos;action reprise {renewal.id} n&apos;est pas modifiée par cet enregistrement : le service QHSE la clôt ou l&apos;abandonne dans le plan d&apos;actions.
           </span>
         </div>
       )}

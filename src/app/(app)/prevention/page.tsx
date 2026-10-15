@@ -81,7 +81,6 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
     people: formOptions.people,
     sites: formOptions.sites,
     projects: formOptions.projects,
-    origins: formOptions.origins,
     contractors: d.choices.contractors,
     plans: d.choices.plans,
     siteRules: d.siteRules,

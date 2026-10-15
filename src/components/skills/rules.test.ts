@@ -42,7 +42,7 @@ describe('heldState', () => {
   });
 });
 
-describe('renewalDue : échéance proposée pour « Planifier le recyclage »', () => {
+describe('renewalDue : échéance proposée pour le recyclage à prévoir', () => {
   it('rien à planifier pour un titre valide sans affectation non couverte, ou non requis', () => {
     expect(renewalDue('v', '2027-06-01', [], NOW)).toBeNull();
     expect(renewalDue('v', '2027-06-01', [span('2026-11-02', '2026-11-06')], NOW)).toBeNull();

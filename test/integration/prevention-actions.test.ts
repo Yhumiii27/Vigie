@@ -8,6 +8,7 @@ import { getDb, schema as t } from '@/db';
 import {
   addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSignature, removePlanAttachment, savePlan, signPlanEu,
 } from '@/server/prevention';
+import { loadPrevention } from '@/lib/data/prevention';
 
 // Recette des server actions des plans de prévention jamais exécutées jusqu'ici (QUA-05) : signatures EU et EE,
 // clôture, annulation, suppression d'un brouillon, pièces jointes ; droits, site sélectionné, journal, motifs.
@@ -111,7 +112,7 @@ describe('closePlan et cancelPlan', () => {
     expect(await savePlan({}, form({ id: 'PP-2026-013' }))).toMatchObject({ error: expect.any(String) });
   });
 
-  it('intervention réalisée sans plan signé : l’écart doit être tracé par une action avant la clôture', async () => {
+  it('intervention réalisée sans plan signé : clôture sans action QSE (actions immédiates, 15/10/2026), écart tracé', async () => {
     actAs('Animateur QHSE');
     const created = await savePlan({}, form({
       contractorId: 'EE-002', siteId: 'ville-a', title: 'Remplacement des luminaires de l’allée centrale', location: 'Atelier usinage',
@@ -120,14 +121,28 @@ describe('closePlan et cancelPlan', () => {
     expect(created).toMatchObject({ ok: true, id: 'PP-2026-019' });
     expect(await plan('PP-2026-019')).toMatchObject({ status: 'brouillon', estimatedHours: 1200 });
     expect(await lastLog('prevention_plan', 'PP-2026-019')).toMatchObject({ action: 'create', byId: 'clefevre' });
-    expect(await closePlan('PP-2026-019')).toEqual({ error: "Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant de clore le plan." });
-    const db = await getDb();
-    await db.insert(t.actions).values({
-      id: 'A-900', title: 'Tracer l’intervention sans plan signé', origin: 'prevention', originRef: 'PP-2026-019', preventionPlanId: 'PP-2026-019', siteId: 'ville-a',
-      pilotId: 'clefevre', dueOn: '2026-10-20', status: 'todo', kind: 'C',
-    });
+    const view = (await loadPrevention()).plans.find((p) => p.id === 'PP-2026-019');
+    expect(view).toMatchObject({ closeBlock: null, actions: [], startGap: { kind: 'non_signe' } });
+    const before = (await (await getDb()).select({ id: t.actions.id }).from(t.actions)).length;
     expect(await closePlan('PP-2026-019')).toEqual({});
     expect((await plan('PP-2026-019')).status).toBe('clos');
+    // Aucune action créée par la Prévention.
+    expect((await (await getDb()).select({ id: t.actions.id }).from(t.actions))).toHaveLength(before);
+  });
+
+  it('actions reprises rattachées au plan : consultation seule (abandonnées non listées), plan engagé jamais supprimé', async () => {
+    actAs('Animateur QHSE');
+    const db = await getDb();
+    const legacy = { openedOn: '2026-09-01', pilotId: 'clefevre', dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null, siteId: 'ville-a', legacyOrigin: 'prevention' } as const;
+    await db.insert(t.actions).values([
+      { ...legacy, id: 'A-900', status: 'a_faire', originRef: 'PP-2026-018', detail: 'Faire signer le plan PP-2026-018', preventionPlanId: 'PP-2026-018' },
+      { ...legacy, id: 'A-901', status: 'abandonnee', originRef: 'PP-2026-018', detail: 'Doublon', preventionPlanId: 'PP-2026-018', cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Doublon' },
+    ]);
+    const view = (await loadPrevention()).plans.find((p) => p.id === 'PP-2026-018');
+    expect(view?.actions).toEqual([{ id: 'A-900', label: 'Faire signer le plan PP-2026-018', statusLabel: expect.any(String), tone: expect.any(String), due: '20/10/2026', pilot: '[C. Lefèvre]' }]);
+    expect(view?.deletable).toBe(false);
+    expect((await deletePlan('PP-2026-018')).error).toMatch(/^Plan déjà engagé \(.*actions A-900, A-901/);
+    await db.delete(t.actions).where(eq(t.actions.preventionPlanId, 'PP-2026-018'));
   });
 
   it('permis rattachés encore actifs : clôturez-les d’abord', async () => {
