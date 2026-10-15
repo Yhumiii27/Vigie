@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll } from 'vitest';
+import { afterAll, beforeAll, vi } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
 import { cookieJar } from './next-mocks';
 import { closeDb, getDb, schema as t } from '@/db';
@@ -36,6 +36,19 @@ export function freshDemoDatabase({ today = DEMO_TODAY }: { today?: string } = {
     rmSync(uploads, { recursive: true, force: true });
   });
   return uploads;
+}
+
+/**
+ * Heure courante figée (Date seulement, l'horloge avance ensuite normalement) pour le fichier de test. En démonstration,
+ * « maintenant » est la date figée du jour avec l'heure réelle (`referenceNow`) : un test qui saisit une heure du jour de
+ * démonstration (soins à 15 h 15…) échouerait s'il tournait plus tôt dans la journée.
+ */
+export function freezeClock(iso: string) {
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(iso));
+  });
+  afterAll(() => { vi.useRealTimers(); });
 }
 
 /** Rôle de démonstration (personne associée : src/lib/demo.ts) et site sélectionné de la requête simulée. */

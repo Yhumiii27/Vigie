@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { form } from '../next-mocks';
-import { actAs, freshDemoDatabase, lastLog } from '../helpers';
+import { actAs, freezeClock, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { LOCATION_UNSPECIFIED } from '@/components/events/shared';
@@ -17,6 +17,8 @@ import { advanceEvent, createEvent, registerBenignAccident, saveEvent, waiveCpam
 // Indicateurs (TF1 / TG, jours sans AT, pyramide) : accidents de l'effectif seulement.
 
 freshDemoDatabase();
+// Soins saisis le jour de démonstration à 15 h 15 : « maintenant » fixé à 18 h (heure de Paris), quelle que soit l'heure du test.
+freezeClock('2026-10-09T18:00:00+02:00');
 
 const db = async () => getDb();
 const row = async (id: string) => (await (await db()).select().from(t.events).where(eq(t.events.id, id)))[0];
