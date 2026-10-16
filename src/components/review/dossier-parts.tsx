@@ -76,14 +76,14 @@ export function ActionStatus({ a, plain }: { a: Pick<ActionBrief, 'status' | 'to
   return (
     <span style={{ display: 'grid', gap: 2 }}>
       <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap', justifySelf: 'start' }}>{a.status}</ToneTag>
-      <span className="rd-muted" style={{ fontSize: 11 }}>{a.pilot} · échéance {fmtDate(a.dueOn)}</span>
+      <span className="rd-muted" style={{ fontSize: 11 }}>{a.pilot} · date cible {fmtDate(a.dueOn)}</span>
     </span>
   );
 }
 
 type LinkedBrief = ActionBrief & { href?: string };
 
-/** Actions liées, une par ligne : référence (lien) · statut. */
+/** Actions liées, une par ligne : numéro (lien) · avancement. */
 export function ActionRefs({ actions, role }: { actions: LinkedBrief[] | undefined; role: Role }) {
   if (!actions?.length) return <>—</>;
   return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain /></div>)}</>;
@@ -94,7 +94,7 @@ export function ActionTable({ rows, role, review, extra }: {
 }) {
   return (
     <table className="table rd-table">
-      <thead><tr><th>Réf.</th><th>Action</th>{review && <th>Revue</th>}<th>Pilote</th><th>Échéance</th><th>Statut</th></tr></thead>
+      <thead><tr><th>N°</th><th>Action</th>{review && <th>Revue</th>}<th>Responsable</th><th>Date cible</th><th>Avancement</th></tr></thead>
       <tbody>
         {rows.map((a) => (
           <tr key={a.id}>
@@ -106,7 +106,7 @@ export function ActionTable({ rows, role, review, extra }: {
             </td>
             {review && <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{a.review ?? '—'}</td>}
             <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
-            <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>clôturée le {fmtDate(a.closedOn)}</div>}</td>
+            <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>vérifiée le {fmtDate(a.closedOn)}</div>}</td>
             <td><ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.status}</ToneTag></td>
           </tr>
         ))}
@@ -117,7 +117,7 @@ export function ActionTable({ rows, role, review, extra }: {
 
 /**
  * Suivi des décisions et actions des revues précédentes (§9.3.2 a, AUD-05) : suite donnée à chaque décision, objectif ou
- * besoin en ressources (action et statut, « Sans action au plan », action annulée avec son motif).
+ * besoin en ressources (action et avancement, « Sans action au plan », action abandonnée avec son motif).
  */
 export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role }) {
   return (
@@ -150,12 +150,12 @@ export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role 
   );
 }
 
-/** « 6 éléments · 2 ouverts · 1 sans action · 1 annulé ». */
+/** « 6 éléments · 2 ouverts · 1 sans action · 1 action abandonnée ». */
 export function followUpAside(rows: FollowUpRow[]) {
   const open = rows.filter((x) => x.open).length;
   const none = rows.filter((x) => x.state === 'no_action').length;
   const cancelled = rows.filter((x) => x.state === 'cancelled').length;
-  return `${plural(rows.length, 'élément', 'éléments')} · ${plural(open, 'ouvert', 'ouverts')} · ${none} sans action · ${plural(cancelled, 'annulé', 'annulés')}`;
+  return `${plural(rows.length, 'élément', 'éléments')} · ${plural(open, 'ouvert', 'ouverts')} · ${none} sans action · ${plural(cancelled, 'action abandonnée', 'actions abandonnées')}`;
 }
 
 // ─── Mise en forme ──────────────────────────────────────────────────────────

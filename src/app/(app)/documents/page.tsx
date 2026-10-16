@@ -5,6 +5,7 @@ import { hrefWith } from '@/components/ui';
 import { DocumentRegister } from '@/components/documents/DocumentRegister';
 import { FilterMenu } from '@/components/documents/FilterMenu';
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/components/documents/meta';
+import { canCreateAction } from '@/lib/action-rules';
 import { SCREENS, TONE, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadDocuments, matchesSearch, type DocumentRow } from '@/lib/data/documents';
@@ -16,7 +17,7 @@ export const metadata: Metadata = { title: SCREENS.docs.title };
 
 const PATH = '/documents';
 /** Consultation seule : aucun formulaire, donc aucune liste de choix (personnel, sites, actions) transmise au navigateur (QUA-06). */
-const READER_OPTIONS = { people: [], sites: [], origins: [], actions: [] };
+const READER_OPTIONS = { people: [], sites: [], actions: null, actionForm: null };
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
@@ -35,6 +36,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
   const sp = await searchParams;
   // Rôles en consultation seule : documents en vigueur, sans cycle de vie ni brouillons.
   const manager = canEdit(role, 'docs');
+  const qhse = canCreateAction(role);
   const [data, formOptions, siteId] = await Promise.all([loadDocuments({ readOnly: !manager }), loadFormOptions(), currentSiteId()]);
   const { rows, kpis } = data;
 
@@ -131,7 +133,12 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
           emptyText={emptyText}
           canManage={manager}
           canApprove={canApprove(role)}
-          options={manager ? { people: formOptions.people, sites: formOptions.sites, origins: formOptions.origins, actions: data.actionOptions } : READER_OPTIONS}
+          options={manager ? {
+            people: formOptions.people, sites: formOptions.sites,
+            // Création d'action et rattachement d'une action à une version : service QHSE seulement (ACT-22).
+            actions: qhse ? data.actionOptions : null,
+            actionForm: qhse ? { people: formOptions.people, sites: formOptions.sites, today: data.now } : null,
+          } : READER_OPTIONS}
           existingIds={data.allIds}
           elsewhere={data.elsewhere}
           unavailable={data.unavailable}

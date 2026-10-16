@@ -386,7 +386,8 @@ export async function cancelPlanItem(_prev: FormState, fd: FormData): Promise<Fo
   if (item.cancelledAt) return { error: 'Élément déjà annulé.' };
   if (item.done) return { error: 'Élément réalisé : il reste au programme.' };
   if (item.reviewId != null) return { error: "Échéance d'une revue de direction : annulez la revue depuis sa carte." };
-  if (item.actionId) return { error: `Échéance portée par l'action ${item.actionId} : détachez-la ou annulez-la d'abord.` };
+  // L'élément d'audit d'une action n'est jamais détaché (D15) : seul l'abandon de l'action le libère.
+  if (item.actionId) return { error: `Échéance portée par l'action ${item.actionId} : abandonnez-la d'abord dans le plan d'actions.` };
   if (finding || files.length) return { error: "Des constats ou un rapport sont rattachés à cet audit : l'audit a eu lieu, déclarez-le réalisé." };
 
   const byId = session.user.id;

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, gte, ne } from 'drizzle-orm';
+import { and, eq, gte } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
@@ -140,11 +140,13 @@ const MATERIAL_FIELDS = ['siteId', 'contractorId', 'title', 'location', 'startOn
  */
 const CONTENT_FIELDS = ['eeHeadcount', ...PLAN_CONTENT_KEYS] as const;
 
-/** Actions du plan d'actions unique rattachées au plan (actions.preventionPlanId, ACT-01), annulées comprises sur demande. */
-async function planActionIds(db: Db, planId: string, { includeCancelled = false }: { includeCancelled?: boolean } = {}) {
-  const rows = await db.select({ id: t.actions.id }).from(t.actions)
-    .where(and(eq(t.actions.preventionPlanId, planId), includeCancelled ? undefined : ne(t.actions.status, 'cancelled')));
-  return rows.map((r) => r.id);
+/**
+ * Actions reprises rattachées au plan (actions.preventionPlanId, ACT-01), abandonnées comprises : un plan qui en porte une
+ * est engagé (jamais supprimé). La Prévention ne crée plus d'action QSE (réponses du service QHSE du 15/10/2026).
+ */
+async function planActionIds(db: Db, planId: string) {
+  const rows = await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.preventionPlanId, planId));
+  return rows.map((r) => r.id).sort();
 }
 
 /** Crée ou modifie un plan de prévention ; le statut est dérivé (inspection commune, signatures). */
@@ -360,19 +362,15 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
 
 /**
  * Motif empêchant de clore ou d'annuler le plan (voir planEndIssue) : jamais pendant une intervention sans le plan
- * obligatoire signé ; après une intervention réalisée sans plan signé, ou avec un plan signé après son début, une fois
- * l'écart tracé par une action du plan d'actions unique ; les permis rattachés doivent être clos ou annulés.
+ * obligatoire signé ; les permis rattachés doivent être clos ou annulés. Aucune action QSE n'est exigée pour un écart
+ * R. 4512-6 passé (actions immédiates hors actions QSE, réponses du service QHSE du 15/10/2026).
  */
 async function planEndBlock(db: Db, plan: typeof t.preventionPlans.$inferSelect, verb: 'clore' | 'annuler') {
-  const [rule, actions, permits] = await Promise.all([
+  const [rule, permits] = await Promise.all([
     siteRule(db, plan.siteId),
-    planActionIds(db, plan.id),
     db.select().from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
   ]);
-  return planEndIssue(plan, {
-    mandatory: isMandatory(plan, rule), now: today(), verb,
-    openPermitIds: permits.filter(isOpenPermit).map((p) => p.id), actionCount: actions.length,
-  });
+  return planEndIssue(plan, { mandatory: isMandatory(plan, rule), now: today(), verb, openPermitIds: permits.filter(isOpenPermit).map((p) => p.id) });
 }
 
 /** Clôture du plan en fin d'intervention (voir planEndBlock). */
@@ -431,7 +429,7 @@ export async function deletePlan(id: string): Promise<Result> {
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   const [permits, actions, activities, events] = await Promise.all([
     db.select({ id: t.permits.id }).from(t.permits).where(eq(t.permits.preventionPlanId, plan.id)),
-    planActionIds(db, plan.id, { includeCancelled: true }),
+    planActionIds(db, plan.id),
     db.select({ id: t.siteActivities.id }).from(t.siteActivities).where(eq(t.siteActivities.preventionPlanId, plan.id)),
     db.select({ id: t.events.id }).from(t.events).where(eq(t.events.preventionPlanId, plan.id)),
   ]);

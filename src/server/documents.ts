@@ -2,13 +2,15 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, ne } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { getDb, schema as t, type DbOrTx } from '@/db';
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
 import { today } from '@/lib/today';
-import { canApprove, canEdit } from '@/lib/domain';
+import { isQhse } from '@/lib/action-rules';
+import { canApprove, canEdit, isClosedActionStatus, type Role } from '@/lib/domain';
 import { formReader, nextRef, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
+import { inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
@@ -45,13 +47,51 @@ async function readMetadata(f: Reader, db: Db, current: { ownerId: string } | nu
   return { title, type, process: processCode, ownerId, reviewMonths, distribution, siteId };
 }
 
-/** Action liée facultative (doit exister dans le plan d'actions). */
-async function readAction(f: Reader, db: Db) {
-  const actionId = f.opt('actionId');
-  if (!actionId) return null;
-  const [a] = await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.id, actionId));
+/** Rattachement d'une action à une version : réservé au service QHSE (ACT-22, réponses du 15/10/2026). */
+const VERSION_LINK_QHSE_ONLY = "Le rattachement d'une action à une version relève du service QHSE.";
+
+/**
+ * Action liée facultative d'une version (lien complémentaire « docversion », D15). Champ absent du formulaire (rôle hors
+ * QHSE, qui ne reçoit pas la liste) ou valeur inchangée : action actuelle conservée telle quelle. Tout changement (pose,
+ * remplacement, retrait) relève du service QHSE, comme linkAction / unlinkAction : action existante, ni Vérifiée ni
+ * Abandonnée, du site du document (document commun : tout site) et du site sélectionné ; l'action remplacée ou retirée,
+ * du site sélectionné et du périmètre. Jamais `actions.document_id`
+ * (posé à la création seulement, D15) : l'écran lit aussi document_versions.action_id.
+ */
+async function readAction(f: Reader, fd: FormData, db: Db, role: Role, current: { actionId: string | null; docSiteId: string | null }) {
+  if (!fd.has('actionId')) return current.actionId;
+  const posted = f.opt('actionId');
+  if (posted === current.actionId) return posted;
+  if (!isQhse(role)) {
+    f.fail('actionId', VERSION_LINK_QHSE_ONLY);
+    return current.actionId;
+  }
+  // L'action détachée (remplacement, retrait) est elle aussi modifiée : site sélectionné et périmètre (comme unlinkAction).
+  if (current.actionId) {
+    const [old] = await db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, current.actionId));
+    const siteError = old ? await requireInSite(old.siteId) : null;
+    if (siteError) {
+      f.fail('actionId', siteError);
+      return current.actionId;
+    }
+  }
+  if (!posted) return null;
+  const [a] = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, posted));
   if (!a) f.fail('actionId', 'Action introuvable.');
-  return actionId;
+  else if (isClosedActionStatus(a.status)) f.fail('actionId', `L'action ${a.id} est vérifiée ou abandonnée : elle ne peut plus être rattachée.`);
+  else if (!inSite(current.docSiteId, a.siteId)) f.fail('actionId', `L'action ${a.id} concerne un autre site que le document.`);
+  else {
+    const siteError = await requireInSite(a.siteId);
+    if (siteError) f.fail('actionId', siteError);
+  }
+  return posted;
+}
+
+/** Journal d'un changement d'action liée d'une version, sur les actions concernées (dans la transaction de l'écriture). */
+async function logVersionLink(tx: DbOrTx, before: string | null, after: string | null, label: string, byId: string) {
+  if (before === after) return;
+  if (before) await logChange(tx, { entityType: 'action', entityId: before, action: 'unlink', summary: `Détachée de ${label}`, byId });
+  if (after) await logChange(tx, { entityType: 'action', entityId: after, action: 'link', summary: `Rattachée à ${label}`, byId });
 }
 
 /** Fichier facultatif (un seul par version). */
@@ -108,7 +148,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   const meta = await readMetadata(f, db, null);
   const rawRef = f.str('ref', { max: 30 }).toUpperCase().replace(/\s+/g, '');
   const summary = f.str('summary', { max: 300 }) || 'Création du document';
-  const actionId = await readAction(f, db);
+  const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: meta.siteId });
   const file = readFile(f);
   if (rawRef && !REF_PATTERN.test(rawRef)) f.fail('ref', 'Format attendu : lettres et chiffres séparés par des tirets (ex. PR-QHSE-006).');
   if (!f.ok) return f.state();
@@ -129,6 +169,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
       const [v] = await tx.insert(t.documentVersions).values({
         documentId: id, version: 'A', status: 'brouillon', summary, authorId: session.user.id, actionId,
       }).returning({ id: t.documentVersions.id });
+      await logVersionLink(tx, null, actionId, `${id} · version A`, session.user.id);
       return v.id;
     });
   } catch (err) {
@@ -218,7 +259,8 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
   const f = formReader(fd);
   const documentId = f.str('documentId', { required: true });
   const summary = f.str('summary', { required: true, max: 300 });
-  const actionId = await readAction(f, db);
+  const [doc] = documentId ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, documentId)) : [];
+  const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: doc?.siteId ?? null });
   const file = readFile(f);
   if (!f.ok) return f.state();
   const siteError = await documentSiteError(documentId);
@@ -232,9 +274,11 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
     if (pending) return { error: `La version ${pending.version} est déjà en cours (${pending.status === 'en_revue' ? 'en revue' : 'brouillon'}).` };
     const relaunch = versions.every((v) => v.status === 'archive' && !v.approvedOn);
     if (!relaunch && !versions.some((v) => v.status === 'approuve')) return { error: 'Document obsolète : il ne peut plus être révisé.' };
+    const version = nextVersion(versions.map((x) => x.version));
     const [v] = await tx.insert(t.documentVersions).values({
-      documentId, version: nextVersion(versions.map((x) => x.version)), status: 'brouillon', summary, authorId: session.user.id, actionId,
+      documentId, version, status: 'brouillon', summary, authorId: session.user.id, actionId,
     }).returning({ id: t.documentVersions.id });
+    await logVersionLink(tx, null, actionId, `${documentId} · version ${version}`, session.user.id);
     return { versionId: v.id };
   });
   if ('error' in created) return { error: created.error };
@@ -275,16 +319,22 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
   if ('error' in loaded) return { error: loaded.error };
   const { v } = loaded;
   const summary = f.str('summary', { required: true, max: 300 });
-  const actionId = await readAction(f, db);
+  const [doc] = v ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, v.documentId)) : [];
+  const actionId = await readAction(f, fd, db, session.role, { actionId: v?.actionId ?? null, docSiteId: doc?.siteId ?? null });
   const file = readFile(f);
   const removeFile = f.bool('removeFile');
   if (!f.ok) return f.state();
   if (!v) return { error: 'Version introuvable.' };
   if (v.status !== 'brouillon') return { error: 'Seul un brouillon peut être modifié : renvoyez la version en brouillon.' };
 
-  // Écriture conditionnelle d'abord : le fichier d'une version soumise entre-temps reste intact.
-  const [row] = await db.update(t.documentVersions).set({ summary, actionId })
-    .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+  // Écriture conditionnelle d'abord : le fichier d'une version soumise entre-temps reste intact. Changement d'action liée
+  // journalisé sur les actions dans la même transaction.
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(t.documentVersions).set({ summary, actionId })
+      .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+    if (updated) await logVersionLink(tx, v.actionId, actionId, `${v.documentId} · version ${v.version}`, session.user.id);
+    return updated;
+  });
   if (!row) return STALE;
 
   if (file) {

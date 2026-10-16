@@ -2,18 +2,21 @@ import 'server-only';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { actionLabel, isLate, isVerificationLate, kanbanColumn, lateDays, missingFields } from './action-rules';
 import { daysBetween, fmtDate, fmtDayMonth } from './dates';
 import { today } from '@/lib/today';
 import {
-  CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, ORIGINS, SAFETY_WINDOW_MONTHS, SKILL_SOON_DAYS, STEP_CLOSED,
-  columnOf, initials, type ActionColumn, type EventType, type SkillState, type Tone,
+  ACTION_SOURCES, AVANCEMENT, CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SAFETY_WINDOW_MONTHS,
+  SKILL_SOON_DAYS, STEP_CLOSED, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
 } from './domain';
 import { PERSON_COLUMNS, type Person } from './people';
 import { siteFilter, type SiteScope } from './session';
 
 export type { Person, SiteScope };
 export type EventRow = typeof t.events.$inferSelect;
+/** Action telle que stockée (modèle du plan d'actions QSE, migration 0005) ; insertion : ActionInsert. */
 export type ActionRow = typeof t.actions.$inferSelect;
+export type ActionInsert = typeof t.actions.$inferInsert;
 
 export const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map((r) => [r.id, r]));
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
@@ -39,14 +42,14 @@ export const loadSiteEvents = cache(async (scope: SiteScope = 'site') => {
 /** Événements du site hors classés sans suite : base des indicateurs (TF1/TG, pyramide, NC ouvertes…). */
 export const loadEvents = cache(async (scope: SiteScope = 'site') => (await loadSiteEvents(scope)).filter((e) => !e.dismissedAt));
 
-/** Toutes les actions du site, annulées comprises (filtre « Annulées », historique). */
+/** Toutes les actions du site, abandonnées comprises (affichage « Abandonnées », historique). */
 export const loadAllActions = cache(async (scope: SiteScope = 'site') => {
   const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
   return (await db.select().from(t.actions)).filter((a) => keep(a.siteId));
 });
 
-/** Actions du site hors annulées : base de tous les calculs transverses (retards, échéances, revues…). */
-export const loadActions = cache(async (scope: SiteScope = 'site') => (await loadAllActions(scope)).filter((a) => a.status !== 'cancelled'));
+/** Actions du site hors abandonnées : base de tous les calculs transverses (retards, échéances, revues…). */
+export const loadActions = cache(async (scope: SiteScope = 'site') => (await loadAllActions(scope)).filter((a) => a.status !== 'abandonnee'));
 
 /** Contrôles périodiques actifs du site (les équipements réformés, archivés, sont exclus). */
 export const loadControls = cache(async (scope: SiteScope = 'site') => {
@@ -57,12 +60,6 @@ export const loadControls = cache(async (scope: SiteScope = 'site') => {
 // ─── Règles de calcul ───────────────────────────────────────────────────────
 
 export const isOpen = (e: EventRow) => e.step < STEP_CLOSED && !e.dismissedAt;
-
-/** Colonne du plan d'actions : « en retard » est déduit de l'échéance. */
-export function actionColumn(a: ActionRow, now = today()): ActionColumn {
-  if (a.status === 'done' || a.status === 'verify' || a.status === 'cancelled') return a.status;
-  return a.dueOn < now ? 'late' : (a.status as ActionColumn);
-}
 
 export function controlStatus(c: { nextOn: string }, now = today()): { label: string; tone: Tone; days: number } {
   const days = daysBetween(now, c.nextOn);
@@ -201,32 +198,65 @@ export function eventView(e: EventRow, people: Map<string, Person>, now = today(
 }
 export type EventView = ReturnType<typeof eventView>;
 
+/** Libellé et ton d'une action en retard (§ 6.3), à la place de son avancement. */
+const LATE_STATUS = { label: 'En retard', tone: 'danger' as Tone };
+
+/** Avancement affiché : « En retard » (danger) quand l'action l'est, sinon libellé et ton de AVANCEMENT (§ 5.1). */
+function avancementOf(a: Pick<ActionRow, 'status' | 'dueOn'>, now: string) {
+  const def = AVANCEMENT[a.status]; // valeur contrôlée par la base (actions_status_check)
+  const late = isLate(a, now);
+  return { def, late, avancement: def.label, statusLabel: late ? LATE_STATUS.label : def.label, tone: late ? LATE_STATUS.tone : def.tone };
+}
+
+/**
+ * Vue calculée d'une action (écrans sources, revues, tableau de bord) : libellé court (actionLabel du détail), avancement
+ * (libellé, groupe, colonne Kanban), retard (isLate, lateDays ; « En retard »/danger à la place de l'avancement),
+ * vérification en retard, close (Vérifiée ou Abandonnée), définition de la source (null : à compléter), responsable,
+ * date cible courte, champs à compléter (missingFields, D8). Rien n'est stocké : tout dépend de la date du jour.
+ */
 export function actionView(a: ActionRow, people: Map<string, Person>, now = today()) {
-  const col = actionColumn(a, now);
-  const c = columnOf(col);
+  const s = avancementOf(a, now);
   const pilot = people.get(a.pilotId)?.name ?? '—';
+  const missing = missingFields(a);
   return {
     ...a,
-    col,
-    statusLabel: c.status,
-    tone: c.tone,
-    origin: ORIGINS[a.origin] ?? { label: a.origin, icon: 'ph-circle', path: '/actions' },
+    label: actionLabel(a.detail),
+    avancement: s.avancement,
+    statusLabel: s.statusLabel,
+    tone: s.tone,
+    group: s.def.group,
+    kanban: kanbanColumn(a, now),
+    late: s.late,
+    lateDays: lateDays(a, now),
+    verifyLate: isVerificationLate(a, now),
+    closed: isClosedActionStatus(a.status),
+    sourceDef: (a.source ? ACTION_SOURCES[a.source] ?? null : null) as (typeof ACTION_SOURCES)[keyof typeof ACTION_SOURCES] | null,
     pilot,
     pilotInitials: initials(pilot),
     due: fmtDayMonth(a.dueOn),
-    late: col === 'late',
-    kindLabel: a.kind === 'C' ? 'Corrective' : 'Préventive',
+    missing,
+    toComplete: missing.length > 0,
   };
 }
 export type ActionView = ReturnType<typeof actionView>;
 
-/** Action du plan d'actions rattachée à un élément (audit, revue…), statut calculé. */
-export type ActionBrief = { id: string; title: string; status: string; tone: Tone; pilot: string; dueOn: string; closedOn: string | null; efficacyNote: string | null };
+/**
+ * Action du plan d'actions rattachée à un élément (audit, revue…), avancement calculé. Clés inchangées depuis l'ancien
+ * modèle (les dossiers de revue figés les relisent tels quels) : `title` = libellé court (actionLabel du détail),
+ * `status` = avancement affiché (« En retard » le cas échéant) ; `effective` : résultat de la vérification.
+ */
+export type ActionBrief = {
+  id: string; title: string; status: string; tone: Tone; pilot: string; dueOn: string; closedOn: string | null; efficacyNote: string | null;
+  effective?: boolean | null;
+};
 
 export function actionBrief(a: ActionRow | undefined, people: Map<string, Person>, now: string): ActionBrief | null {
   if (!a) return null;
-  const c = columnOf(actionColumn(a, now));
-  return { id: a.id, title: a.title, status: c.status, tone: c.tone, pilot: people.get(a.pilotId)?.name ?? '—', dueOn: a.dueOn, closedOn: a.closedOn, efficacyNote: a.efficacyNote };
+  const s = avancementOf(a, now);
+  return {
+    id: a.id, title: actionLabel(a.detail), status: s.statusLabel, tone: s.tone, pilot: people.get(a.pilotId)?.name ?? '—',
+    dueOn: a.dueOn, closedOn: a.closedOn, efficacyNote: a.efficacyNote, effective: a.effective,
+  };
 }
 
 // ─── Veille : projets Keystone concernés ────────────────────────────────────

@@ -3,14 +3,16 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useState, useTransition } from 'react';
-import { ActionFields, type ActionDefaults } from '@/components/ActionFormDialog';
+import { ActionFields } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import { addDays, addMonths, fmtDate } from '@/lib/dates';
+import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
+import type { ActionFormOptions } from '@/lib/action-view';
+import { addMonths, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
@@ -18,9 +20,15 @@ import type { ControlFilter, ControlView } from '@/lib/data/watch';
 import {
   archiveControl, cancelControlRecord, recordControl, removeControlRecordFile, restoreControl, saveControl, type CancelRecordState,
 } from '@/server/watch';
+import { controlOverdueDefaults, controlReserveDefaults } from './action-defaults';
 import { ArchivedBanner, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
-type Opts = Pick<FormOptions, 'people' | 'sites'> & Partial<Pick<FormOptions, 'origins' | 'actions'>>;
+type Opts = Pick<FormOptions, 'people' | 'sites'>;
+/**
+ * Plan d'actions (ACT-22) : `actionOptions` (formulaire d'action) et `linkActions` (actions ouvertes à rattacher) ne sont
+ * fournis qu'au service QHSE, seul à créer une action et à modifier ses rattachements.
+ */
+type ActionProps = { actionOptions?: ActionFormOptions | null; linkActions?: readonly Option[] };
 export type ControlSuggestions = { types: string[]; organizations: string[] };
 type View = 'fiche' | 'historique' | 'realise';
 
@@ -37,7 +45,7 @@ function nextFrom(lastOn: string, period: string) {
 
 // ─── Tableau des contrôles ──────────────────────────────────────────────────
 
-export function ControlsPanel({ rows, filter, canManage, canApprove, options, requirementOptions, today, showSite, suggestions, initialId, closeHref }: {
+export function ControlsPanel({ rows, filter, canManage, canApprove, options, actionOptions, linkActions, requirementOptions, today, showSite, suggestions, initialId, closeHref }: ActionProps & {
   /** Contrôles du site, archivés compris (filtre « Archivés ») : la fiche ouverte reste affichée après son archivage. */
   rows: ControlView[];
   filter?: ControlFilter;
@@ -109,7 +117,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, re
                   {c.reserves ?? '—'}
                   {c.actionId ? (
                     <div style={{ marginTop: 2 }}>
-                      <Link href={`/actions?action=${c.actionId}`} className="vg-link" style={{ fontSize: 11 }}>{c.actionId}</Link>
+                      <Link href={actionHref(c.actionId)} className="vg-link" style={{ fontSize: 11 }}>{c.actionId}</Link>
                       {c.action && <span style={{ ...muted, color: c.action.late ? TONE.danger.dot : muted.color }}> · {c.action.statusLabel}</span>}
                     </div>
                   ) : c.reserves && canManage && !c.archived ? (
@@ -136,7 +144,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, re
         kicker={control ? `Contrôle périodique · ${control.siteLabel}${control.archived ? ' · archivé' : ''}` : undefined} title={control?.equipment ?? ''}>
         {control && sel && (
           <ControlDetail key={control.id} c={control} initialView={sel.view} canManage={canManage} canApprove={canApprove} options={options}
-            requirementOptions={requirementOptions} today={today} suggestions={suggestions} onClose={close} />
+            actionOptions={actionOptions} linkActions={linkActions} requirementOptions={requirementOptions} today={today} suggestions={suggestions} onClose={close} />
         )}
       </Dialog>
     </div>
@@ -156,7 +164,7 @@ export function AddControlButton({ options, requirementOptions, defaultSite, sug
 
 // ─── Fiche d'un contrôle ────────────────────────────────────────────────────
 
-function ControlDetail({ c, initialView, canManage, canApprove, options, requirementOptions, today, suggestions, onClose }: {
+function ControlDetail({ c, initialView, canManage, canApprove, options, actionOptions, linkActions, requirementOptions, today, suggestions, onClose }: ActionProps & {
   c: ControlView; initialView: View; canManage: boolean; canApprove: boolean; options: Opts; requirementOptions: readonly Option[];
   today: string; suggestions: ControlSuggestions; onClose: () => void;
 }) {
@@ -202,7 +210,8 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, require
 
       {notice && <Notice>{notice}</Notice>}
 
-      <FollowUp c={c} today={today} options={options} editable={editable} creating={creating} setCreating={setCreating}
+      <FollowUp c={c} today={today} actionOptions={c.archived ? null : actionOptions} linkActions={c.archived ? undefined : linkActions} editable={editable}
+        creating={creating} setCreating={setCreating}
         onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
 
       {!creating && (
@@ -238,47 +247,15 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, require
   );
 }
 
-const equipShort = (equipment: string) => equipment.split(' — ')[0];
-
-/** Action de levée des réserves : titre « Lever les réserves « … » : équipement », échéance au plus tard dans 30 jours. */
-function reserveDefaults(c: ControlView, today: string): ActionDefaults {
-  const limit = addDays(today, 30);
-  return {
-    title: `Lever les réserves « ${c.reserves} » : ${equipShort(c.equipment)}`.slice(0, 200),
-    origin: 'watch',
-    originRef: c.equipment.slice(0, 120),
-    lockOrigin: true,
-    link: `control:${c.id}`,
-    pilotId: c.responsibleId ?? undefined,
-    dueOn: c.nextOn > today && c.nextOn < limit ? c.nextOn : limit,
-    kind: 'C',
-    siteId: c.siteId,
-  };
-}
-
-/** Contrôle dépassé sans action : « Réaliser le contrôle « … » : équipement », sous 15 jours (VEI-02). */
-function overdueDefaults(c: ControlView, today: string): ActionDefaults {
-  return {
-    title: `Réaliser le contrôle « ${c.controlType} » : ${equipShort(c.equipment)}`.slice(0, 200),
-    description: `Contrôle dépassé depuis le ${c.next} (tous les ${months(c.periodMonths)}, ${c.organization}).`,
-    origin: 'watch',
-    originRef: c.equipment.slice(0, 120),
-    lockOrigin: true,
-    link: `control:${c.id}`,
-    pilotId: c.responsibleId ?? undefined,
-    dueOn: addDays(today, 15),
-    kind: 'C',
-    siteId: c.siteId,
-  };
-}
-
 /**
- * Suivi du contrôle dans le plan d'actions : action liée (détachable) ; sinon, réserves en cours ou contrôle dépassé,
- * avec « Lever les réserves » / « Créer une action » ou le rattachement d'une action existante.
+ * Suivi du contrôle dans le plan d'actions : action liée (détachable par le QHSE) ; sinon, réserves en cours ou contrôle
+ * dépassé, avec « Lever les réserves » / « Créer une action » ou le rattachement d'une action existante (service QHSE
+ * seulement, ACT-22 ; l'encadrement qui suit le contrôle lit QHSE_ONLY_CREATE_MESSAGE).
  */
-function FollowUp({ c, today, options, editable, creating, setCreating, onCreated }: {
-  c: ControlView; today: string; options: Opts; editable: boolean; creating: boolean; setCreating: (v: boolean) => void; onCreated: () => void;
+function FollowUp({ c, today, actionOptions, linkActions, editable, creating, setCreating, onCreated }: ActionProps & {
+  c: ControlView; today: string; editable: boolean; creating: boolean; setCreating: (v: boolean) => void; onCreated: () => void;
 }) {
+  const qhse = !!actionOptions;
   const overdue = c.days < 0 && !c.archived;
   if (!c.reserves && !c.actionId && !overdue) return null;
   const box = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', fontSize: 12.5 } as const;
@@ -289,37 +266,37 @@ function FollowUp({ c, today, options, editable, creating, setCreating, onCreate
         <Icon name="ph-list-checks" size={15} style={{ color: 'var(--color-accent)' }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ color: 'var(--color-neutral-500)' }}>{c.reserves ? `Réserves en cours · ${c.reserves} · action ` : 'Action liée '}</span>
-          <Link href={`/actions?action=${c.actionId}`} className="vg-link" style={{ fontSize: 12.5 }}>{c.actionId}</Link>
-          {c.action && <span> · {c.action.title}</span>}
-          {c.action && <span style={{ ...muted, display: 'block', color: c.action.late ? TONE.danger.dot : muted.color }}>Échéance {c.action.due}</span>}
+          <Link href={actionHref(c.actionId)} className="vg-link" style={{ fontSize: 12.5 }}>{c.actionId}</Link>
+          {c.action && <span> · {c.action.label}</span>}
+          {c.action && <span style={{ ...muted, display: 'block', color: c.action.late ? TONE.danger.dot : muted.color }}>Date cible {c.action.due}</span>}
         </span>
         {c.action && <ToneTag tone={c.action.tone} style={{ whiteSpace: 'nowrap' }}>{c.action.statusLabel}</ToneTag>}
-        {editable && <LinkActionButton link={link} current={c.actionId} />}
+        {linkActions && <LinkActionButton link={link} current={c.actionId} />}
       </div>
     );
   }
-  if (creating && editable && options.origins) {
+  if (creating && actionOptions) {
     return (
       <>
         <div className="vg-eyebrow">{c.reserves ? 'Lever les réserves' : 'Contrôle dépassé'} · plan d&apos;actions unique</div>
         {/* Rendu sur un état local seulement : l'action liée arrive avec le même rafraîchissement que le succès du formulaire. */}
-        <ActionFields options={{ ...options, origins: options.origins }} defaults={c.reserves ? reserveDefaults(c, today) : overdueDefaults(c, today)}
+        <ActionFields options={actionOptions} defaults={c.reserves ? controlReserveDefaults(c, today) : controlOverdueDefaults(c, today)}
           onCancel={() => setCreating(false)} onDone={onCreated} />
       </>
     );
   }
   if (!c.reserves) {
     // Contrôle dépassé, sans réserve ni action : signalé à qui peut agir seulement (le statut « Dépassé » suffit sinon).
-    if (!editable) return null;
+    if (!editable && !qhse) return null;
     return (
       <div className="vg-inset" style={{ ...box, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${TONE.danger.dot} 45%, transparent)` }}>
         <Icon name="ph-warning-octagon" size={15} style={{ color: TONE.danger.dot }} />
         <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
           <span style={{ color: 'var(--color-neutral-500)' }}>Contrôle dépassé depuis le </span>{c.next}
-          <span style={{ ...muted, display: 'block' }}>Aucune action dans le plan d&apos;actions.</span>
+          <span style={{ ...muted, display: 'block' }}>Aucune action dans le plan d&apos;actions.{qhse ? '' : ` ${QHSE_ONLY_CREATE_MESSAGE}`}</span>
         </span>
-        <LinkActionButton link={link} actions={options.actions} label="Rattacher" />
-        {options.origins && (
+        {linkActions && <LinkActionButton link={link} actions={linkActions} label="Rattacher" />}
+        {qhse && (
           <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setCreating(true)}>
             <Icon name="ph-plus" size={13} />Créer une action
           </button>
@@ -332,10 +309,12 @@ function FollowUp({ c, today, options, editable, creating, setCreating, onCreate
       <Icon name="ph-warning" size={15} style={{ color: TONE.warn.dot }} />
       <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
         <span style={{ color: 'var(--color-neutral-500)' }}>Réserves en cours · </span>{c.reserves}
-        {editable && <span style={{ ...muted, display: 'block' }}>Aucune action de levée dans le plan d&apos;actions.</span>}
+        {(editable || qhse) && (
+          <span style={{ ...muted, display: 'block' }}>Aucune action de levée dans le plan d&apos;actions.{qhse ? '' : ` ${QHSE_ONLY_CREATE_MESSAGE}`}</span>
+        )}
       </span>
-      {editable && <LinkActionButton link={link} actions={options.actions} label="Rattacher" />}
-      {editable && options.origins && (
+      {linkActions && <LinkActionButton link={link} actions={linkActions} label="Rattacher" />}
+      {qhse && (
         <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setCreating(true)}>
           <Icon name="ph-plus" size={13} />Lever les réserves
         </button>

@@ -6,23 +6,37 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
-import { LinkActionButton } from '@/components/LinkActionButton';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { CardHead, ToneTag } from '@/components/ui';
 import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
-import { MONTHS_SHORT, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
+import { MONTHS_SHORT, addDays, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { FINDING_KINDS, PLAN_ITEM_STATES, REASON_MAX, TONE } from '@/lib/domain';
 import type { FindingView, PlanItemView } from '@/lib/data/audits';
-import type { FormOptions, Option } from '@/lib/data/options';
+import type { Option } from '@/lib/data/options';
+import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { cancelPlanItem, removePlanItemReport, reschedulePlanItem, savePlanItem } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
 import { ActionLink, DialogFooter, FileList } from './parts';
-import { MONTH_OPTIONS, NEW_TRACK, isReviewPlanItem, monthLabel } from './shared';
+import { MONTH_OPTIONS, NEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from './shared';
 import styles from './audits.module.css';
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites' | 'actions'>;
+type Opts = ActionFormOptions;
+
+/**
+ * Valeurs proposées pour l'action de suivi d'un élément du programme (ACT-28) : source selon la ligne (auditActionSource ;
+ * « Revues de direction » → Revue de direction), élément lié (D15 : posé à la création seulement), problème = intitulé de
+ * l'élément, responsable de l'élément, date cible = date prévue (vérification proposée 30 jours après) ; site choisi par le
+ * service QHSE.
+ */
+export function planItemActionDefaults(item: Pick<PlanItemView, 'id' | 'track' | 'label' | 'detail' | 'year' | 'month' | 'ownerId' | 'plannedOn'>): ActionDefaults {
+  return {
+    ...auditActionSource('plan', item.track), link: `plan:${item.id}`, linkLabel: `${item.track} · ${item.detail ?? item.label}`,
+    originRef: `Programme ${item.year} · ${item.detail ?? item.label}`.slice(0, 120), problem: item.detail ?? item.label,
+    pilotId: item.ownerId ?? undefined, dueOn: item.plannedOn ?? undefined, verifyDueOn: item.plannedOn ? addDays(item.plannedOn, 30) : undefined,
+  };
+}
 /** Élément ouvert : existant (id) ou à créer (ligne + mois ; ligne null = nouvelle ligne). */
 type Editing = { id: number } | { track: string | null; month: number } | null;
 /** Vue secondaire de la fenêtre d'un élément : nouveau constat, report. */
@@ -47,6 +61,8 @@ type Props = {
   yearOptions: number[];
   /** Saisie sur l'écran Audits (animateur QHSE, direction) ; consultation seule sinon (AUD-02). */
   canEdit: boolean;
+  /** Service QHSE (canCreateAction) : « Créer l'action de suivi » (ACT-22). */
+  canCreate?: boolean;
   options: Opts;
   aside?: ReactNode;
   /** Élément à ouvrir d'emblée (lien profond `?element=<id>`). */
@@ -64,7 +80,7 @@ const muted = { color: 'var(--color-neutral-500)' } as const;
  * verrouillée (« Ouvrir la revue ») ; un élément se reporte (« Reporter… ») ou s'annule avec un motif, jamais supprimé.
  */
 export function ProgramTimeline({
-  year, curMonth, tracks, allTracks, items, cancelled, findings, certs, auditOptions, yearOptions, canEdit, options, aside, initialId, closeHref,
+  year, curMonth, tracks, allTracks, items, cancelled, findings, certs, auditOptions, yearOptions, canEdit, canCreate = false, options, aside, initialId, closeHref,
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState<Editing>(initialId ? { id: initialId } : null);
@@ -153,21 +169,17 @@ export function ProgramTimeline({
             )}
             {item && (
               <DialogFooter>
+                {/* Un seul élément d'audit par action, posé à la création : ni rattachement ni détachement ensuite (D15). */}
                 {item.actionId ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-neutral-400)' }}>
                     Échéance portée par l&apos;action <ActionLink action={item.action} id={item.actionId} />
-                    <LinkActionButton link={`plan:${item.id}`} current={item.actionId} />
                   </span>
-                ) : (
+                ) : canCreate ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                     <NewActionButton options={options} label="Créer l'action de suivi" className="btn btn-secondary vg-btn-sm"
-                      defaults={{
-                        title: item.detail ?? item.label, origin: 'audit', originRef: `Programme ${item.year}`, pilotId: item.ownerId ?? undefined,
-                        dueOn: item.plannedOn ?? undefined, kind: 'P', link: `plan:${item.id}`, lockOrigin: true,
-                      }} />
-                    <LinkActionButton link={`plan:${item.id}`} actions={options.actions} />
+                      defaults={planItemActionDefaults(item)} />
                   </span>
-                )}
+                ) : null}
                 {item.cancellable && (
                   <ReasonButton action={cancelPlanItem} hidden={{ id: item.id }} label="Annuler l'élément" icon="ph-prohibit"
                     className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)', marginLeft: 'auto' }}

@@ -2,7 +2,6 @@
 
 import { useEffect, useOptimistic, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ActionFields } from '@/components/ActionFormDialog';
 import { Attachments } from '@/components/Attachments';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { Input, Select } from '@/components/form';
@@ -14,13 +13,14 @@ import type { FormOptions, Option } from '@/lib/data/options';
 import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
 import type { Person } from '@/lib/queries';
 import { addQualificationFiles, cancelQualification, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
-import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, canPlanRenewal, lcfirst, period, planLabel, plannedLabel, renewalDefaults, renewalNoun, stateDetail, validityLabel } from './common';
+import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
 import { PersonForm } from './PersonForm';
 import { lapseFor } from './rules';
 import { TitlesButton } from './TitlesManager';
 import { TrainingForm } from './TrainingForm';
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
+/** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
+type Opts = Pick<FormOptions, 'sites'>;
 
 type Props = {
   titles: TrainingTitle[];
@@ -86,13 +86,13 @@ const toTreat = (r: SkillRow, today: string) =>
 const LEGEND: SkillState[] = ['v', 's', 'x', 'r', 'n'];
 const sub = (text: string) => <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{text}</span>;
 
-/** Recyclage planifié et pas encore réalisé (action à lancer ou en cours). */
+/** Recyclage planifié par une action reprise encore à réaliser (ni close ni Terminée). */
 const plannedOf = (c: SkillCell) => (c.renewal?.planned ? c.renewal : null);
 
 function cellTip(c: SkillCell) {
   const s = SKILL_STATES[c.state];
   const r = c.renewal;
-  // Action rattachée : « recyclage planifié (A-xxx) », ou son statut quand elle n'est plus à réaliser (efficacité à vérifier).
+  // Action reprise rattachée : « recyclage planifié (A-xxx) », ou son avancement quand elle n'est plus à réaliser (Terminée).
   const action = !r ? '' : r.planned
     ? ` · ${renewalNoun(c.state)} ${c.state === 'r' ? 'planifiée' : 'planifié'} (${r.id})`
     : ` · action de ${renewalNoun(c.state)} ${r.id} (${lcfirst(r.statusLabel)})`;
@@ -109,9 +109,9 @@ function Soon({ label, icon, tip }: { label: string; icon: string; tip: string }
 }
 
 /** Contenu de la fenêtre d'une case : état, dates, organisme, recyclage, exigence, attestations, historique. */
-function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTraining, onPlan }: {
+function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTraining }: {
   row: SkillRow; cell: SkillCell; canManage: boolean; today: string;
-  onRecord: () => void; onCorrect: () => void; onPlan: () => void;
+  onRecord: () => void; onCorrect: () => void;
   /** Annulation d'une formation de l'historique (la formation en cours ou une plus ancienne saisie par erreur). */
   onCancelTraining: (id: number) => void;
 }) {
@@ -120,7 +120,8 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
   const [error, setError] = useState<string | null>(null);
   const s = SKILL_STATES[cell.state];
   const next = row.assignments[0];
-  // Une action de recyclage ouverte (non clôturée) est rattachée à l'exigence : on ne peut pas la retirer.
+  // Une action de recyclage reprise non close est rattachée à l'exigence : on ne peut pas la retirer (le service QHSE la
+  // clôt ou l'abandonne d'abord dans le plan d'actions).
   const locked = required && !!cell.renewal;
   const toggle = () => start(async () => {
     setRequired(!required);
@@ -130,7 +131,7 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
   const requiredHint = !canManage
     ? "Modification réservée à l'encadrement et à l'animation QHSE."
     : locked
-      ? `Retirer l'exigence suppose de clôturer d'abord l'action ${cell.renewal!.id}.`
+      ? `Retirer l'exigence suppose que le service QHSE clôture ou abandonne d'abord l'action ${cell.renewal!.id}.`
       : required
         ? 'Le titre est suivi pour ce salarié (alertes et échéances).'
         : "Le titre n'est pas exigé pour ce salarié ; les formations enregistrées sont conservées.";
@@ -156,9 +157,11 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
         <Fact label="Prochaine affectation Keystone">
           {next ? <>{next.project}{sub(`${next.activity} · ${period(next.startOn, next.endOn)}`)}</> : '—'}
         </Fact>
-        <Fact label={cell.renewal && !cell.renewal.planned ? `Action de ${renewalNoun(cell.state)}` : plannedLabel(cell.state)} wide>
-          {cell.renewal ? <RenewalLink renewal={cell.renewal} /> : <span style={{ color: 'var(--color-neutral-500)' }}>{cell.state === 'r' ? 'Aucune' : 'Aucun'}</span>}
-        </Fact>
+        {cell.renewal && (
+          <Fact label={cell.renewal.planned ? plannedLabel(cell.state) : `Action de ${renewalNoun(cell.state)}`} wide>
+            <RenewalLink renewal={cell.renewal} />
+          </Fact>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -196,9 +199,6 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
           )}
           {qid !== null && (
             <button type="button" className="btn btn-secondary" onClick={onCorrect}><Icon name="ph-pencil-simple" size={14} />Corriger</button>
-          )}
-          {canPlanRenewal(cell) && (
-            <button type="button" className="btn btn-secondary" onClick={onPlan}><Icon name="ph-calendar-plus" size={14} />{planLabel(cell.state)}</button>
           )}
           <button type="button" className="btn btn-primary" onClick={onRecord}><Icon name="ph-certificate" size={14} />Enregistrer / renouveler</button>
         </div>
@@ -267,7 +267,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, options, today, defaultSiteId, initialSel, closeHref }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
-  const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel' | 'plan'>('view');
+  const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel'>('view');
   // Formation de l'historique à annuler (mode 'cancel').
   const [cancelId, setCancelId] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -335,8 +335,8 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
     : undefined;
   // Recherchée même annulée : la fenêtre reste montée le temps que l'annulation réussie la referme.
   const toCancel = cell?.history.find((e) => e.id === cancelId);
-  const KICKER = { view: 'Habilitations et formations', record: cellName, correct: cellName, cancel: cellName, plan: "Plan d'actions unique" } as const;
-  const TITLE = { view: cellName, record: 'Enregistrer une formation', correct: 'Corriger la formation', cancel: 'Annuler cette formation', plan: cell ? planLabel(cell.state) : '' } as const;
+  const KICKER = { view: 'Habilitations et formations', record: cellName, correct: cellName, cancel: cellName } as const;
+  const TITLE = { view: cellName, record: 'Enregistrer une formation', correct: 'Corriger la formation', cancel: 'Annuler cette formation' } as const;
 
   return (
     <>
@@ -467,10 +467,10 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
         </div>
       )}
 
-      <Dialog open={!!(row && cell)} onClose={closeCell} width={mode === 'plan' ? 560 : mode === 'view' ? 600 : 540} kicker={KICKER[mode]} title={TITLE[mode]}>
+      <Dialog open={!!(row && cell)} onClose={closeCell} width={mode === 'view' ? 600 : 540} kicker={KICKER[mode]} title={TITLE[mode]}>
         {row && cell && mode === 'view' && (
           <CellView key={`${row.person.id}:${cell.title.id}`} row={row} cell={cell} canManage={canManage} today={today}
-            onRecord={() => setMode('record')} onCorrect={() => setMode('correct')} onPlan={() => setMode('plan')}
+            onRecord={() => setMode('record')} onCorrect={() => setMode('correct')}
             onCancelTraining={(id) => { setCancelId(id); setMode('cancel'); }} />
         )}
         {row && cell && mode === 'record' && (
@@ -483,9 +483,6 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
           <ReasonForm action={cancelQualification} hidden={{ id: toCancel.id }} onDone={back} onCancel={back}
             submitLabel="Annuler la formation" submitIcon="ph-prohibit" placeholder="Ex. saisie sur le mauvais salarié"
             message={<>La formation du {fmtDate(toCancel.obtainedOn)} sort du calcul de l&apos;état ; elle reste visible, barrée, dans l&apos;historique avec ce motif. Aucune suppression.</>} />
-        )}
-        {row && cell && mode === 'plan' && (
-          <ActionFields options={options} defaults={renewalDefaults(row.person, cell.title, cell.state, cell.renewalDueOn, row.renewalPilotId)} onDone={back} onCancel={back} />
         )}
       </Dialog>
 

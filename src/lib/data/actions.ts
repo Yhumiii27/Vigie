@@ -1,310 +1,486 @@
 import 'server-only';
 import { cache } from 'react';
-import { eq } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import { addActionBlocker } from '@/components/events/shared';
+import { entryRef } from '@/components/environment/model';
 import { ACTION_LINKS, loadLinkSources } from '../action-links';
-import { toAttachmentItem, type AttachmentItem } from '../attachments';
-import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
-import { today } from '@/lib/today';
 import {
-  ACTION_COLUMNS, EVENT_ORIGINS, ORIGINS, TODO_HORIZON_DAYS, canOpen, isEmployee,
-  type ActionColumn, type TodoItem, type Tone,
+  SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
+  canReadPlan, compareActions, inPlanScope, isLate, isQhse, isToComplete, isVerificationDueSoon, isVerificationLate,
+  matchesActionFilters, type ActionFilters, type LinkFacts,
+} from '../action-rules';
+import type {
+  ActionCommentView, ActionDetailPayload, ActionDetailView, ActionFormOptions, ActionListItem, ActionTargetOption, PlanSource,
+} from '../action-view';
+import { toAttachmentItem, type AttachmentItem } from '../attachments';
+import { addDays, fmtDate, fmtDayMonth, fmtParisDateTime, parisDay } from '../dates';
+import {
+  ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, ALL_SITES, LEGACY_ORIGIN_LABELS, TODO_HORIZON_DAYS,
+  VERIFY_METHODS, canOpen, canSee, canSeeHealth, isClosedActionStatus, isEmployee, isOpenAvancement, type TodoItem,
 } from '../domain';
-import { actionColumn, actionView, loadActions, loadAllActions, loadPeople, type ActionView } from '../queries';
-import { loadQhseLeads } from './leads';
-import { getSession, inPerimeter } from '../session';
+import type { Option } from '../form-options';
+import { hasLeft, type Person } from '../people';
+import { actionView, loadActions, loadAllActions, loadPeople, type ActionRow } from '../queries';
+import { getSession, inPerimeter, inSite, siteFilter, type Session } from '../session';
+import { today } from '@/lib/today';
 import { loadChangeLogs } from './changelog';
+import { loadQhseLeads } from './leads';
+import { loadFormOptions } from './options';
 
-// ─── Plan d'actions ─────────────────────────────────────────────────────────
+// Plan d'actions QSE (docs/specs/actions-qse.md § 8, § 12, § 15.3, § 16 ; plan du paquet 1, flux C) :
+//   - loadActionPlan(filters) : lignes de la vue générale (Liste, Kanban, Par responsable), jamais de fil, de preuves ni
+//     d'historique (QUA-11) ; plan du site sélectionné pour qui le lit (QHSE, encadrement en lecture seule, ACT-22), plus
+//     ses propres actions sur tous les sites (D19, TDB-05) ; le Salarié : ses actions seulement ;
+//   - loadActionDetail(id) : fiche chargée à l'ouverture (?action=), avec fil, preuves, historique et droits du lecteur ;
+//   - loadActionFormOptions / loadActionTargets : listes du formulaire, réservées au QHSE (seul à créer et modifier) ;
+//   - loadActionSignals : échéances du § 15.3 (À faire, tableau de bord, cloche, badges), plus l'échéance du § 22.12 (D6).
 
-/**
- * Source d'une action (fiche, colonne Origine) ; href null = écran non ouvert au rôle.
- * `detachOnCancel` : rattachement retiré si l'action est annulée (ni l'événement, ni la revue, ni la référence d'origine).
- */
-export type PlanSource = { label: string; href: string | null; detail?: string; detachOnCancel?: boolean };
+const enc = encodeURIComponent;
+const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const name = (people: Map<string, Person>, id: string | null | undefined) => (id ? people.get(id)?.name ?? id : null);
+/** Libellé court d'un site (« Site de [Ville B] » pour « Site de [Ville B] — zone d'essais »). */
+const shortSite = (label: string) => label.split(' — ')[0];
 
-/** Action du plan, sérialisable pour les composants client (carte Kanban, fiche). */
-export type PlanAction = {
-  id: string;
-  title: string;
-  description: string | null;
-  origin: { key: string; label: string; icon: string };
-  originRef: string;
-  eventId: string | null;
-  /** Sources de l'action, la plus précise d'abord ; jamais vide (repli : écran de l'origine). */
-  sources: PlanSource[];
-  /** Le premier élément de `sources` est le simple repli sur l'écran d'origine (aucune source précise). */
-  sourcesFallback: boolean;
-  siteId: string | null;
-  /** Libellé complet du site (« Tous les sites » si l'action n'est pas rattachée à un site). */
-  site: string;
-  /** Libellé court pour les tableaux (« Site de [Ville A] »). */
-  siteShort: string;
-  pilotId: string;
-  pilot: string;
-  pilotInitials: string;
-  dueOn: string;
-  /** 03/10 */
-  due: string;
-  /** 03/10/2026 */
-  dueLabel: string;
-  late: boolean;
-  lateDays: number;
-  status: 'todo' | 'doing' | 'verify' | 'done' | 'cancelled';
-  col: ActionColumn;
-  statusLabel: string;
-  tone: Tone;
-  kind: 'C' | 'P';
-  kindLabel: string;
-  verifyDueOn: string | null;
-  /** 02/10 */
-  verifyDue: string | null;
-  verifyDueLabel: string | null;
-  /** Vérification d'efficacité attendue et dépassée. */
-  verifyLate: boolean;
-  efficacyNote: string | null;
-  verifiedBy: string | null;
-  closedOn: string | null;
-  closedLabel: string | null;
-  /** Annulation : date (AAAA-MM-JJ), libellé, auteur, motif. */
-  cancelledOn: string | null;
-  cancelledLabel: string | null;
-  cancelledBy: string | null;
-  cancelReason: string | null;
-  /** Preuves de réalisation ou d'efficacité (pièces jointes, entityType 'action'). */
-  files: AttachmentItem[];
-  history: ChangeEntry[];
-};
+/** Site sélectionné, ou null pour « Tous les sites ». */
+const selectedSite = (s: Session) => (s.site.id === ALL_SITES ? null : s.site.id);
 
-const ALL_SITES_LABEL = 'Tous les sites';
+/** Tous les sites, archivés compris : une action d'un site archivé garde son libellé. */
+async function siteLabels() {
+  const db = await getDb();
+  return new Map((await db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label]));
+}
 
-// actionView remplace la clé d'origine par sa définition (libellé, icône) : on la retrouve par identité.
-const originKey = (a: ActionView) => Object.entries(ORIGINS).find(([, o]) => o === a.origin)?.[0] ?? a.origin.label;
+type ItemContext = { people: Map<string, Person>; sites: Map<string, string>; now: string; userId: string; selected: string | null };
 
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-
-type Context = Awaited<ReturnType<typeof loadContext>>;
-
-function toPlanAction(a: ActionView, ctx: Context): PlanAction {
-  const { people, sites, now } = ctx;
-  const site = a.siteId ? sites.get(a.siteId) ?? a.siteId : ALL_SITES_LABEL;
-  const src = ctx.sourcesOf(a);
-  const cancelledOn = a.cancelledAt ? isoDay(a.cancelledAt) : null;
+/** Ligne de la vue générale (calculée : avancement affiché, retard, à compléter… ; rien n'est stocké). */
+function listItem(a: ActionRow, ctx: ItemContext): ActionListItem {
+  const v = actionView(a, ctx.people, ctx.now);
+  const site = a.siteId ? ctx.sites.get(a.siteId) ?? a.siteId : SITE_TO_COMPLETE_LABEL;
+  const pilot = ctx.people.get(a.pilotId);
   return {
-    id: a.id,
-    title: a.title,
-    description: a.description,
-    origin: { key: originKey(a), label: a.origin.label, icon: a.origin.icon },
+    id: a.id, label: v.label, openedOn: a.openedOn, opened: fmtDate(a.openedOn),
+    status: a.status, avancement: v.avancement, statusLabel: v.statusLabel, tone: v.tone,
+    group: v.group, kanban: v.kanban, late: v.late, lateDays: v.lateDays, verifyLate: v.verifyLate,
+    priority: a.priority, priorityLabel: a.priority ? ACTION_PRIORITIES[a.priority]?.label ?? null : null,
+    domain: a.domain, domainLabel: a.domain ? ACTION_DOMAINS[a.domain] ?? null : null,
+    source: a.source, sourceLabel: v.sourceDef?.label ?? SOURCE_TO_COMPLETE.label, sourceIcon: v.sourceDef?.icon ?? SOURCE_TO_COMPLETE.icon,
     originRef: a.originRef,
-    eventId: a.eventId,
-    sources: src.sources,
-    sourcesFallback: src.fallback,
-    siteId: a.siteId,
-    site,
-    siteShort: site.split(' — ')[0],
-    pilotId: a.pilotId,
-    pilot: a.pilot,
-    pilotInitials: a.pilotInitials,
-    dueOn: a.dueOn,
-    due: a.due,
-    dueLabel: fmtDate(a.dueOn),
-    late: a.late,
-    lateDays: a.late ? daysBetween(a.dueOn, now) : 0,
-    status: a.status as PlanAction['status'],
-    col: a.col,
-    statusLabel: a.statusLabel,
-    tone: a.tone,
-    kind: a.kind === 'P' ? 'P' : 'C',
-    kindLabel: a.kindLabel,
-    verifyDueOn: a.verifyDueOn,
-    verifyDue: a.verifyDueOn ? fmtDayMonth(a.verifyDueOn) : null,
-    verifyDueLabel: a.verifyDueOn ? fmtDate(a.verifyDueOn) : null,
-    verifyLate: a.col === 'verify' && !!a.verifyDueOn && a.verifyDueOn < now,
-    efficacyNote: a.efficacyNote,
-    verifiedBy: a.verifiedById ? people.get(a.verifiedById)?.name ?? null : null,
-    closedOn: a.closedOn,
-    closedLabel: a.closedOn ? fmtDate(a.closedOn) : null,
-    cancelledOn,
-    cancelledLabel: cancelledOn ? fmtDate(cancelledOn) : null,
-    cancelledBy: a.cancelledById ? people.get(a.cancelledById)?.name ?? null : null,
-    cancelReason: a.cancelReason,
-    files: ctx.files.get(a.id) ?? [],
-    history: ctx.history.get(a.id) ?? [],
+    siteId: a.siteId, site, siteShort: a.siteId ? shortSite(site) : site,
+    pilotId: a.pilotId, pilot: v.pilot, pilotInitials: v.pilotInitials, pilotLeft: !!pilot && hasLeft(pilot, ctx.now),
+    dueOn: a.dueOn, due: fmtDate(a.dueOn), initialDueOn: a.initialDueOn, rescheduled: a.initialDueOn !== a.dueOn,
+    verifyDueOn: a.verifyDueOn, verifyDue: a.verifyDueOn ? fmtDate(a.verifyDueOn) : null,
+    // Date de vérification : celle de la vérification en cours seulement (une ligne reprise rouverte garde l'ancienne, D17).
+    doneOn: a.doneOn, closedOn: a.status === 'verifiee' ? a.closedOn : null,
+    cancelledOn: a.cancelledAt ? parisDay(a.cancelledAt) : null, cancelReason: a.cancelReason,
+    hours: a.hours, estimatedCost: a.estimatedCost, actualCost: a.actualCost,
+    followsActionId: a.followsActionId, followReason: a.followReason,
+    missing: [...v.missing], toComplete: v.toComplete,
+    mine: a.pilotId === ctx.userId,
+    elsewhere: !inSite(ctx.selected, a.siteId),
   };
 }
 
-async function loadContext() {
+// ─── Vue générale ───────────────────────────────────────────────────────────
+
+/** Actions que la personne peut lire dans la vue générale (avant l'affichage ?etat= et les filtres). */
+async function readableActions(session: Session): Promise<ActionRow[]> {
   const db = await getDb();
-  const [people, actions, sites, links, session, files, events] = await Promise.all([
-    loadPeople(), loadAllActions(),
-    // Tous les sites, archivés compris : une action d'un site archivé garde son libellé (« Tous les sites » sélectionné).
-    db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
-    loadLinkSources(), getSession(),
-    db.select().from(t.attachments).where(eq(t.attachments.entityType, 'action')),
-    db.select({ id: t.events.id, title: t.events.title, declarantId: t.events.declarantId, anonymous: t.events.anonymous }).from(t.events),
-  ]);
-  const history = await loadChangeLogs('action', actions.map((a) => a.id));
-
-  const filesOf = new Map<string, AttachmentItem[]>();
-  files.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).forEach((r) => {
-    filesOf.set(r.entityId, [...(filesOf.get(r.entityId) ?? []), toAttachmentItem(r, r.uploadedBy ? people.get(r.uploadedBy)?.name : undefined)]);
-  });
-
-  const eventTitles = new Map(events.map((e) => [e.id, e.title]));
-  // Salarié : /evenements ne montre que ses propres signalements (non anonymes).
-  const ownEvents = new Set(events.filter((e) => e.declarantId === session.user.id && !e.anonymous).map((e) => e.id));
-  const enc = encodeURIComponent;
-
-  /** Événement source : référence, titre et lien ; Salarié : simple référence pour un événement qu'il n'a pas déclaré. */
-  const eventSource = (id: string): PlanSource => (isEmployee(session.role) && !ownEvents.has(id)
-    ? { label: id, href: null }
-    : { label: id, detail: eventTitles.get(id), href: `/evenements?sel=${enc(id)}` });
-
-  /**
-   * Lien déduit de la référence d'origine quand elle ne désigne pas de fiche source : événement saisi librement
-   * (« EV-2026-131 ») sans événement lié, registre annuel des déchets. Les plans, permis, documents, filières et
-   * enlèvements ne sont plus déduits du texte : ils sont rattachés par leur colonne (ACT-01, registre action-links).
-   */
-  const originSource = (key: string, ref: string): PlanSource | null => {
-    const first = ref.split(/[\s·,]+/)[0] ?? '';
-    if (EVENT_ORIGINS.includes(key)) {
-      const id = eventTitles.has(ref) ? ref : eventTitles.has(first) ? first : null;
-      if (id) return { ...eventSource(id), label: ref };
-    }
-    if (key === 'env') {
-      const year = /^Registre des déchets (\d{4})$/.exec(ref)?.[1];
-      if (year) return { label: ref, href: `/environnement?vue=bsd-manquants&annee=${year}` };
-    }
-    return null;
-  };
-
-  /**
-   * Sources d'une action : événement lié, rattachements (registre action-links), référence d'origine, repli.
-   * Chaque rattachement est listé, même s'il mène à la même page qu'un autre (décision de revue et sa revue) ;
-   * la référence d'origine n'est ajoutée que si elle ne double pas une source déjà listée.
-   */
-  const sourcesOf = (a: ActionView): { sources: PlanSource[]; fallback: boolean } => {
-    const key = originKey(a);
-    const list: PlanSource[] = [];
-    if (a.eventId) list.push(eventSource(a.eventId));
-    // L'événement lié (type « event » du registre) est celui de a.eventId, déjà listé.
-    // Source d'origine sur un écran fermé au rôle (plan de prévention pour le Salarié…) : référence seule, sans intitulé.
-    const closed = new Set<PlanSource>();
-    (links.get(a.id) ?? []).filter((s) => s.kind !== 'event').forEach((s) => {
-      const source: PlanSource = { label: s.label, href: s.href, detail: s.detail, detachOnCancel: !ACTION_LINKS[s.kind]?.keptOnCancel };
-      if (ACTION_LINKS[s.kind]?.origin && !canOpen(session.role, s.href)) closed.add(source);
-      list.push(source);
-    });
-    const fromOrigin = originSource(key, a.originRef);
-    const target = (s: PlanSource) => s.href ?? s.label;
-    if (fromOrigin && !list.some((s) => target(s) === target(fromOrigin))) list.push(fromOrigin);
-    const fallback = list.length === 0;
-    if (fallback) list.push({ label: a.originRef, href: ORIGINS[key]?.path ?? null });
-    const sources = list.map((s) => ({
-      ...s, href: s.href && canOpen(session.role, s.href) ? s.href : null, ...(closed.has(s) ? { detail: undefined } : {}),
-    }));
-    return { sources, fallback };
-  };
-
-  return {
-    people, actions, session, sourcesOf, files: filesOf, history,
-    sites: new Map(sites.map((s) => [s.id, s.label])), now: today(),
-  };
+  // Ses propres actions, sur tous les sites (D19 : le responsable consulte ses actions quel que soit leur site).
+  const own = await db.select().from(t.actions).where(eq(t.actions.pilotId, session.user.id));
+  if (!canReadPlan(session.role)) return own;
+  // Plan du site sélectionné (« Tous les sites » consolide le périmètre), plus ses actions des autres sites.
+  const plan = await loadAllActions('site');
+  const ids = new Set(plan.map((a) => a.id));
+  return [...plan, ...own.filter((a) => !ids.has(a.id))];
 }
 
-export type PlanScope = '' | 'historique' | 'annulees';
+const sum = (items: ActionListItem[], key: 'hours' | 'estimatedCost' | 'actualCost') =>
+  Math.round(items.reduce((n, a) => n + (a[key] ?? 0), 0) * 100) / 100;
 
 /**
- * Actions du site sélectionné (Salarié : celles dont il est pilote), selon le filtre d'affichage :
- * - '' (plan en cours) : ouvertes, et clôturées depuis moins de 30 jours (colonne « Clôturées · 30 j ») ;
- * - 'historique' : toutes les actions non annulées ;
- * - 'annulees' : les actions annulées, de la plus récemment annulée à la plus ancienne.
- * `counts` alimente les libellés du filtre.
+ * Vue générale du plan d'actions (§ 16) : lignes lisibles par la personne, affichage `etat` (inPlanScope), filtres de l'URL
+ * (matchesActionFilters), tri par défaut (compareActions : retards d'abord, puis date cible ; Abandonnées : les plus
+ * récemment abandonnées d'abord).
+ * - `responsables` : responsables des actions lisibles (Salarié : lui-même au plus, jamais la liste du personnel) ;
+ * - `counts` : ouvertes et en retard (en-tête), actions de la personne (« Mes actions »), Abandonnées et Vérifiées de
+ *   plus de 30 jours (libellés de l'affichage), actions à compléter de l'affichage courant (filtre « À compléter ») ;
+ * - `totals` : pointage et coûts des actions affichées (pied de la vue Liste).
  */
-export async function loadActionPlan({ scope = '' }: { scope?: PlanScope } = {}) {
-  const ctx = await loadContext();
-  const { people, actions, session, now } = ctx;
-  const recentCut = addDays(now, -30);
-  const views = actions
-    .filter((a) => !isEmployee(session.role) || a.pilotId === session.user.id)
-    .map((a) => actionView(a, people, now));
-  const recent = (a: ActionView) => a.col !== 'done' || (a.closedOn ?? a.dueOn) >= recentCut;
+export async function loadActionPlan(filters: ActionFilters) {
+  const session = await getSession();
+  const [rows, people, sites] = await Promise.all([readableActions(session), loadPeople(), siteLabels()]);
+  const now = today();
+  const ctx: ItemContext = { people, sites, now, userId: session.user.id, selected: selectedSite(session) };
+  const all = rows.map((a) => listItem(a, ctx));
+  const raw = new Map(rows.map((a) => [a.id, a]));
+  const scoped = all.filter((a) => inPlanScope(a.status === 'verifiee' ? { ...a, closedOn: raw.get(a.id)!.closedOn } : a, filters.etat, now));
+  const items = scoped
+    .filter((a) => matchesActionFilters({ ...a, problem: raw.get(a.id)!.problem, detail: raw.get(a.id)!.detail }, filters, { userId: session.user.id, today: now }))
+    .sort((a, b) => (filters.etat === 'abandonnees'
+      ? (raw.get(b.id)!.cancelledAt?.getTime() ?? 0) - (raw.get(a.id)!.cancelledAt?.getTime() ?? 0)
+      : 0) || compareActions(a, b, now));
+  const responsables: Option[] = [...new Map(all.map((a) => [a.pilotId, a.pilot])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1], 'fr'))
+    .map(([id, label]) => [id, label] as const);
   const counts = {
-    olderClosed: views.filter((a) => a.col !== 'cancelled' && !recent(a)).length,
-    cancelled: views.filter((a) => a.col === 'cancelled').length,
+    open: all.filter((a) => isOpenAvancement(a.status)).length,
+    late: all.filter((a) => a.late).length,
+    // « Mes actions » : actions de la personne dans l'affichage et les autres filtres (compteur de la puce).
+    mine: scoped.filter((a) => a.mine && matchesActionFilters({ ...a, problem: raw.get(a.id)!.problem, detail: raw.get(a.id)!.detail }, { ...filters, responsable: null, mes: true }, { userId: session.user.id, today: now })).length,
+    abandoned: all.filter((a) => a.status === 'abandonnee').length,
+    olderVerified: rows.filter((a) => a.status === 'verifiee' && !inPlanScope(a, '', now)).length,
+    toComplete: scoped.filter((a) => a.toComplete).length,
   };
-  const all = views
-    .filter((a) => (scope === 'annulees' ? a.col === 'cancelled' : a.col !== 'cancelled' && (scope === 'historique' || recent(a))))
-    .sort((a, b) => (scope === 'annulees' ? (b.cancelledAt?.getTime() ?? 0) - (a.cancelledAt?.getTime() ?? 0) : 0) || b.id.localeCompare(a.id, 'fr', { numeric: true }))
-    .map((a) => toPlanAction(a, ctx));
-  const pilots = [...new Map(all.map((a) => [a.pilotId, a.pilot])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr'));
-  return { all, pilots, columns: ACTION_COLUMNS, now, counts };
+  const totals = { hours: sum(items, 'hours'), estimatedCost: sum(items, 'estimatedCost'), actualCost: sum(items, 'actualCost') };
+  return { items, responsables, counts, totals, now };
 }
+export type ActionPlan = Awaited<ReturnType<typeof loadActionPlan>>;
+
+// ─── Listes du formulaire (QHSE seulement) ──────────────────────────────────
 
 /**
- * Action ouverte par lien direct (/actions?action=A-214), y compris une action annulée ou clôturée depuis plus de 30 jours.
- * `elsewhere` donne le site de l'action quand elle n'appartient pas au site sélectionné.
- * Salarié : une action dont il n'est pas pilote est traitée comme introuvable.
+ * Listes du formulaire d'action (§ 2.3 du plan) : personnel actif, sites inscriptibles (writableSites, jamais « Tous les
+ * sites »), date du jour du serveur ; `targets` (sélecteur d'élément du plan) sur demande. Vides pour qui n'est pas QHSE :
+ * seul le service QHSE crée et modifie une action (ACT-22, convention isReadOnly).
  */
-export async function loadLinkedAction(id: string): Promise<{ action: PlanAction | null; elsewhere: string | null }> {
-  const ctx = await loadContext();
-  const { people, actions, sites, session, now } = ctx;
-  const employee = isEmployee(session.role);
-  const row = actions.find((a) => a.id === id);
-  if (row) {
-    if (employee && row.pilotId !== session.user.id) return { action: null, elsewhere: null };
-    return { action: toPlanAction(actionView(row, people, now), ctx), elsewhere: null };
-  }
-  const db = await getDb();
-  const [other] = await db.select({ siteId: t.actions.siteId, pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.id, id));
-  // Action d'un site hors du périmètre : introuvable (aucune fuite de son site, SEC-02).
-  if (!other || !inPerimeter(session.allowedSiteIds, other.siteId) || (employee && other.pilotId !== session.user.id)) return { action: null, elsewhere: null };
-  return { action: null, elsewhere: other.siteId ? sites.get(other.siteId) ?? other.siteId : ALL_SITES_LABEL };
+export async function loadActionFormOptions(opts: { targets?: boolean } = {}): Promise<ActionFormOptions> {
+  const session = await getSession();
+  const now = today();
+  if (!canCreateAction(session.role)) return { people: [], sites: [], today: now };
+  const [options, targets] = await Promise.all([loadFormOptions(), opts.targets ? loadActionTargets() : null]);
+  return { people: options.people, sites: options.sites, today: now, ...(targets ? { targets } : {}) };
 }
 
-// ─── Filtres ────────────────────────────────────────────────────────────────
-
-const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('fr');
-
-export type PlanFilter = { origin?: string; pilotId?: string; q?: string };
-
-/** Filtres communs aux trois vues : origine, pilote, recherche (référence, titre, référence d'origine, motif d'annulation). */
-export function filterPlan(all: PlanAction[], { origin, pilotId, q }: PlanFilter) {
-  const needle = q ? fold(q) : '';
-  return all.filter((a) =>
-    (!origin || a.origin.key === origin)
-    && (!pilotId || a.pilotId === pilotId)
-    && (!needle || [a.id, a.title, a.originRef, a.cancelReason ?? ''].some((v) => fold(v).includes(needle))));
-}
-
-// ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
+const fmtReview = (iso: string) => `Revue de direction du ${fmtDate(iso)}`;
 
 /**
- * Échéances du plan d'actions (actions annulées exclues par loadActions) :
- * actions en retard, actions à échéance sous 15 jours (hors celles portées par le programme d'audit),
- * vérifications d'efficacité à venir et dépassées (datées du jour, urgentes). Les vérifications concernent aussi
- * l'animateur QHSE, qui les mène. Tous les sites du périmètre (TDB-05) : siteId de l'action (null = tous les sites).
+ * Éléments proposés par le sélecteur du formulaire du plan (spec § 12, § 13 ; QHSE seulement, sinon liste vide) : éléments
+ * du site sélectionné (« Tous les sites » : du périmètre) ou communs à l'entreprise, qui acceptent encore une action :
+ * événements ouverts aux actions (ACT-07, addActionBlocker), constats non annulés (hors points forts) et éléments du
+ * programme de l'année et de la précédente, risques en vigueur, contrôles actifs, exigences en vigueur, revues non closes et
+ * leurs décisions, documents, filières et enlèvements de l'année et de la précédente ; jamais un élément d'un site archivé
+ * ni le risque d'une unité de travail archivée. Un élément à action unique (constat,
+ * élément du programme, exigence, contrôle, décision) déjà porté par une action ouverte n'est pas proposé (il serait
+ * refusé). Chaque option porte le site de l'élément (null : élément commun, le QHSE choisit) et ses sources admises
+ * (admissibleSources, D20 révisée) ; un élément qui ne permet aucune action QSE n'est jamais proposé.
+ */
+export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> => {
+  const session = await getSession();
+  if (!canCreateAction(session.role)) return [];
+  const db = await getDb();
+  const inScope = await siteFilter('site');
+  // Élément d'un site archivé : jamais proposé (l'action prend le site de son élément, et un site archivé est refusé à la
+  // création : requireInSite(…, { create: true })).
+  const active = new Set(session.siteOptions.map((s) => s.id));
+  const keep = (siteId: string | null) => inScope(siteId) && (!siteId || active.has(siteId));
+  const year = Number(today().slice(0, 4));
+  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses] = await Promise.all([
+    db.select({ id: t.events.id, title: t.events.title, type: t.events.type, step: t.events.step, dismissedAt: t.events.dismissedAt, siteId: t.events.siteId, occurredOn: t.events.occurredOn }).from(t.events),
+    db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, actionId: t.auditFindings.actionId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
+    db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, track: t.auditPlanItems.track, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, month: t.auditPlanItems.month, actionId: t.auditPlanItems.actionId, cancelledAt: t.auditPlanItems.cancelledAt }).from(t.auditPlanItems),
+    db.select({ id: t.risks.id, hazard: t.risks.hazard, archivedAt: t.risks.archivedAt, unitArchivedAt: t.workUnits.archivedAt, unit: t.workUnits.label, siteId: t.workUnits.siteId, sort: t.risks.sort, unitSort: t.workUnits.sort })
+      .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)),
+    db.select({ id: t.controls.id, equipment: t.controls.equipment, controlType: t.controls.controlType, siteId: t.controls.siteId, actionId: t.controls.actionId, archivedAt: t.controls.archivedAt }).from(t.controls).orderBy(asc(t.controls.sort)),
+    db.select({ id: t.requirements.id, text: t.requirements.text, actionId: t.requirements.actionId, archivedAt: t.requirements.archivedAt }).from(t.requirements).orderBy(asc(t.requirements.sort)),
+    db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status }).from(t.reviews).orderBy(asc(t.reviews.reviewOn)),
+    db.select({ id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, kind: t.reviewDecisions.kind, text: t.reviewDecisions.text, actionId: t.reviewDecisions.actionId }).from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort)),
+    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
+    db.select({ id: t.wasteStreams.id, label: t.wasteStreams.label, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).orderBy(asc(t.wasteStreams.id)),
+    db.select({ id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, siteId: t.wasteEntries.siteId, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries),
+    db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
+  ]);
+  const openActions = new Set(statuses.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id));
+  /** Élément à action unique encore libre (l'action qui le porte est close, ou aucune). */
+  const free = (actionId: string | null) => !actionId || !openActions.has(actionId);
+  const recent = (y: number) => y >= year - 1;
+  const tracks = new Map(planItems.map((p) => [p.id, p.track]));
+  const openReviews = new Map(reviews.filter((r) => r.status !== 'cloturee' && r.status !== 'annulee').map((r) => [r.id, r]));
+  const streamLabels = new Map(streams.map((s) => [s.id, s.label]));
+
+  const out: ActionTargetOption[] = [];
+  const add = (kind: string, args: string | number, label: string, siteId: string | null, facts: LinkFacts = {}, extra: Partial<ActionTargetOption> = {}) => {
+    const sources = admissibleSources(kind, facts);
+    if (sources.length) out.push({ value: `${kind}:${args}`, label: clip(label), siteId, sources, ...extra });
+  };
+  events
+    .filter((e) => addActionBlocker(e.step, !!e.dismissedAt) === null && keep(e.siteId))
+    .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.id.localeCompare(a.id, 'fr', { numeric: true }))
+    .forEach((e) => add('event', e.id, `${e.id} · ${e.title}`, e.siteId, { eventType: e.type }, e.type === 'AT' ? { healthWarning: true } : {}));
+  findings
+    .filter((f) => !f.cancelledAt && f.kind !== 'point_fort' && free(f.actionId))
+    .forEach((f) => add('finding', f.id, `Constat${f.clause ? ` ${f.clause}` : ''} · ${f.audit} — ${f.text}`, null, { track: f.planItemId ? tracks.get(f.planItemId) ?? null : null }));
+  planItems
+    .filter((p) => !p.cancelledAt && recent(p.year) && free(p.actionId))
+    .sort((a, b) => a.year - b.year || a.month - b.month || a.id - b.id)
+    .forEach((p) => add('plan', p.id, `Programme ${p.year} · ${p.detail ?? p.label}`, null, { track: p.track }));
+  risks
+    .filter((r) => !r.archivedAt && !r.unitArchivedAt && keep(r.siteId))
+    .sort((a, b) => a.unitSort - b.unitSort || a.sort - b.sort)
+    .forEach((r) => add('risk', r.id, `${r.unit} · ${r.hazard}`, r.siteId));
+  controls
+    .filter((c) => !c.archivedAt && keep(c.siteId) && free(c.actionId))
+    .forEach((c) => add('control', c.id, `${c.controlType} · ${c.equipment}`, c.siteId));
+  requirements
+    .filter((r) => !r.archivedAt && free(r.actionId))
+    .forEach((r) => add('requirement', r.id, `Exigence · ${r.text}`, null));
+  [...openReviews.values()].forEach((r) => add('review', r.id, fmtReview(r.reviewOn), null));
+  decisions
+    .filter((d) => openReviews.has(d.reviewId) && free(d.actionId))
+    .forEach((d) => add('reviewdecision', d.id, `Décision · ${fmtReview(openReviews.get(d.reviewId)!.reviewOn)} — ${d.text}`, null, { decisionKind: d.kind }));
+  documents.filter((d) => keep(d.siteId)).forEach((d) => add('document', d.id, `${d.id} · ${d.title}`, d.siteId));
+  streams.filter((s) => keep(s.siteId)).forEach((s) => add('wastestream', s.id, `${s.id} · ${s.label}`, s.siteId));
+  entries
+    .filter((e) => !e.cancelledAt && recent(Number(e.removedOn.slice(0, 4))) && keep(e.siteId))
+    .sort((a, b) => b.removedOn.localeCompare(a.removedOn) || b.id - a.id)
+    .forEach((e) => add('wasteentry', e.id, `${entryRef(e.streamId, e.removedOn)} · ${streamLabels.get(e.streamId) ?? e.streamId}`, e.siteId));
+  return out;
+});
+
+// ─── Fiche ──────────────────────────────────────────────────────────────────
+
+type Reader = { role: Session['role']; userId: string; restricted: boolean };
+
+/**
+ * Éléments liés affichés par la fiche : événement (event_id), rattachements du registre (src/lib/action-links.ts), sinon
+ * la référence d'origine (avec le lien de l'événement qu'elle nomme, ou du registre annuel des déchets) ; protections :
+ * - Salarié : un événement qu'il n'a pas déclaré (nominativement) → référence seule, sans intitulé ni lien ;
+ * - source sur un écran fermé au rôle (canOpen) → référence seule, sans intitulé ni lien ;
+ * - action de la personne hors de son périmètre (D19) → toutes les sources en référence seule : rien d'autre de ce site.
+ */
+async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
+  const db = await getDb();
+  const links = (await loadLinkSources()).get(a.id) ?? [];
+  const first = a.originRef.split(/[\s·,]+/)[0] ?? '';
+  const eventIds = [...new Set([a.eventId, a.originRef, first].filter((x): x is string => !!x))];
+  const events = new Map((eventIds.length
+    ? await db.select({ id: t.events.id, title: t.events.title, declarantId: t.events.declarantId, anonymous: t.events.anonymous }).from(t.events).where(inArray(t.events.id, eventIds))
+    : []).map((e) => [e.id, e]));
+  const employee = isEmployee(reader.role);
+  const eventSource = (id: string, label = id): PlanSource => {
+    const e = events.get(id);
+    const own = !!e && e.declarantId === reader.userId && !e.anonymous;
+    return !e || reader.restricted || (employee && !own)
+      ? { kind: 'event', label, href: null }
+      : { kind: 'event', label, detail: e.title, href: `/evenements?sel=${enc(id)}` };
+  };
+
+  const list: PlanSource[] = [];
+  if (a.eventId) list.push(eventSource(a.eventId));
+  // L'événement lié (type « event » du registre) est celui de event_id, déjà listé.
+  for (const s of links) {
+    if (s.kind === 'event') continue;
+    const readable = !reader.restricted && canOpen(reader.role, s.href);
+    list.push({
+      kind: s.kind, label: s.label, href: readable ? s.href : null, ...(readable && s.detail ? { detail: s.detail } : {}),
+      detachOnAbandon: !ACTION_LINKS[s.kind]?.keptOnCancel,
+    });
+  }
+  if (!list.length) {
+    // Repli : référence d'origine (source sans fiche, action de suite d'un événement clos, reprise).
+    const target = a.source ? ACTION_SOURCES[a.source]?.target : null;
+    const eventId = events.has(a.originRef) ? a.originRef : events.has(first) ? first : null;
+    const year = /^Registre des déchets (\d{4})$/.exec(a.originRef)?.[1];
+    if (eventId && (target === 'event' || (!a.source && (a.legacyOrigin === 'ev' || a.legacyOrigin === 'client')))) list.push(eventSource(eventId, a.originRef));
+    else if (year && (a.source === 'dechets' || (!a.source && a.legacyOrigin === 'env'))) {
+      list.push({ kind: 'reference', label: a.originRef, href: reader.restricted ? null : `/environnement?vue=bsd-manquants&annee=${year}` });
+    } else {
+      list.push({ kind: 'reference', label: a.originRef, href: reader.restricted || !a.source ? null : ACTION_SOURCES[a.source]?.path ?? null });
+    }
+  }
+  return list.map((s) => (s.href && !canOpen(reader.role, s.href) ? { ...s, href: null, detail: undefined } : s));
+}
+
+/** Nom d'une preuve jointe à un commentaire retiré, à la place du nom réel dans l'historique lu par qui n'est pas QHSE (D23). */
+const WITHDRAWN_PROOF_NAME = '(preuve d’un commentaire retiré)';
+
+/**
+ * Fiche d'une action (?action=A-214), y compris abandonnée ou vérifiée depuis plus de 30 jours. Règles :
+ * - sa propre action (responsable) : lisible quel que soit son site (D19) ; `rights.elsewhere` nomme son site quand il
+ *   diffère du site sélectionné (écritures du QHSE refusées par requireInSite) ;
+ * - sinon (QHSE, encadrement en lecture) : action du site sélectionné ; d'un autre site du périmètre : pas de fiche,
+ *   `elsewhere` = libellé du site (« sélectionnez ce site ») ; hors périmètre : introuvable, son site n'est jamais nommé
+ *   (SEC-02) ; Salarié : ses actions seulement ;
+ * - fil de cette action seulement : texte d'un commentaire retiré jamais renvoyé (ni même lu), ses preuves au QHSE seulement,
+ *   signalées (D23) ; preuves de cette action ; historique (sans donnée de santé : aucune n'est portée par une action ;
+ *   le nom d'une preuve d'un commentaire retiré y est masqué à qui n'est pas QHSE) ;
+ * - vérification (méthode, constat, résultat, vérificateur, date) seulement à l'état Vérifiée ; ancien constat d'une ligne
+ *   reprise non Vérifiée en `previousVerification` (D17) ;
+ * - `healthWarning` (événement lié de type AT) calculé pour le QHSE seulement : jamais la nature de l'événement d'un collègue.
+ */
+export const loadActionDetail = cache(async (id: string): Promise<{ payload: ActionDetailPayload | null; elsewhere: string | null }> => {
+  const none = { payload: null, elsewhere: null };
+  const session = await getSession();
+  const { role, user, allowedSiteIds } = session;
+  if (!canSee(role, 'actions')) return none;
+  const db = await getDb();
+  const [a] = await db.select().from(t.actions).where(eq(t.actions.id, id));
+  if (!a) return none;
+  const own = a.pilotId === user.id;
+  if (!canReadAction(role, user.id, a, allowedSiteIds)) return none;
+  const [people, sites] = await Promise.all([loadPeople(), siteLabels()]);
+  const selected = selectedSite(session);
+  const siteLabel = a.siteId ? sites.get(a.siteId) ?? a.siteId : SITE_TO_COMPLETE_LABEL;
+  const here = inSite(selected, a.siteId);
+  // Action d'un autre site du périmètre (hors les siennes) : pas de fiche, son site est nommé pour le sélectionner.
+  if (!own && !here) return { payload: null, elsewhere: siteLabel };
+
+  const qhse = isQhse(role);
+  const now = today();
+  const ctx: ItemContext = { people, sites, now, userId: user.id, selected };
+  const reader: Reader = { role, userId: user.id, restricted: !inPerimeter(allowedSiteIds, a.siteId) };
+
+  const [sources, commentRows, fileRows, history, followUpRows, predecessor, event] = await Promise.all([
+    sourcesOf(a, reader),
+    db.select({
+      id: t.actionComments.id, authorId: t.actionComments.authorId, authorRole: t.actionComments.authorRole, createdAt: t.actionComments.createdAt,
+      // Texte d'un commentaire retiré : jamais lu (D23), donc jamais renvoyé.
+      body: sql<string | null>`case when ${t.actionComments.withdrawnAt} is null then ${t.actionComments.body} end`,
+      withdrawnAt: t.actionComments.withdrawnAt, withdrawnById: t.actionComments.withdrawnById, withdrawReason: t.actionComments.withdrawReason,
+    }).from(t.actionComments).where(eq(t.actionComments.actionId, a.id)).orderBy(asc(t.actionComments.createdAt), asc(t.actionComments.id)),
+    db.select().from(t.attachments).where(sql`${t.attachments.entityType} = 'action' and ${t.attachments.entityId} = ${a.id}`)
+      .orderBy(asc(t.attachments.createdAt), asc(t.attachments.id)),
+    loadChangeLogs('action', [a.id]),
+    db.select().from(t.actions).where(eq(t.actions.followsActionId, a.id)).orderBy(asc(t.actions.createdAt), asc(t.actions.id)),
+    a.followsActionId ? db.select().from(t.actions).where(eq(t.actions.id, a.followsActionId)).then((r) => r[0]) : undefined,
+    qhse && a.eventId ? db.select({ type: t.events.type }).from(t.events).where(eq(t.events.id, a.eventId)).then((r) => r[0]) : undefined,
+  ]);
+
+  // Preuves visibles du lecteur : celles d'un commentaire retiré au QHSE seulement, signalées (D23) ; pièce médicale : jamais.
+  const withdrawn = new Set(commentRows.filter((c) => c.withdrawnAt).map((c) => c.id));
+  const visibleFiles = fileRows.filter((f) => (!f.health || canSeeHealth(role)) && (qhse || f.commentId == null || !withdrawn.has(f.commentId)));
+  const files: AttachmentItem[] = visibleFiles.map((f) => toAttachmentItem(f, name(people, f.uploadedBy) ?? undefined, { commentWithdrawn: f.commentId != null && withdrawn.has(f.commentId) }));
+  const comments: ActionCommentView[] = commentRows.map((c) => ({
+    id: c.id, authorId: c.authorId, author: name(people, c.authorId) ?? c.authorId, authorRole: c.authorRole, byResponsible: c.authorId === a.pilotId,
+    at: c.createdAt.toISOString(), atLabel: fmtParisDateTime(c.createdAt),
+    body: c.withdrawnAt ? null : c.body,
+    withdrawn: c.withdrawnAt ? { atLabel: fmtParisDateTime(c.withdrawnAt), by: name(people, c.withdrawnById) ?? '—', reason: c.withdrawReason ?? '' } : null,
+    files: files.filter((f) => f.commentId === c.id),
+  }));
+  const hiddenNames = qhse ? new Set<string>() : new Set(fileRows.filter((f) => f.commentId != null && withdrawn.has(f.commentId)).map((f) => f.fileName));
+  const entries = (history.get(a.id) ?? []).map((e) => (e.action === 'attach' && hiddenNames.size
+    ? { ...e, details: e.details.map((d) => (d.to && hiddenNames.has(d.to) ? { ...d, to: WITHDRAWN_PROOF_NAME } : d)) }
+    : e));
+
+  const verified = a.status === 'verifiee';
+  const readable = (r: ActionRow) => canReadAction(role, user.id, r, allowedSiteIds);
+  const detail: ActionDetailView = {
+    ...listItem(a, ctx),
+    problem: a.problem, detail: a.detail,
+    riskLevel: a.riskLevel, riskLevelLabel: a.riskLevel != null ? ACTION_RISK_LEVELS[a.riskLevel] ?? null : null,
+    verifyMethod: verified ? a.verifyMethod : null, verifyMethodLabel: verified && a.verifyMethod ? VERIFY_METHODS[a.verifyMethod] ?? null : null,
+    efficacyNote: verified ? a.efficacyNote : null, effective: verified ? a.effective : null, newRisk: verified && a.newRisk,
+    verifiedById: verified ? a.verifiedById : null, verifiedBy: verified ? name(people, a.verifiedById) : null,
+    previousVerification: !verified && a.efficacyNote?.trim() ? { note: a.efficacyNote, by: name(people, a.verifiedById) } : null,
+    cancelledBy: name(people, a.cancelledById),
+    legacyOriginLabel: a.source === null && a.legacyOrigin ? LEGACY_ORIGIN_LABELS[a.legacyOrigin] ?? a.legacyOrigin : null,
+    eventId: a.eventId, sources,
+    // Action précédente : son libellé seulement si le lecteur peut la lire (sinon le numéro seul, déjà cité par le problème).
+    follows: a.followsActionId && a.followReason
+      ? { id: a.followsActionId, label: predecessor && readable(predecessor) ? actionLabel(predecessor.detail) : '', reason: a.followReason }
+      : null,
+    followUps: followUpRows.filter((f) => f.followReason && readable(f)).map((f) => {
+      const v = actionView(f, people, now);
+      return { id: f.id, label: v.label, reason: f.followReason!, statusLabel: v.statusLabel, tone: v.tone };
+    }),
+    comments, files, history: entries,
+    healthWarning: qhse && event?.type === 'AT',
+  };
+  const elsewhere = here ? null : siteLabel;
+  return { payload: { detail, rights: actionRights(role, user.id, a, { elsewhere }) }, elsewhere: null };
+});
+
+// ─── Échéances du domaine (tableau de bord, À faire, notifications, badges) ──
+
+/** Type des échéances de vérification d'efficacité (§ 15.3). */
+const VERIFY_KIND = "Vérification d'efficacité";
+/** Type de l'échéance groupée des actions à compléter (§ 15.3, D8). */
+export const TO_COMPLETE_KIND = 'Actions à compléter';
+/** Lien de l'échéance « à compléter » : filtre ?completer=1 sur l'historique complet. */
+export const TO_COMPLETE_HREF = '/actions?completer=1&etat=historique';
+/** Type de l'échéance du § 22.12 (D6) : action de suite d'un événement qui n'accepte plus d'action. */
+export const CLOSED_EVENT_KIND = 'Événement clos — action de suite ouverte';
+
+/**
+ * Échéances du plan d'actions (§ 15.3), sur tout le périmètre (TDB-05), portant le site de l'action (null : site à
+ * compléter) ; Reportée et Abandonnée n'en produisent aucune :
+ * - « Action en retard » (isLate) et « Action » à échéance sous 15 jours (avancement ouvert ; actions portées par le
+ *   programme d'audit exclues, comme avant) : responsable de l'action ;
+ * - « Vérification d'efficacité » à venir sous 15 jours et dépassée (Terminée) : responsable QHSE du site seulement
+ *   (loadQhseLeads, ACT-14), pas le responsable de l'action, qui ne peut pas la faire ;
+ * - « Actions à compléter » (champs obligatoires manquants, D8) : une échéance par site, au responsable QHSE du site, clé
+ *   portant le nombre (elle réapparaît non lue quand il change) ;
+ * - § 22.12 (D6) : action de suite non close, sans événement lié, dont l'action précédente (ou la première de la chaîne qui
+ *   en a un) porte un événement qui n'accepte plus d'action (addActionBlocker) : « décider d'une réouverture », au
+ *   responsable QHSE du site de l'événement, lien vers l'événement.
+ * Intitulés : numéro, puis libellé court (actionLabel) ; jamais de donnée de santé (aucune n'est portée par une action).
  */
 export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const inWindow = (d: string | null | undefined): d is string => !!d && d >= now && d <= horizon;
-  const [actions, people, plan, leads] = await Promise.all([
+  const [actions, people, plan, leads, chain] = await Promise.all([
     loadActions('perimeter'), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems), loadQhseLeads(),
+    db.select({ id: t.actions.id, eventId: t.actions.eventId, followsActionId: t.actions.followsActionId }).from(t.actions),
   ]);
   const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
+  const links = new Map(chain.map((r) => [r.id, r]));
+  /** Événement de la première action de la chaîne des précédentes qui en porte un (au plus 20 maillons). */
+  const ancestorEvent = (id: string | null): string | null => {
+    for (let i = 0, cur = id; cur && i < 20; i++) {
+      const r = links.get(cur);
+      if (!r) return null;
+      if (r.eventId) return r.eventId;
+      cur = r.followsActionId;
+    }
+    return null;
+  };
+  const followUps = actions.filter((a) => a.status !== 'reportee' && a.followsActionId && !a.eventId && !isClosedActionStatus(a.status))
+    .map((a) => ({ a, eventId: ancestorEvent(a.followsActionId) }))
+    .filter((f): f is { a: ActionRow; eventId: string } => !!f.eventId);
+  const events = new Map((followUps.length
+    ? await db.select({ id: t.events.id, siteId: t.events.siteId, step: t.events.step, dismissedAt: t.events.dismissedAt }).from(t.events)
+      .where(inArray(t.events.id, [...new Set(followUps.map((f) => f.eventId))]))
+    : []).map((e) => [e.id, e]));
+
   const todo: TodoItem[] = [];
-  actions.forEach((a) => {
-    const col = actionColumn(a, now);
-    const base = { who: people.get(a.pilotId)?.name ?? '', href: `/actions?action=${a.id}`, ownerIds: [a.pilotId], siteId: a.siteId };
-    // La vérification d'efficacité concerne aussi le responsable QHSE du site, qui la mène.
-    const verify = { ...base, ownerIds: [...new Set([a.pilotId, ...leads.forSite(a.siteId).ownerIds])] };
-    if (col === 'late') todo.push({ ...base, date: now, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${a.title} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });
-    if ((col === 'todo' || col === 'doing') && inWindow(a.dueOn) && !planActions.has(a.id)) todo.push({ ...base, date: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${a.title}` });
-    if (col === 'verify' && inWindow(a.verifyDueOn)) todo.push({ ...verify, date: a.verifyDueOn, kind: 'Efficacité', tone: 'accent', title: `${a.eventId ?? a.originRef} · vérification d'efficacité de ${a.id}` });
-    if (col === 'verify' && a.verifyDueOn && a.verifyDueOn < now) todo.push({ ...verify, date: now, kind: 'Efficacité', tone: 'danger', overdue: true, title: `${a.eventId ?? a.originRef} · vérification d'efficacité de ${a.id} — dépassée depuis le ${fmtDayMonth(a.verifyDueOn)}` });
-  });
+  const toComplete = new Map<string | null, number>();
+  for (const a of actions) {
+    if (a.status === 'reportee') continue; // Reportée : aucune échéance (§ 15.3)
+    const label = actionLabel(a.detail);
+    const href = actionHref(a.id);
+    const pilot = { who: people.get(a.pilotId)?.name ?? '', href, ownerIds: [a.pilotId], siteId: a.siteId };
+    const qhse = leads.forSite(a.siteId);
+    const lead = { who: qhse.who, href, ownerIds: qhse.ownerIds, siteId: a.siteId };
+    if (isLate(a, now)) {
+      todo.push({ ...pilot, date: now, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${label} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });
+    } else if (isOpenAvancement(a.status) && a.dueOn >= now && a.dueOn <= horizon && !planActions.has(a.id)) {
+      todo.push({ ...pilot, date: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${label}` });
+    }
+    if (isVerificationDueSoon(a, now)) {
+      todo.push({ ...lead, date: a.verifyDueOn!, kind: VERIFY_KIND, tone: 'accent', title: `${a.id} · ${label} — vérification d'efficacité` });
+    }
+    if (isVerificationLate(a, now)) {
+      todo.push({ ...lead, date: now, kind: VERIFY_KIND, tone: 'danger', overdue: true, title: `${a.id} · ${label} — vérification d'efficacité dépassée depuis le ${fmtDayMonth(a.verifyDueOn!)}` });
+    }
+    if (isToComplete(a)) toComplete.set(a.siteId, (toComplete.get(a.siteId) ?? 0) + 1);
+  }
+  for (const [siteId, n] of toComplete) {
+    const r = leads.forSite(siteId);
+    todo.push({
+      date: now, kind: TO_COMPLETE_KIND, tone: 'warn', siteId, who: r.who, ownerIds: r.ownerIds, href: TO_COMPLETE_HREF, count: n,
+      key: `${TO_COMPLETE_KIND}|${siteId ?? 'sans-site'}|${n}`,
+      title: `Plan d'actions · ${n} action${n > 1 ? 's' : ''} à compléter (champs obligatoires manquants)`,
+    });
+  }
+  for (const { a, eventId } of followUps) {
+    const ev = events.get(eventId);
+    if (!ev || addActionBlocker(ev.step, !!ev.dismissedAt) === null) continue;
+    const r = leads.forSite(ev.siteId);
+    todo.push({
+      date: now, kind: CLOSED_EVENT_KIND, tone: 'warn', siteId: ev.siteId, who: r.who, ownerIds: r.ownerIds, href: `/evenements?sel=${enc(ev.id)}`,
+      title: `${ev.id} · action de suite ${a.id} — décider d'une réouverture`,
+    });
+  }
   return { todo };
 });

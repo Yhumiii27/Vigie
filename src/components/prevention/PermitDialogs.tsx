@@ -3,13 +3,12 @@
 import { useOptimistic, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ActionFields, NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
-import { addDays } from '@/lib/dates';
+import { actionHref } from '@/lib/action-rules';
 import type { PermitView, PlanChoice } from '@/lib/data/prevention';
 import { cancelPermit, closePermit, deliverPermit, linkPermitPlan, savePermit, setPermitCheck } from '@/server/prevention';
 import {
@@ -40,32 +39,6 @@ const planLabel = (p: PlanChoice, withContractor: boolean) =>
   `${p.id} · ${withContractor ? `${p.contractor} — ` : ''}${p.title} · ${p.period} · ${p.signed ? 'signé' : 'non signé'}`;
 
 const contractorName = (options: PreventionOptions, id: string) => options.contractors.find(([v]) => v === id)?.[1].split(' — ')[0] ?? id;
-
-/**
- * Action proposée depuis un permis (plan d'actions unique, origine Prévention) :
- * - 'gap' (alerte) : corrective pour une entreprise extérieure sans plan signé, rattachée au plan s'il y en a un ;
- * - 'permit' (fiche) : rattachée au permis lui-même ; intitulé proposé seulement en cas d'écart.
- */
-export function permitActionDefaults(permit: PermitView, todayIso: string, target: 'gap' | 'permit' = 'gap'): ActionDefaults {
-  const who = permit.contractor ?? "l'entreprise extérieure";
-  const start = permit.validFrom.slice(0, 10);
-  const gapTitle = !permit.plan ? `Établir et faire signer le plan de prévention de ${who} (permis ${permit.id})`
-    : !permit.plan.signed ? `Faire signer le plan de prévention ${permit.plan.id} par les deux entreprises (permis ${permit.id})`
-      : `Mettre le plan de prévention ${permit.plan.id} en cohérence avec le permis ${permit.id} (${who})`;
-  const onPermit = target === 'permit';
-  return {
-    title: !onPermit || permit.planGap ? gapTitle : undefined,
-    description: `${permit.typeLabel} ${permit.id} : ${permit.description} (${permit.location}), validité ${permit.validity}.`
-      + `${permit.planIssue ? ` ${permit.planIssue}` : ''}${permit.ruleReason ? ` ${permit.ruleReason}.` : ''}`,
-    origin: 'prevention',
-    originRef: onPermit ? permit.id : permit.plan?.id ?? permit.id,
-    lockOrigin: true,
-    siteId: permit.siteId,
-    pilotId: permit.issuerId ?? undefined,
-    dueOn: start > addDays(todayIso, 1) ? addDays(start, -1) : addDays(todayIso, 1),
-    kind: permit.planGap ? 'C' : 'P',
-  };
-}
 
 // ─── Formulaire ─────────────────────────────────────────────────────────────
 
@@ -314,8 +287,8 @@ function PermitPlanLink({ permit, options }: { permit: PermitView; options: Prev
   );
 }
 
-function PermitSheet({ permit, options, canManage, onEdit, onCreateAction, onCancelPermit, onLeave }: {
-  permit: PermitView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCreateAction: () => void; onCancelPermit: () => void; onLeave: () => void;
+function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLeave }: {
+  permit: PermitView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCancelPermit: () => void; onLeave: () => void;
 }) {
   const { pending, error, run } = useRun();
   const requested = permit.status === 'demande';
@@ -391,23 +364,25 @@ function PermitSheet({ permit, options, canManage, onEdit, onCreateAction, onCan
 
       <PermitChecklist permit={permit} editable={canManage && requested} />
 
-      <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle>Actions du plan d&apos;actions unique</SectionTitle>
-        {permit.actions.length === 0 && <span style={muted}>Aucune action rattachée à ce permis.</span>}
-        {permit.actions.map((a) => (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
-            <Link href={`/actions?action=${a.id}`} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
-            <span style={{ flex: 1, minWidth: 180 }}>{a.title}</span>
-            <span style={muted}>{a.pilot} · {a.due}</span>
-            <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
-          </div>
-        ))}
-        {permit.plan && permit.planActions > 0 && (
-          <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ fontSize: 11.5, justifySelf: 'start' }}>
-            {permit.planActions > 1 ? `${permit.planActions} actions` : '1 action'} sur le plan {permit.plan.id}
-          </Link>
-        )}
-      </div>
+      {/* Actions reprises seulement (consultation) : la Prévention ne crée plus d'action QSE (15/10/2026). */}
+      {(permit.actions.length > 0 || (permit.plan && permit.planActions > 0)) && (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <SectionTitle>Actions reprises du plan d&apos;actions</SectionTitle>
+          {permit.actions.map((a) => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
+              <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
+              <span style={{ flex: 1, minWidth: 180 }}>{a.label}</span>
+              <span style={muted}>{a.pilot} · {a.due}</span>
+              <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
+            </div>
+          ))}
+          {permit.plan && permit.planActions > 0 && (
+            <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ fontSize: 11.5, justifySelf: 'start' }}>
+              {permit.planActions > 1 ? `${permit.planActions} actions` : '1 action'} sur le plan {permit.plan.id}
+            </Link>
+          )}
+        </div>
+      )}
 
       <LinkedEvents events={permit.events} emptyLabel="Aucun événement rattaché à ce permis."
         reportHref={canManage ? `/evenements?nouveau=1&permis=${encodeURIComponent(permit.id)}` : null} />
@@ -417,7 +392,6 @@ function PermitSheet({ permit, options, canManage, onEdit, onCreateAction, onCan
       <ErrorLine error={error} />
       {canManage && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCreateAction}><Icon name="ph-list-plus" size={13} />Créer l&apos;action</button>
           {requested && <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>}
           {(requested || delivered) && (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCancelPermit}>
@@ -440,9 +414,9 @@ function PermitSheet({ permit, options, canManage, onEdit, onCreateAction, onCan
   );
 }
 
-type Mode = 'view' | 'edit' | 'action' | 'cancel';
+type Mode = 'view' | 'edit' | 'cancel';
 
-/** Fiche d'un permis (check-list, délivrance, clôture, annulation avec motif, création d'une action). */
+/** Fiche d'un permis (check-list, délivrance, clôture, annulation avec motif). */
 export function PermitDialog({ permit, open, onClose, options, canManage }: { permit: PermitView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
@@ -450,13 +424,11 @@ export function PermitDialog({ permit, open, onClose, options, canManage }: { pe
   const requested = permit?.status === 'demande';
   const kicker = !permit ? ''
     : mode === 'edit' ? `Modifier la demande ${permit.id}`
-      : mode === 'action' ? `Plan d'actions unique · ${permit.id}`
-        : mode === 'cancel' ? `${requested ? 'Annuler la demande' : 'Annuler le permis'} ${permit.id}` : permit.typeLabel;
+      : mode === 'cancel' ? `${requested ? 'Annuler la demande' : 'Annuler le permis'} ${permit.id}` : permit.typeLabel;
   return (
     <Dialog open={open && !!permit} onClose={close} width={680} kicker={kicker}
-      title={permit ? (mode === 'action' ? 'Nouvelle action' : `${permit.id} · ${permit.location}`) : ''}>
+      title={permit ? `${permit.id} · ${permit.location}` : ''}>
       {permit && mode === 'edit' && <PermitForm permit={permit} options={options} onDone={back} onCancel={back} />}
-      {permit && mode === 'action' && <ActionFields options={options} defaults={permitActionDefaults(permit, options.today, 'permit')} onDone={back} onCancel={back} />}
       {permit && mode === 'cancel' && (
         <ReasonForm action={cancelPermit} hidden={{ id: permit.id }} submitLabel={requested ? 'Annuler la demande' : 'Annuler le permis'} submitIcon="ph-prohibit"
           onDone={back} onCancel={back}
@@ -464,20 +436,19 @@ export function PermitDialog({ permit, open, onClose, options, canManage }: { pe
           message={requested ? 'La demande reste consultable dans le filtre « Annulés », avec le motif.' : 'Travaux arrêtés ou n’ayant pas lieu : le permis reste consultable dans le filtre « Annulés », avec le motif.'} />
       )}
       {permit && mode === 'view' && (
-        <PermitSheet permit={permit} options={options} canManage={canManage} onEdit={() => setMode('edit')} onCreateAction={() => setMode('action')}
+        <PermitSheet permit={permit} options={options} canManage={canManage} onEdit={() => setMode('edit')}
           onCancelPermit={() => setMode('cancel')} onLeave={close} />
       )}
     </Dialog>
   );
 }
 
-/** Boutons de l'alerte « entreprise extérieure sans plan signé » pour un permis : ouvrir la fiche, créer l'action. */
+/** Bouton de l'alerte « entreprise extérieure sans plan signé » pour un permis : ouvrir la fiche (aucune action QSE, 15/10/2026). */
 export function PermitAlertActions({ permit, options }: { permit: PermitView; options: PreventionOptions }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ display: 'flex', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
       <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name={permit.icon} size={13} />Ouvrir le permis</button>
-      <NewActionButton options={options} defaults={permitActionDefaults(permit, options.today)} label="Créer l'action" />
       <PermitDialog permit={permit} open={open} onClose={() => setOpen(false)} options={options} canManage />
     </div>
   );

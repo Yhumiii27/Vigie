@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { actAs, freshDemoDatabase } from '../helpers';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { loadLinkedAction, loadActionPlan } from '@/lib/data/actions';
+import { actionHref, parseActionFilters } from '@/lib/action-rules';
+import { REMINDER_KEY_PREFIX, STORED_NOTIFICATION_KEY_PREFIX } from '@/lib/domain';
+import { loadActionDetail, loadActionFormOptions, loadActionPlan } from '@/lib/data/actions';
 import { loadCounters } from '@/lib/data/counters';
 import { loadEventDetail, loadMyReport, loadMyReports, loadVisibleEvents } from '@/lib/data/events';
 import { loadNotifications } from '@/lib/data/notifications';
 import { loadSkillMatrix } from '@/lib/data/skills';
 import { loadVisibleTodo } from '@/lib/data/todo';
-import { canReadAttachment, type Attachment } from '@/lib/uploads';
+import { canReadAttachment, type AttachmentAccess } from '@/lib/uploads';
 
 // Cloisonnement du rôle Salarié (QUA-06) : chaque chargement ne lui renvoie que ses propres données — sa ligne de
-// la matrice des habilitations, ses signalements nominatifs, les actions dont il est pilote, ses échéances — tous sites
+// la matrice des habilitations, ses signalements nominatifs, les actions dont il est responsable (fil et preuves compris), ses échéances — tous sites
 // confondus. La charge RSC des pages construites est vérifiée par test/e2e/employee-payload.test.ts.
 
 freshDemoDatabase();
@@ -36,33 +38,52 @@ describe('Salarié : ses données seulement', () => {
     expect(JSON.stringify(mine)).not.toMatch(/\[M\. Girard\]|\[P\. Roux\]|\[K\. Bernard\]|\[Y\. Lambert\]/);
   });
 
-  it('plan d’actions : les actions dont il est pilote, sur tous les filtres ; lien direct vers une autre action introuvable', async () => {
+  it('plan d’actions : ses actions seulement, sur tous les affichages ; fiche d’une autre action introuvable', async () => {
     asEmployee();
-    for (const scope of ['', 'historique', 'annulees'] as const) {
-      const { all, pilots } = await loadActionPlan({ scope });
-      expect(all.every((a) => a.pilotId === ME)).toBe(true);
-      expect(pilots.every(([id]) => id === ME)).toBe(true);
+    for (const etat of ['', 'historique', 'abandonnees', 'annulees']) {
+      for (const vue of ['liste', 'kanban', 'responsable']) {
+        const { items, responsables } = await loadActionPlan(parseActionFilters({ etat, vue }));
+        expect(items.every((a) => a.pilotId === ME), `${etat} ${vue}`).toBe(true);
+        expect(responsables.every(([id]) => id === ME), `${etat} ${vue}`).toBe(true);
+      }
     }
-    expect((await loadActionPlan()).all.map((a) => a.id)).toContain('A-215');
-    expect(await loadLinkedAction('A-214')).toEqual({ action: null, elsewhere: null }); // même événement, autre pilote
-    expect(await loadLinkedAction('A-206')).toEqual({ action: null, elsewhere: null }); // autre site, autre pilote
-    expect((await loadLinkedAction('A-215')).action?.id).toBe('A-215');
+    expect((await loadActionPlan(parseActionFilters({}))).items.map((a) => a.id)).toContain('A-215');
+    // Filtre sur un autre responsable : rien (jamais ses actions).
+    expect((await loadActionPlan(parseActionFilters({ responsable: 'sbenali' }))).items).toEqual([]);
+    expect(await loadActionDetail('A-214')).toEqual({ payload: null, elsewhere: null }); // même événement, autre responsable
+    expect(await loadActionDetail('A-209')).toEqual({ payload: null, elsewhere: null }); // autre site, autre responsable
+    expect((await loadActionDetail('A-215')).payload?.detail.id).toBe('A-215');
+    expect(await loadActionFormOptions({ targets: true })).toEqual({ people: [], sites: [], today: '2026-10-09' });
+  });
+
+  it('fiche de son action : son fil et ses preuves ; rien des autres actions', async () => {
+    asEmployee();
+    const { payload } = await loadActionDetail('A-215');
+    const d = payload!.detail;
+    expect(d.comments.map((c) => c.authorId)).toEqual(['tnguyen', 'clefevre']);
+    expect(d.files.map((f) => f.name)).toEqual(['mode-operatoire-retournement-v0.pdf']);
+    const json = JSON.stringify(payload);
+    expect(json).not.toContain('livraison prévue le 14/10'); // commentaire de A-214
+    expect(json).not.toContain('bon-de-commande-elingues.pdf'); // preuve de A-214
+    expect(json.match(/\bA-\d{3}\b/g)?.filter((id) => id !== 'A-215') ?? []).toEqual([]);
+    expect(d.healthWarning).toBe(false);
   });
 
   it('la source d’une action de son signalement reste lisible, celle d’un signalement d’autrui est masquée', async () => {
     const db = await getDb();
-    // Action dont il est pilote, issue du signalement d'un collègue (EV-2026-130, [P. Roux]).
+    // Action dont il est responsable, issue du signalement d'un collègue (EV-2026-130, [P. Roux]).
     await db.insert(t.actions).values({
-      id: 'A-950', title: 'Contrôler la dérive outil au poste CU-2', origin: 'ev', originRef: 'EV-2026-130', eventId: 'EV-2026-130', siteId: 'ville-a',
-      pilotId: ME, dueOn: '2026-10-30', status: 'todo', kind: 'C',
+      id: 'A-950', detail: 'Contrôler la dérive outil au poste CU-2', problem: 'Dérive outil au poste CU-2.', openedOn: '2026-10-01',
+      initialDueOn: '2026-10-30', dueOn: '2026-10-30', status: 'a_faire', source: 'evenement', originRef: 'EV-2026-130', eventId: 'EV-2026-130',
+      siteId: 'ville-a', pilotId: ME,
     });
     actAs('Animateur QHSE', 'all');
-    expect(JSON.stringify((await loadActionPlan()).all.find((a) => a.id === 'A-950'))).toContain("Cotes hors tolérance sur l'arbre de malaxeur");
+    expect(JSON.stringify((await loadActionDetail('A-950')).payload)).toContain("Cotes hors tolérance sur l'arbre de malaxeur");
     asEmployee();
-    const plan = await loadActionPlan();
-    const other = plan.all.find((a) => a.id === 'A-950')!;
-    const own = plan.all.find((a) => a.id === 'A-215')!;
+    const other = (await loadActionDetail('A-950')).payload!;
+    const own = (await loadActionDetail('A-215')).payload!;
     expect(JSON.stringify(other)).not.toContain("Cotes hors tolérance sur l'arbre de malaxeur");
+    expect(other.detail.sources).toEqual([{ kind: 'event', label: 'EV-2026-130', href: null }]);
     expect(JSON.stringify(own)).toContain('EV-2026-131');
   });
 
@@ -107,8 +128,18 @@ describe('Salarié : ses données seulement', () => {
     expect(todo.every((x) => (x.ownerIds ? x.ownerIds.includes(ME) : x.who.includes('[T. Nguyen]')))).toBe(true);
     expect(todo.some((x) => x.health)).toBe(false);
     expect(JSON.stringify(todo)).not.toMatch(/\[M\. Girard\]|\[A\. Martin\]|\[K\. Bernard\]/);
+    // Cloche : ses échéances, ses notifications stockées (personne = lui) et son rappel du mercredi.
     const notifications = await loadNotifications();
-    expect(notifications.every((n) => todo.some((x) => x.title === n.title))).toBe(true);
+    expect(notifications.every((n) => todo.some((x) => x.title === n.title)
+      || n.key.startsWith(STORED_NOTIFICATION_KEY_PREFIX) || n.key.startsWith(REMINDER_KEY_PREFIX))).toBe(true);
+    const db = await getDb();
+    const stored = new Set((await db.select({ id: t.notifications.id }).from(t.notifications).where(eq(t.notifications.personId, ME))).map((r) => `${STORED_NOTIFICATION_KEY_PREFIX}${r.id}`));
+    expect(notifications.filter((n) => n.key.startsWith(STORED_NOTIFICATION_KEY_PREFIX)).every((n) => stored.has(n.key))).toBe(true);
+    // Informations (notifications stockées, rappel) : ses actions seulement (fiche de l'une d'elles, ou « Mes actions »).
+    const own = new Set((await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.pilotId, ME))).map((r) => actionHref(r.id)));
+    const infos = notifications.filter((n) => n.info);
+    expect(infos.length).toBeGreaterThan(0);
+    expect(infos.every((n) => !n.href || own.has(n.href) || n.href === '/actions?mes=1')).toBe(true);
     const { badges } = await loadCounters();
     expect(badges.todo).toBe(todo.length);
     expect(Object.keys(badges).every((k) => ['todo', 'events', 'actions', 'skills', 'docs'].includes(k))).toBe(true);
@@ -118,7 +149,7 @@ describe('Salarié : ses données seulement', () => {
     const db = await getDb();
     const [qMine] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, ME));
     const [qOther] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, 'mgirard'));
-    const row = (entityType: string, entityId: string | number, uploadedBy: string | null = null): Attachment => ({
+    const row = (entityType: string, entityId: string | number, uploadedBy: string | null = null): AttachmentAccess => ({
       id: 'x', entityType, entityId: String(entityId), fileName: 'f.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy, createdAt: new Date(), health: false,
     });
     const s = { role: 'Salarié' as const, user: { id: ME }, allowedSiteIds: null };

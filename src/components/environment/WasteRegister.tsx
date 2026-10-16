@@ -17,6 +17,7 @@ import {
   qualificationError, qualificationLabel, treatmentLabel,
 } from './model';
 import { CompanyIdField, LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier } from './parts';
+import { entryActionDefaults } from './action-defaults';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
@@ -171,10 +172,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
         </Note>
       )}
       <LinkedActions actions={entry.actions} options={entry.cancelled ? null : actionOptions} canAct={!entry.cancelled}
-        defaults={{
-          originRef: entry.ref, siteId: entry.siteId, title: entry.staleBsd ? `Obtenir le certificat de traitement du ${entry.bsdNumber}` : undefined,
-          description: `Enlèvement du ${fmtDate(entry.removedOn)} · ${entry.stream} · ${fmtQty(entry.quantity, entry.unit)}${entry.bsdNumber ? ` · ${entry.bsdNumber}` : ''}.`,
-        }} />
+        defaults={entryActionDefaults(entry, today)} />
       {!entry.cancelled && (
         <section style={{ display: 'grid', gap: 8 }}>
           <h6 className="vg-h6">Enlèvement</h6>

@@ -6,8 +6,12 @@ import { currentPersonId } from '@/lib/session';
 // Journal des modifications (table change_log) : appelé par les server actions des fiches principales.
 // Pas de 'use server' : ce module n'expose aucune action appelable depuis le navigateur.
 
-/** Champ modifié, pour le détail d'une entrée « update » (valeurs déjà mises en forme pour l'affichage). */
-export type ChangeDetail = { field: string; from: string | null; to: string | null };
+/**
+ * Champ modifié, pour le détail d'une entrée « update » (valeurs déjà mises en forme pour l'affichage). `fromKey` /
+ * `toKey` : clés stockées correspondantes quand le libellé ne suffit pas à les retrouver (avancement d'une action, D11 :
+ * journal structuré lu par les statistiques ACT-29 ; reprise 0005).
+ */
+export type ChangeDetail = { field: string; from: string | null; to: string | null; fromKey?: string | null; toKey?: string | null };
 
 export type ChangeInput = {
   /** event | action | risk | work_unit | duerp_version | requirement | control | control_record | prevention_plan | permit

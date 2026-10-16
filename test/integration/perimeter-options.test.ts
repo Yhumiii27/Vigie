@@ -2,13 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cookieJar } from '../next-mocks';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { actionLabel } from '@/lib/action-rules';
 import { resetConfig } from '@/lib/env';
-import type { Role } from '@/lib/domain';
+import { isClosedActionStatus, type Role } from '@/lib/domain';
 import { freshDemoDatabase } from '../helpers';
 
 // Listes de choix des formulaires limitées au périmètre (réserve SEC-02 / EVT-23 du lot 1) : options.sites contient
-// exactement les sites qu'accepte requireInSite(…, { create: true }) (writableSites), événements et actions liables du
-// site sélectionné et du périmètre ; loadLinkedAction ne nomme pas le site d'une action hors périmètre.
+// exactement les sites qu'accepte requireInSite(…, { create: true }) (writableSites), actions liables du site
+// sélectionné et du périmètre (« A-n · libellé », ni Vérifiées ni Abandonnées). Les éléments liables du formulaire
+// d'action (événements…) et la fiche d'une action hors périmètre relèvent du plan d'actions (actions-plan-perimeter).
 // Jeu de démonstration, puis session Entra ID (périmètre restreint) sur la même base.
 
 const SECRET = 'secret-de-session-des-tests-perimetre-0123456789';
@@ -40,10 +42,9 @@ async function actAsEntra(pid: string, role: Role, sites: string[] | null, site:
 
 const ids = (opts: readonly (readonly [string, string])[]) => opts.map(([id]) => id);
 
-async function siteOf(table: 'events' | 'actions', id: string) {
+async function siteOf(id: string) {
   const db = await getDb();
-  const tbl = table === 'events' ? t.events : t.actions;
-  const [row] = await db.select({ siteId: tbl.siteId }).from(tbl).where(eq(tbl.id, id));
+  const [row] = await db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, id));
   return row.siteId;
 }
 
@@ -54,10 +55,29 @@ describe('listes de choix des formulaires et périmètre', () => {
     const options = await loadFormOptions();
     expect(ids(options.sites)).toEqual(['ville-a']);
     expect(options.allSites).toBe(false);
-    expect(options.events.length).toBeGreaterThan(0);
+    expect(options).not.toHaveProperty('events');
+    expect(options).not.toHaveProperty('origins');
     expect(options.actions.length).toBeGreaterThan(0);
-    for (const [id] of options.events) expect([null, 'ville-a']).toContain(await siteOf('events', id));
-    for (const [id] of options.actions) expect([null, 'ville-a']).toContain(await siteOf('actions', id));
+    for (const [id] of options.actions) expect([null, 'ville-a']).toContain(await siteOf(id));
+  });
+
+  it('actions liables : « A-n · libellé » (80 caractères au plus), ni Vérifiées ni Abandonnées, numéros décroissants', async () => {
+    await actAsEntra('hmarchand', 'Direction', null, 'all');
+    const { loadFormOptions } = await import('@/lib/data/options');
+    const options = await loadFormOptions();
+    const db = await getDb();
+    const rows = new Map((await db.select().from(t.actions)).map((a) => [a.id, a]));
+    expect(ids(options.actions)).toEqual([...rows.values()].filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id)
+      .sort((a, b) => b.localeCompare(a, 'fr', { numeric: true })));
+    for (const [id, label] of options.actions) {
+      expect(label.length).toBeLessThanOrEqual(80);
+      const full = `${id} · ${actionLabel(rows.get(id)!.detail)}`;
+      expect(label).toBe(full.length > 80 ? `${full.slice(0, 79)}…` : full);
+    }
+    expect(ids(options.actions)).toContain('A-190'); // Terminée : encore ouverte aux rattachements
+    expect(ids(options.actions)).toContain('A-174'); // Reportée
+    expect(ids(options.actions)).not.toContain('A-176'); // Vérifiée
+    expect(ids(options.actions)).not.toContain('A-180'); // Abandonnée
   });
 
   it('périmètre de deux sites : le site sélectionné seulement', async () => {
@@ -66,7 +86,8 @@ describe('listes de choix des formulaires et périmètre', () => {
     const options = await loadFormOptions();
     expect(ids(options.sites)).toEqual(['ville-b']);
     expect(options.allSites).toBe(false);
-    for (const [id] of options.events) expect([null, 'ville-b']).toContain(await siteOf('events', id));
+    expect(options.actions.length).toBeGreaterThan(0);
+    for (const [id] of options.actions) expect([null, 'ville-b']).toContain(await siteOf(id));
   });
 
   it('direction : sites actifs sous « Tous les sites » (archivé exclu), « Tous les sites » admis ; site sélectionné sinon', async () => {
@@ -76,7 +97,7 @@ describe('listes de choix des formulaires et périmètre', () => {
     expect(ids(all.sites)).toEqual(['ville-a', 'ville-b']);
     expect(ids(all.sites)).not.toContain('ville-c');
     expect(all.allSites).toBe(true);
-    const sites = new Set(await Promise.all(all.events.map(([id]) => siteOf('events', id))));
+    const sites = new Set(await Promise.all(all.actions.map(([id]) => siteOf(id))));
     expect(sites.has('ville-a') && sites.has('ville-b')).toBe(true);
     await actAsEntra('hmarchand', 'Direction', null, 'ville-a');
     const a = await loadFormOptions();
@@ -103,18 +124,5 @@ describe('listes de choix des formulaires et périmètre', () => {
       }
       expect((await requireInSite(null, { create: true })) === null).toBe(writable.allSites);
     }
-  });
-
-  it('action liée : hors périmètre, introuvable sans nommer son site ; dans le périmètre, autre site nommé', async () => {
-    const db = await getDb();
-    const [other] = await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.siteId, 'ville-b')).limit(1);
-    expect(other).toBeDefined();
-    const { loadLinkedAction } = await import('@/lib/data/actions');
-    await actAsEntra('sbenali', 'Chef de service', ['ville-a'], 'ville-a');
-    expect(await loadLinkedAction(other.id)).toEqual({ action: null, elsewhere: null });
-    await actAsEntra('hmarchand', 'Direction', null, 'ville-a');
-    const [b] = await db.select({ label: t.sites.label }).from(t.sites).where(eq(t.sites.id, 'ville-b'));
-    expect(await loadLinkedAction(other.id)).toEqual({ action: null, elsewhere: b.label });
-    cookieJar.clear();
   });
 });

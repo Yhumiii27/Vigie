@@ -5,15 +5,17 @@ import { getDb, schema as t } from '@/db';
 import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf } from '../dates';
 import { today } from '@/lib/today';
 import {
-  EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, ORIGINS, PLAN_ITEM_STATES, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
-  REVIEW_CLOSE_DAYS, REVIEW_DECISION_KINDS, REVIEW_FOLLOW_UP, REVIEW_KINDS, REVIEW_SOURCES, REVIEW_STATUS, RISK_ACTION_THRESHOLD,
-  TODO_HORIZON_DAYS, canApprove, canEdit, canReadReviewDossier, canSee, isEmployee, isOpenActionStatus, type ReviewDecisionKind,
+  ACTION_SOURCES, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, PLAN_ITEM_STATES, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
+  REVIEW_CLOSE_DAYS, REVIEW_DECISION_KINDS, REVIEW_FOLLOW_UP, REVIEW_KINDS, REVIEW_SOURCES, REVIEW_STATUS, RISK_ACTION_THRESHOLD, SOURCE_KEYS,
+  TODO_HORIZON_DAYS, canApprove, canEdit, canReadReviewDossier, canSee, isClosedActionStatus, isEmployee, isOpenAvancement, type ReviewDecisionKind,
   type ReviewKind, type ReviewSource, type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
 import {
-  actionBrief, actionColumn, certificationStatus, controlStatus, isOpen, lastFullMonths, loadActions, loadAllActions, loadControls,
+  actionBrief, certificationStatus, controlStatus, isOpen, lastFullMonths, loadActions, loadAllActions, loadControls,
   loadEvents, loadPeople, safetyRates, workforceAccident, type ActionBrief, type ActionRow, type Person,
 } from '../queries';
+import { SOURCE_TO_COMPLETE, actionHref, actionLabel, canCreateAction, isLate } from '../action-rules';
+import type { ActionFormOptions } from '../action-view';
 import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { planItemAuditLabel, planItemState } from './audits';
@@ -50,6 +52,21 @@ export type ReviewSnapshot = {
 
 /** Ligne de l'ancienne section 1 (« Suivi des actions des revues précédentes », instantanés de version 1). */
 export type LegacyPreviousAction = ActionBrief & { href: string; originRef: string; review: string; open: boolean };
+/**
+ * Section « Plan d'actions » du dossier, par source (ligne) : `open` = non closes hors Terminées (Reportée comprise), `late` =
+ * en retard (§ 6.3), `verify` = Terminées — à vérifier, `closed` = Vérifiées pendant la période examinée (closed_on).
+ * Clés inchangées depuis l'ancien modèle : un dossier figé avant 0005 porte `byOrigin` (même forme, colonnes d'origine).
+ */
+export type DossierActionRow = { key: string; label: string; open: number; late: number; verify: number; closed: number };
+export type DossierActions = {
+  /** Dossier courant : une ligne par source (24, plus « À compléter »). */
+  bySource?: DossierActionRow[];
+  /** Dossier figé avant la refonte des actions (ancien champ « origine ») : lu tel quel. */
+  byOrigin?: DossierActionRow[];
+  totals?: Omit<DossierActionRow, 'key' | 'label'>;
+  /** Actions en retard ; `origin` = libellé de la source (clé conservée pour les dossiers figés). */
+  lateActions?: (ActionBrief & { href: string; origin: string; originRef: string })[];
+};
 /** Dossier conservé dans un instantané : format courant, ou ancien format (previousActions au lieu de previousFollowUp). */
 export type StoredDossier = ReviewDossier & { previousActions?: LegacyPreviousAction[] };
 
@@ -224,7 +241,11 @@ export type DecisionView = {
   dueOn: string | null; actionId: string | null; action: ActionBrief | null; sort: number;
 };
 
-/** Préparation, décisions et actions d'une revue (partagé par la carte et le dossier). */
+/**
+ * Préparation, décisions et actions d'une revue (partagé par la carte et le dossier). Les décisions d'une revue valent pour
+ * toute l'entreprise : leurs actions (chacune sur un site, D16) sont lues sur tout le périmètre de la personne, quel que
+ * soit le site sélectionné.
+ */
 async function readReviewRecord(review: Review, reviews: Review[]) {
   const db = await getDb();
   const now = today();
@@ -232,8 +253,8 @@ async function readReviewRecord(review: Review, reviews: Review[]) {
     loadPeople(),
     db.select().from(t.reviewItems).orderBy(asc(t.reviewItems.sort), asc(t.reviewItems.id)),
     db.select().from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort), asc(t.reviewDecisions.id)),
-    loadActions(),
-    loadAllActions(),
+    loadActions('perimeter'),
+    loadAllActions('perimeter'),
   ]);
   const prior = priorReviews(reviews, review);
   const ready = await autoReady(prior.length > 0);
@@ -249,7 +270,7 @@ async function readReviewRecord(review: Review, reviews: Review[]) {
   const linked = new Set(decisions.map((d) => d.actionId).filter(Boolean));
   const extraActions = (reviewActions(actions).get(review.id) ?? [])
     .filter((a) => !linked.has(a.id))
-    .map((a) => ({ ...actionBrief(a, people, now)!, href: `/actions?action=${encodeURIComponent(a.id)}` }))
+    .map((a) => ({ ...actionBrief(a, people, now)!, href: actionHref(a.id) }))
     .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
   return {
     now, people, prior, ready, actions, allActions, decisionRows,
@@ -276,11 +297,19 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   const current = pickReview(reviews, revue, now);
   const edit = canEdit(session.role, 'audits');
   // Listes des formulaires : rôles qui saisissent seulement (consultation de l'encadrement : hors de la charge de la page).
-  const opts = edit
-    ? { people: options.people, origins: options.origins, sites: options.sites, actions: options.actions }
-    : { people: [] as typeof options.people, origins: [] as typeof options.origins, sites: [] as typeof options.sites, actions: [] as typeof options.actions };
+  // Formulaire d'action : service QHSE seulement (ACT-22) ; `today` : date du jour du serveur.
+  const createActions = edit && canCreateAction(session.role);
+  const opts: ActionFormOptions = createActions
+    ? { people: options.people, sites: options.sites, today: now }
+    : { people: [], sites: [], today: now };
+  // Liste du personnel du formulaire de décision (pilote) : rôles qui saisissent.
+  const people = edit ? options.people : [];
+  // « Rattacher » une action existante à la revue ou à une décision (liens complémentaires) : service QHSE seulement.
+  const linkable = createActions ? options.actions : [];
   const flags = {
     canEdit: edit,
+    /** Service QHSE : création des actions des décisions et de la revue (ACT-22). */
+    canCreateActions: createActions,
     canApprove: canApprove(session.role),
     /** Dossier consolidé (/revue-de-direction) : animateur QHSE et direction (AUD-02). */
     canDossier: canReadReviewDossier(session.role),
@@ -288,7 +317,7 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   };
   const history = reviews.map(historyRow);
   if (!current) {
-    return { now, review: null, reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, programme: null,
+    return { now, review: null, reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
       defaults: { nextOn: addMonths(now, 1), holdNext: { on: addMonths(now, 1), kind: 'ordinaire' as ReviewKind }, originRef: '', copyFrom: null },
       flags: { ...flags, editable: false, mine: false } };
   }
@@ -311,6 +340,8 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
     previous: previous && { id: previous.id, reviewOn: previous.reviewOn, kindShort: kindOf(previous.kind).short },
     changes,
     options: opts,
+    people,
+    linkable,
     /** Échéance au programme annuel (AUD-01) ; null : revue hors programme. */
     programme,
     defaults: {
@@ -344,7 +375,6 @@ function lapseState(al: SkillAlert): { label: string; tone: Tone } {
   }
 }
 
-const actionHref = (id: string) => `/actions?action=${encodeURIComponent(id)}`;
 const eventHref = (id: string) => `/evenements?etat=tous&sel=${encodeURIComponent(id)}`;
 
 /** En-tête et compte rendu d'une revue (aussi le seul contenu d'une revue antérieure à Vigie). */
@@ -403,11 +433,12 @@ export type FollowUpRow = {
 
 /**
  * Suivi des revues précédentes (`prior`, la plus récente d'abord) : une ligne par décision, objectif ou besoin en
- * ressources, plus chaque action rattachée à la revue (actions.reviewId) qu'aucune décision ne porte. Action annulée :
- * date et motif ; décision sans action : « Sans action au plan » (warn pour une décision, neutral sinon).
+ * ressources, plus chaque action rattachée à la revue (actions.reviewId) qu'aucune décision ne porte. Action abandonnée :
+ * date et motif ; décision sans action : « Sans action au plan » (warn pour une décision, neutral sinon). Encore à suivre :
+ * action non close (Reportée et Terminée — à vérifier comprises).
  * Inclusion : la dernière revue et les revues tenues pendant la période examinée (reviewOn ≥ `from`) en entier ; les plus
  * anciennes pour leurs lignes encore ouvertes. Tri : ouvertes d'abord, puis par revue, puis par échéance.
- * `actions` : actions du site, annulées comprises (une action hors du site sélectionné n'a pas de fiche : sa référence seule).
+ * `actions` : actions du périmètre, abandonnées comprises (une action hors du périmètre n'a pas de fiche : sa référence seule).
  */
 export function reviewFollowUp({ prior, decisions, actions, people, asOf, from }: {
   prior: Pick<Review, 'id' | 'reviewOn'>[]; decisions: ReviewDecisionRow[]; actions: ActionRow[]; people: Map<string, Person>; asOf: string; from: string;
@@ -425,9 +456,9 @@ export function reviewFollowUp({ prior, decisions, actions, people, asOf, from }
       const kind = (d.kind in REVIEW_DECISION_KINDS ? d.kind : 'decision') as ReviewDecisionKind;
       const common = { ...base, key: `d${d.id}`, kind, kindLabel: k.label, text: d.text, pilot: name(d.pilotId), dueOn: d.dueOn, actionId: d.actionId };
       const a = d.actionId ? byId.get(d.actionId) : undefined;
-      if (a?.status === 'cancelled') return { ...common, tone: REVIEW_FOLLOW_UP.cancelled.tone, action: brief(a), cancelled: cancelOf(a), open: false, state: 'cancelled' };
-      if (a) { const b = brief(a); return { ...common, tone: b.tone, action: b, cancelled: null, open: isOpenActionStatus(a.status), state: 'action' }; }
-      // Action hors du site sélectionné (référence seule) : suivie dans le plan d'actions, considérée comme ouverte.
+      if (a?.status === 'abandonnee') return { ...common, tone: REVIEW_FOLLOW_UP.cancelled.tone, action: brief(a), cancelled: cancelOf(a), open: false, state: 'cancelled' };
+      if (a) { const b = brief(a); return { ...common, tone: b.tone, action: b, cancelled: null, open: !isClosedActionStatus(a.status), state: 'action' }; }
+      // Action hors du périmètre (référence seule) : suivie dans le plan d'actions, considérée comme ouverte.
       if (d.actionId) return { ...common, tone: 'neutral', action: null, cancelled: null, open: true, state: 'action' };
       return {
         ...common, tone: kind === 'decision' ? REVIEW_FOLLOW_UP.no_action.tone : 'neutral', action: null, cancelled: null,
@@ -435,12 +466,12 @@ export function reviewFollowUp({ prior, decisions, actions, people, asOf, from }
       };
     });
     const extra = actions.filter((a) => a.reviewId === r.id && !carried.has(a.id)).map((a): FollowUpRow => {
-      const cancelled = a.status === 'cancelled';
+      const cancelled = a.status === 'abandonnee';
       const b = brief(a);
       return {
         ...base, key: `a${a.id}`, kind: 'action', kindLabel: 'Action', tone: cancelled ? REVIEW_FOLLOW_UP.cancelled.tone : b.tone,
-        text: a.title, pilot: b.pilot, dueOn: a.dueOn, actionId: a.id, action: b, cancelled: cancelled ? cancelOf(a) : null,
-        open: !cancelled && isOpenActionStatus(a.status), state: cancelled ? 'cancelled' : 'action',
+        text: actionLabel(a.detail), pilot: b.pilot, dueOn: a.dueOn, actionId: a.id, action: b, cancelled: cancelled ? cancelOf(a) : null,
+        open: !isClosedActionStatus(a.status), state: cancelled ? 'cancelled' : 'action',
       };
     });
     const all = [...fromDecisions, ...extra];
@@ -483,7 +514,8 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     // Constats annulés (saisis par erreur) : hors dossier.
     db.select().from(t.auditFindings).where(isNull(t.auditFindings.cancelledAt)).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
     currentSiteId(),
-    loadAllActions(),
+    // Périmètre : le suivi des décisions des revues précédentes (communes à l'entreprise) lit leurs actions de tout site.
+    loadAllActions('perimeter'),
   ]);
   const { rec, header, record } = parts;
   const { now, people, prior } = rec;
@@ -621,24 +653,25 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   });
   const auditGroups = [...groups.values()].sort((a, b) => b.first - a.first).map(({ label, findings: list }) => ({ label, findings: list }));
 
-  // 7. Plan d'actions par origine (colonnes et retards à la date d'arrêt)
-  const cols = actions.map((a) => ({ a, col: actionColumn(a, asOf) }));
-  const byOrigin = Object.entries(ORIGINS)
-    .map(([key, o]) => {
-      const list = cols.filter((x) => x.a.origin === key);
-      return {
-        key, label: o.label,
-        open: list.filter((x) => x.col !== 'done').length,
-        late: list.filter((x) => x.col === 'late').length,
-        verify: list.filter((x) => x.col === 'verify').length,
-        closed: list.filter((x) => x.col === 'done' && (x.a.closedOn ?? x.a.dueOn) >= from && (x.a.closedOn ?? x.a.dueOn) <= asOf).length,
-      };
-    })
-    .filter((r) => r.open + r.closed > 0);
-  const totals = byOrigin.reduce((s, r) => ({ open: s.open + r.open, late: s.late + r.late, verify: s.verify + r.verify, closed: s.closed + r.closed }), { open: 0, late: 0, verify: 0, closed: 0 });
-  const lateActions = cols.filter((x) => x.col === 'late')
-    .map((x) => ({ ...brief(x.a), origin: ORIGINS[x.a.origin]?.label ?? x.a.origin, originRef: x.a.originRef }))
+  // 7. Plan d'actions par source (§ 12), sur le site sélectionné : avancements actuels, retards à la date d'arrêt ; Vérifiées
+  // pendant la période examinée (closed_on = date de la vérification).
+  const siteActions = actions.filter((a) => inSite(site, a.siteId));
+  const row = (key: string, label: string, list: ActionRow[]): DossierActionRow => ({
+    key, label,
+    open: list.filter((a) => isOpenAvancement(a.status) || a.status === 'reportee').length,
+    late: list.filter((a) => isLate(a, asOf)).length,
+    verify: list.filter((a) => a.status === 'terminee').length,
+    closed: list.filter((a) => a.status === 'verifiee' && !!a.closedOn && a.closedOn >= from && a.closedOn <= asOf).length,
+  });
+  const bySource = [
+    ...SOURCE_KEYS.map((key) => row(key, ACTION_SOURCES[key].label, siteActions.filter((a) => a.source === key))),
+    row('a_completer', SOURCE_TO_COMPLETE.label, siteActions.filter((a) => !a.source)),
+  ].filter((r) => r.open + r.verify + r.closed > 0);
+  const totals = bySource.reduce((s, r) => ({ open: s.open + r.open, late: s.late + r.late, verify: s.verify + r.verify, closed: s.closed + r.closed }), { open: 0, late: 0, verify: 0, closed: 0 });
+  const lateActions = siteActions.filter((a) => isLate(a, asOf))
+    .map((a) => ({ ...brief(a), origin: a.source ? ACTION_SOURCES[a.source].label : SOURCE_TO_COMPLETE.label, originRef: a.originRef }))
     .sort((a, b) => a.dueOn.localeCompare(b.dueOn));
+  const actionsSection: DossierActions = { bySource, totals, lateActions };
 
   // 8. Veille réglementaire et contrôles périodiques (échéances des contrôles à la date d'arrêt)
   const liveReqs = reqs.filter((r) => !r.archivedAt);
@@ -738,7 +771,7 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     complaints,
     suppliers,
     audits: { certs: certViews, progFrom, progTo, programme, programmeCounts, auditGroups, programmeHref: `/audits?annee=${yearOf(review.reviewOn)}` },
-    actions: { byOrigin, totals, lateActions },
+    actions: actionsSection,
     watch: { requirements, requirementCounts, controls: controlView },
     risks: riskView,
     prevention: preventionView,
@@ -885,8 +918,8 @@ export async function loadMyContributions({ revue }: { revue?: string | string[]
     db.select().from(t.reviewItems).orderBy(asc(t.reviewItems.sort), asc(t.reviewItems.id)),
     db.select().from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort), asc(t.reviewDecisions.id)),
     loadPeople(),
-    // Actions du site sélectionné (périmètre de la personne) : pas de fiche d'action d'un autre périmètre.
-    loadAllActions(),
+    // Actions du périmètre de la personne (décisions communes à l'entreprise) : pas de fiche d'action hors périmètre.
+    loadAllActions('perimeter'),
   ]);
   const { role, user } = session;
   const employee = isEmployee(role);

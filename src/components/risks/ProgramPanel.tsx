@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
@@ -18,13 +19,20 @@ import { fmtEuro } from './format';
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 const lineTone = (l: ProgramLineView) => (l.cancelled ? 'var(--color-neutral-500)' : TONE[l.tone].fg);
 
-/** Champs d'une ligne du programme : coût estimé, ressources, indicateur (optionnels). */
-function LineFields({ line }: { line?: ProgramLineView }) {
+const costText = (n: number | null | undefined) => (n != null ? String(n).replace('.', ',') : '');
+
+/**
+ * Champs d'une ligne du programme : coût estimé, ressources, indicateur (optionnels). `cost` / `onCost` : coût contrôlé
+ * (ligne ajoutée : proposé depuis l'action choisie) ; `costHint` remplace l'aide du coût.
+ */
+function LineFields({ line, cost, onCost, costHint }: { line?: ProgramLineView; cost?: string; onCost?: (v: string) => void; costHint?: string }) {
   return (
     <>
       <FormRow>
-        <Field name="estimatedCost" label="Coût estimé (€ HT)" hint="Optionnel ; centimes admis (1250,50).">
-          <Input name="estimatedCost" inputMode="decimal" defaultValue={line?.estimatedCost != null ? String(line.estimatedCost).replace('.', ',') : ''} />
+        <Field name="estimatedCost" label="Coût estimé (€ HT)" hint={costHint ?? 'Optionnel ; centimes admis (1250,50).'}>
+          {onCost
+            ? <Input name="estimatedCost" inputMode="decimal" value={cost ?? ''} onChange={(e) => onCost(e.target.value)} />
+            : <Input name="estimatedCost" inputMode="decimal" defaultValue={costText(line?.estimatedCost)} />}
         </Field>
         <Field name="indicator" label="Indicateur de résultat">
           <Input name="indicator" maxLength={300} defaultValue={line?.indicator ?? ''} placeholder="Ex. 100 % des monteurs habilités" />
@@ -33,6 +41,26 @@ function LineFields({ line }: { line?: ProgramLineView }) {
       <Field name="resources" label="Ressources" hint="Moyens humains, prestataires, budget, délais.">
         <TextArea name="resources" rows={2} maxLength={500} defaultValue={line?.resources ?? ''} />
       </Field>
+    </>
+  );
+}
+
+/**
+ * Ajout d'une ligne (DUE-02, spec § 11) : le choix de l'action propose son coût estimé (saisi dans le plan d'actions,
+ * modifiable ici) ; le coût de la ligne reste ensuite figé avec le programme à l'arrêt.
+ */
+function AddLineFields({ candidates, costs }: { candidates: PreventionProgramData['candidates']; costs: PreventionProgramData['candidateCosts'] }) {
+  const [picked, setPicked] = useState('');
+  const [cost, setCost] = useState('');
+  const proposed = picked && Object.hasOwn(costs, picked) ? costs[picked] : null;
+  return (
+    <>
+      <Field name="actionId" label="Action du plan" hint="Actions rattachées à un risque du DUERP en vigueur, non closes ou vérifiées dans l'année.">
+        <Select name="actionId" options={candidates} placeholder="Choisir…" value={picked}
+          onChange={(e) => { const id = e.target.value; setPicked(id); setCost(costText(Object.hasOwn(costs, id) ? costs[id] : null)); }} />
+      </Field>
+      <LineFields cost={cost} onCost={setCost}
+        costHint={proposed != null ? `Proposé : coût estimé de l'action (TTC), ${fmtEuro(proposed)} ; modifiable.` : undefined} />
     </>
   );
 }
@@ -53,7 +81,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
   /** Historique du programme (rôles qui modifient le DUERP). */
   showHistory: boolean;
 }) {
-  const { year, program, lines, totals, hiddenCount, candidates } = data;
+  const { year, program, lines, totals, hiddenCount, candidates, candidateCosts } = data;
   const draft = program?.state === 'draft';
   const frozen = program?.state === 'frozen';
   const editLines = canApprove && draft;
@@ -95,7 +123,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
               {[
                 { v: String(totals.count), k: totals.count > 1 ? 'actions' : 'action' },
-                { v: String(totals.done), k: totals.done > 1 ? 'clôturées' : 'clôturée' },
+                { v: String(totals.done), k: totals.done > 1 ? 'vérifiées' : 'vérifiée' },
                 { v: fmtEuro(totals.cost), k: 'coût estimé (HT)' },
               ].map((k) => (
                 <div key={k.k} style={{ display: 'grid', gap: 1 }}>
@@ -125,10 +153,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
                 disabled={!candidates.length} tooltip={candidates.length ? undefined : 'Aucune autre action rattachée à un risque du DUERP en vigueur.'}>
                 {(close) => (
                   <ActionForm action={addProgramAction} hidden={{ year }} onDone={close} onCancel={close} submitLabel="Ajouter au programme">
-                    <Field name="actionId" label="Action du plan" hint="Actions rattachées à un risque du DUERP en vigueur, ouvertes ou clôturées dans l'année.">
-                      <Select name="actionId" options={candidates} placeholder="Choisir…" />
-                    </Field>
-                    <LineFields />
+                    <AddLineFields candidates={candidates} costs={candidateCosts} />
                   </ActionForm>
                 )}
               </DialogButton>
@@ -195,7 +220,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             <table className="table" style={{ fontSize: 12.5, minWidth: 900 }}>
               <thead>
                 <tr>
-                  <th>Action</th><th>Risques</th><th>Échéance</th><th>Statut</th>{showPilot && <th>Pilote</th>}
+                  <th>Action</th><th>Risques</th><th>Date cible</th><th>Avancement</th>{showPilot && <th>Responsable</th>}
                   <th style={{ textAlign: 'right' }}>Coût</th><th>Ressources</th><th>Indicateur</th>{editLines && <th />}
                 </tr>
               </thead>

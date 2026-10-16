@@ -131,6 +131,44 @@ describe('parseConfig', () => {
     expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_TRUSTED_PROXIES: 'deux' })).toThrow(/VIGIE_TRUSTED_PROXIES : nombre entier attendu \(1 par défaut\)$/m);
   });
 
+  it('tâches planifiées et e-mails (PRD-12, ACT-33) : valeurs par défaut', () => {
+    const demo = parseConfig({ VIGIE_DEMO: '1' });
+    expect(demo).toMatchObject({ scheduler: true, mailTransport: 'fichier', mailFrom: 'Vigie <vigie@localhost>', reminderTime: { hour: 7, minute: 0 } });
+    expect(demo.mailDir).toBe(path.resolve('.data/mails'));
+    // Hors démonstration : aucun e-mail tant que le compte d'envoi n'est pas branché (ACT-34).
+    expect(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr' }).mailTransport).toBe('aucun');
+    const c = parseConfig({
+      VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr', VIGIE_SCHEDULER: '0', VIGIE_MAIL_TRANSPORT: 'fichier', VIGIE_MAIL_DIR: 'courriels',
+      VIGIE_MAIL_FROM: 'Vigie QHSE <vigie@epc2i.fr>', VIGIE_REMINDER_TIME: '7:30',
+    });
+    expect(c).toMatchObject({ scheduler: false, mailTransport: 'fichier', mailDir: path.resolve('courriels'), mailFrom: 'Vigie QHSE <vigie@epc2i.fr>', reminderTime: { hour: 7, minute: 30 } });
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun', VIGIE_MAIL_FROM: 'vigie@localhost', VIGIE_REMINDER_TIME: '23:59' }))
+      .toMatchObject({ mailTransport: 'aucun', mailFrom: 'vigie@localhost', reminderTime: { hour: 23, minute: 59 } });
+  });
+
+  it('tâches planifiées et e-mails : valeurs invalides, dossier des e-mails hors de VIGIE_DATA_DIR', () => {
+    const problems = (env: Record<string, string>) => {
+      try {
+        parseConfig({ VIGIE_DEMO: '1', ...env });
+        return [];
+      } catch (e) {
+        return (e as ConfigError).problems;
+      }
+    };
+    expect(problems({ VIGIE_SCHEDULER: 'parfois' })).toEqual(['VIGIE_SCHEDULER : valeur attendue : 1 ou 0']);
+    expect(problems({ VIGIE_MAIL_TRANSPORT: 'smtp' })[0]).toMatch(/^VIGIE_MAIL_TRANSPORT : valeur attendue : fichier ou aucun/);
+    for (const bad of ['24:00', '07:60', '0700', 'sept heures', '07:00:00']) {
+      expect(problems({ VIGIE_REMINDER_TIME: bad }), bad).toEqual(['VIGIE_REMINDER_TIME : heure attendue au format HH:MM, de 00:00 à 23:59 (ex. 07:00)']);
+    }
+    for (const bad of ['Vigie', 'Vigie <vigie>', 'a b@c.fr', 'Vigie <vigie@epc2i.fr>\nBcc: x@y.fr', '"Vigie" <vigie@epc2i.fr>', '<>']) {
+      expect(problems({ VIGIE_MAIL_FROM: bad }).map((p) => p.split(' :')[0]), bad).toEqual(['VIGIE_MAIL_FROM']);
+    }
+    expect(problems({ VIGIE_DATA_DIR: '/data', VIGIE_UPLOAD_DIR: '/srv/uploads', VIGIE_BACKUP_DIR: '/srv/backups', VIGIE_MAIL_DIR: '/data/mails' }))
+      .toEqual(['VIGIE_MAIL_DIR : à placer hors de VIGIE_DATA_DIR (/data), dossier réservé à la base PGlite et vidé par sa restauration (ex. /data/mails).']);
+    expect(problems({ VIGIE_DATA_DIR: '/data/db', VIGIE_MAIL_DIR: '/data/mails' })).toEqual([]);
+    expect(problems({ VIGIE_DATA_DIR: 'memory://', VIGIE_MAIL_DIR: '/data/mails' })).toEqual([]);
+  });
+
   it('cookies Secure dès que l’adresse publique est en HTTPS', () => {
     expect(secureCookies(parseConfig({ VIGIE_DEMO: '1' }))).toBe(false);
     expect(secureCookies(parseConfig({ VIGIE_DEMO: '1', VIGIE_PUBLIC_URL: 'http://localhost:3200' }))).toBe(false);

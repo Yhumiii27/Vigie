@@ -17,6 +17,7 @@ import {
 import {
   CompanyIdField, DeleteZone, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
 } from './parts';
+import { streamActionDefaults } from './action-defaults';
 
 type Opt = readonly (readonly [string, string])[];
 export type StreamSuggestions = {
@@ -125,7 +126,7 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
             </div>
             <div style={{ marginBottom: 14 }}>
               <LinkedActions actions={stream.actions} options={actionOptions} canAct={!!actionOptions}
-                defaults={{ originRef: stream.id, siteId: stream.siteId, kind: 'P', description: `Filière ${stream.id} · ${stream.label} (${stream.ewcCode}) · exutoire ${stream.destination}.` }} />
+                defaults={streamActionDefaults(stream, actionOptions?.today ?? '')} />
             </div>
             {stream.gaps.length > 0 && (
               <div style={{ marginBottom: 12 }}>

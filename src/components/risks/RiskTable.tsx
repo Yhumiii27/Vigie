@@ -5,13 +5,12 @@ import Link from 'next/link';
 import { Dialog } from '@/components/Dialog';
 import { ToneTag } from '@/components/ui';
 import { RISK_ACTION_THRESHOLD, RISK_FLAGS, TONE } from '@/lib/domain';
-import type { FormOptions } from '@/lib/data/options';
+import type { ActionFormOptions } from '@/lib/action-view';
 import type { RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { Cotation } from './RiskForm';
 import { RiskSheet, actionColor, riskSheetHeading, type RiskSheetView } from './RiskSheet';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
-type Options = Pick<FormOptions, 'people' | 'origins' | 'sites'>;
 
 /** Les clics sur un lien, un bouton ou une fenêtre ouverte depuis la ligne n'ouvrent pas la fiche du risque. */
 const fromControl = (e: MouseEvent | KeyboardEvent) => !!(e.target as HTMLElement).closest('a, button, dialog, input, select, textarea, label');
@@ -32,16 +31,18 @@ export function rowOpener(open: () => void) {
 type OpenState = { id: number; view: RiskSheetView; direct?: boolean };
 
 /** Tableau des risques de l'unité ; un clic sur une ligne ouvre la fiche du risque (lecture pour tous, modification pour l'encadrement). */
-export function RiskTable({ rows, unit, units, canManage, showEvents = true, showHistory = true, options, linkableActions, initialRiskId }: {
+export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, initialRiskId }: {
   rows: RiskView[];
   unit: Unit;
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];
   canManage: boolean;
+  /** Service QHSE : « + Action », nouvelle action et rattachement depuis la fiche (ACT-22). */
+  actionsQhse?: boolean;
   /** Événements liés dans la fiche (masqués pour le Salarié). */
   showEvents?: boolean;
   /** Historique dans la fiche (rôles qui modifient le DUERP). */
   showHistory?: boolean;
-  options: Options;
+  options: ActionFormOptions;
   linkableActions: RisksData['linkableActions'];
   /** Lien profond ?risque=<id> : fiche ouverte au chargement. */
   initialRiskId?: number;
@@ -78,7 +79,7 @@ export function RiskTable({ rows, unit, units, canManage, showEvents = true, sho
                   {r.flag === 'residualHigh' && <span style={{ color: TONE.danger.dot }} title={RISK_FLAGS.residualHigh.hint}>Résiduel ≥ {RISK_ACTION_THRESHOLD}</span>}
                   {r.flag === 'toReview' && <ToneTag tone="warn" style={{ fontSize: 11 }}><span title={RISK_FLAGS.toReview.hint}>À recoter</span></ToneTag>}
                   {!r.actions.length && !r.flag && <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
-                  {canManage && (
+                  {canManage && actionsQhse && (
                     <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
                       title="Nouvelle action de réduction rattachée au risque" onClick={() => setOpen({ id: r.id, view: 'newAction', direct: true })}>
                       <i className="ph ph-plus" style={{ fontSize: 13 }} />Action
@@ -99,8 +100,8 @@ export function RiskTable({ rows, unit, units, canManage, showEvents = true, sho
       <Dialog open={!!current} onClose={close} title={heading?.title ?? ''} kicker={heading?.kicker} width={open?.view === 'newAction' ? 560 : 640}>
         {current && open && (
           <RiskSheet key={`${current.id}:${open.view}`} risk={current} unit={unit} units={units} canManage={canManage} showEvents={showEvents} showHistory={showHistory} options={options}
-            linkableActions={linkableActions} isFirst={index === 0} isLast={index === rows.length - 1}
-            view={canManage ? open.view : 'sheet'} onView={onView} onClose={close} />
+            actionsQhse={actionsQhse} linkableActions={linkableActions} isFirst={index === 0} isLast={index === rows.length - 1}
+            view={canManage && (actionsQhse || (open.view !== 'newAction' && open.view !== 'link')) ? open.view : 'sheet'} onView={onView} onClose={close} />
         )}
       </Dialog>
     </>

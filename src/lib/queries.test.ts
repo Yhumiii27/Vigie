@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  actionBrief, actionColumn, actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, eventView, isOpen,
+  actionBrief, actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, eventView, isOpen,
   lastFullMonths, lcfirst, safetyRates, skillState, workforceAccident, type ActionRow, type EventRow, type Person,
 } from './queries';
 
@@ -9,36 +9,63 @@ import {
 const NOW = '2026-10-09';
 
 const action = (over: Partial<ActionRow> = {}): ActionRow => ({
-  id: 'A-1', title: 'Action', origin: 'ev', originRef: null, kind: 'C', pilotId: 'p1', dueOn: '2026-10-20', status: 'todo',
-  siteId: 'ville-a', eventId: null, closedOn: null, efficacyNote: null, verifyDueOn: null,
-  cancelledAt: null, cancelledById: null, cancelReason: null, ...over,
-} as ActionRow);
+  id: 'A-1', openedOn: '2026-09-01', pilotId: 'p1', status: 'a_faire', priority: 'urgent', dueOn: '2026-10-20', initialDueOn: '2026-10-20',
+  doneOn: null, source: 'evenement', originRef: 'EV-2026-131', eventId: null, reviewId: null, preventionPlanId: null, permitId: null,
+  documentId: null, wasteStreamId: null, wasteEntryId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
+  detail: 'Poser un garde-corps\nSelon la norme NF E85-015.', verifyDueOn: '2026-11-15', closedOn: null, verifyMethod: null,
+  efficacyNote: null, effective: null, newRisk: false, verifiedById: null, riskLevel: null, hours: null, estimatedCost: null,
+  actualCost: null, followsActionId: null, followReason: null, siteId: 'ville-a', legacyOrigin: null, cancelledAt: null,
+  cancelledById: null, cancelReason: null, createdAt: new Date('2026-09-01T08:00:00Z'), ...over,
+});
 
 const people = new Map<string, Person>([['p1', { id: 'p1', name: '[S. Benali]' } as Person]]);
 
-describe('actionColumn : colonne du plan d’actions', () => {
-  it('« en retard » est déduit de l’échéance dépassée pour une action à lancer ou en cours', () => {
-    expect(actionColumn(action({ status: 'todo', dueOn: '2026-10-08' }), NOW)).toBe('late');
-    expect(actionColumn(action({ status: 'doing', dueOn: '2026-10-08' }), NOW)).toBe('late');
-    // L'échéance du jour n'est pas encore dépassée.
-    expect(actionColumn(action({ status: 'doing', dueOn: NOW }), NOW)).toBe('doing');
-    expect(actionColumn(action({ status: 'todo', dueOn: '2026-10-10' }), NOW)).toBe('todo');
-  });
-  it('les statuts terminaux ne passent jamais en retard', () => {
-    for (const status of ['done', 'verify', 'cancelled'] as const) {
-      expect(actionColumn(action({ status, dueOn: '2020-01-01' }), NOW)).toBe(status);
-    }
-  });
-  it('vue et résumé : libellé, ton, pilote et initiales', () => {
-    const v = actionView(action({ dueOn: '2026-10-01' }), people, NOW);
-    expect(v).toMatchObject({ col: 'late', statusLabel: 'En retard', tone: 'danger', late: true, pilot: '[S. Benali]', pilotInitials: 'SB', due: '01/10', kindLabel: 'Corrective' });
-    expect(v.origin).toMatchObject({ label: 'Événement' });
-    expect(actionView(action({ pilotId: 'inconnu', origin: 'autre', kind: 'P' }), people, NOW)).toMatchObject({
-      pilot: '—', origin: { label: 'autre', path: '/actions' }, kindLabel: 'Préventive',
+describe('actionView : vue calculée d’une action (ACT-27)', () => {
+  it('libellé court, avancement, groupe, colonne Kanban, responsable et date cible', () => {
+    const v = actionView(action({ status: 'p40' }), people, NOW);
+    expect(v).toMatchObject({
+      label: 'Poser un garde-corps', avancement: '40 %', statusLabel: '40 %', tone: 'accent', group: 'ouverte', kanban: 'en_cours',
+      late: false, lateDays: 0, verifyLate: false, closed: false, pilot: '[S. Benali]', pilotInitials: 'SB', due: '20/10',
+      missing: [], toComplete: false,
     });
-    expect(actionView(action({ status: 'cancelled' }), people, NOW)).toMatchObject({ statusLabel: 'Annulée', tone: 'neutral' });
+    expect(v.sourceDef).toMatchObject({ label: 'Évènement QSE', target: 'event' });
+    // Les champs stockés restent présents (aucune clé de l'ancien modèle).
+    expect(v).toMatchObject({ detail: 'Poser un garde-corps\nSelon la norme NF E85-015.', status: 'p40' });
+    expect(v).not.toHaveProperty('col');
+    expect(v).not.toHaveProperty('origin');
+    expect(v).not.toHaveProperty('kindLabel');
+  });
+  it('« En retard » (danger) à la place de l’avancement pour une valeur ouverte dont la date cible est passée', () => {
+    const v = actionView(action({ status: 'p20', dueOn: '2026-10-01' }), people, NOW);
+    expect(v).toMatchObject({ avancement: '20 %', statusLabel: 'En retard', tone: 'danger', late: true, lateDays: 8, kanban: 'en_retard' });
+    // La date cible du jour n'est pas dépassée.
+    expect(actionView(action({ dueOn: NOW }), people, NOW)).toMatchObject({ late: false, statusLabel: 'À faire', tone: 'neutral', kanban: 'a_faire' });
+  });
+  it('Reportée, Terminée, Vérifiée et Abandonnée ne sont jamais en retard', () => {
+    const past = { dueOn: '2020-01-01' };
+    expect(actionView(action({ ...past, status: 'reportee' }), people, NOW)).toMatchObject({ late: false, statusLabel: 'Reportée', kanban: 'reportee', closed: false });
+    expect(actionView(action({ ...past, status: 'terminee', doneOn: '2026-10-01', verifyDueOn: '2026-10-05' }), people, NOW))
+      .toMatchObject({ late: false, statusLabel: 'Terminée — à vérifier', tone: 'warn', group: 'realisee', kanban: 'terminee', verifyLate: true, closed: false });
+    expect(actionView(action({ ...past, status: 'verifiee', doneOn: '2026-10-01', closedOn: '2026-10-05', verifyMethod: 'visuelle', efficacyNote: 'OK', effective: true }), people, NOW))
+      .toMatchObject({ late: false, statusLabel: 'Vérifiée', tone: 'ok', group: 'close', kanban: 'verifiee', closed: true, toComplete: false });
+    expect(actionView(action({ ...past, status: 'abandonnee', problem: null }), people, NOW))
+      .toMatchObject({ late: false, statusLabel: 'Abandonnée', tone: 'neutral', kanban: null, closed: true, missing: [] });
+  });
+  it('à compléter (reprise) : champs manquants calculés, source et responsable inconnus', () => {
+    const v = actionView(action({ source: null, priority: null, siteId: null, pilotId: 'inconnu' }), people, NOW);
+    expect(v).toMatchObject({ sourceDef: null, pilot: '—', toComplete: true });
+    expect(v.missing).toEqual(['source', 'priority', 'siteId']);
+    expect(actionView(action({ detail: '' }), people, NOW).label).toBe('Action sans détail');
+  });
+  it('résumé rattaché à un élément (audit, revue) : clés inchangées, titre = libellé, statut affiché', () => {
     expect(actionBrief(undefined, people, NOW)).toBeNull();
-    expect(actionBrief(action({ status: 'verify' }), people, NOW)).toMatchObject({ status: 'Efficacité à vérifier', tone: 'warn', pilot: '[S. Benali]' });
+    expect(actionBrief(action({ status: 'terminee', doneOn: '2026-10-01' }), people, NOW)).toEqual({
+      id: 'A-1', title: 'Poser un garde-corps', status: 'Terminée — à vérifier', tone: 'warn', pilot: '[S. Benali]', dueOn: '2026-10-20',
+      closedOn: null, efficacyNote: null, effective: null,
+    });
+    expect(actionBrief(action({ dueOn: '2026-10-01' }), people, NOW)).toMatchObject({ status: 'En retard', tone: 'danger' });
+    expect(actionBrief(action({ status: 'verifiee', closedOn: '2026-10-05', efficacyNote: 'Efficace', effective: false }), people, NOW))
+      .toMatchObject({ status: 'Vérifiée', tone: 'ok', closedOn: '2026-10-05', efficacyNote: 'Efficace', effective: false });
   });
 });
 

@@ -10,7 +10,7 @@ import { cancelFinding } from '@/server/audits';
 import { obsoleteDocument } from '@/server/documents';
 import { cancelWasteEntry } from '@/server/environment';
 import { dismissEvent, restoreEvent, revertEvent } from '@/server/events';
-import { cancelAction } from '@/server/plan-ui';
+import { abandonAction } from '@/server/plan-ui';
 import { archiveContractor, cancelPermit, cancelPlan, closePlan, savePlan, signPlanEu } from '@/server/prevention';
 import { cancelReview } from '@/server/review';
 import { archiveRisk, archiveWorkUnit, restoreRisk, restoreWorkUnit } from '@/server/risks';
@@ -47,11 +47,11 @@ describe('saisie et validation par rôle', () => {
     });
   });
 
-  it('requireApprover : annulation d’action, retour d’étape, classement sans suite réservés à l’animateur QHSE et à la direction', async () => {
+  it('requireApprover : abandon d’action, retour d’étape, classement sans suite réservés à l’animateur QHSE et à la direction', async () => {
     for (const role of ROLE_KEYS) {
       actAs(role);
       const approver = role === 'Animateur QHSE' || role === 'Direction';
-      expect(await cancelAction({}, form({ id: 'A-inconnue', from: 'todo', reason: 'Test' }))).toEqual({ error: approver ? 'Action introuvable.' : APPROVERS_ONLY });
+      expect(await abandonAction({}, form({ id: 'A-inconnue', from: 'a_faire', reason: 'Test' }))).toEqual({ error: approver ? 'Action introuvable.' : APPROVERS_ONLY });
       expect(await revertEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: approver ? 'Événement introuvable.' : APPROVERS_ONLY });
       expect(await dismissEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: approver ? 'Événement introuvable.' : APPROVERS_ONLY });
       expect(await archiveSite({}, form({ siteId: 'inconnu', reason: 'Test' }))).toMatchObject({ error: approver ? expect.not.stringContaining('Réservé') : APPROVERS_ONLY });
@@ -61,7 +61,7 @@ describe('saisie et validation par rôle', () => {
 
 describe('motif obligatoire des annulations, archivages et restaurations', () => {
   it.each([
-    ['cancelAction', () => cancelAction({}, form({ id: 'A-207', from: 'todo', reason: '' }))],
+    ['abandonAction', () => abandonAction({}, form({ id: 'A-217', from: 'a_faire', reason: '' }))],
     ['revertEvent', () => revertEvent({}, form({ id: 'EV-2026-131', reason: '' }))],
     ['dismissEvent', () => dismissEvent({}, form({ id: 'EV-2026-133', reason: '' }))],
     ['restoreEvent', () => restoreEvent({}, form({ id: 'EV-2026-133', reason: '' }))],
@@ -90,13 +90,14 @@ describe('motif obligatoire des annulations, archivages et restaurations', () =>
 });
 
 describe('journal des modifications : auteur, motif, détail', () => {
-  it('annulation d’une action : statut, motif, auteur ; jamais supprimée', async () => {
+  it('abandon d’une action : avancement, motif, auteur ; jamais supprimée', async () => {
     actAs('Direction', 'all');
-    expect(await cancelAction({}, form({ id: 'A-217', from: 'todo', reason: 'Fin de course remplacé lors de la VGP' }))).toEqual({ ok: true, id: 'A-217' });
+    expect(await abandonAction({}, form({ id: 'A-217', from: 'a_faire', reason: 'Fin de course remplacé lors de la VGP' }))).toEqual({ ok: true, id: 'A-217' });
     const [a] = await (await getDb()).select().from(t.actions).where(eq(t.actions.id, 'A-217'));
-    expect(a).toMatchObject({ status: 'cancelled', cancelledById: 'hmarchand', cancelReason: 'Fin de course remplacé lors de la VGP' });
-    expect(await lastLog('action', 'A-217')).toMatchObject({ action: 'cancel', summary: 'Annulée', reason: 'Fin de course remplacé lors de la VGP', byId: 'hmarchand' });
-    expect(await cancelAction({}, form({ id: 'A-217', from: 'todo', reason: 'Encore' }))).toMatchObject({ error: expect.any(String) });
+    expect(a).toMatchObject({ status: 'abandonnee', cancelledById: 'hmarchand', cancelReason: 'Fin de course remplacé lors de la VGP' });
+    expect(await lastLog('action', 'A-217')).toMatchObject({ action: 'status', summary: 'Abandonnée', reason: 'Fin de course remplacé lors de la VGP', byId: 'hmarchand' });
+    expect(await abandonAction({}, form({ id: 'A-217', from: 'abandonnee', reason: 'Encore' }))).toEqual({ error: 'Action déjà abandonnée.' });
+    expect(await abandonAction({}, form({ id: 'A-217', from: 'a_faire', reason: 'Encore' }))).toEqual({ error: "L'action a changé entre-temps : la fiche est actualisée." });
   });
   it('classement sans suite puis annulation du classement : motif et auteur tracés', async () => {
     actAs('Animateur QHSE', 'all');
@@ -141,28 +142,22 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
     cookieJar.delete('vigie_site');
   });
 
-  it('« Tous les sites » réservé au périmètre complet : création ou transfert refusés, action commune existante modifiable', async () => {
+  it('« Tous les sites » : une action porte un seul site ; création réservée au QHSE ; contrôle commun réservé au périmètre complet', async () => {
     const { saveAction } = await import('@/server/plan');
     const { saveControl } = await import('@/server/watch');
     const { ALL_SITES_RESERVED } = await import('@/lib/guard');
-    const db = await getDb();
+    const { QHSE_ONLY_CREATE_MESSAGE } = await import('@/lib/action-rules');
+    const action = {
+      source: 'comex', originRef: 'COMEX du 08/10/2026', pilotId: 'jpetit', priority: 'moyen_terme', dueOn: '2026-11-30', domain: 'securite',
+      problem: 'Problème', detail: 'Action du site B', verifyDueOn: '2026-12-15',
+    };
     actAs('Animateur QHSE', 'all');
-    const common = { title: 'Action commune aux sites', origin: 'docs', originRef: 'PR-QHSE-005', pilotId: 'jpetit', dueOn: '2026-11-30', kind: 'P', siteId: 'all' };
-    const created = await saveAction({}, form(common));
-    expect(created).toMatchObject({ ok: true });
-    const commonId = (created as { id: string }).id;
+    expect(await saveAction({}, form({ ...action, siteId: 'all' }))).toMatchObject({ fieldErrors: { siteId: expect.stringContaining('un seul site') } });
+    expect(await saveAction({}, form({ ...action, siteId: 'ville-b' }))).toMatchObject({ ok: true });
 
     restricted();
     cookieJar.set('vigie_site', 'ville-b');
-    const refused = { error: ALL_SITES_RESERVED, fieldErrors: { siteId: ALL_SITES_RESERVED } };
-    const action = { title: 'Action du site B', origin: 'prevention', originRef: 'PP-2026-012', pilotId: 'jpetit', dueOn: '2026-11-30', kind: 'P' };
-    expect(await saveAction({}, form({ ...action, siteId: 'all' }))).toEqual(refused);
-    const [a206] = await db.select().from(t.actions).where(eq(t.actions.id, 'A-206'));
-    expect(await saveAction({}, form({ id: 'A-206', title: a206.title, origin: a206.origin, originRef: a206.originRef, pilotId: a206.pilotId, dueOn: a206.dueOn, kind: a206.kind, siteId: 'all' }))).toEqual(refused);
-    expect((await db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, 'A-206')))[0].siteId).toBe('ville-b');
-    // Action commune existante : son pilote la modifie sans la rattacher à un site.
-    expect(await saveAction({}, form({ ...common, id: commonId, title: 'Action commune aux sites (précisée)' }))).toEqual({ ok: true, id: commonId });
-    expect(await saveAction({}, form({ ...action, siteId: '' }))).toMatchObject({ ok: true });
+    expect(await saveAction({}, form({ ...action, siteId: 'ville-b' }))).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
     expect(await saveControl({}, form({
       equipment: 'Extincteurs', controlType: 'Vérification annuelle', periodMonths: '12', organization: 'Prestataire', lastOn: '2026-09-01', siteId: '',
     }))).toEqual({ error: ALL_SITES_RESERVED, fieldErrors: { siteId: 'Site non autorisé.' } });

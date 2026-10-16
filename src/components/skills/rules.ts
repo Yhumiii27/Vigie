@@ -40,7 +40,7 @@ export function heldState(expiresOn: string | null, now: string): SkillState {
 }
 
 /**
- * Échéance proposée pour « Planifier le recyclage », null quand il n'y a rien à planifier.
+ * Échéance du recyclage à prévoir (formation gérée par le service RH, hors actions QSE), null quand il n'y a rien à planifier.
  * À planifier : titre requis expiré, expirant sous 60 jours, jamais suivi, ou valide mais expirant avant la fin
  * d'une affectation Keystone à venir.
  * - la veille du début de la première affectation Keystone à venir que le titre ne couvre pas (`upcoming` trié par date de début) ;

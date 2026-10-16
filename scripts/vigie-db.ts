@@ -29,6 +29,7 @@ import type { Client } from 'pg';
 import { createBackup, extractBackup, listBackups, listUploads, pgReplace, pgRestore, restoreUploads, type DbSource, type ExtractedBackup } from '../src/db/backup';
 import { MIGRATIONS_DIR, compareChecksums, currentChecksums, migrationState, readChecksums, readJournal, recordNewChecksums, type Query } from '../src/db/migrations';
 import * as schema from '../src/db/schema';
+import { catalogueMismatches, readCatalogue, readDetailedCatalogue, shapeMismatches } from '../src/db/shape';
 import type { Db } from '../src/db/types';
 import { decryptBuffer, encryptBuffer, encryptedWith, fileKeys, isEncrypted } from '../src/lib/encryption';
 import { ConfigError, isWithinDir, parseStorageConfig, type StorageConfig } from '../src/lib/env';
@@ -473,6 +474,20 @@ async function check(flags: Set<string>) {
     const db = drizzle(client, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
     ok(`${journal.length} migrations appliquées à une base vide`);
+    // 5b. Forme de la base = dernier instantané (src/db/shape.ts) : une retouche à la main du SQL d'une migration
+    // (NOT NULL oublié, CHECK mal nommé ou au contenu faux, DEFAULT oublié, type changé, DROP COLUMN manquant) que
+    // drizzle-kit, qui ne lit que schema.ts, ne voit pas. Noms et NOT NULL contre l'instantané, puis catalogue détaillé
+    // contre une base de référence construite directement depuis l'instantané (SQL d'installation neuve de drizzle-kit).
+    const shape = shapeMismatches(snapshot, await readCatalogue(pgliteQuery(client)));
+    const reference = new PGlite('memory://');
+    try {
+      for (const statement of await api.generateMigration(await api.generateDrizzleJson({}), snapshot)) await reference.exec(statement);
+      shape.push(...catalogueMismatches(await readDetailedCatalogue(pgliteQuery(reference)), await readDetailedCatalogue(pgliteQuery(client))));
+    } finally {
+      await reference.close();
+    }
+    for (const m of shape) problems.push(`forme de la base : ${m}`);
+    if (!shape.length) ok(`forme de la base identique à l'instantané ${last.tag} (noms, types, valeurs par défaut, contraintes, index)`);
     const { seed } = await import('../src/db/seed');
     await seed(db);
     const [{ n }] = (await client.query<{ n: number }>('select count(*)::int as n from people')).rows;
@@ -585,7 +600,7 @@ async function main() {
   const keepRaw = value('--conserver');
   const keep = keepRaw === undefined ? undefined : Number(keepRaw);
   if (keep !== undefined && !(Number.isInteger(keep) && keep >= 1)) throw new UsageError('--conserver : nombre de sauvegardes à garder attendu (1 ou plus).');
-  if (!command || command === 'help' || flags.has('--help')) return say(USAGE);
+  if (!command || command === 'help' || command === '--help' || command === '-h' || flags.has('--help')) return say(USAGE);
 
   loadEnvConfig(process.cwd(), false, { info: () => {}, error: console.error });
   const storage = parseStorageConfig(process.env);

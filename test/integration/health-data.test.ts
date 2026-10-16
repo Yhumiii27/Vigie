@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cookieJar, form } from '../next-mocks';
 import { eq } from 'drizzle-orm';
@@ -10,16 +13,24 @@ import { resetConfig } from '@/lib/env';
 
 const AT = 'EV-2026-119'; // accident avec arrêt (3 jours), déclaré à la CPAM le 09/09 (jeu de démonstration)
 
+// Pièces jointes dans un dossier temporaire : le jeu de démonstration écrit les preuves des actions (src/db/seeds/actions.ts),
+// jamais dans le .data/uploads du dépôt.
+const uploads = mkdtempSync(path.join(tmpdir(), 'vigie-test-uploads-'));
+
 beforeAll(async () => {
   process.env.VIGIE_DEMO = '1';
   process.env.VIGIE_DATA_DIR = 'memory://';
   process.env.VIGIE_TODAY = '2026-10-09';
+  process.env.VIGIE_UPLOAD_DIR = uploads;
   resetConfig();
   await closeDb();
 });
 afterAll(async () => {
   cookieJar.clear();
   await closeDb();
+  delete process.env.VIGIE_UPLOAD_DIR;
+  resetConfig();
+  rmSync(uploads, { recursive: true, force: true });
 });
 
 async function as(role: string) {

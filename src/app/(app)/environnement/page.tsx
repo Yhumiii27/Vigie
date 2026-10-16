@@ -19,6 +19,8 @@ import { fmtSiret } from '@/lib/siret';
 import { guard } from '@/lib/guard';
 import { loadEnvironment } from '@/lib/data/environment';
 import { loadFormOptions } from '@/lib/data/options';
+import { QHSE_ONLY_CREATE_MESSAGE, actionHref, canCreateAction } from '@/lib/action-rules';
+import type { ActionFormOptions } from '@/lib/action-view';
 import { ALL_SITES } from '@/lib/session';
 
 export const metadata: Metadata = { title: SCREENS.env.title };
@@ -41,8 +43,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const manage = canEdit(session.role, 'env');
   const yearParam = Number(str(sp.annee));
   const [d, allOptions] = await Promise.all([loadEnvironment(Number.isInteger(yearParam) ? yearParam : undefined), loadFormOptions()]);
-  const actionOptions = { people: allOptions.people, sites: allOptions.sites, origins: allOptions.origins };
-  // Création d'action : encadrement ayant la main sur l'écran (pas de lecture seule).
+  // Création d'action : service QHSE seulement (ACT-22, réponses du 15/10/2026) ; les autres rôles ne reçoivent ni les
+  // listes du formulaire d'action ni ses valeurs proposées.
+  const qhse = canCreateAction(session.role);
+  const actionOptions: ActionFormOptions | null = qhse ? { people: allOptions.people, sites: allOptions.sites, today: d.now } : null;
   const entryActionOptions = manage ? actionOptions : null;
 
   // ── État porté par l'URL : onglet, année, filière, vue
@@ -192,13 +196,15 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 2 }}>
                 <Link href={hrefWith(PATH, { annee }, { vue: 'bsd-manquants' })} scroll={false} className="vg-link">Afficher</Link>
                 {d.bsdAction ? (
-                  <Link href={`/actions?action=${encodeURIComponent(d.bsdAction.id)}`} className="vg-link" title={`${d.bsdAction.title} — ${d.bsdAction.pilot} · échéance ${fmtDate(d.bsdAction.dueOn)}`}
+                  <Link href={actionHref(d.bsdAction.id)} className="vg-link" title={`${d.bsdAction.label} — ${d.bsdAction.pilot} · date cible ${fmtDate(d.bsdAction.dueOn)}`}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     <Dot color={TONE[d.bsdAction.tone].dot} size={6} />{d.bsdAction.id} · {d.bsdAction.statusLabel.toLowerCase()}
                   </Link>
-                ) : manage && (
+                ) : actionOptions ? (
                   <NewActionButton options={actionOptions} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} defaults={d.bsdActionDefaults} />
+                ) : manage && (
+                  <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{QHSE_ONLY_CREATE_MESSAGE}</span>
                 )}
               </div>
             )}

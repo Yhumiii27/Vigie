@@ -32,7 +32,8 @@ export function DialogFooter({ children }: { children: ReactNode }) {
 /** Lien vers une action du plan d'actions unique, avec son statut calculé. */
 export function ActionLink({ action, id, compact }: { action: ActionBrief | null; id: string; compact?: boolean }) {
   if (!action) return <span style={{ color: 'var(--color-neutral-500)' }}>{id}</span>;
-  const tip = `${action.title} — ${action.status} · ${action.pilot} · échéance ${fmtDate(action.dueOn)}`;
+  // Libellé court, avancement (« En retard » calculé), responsable, date cible.
+  const tip = `${action.title} — ${action.status} · ${action.pilot} · date cible ${fmtDate(action.dueOn)}`;
   return (
     <Link href={`/actions?action=${encodeURIComponent(action.id)}`} className="vg-link" title={tip}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>

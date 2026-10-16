@@ -6,6 +6,7 @@ import type { Role } from '../lib/domain';
 import { backfillActionLinks } from '../lib/origin-links';
 import * as t from './schema';
 import type { Db } from './types';
+import { seedActions, upgradeDemoActions } from './seeds/actions';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { seedPrevention } from './seeds/prevention';
@@ -137,60 +138,7 @@ const ANALYSES: [string, string, unknown][] = [
   ['EV-2026-131', '8d', { current: 3 }],
 ];
 
-// [réf, intitulé, origine, référence d'origine, pilote, échéance, statut, nature, événement, vérif. efficacité, clôture]
-const ACTIONS: [string, string, string, string, string, string, string, string, string?, string?, string?][] = [
-  ['A-214', 'Remplacer les élingues textiles par des élingues à œillets, étiquetage CMU', 'ev', 'EV-2026-131', '[S. Benali]', '2026-10-17', 'doing', 'C', 'EV-2026-131'],
-  ['A-215', 'Rédiger le mode opératoire de retournement des bâtis > 1 t', 'ev', 'EV-2026-131', '[T. Nguyen]', '2026-10-31', 'todo', 'P', 'EV-2026-131'],
-  ['A-212', "Mettre à jour la gamme de contrôle de l'arbre de malaxeur (Ø45 h7)", 'ev', 'EV-2026-130', '[L. Moreau]', '2026-10-10', 'doing', 'C', 'EV-2026-130'],
-  ['A-209', 'Remplacer le flexible et contrôler les 12 flexibles du banc BE-1', 'ev', 'EV-2026-129', '[J. Petit]', '2026-10-08', 'doing', 'C', 'EV-2026-129'],
-  ['A-205', 'Recyclage habilitation électrique BR pour 4 monteurs', 'risk', 'DUERP · atelier montage', '[C. Lefèvre]', '2026-09-30', 'todo', 'P'],
-  ['A-203', "Mettre en conformité l'alimentation électrique de la zone ATEX", 'ev', 'EV-2026-109', '[C. Lefèvre]', '2026-09-15', 'doing', 'C', 'EV-2026-109'],
-  ['A-201', 'Plan de circulation magasin : miroir et marquage au sol', 'ev', 'EV-2026-115', '[R. Fontaine]', '2026-09-26', 'doing', 'P', 'EV-2026-115'],
-  ['A-198', "Remplacer les luminaires de l'allée centrale usinage", 'ev', 'EV-2026-117', '[P. Roux]', '2026-09-20', 'doing', 'C', 'EV-2026-117'],
-  ['A-196', "Analyse d'écart Règlement 2023/1230 sur les 7 projets concernés", 'watch', 'Règlement (UE) 2023/1230', '[E. Dubois]', '2026-11-30', 'doing', 'P'],
-  ['A-194', 'Contrôle du traitement de surface par lot à la réception', 'ev', 'EV-2026-121', '[L. Moreau]', '2026-10-24', 'doing', 'P', 'EV-2026-121'],
-  ['A-190', "Corriger la fiche de réglage du réducteur RD-7 et former l'équipe", 'ev', 'EV-2026-112', '[L. Moreau]', '2026-09-05', 'verify', 'C', 'EV-2026-112', '2026-10-20'],
-  ['A-188', 'Formaliser la revue des exigences client (écart mineur §8.2.3)', 'audit', 'Audit interne juin 2026', '[E. Dubois]', '2026-10-15', 'doing', 'C'],
-  ['A-186', 'Remplacer les joints de la presse PC-400 sous garantie', 'client', 'EV-2026-128 · [Client C]', '[L. Moreau]', '2026-09-30', 'verify', 'C', 'EV-2026-128', '2026-10-30'],
-  ['A-184', 'Objectifs QHSE 2027 et indicateurs pour la revue de direction', 'rev', 'Revue de direction 10/12', '[C. Lefèvre]', '2026-11-20', 'todo', 'P'],
-  ['A-181', "Visite sécurité trimestrielle zone d'essais", 'audit', 'Programme 2026', '[S. Benali]', '2026-10-12', 'todo', 'P'],
-  ['A-176', 'Remplacer le kit absorbant et former au déversement', 'ev', 'EV-2026-126', '[R. Fontaine]', '2026-09-15', 'done', 'C', 'EV-2026-126', undefined, '2026-09-18'],
-  ['A-172', 'Arrimer les bouteilles de gaz : râteliers et chaînes', 'ev', 'EV-2026-124', '[S. Benali]', '2026-09-30', 'verify', 'C', 'EV-2026-124', '2026-10-28'],
-  ['A-170', "Ranger les bouteilles vides sous l'abri extérieur", 'ev', 'EV-2026-124', '[S. Benali]', '2026-09-15', 'done', 'C', 'EV-2026-124', undefined, '2026-09-16'],
-  ['A-165', 'Ajouter un garde-corps sur la plateforme PIRL', 'ev', 'EV-2026-119', '[S. Benali]', '2026-09-25', 'done', 'C', 'EV-2026-119', undefined, '2026-09-26'],
-];
-
-// Actions complémentaires (champs au-delà du tuple ACTIONS) : historique, annulation, efficacité dépassée, origines
-// cliquables de chaque type, actions de la revue de direction, de la prévention, de la veille et de l'environnement.
-// Prochain numéro libre après ces ajouts : A-221.
-const MORE_ACTIONS: (typeof t.actions.$inferInsert)[] = [
-  // Efficacité à vérifier, vérification dépassée depuis le 02/10.
-  { id: 'A-178', title: 'Afficher les consignes de tri au poste de lavage des pièces', origin: 'env', originRef: 'Registre des déchets 2026', pilotId: 'rfontaine', dueOn: '2026-09-12', status: 'verify', kind: 'P', verifyDueOn: '2026-10-02', siteId: 'ville-a', createdAt: new Date('2026-09-01T10:00:00+02:00') },
-  // Annulée (jamais supprimée) : qui, quand, pourquoi.
-  { id: 'A-180', title: 'Acheter un second chariot élévateur pour le magasin', origin: 'ev', originRef: 'EV-2026-115', eventId: 'EV-2026-115', siteId: 'ville-a', pilotId: 'rfontaine', dueOn: '2026-10-05', status: 'cancelled', kind: 'C',
-    cancelledAt: new Date('2026-09-24T11:00:00+02:00'), cancelledById: 'clefevre', cancelReason: 'Doublon de A-201 : le plan de circulation (miroir, marquage) couvre le besoin, validé avec le chef de service.', createdAt: new Date('2026-08-29T10:00:00+02:00') },
-  // Clôturée depuis plus de 30 jours : visible avec le filtre « Historique complet ».
-  { id: 'A-150', title: "Mettre à jour le livret d'accueil sécurité (sous-traitants)", origin: 'audit', originRef: 'Audit interne production · juin 2026', pilotId: 'clefevre', dueOn: '2026-07-15', status: 'done', kind: 'C', verifyDueOn: '2026-08-20',
-    efficacyNote: "Livret remis aux 6 entreprises intervenues en août ; quiz d'accueil réussi par tous.", verifiedById: 'hmarchand', closedOn: '2026-08-21', siteId: null, createdAt: new Date('2026-06-15T10:00:00+02:00') },
-  { id: 'A-206', title: 'Faire signer le plan de prévention PP-2026-012 par les deux entreprises', origin: 'prevention', originRef: 'PP-2026-012', siteId: 'ville-b', pilotId: 'jpetit', dueOn: '2026-10-14', status: 'todo', kind: 'P', createdAt: new Date('2026-09-15T10:00:00+02:00') },
-  { id: 'A-207', title: 'Recyclage habilitation électrique — [M. Girard]', origin: 'skills', originRef: 'Habilitations · [M. Girard]', siteId: 'ville-a', pilotId: 'clefevre', dueOn: '2026-11-06', status: 'todo', kind: 'P', createdAt: new Date('2026-10-01T10:00:00+02:00') },
-  { id: 'A-208', title: "Réviser PR-QHSE-002 après le retour d'expérience levage", origin: 'docs', originRef: 'PR-QHSE-002', pilotId: 'clefevre', dueOn: '2026-11-15', status: 'doing', kind: 'P', siteId: null, createdAt: new Date('2026-10-05T10:00:00+02:00') },
-  // Revue de direction : décisions des revues du 11/12/2025 et du 18/06/2026 (reviewId renseigné après l'insertion des revues).
-  { id: 'A-152', title: 'Déployer la remontée des presque-accidents par QR code de poste', origin: 'rev', originRef: 'Revue de direction 11/12/2025', pilotId: 'clefevre', dueOn: '2026-03-31', status: 'done', kind: 'P', efficacyNote: 'Remontée des presque-accidents ×2,4 sur 6 mois.', verifiedById: 'hmarchand', closedOn: '2026-03-27', siteId: null, createdAt: new Date('2025-12-18T10:00:00+01:00') },
-  { id: 'A-158', title: "Étude d'opportunité de la certification ISO 45001", origin: 'rev', originRef: 'Revue de direction 11/12/2025', pilotId: 'hmarchand', dueOn: '2026-06-30', status: 'done', kind: 'P', efficacyNote: 'Engagement ISO 45001 décidé pour le second semestre 2027.', verifiedById: 'clefevre', closedOn: '2026-06-15', siteId: null, createdAt: new Date('2025-12-18T10:00:00+01:00') },
-  { id: 'A-174', title: "Former les chefs d'équipe à l'animation des quarts d'heure sécurité", origin: 'rev', originRef: 'Revue de direction 18/06/2026', pilotId: 'sbenali', dueOn: '2026-09-30', status: 'doing', kind: 'P', siteId: null, createdAt: new Date('2026-06-25T10:00:00+02:00') },
-  // Action issue d'un permis de feu (prévention).
-  { id: 'A-216', title: 'Installer un écran de soudage mobile et une couverture anti-projections au poste M3', origin: 'prevention', originRef: 'PF-2026-031', siteId: 'ville-a', pilotId: 'sbenali', dueOn: '2026-10-14', status: 'todo', kind: 'P', createdAt: new Date('2026-10-08T17:00:00+02:00') },
-  // Levée de la réserve de la VGP du pont roulant 10 t (controls.actionId).
-  { id: 'A-217', title: 'Régler le fin de course du pont roulant 10 t (réserve VGP)', origin: 'watch', originRef: 'Pont roulant 10 t — atelier montage', siteId: 'ville-a', pilotId: 'sbenali', dueOn: '2026-10-20', status: 'todo', kind: 'C', createdAt: new Date('2026-04-03T10:00:00+02:00') },
-  // Environnement : action liée à un enlèvement, puis à une filière.
-  { id: 'A-218', title: 'Relancer la raffinerie pour le certificat de traitement du BSD-20260818-M3QX7TBC', origin: 'env', originRef: 'FD-11 · 19/08/2026', siteId: 'ville-b', pilotId: 'rfontaine', dueOn: '2026-10-20', status: 'todo', kind: 'C', createdAt: new Date('2026-10-07T10:00:00+02:00') },
-  { id: 'A-219', title: "Contrôler l'habilitation ICPE de l'exutoire des fluides de coupe", origin: 'env', originRef: 'FD-04', siteId: 'ville-a', pilotId: 'clefevre', dueOn: '2026-11-15', status: 'todo', kind: 'P', createdAt: new Date('2026-10-07T10:00:00+02:00') },
-  // Écart passé R. 4512-6 (PRV-01) : PP-2026-008 signé le lendemain du démarrage ; action menée et close.
-  { id: 'A-220', title: "Rappeler aux chefs d'atelier la signature du plan de prévention avant tout démarrage (écart PP-2026-008)", origin: 'prevention', originRef: 'PP-2026-008',
-    siteId: 'ville-a', pilotId: 'clefevre', dueOn: '2026-04-30', status: 'done', kind: 'C', closedOn: '2026-05-05',
-    efficacyNote: 'Rappel fait en réunion des chefs d’atelier le 28/04 ; aucun démarrage sans plan signé depuis.', verifiedById: 'hmarchand', createdAt: new Date('2026-04-15T10:00:00+02:00') },
-];
+// Actions du plan d'actions QSE : src/db/seeds/actions.ts (seedActions, upgradeDemoActions).
 
 // Projets Keystone référencés : les 7 livrés après le 20/01/2027 sont concernés par le règlement 2023/1230 (calcul automatique,
 // requirements.affectsProjects).
@@ -210,6 +158,8 @@ const PROJECTS: [id: string, client: string, title: string, deliveryOn: string][
 const UNITS: [string, string][] = [['montage', 'Atelier montage'], ['usinage', 'Atelier usinage'], ['essais', "Zone d'essais"], ['client', 'Mise en service chez le client'], ['be', "Bureau d'études"], ['magasin', 'Magasin'], ['bureaux', 'Bureaux'], ['deplacements', 'Déplacements']];
 
 // [unité, danger, situation, G, P, mesures existantes, G résiduelle, P résiduelle, actions]
+// A-222 (action de suite « nouveau risque » de A-176) porte le risque de A-176 : lien à plusieurs porteurs repris par la
+// suite (plan du paquet 1, D21).
 const RISKS: [string, string, string, number, number, string, number, number, string[]][] = [
   ['montage', 'Manutention mécanique', "Levage et retournement de bâtis jusqu'à 3 t au pont roulant", 4, 2, 'VGP semestrielle, élingues contrôlées, autorisation de conduite', 4, 1, ['A-214', 'A-215']],
   ['montage', 'Électricité', 'Essais sous tension des armoires en fin de montage', 4, 2, 'Habilitation BR / B2V, consignation, EPI isolants', 4, 1, ['A-205']],
@@ -231,7 +181,7 @@ const RISKS: [string, string, string, number, number, string, number, number, st
   ['be', 'Travail sur écran', 'Postes prolongés sur écran, CAO', 1, 4, 'Postes réglables, pauses', 1, 3, []],
   ['be', 'Risques psychosociaux', 'Pics de charge avant livraison', 2, 3, 'Planification Keystone, entretiens', 2, 2, []],
   ['magasin', 'Circulation engins / piétons', "Chariot élévateur et piétons dans l'allée centrale", 4, 2, 'Plan de circulation, CACES R489, gilets', 4, 1, ['A-201']],
-  ['magasin', 'Chimique / environnement', "Déversement d'huile ou de solvant", 2, 2, 'Rétentions, kit absorbant', 2, 1, ['A-176']],
+  ['magasin', 'Chimique / environnement', "Déversement d'huile ou de solvant", 2, 2, 'Rétentions, kit absorbant', 2, 1, ['A-176', 'A-222']],
   ['bureaux', 'Chute', 'Escaliers et sols', 2, 2, 'Nez de marche, éclairage', 2, 1, []],
   ['bureaux', 'Incendie', 'Locaux techniques et serveurs', 3, 1, 'Détection, extincteurs, exercice annuel', 3, 1, []],
   ['deplacements', 'Risque routier', 'Trajets en véhicule de service', 4, 2, 'Entretien des véhicules, téléphone interdit au volant', 4, 1, []],
@@ -412,8 +362,11 @@ const demoEmail = (name: string) =>
  * ensuite dans « Gérer les sites » n'est jamais écrasé.
  */
 async function upgradeDemo(db: Db) {
-  // Liens réels des actions (ACT-01) : reprise idempotente des références d'origine textuelles (src/lib/origin-links.ts).
+  // Liens réels des actions (ACT-01) : reprise idempotente des références d'origine textuelles (src/lib/origin-links.ts,
+  // depuis l'ancienne origine conservée par la migration 0005 : actions.legacy_origin).
   await backfillActionLinks(db, { apply: true });
+  // Plan d'actions QSE (migration 0005) : champs « à compléter » du jeu d'avant complétés une fois (src/db/seeds/actions.ts).
+  await upgradeDemoActions(db);
   // Lot 2 (migration 0004) : rubriques des AT, registre des accidents bénins, mentions du registre des déchets.
   await upgradeDemoAccidents(db);
   await upgradeDemoWasteMentions(db);
@@ -505,9 +458,11 @@ async function upgradeDemoWasteMentions(db: Db) {
 
 /**
  * Jeu de démonstration (VIGIE_DEMO=1 seulement, voir src/db/index.ts) : chargé dans une base vide (ni site ni personne) ;
- * base déjà remplie : mise à niveau unique d'un jeu de démonstration antérieur (upgradeDemo).
+ * base déjà remplie : mise à niveau unique d'un jeu de démonstration antérieur (upgradeDemo). `files` : écrit aussi les
+ * fichiers des preuves des actions (VIGIE_UPLOAD_DIR) — ouverture de la base par src/db/index.ts ; db:check charge le
+ * jeu sans fichiers (aucune écriture dans .data/uploads depuis une vérification en mémoire).
  */
-export async function seed(db: Db) {
+export async function seed(db: Db, opts: { files?: boolean } = {}) {
   const [[sites], [people]] = await Promise.all([db.select({ n: count() }).from(t.sites), db.select({ n: count() }).from(t.people)]);
   if (sites.n > 0 || people.n > 0) return upgradeDemo(db);
 
@@ -562,14 +517,8 @@ export async function seed(db: Db) {
     await tx.insert(t.eventAnalyses).values(ANALYSES.map(([eventId, method, content]) => ({ eventId, method, content })));
     await tx.insert(t.benignAccidents).values(BENIGN);
 
-    const eventSite = new Map(EVENTS.map((e) => [e[0], SITE_B_LOCATION.test(e[4]) ? 'ville-b' : 'ville-a']));
-    await tx.insert(t.actions).values(ACTIONS.map((a) => ({
-      id: a[0], title: a[1], origin: a[2], originRef: a[3], pilotId: pid(a[4]), dueOn: a[5], status: a[6], kind: a[7],
-      eventId: a[8] ?? null, verifyDueOn: a[9] ?? null, closedOn: a[10] ?? null,
-      siteId: a[8] ? eventSite.get(a[8])! : a[3].startsWith('DUERP') ? 'ville-a' : null,
-      createdAt: new Date(`${a[8] ? EVENTS.find((e) => e[0] === a[8])![1] : '2026-09-01'}T10:00:00+02:00`),
-    })));
-    await tx.insert(t.actions).values(MORE_ACTIONS);
+    // Plan d'actions QSE (après les personnes et les événements) : actions, fil, journal, notifications, compteur, preuves.
+    await seedActions(tx, { files: opts.files });
 
     // Versions archivées avant Vigie (conservées hors application, sans instantané).
     const archived = ['2015.1', '2016.1', '2017.1', '2018.1', '2019.1', '2020.1', '2021.1', '2021.2', '2022.1', '2023.1', '2024.1', '2025.1'];
@@ -659,9 +608,8 @@ export async function seed(db: Db) {
     });
     await tx.insert(t.qualificationRequirements).values(reqs);
     await tx.insert(t.qualifications).values(quals);
-    // Recyclage planifié de l'habilitation électrique de [M. Girard] (expire le 28/11).
-    await tx.update(t.qualificationRequirements).set({ renewalActionId: 'A-207' })
-      .where(and(eq(t.qualificationRequirements.personId, 'mgirard'), eq(t.qualificationRequirements.titleId, 'elec')));
+    // Recyclages : aucune action QSE (gérés par les RH, réponses du service QHSE du 15/10/2026) — plus de recyclage planifié
+    // par une action (ancienne A-207).
     await tx.insert(t.keystoneAssignments).values({ personId: 'tnguyen', project: 'K-2025-042 · [Client A]', activity: 'Mise en service', startOn: '2026-10-13', endOn: '2026-10-17' });
 
     await tx.insert(t.certifications).values(CERTS.map((c, sort) => ({ ...c, sort })));
@@ -706,11 +654,9 @@ export async function seed(db: Db) {
     await seedEnvironment(tx);
     await seedSitemap(tx);
 
-    // Sources d'origine des actions Prévention, Documents et Environnement (ACT-01), après l'insertion des plans, permis,
-    // documents et déchets. A-178 (« Registre des déchets 2026 ») n'a pas de fiche source : elle reste repérée par sa référence.
-    await tx.update(t.actions).set({ preventionPlanId: 'PP-2026-012' }).where(eq(t.actions.id, 'A-206'));
-    await tx.update(t.actions).set({ preventionPlanId: 'PP-2026-008' }).where(eq(t.actions.id, 'A-220'));
-    await tx.update(t.actions).set({ permitId: 'PF-2026-031' }).where(eq(t.actions.id, 'A-216'));
+    // Sources d'origine des actions Documents et Environnement (ACT-01), après l'insertion des documents et déchets.
+    // A-178 (« Registre des déchets 2026 ») n'a pas de fiche source : elle reste repérée par sa référence. Plus d'action QSE
+    // depuis la Prévention (anciennes A-206, A-216, A-220 : réponses du service QHSE du 15/10/2026).
     await tx.update(t.actions).set({ documentId: 'PR-QHSE-002' }).where(eq(t.actions.id, 'A-208'));
     await tx.update(t.actions).set({ wasteStreamId: 'FD-04' }).where(eq(t.actions.id, 'A-219'));
     const [fd11] = await tx.select({ id: t.wasteEntries.id }).from(t.wasteEntries)
@@ -733,11 +679,9 @@ export async function seed(db: Db) {
     ];
     for (const [id, set] of EVENT_LINKS) await tx.update(t.events).set(set).where(eq(t.events.id, id));
 
-    // Journal des modifications : quelques entrées de démonstration (créations, annulations, archivages).
+    // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
+    // écrites par seedActions.
     await tx.insert(t.changeLog).values([
-      { entityType: 'action', entityId: 'A-214', action: 'create', summary: 'Action créée', byId: 'clefevre', at: new Date('2026-10-03T10:00:00+02:00') },
-      { entityType: 'action', entityId: 'A-190', action: 'status', summary: 'Déclarée réalisée · vérification d’efficacité prévue le 20/10/2026', byId: 'lmoreau', at: new Date('2026-09-20T16:00:00+02:00') },
-      { entityType: 'action', entityId: 'A-180', action: 'cancel', summary: 'Action annulée', reason: 'Doublon de A-201 : le plan de circulation (miroir, marquage) couvre le besoin, validé avec le chef de service.', byId: 'clefevre', at: new Date('2026-09-24T11:00:00+02:00') },
       { entityType: 'event', entityId: 'EV-2026-123', action: 'dismiss', summary: 'Classé sans suite', reason: 'Doublon de EV-2026-124 (même constat, même déclarant).', byId: 'clefevre', at: new Date('2026-09-20T09:00:00+02:00') },
       { entityType: 'prevention_plan', entityId: 'PP-2026-010', action: 'cancel', summary: 'Plan annulé', reason: 'Intervention reportée à la campagne de printemps 2027 : un nouveau plan sera établi', byId: 'jpetit', at: new Date('2026-10-01T11:00:00+02:00') },
       { entityType: 'contractor', entityId: 'EE-007', action: 'archive', summary: 'Entreprise archivée', reason: 'Contrat de maintenance des sols terminé, entreprise plus référencée', byId: 'clefevre', at: new Date('2026-03-31T10:00:00+02:00') },

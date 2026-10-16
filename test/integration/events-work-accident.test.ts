@@ -147,7 +147,8 @@ describe('clôture d’un AT sans déclaration CPAM (EVT-02)', () => {
     const db = await getDb();
     await db.update(t.events).set({ step: 4 }).where(eq(t.events.id, id));
     await db.insert(t.actions).values({
-      id: 'A-960', title: 'Baliser le passage', origin: 'ev', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali', dueOn: '2026-10-20', status: 'done', kind: 'C',
+      id: 'A-960', detail: 'Baliser le passage', source: 'evenement', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali',
+      openedOn: '2026-10-09', dueOn: '2026-10-20', initialDueOn: '2026-10-20', status: 'verifiee', doneOn: '2026-10-09', closedOn: '2026-10-09',
     });
     expect(await advanceEvent(id)).toEqual({ error: "Saisissez la date de déclaration à la CPAM, ou indiquez pourquoi l'entreprise ne la déclare pas, avant la clôture." });
     expect(await cpamTodo(id)).toMatchObject({ health: true });

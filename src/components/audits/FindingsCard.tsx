@@ -6,20 +6,20 @@ import { useEffect, useState } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
-import { LinkActionButton } from '@/components/LinkActionButton';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Aside, CardHead, ToneTag } from '@/components/ui';
+import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { fmtDate } from '@/lib/dates';
 import { FINDING_KINDS, TONE } from '@/lib/domain';
 import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/audits';
-import type { FormOptions, Option } from '@/lib/data/options';
+import type { Option } from '@/lib/data/options';
 import { cancelFinding, saveFinding } from '@/server/audits';
 import { ActionLink, DialogFooter, RadioSeg, fileUrl } from './parts';
-import { FINDING_KEYS, OTHER_AUDIT } from './shared';
+import { FINDING_KEYS, OTHER_AUDIT, auditActionSource } from './shared';
 import styles from './audits.module.css';
 
-type Opts = Pick<FormOptions, 'people' | 'origins' | 'sites' | 'actions'>;
+type Opts = ActionFormOptions;
 type Editing = { id: number | null } | null;
 
 const KIND_OPTIONS = FINDING_KEYS.map((k) => [k, FINDING_KINDS[k].label, TONE[FINDING_KINDS[k].tone].dot] as const);
@@ -36,6 +36,9 @@ type Props = {
   defaultAudit: string;
   /** Saisie sur l'écran Audits (animateur QHSE, direction) ; consultation seule sinon (AUD-02). */
   canEdit: boolean;
+  /** Service QHSE (canCreateAction) : « Créer l'action » d'un écart ou d'une piste de progrès (ACT-22). */
+  canCreate?: boolean;
+  /** Listes du formulaire d'action (vides sans création). */
   options: Opts;
   /** Constat à ouvrir d'emblée (lien profond `?constat=<id>`). */
   initialFindingId?: number;
@@ -44,7 +47,7 @@ type Props = {
 };
 
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canEdit, options, initialFindingId, closeHref }: Props) {
+export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canEdit, canCreate = false, options, initialFindingId, closeHref }: Props) {
   const router = useRouter();
   // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
   // un constat annulé s'affiche dans le filtre « Annulés ».
@@ -121,7 +124,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, ca
       {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} flash={f.id === flashId} />) : (
         <>
           {group?.findings.map((f) => (
-            <FindingRow key={f.id} finding={f} canEdit={canEdit} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
+            <FindingRow key={f.id} finding={f} canEdit={canEdit} canCreate={canCreate} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
           ))}
           {!group && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré.</div>}
         </>
@@ -143,8 +146,8 @@ export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, ca
               <DialogFooter>
                 {finding.actionId && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-neutral-400)' }}>
+                    {/* Élément de la source de l'action : jamais détaché (D15). */}
                     Action liée <ActionLink action={finding.action} id={finding.actionId} />
-                    <LinkActionButton link={`finding:${finding.id}`} current={finding.actionId} />
                   </span>
                 )}
                 <ReasonButton label="Annuler le constat" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm"
@@ -185,7 +188,20 @@ function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; fl
   );
 }
 
-function FindingRow({ finding: f, canEdit, options, flash, onEdit }: { finding: FindingView; canEdit: boolean; options: Opts; flash?: boolean; onEdit: () => void }) {
+/**
+ * Valeurs proposées pour l'action d'un constat (ACT-28) : source selon la ligne du programme (auditActionSource), constat
+ * lié (un seul élément d'audit par action, D15 : jamais rattaché ni détaché ensuite), problème = texte du constat ; site
+ * choisi par le service QHSE (un audit n'a pas de site).
+ */
+export function findingActionDefaults(f: Pick<FindingView, 'id' | 'kind' | 'audit' | 'clause' | 'text' | 'track'>): ActionDefaults {
+  const k = FINDING_KINDS[f.kind]?.label ?? f.kind;
+  return {
+    ...auditActionSource('finding', f.track), link: `finding:${f.id}`, linkLabel: `${k}${f.clause ? ` ${f.clause}` : ''} — ${f.audit}`,
+    originRef: f.audit.slice(0, 120), problem: `${k} — ${f.audit}${f.clause ? ` (${f.clause})` : ''} : ${f.text}`,
+  };
+}
+
+function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: { finding: FindingView; canEdit: boolean; canCreate: boolean; options: Opts; flash?: boolean; onEdit: () => void }) {
   const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as const };
   const needsAction = f.kind !== 'point_fort';
   const text = (
@@ -205,17 +221,10 @@ function FindingRow({ finding: f, canEdit, options, flash, onEdit }: { finding: 
       <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
         {f.actionId ? (
           <ActionLink action={f.action} id={f.actionId} compact />
-        ) : needsAction && canEdit ? (
-          <>
-            <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              defaults={{
-                description: `${k.label} — ${f.audit}${f.clause ? ` (${f.clause})` : ''} : ${f.text}`, origin: 'audit', originRef: f.audit,
-                kind: f.kind === 'ecart_mineur' ? 'C' : 'P', link: `finding:${f.id}`, lockOrigin: true,
-              }} />
-            <LinkActionButton link={`finding:${f.id}`} actions={options.actions} label="Rattacher" className="vg-text-btn"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} />
-          </>
+        ) : needsAction && canEdit && canCreate ? (
+          // Pas de « Rattacher une action existante » : le constat est l'élément de la source, posé à la création (D15).
+          <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} defaults={findingActionDefaults(f)} />
         ) : (
           <span style={{ color: 'var(--color-neutral-600)' }}>—</span>
         )}

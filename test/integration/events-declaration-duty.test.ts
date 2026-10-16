@@ -41,12 +41,13 @@ async function accident(fields: Record<string, string>) {
   return r.id!;
 }
 
-/** Fiche à l'étape « Efficacité vérifiée », avec une action liée clôturée : seule la déclaration bloque la clôture. */
+/** Fiche à l'étape « Efficacité vérifiée », avec une action liée Vérifiée : seule la déclaration bloque la clôture. */
 async function readyToClose(id: string, actionId: string) {
   const d = await db();
   await d.update(t.events).set({ step: 4 }).where(eq(t.events.id, id));
   await d.insert(t.actions).values({
-    id: actionId, title: 'Baliser le quai', origin: 'ev', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali', dueOn: '2026-10-20', status: 'done', kind: 'C',
+    id: actionId, detail: 'Baliser le quai', source: 'evenement', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali',
+    openedOn: '2026-10-09', dueOn: '2026-10-20', initialDueOn: '2026-10-20', status: 'verifiee', doneOn: '2026-10-09', closedOn: '2026-10-09',
   });
 }
 

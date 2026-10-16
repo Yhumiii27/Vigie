@@ -5,11 +5,13 @@ import { useState, type ReactNode } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
+import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { DocumentRow, LinkedAction, VersionView } from '@/lib/data/documents';
 import { abandonDraft, approveVersion, obsoleteDocument, returnToDraft, submitVersion } from '@/server/documents';
 import { ConfirmForm, DraftForm, MetadataForm, RevisionForm, type DocFormOptions } from './DocumentForms';
+import { documentActionDefaults } from './action-defaults';
 import { nextVersion } from './meta';
 
 type Mode = 'view' | 'edit' | 'revise' | 'draft' | 'submit' | 'approve' | 'return' | 'abandon' | 'obsolete' | 'action';
@@ -29,7 +31,7 @@ function Meta({ label, children, wide }: { label: string; children: ReactNode; w
 
 export function ActionLink({ action }: { action: LinkedAction }) {
   return (
-    <Link href={`/actions?action=${encodeURIComponent(action.id)}`} className="vg-link" title={`${action.title} · ${action.statusLabel}`}
+    <Link href={actionHref(action.id)} className="vg-link" title={`${action.label} · ${action.statusLabel}`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
       <Dot color={TONE[action.tone].dot} size={6} />{action.id}
     </Link>
@@ -57,6 +59,8 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
   doc: DocumentRow; canManage: boolean; canApprove: boolean; options: DocFormOptions; suggestedDueOn: string;
 }) {
   const [mode, setMode] = useState<Mode>('view');
+  // Création d'action : service QHSE seulement (ACT-22), qui reçoit seul le formulaire d'action.
+  const actionForm = options.actionForm;
   // Action de revue (encadré « revue dépassée ») ou action libre (« Nouvelle action »).
   const [reviewAction, setReviewAction] = useState(true);
   const newAction = (review: boolean) => { setReviewAction(review); setMode('action'); };
@@ -147,8 +151,10 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-neutral-400)' }}>
               Action{doc.reviewActions.length > 1 ? 's' : ''} {doc.reviewActions.map((a) => <ActionLink key={a.id} action={a} />)}
             </span>
-          ) : canManage && (
+          ) : actionForm ? (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => newAction(true)}><Icon name="ph-list-plus" size={13} />Créer une action</button>
+          ) : canManage && (
+            <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{QHSE_ONLY_CREATE_MESSAGE}</span>
           )}
         </div>
       )}
@@ -160,7 +166,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               <H6>Informations</H6>
               {canManage && !obsolete && (
                 <span style={{ display: 'flex', gap: 14 }}>
-                  <button type="button" className="vg-text-btn" onClick={() => newAction(false)}>Nouvelle action</button>
+                  {actionForm && <button type="button" className="vg-text-btn" onClick={() => newAction(false)}>Nouvelle action</button>}
                   <button type="button" className="vg-text-btn" onClick={() => setMode('edit')}>Modifier</button>
                 </span>
               )}
@@ -182,7 +188,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           {!showReview && doc.reviewActions.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--color-neutral-400)' }}>
               <H6>Actions liées</H6>
-              {doc.reviewActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.title}</span></span>)}
+              {doc.reviewActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
             </div>
           )}
 
@@ -247,15 +253,10 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               reasonLabel="Motif du retrait" placeholder="Ex. remplacé par un autre document, activité arrêtée, exigence abrogée…"
               message={<>La version {current.version} est retirée de la diffusion et archivée{pending ? <> ; la révision {pending.version} {pending.status === 'en_revue' ? 'en revue' : 'en cours'} est abandonnée</> : null}. Le document est classé obsolète et reste consultable pour traçabilité ; pensez à retirer les exemplaires diffusés ({doc.distribution || 'diffusion non précisée'}).</>} />
           )}
-          {mode === 'action' && (
-            <ActionFields options={options} onDone={back} onCancel={back} defaults={{
-              title: reviewAction ? doc.actionTitle : undefined, origin: 'docs', originRef: doc.id, lockOrigin: true, pilotId: doc.ownerId,
-              dueOn: reviewAction && doc.dueSoon && doc.nextReviewOn ? doc.nextReviewOn : suggestedDueOn, kind: 'P', siteId: doc.siteId,
-              // Rattachement à une version seulement si une révision en cours n'a pas encore d'action : la version en vigueur
-              // garde l'action qui l'a fait naître. Sinon l'action est reliée par sa référence d'origine (doc.reviewActions)
-              // et proposée d'office dans « Nouvelle révision », qui l'attache à la version créée.
-              link: pending && !pending.action ? `docversion:${pending.id}` : undefined,
-            }} />
+          {mode === 'action' && actionForm && (
+            // Version en cours sans action : rattachée à la nouvelle action (qui porte aussi le document) ; sinon le
+            // document lui-même (la version en vigueur garde l'action qui l'a fait naître).
+            <ActionFields options={actionForm} onDone={back} onCancel={back} defaults={documentActionDefaults(doc, { review: reviewAction, suggestedDueOn })} />
           )}
         </section>
       )}

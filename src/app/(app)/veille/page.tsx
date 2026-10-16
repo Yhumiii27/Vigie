@@ -5,6 +5,8 @@ import { Icon, MissingNotice, hrefWith } from '@/components/ui';
 import { AddControlButton, ControlsPanel, type ControlSuggestions } from '@/components/watch/ControlsPanel';
 import { AddRequirementButton, RequirementsPanel } from '@/components/watch/RequirementsPanel';
 import { today } from '@/lib/today';
+import { canCreateAction } from '@/lib/action-rules';
+import type { ActionFormOptions } from '@/lib/action-view';
 import { REQUIREMENT_REVIEW_MONTHS, SCREENS, canApprove as canApproveRole, canManage as canManageRole } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
@@ -22,8 +24,13 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
   const canManage = canManageRole(session.role);
   const canApprove = canApproveRole(session.role);
   const [{ requirements, controls }, allOptions] = await Promise.all([loadWatch(), loadFormOptions()]);
-  const options = { people: allOptions.people, sites: allOptions.sites, origins: allOptions.origins, actions: allOptions.actions };
   const now = today();
+  const options = { people: allOptions.people, sites: allOptions.sites };
+  // Plan d'actions (ACT-22) : création et rattachements réservés au service QHSE ; les autres rôles ne reçoivent ni les
+  // listes du formulaire d'action ni la liste des actions ouvertes.
+  const qhse = canCreateAction(session.role);
+  const actionOptions: ActionFormOptions | null = qhse ? { people: allOptions.people, sites: allOptions.sites, today: now } : null;
+  const linkActions = qhse ? allOptions.actions : undefined;
   // Exigences et contrôles en vigueur : les archivés ne comptent ni dans le sous-titre ni dans les onglets.
   const activeReqs = requirements.filter((r) => !r.archived);
   const activeCtrls = controls.filter((c) => !c.archived);
@@ -96,7 +103,7 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
               </span>
             </div>
             <RequirementsPanel key={openRequirement?.id ?? 'list'} rows={requirements} archives={archives} canManage={canManage} canApprove={canApprove}
-              options={options} today={now} initialId={openRequirement?.id} closeHref={openRequirement ? hrefWith('/veille', reqParams, {}) : undefined} />
+              options={options} actionOptions={actionOptions} linkActions={linkActions} today={now} initialId={openRequirement?.id} closeHref={openRequirement ? hrefWith('/veille', reqParams, {}) : undefined} />
           </>
         ) : (
           <>
@@ -111,7 +118,7 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
               </span>
             </div>
             <ControlsPanel key={openControl?.id ?? 'list'} rows={controls} filter={filter} canManage={canManage} canApprove={canApprove}
-              options={options} requirementOptions={requirementOptions} today={now}
+              options={options} actionOptions={actionOptions} linkActions={linkActions} requirementOptions={requirementOptions} today={now}
               showSite={session.site.id === ALL_SITES} suggestions={suggestions}
               initialId={openControl?.id} closeHref={openControl ? hrefWith('/veille', ctrlParams, {}) : undefined} />
           </>

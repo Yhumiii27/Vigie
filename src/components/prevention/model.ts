@@ -148,20 +148,19 @@ export const inGapWindow = (p: Pick<PlanLike, 'startOn'>, now: string) => p.star
 
 /**
  * Motif empêchant de clore ou d'annuler un plan (même règle à l'écran et côté serveur), null sinon :
- * jamais pendant une intervention sans le plan obligatoire signé ; après une intervention réalisée sans plan signé, ou
- * avec un plan signé après son début, seulement une fois l'écart tracé par une action ; jamais avec des permis rattachés
- * encore actifs.
+ * jamais pendant une intervention sans le plan obligatoire signé ; jamais avec des permis rattachés encore actifs.
+ * Une intervention réalisée sans plan signé, ou avec un plan signé après son début, n'exige plus d'action du plan
+ * d'actions QSE avant la clôture (réponses du service QHSE du 15/10/2026 : les plans de prévention donnent lieu à des
+ * actions immédiates, non enregistrées dans les actions QSE) ; l'écart R. 4512-6 reste tracé par les indicateurs
+ * (startGap, fenêtre GAP_WINDOW_MONTHS) et le journal du plan.
  */
 export function planEndIssue(
   p: PlanLike,
-  { mandatory, now, openPermitIds, actionCount, verb }: { mandatory: boolean; now: string; openPermitIds: string[]; actionCount: number; verb: 'clore' | 'annuler' },
+  { mandatory, now, openPermitIds, verb }: { mandatory: boolean; now: string; openPermitIds: string[]; verb: 'clore' | 'annuler' },
 ): string | null {
   const unsigned = mandatory && !isFullySigned(p);
   const what = verb === 'clore' ? 'de clore le plan' : "d'annuler le plan";
   if (unsigned && p.startOn <= now && p.endOn >= now) return `Intervention en cours avec un plan obligatoire non signé : enregistrez les signatures des deux entreprises avant ${what}.`;
-  if (unsigned && p.startOn <= now && !actionCount) return `Intervention réalisée sans plan signé : créez l'action qui trace l'écart avant ${what}.`;
-  const first = firstFullSignatureOn(p);
-  if (mandatory && first && first > p.startOn && p.startOn <= now && !actionCount) return `Plan signé après le début de l'intervention : créez l'action qui trace l'écart avant ${what}.`;
   if (openPermitIds.length) return `Permis rattachés encore actifs (${openPermitIds.join(', ')}) : clôturez-les ou annulez-les avant ${what}.`;
   return null;
 }

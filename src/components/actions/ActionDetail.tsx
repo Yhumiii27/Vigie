@@ -1,306 +1,311 @@
 'use client';
 
-import { useState, useTransition, type ReactNode } from 'react';
+// Fiche d'une action QSE (docs/specs/actions-qse.md § 4–11 ; plan du paquet 1, flux B) : Problème, Action,
+// Planification, Source, Vérification (à l'état Vérifiée seulement, D17), Pointage et coûts, Fil, Preuves, Historique.
+// Écritures (Modifier, Changer l'avancement, Vérifier, Rouvrir, Abandonner) : QHSE seulement, sur le site sélectionné
+// (requireInSite) ; le responsable commente et joint des preuves, de tout site (D19) ; les droits viennent du serveur
+// (ActionRights) et chaque fenêtre renvoie l'avancement affiché (`from`) pour qu'un choix devenu caduc soit refusé.
+
+import { useRef, useState, useTransition, type ReactNode, type Ref } from 'react';
 import Link from 'next/link';
+import { setSite } from '@/app/actions';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { Attachments } from '@/components/Attachments';
 import { ChangeLogList } from '@/components/ChangeLog';
-import { ActionForm, Field, Input, TextArea } from '@/components/form';
+import { FORM_SAVED_EVENT } from '@/components/form';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import type { PlanAction } from '@/lib/data/actions';
-import type { FormOptions } from '@/lib/data/options';
-import { CANCEL_REASON_MAX, TONE } from '@/lib/domain';
+import { actionHref, canRemoveProof, type ActionRights } from '@/lib/action-rules';
+import type { ActionDetailView, ActionFormOptions } from '@/lib/action-view';
+import { fmtDate } from '@/lib/dates';
+import { ACTION_PRIORITIES, AVANCEMENT, FOLLOW_REASONS, TONE } from '@/lib/domain';
+import type { FormState } from '@/lib/forms';
 import { addActionFiles, removeActionFile } from '@/server/plan';
-import { cancelAction, moveAction } from '@/server/plan-ui';
+import { abandonAction, reopenAction } from '@/server/plan-ui';
+import { ActionThread } from './detail/ActionThread';
+import { CostsBlock } from './detail/CostsBlock';
+import {
+  commentAnchor, detailButtons, editDefaults, editOptions, missingSummary, readOnlyNotice, showPreviousVerification, showVerification,
+  threadWritable, writesBlocked, type DetailButton,
+} from './detail/form-helpers';
+import { MoveForm } from './detail/MoveForm';
+import { VerifyForm } from './detail/VerifyForm';
 
-type Step = 'view' | 'edit' | 'verify' | 'close' | 'reject' | 'cancel';
-
-type Props = {
-  a: PlanAction;
-  options: Pick<FormOptions, 'people' | 'origins' | 'sites'> & Partial<Pick<FormOptions, 'events'>>;
-  canManage: boolean;
-  canApprove: boolean;
-  /** Personne connectée : le pilote salarié fait avancer sa propre action (Démarrer, Déclarer réalisée). */
-  currentUserId: string;
-  today: string;
-  verifyDefault: string;
+export type ActionDetailProps = {
+  detail: ActionDetailView; rights: ActionRights; options: ActionFormOptions; currentUserId: string; today: string; verifyDefault: string;
 };
 
-const APPROVER_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+type Step = 'view' | DetailButton;
 
-/** Contenu de la fiche d'action : détail, passage d'un statut à l'autre, modification. */
-export function ActionDetail({ a, options, canManage, canApprove, currentUserId, today, verifyDefault }: Props) {
+const BUTTONS: Record<DetailButton, { label: string; icon: string; primary?: boolean; danger?: boolean }> = {
+  edit: { label: 'Modifier', icon: 'ph-pencil-simple' },
+  abandon: { label: 'Abandonner', icon: 'ph-prohibit', danger: true },
+  reopen: { label: 'Rouvrir', icon: 'ph-arrow-counter-clockwise' },
+  move: { label: 'Changer l’avancement', icon: 'ph-arrows-clockwise', primary: true },
+  verify: { label: 'Vérifier l’efficacité', icon: 'ph-seal-check', primary: true },
+};
+
+/** Fiche d'une action (problème, action, planification, source, vérification, coûts, fil, preuves, historique). */
+export function ActionDetail({ detail: d, rights, options, currentUserId, today, verifyDefault }: ActionDetailProps) {
   const [step, setStep] = useState<Step>('view');
-  // Statut affiché à l'ouverture de l'étape : envoyé avec la transition pour que le serveur refuse un choix devenu caduc.
-  const [from, setFrom] = useState(a.status);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const back = () => { setError(null); setStep('view'); };
-  const go = (s: Step) => { setError(null); setFrom(a.status); setStep(s); };
+  // Avancement affiché à l'ouverture de la fenêtre : envoyé en « from » (refus d'un choix devenu caduc).
+  const [from, setFrom] = useState(d.status);
+  const [flash, setFlash] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const go = (s: Step) => { setFlash(null); setFrom(d.status); setStep(s); };
+  // Fenêtre annulée : la saisie est abandonnée, la fiche (Dialog) se ferme ensuite sans demander confirmation.
+  const back = () => { root.current?.dispatchEvent(new CustomEvent(FORM_SAVED_EVENT, { bubbles: true })); setStep('view'); };
+  const done = (message?: string) => (s: FormState) => {
+    setStep('view');
+    const parts = [message, s.ids?.length ? `Action${s.ids.length > 1 ? 's' : ''} de suite créée${s.ids.length > 1 ? 's' : ''} : ${s.ids.join(', ')}.` : null, ...(s.warnings ?? [])];
+    setFlash(parts.filter(Boolean).join(' ') || null);
+  };
 
-  // Transitions sans saisie (Démarrer, Rouvrir).
-  const move = (to: 'doing') => start(async () => {
-    const fd = new FormData();
-    fd.set('id', a.id);
-    fd.set('from', a.status);
-    fd.set('to', to);
-    const r = await moveAction({}, fd);
-    setError(r.ok ? null : r.error ?? 'Le changement de statut a échoué.');
-  });
-
-  const cancelled = a.status === 'cancelled';
-  const isPilot = a.pilotId === currentUserId;
-  const canEdit = canManage && !cancelled && (a.status !== 'done' || canApprove);
-  // Encadrement : toutes les transitions ; pilote salarié : Démarrer et Déclarer réalisée.
-  const canMove = !cancelled && (canManage || (isPilot && (a.status === 'todo' || a.status === 'doing')));
-  const canCancel = canApprove && (a.status === 'todo' || a.status === 'doing' || a.status === 'verify');
-  // Sources détachées à l'annulation (l'événement et la revue d'origine restent lisibles, voir cancelAction).
-  const linkedTo = a.sources.filter((s) => s.detachOnCancel).map((s) => s.label);
+  const blocked = writesBlocked(rights);
+  const buttons = detailButtons(rights);
+  const notice = readOnlyNotice(rights, d.status);
+  const writable = threadWritable(rights);
 
   if (step === 'edit') {
     return (
-      <Section>
-        <StepHead icon="ph-pencil-simple" title={`Modifier ${a.id}`} />
-        <ActionFields options={options} onDone={back} onCancel={back} defaults={{
-          id: a.id, title: a.title, description: a.description, origin: a.origin.key, originRef: a.originRef, eventId: a.eventId,
-          siteId: a.siteId, pilotId: a.pilotId, pilotName: a.pilot, dueOn: a.dueOn, kind: a.kind, verifyDueOn: a.verifyDueOn,
-        }} />
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-pencil-simple" title={`Modifier ${d.id}`} text={d.toComplete && rights.qhse ? missingSummary(d.missing) ?? undefined : undefined} />
+        <ActionFields options={editOptions(options, d)} defaults={{ ...editDefaults(d), status: from }} legacyOriginLabel={d.legacyOriginLabel}
+          onDone={done('Action enregistrée.')} onCancel={back} />
       </Section>
     );
   }
-
+  if (step === 'move') {
+    return (
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-arrows-clockwise" title="Changer l’avancement" text="Paliers libres (retour en arrière admis), Reportée, reprise, Terminée." />
+        <MoveForm detail={d} from={from} today={today} verifyDefault={verifyDefault} onDone={done('Avancement enregistré.')} onCancel={back} />
+      </Section>
+    );
+  }
   if (step === 'verify') {
-    // Une date encore à venir a été planifiée via « Modifier » (le retour « en cours » efface celle de la tentative précédente).
-    const planned = a.verifyDueOn && a.verifyDueOn > today && a.verifyDueOn !== verifyDefault ? a.verifyDueOn : null;
     return (
-      <Section>
-        <Meta a={a} />
-        <StepHead icon="ph-check" title="Déclarer l'action réalisée"
-          text="L'action passe en « Efficacité à vérifier ». Elle ne sera clôturée qu'après vérification de son efficacité par l'animateur QHSE ou la direction." />
-        <ActionForm action={moveAction} hidden={{ id: a.id, from, to: 'verify' }} submitLabel="Déclarer réalisée" submitIcon="ph-check" onDone={back} onCancel={back}>
-          <Field name="verifyDueOn" label="Vérifier l'efficacité le"
-            hint={planned ? 'Date déjà planifiée sur la fiche ; par défaut, 30 jours après la réalisation.' : 'Par défaut, 30 jours après la réalisation.'}>
-            <Input name="verifyDueOn" type="date" defaultValue={planned ?? verifyDefault} min={today} style={{ maxWidth: 220 }} />
-          </Field>
-        </ActionForm>
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-seal-check" title="Vérifier l’efficacité"
+          text="Non efficace ou nouveau risque : l’action de suite est créée dans le même enregistrement, liée à celle-ci." />
+        <VerifyForm detail={d} from={from} options={options} today={today} verifyDefault={verifyDefault} onDone={done('Vérification enregistrée.')} onCancel={back} />
       </Section>
     );
   }
-
-  if (step === 'cancel') {
+  if (step === 'reopen') {
     return (
-      <Section>
-        <Meta a={a} />
-        <StepHead icon="ph-prohibit" title="Annuler l'action"
-          text={`L'action est conservée avec ce motif (qui, quand, pourquoi) et retirée du plan en cours.${linkedTo.length ? ` Elle sera détachée de : ${linkedTo.join(' ; ')}.` : ''}`} />
-        <ActionForm action={cancelAction} hidden={{ id: a.id, from }} submitLabel="Annuler l'action" submitIcon="ph-prohibit" onDone={back} onCancel={back}>
-          <Field name="reason" label="Motif d'annulation">
-            <TextArea name="reason" rows={3} autoFocus required maxLength={CANCEL_REASON_MAX}
-              placeholder="Action créée par erreur, doublon de A-…, remplacée par…, devenue sans objet…" />
-          </Field>
-        </ActionForm>
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-arrow-counter-clockwise" title="Rouvrir la vérification" />
+        <ReasonForm action={reopenAction} hidden={{ id: d.id, from }} submitLabel="Rouvrir" submitIcon="ph-arrow-counter-clockwise"
+          message={`L’action revient à « ${AVANCEMENT.terminee.label} » ; date, nature, constat et résultat de la vérification sont effacés (conservés dans l’historique).${d.followUps.length ? ' Les actions de suite déjà créées restent en place.' : ''}`}
+          onDone={done('Vérification rouverte.')} onCancel={back} />
       </Section>
     );
   }
-
-  if (step === 'close') {
+  if (step === 'abandon') {
+    const detached = d.sources.filter((s) => s.detachOnAbandon).map((s) => s.label);
     return (
-      <Section>
-        <Meta a={a} />
-        <StepHead icon="ph-seal-check" title="Clôturer — efficacité vérifiée"
-          text="Consignez ce qui a été vérifié pour juger l'action efficace : le constat reste attaché à l'action et à son origine." />
-        <ActionForm action={moveAction} hidden={{ id: a.id, from, to: 'done' }} submitLabel="Clôturer l'action" submitIcon="ph-seal-check" onDone={back} onCancel={back}>
-          <Field name="efficacyNote" label="Constat d'efficacité">
-            <TextArea name="efficacyNote" rows={4} autoFocus
-              placeholder="Ce qui a été vérifié, comment et avec quel résultat (visite terrain, indicateur, absence de récidive…)" />
-          </Field>
-        </ActionForm>
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-prohibit" title="Abandonner l’action" />
+        <ReasonForm action={abandonAction} hidden={{ id: d.id, from }} submitLabel="Abandonner l’action" submitIcon="ph-prohibit"
+          placeholder="Doublon de A-…, devenue sans objet, remplacée par…"
+          message={`L’action est conservée avec ce motif (qui, quand, pourquoi), retirée du plan en cours, puis consultable seulement.${detached.length ? ` Elle sera détachée de : ${detached.join(' ; ')}.` : ''}`}
+          onDone={done('Action abandonnée.')} onCancel={back} />
       </Section>
     );
   }
-
-  if (step === 'reject') {
-    return (
-      <Section>
-        <Meta a={a} />
-        <StepHead icon="ph-arrow-counter-clockwise" title="Efficacité insuffisante"
-          text="L'action repasse « En cours » pour être complétée ; le constat est conservé dans la fiche." />
-        <ActionForm action={moveAction} hidden={{ id: a.id, from, to: 'doing' }} submitLabel="Renvoyer en cours" submitIcon="ph-arrow-counter-clockwise" onDone={back} onCancel={back}>
-          <Field name="efficacyNote" label="Constat" hint="Ce qui manque ou ce qui n'a pas produit l'effet attendu.">
-            <TextArea name="efficacyNote" rows={3} autoFocus />
-          </Field>
-        </ActionForm>
-      </Section>
-    );
-  }
-
-  const fields: [string, ReactNode][] = [
-    ['Origine', (
-      <span key="origin" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}>
-        <Icon name={a.origin.icon} size={12} style={{ color: 'var(--color-neutral-400)', alignSelf: 'center' }} />
-        <span>{a.origin.label}</span>
-        {a.sources.map((s, i) => (
-          <span key={`${s.href ?? ''}-${i}`} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5 }}>
-            <span style={{ color: 'var(--color-neutral-500)' }}>·</span>
-            {s.href
-              ? <Link href={s.href} className="vg-link" style={{ fontSize: 12.5 }}>{s.label}</Link>
-              : <span style={{ color: 'var(--color-neutral-300)' }}>{s.label}</span>}
-            {s.detail && <span style={{ color: 'var(--color-neutral-500)' }}>{s.detail}</span>}
-          </span>
-        ))}
-        {a.sources[0]?.label !== a.originRef && <span style={{ color: 'var(--color-neutral-500)' }}>({a.originRef})</span>}
-      </span>
-    )],
-    ['Pilote', (
-      <span key="pilot" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span className="vg-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{a.pilotInitials}</span>{a.pilot}
-      </span>
-    )],
-    ['Échéance', (
-      <span key="due" style={{ color: a.late ? TONE.danger.dot : undefined }}>
-        {a.dueLabel}{a.late && ` · ${a.lateDays} j de retard`}
-      </span>
-    )],
-    ['Nature', a.kindLabel],
-    ['Site', a.site],
-    ["Vérification d'efficacité prévue", a.verifyDueLabel
-      ? <span key="verify" style={{ color: a.verifyLate ? TONE.danger.dot : undefined }}>{a.verifyDueLabel}{a.verifyLate && ' · dépassée'}</span>
-      : '—'],
-    ...(cancelled
-      ? [['Annulée le', a.cancelledLabel ?? '—'], ['Par', a.cancelledBy ?? '—']] as [string, ReactNode][]
-      : [['Vérifiée par', a.status === 'done' ? a.verifiedBy ?? '—' : '—'], ['Clôturée le', a.closedLabel ?? '—']] as [string, ReactNode][]),
-  ];
 
   return (
-    <Section>
-      <Meta a={a} />
+    <Section root={root}>
+      <Meta d={d} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: '12px 16px' }}>
-        {fields.map(([k, v]) => (
-          <div key={k} style={{ display: 'grid', gap: 3, alignContent: 'start', minWidth: 0 }}>
-            <span style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{k}</span>
-            <span style={{ fontSize: 12.5, overflowWrap: 'anywhere' }}>{v}</span>
-          </div>
-        ))}
-      </div>
+      {rights.elsewhere && <ElsewhereNotice site={rights.elsewhere} siteId={d.siteId} qhse={rights.qhse} />}
+      {rights.qhse && d.toComplete && d.status !== 'abandonnee' && (
+        <Notice icon="ph-question" tone="warn">{missingSummary(d.missing)} — complétez-les par « Modifier ».</Notice>
+      )}
+      {flash && <div role="status" className="vg-flash"><Icon name="ph-check-circle" size={13} />{flash}</div>}
 
-      <div style={{ display: 'grid', gap: 4 }}>
-        <h6 className="vg-h6">Description</h6>
-        <p style={{ margin: 0, fontSize: 12.5, color: a.description ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>
-          {a.description || 'Aucune précision saisie.'}
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gap: 4 }}>
-        {/* Après « Efficacité insuffisante » ou « Rouvrir », le constat conservé est celui de la vérification précédente. */}
-        <h6 className="vg-h6">{a.status !== 'done' && a.efficacyNote ? "Dernier constat d'efficacité" : "Constat d'efficacité"}</h6>
-        {a.efficacyNote ? (
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{a.efficacyNote}</p>
-        ) : (
-          <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '8px 10px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)', textWrap: 'pretty' }}>
-            {a.status === 'done'
-              ? 'Aucun constat consigné à la clôture.'
-              : "Renseigné à la clôture, après vérification de l'efficacité par l'animateur QHSE ou la direction."}
-          </div>
-        )}
-      </div>
-
-      {cancelled && (
-        <div style={{ display: 'grid', gap: 4 }}>
-          <h6 className="vg-h6">Motif d&apos;annulation</h6>
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{a.cancelReason || '—'}</p>
+      {buttons.length > 0 && (
+        <div className="vg-action-buttons">
+          {buttons.map((b) => {
+            const def = BUTTONS[b];
+            return (
+              <button key={b} type="button" disabled={blocked} onClick={() => go(b)}
+                title={blocked ? `Sélectionnez le site ${rights.elsewhere} pour modifier cette action.` : undefined}
+                className={def.primary ? 'btn btn-primary vg-btn-sm' : 'btn btn-secondary vg-btn-sm'}
+                style={def.danger ? { color: TONE.danger.fg, borderColor: TONE.danger.dot } : undefined}>
+                <Icon name={def.icon} size={13} />{def.label}
+              </button>
+            );
+          })}
         </div>
       )}
+      {notice && <Notice icon={d.status === 'abandonnee' ? 'ph-prohibit' : 'ph-lock-simple'}>{notice}</Notice>}
 
-      <Attachments title="Preuves" kicker={a.id} files={a.files} hint="Photos, PV, attestations prouvant la réalisation ou l'efficacité"
-        emptyText="Aucune preuve jointe."
-        canAdd={(canManage || isPilot) && !cancelled}
-        canRemove={(f) => a.status !== 'done' && !cancelled && (canManage || f.uploadedById === currentUserId)}
+      <Block title="Problème"><Text value={d.problem} empty="À compléter." /></Block>
+      <Block title="Action"><Text value={d.detail} empty="Aucun détail saisi." /></Block>
+
+      <Block title="Planification">
+        <Facts rows={[
+          ['Ouverte le', d.opened],
+          ['Responsable', <span key="p" className="vg-person"><span className="vg-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{d.pilotInitials}</span>{d.pilot}{d.pilotLeft && <span className="vg-muted"> · sorti de l’effectif</span>}</span>],
+          ['Priorité', d.priority ? <ToneTag key="pr" tone={ACTION_PRIORITIES[d.priority].tone}>{d.priorityLabel}</ToneTag> : 'À compléter'],
+          ['Domaine', d.domainLabel ?? 'À compléter'],
+          ['Niveau de risque', d.riskLevelLabel ?? '—'],
+          ['Site', d.site],
+          ['Date cible', <span key="due" style={{ color: d.late ? TONE.danger.dot : undefined }}>{d.due}{d.late && ` · ${d.lateDays} j de retard`}</span>],
+          ...(d.rescheduled ? [['Date cible initiale', fmtDate(d.initialDueOn)] as [string, ReactNode]] : []),
+          ['Vérification planifiée', d.verifyDue
+            ? <span key="v" style={{ color: d.verifyLate ? TONE.danger.dot : undefined }}>{d.verifyDue}{d.verifyLate && ' · dépassée'}</span>
+            : '—'],
+          ['Date effective', d.doneOn ? fmtDate(d.doneOn) : '—'],
+          ...(d.status === 'abandonnee'
+            ? [['Abandonnée le', d.cancelledOn ? fmtDate(d.cancelledOn) : '—'], ['Par', d.cancelledBy ?? '—']] as [string, ReactNode][]
+            : []),
+        ]} />
+        {d.status === 'abandonnee' && d.cancelReason && <p className="vg-block-text">Motif : {d.cancelReason}</p>}
+      </Block>
+
+      <Block title="Source">
+        <div className="vg-source-line">
+          <Icon name={d.sourceIcon} size={13} />
+          <span>{d.sourceLabel}</span>
+          {d.source === null && d.legacyOriginLabel && <span className="vg-muted">· origine Vigie avant reprise : {d.legacyOriginLabel}</span>}
+        </div>
+        {d.originRef && <div className="vg-muted" style={{ fontSize: 12 }}>Référence d’origine : {d.originRef}</div>}
+        {d.sources.length > 0 && (
+          <ul className="vg-source-list">
+            {d.sources.map((s, i) => (
+              <li key={`${s.kind}-${s.href ?? ''}-${i}`}>
+                {s.href ? <Link href={s.href} className="vg-link">{s.label}</Link> : <span>{s.label}</span>}
+                {s.detail && <span className="vg-muted"> · {s.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {d.follows && (
+          <div style={{ fontSize: 12.5 }}>
+            Suite de <Link href={actionHref(d.follows.id)} className="vg-link">{d.follows.id}</Link>
+            {d.follows.label && ` · ${d.follows.label}`} <span className="vg-muted">({FOLLOW_REASONS[d.follows.reason].toLowerCase()})</span>
+          </div>
+        )}
+        {d.followUps.map((f) => (
+          <div key={f.id} style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            Suivie par <Link href={actionHref(f.id)} className="vg-link">{f.id}</Link>
+            <span>· {f.label}</span>
+            <span className="vg-muted">({FOLLOW_REASONS[f.reason].toLowerCase()})</span>
+            <ToneTag tone={f.tone}>{f.statusLabel}</ToneTag>
+          </div>
+        ))}
+      </Block>
+
+      {showVerification(d.status) && (
+        <Block title="Vérification">
+          <Facts rows={[
+            ['Vérifiée le', d.closedOn ? fmtDate(d.closedOn) : '—'],
+            ['Nature', d.verifyMethodLabel ?? '—'],
+            ['Résultat', d.effective == null ? '—' : <ToneTag key="r" tone={d.effective ? 'ok' : 'danger'}>{d.effective ? 'Efficace' : 'Non efficace'}</ToneTag>],
+            ['Vérifiée par', d.verifiedBy ?? '—'],
+            ...(d.newRisk ? [['Nouveau risque', 'Généré'] as [string, ReactNode]] : []),
+          ]} />
+          <Text value={d.efficacyNote} empty="Aucun constat consigné." />
+        </Block>
+      )}
+      {showPreviousVerification(d) && d.previousVerification && (
+        <Block title="Constat d’une vérification précédente">
+          <Text value={d.previousVerification.note} empty="" />
+          {d.previousVerification.by && <div className="vg-muted" style={{ fontSize: 11.5 }}>Par {d.previousVerification.by} ; remplacé par la prochaine vérification.</div>}
+        </Block>
+      )}
+
+      <CostsBlock detail={d} />
+
+      <ActionThread actionId={d.id} comments={d.comments} rights={rights} currentUserId={currentUserId} writable={writable} healthWarning={d.healthWarning} />
+
+      <Attachments title="Preuves" kicker={d.id} files={d.files} emptyText="Aucune preuve jointe."
+        hint="Photos, PV, attestations prouvant la réalisation ou l’efficacité ; facultatives."
+        canAdd={writable && rights.canAttach}
+        canRemove={(f) => writable && canRemoveProof(rights, d.status, f.uploadedById, currentUserId)}
+        caption={(f) => (f.commentWithdrawn
+          ? <span style={{ color: 'var(--tone-warn-fg)' }}>commentaire retiré</span>
+          : f.commentId != null ? <a href={`#${commentAnchor(f.commentId)}`} className="vg-link">avec un commentaire</a> : null)}
         onAdd={(picked) => {
           const fd = new FormData();
-          fd.set('actionId', a.id);
+          fd.set('actionId', d.id);
           picked.forEach((f) => fd.append('files', f));
           return addActionFiles(fd);
         }}
         onRemove={removeActionFile} />
 
-      {error && <div role="alert" className="vg-form-error">{error}</div>}
-
-      {cancelled ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-          <Icon name="ph-prohibit" size={13} />Action annulée — consultation seule.
-        </div>
-      ) : canMove ? (
-        <div className="dialog-actions" style={{ flexWrap: 'wrap' }}>
-          {(canEdit || canCancel) && (
-            <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap', marginRight: 'auto' }}>
-              {canEdit && (
-                <button type="button" className="btn btn-secondary" onClick={() => go('edit')} disabled={pending}>
-                  <Icon name="ph-pencil-simple" />Modifier
-                </button>
-              )}
-              {canCancel && (
-                <button type="button" className="btn" onClick={() => go('cancel')} disabled={pending}
-                  style={{ color: TONE.danger.fg, borderColor: TONE.danger.dot }}>
-                  <Icon name="ph-prohibit" />Annuler l&apos;action
-                </button>
-              )}
-            </span>
-          )}
-          {a.status === 'todo' && (
-            <>
-              <button type="button" className="btn btn-secondary" onClick={() => go('verify')} disabled={pending}><Icon name="ph-check" />Déclarer réalisée</button>
-              <button type="button" className="btn btn-primary" onClick={() => move('doing')} disabled={pending}><Icon name="ph-play" />{pending ? 'Enregistrement…' : 'Démarrer'}</button>
-            </>
-          )}
-          {a.status === 'doing' && (
-            <button type="button" className="btn btn-primary" onClick={() => go('verify')} disabled={pending}><Icon name="ph-check" />Déclarer réalisée</button>
-          )}
-          {a.status === 'verify' && canManage && (
-            <>
-              <button type="button" className="btn btn-secondary" onClick={() => go('reject')} disabled={pending}><Icon name="ph-arrow-counter-clockwise" />Efficacité insuffisante</button>
-              <button type="button" className="btn btn-primary" onClick={() => go('close')} disabled={pending || !canApprove} title={canApprove ? undefined : APPROVER_ONLY}>
-                <Icon name="ph-seal-check" />Clôturer — efficacité vérifiée
-              </button>
-            </>
-          )}
-          {a.status === 'done' && canManage && (
-            <button type="button" className="btn btn-secondary" onClick={() => move('doing')} disabled={pending || !canApprove} title={canApprove ? undefined : APPROVER_ONLY}>
-              <Icon name="ph-arrow-counter-clockwise" />{pending ? 'Enregistrement…' : 'Rouvrir'}
-            </button>
-          )}
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-          <Icon name="ph-lock-simple" size={13} />
-          {isPilot
-            ? "Vous pilotez cette action : la vérification d'efficacité et la clôture reviennent à l'animateur QHSE ou à la direction."
-            : "Consultation seule : la mise à jour du plan d'actions est réservée à l'encadrement."}
-        </div>
-      )}
-      {canMove && !canManage && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-          <Icon name="ph-user-circle" size={13} />Vous pilotez cette action : déclarez-la réalisée une fois terminée.
-        </div>
-      )}
-
-      <ChangeLogList entries={a.history} />
+      <ChangeLogList entries={d.history} />
     </Section>
   );
 }
 
-function Meta({ a }: { a: PlanAction }) {
+/** Action d'un autre site que le site sélectionné : écritures du QHSE refusées par requireInSite, d'où le changement de site. */
+function ElsewhereNotice({ site, siteId, qhse }: { site: string; siteId: string | null; qhse: boolean }) {
+  const [pending, start] = useTransition();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-      <span>{a.id}</span>
-      <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
-      {a.late && <span>{a.status === 'doing' ? 'en cours' : 'non démarrée'}</span>}
+    <Notice icon="ph-map-pin">
+      <span>
+        Action du site {site}.{' '}
+        {qhse ? 'Sélectionnez ce site pour la modifier.' : 'Vous pouvez la commenter et y joindre des preuves sans changer de site.'}
+      </span>
+      {qhse && siteId && (
+        <button type="button" className="vg-text-btn" disabled={pending} onClick={() => start(() => setSite(siteId))}>
+          {pending ? 'Sélection…' : `Sélectionner ${site}`}
+        </button>
+      )}
+    </Notice>
+  );
+}
+
+function Meta({ d }: { d: ActionDetailView }) {
+  return (
+    <div className="vg-action-meta">
+      <span>{d.id}</span>
+      <ToneTag tone={d.tone}>{d.statusLabel}</ToneTag>
+      {d.late && <span>{AVANCEMENT[d.status].label}</span>}
+      {d.toComplete && <ToneTag tone="warn">À compléter</ToneTag>}
+      <span className="vg-action-label">{d.label}</span>
     </div>
   );
 }
 
-function Section({ children }: { children: ReactNode }) {
-  return <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>{children}</div>;
+function Section({ root, children }: { root: Ref<HTMLDivElement>; children: ReactNode }) {
+  return <div ref={root} className="vg-action-detail">{children}</div>;
+}
+
+function Block({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="vg-action-block" aria-label={title}><h6 className="vg-h6">{title}</h6>{children}</section>;
+}
+
+function Text({ value, empty }: { value: string | null | undefined; empty: string }) {
+  return value?.trim()
+    ? <p className="vg-block-text">{value}</p>
+    : <p className="vg-block-text vg-muted">{empty}</p>;
+}
+
+function Facts({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl className="vg-facts">
+      {rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+    </dl>
+  );
+}
+
+function Notice({ icon, tone, children }: { icon: string; tone?: 'warn'; children: ReactNode }) {
+  return (
+    <div className={`vg-notice${tone ? ` is-${tone}` : ''}`}>
+      <Icon name={icon} size={13} />
+      <div>{children}</div>
+    </div>
+  );
 }
 
 function StepHead({ icon, title, text }: { icon: string; title: string; text?: string }) {
@@ -309,7 +314,7 @@ function StepHead({ icon, title, text }: { icon: string; title: string; text?: s
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 500 }}>
         <Icon name={icon} size={15} style={{ color: 'var(--color-accent)' }} />{title}
       </div>
-      {text && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{text}</p>}
+      {text && <p className="vg-step-note">{text}</p>}
     </div>
   );
 }

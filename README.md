@@ -110,4 +110,4 @@ Le `Dockerfile` à la racine produit l'image décrite dans [`docs/EXPLOITATION.m
 | Instance de démonstration | `VIGIE_DEMO=1` et `VIGIE_PUBLIC_URL=https://<domaine>` (hôte admis) : jeu de démonstration, sélecteur de rôle, aucune connexion |
 | Production | variables de [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md) § 4 : `VIGIE_PUBLIC_URL` (https), Entra ID, secrets, `DATABASE_URL` recommandé |
 
-Sans `VIGIE_DEMO=1` ni configuration Entra ID, le serveur s'arrête au démarrage ou affiche « Configuration incomplète ». Le build télécharge la police Inter depuis Google Fonts : le serveur de build doit avoir accès à Internet. Une instance de démonstration n'a pas d'authentification : protéger l'accès au niveau de l'hébergeur (authentification HTTP de Coolify, par exemple).
+Sans `VIGIE_DEMO=1` ni configuration Entra ID, le serveur s'arrête au démarrage ou affiche « Configuration incomplète ». Une instance de démonstration n'a pas d'authentification : protéger l'accès au niveau de l'hébergeur (authentification HTTP de Coolify, par exemple).

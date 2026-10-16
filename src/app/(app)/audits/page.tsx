@@ -6,6 +6,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ReviewCard } from '@/components/review/ReviewCard';
 import { Aside, SegLinks } from '@/components/ui';
 import { isoWeek, monthName, monthOf, yearOf } from '@/lib/dates';
+import { canCreateAction } from '@/lib/action-rules';
+import type { ActionFormOptions } from '@/lib/action-view';
 import { SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { DEFAULT_AUDIT, loadAudits } from '@/lib/data/audits';
@@ -27,10 +29,12 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const approve = canApprove(session.role);
   const nowYear = yearOf(now);
   const curMonth = nowYear === year ? monthOf(now) : nowYear > year ? 13 : 0;
-  // Listes des formulaires (personnes, actions…) : rôles qui saisissent seulement, hors de la charge de la page en consultation.
-  const actionOptions = edit
-    ? { people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites, actions: options.actions }
-    : { people: [], origins: [], sites: [], actions: [] };
+  // Listes des formulaires (personnes, sites) : rôles qui saisissent seulement, hors de la charge de la page en consultation.
+  // Création d'action : service QHSE seulement (ACT-22) ; `today` : date du jour du serveur.
+  const canCreate = edit && canCreateAction(session.role);
+  const actionOptions: ActionFormOptions = canCreate
+    ? { people: options.people, sites: options.sites, today: now }
+    : { people: [], sites: [], today: now };
   const certOptions = certs.map((c) => [c.id, c.standard] as const);
   const closeHref = `/audits?annee=${year}`;
 
@@ -46,12 +50,12 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
         <CertificationCards certs={certs} canApprove={approve} />
 
         <ProgramTimeline key={openElement ?? 'prog'} year={year} curMonth={curMonth} tracks={tracks} allTracks={allTracks} items={plan} cancelled={cancelledPlan}
-          findings={planFindings} certs={certOptions} auditOptions={auditOptions} yearOptions={yearOptions} canEdit={edit} options={actionOptions}
+          findings={planFindings} certs={certOptions} auditOptions={auditOptions} yearOptions={yearOptions} canEdit={edit} canCreate={canCreate} options={actionOptions}
           initialId={openElement} closeHref={closeHref} aside={<><Aside>{period}</Aside>{yearNav}</>} />
 
         {/* Pas de `key` liée au lien profond : la fermeture retire ?constat= de l'URL sans remonter la carte ni changer de groupe. */}
         <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} defaultAudit={DEFAULT_AUDIT} canEdit={edit}
-          options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} />
+          canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} />
 
         <div id="revue" style={{ scrollMarginTop: 16 }}>
           <ReviewCard searchParams={sp} />

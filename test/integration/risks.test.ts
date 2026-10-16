@@ -108,6 +108,16 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
     expect(full).toMatchObject({ readOnly: false, employee: false });
     expect(full.archivedRisks.length).toBeGreaterThan(0);
     expect(full.linkableActions.length).toBeGreaterThan(0);
+    // Actions non closes seulement, libellé court (actionLabel).
+    expect(full.linkableActions.map((a) => a.id)).not.toContain('A-176'); // Vérifiée
+    expect(full.linkableActions.map((a) => a.id)).not.toContain('A-180'); // Abandonnée
+    expect(full.linkableActions.find((a) => a.id === 'A-172')?.label).toMatch(/^A-172 · Arrimer les bouteilles/); // Terminée
+    expect(full.actionsQhse).toBe(true);
+
+    // Chef de service : saisit le DUERP, mais les actions QSE sont créées et rattachées par le service QHSE (ACT-22).
+    actAs('Chef de service', 'all');
+    const cs = await loadRisks();
+    expect(cs).toMatchObject({ readOnly: false, actionsQhse: false, linkableActions: [] });
     expect(full.archivedRisks.find((r) => r.id === noise.id)!.history.map((h) => h.action)).toEqual(['archive', 'create']);
 
     actAs('Chef de projet', 'all');
@@ -138,7 +148,7 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
       expect(print.version).toMatchObject({ version: '2026.1', validatedBy: '[H. Marchand]', cseConsultedOn: '2026-03-20' });
       expect(print.risks.length).toBeGreaterThan(0);
       expect(print.risks.some((r) => r.hazard === 'Bruit des bancs')).toBe(false); // archivé
-      expect(print.actionInfo['A-214']).toEqual({ title: expect.stringContaining('élingues'), dueOn: '2026-10-17', status: 'En cours' });
+      expect(print.actionInfo['A-214']).toEqual({ title: expect.stringContaining('élingues'), dueOn: '2026-10-17', status: '40 %' });
       expect(print.actionInfo['A-203']).toMatchObject({ status: 'En retard' });
       const json = JSON.stringify(print);
       OTHER_PEOPLE.forEach((name) => expect(json, name).not.toContain(name));
@@ -278,14 +288,15 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     const db = await getDb();
     const sources = await loadProgramSources(db);
     const expected = programDefaultIds(sources.actions, riskLinkedActionIds(sources), 2027);
-    // Actions encore ouvertes à échéance 2026 (report), par échéance puis référence.
-    expect(expected).toEqual(['A-203', 'A-198', 'A-201', 'A-172', 'A-205', 'A-209', 'A-214', 'A-215']);
+    // Actions non closes à date cible 2026 (report : Terminée A-172 comprise, Vérifiées A-170/A-176 exclues), par date cible
+    // puis numéro ; A-222 = suite de A-176, rattachée au même risque (D21).
+    expect(expected).toEqual(['A-203', 'A-198', 'A-201', 'A-172', 'A-205', 'A-209', 'A-214', 'A-222', 'A-215']);
     const before = await loadPreventionProgram(2027);
     expect(before).toMatchObject({ program: null, creatable: true, prefillCount: expected.length, currentVersion: '2026.1' });
     expect(await createPreventionProgram({}, form({ year: '2027', comment: 'Report des actions ouvertes' }))).toEqual({ ok: true, id: '2027' });
     const rows = await db.select().from(t.preventionProgramActions).where(eq(t.preventionProgramActions.year, 2027));
     expect(rows.map((r) => r.actionId).sort()).toEqual([...expected].sort());
-    expect(await lastLog('prevention_program', '2027')).toMatchObject({ action: 'create', byId: 'clefevre', summary: 'Programme 2027 créé · 8 actions reprises du DUERP 2026.1' });
+    expect(await lastLog('prevention_program', '2027')).toMatchObject({ action: 'create', byId: 'clefevre', summary: 'Programme 2027 créé · 9 actions reprises du DUERP 2026.1' });
     expect((await db.select().from(t.preventionPrograms).where(eq(t.preventionPrograms.year, 2027)))[0]).toMatchObject({ duerpVersion: '2026.1', comment: 'Report des actions ouvertes', frozenAt: null });
     expect(await createPreventionProgram({}, form({ year: '2027' }))).toMatchObject({ fieldErrors: { year: 'Un programme existe déjà pour cette année.' } });
 
@@ -296,7 +307,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     });
   });
 
-  it('lignes : action non rattachée ou annulée refusée, site de l’action, journal détaillé', async () => {
+  it('lignes : action non rattachée ou abandonnée refusée, site de l’action, journal détaillé', async () => {
     actAs('Chef de service', 'all');
     expect(await addProgramAction({}, line(2026, 'A-215'))).toEqual({ error: APPROVERS_ONLY });
     expect(await saveProgramAction({}, line(2026, 'A-205'))).toEqual({ error: APPROVERS_ONLY });
@@ -304,7 +315,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
 
     actAs('Animateur QHSE', 'all');
     expect(await addProgramAction({}, line(2026, 'A-212'))).toEqual({ error: "Action sans risque du DUERP en vigueur : rattachez-la d'abord à un risque." });
-    expect(await addProgramAction({}, line(2026, 'A-180'))).toEqual({ error: 'Action annulée : elle ne peut pas entrer au programme.' });
+    expect(await addProgramAction({}, line(2026, 'A-180'))).toEqual({ error: 'Action abandonnée : elle ne peut pas entrer au programme.' });
     expect(await addProgramAction({}, line(2026, 'A-999'))).toEqual({ error: 'Action introuvable.' });
     expect(await addProgramAction({}, line(2031, 'A-215'))).toEqual({ error: 'Programme introuvable.' });
     expect(await addProgramAction({}, line(2026, 'A-215', { estimatedCost: '20000000' }))).toMatchObject({ fieldErrors: { estimatedCost: 'Montant trop élevé.' } });
@@ -324,6 +335,12 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
         { field: 'Indicateur', from: 'Vérification ATEX sans écart', to: null },
       ],
     });
+    // Ligne ajoutée : le coût estimé de l'action est proposé (DUE-02, spec § 11), seulement pour les actions proposées.
+    const draft = await loadPreventionProgram(2026);
+    expect(draft.candidates.map(([id]) => id)).toContain('A-203');
+    expect(draft.candidateCosts['A-203']).toBe(12000);
+    expect(Object.hasOwn(draft.candidateCosts, 'A-215')).toBe(false); // sans coût estimé
+    expect(Object.keys(draft.candidateCosts).every((id) => draft.candidates.some(([c]) => c === id))).toBe(true);
     actAs('Animateur QHSE', 'ville-a');
     expect(await addProgramAction({}, line(2026, 'A-203', { estimatedCost: '12000' }))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'all');

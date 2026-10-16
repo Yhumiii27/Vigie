@@ -16,7 +16,7 @@ const base = process.env.VIGIE_E2E_URL;
 const COOKIE = `vigie_role=${encodeURIComponent('Salarié')}; vigie_site=all`;
 /** Signalements nominatifs de [T. Nguyen] dans le jeu de démonstration. */
 const OWN_EVENTS = ['EV-2026-112', 'EV-2026-118', 'EV-2026-123', 'EV-2026-124', 'EV-2026-131', 'EV-2026-133'];
-/** Actions dont il est pilote. */
+/** Actions dont il est responsable. */
 const OWN_ACTIONS = ['A-215'];
 /** Salariés dont aucune donnée ne le concerne (ni pilote de ses signalements, ni responsable QHSE de son site). */
 const OTHER_PEOPLE = ['[M. Girard]', '[P. Roux]', '[A. Martin]', '[J. Petit]', '[R. Fontaine]', '[K. Bernard]', '[Y. Lambert]'];
@@ -63,13 +63,38 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
       }
     });
 
-    it('plan d’actions : les actions dont il est pilote', async () => {
-      for (const path of ['/actions', '/actions?etat=historique', '/actions?etat=annulees', '/actions?action=A-214']) {
+    it('plan d’actions : les actions dont il est responsable, sur toutes les vues et tous les affichages', async () => {
+      for (const path of ['/actions', '/actions?etat=historique', '/actions?etat=abandonnees', '/actions?etat=annulees', '/actions?vue=kanban',
+        '/actions?vue=responsable', '/actions?responsable=sbenali', '/actions?action=A-214']) {
         const { status, body } = await load(path, rsc);
         expect(status, path).toBe(200);
         expect(found(body, ACTION_REF).filter((id) => !OWN_ACTIONS.includes(id) && !path.endsWith(id)), path).toEqual([]);
-        expect(body, path).not.toContain('Remplacer les élingues textiles'); // A-214, même événement, autre pilote
+        expect(body, path).not.toContain('Remplacer les élingues textiles'); // A-214, même événement, autre responsable
+        expect(body, path).not.toContain('livraison prévue le 14/10'); // commentaire de A-214
+        expect(body, path).not.toMatch(/\\?"people\\?":\[\[/); // aucune liste du personnel (formulaire)
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
+      }
+    });
+
+    it('fiche de son action : son fil et ses preuves, aucune autre action', async () => {
+      const path = '/actions?action=A-215';
+      const { status, body } = await load(path, rsc);
+      expect(status, path).toBe(200);
+      expect(body).toContain('Premier jet du mode opératoire'); // son commentaire
+      expect(body).toContain('mode-operatoire-retournement-v0.pdf'); // sa preuve
+      expect(found(body, ACTION_REF).filter((id) => !OWN_ACTIONS.includes(id)), path).toEqual([]);
+      expect(body).not.toContain('bon-de-commande-elingues.pdf'); // preuve de A-214
+      OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
+    });
+
+    it('cloche : ses notifications et son rappel, sans responsables ni site des éléments (projection de PageHeader)', async () => {
+      for (const path of ['/actions', '/a-faire', '/evenements']) {
+        const { status, body } = await load(path, rsc);
+        expect(status, path).toBe(200);
+        expect(body, path).toContain('rappel-actions|'); // rappel du mercredi (VIGIE_TODAY = vendredi 09/10)
+        expect(body, path).toMatch(/notification:\d+/); // « Action confiée » de A-215
+        expect(body, path).not.toContain('ownerIds');
+        expect(found(body, ACTION_REF).filter((id) => !OWN_ACTIONS.includes(id)), path).toEqual([]);
       }
     });
 

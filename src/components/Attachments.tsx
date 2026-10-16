@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useRef, useState, useTransition, type ReactNode } from 'react';
 import { Dialog } from '@/components/Dialog';
 import {
   ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES,
@@ -24,13 +24,15 @@ type AttachmentsProps = {
   kicker?: string;
   hint?: string;
   emptyText?: string;
+  /** Mention sous la vignette (preuve d'une action : « avec un commentaire », « commentaire retiré », D23). */
+  caption?: (f: AttachmentItem) => ReactNode;
 };
 
 /**
  * Pièces jointes d'une fiche (photos, PV, attestations, rapports) : vignettes, ajout et retrait.
  * Composant transverse ; le stockage passe par src/lib/uploads.ts et la lecture par /fichiers/[id] (droit sur l'entité).
  */
-export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, title = 'Pièces jointes', kicker, hint = `Photos, PDF, Word, Excel · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier`, emptyText = 'Aucune pièce jointe.' }: AttachmentsProps) {
+export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, title = 'Pièces jointes', kicker, hint = `Photos, PDF, Word, Excel · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier`, emptyText = 'Aucune pièce jointe.', caption }: AttachmentsProps) {
   const canManage = canAdd;
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
                   <i className="ph ph-x" style={{ fontSize: 12 }} />
                 </button>
               )}
+              {caption?.(f) && <div className="vg-thumb-caption">{caption(f)}</div>}
             </div>
           ))}
           {canManage && (

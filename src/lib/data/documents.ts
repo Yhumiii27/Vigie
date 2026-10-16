@@ -8,8 +8,9 @@ import {
 } from '@/components/documents/meta';
 import { addDays, addMonths, daysBetween, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
-import { canApprove, columnOf, type TodoItem, type Tone } from '../domain';
-import { actionColumn, lcfirst, loadActions, loadPeople, type ActionRow } from '../queries';
+import { canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
+import { actionView, lcfirst, loadActions, loadPeople, type ActionRow, type Person } from '../queries';
+import { actionLabel } from '../action-rules';
 import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
@@ -21,7 +22,11 @@ export const DOC_SOON_DAYS = 15;
 
 export type Retirement = { on: string; by: string; reason: string | null };
 
-export type LinkedAction = { id: string; title: string; statusLabel: string; tone: Tone; dueOn: string; late: boolean; open: boolean };
+/**
+ * Action du plan d'actions liée à un document ou à une version : libellé court (actionLabel du détail), avancement affiché
+ * (« En retard » le cas échéant) ; `open` = ni Vérifiée ni Abandonnée (une action Terminée attend sa vérification).
+ */
+export type LinkedAction = { id: string; label: string; statusLabel: string; tone: Tone; dueOn: string; late: boolean; open: boolean };
 
 export type VersionView = {
   id: number;
@@ -70,9 +75,13 @@ export type DocumentRow = {
   reviewDays: number | null;
   overdue: boolean;
   dueSoon: boolean;
-  /** Actions ouvertes du plan d'actions rattachées au document (origine « Documents »). */
+  /**
+   * Actions non closes rattachées au document : son document d'origine (actions.document_id, posé à la création, ACT-01)
+   * ou l'une de ses versions (document_versions.action_id : une version rattachée après coup ne pose jamais
+   * document_id, D15). Sans doublon, la plus récente d'abord.
+   */
   reviewActions: LinkedAction[];
-  /** Intitulé proposé pour une action de revue. */
+  /** Détail proposé pour une action de revue périodique. */
   actionTitle: string;
 };
 
@@ -86,7 +95,7 @@ const typeRank = (type: string) => {
 };
 
 type RawDocumentData = {
-  people: Map<string, { name: string }>;
+  people: Map<string, Person>;
   docs: (typeof t.documents.$inferSelect)[];
   versions: (typeof t.documentVersions.$inferSelect)[];
   files: { id: string; entityId: string; fileName: string; size: number }[];
@@ -103,11 +112,12 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
   const fileOf = new Map(files.map((f) => [f.entityId, { id: f.id, name: f.fileName, size: f.size }])); // le dernier dépôt l'emporte
 
   const linked = (a: ActionRow): LinkedAction => {
-    const col = actionColumn(a, now);
-    const c = columnOf(col);
-    return { id: a.id, title: a.title, statusLabel: c.status, tone: c.tone, dueOn: a.dueOn, late: col === 'late', open: col !== 'done' };
+    const v = actionView(a, people, now);
+    return { id: a.id, label: v.label, statusLabel: v.statusLabel, tone: v.tone, dueOn: a.dueOn, late: v.late, open: !isClosedActionStatus(a.status) };
   };
   const actionById = new Map(actions.map((a) => [a.id, a]));
+  // Couples « action liée à une version | document de la version ».
+  const versionLinks = new Set(versions.filter((v) => v.actionId).map((v) => `${v.actionId}|${v.documentId}`));
 
   const versionView = (v: typeof versions[number]): VersionView => {
     const s = versionStatus(v.status, v.approvedOn);
@@ -156,7 +166,8 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
       overdue: reviewDays != null && reviewDays < 0,
       dueSoon: reviewDays != null && reviewDays >= 0 && reviewDays <= DOC_SOON_DAYS,
       reviewActions: actions
-        .filter((a) => a.documentId === d.id)
+        .filter((a) => a.documentId === d.id || versionLinks.has(`${a.id}|${d.id}`))
+        .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
         .map(linked).filter((a) => a.open),
       actionTitle: `Revue périodique de ${d.id} — ${lcfirst(d.title)}`,
     };
@@ -181,7 +192,7 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.documentVersions).orderBy(asc(t.documentVersions.id)),
     db.select({ id: t.attachments.id, entityId: t.attachments.entityId, fileName: t.attachments.fileName, size: t.attachments.size })
       .from(t.attachments).where(eq(t.attachments.entityType, 'document_version')).orderBy(asc(t.attachments.createdAt)),
-    db.select().from(t.actions).where(ne(t.actions.status, 'cancelled')),
+    db.select().from(t.actions).where(ne(t.actions.status, 'abandonnee')),
     db.select().from(t.sites).orderBy(asc(t.sites.sort)),
   ]);
   // Retraits tracés (motif obligatoire) : l'entrée « archive » la plus récente de chaque document.
@@ -253,10 +264,11 @@ export async function loadDocuments({ readOnly = false }: { readOnly?: boolean }
     { key: 'brouillon', label: 'Brouillons', value: drafts.length, sub: '', subTone: 'neutral', note: 'Créations et révisions en rédaction' },
   ];
 
+  // Actions à rattacher à une version (service QHSE seulement, la page ne les transmet qu'à lui) : ni Vérifiées ni Abandonnées.
   const actionOptions = actions
-    .filter((a) => actionColumn(a, now) !== 'done')
+    .filter((a) => !isClosedActionStatus(a.status))
     .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
-    .map((a) => [a.id, `${a.id} · ${a.title}`] as const);
+    .map((a) => [a.id, `${a.id} · ${actionLabel(a.detail)}`] as const);
 
   return { rows, allIds, elsewhere, unavailable: {} as Record<string, UnavailableDoc>, now, kpis, overdueCount: overdue.length, actionOptions, suggestedDueOn: addDays(now, 30) };
 }

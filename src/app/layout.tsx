@@ -1,11 +1,13 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import { connection } from 'next/server';
 import '@phosphor-icons/web/regular';
 import './nocturne.css';
 import './vigie.css';
 
-const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-inter' });
+// Inter servie depuis le dépôt (fichier variable, sous-ensemble latin, licence OFL : fonts/OFL-Inter.txt) : la construction
+// ne télécharge plus la police chez Google Fonts (échecs passagers de l'image Docker, construction hors ligne possible).
+const inter = localFont({ src: './fonts/inter-latin-wght.woff2', weight: '100 900', style: 'normal', display: 'swap', variable: '--font-inter' });
 
 export const metadata: Metadata = {
   title: { default: 'Vigie · QHSE', template: '%s · Vigie' },

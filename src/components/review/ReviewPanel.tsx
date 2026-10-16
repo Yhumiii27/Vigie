@@ -8,7 +8,9 @@ import { Dialog } from '@/components/Dialog';
 import { LinkActionButton } from '@/components/LinkActionButton';
 import { ActionLink } from '@/components/audits/parts';
 import { Aside, CardHead, Icon, ToneTag, hrefWith } from '@/components/ui';
-import { fmtDate, fmtDayMonth, yearOf } from '@/lib/dates';
+import { admissibleSources } from '@/lib/action-rules';
+import type { ActionDefaults } from '@/lib/action-view';
+import { addDays, fmtDate, fmtDayMonth, yearOf } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { ReviewCardData } from '@/lib/data/review';
 import { setReviewItemDone } from '@/server/review';
@@ -24,13 +26,33 @@ type Editing =
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 
 /**
+ * Valeurs proposées pour l'action d'une décision (ACT-28) : source Objectif QSE pour un objectif, sinon Revue de direction
+ * (D20, imposée), décision liée, problème = texte de la décision, pilote et échéance de la décision (vérification proposée
+ * 30 jours après) ; le site est choisi par le service QHSE (une décision vaut pour toute l'entreprise, jamais « Tous les
+ * sites » pour une action, D16).
+ */
+export function decisionActionDefaults(d: { id: number; kind: string; text: string; pilotId: string | null; dueOn: string | null }, originRef: string): ActionDefaults {
+  const [source] = admissibleSources('reviewdecision', { decisionKind: d.kind });
+  return {
+    source, lockSource: true, link: `reviewdecision:${d.id}`, linkLabel: d.text.slice(0, 80), originRef, problem: d.text,
+    pilotId: d.pilotId ?? undefined, dueOn: d.dueOn ?? undefined, verifyDueOn: d.dueOn ? addDays(d.dueOn, 30) : undefined,
+  };
+}
+
+/** Action rattachée à la revue sans décision qui la porte : source Revue de direction imposée. */
+export function reviewActionDefaults(reviewId: number, originRef: string): ActionDefaults {
+  const [source] = admissibleSources('review');
+  return { source, lockSource: true, link: `review:${reviewId}`, linkLabel: originRef, originRef };
+}
+
+/**
  * Revue de direction sur /audits : préparation (check-list), puis séance (compte rendu, décisions et actions),
  * visa de la direction et historique des revues (?revue=<id>, ?revues=annulees).
  */
 export function ReviewPanel({ data, params, showCancelled, allSites }: {
   data: ReviewCardData; params: Record<string, string | undefined>; showCancelled: boolean; allSites: boolean;
 }) {
-  const { now, review, items, decisions, extraActions, previous, changes, options, defaults, flags, programme } = data;
+  const { now, review, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
   const [list, setDone] = useOptimistic(items, (state, { id, done }: { id: number; done: boolean }) => state.map((r) => (r.id === id ? { ...r, done } : r)));
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +60,8 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
   const close = () => setEditing(null);
 
   const edit = flags.canEdit && flags.editable;
-  const actionOpts = { people: options.people, origins: options.origins, sites: options.sites };
+  // Actions QSE : création et rattachements par le service QHSE seulement (ACT-22).
+  const actionEdit = edit && flags.canCreateActions;
   const provided = list.filter((r) => r.done).length;
   const item = editing?.kind === 'item' && editing.id != null ? items.find((r) => r.id === editing.id) : undefined;
   const decision = editing?.kind === 'decision' && editing.id != null ? decisions.find((d) => d.id === editing.id) : undefined;
@@ -168,13 +191,13 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                   {d.actionId ? (
                     <>
                       <ActionLink action={d.action} id={d.actionId} />
-                      {edit && <LinkActionButton link={`reviewdecision:${d.id}`} current={d.actionId} tooltip={`Détacher ${d.actionId} de la décision (l'action reste dans le plan, rattachée à la revue)`} />}
+                      {actionEdit && <LinkActionButton link={`reviewdecision:${d.id}`} current={d.actionId} tooltip={`Détacher ${d.actionId} de la décision (l'action reste dans le plan, rattachée à la revue)`} />}
                     </>
-                  ) : edit && (
+                  ) : actionEdit && (
                     <>
-                      <NewActionButton label="Créer l'action" icon="ph-plus" className="vg-text-btn" options={actionOpts}
-                        defaults={{ title: d.text, origin: 'rev', originRef: defaults.originRef, lockOrigin: true, pilotId: d.pilotId ?? undefined, dueOn: d.dueOn ?? undefined, kind: 'P', siteId: null, link: `reviewdecision:${d.id}` }} />
-                      <LinkActionButton link={`reviewdecision:${d.id}`} actions={options.actions} label="Rattacher" />
+                      <NewActionButton label="Créer l'action" icon="ph-plus" className="vg-text-btn" options={options}
+                        defaults={decisionActionDefaults(d, defaults.originRef)} />
+                      <LinkActionButton link={`reviewdecision:${d.id}`} actions={linkable} label="Rattacher" />
                     </>
                   )}
                 </span>
@@ -188,7 +211,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                   <div key={a.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', fontSize: 12.5 }}>
                     <ActionLink action={a} id={a.id} compact />
                     <span style={{ flex: 1, minWidth: 140 }}>{a.title}</span>
-                    {edit && <LinkActionButton link={`review:${review.id}`} current={a.id} />}
+                    {actionEdit && <LinkActionButton link={`review:${review.id}`} current={a.id} />}
                   </div>
                 ))}
               </>
@@ -198,9 +221,12 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                 <button type="button" className="vg-text-btn" onClick={() => setEditing({ kind: 'decision', id: null })}>
                   <i className="ph ph-plus" style={{ fontSize: 13 }} /> Ajouter une décision
                 </button>
-                <NewActionButton label="Nouvelle action" className="vg-text-btn" options={actionOpts}
-                  defaults={{ origin: 'rev', originRef: defaults.originRef, lockOrigin: true, kind: 'P', siteId: null, link: `review:${review.id}` }} />
-                <LinkActionButton link={`review:${review.id}`} actions={options.actions} />
+                {actionEdit && (
+                  <>
+                    <NewActionButton label="Nouvelle action" className="vg-text-btn" options={options} defaults={reviewActionDefaults(review.id, defaults.originRef)} />
+                    <LinkActionButton link={`review:${review.id}`} actions={linkable} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -255,12 +281,12 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
 
       <Dialog open={!!editing} onClose={close} kicker={kicker} width={editing?.kind === 'hold' ? 620 : 500} title={title}>
         {editing?.kind === 'item' && review && (
-          <ItemForm reviewId={review.id} item={item} people={options.people} canDelete={review.status === 'planifiee'} onClose={close} />
+          <ItemForm reviewId={review.id} item={item} people={people} canDelete={review.status === 'planifiee'} onClose={close} />
         )}
         {editing?.kind === 'decision' && review && (
-          <DecisionForm reviewId={review.id} decision={decision} people={options.people} canDelete={review.status === 'planifiee'} onClose={close} />
+          <DecisionForm reviewId={review.id} decision={decision} people={people} canDelete={review.status === 'planifiee'} onClose={close} />
         )}
-        {editing?.kind === 'hold' && review && <HoldForm review={review} people={options.people} now={now} next={defaults.holdNext} allSites={allSites} onClose={close} />}
+        {editing?.kind === 'hold' && review && <HoldForm review={review} people={people} now={now} next={defaults.holdNext} allSites={allSites} onClose={close} />}
         {editing?.kind === 'reschedule' && review && <RescheduleForm review={review} onClose={close} />}
         {editing?.kind === 'create' && (
           <CreateReviewForm nextOn={defaults.nextOn} kind={review?.kind === 'ordinaire' ? 'intermediaire' : 'ordinaire'} copyFrom={defaults.copyFrom}

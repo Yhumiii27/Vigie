@@ -2,12 +2,23 @@
 
 import { REASON_MAX } from './domain';
 
-/** État renvoyé par une server action de formulaire (utilisé avec useActionState). */
-export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string };
+/**
+ * État renvoyé par une server action de formulaire (utilisé avec useActionState). `ids` : enregistrements créés en plus de
+ * `id` (actions de suite d'une vérification, ACT-23) ; `warnings` : avertissements qui n'empêchent pas l'enregistrement
+ * (vérification planifiée avant la date cible…).
+ */
+export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string; ids?: string[]; warnings?: string[] };
 
 export const initialFormState: FormState = {};
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DECIMAL = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+/** Nombre décimal à la française pour les messages : « 9 999 999 999,99 » (espaces insécables). */
+export function fmtDecimal(n: number): string {
+  const [int, dec] = String(Math.abs(n)).split('.');
+  return `${n < 0 ? '-' : ''}${int.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0')}${dec ? `,${dec}` : ''}`;
+}
 
 /** Lecteur de FormData qui accumule les erreurs par champ. */
 export function formReader(fd: FormData) {
@@ -45,6 +56,25 @@ export function formReader(fd: FormData) {
       const n = Number(v.replace(/\s/g, '').replace(',', '.'));
       if (!Number.isFinite(n)) { fail(name, 'Nombre attendu.'); return null; }
       if (opts.min != null && n < opts.min) fail(name, `Minimum ${opts.min}.`);
+      return n;
+    },
+    /**
+     * Nombre décimal (heures, montants en euros, ACT-26) : virgule ou point, espaces de milliers admis ; au plus `scale`
+     * décimales (2 par défaut, « 2 décimales au maximum. ») ; bornes `min` / `max` incluses.
+     */
+    decimal(name: string, opts: { required?: boolean; min?: number; max?: number; scale?: number } = {}) {
+      const v = raw(name).replace(/\s/g, '').replace(',', '.');
+      if (!v) { if (opts.required) fail(name, 'Champ obligatoire.'); return null; }
+      if (!DECIMAL.test(v)) { fail(name, 'Nombre attendu.'); return null; }
+      const scale = opts.scale ?? 2;
+      const decimals = v.includes('.') ? v.split('.')[1].length : 0;
+      if (decimals > scale) {
+        fail(name, scale === 0 ? 'Nombre entier attendu.' : `${scale} décimale${scale > 1 ? 's' : ''} au maximum.`);
+        return null;
+      }
+      const n = Number(v);
+      if (opts.min != null && n < opts.min) fail(name, `Minimum ${fmtDecimal(opts.min)}.`);
+      if (opts.max != null && n > opts.max) fail(name, `Maximum ${fmtDecimal(opts.max)}.`);
       return n;
     },
     /** Date « AAAA-MM-JJ » (champ <input type="date">). */

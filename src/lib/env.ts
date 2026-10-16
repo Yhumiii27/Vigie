@@ -80,7 +80,29 @@ export type VigieConfig = {
   /** Lecture des scans par l'API Claude (VIGIE_AI_IMPORT=1). */
   aiImport: boolean;
   anthropicEnv: AnthropicEnv;
+  /**
+   * Tâches planifiées du serveur (PRD-12, src/db/scheduler.ts : rappel du mercredi par e-mail…), lancées à l'ouverture
+   * de la base (VIGIE_SCHEDULER=0 : aucune ; la maintenance horaire, src/db/maintenance.ts, garde sa propre minuterie).
+   */
+  scheduler: boolean;
+  /**
+   * Transport des e-mails (ACT-33) : « fichier » = un fichier JSON par message dans mailDir, aucun envoi réel
+   * (démonstration, recette) ; « aucun » = pas d'e-mail (défaut hors démonstration, en attendant le compte d'envoi ACT-34).
+   */
+  mailTransport: MailTransportKind;
+  /** Dossier du transport « fichier » (absolu), jamais dans VIGIE_DATA_DIR. */
+  mailDir: string;
+  /** Expéditeur des e-mails (« Vigie <vigie@exemple.fr> » ou adresse seule). */
+  mailFrom: string;
+  /** Heure d'envoi du rappel du mercredi par e-mail (heure de Paris, 07:00 par défaut). */
+  reminderTime: { hour: number; minute: number };
 };
+
+/** Transports d'e-mail disponibles (VIGIE_MAIL_TRANSPORT) ; SMTP ou Microsoft Graph : ACT-34. */
+export const MAIL_TRANSPORTS = ['fichier', 'aucun'] as const;
+export type MailTransportKind = (typeof MAIL_TRANSPORTS)[number];
+/** Expéditeur par défaut (VIGIE_MAIL_FROM). */
+export const DEFAULT_MAIL_FROM = 'Vigie <vigie@localhost>';
 
 /** Secret HMAC des QR codes en démonstration (jeu de données local, sans valeur hors démonstration). */
 const DEMO_REPORT_SECRET = 'vigie-demonstration-qr-codes-sans-valeur-en-production';
@@ -97,6 +119,16 @@ const origin = z.url({ protocol: /^https?$/, error: 'URL http(s) attendue' }).tr
 /** Nom de domaine de messagerie (VIGIE_EMAIL_DOMAINS), en minuscules : au moins deux libellés. */
 const EMAIL_DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const secret = z.string().min(SECRET_MIN, { error: `au moins ${SECRET_MIN} caractères (ex. openssl rand -base64 48)` });
+/** Adresse électronique simple (expéditeur) : sans espace, chevron ni retour à la ligne. */
+const MAIL_ADDRESS = /^[^\s<>@"]+@[^\s<>@".]+(\.[^\s<>@".]+)*$/;
+/** Expéditeur : « Nom <adresse> » ou adresse seule ; jamais de retour à la ligne (injection d'en-têtes). */
+const sender = z.string().refine((v) => {
+  const m = /^([^<>\r\n"]+?)\s*<([^<>]+)>$/.exec(v);
+  return MAIL_ADDRESS.test(m ? m[2] : v);
+}, { error: 'expéditeur attendu : « Nom <adresse@domaine> » ou adresse seule (ex. Vigie <vigie@epc2i.fr>)' });
+/** Heure « HH:MM » (heure de Paris). */
+const clockTime = z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, { error: 'heure attendue au format HH:MM, de 00:00 à 23:59 (ex. 07:00)' })
+  .transform((v) => ({ hour: Number(v.split(':')[0]), minute: Number(v.split(':')[1]) }));
 
 /** Clé de 32 octets en base64 ou en hexadécimal. */
 function decodeKey(v: string): Buffer | null {
@@ -227,10 +259,23 @@ export function parseConfig(env: Env): VigieConfig {
   const aiImport = read('VIGIE_AI_IMPORT', flag) ?? false;
   const anthropicEnv = Object.fromEntries(ANTHROPIC_KEYS.flatMap((k) => (env[k] ? [[k, env[k]]] : []))) as AnthropicEnv;
 
+  // Tâches planifiées et e-mails (PRD-12, ACT-33). Transport « fichier » par défaut en démonstration seulement : hors
+  // démonstration, aucun e-mail tant que le compte d'envoi de l'entreprise n'est pas branché (ACT-34).
+  const scheduler = read('VIGIE_SCHEDULER', flag) ?? true;
+  const mailTransport = read('VIGIE_MAIL_TRANSPORT', z.enum(MAIL_TRANSPORTS, { error: `valeur attendue : ${MAIL_TRANSPORTS.join(' ou ')} (SMTP et Microsoft Graph : à venir)` }))
+    ?? (demo ? 'fichier' : 'aucun');
+  const mailDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), blank(env.VIGIE_MAIL_DIR) ?? path.join('.data', 'mails'));
+  if (isWithinDir(storage.dataDir, mailDir)) {
+    problems.push(`VIGIE_MAIL_DIR : à placer hors de VIGIE_DATA_DIR (${storage.dataDir}), dossier réservé à la base PGlite et vidé par sa restauration (ex. /data/mails).`);
+  }
+  const mailFromValue = read('VIGIE_MAIL_FROM', sender) ?? DEFAULT_MAIL_FROM;
+  const reminderTime = read('VIGIE_REMINDER_TIME', clockTime) ?? { hour: 7, minute: 0 };
+
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage,
     publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
+    scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime,
   };
 }
 

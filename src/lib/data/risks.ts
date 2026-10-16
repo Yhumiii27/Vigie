@@ -7,12 +7,13 @@ import { addMonths, daysBetween, fmtDayMonth, yearOf } from '../dates';
 import { today } from '@/lib/today';
 import {
   DUERP_ACCESS_CHANNELS, DUERP_REQUESTERS, DUERP_REQUIREMENT_LINK, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, PROGRAM_SHORT,
-  RISK_ACTION_THRESHOLD, RISK_LEVELS, RISK_TODO_KIND, STEP_CLOSED, TODO_HORIZON_DAYS, canApprove, canEdit, isEmployee, isMine,
-  isOpenActionStatus, riskLevel, type DuerpAccessChannel, type DuerpRequester, type EventType, type ProgramState, type RiskFlag,
+  RISK_ACTION_THRESHOLD, RISK_LEVELS, RISK_TODO_KIND, STEP_CLOSED, TODO_HORIZON_DAYS, AVANCEMENT, canApprove, canEdit, isClosedActionStatus,
+  isEmployee, isMine, riskLevel, type DuerpAccessChannel, type DuerpRequester, type EventType, type ProgramState, type RiskFlag,
   type TodoItem, type Tone,
 } from '../domain';
 import type { Option } from '../form-options';
-import { actionColumn, lcfirst, loadPeople, type ActionRow } from '../queries';
+import { actionLabel, canCreateAction, isLate } from '../action-rules';
+import { lcfirst, loadPeople, type ActionRow } from '../queries';
 import { loadQhseLeads, type Recipients } from './leads';
 import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLog, loadChangeLogs } from './changelog';
@@ -54,6 +55,11 @@ export type DuerpSnapshot = {
   risks?: RiskRecord[];
 };
 
+/**
+ * Action du plan d'actions QSE rattachée au risque : `title` = libellé court (actionLabel du détail), `status` = avancement
+ * affiché (« En retard » calculé) ; `done` = Vérifiée (close pour le risque : résiduel à recoter, spec § 7), `cancelled` =
+ * Abandonnée (grisée, sans effet sur l'alerte). Une action Terminée attend sa vérification : elle reste ouverte.
+ */
 export type LinkedAction = {
   id: string; title: string; status: string; late: boolean; done: boolean;
   closedOn: string | null; cancelled: boolean; pilot: string; dueOn: string; tone: Tone;
@@ -77,11 +83,11 @@ export type RiskView = {
   residualProbability: number;
   /** Dernière recotation du résiduel (null = jamais recoté depuis Vigie). */
   residualReviewedOn: string | null;
-  /** Actions liées, annulées comprises (grisées, sans effet sur l'alerte). */
+  /** Actions liées, abandonnées comprises (grisées, sans effet sur l'alerte). */
   actions: LinkedAction[];
   events: RiskEvent[];
   flag: RiskFlag | null;
-  /** Dernière clôture parmi les actions liées, quand elles sont toutes clôturées. */
+  /** Dernière vérification (closed_on) parmi les actions liées, quand elles sont toutes Vérifiées. */
   lastClosedOn: string | null;
   /** Risque archivé (retiré du document unique en vigueur, filtre « Archivés ») ; null = en vigueur. */
   archived: ArchiveInfo | null;
@@ -122,8 +128,6 @@ export type DuerpVersionView = {
   hasSnapshot: boolean;
   riskCount: number | null;
 };
-
-const STATUS_LABEL: Record<string, string> = { todo: 'À lancer', doing: 'En cours', verify: 'Efficacité à vérifier', done: 'Clôturée', cancelled: 'Annulée' };
 
 /** Lecture défensive du JSON stocké dans duerp_versions.snapshot. */
 export function parseSnapshot(raw: unknown): DuerpSnapshot {
@@ -199,10 +203,11 @@ const dayOf = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/
 const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /**
- * Alerte calculée d'un risque, par ordre de priorité (RISK_FLAGS) ; `active` = actions liées non annulées.
+ * Alerte calculée d'un risque, par ordre de priorité (RISK_FLAGS) ; `active` = actions liées non abandonnées, `done` =
+ * Vérifiée (une action Terminée attend encore sa vérification d'efficacité : elle ne déclenche pas la recotation).
  * - toDefine : cotation brute ≥ seuil sans aucune action ;
- * - residualHigh : toutes les actions clôturées, résiduel encore ≥ seuil ;
- * - toReview : toutes les actions clôturées, résiduel non recoté depuis la dernière clôture.
+ * - residualHigh : toutes les actions vérifiées, résiduel encore ≥ seuil ;
+ * - toReview : toutes les actions vérifiées, résiduel non recoté depuis la dernière vérification.
  */
 export function riskFlag(
   r: Pick<RiskRow, 'gravity' | 'probability' | 'residualGravity' | 'residualProbability' | 'residualReviewedOn'>,
@@ -216,20 +221,16 @@ export function riskFlag(
   return { flag: null, lastClosedOn };
 }
 
-function actionTone(status: string, late: boolean): Tone {
-  if (late) return 'danger';
-  if (status === 'done') return 'ok';
-  if (status === 'cancelled') return 'neutral';
-  if (status === 'verify') return 'warn';
-  return 'accent';
-}
-
-/** État affiché d'une action (« En retard » calculé) : libellé, ton, retard, clôture, annulation. */
+/**
+ * État affiché d'une action (§ 5.1, § 6.3) : avancement (« En retard » calculé, ton danger), retard, `done` = Vérifiée,
+ * `cancelled` = Abandonnée.
+ */
 function actionState(a: Pick<ActionRow, 'status' | 'dueOn'>, now: string) {
-  const late = actionColumn(a as ActionRow, now) === 'late';
+  const late = isLate(a, now);
+  const def = AVANCEMENT[a.status];
   return {
-    status: late ? 'En retard' : STATUS_LABEL[a.status] ?? a.status, tone: actionTone(a.status, late), late,
-    done: a.status === 'done', cancelled: a.status === 'cancelled',
+    status: late ? 'En retard' : def?.label ?? a.status, tone: (late ? 'danger' : def?.tone ?? 'neutral') as Tone, late,
+    done: a.status === 'verifiee', cancelled: a.status === 'abandonnee',
   };
 }
 
@@ -265,7 +266,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
     .sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true }))
     .map((a) => {
       const { status, tone, late, done, cancelled } = actionState(a, now);
-      return { id: a.id, title: a.title, status, late, done, closedOn: a.closedOn, cancelled, pilot: people.get(a.pilotId)?.name ?? '', dueOn: a.dueOn, tone };
+      return { id: a.id, title: actionLabel(a.detail), status, late, done, closedOn: a.closedOn, cancelled, pilot: people.get(a.pilotId)?.name ?? '', dueOn: a.dueOn, tone };
     });
 
   const eventsOf = (riskId: number): RiskEvent[] => events
@@ -336,11 +337,12 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
     })),
     // Contenu du prochain instantané (tous sites, éléments en vigueur).
     totals: { units: activeUnitIds.size, risks: allRisks.filter((r) => !r.archivedAt && activeUnitIds.has(r.unitId)).length },
-    // Actions ouvertes du site sélectionné (« Rattacher une action existante ») ; la fiche ne garde que celles du site de l'unité.
+    // Actions non closes (ni Vérifiées ni Abandonnées) du site sélectionné (« Rattacher une action existante », service QHSE) ;
+    // la fiche ne garde que celles du site de l'unité.
     linkableActions: actions
-      .filter((a) => a.status !== 'done' && a.status !== 'cancelled' && inSite(site, a.siteId))
+      .filter((a) => !isClosedActionStatus(a.status) && inSite(site, a.siteId))
       .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
-      .map((a) => ({ id: a.id, label: `${a.id} · ${a.title}`, siteId: a.siteId })),
+      .map((a) => ({ id: a.id, label: clip(`${a.id} · ${actionLabel(a.detail)}`), siteId: a.siteId })),
     duerpRequirement: requirement ? { id: requirement.id, href: `/veille?onglet=exigences&exigence=${requirement.id}` as const } : null,
   };
 });
@@ -348,12 +350,15 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
 /**
  * Écran DUERP, projeté selon le rôle (DUE-01) : le document unique est consultable par tous les rôles (R. 4121-4), saisi par
  * ceux qui le modifient (canEdit). En consultation : ni éléments archivés, ni actions à rattacher, ni historique ; pour le
- * Salarié, en plus, ni pilotes des actions ni événements liés (signalements nominatifs de collègues).
+ * Salarié, en plus, ni pilotes des actions ni événements liés (signalements nominatifs de collègues). Création d'action et
+ * rattachement d'une action existante : service QHSE seulement (ACT-22, `actionsQhse`) ; les autres rôles lisent les
+ * actions liées.
  */
 export async function loadRisks() {
   const [base, { role }] = await Promise.all([loadRiskBase(), getSession()]);
   const { now, versions, versionViews, current, daysToUpdate } = base;
   const edit = canEdit(role, 'risks');
+  const qhse = edit && canCreateAction(role);
   const employee = isEmployee(role);
   const [history, unitHistory] = edit
     ? await Promise.all([
@@ -388,7 +393,9 @@ export async function loadRisks() {
     risks: base.risks.map(view),
     archivedRisks: edit ? base.archivedRisks.map(view) : [],
     archivedUnits: edit ? base.archivedUnits.map((u): ArchivedUnitView => ({ ...u, history: unitHistory.get(u.id) ?? [] })) : [],
-    linkableActions: edit ? base.linkableActions : [],
+    linkableActions: qhse ? base.linkableActions : [],
+    /** Service QHSE : crée les actions du DUERP et y rattache des actions existantes (ACT-22). */
+    actionsQhse: qhse,
     duerpRequirement: base.duerpRequirement,
     /** Consultation seule (chef de projet, salarié) : aucune saisie, ni archives ni historique. */
     readOnly: !edit,
@@ -489,7 +496,7 @@ export async function loadDuerpVersion(version: string) {
 }
 export type DuerpVersionDetail = NonNullable<Awaited<ReturnType<typeof loadDuerpVersion>>>;
 
-/** Action de prévention citée dans la version imprimable : intitulé, échéance et statut (« En retard » calculé), sans pilote. */
+/** Action de prévention citée dans la version imprimable : libellé court, date cible et avancement (« En retard » calculé), sans responsable. */
 export type PrintAction = { title: string; dueOn: string; status: string };
 
 /**
@@ -503,12 +510,12 @@ export async function loadDuerpPrint() {
     riskRecords(db, (u) => inPerimeter(allowed, u.siteId) && inSite(site, u.siteId)),
     db.select().from(t.duerpVersions),
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
-    db.select({ id: t.actions.id, title: t.actions.title, dueOn: t.actions.dueOn, status: t.actions.status }).from(t.actions),
+    db.select({ id: t.actions.id, detail: t.actions.detail, dueOn: t.actions.dueOn, status: t.actions.status }).from(t.actions),
   ]);
   const cited = new Set(data.risks.flatMap((r) => r.actions));
   const actionInfo: Record<string, PrintAction> = Object.fromEntries(actions
     .filter((a) => cited.has(a.id))
-    .map((a) => [a.id, { title: a.title, dueOn: a.dueOn, status: actionState(a, now).status }]));
+    .map((a) => [a.id, { title: actionLabel(a.detail), dueOn: a.dueOn, status: actionState(a, now).status }]));
   const v = versions.find((x) => x.current);
   return {
     version: v ? {
@@ -661,33 +668,34 @@ const byDue = (a: { dueOn: string; id: string }, b: { dueOn: string; id: string 
   a.dueOn.localeCompare(b.dueOn) || a.id.localeCompare(b.id, 'fr', { numeric: true });
 
 /**
- * Actions reprises à la création du programme de l'année : rattachées à un risque en vigueur, non annulées, à échéance
- * dans l'année, ou encore ouvertes avec une échéance antérieure au 1er janvier (report). Par échéance, puis référence.
+ * Actions reprises à la création du programme de l'année : rattachées à un risque en vigueur, non abandonnées, à date cible
+ * dans l'année, ou encore non closes (ni Vérifiées ni Abandonnées : Reportée et Terminée comprises) avec une date cible
+ * antérieure au 1er janvier (report). Par date cible, puis numéro.
  */
 export function programDefaultIds(actions: Pick<ActionRow, 'id' | 'dueOn' | 'status'>[], riskLinked: Set<string>, year: number): string[] {
   const start = `${year}-01-01`;
   return actions
-    .filter((a) => riskLinked.has(a.id) && a.status !== 'cancelled'
-      && (yearOf(a.dueOn) === year || (isOpenActionStatus(a.status) && a.dueOn < start)))
+    .filter((a) => riskLinked.has(a.id) && a.status !== 'abandonnee'
+      && (yearOf(a.dueOn) === year || (!isClosedActionStatus(a.status) && a.dueOn < start)))
     .sort(byDue)
     .map((a) => a.id);
 }
 
 /**
- * Actions proposées à l'ajout (« Ajouter une action ») : rattachées à un risque en vigueur, non annulées, pas encore au
- * programme, ouvertes ou clôturées dans l'année.
+ * Actions proposées à l'ajout (« Ajouter une action ») : rattachées à un risque en vigueur, non abandonnées, pas encore au
+ * programme, non closes, ou Vérifiées dans l'année (closed_on = date de la vérification d'efficacité).
  */
 export function programCandidateIds(
   actions: Pick<ActionRow, 'id' | 'dueOn' | 'status' | 'closedOn'>[], riskLinked: Set<string>, inProgram: Set<string>, year: number,
 ): string[] {
   return actions
-    .filter((a) => riskLinked.has(a.id) && a.status !== 'cancelled' && !inProgram.has(a.id)
-      && (isOpenActionStatus(a.status) || (!!a.closedOn && yearOf(a.closedOn) === year)))
+    .filter((a) => riskLinked.has(a.id) && a.status !== 'abandonnee' && !inProgram.has(a.id)
+      && (!isClosedActionStatus(a.status) || (a.status === 'verifiee' && !!a.closedOn && yearOf(a.closedOn) === year)))
     .sort(byDue)
     .map((a) => a.id);
 }
 
-/** Totaux du programme : lignes, lignes chiffrées, coût estimé (€ HT, au centime), actions clôturées et annulées. */
+/** Totaux du programme : lignes, lignes chiffrées, coût estimé (€ HT, au centime), actions Vérifiées (`done`) et Abandonnées (`cancelled`). */
 export function programTotals(lines: { estimatedCost: number | null; done?: boolean; cancelled?: boolean }[]) {
   const costed = lines.filter((l) => l.estimatedCost != null);
   return {
@@ -733,7 +741,7 @@ function programRecords(rows: ProgramActionRow[], s: ProgramSources): ProgramLin
     const a = byAction.get(row.actionId);
     if (!a) return [];
     return [{
-      actionId: a.id, title: a.title, siteId: a.siteId, site: a.siteId ? s.siteLabel.get(a.siteId) ?? a.siteId : 'Tous les sites',
+      actionId: a.id, title: actionLabel(a.detail), siteId: a.siteId, site: a.siteId ? s.siteLabel.get(a.siteId) ?? a.siteId : 'Tous les sites',
       pilot: s.personName(a.pilotId), dueOn: a.dueOn, status: actionState(a, s.now).status, risks: risks.get(a.id) ?? [],
       estimatedCost: row.estimatedCost ?? null, resources: row.resources || null, indicator: row.indicator || null,
     }];
@@ -812,6 +820,9 @@ export const loadPreventionProgram = cache(async (year: number) => {
   const name = (id: string | null) => (id ? base.people.get(id)?.name ?? '' : '');
   const state: ProgramState | null = row ? (row.frozenAt ? 'frozen' : 'draft') : null;
   const inScope = (siteId: string | null) => inPerimeter(allowed, siteId) && inSite(base.site, siteId);
+  const candidateRows = approver && state === 'draft'
+    ? programCandidateIds(base.actions, linked, new Set(rows.map((r) => r.actionId)), year).map((id) => actionById.get(id)!).filter((a) => inScope(a.siteId))
+    : [];
   return {
     year,
     thisYear,
@@ -823,12 +834,12 @@ export const loadPreventionProgram = cache(async (year: number) => {
     lines: visible,
     totals: programTotals(visible),
     hiddenCount: lines.length - visible.length,
-    candidates: approver && state === 'draft'
-      ? programCandidateIds(base.actions, linked, new Set(rows.map((r) => r.actionId)), year)
-        .map((id) => actionById.get(id)!)
-        .filter((a) => inScope(a.siteId))
-        .map((a) => [a.id, clip(`${a.id} · ${a.title}`)] as Option)
-      : [],
+    candidates: candidateRows.map((a) => [a.id, clip(`${a.id} · ${actionLabel(a.detail)}`)] as Option),
+    /**
+     * Coût estimé de chaque action proposée (DUE-02, spec § 11) : la ligne ajoutée le propose, modifiable ; le coût de la
+     * ligne reste figé avec le programme. Le plan d'actions saisit un montant TTC, le programme un montant HT (point ouvert).
+     */
+    candidateCosts: Object.fromEntries(candidateRows.filter((a) => a.estimatedCost != null).map((a) => [a.id, a.estimatedCost as number])) as Record<string, number>,
     prefillCount: approver && !row ? programDefaultIds(base.actions, linked, year).length : 0,
     /** Création possible : approbateur, pas encore de programme, année N-1 à N+1, version du DUERP en vigueur. */
     creatable: approver && !row && year >= thisYear - 1 && year <= thisYear + 1 && !!base.current,
@@ -900,7 +911,7 @@ export function unitRiskTodos(
       });
     }
     for (const r of ur.filter((r) => r.flag === 'toReview')) {
-      todo.push({ ...base, tone: 'warn', title: `${u.label} · ${r.hazard} — résiduel à recoter (actions clôturées)`, href: `/risques?risque=${r.id}` });
+      todo.push({ ...base, tone: 'warn', title: `${u.label} · ${r.hazard} — résiduel à recoter (actions vérifiées)`, href: `/risques?risque=${r.id}` });
     }
   }
   return todo;

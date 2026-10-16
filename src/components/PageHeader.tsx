@@ -9,7 +9,7 @@ export async function PageHeader({ title, sub, actions }: { title: string; sub: 
   // Champs affichés seulement : ni responsables ni site dans la charge de la page.
   const notifications = (await loadNotifications()).map((n) => ({
     key: n.key, date: n.date, kind: n.kind, tone: n.tone, title: n.title, who: n.who, href: n.href, urgent: n.urgent, read: n.read,
-    elsewhere: n.elsewhere, siteLabel: n.siteLabel,
+    elsewhere: n.elsewhere, siteLabel: n.siteLabel, family: n.family,
   }));
   return (
     <header className="vg-header">

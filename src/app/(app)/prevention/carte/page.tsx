@@ -7,7 +7,6 @@ import { isRealDate } from '@/components/sitemap/model';
 import { Icon, ToneTag } from '@/components/ui';
 import { canManage } from '@/lib/domain';
 import { guard } from '@/lib/guard';
-import { loadFormOptions } from '@/lib/data/options';
 import { loadSitemap } from '@/lib/data/sitemap';
 
 const TITLE = 'Carte du site et coactivité';
@@ -23,7 +22,8 @@ export default async function SiteMapPage({ searchParams }: Props) {
   const { role, demo } = await guard('prevention');
   const sp = await searchParams;
   const plan = str(sp.plan), permit = str(sp.permis);
-  const [data, options] = await Promise.all([loadSitemap({ site: str(sp.site), plan, permit }), loadFormOptions()]);
+  // Aucune liste du formulaire d'action : la carte ne crée pas d'action QSE (réponses du service QHSE du 15/10/2026).
+  const data = await loadSitemap({ site: str(sp.site), plan, permit });
   const requested = str(sp.date);
   const initialDate = isRealDate(requested) ? requested : data.now;
   const rule = { seveso: data.site.seveso, ppFromFirstMinute: data.site.ppFromFirstMinute };
@@ -66,8 +66,7 @@ export default async function SiteMapPage({ searchParams }: Props) {
             )}
           </span>
         </div>
-        <SiteMapScreen key={`${data.site.id}|${plan ?? ''}|${permit ?? ''}`} data={data} canManage={canManage(role)} initialDate={initialDate}
-          actionOptions={{ people: options.people, origins: options.origins, sites: options.sites, allSites: options.allSites }} />
+        <SiteMapScreen key={`${data.site.id}|${plan ?? ''}|${permit ?? ''}`} data={data} canManage={canManage(role)} initialDate={initialDate} />
       </div>
     </>
   );

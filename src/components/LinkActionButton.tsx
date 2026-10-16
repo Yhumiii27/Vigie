@@ -10,7 +10,7 @@ type Option = readonly [value: string, label: string];
 type Props = {
   /** Source à rattacher, syntaxe de src/lib/action-links.ts : risk:12 · finding:3 · requirement:5 · control:2 · review:1… */
   link: string;
-  /** Actions proposées (loadFormOptions().actions : ouvertes, non annulées), déjà filtrées par l'appelant au besoin. */
+  /** Actions proposées (loadFormOptions().actions : ni vérifiées ni abandonnées), déjà filtrées par l'appelant au besoin. */
   actions?: readonly Option[];
   /** Action actuellement rattachée : le bouton propose alors « Détacher » (confirmation en ligne). */
   current?: string | null;
@@ -23,8 +23,10 @@ type Props = {
 };
 
 /**
- * Rattacher une action existante du plan d'actions à une source (et la détacher) — composant transverse
- * (risques, veille, audits, revue). À placer à côté de NewActionButton.
+ * Rattacher une action existante du plan d'actions à un lien complémentaire (et la détacher) — composant transverse
+ * (risques, veille, revue, documents). À placer à côté de NewActionButton, pour le service QHSE seulement (ACT-22 : toute
+ * modification d'une action relève du QHSE ; src/server/links.ts le refuse aux autres rôles). Jamais pour un événement
+ * ni un audit (fixés à la création de l'action, D15), ni pour une habilitation, un plan de prévention ou un permis.
  */
 export function LinkActionButton({ link, actions = [], current, label = 'Rattacher une action existante', className = 'vg-text-btn', icon = 'ph-link', style, disabled, tooltip }: Props) {
   const [open, setOpen] = useState(false);
@@ -66,7 +68,7 @@ export function LinkActionButton({ link, actions = [], current, label = 'Rattach
   const close = () => setOpen(false);
   return (
     <>
-      <button type="button" className={className} style={style} disabled={disabled || !actions.length} title={tooltip ?? (actions.length ? undefined : 'Aucune action ouverte à rattacher')} onClick={() => setOpen(true)}>
+      <button type="button" className={className} style={style} disabled={disabled || !actions.length} title={tooltip ?? (actions.length ? undefined : 'Aucune action en cours à rattacher')} onClick={() => setOpen(true)}>
         {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} />}{label}
       </button>
       <Dialog open={open} onClose={close} title="Rattacher une action existante" kicker="Plan d'actions unique" width={520}>
@@ -95,7 +97,7 @@ export function LinkActionForm({ link, actions, onDone, onCancel }: { link: stri
   });
   return (
     <div className="vg-form">
-      <Field name="actionId" label="Action" hint="Actions ouvertes du plan d'actions (ni clôturées, ni annulées).">
+      <Field name="actionId" label="Action" hint="Actions en cours du plan d'actions (ni vérifiées, ni abandonnées).">
         <Select name="actionId" options={actions} placeholder="Choisir…" value={picked} onChange={(e) => setPicked(e.target.value)} autoFocus />
       </Field>
       {error && <div role="alert" className="vg-form-error">{error}</div>}

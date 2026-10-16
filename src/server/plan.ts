@@ -1,208 +1,297 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { TransactionRollbackError, eq } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { fmtDate } from '@/lib/dates';
+import { and, eq } from 'drizzle-orm';
+import { getDb, schema as t, type DbOrTx } from '@/db';
+import { actionLinks, checkActionLink, linkFacts, parseActionLink } from '@/lib/action-links';
+import {
+  NON_QSE_LINK_MESSAGE, QHSE_ONLY_CREATE_MESSAGE, actionDateErrors, actionHref, actionRights, admissibleSources, canCreateAction, canRemoveProof,
+  isNonQseLinkKind, missingFields, sourceEditable, textTooLong, type ActionCompletion, type MissingField,
+} from '@/lib/action-rules';
+import {
+  ACTION_AVANCEMENTS, ACTION_SOURCES, ACTION_TEXT_MAX, DOMAIN_KEYS, EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, PRIORITY_KEYS, SOURCE_KEYS,
+  SOURCE_LINK_KINDS, type SourceKey,
+} from '@/lib/domain';
+import { formReader, type FormState } from '@/lib/forms';
+import { requireApprover, requireInSite } from '@/lib/guard';
+import type { ActionInsert } from '@/lib/queries';
+import { getSession, inSite } from '@/lib/session';
 import { today } from '@/lib/today';
-import { EVENT_ORIGINS, ORIGINS, canApprove, canManage } from '@/lib/domain';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
-import { applyActionLink, checkActionLink, linkLogEntity, originLinkFor, originSiteOf } from '@/lib/action-links';
-import { ALL_SITES_RESERVED, requireInSite, requireManager } from '@/lib/guard';
-import { ALL_SITES, activeSiteIds, getSession, inSite } from '@/lib/session';
-import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
-import { diffFields, logChange } from './changelog';
+import { deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
+import {
+  ACTION_FIELD_LABELS, ActionLinkError, COST_MAX, HOURS_MAX, actionFieldDetails, createActionRecord, filesProblem, nameBook, newSiteProblem,
+  notifyReassigned, ownOrInSite, pilotProblem, readNewActionFields, type ActionField,
+} from './action-create';
+import { logChange } from './changelog';
+import { actionProofTitle, notify, qhseAnimatorIds } from './notify';
 
-const ORIGIN_KEYS = Object.keys(ORIGINS);
-const CANCELLED = 'Action annulée : consultation seule.';
-const SITE_CHOICE = 'Une nouvelle action vaut pour le site sélectionné ou pour tous les sites.';
+// Création et modification d'une action du plan d'actions QSE (ACT-20), preuves (ACT-25). Champs postés : plan du
+// paquet 1 § 2.14. Ordre des contrôles (CLAUDE.md) : droits → validation → chargement → requireInSite → une transaction
+// avec ses entrées de journal (byId explicite) → revalidatePath('/', 'layout').
+//   - Création : service QHSE seulement (ACT-22, réponses du 15/10/2026), depuis le plan comme depuis un écran source ;
+//     un seul site, actif, du périmètre (jamais « Tous les sites ») ; élément lié (`link`) facultatif : il impose la source
+//     (admissibleSources, D20), le site (celui de l'élément) et la référence d'origine par défaut (linkFacts) ; habilitation,
+//     plan de prévention et permis refusés (aucune action QSE) ; sans élément, référence d'origine obligatoire.
+//   - Modification : QHSE ; jamais une action abandonnée ; avancement affiché (`from`) contrôlé ; source lue seulement
+//     tant qu'elle est vide (reprise), élément jamais changé ; règles de dates et de longueur sur les seules valeurs
+//     modifiées (D24) ; champs obligatoires manquants (« à compléter ») exigés ; vérification planifiée figée une fois
+//     « Vérifiée » ; transfert vers un site actif du périmètre, jamais hors du site de l'élément lié.
+//   - Preuves : le responsable (tous sites, D19) ou le QHSE (site sélectionné) ; jamais sur une action abandonnée ;
+//     retrait (seule suppression physique admise, spec § 10) avant « Vérifiée » : QHSE, ou le responsable actuel pour sa
+//     propre preuve. Preuve du responsable hors QHSE : une notification par fichier à chaque animateur QHSE (ACT-31).
 
-/**
- * Crée ou modifie une action du plan d'actions unique.
- * Champ `siteId` : '' = site sélectionné (à défaut celui de l'événement lié), 'all' = tous les sites. Une création vise
- * le site sélectionné (ou tous les sites) ; une modification peut transférer l'action vers un autre site actif.
- * Champ `eventId` (sélecteur « Événement lié ») : seulement pour les origines Événement et Client ; remis à null sinon.
- * Champ caché `link` pour rattacher la nouvelle action à son origine (registre src/lib/action-links.ts) :
- * event:<id> · risk:<id> · finding:<id> · requirement:<id> · control:<id> · plan:<id> · docversion:<id>
- * · qualification:<personId>:<titleId> · review:<id> · reviewdecision:<id>
- * · preventionplan:<id> · permit:<id> · document:<id> · wastestream:<id> · wasteentry:<id>
- * — mêmes contrôles que « Rattacher une action existante » (checkActionLink : écran ouvert au rôle, site de la source).
- * Origine Prévention, Documents ou Environnement sans lien explicite : la référence d'origine désignant un plan, un permis,
- * un document, une filière ou un enlèvement y rattache l'action (originLinkFor, ACT-01).
- * Origine verrouillée (ACT-01) : `origin` et `originRef` ne sont lus qu'à la création ; une modification les conserve
- * (la référence suit seulement l'événement lié qui change, quand elle était celle de l'ancien événement).
- * Action en « Efficacité à vérifier » : la date de vérification reste obligatoire et ne peut être reportée dans le passé.
- */
+const ABANDONED = 'Action abandonnée : consultation seule.';
+const STALE = "L'action a changé entre-temps : la fiche est actualisée.";
+const DENIED = 'Votre rôle ne permet pas cette modification.';
+const SOURCE_MISMATCH = "Source incompatible avec l'élément lié.";
+const SITE_OF_ELEMENT = 'Site différent de celui de l’élément lié.';
+
+/** Champ du formulaire d'un champ obligatoire manquant (missingFields). */
+const MISSING_FIELD: Record<MissingField, string> = {
+  source: 'source', problem: 'problem', domain: 'domain', priority: 'priority', siteId: 'siteId', verifyDueOn: 'verifyDueOn', doneOn: 'doneOn',
+  closedOn: 'closedOn', verifyMethod: 'verifyMethod', efficacyNote: 'efficacyNote', effective: 'effective',
+};
+
+/** Crée (QHSE seulement, ACT-22) ou modifie une action du plan d'actions QSE (ACT-20). */
 export async function saveAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireManager();
-  if (error) return { error };
+  const id = formReader(fd).opt('id');
+  return id ? updateAction(id, fd) : createAction(fd);
+}
+
+// ─── Création ───────────────────────────────────────────────────────────────
+
+async function createAction(fd: FormData): Promise<FormState> {
+  const session = await getSession();
+  if (!canCreateAction(session.role)) return { error: QHSE_ONLY_CREATE_MESSAGE };
   const f = formReader(fd);
-  const id = f.opt('id');
-  const title = f.str('title', { required: true, max: 200 });
-  const description = f.opt('description');
-  // Origine et référence : lues à la création seulement (origine verrouillée ensuite).
-  const originField = id ? null : f.oneOf('origin', ORIGIN_KEYS, { required: true });
-  const pilotId = f.str('pilotId', { required: true });
-  const dueOn = f.date('dueOn', { required: true });
-  const kind = f.oneOf('kind', ['C', 'P'] as const, { required: true });
-  const verifyDueOn = f.date('verifyDueOn');
-  const refField = id ? '' : f.str('originRef', { max: 120 });
-  const siteField = f.opt('siteId');
+  const source = f.oneOf('source', SOURCE_KEYS, { required: true });
   const link = f.opt('link');
+  const originField = f.str('originRef', { max: ORIGIN_REF_MAX });
+  const v = readNewActionFields(f);
+  const estimatedCost = f.decimal('estimatedCost', { min: 0, max: COST_MAX });
+  const actualCost = f.decimal('actualCost', { min: 0, max: COST_MAX });
+  if (!link && !originField) f.fail('originRef', "Précisez la référence d'origine : aucun élément lié.");
+  const now = today();
+  const dates = actionDateErrors({ openedOn: now, dueOn: v.dueOn, verifyDueOn: v.verifyDueOn }, now, { dueOn: true, verifyDueOn: true });
+  Object.entries(dates.fieldErrors).forEach(([k, msg]) => f.fail(k, msg));
+  const parsed = link ? parseActionLink(link) : null;
+  if (link && !parsed) f.fail('link', 'Type de rattachement inconnu.');
+  if (parsed && isNonQseLinkKind(parsed.kind)) f.fail('link', NON_QSE_LINK_MESSAGE);
   if (!f.ok) return f.state();
 
   const db = await getDb();
-  const [cur] = id ? await db.select().from(t.actions).where(eq(t.actions.id, id)) : [];
-  if (id && !cur) return { error: 'Action introuvable.' };
-  const origin = cur ? cur.origin : originField!;
-  let originRef = cur ? cur.originRef : refField;
-  // Formulaire sans sélecteur « Événement lié » (modification depuis un autre écran) : l'événement lié est conservé.
-  const eventId = !EVENT_ORIGINS.includes(origin) ? null : cur && !fd.has('eventId') ? cur.eventId : f.opt('eventId');
-  if (cur?.status === 'cancelled') return { error: CANCELLED };
-  if (cur?.status === 'done' && !canApprove(session.role)) return { error: "Seuls l'animateur QHSE et la direction modifient une action clôturée." };
-  if (cur) {
-    const blocked = await requireInSite(cur.siteId);
-    if (blocked) return { error: blocked };
-  }
+  const pilot = await pilotProblem(db, v.pilotId, now);
+  if (pilot) return { error: 'Certains champs sont à corriger.', fieldErrors: { pilotId: pilot } };
 
-  let eventSite: string | null = null;
-  if (eventId) {
-    const [ev] = await db.select({ id: t.events.id, siteId: t.events.siteId }).from(t.events).where(eq(t.events.id, eventId));
-    if (!ev) return { error: 'Événement lié introuvable.', fieldErrors: { eventId: 'Événement introuvable.' } };
-    const blocked = await requireInSite(ev.siteId);
-    if (blocked) return { error: blocked, fieldErrors: { eventId: 'Événement d\'un autre site.' } };
-    eventSite = ev.siteId;
-    // Référence par défaut : celle de l'événement, mise à jour si l'événement lié change (sauf référence saisie à part).
-    if (!originRef || (cur && eventId !== cur.eventId && originRef === cur.eventId)) originRef = ev.id;
-  }
-  if (!cur && !originRef) return { error: "Précisez la référence d'origine (événement, audit, exigence…).", fieldErrors: { originRef: 'Champ obligatoire.' } };
-
-  // '' = site sélectionné (ou celui de l'événement lié) ; 'all' = tous les sites.
-  const selected = session.site.id !== ALL_SITES ? session.site.id : null;
-  const siteId = siteField === ALL_SITES ? null : siteField ?? eventSite ?? selected;
-  if (siteId) {
-    const [site] = await db.select({ id: t.sites.id }).from(t.sites).where(eq(t.sites.id, siteId));
-    if (!site) return { error: 'Site inconnu.', fieldErrors: { siteId: 'Site inconnu.' } };
-  }
-  if (!cur) {
-    if (!inSite(selected, siteId)) return { error: SITE_CHOICE, fieldErrors: { siteId: SITE_CHOICE } };
-    const blocked = await requireInSite(siteId, { create: true });
-    if (blocked) return { error: blocked, fieldErrors: { siteId: blocked } };
-  } else if (cur.siteId !== siteId) {
-    // Transfert (l'action relève déjà du site sélectionné, contrôlé plus haut) : vers un site actif du périmètre, ou vers
-    // « Tous les sites » pour un périmètre complet seulement (une action commune existante reste modifiable).
-    const blocked = !siteId
-      ? (session.allowedSiteIds ? ALL_SITES_RESERVED : null)
-      : !(await activeSiteIds()).includes(siteId) ? 'Site archivé ou inconnu : choisissez un site actif.' : null;
-    if (blocked) return { error: blocked, fieldErrors: { siteId: blocked } };
-    // L'action reste sur le site de sa source d'origine (plan, permis, document, filière, enlèvement) : origine verrouillée.
-    const sourceSite = await originSiteOf(db, cur);
-    if (sourceSite !== undefined && !inSite(sourceSite, siteId)) {
-      const error = `L'action doit concerner le site de sa source (${cur.originRef}) : choisissez ce site.`;
-      return { error, fieldErrors: { siteId: 'Site différent de celui de la source.' } };
-    }
-  }
-
-  if (cur?.status === 'verify') {
-    // Une vérification d'efficacité ne peut être ni retirée ni reportée dans le passé (signal « dépassée »).
-    if (!verifyDueOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { verifyDueOn: "Date obligatoire tant que l'efficacité est à vérifier." } };
-    if (verifyDueOn !== cur.verifyDueOn && verifyDueOn < today()) return { error: 'Certains champs sont à corriger.', fieldErrors: { verifyDueOn: 'La vérification ne peut pas être planifiée dans le passé.' } };
-  }
-
-  if (!cur && link) {
+  // Élément lié : écran de la source ouvert en saisie, site de l'élément dans le périmètre et le site sélectionné.
+  let originRef = originField;
+  if (link && parsed) {
     const checked = await checkActionLink(db, session.role, link);
-    if ('error' in checked) return { error: checked.error };
-  }
-  // Source d'origine (plan, permis, document, filière, enlèvement) : lien explicite ou référence d'origine résolue.
-  let originLink: string | null = null;
-  if (!cur) {
-    const found = await originLinkFor(db, { origin, originRef, link, siteId });
-    if ('error' in found) return found;
-    originLink = found.link;
-  }
-
-  const values = { title, description, origin, originRef, pilotId, dueOn: dueOn!, kind: kind!, verifyDueOn, siteId };
-
-  if (cur) {
-    let linkError: string | null = null;
-    await db.transaction(async (tx) => {
-      await tx.update(t.actions).set({ ...values, eventId: eventId === cur.eventId ? cur.eventId : null }).where(eq(t.actions.id, cur.id));
-      // Nouvel événement lié : rattachement par le registre (contrôle de l'étape, classement sans suite).
-      if (eventId && eventId !== cur.eventId) {
-        linkError = await applyActionLink(tx, `event:${eventId}`, cur.id);
-        if (linkError) return tx.rollback();
-      }
-      const [people, sites] = await Promise.all([
-        tx.select({ id: t.people.id, name: t.people.name }).from(t.people),
-        tx.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
-      ]);
-      const name = (pid: string | null) => (pid ? people.find((p) => p.id === pid)?.name ?? pid : null);
-      const site = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label.split(' — ')[0] ?? sid : 'Tous les sites');
-      const shown = (a: { title: string; pilotId: string; dueOn: string; siteId: string | null; origin: string; originRef: string; eventId: string | null }) => ({
-        title: a.title, pilot: name(a.pilotId), due: fmtDate(a.dueOn), site: site(a.siteId),
-        origin: `${ORIGINS[a.origin]?.label ?? a.origin} · ${a.originRef}`, event: a.eventId,
-      });
-      const details = diffFields(shown(cur), shown({ ...values, eventId }), { title: 'Titre', pilot: 'Pilote', due: 'Échéance', site: 'Site', origin: 'Origine', event: 'Événement' });
-      await logChange(tx, { entityType: 'action', entityId: cur.id, action: 'update', summary: details.length ? `Modifiée : ${details.map((d) => d.field.toLowerCase()).join(', ')}` : 'Modifiée', details, byId: session.user.id });
-    }).catch((e: unknown) => { if (!(e instanceof TransactionRollbackError)) throw e; });
-    if (linkError) return { error: linkError, fieldErrors: { eventId: linkError } };
-    revalidatePath('/', 'layout');
-    return { ok: true, id: cur.id };
-  }
-
-  const ids = (await db.select({ id: t.actions.id }).from(t.actions)).map((r) => r.id);
-  const newId = nextRef(ids, 'A-');
-  let linkError: string | null = null;
-  await db.transaction(async (tx) => {
-    await tx.insert(t.actions).values({ id: newId, ...values, status: 'todo' });
-    await logChange(tx, { entityType: 'action', entityId: newId, action: 'create', summary: 'Action créée', byId: session.user.id });
-    // Rattachements (registre src/lib/action-links.ts) : événement lié, source d'origine, puis source de l'écran appelant ;
-    // un échec annule la création.
-    for (const l of [eventId ? `event:${eventId}` : null, originLink, link === originLink ? null : link]) {
-      if (!l) continue;
-      linkError = await applyActionLink(tx, l, newId);
-      if (linkError) return tx.rollback();
-      const source = linkLogEntity(l);
-      if (source) await logChange(tx, { ...source, action: 'link', summary: `Action ${newId} créée et rattachée`, byId: session.user.id });
+    if ('error' in checked) return { error: checked.error, fieldErrors: { link: checked.error } };
+    const el = await linkFacts(db, link);
+    if (!el) return { error: 'Élément introuvable : le rattachement est impossible.', fieldErrors: { link: 'Élément introuvable.' } };
+    const admitted = admissibleSources(parsed.kind, el.facts);
+    const target = ACTION_SOURCES[source!].target;
+    if (!admitted.includes(source!) || !SOURCE_LINK_KINDS[target].includes(parsed.kind)) {
+      return { error: SOURCE_MISMATCH, fieldErrors: { source: SOURCE_MISMATCH } };
     }
-  }).catch((e: unknown) => { if (!(e instanceof TransactionRollbackError)) throw e; });
-  if (linkError) return { error: linkError };
+    if (!inSite(el.siteId, v.siteId)) {
+      return { error: `L'action doit concerner le site de son élément lié (${el.reference}) : choisissez ce site.`, fieldErrors: { siteId: SITE_OF_ELEMENT } };
+    }
+    if (!originRef) originRef = el.reference;
+  }
+  const siteError = await newSiteProblem(v.siteId);
+  if (siteError) return { error: siteError, fieldErrors: { siteId: siteError } };
+
+  let created: string;
+  try {
+    created = await db.transaction(async (tx) => (await createActionRecord(tx, {
+      source: source!, originRef, pilotId: v.pilotId, priority: v.priority!, dueOn: v.dueOn!, domain: v.domain!, problem: v.problem, detail: v.detail,
+      verifyDueOn: v.verifyDueOn!, riskLevel: v.riskLevel, estimatedCost, actualCost, siteId: v.siteId, links: link ? [link] : [], strictLinks: true,
+    }, { byId: session.user.id, byName: session.user.name, today: now })).id);
+  } catch (e) {
+    if (e instanceof ActionLinkError) return { error: e.message, fieldErrors: { link: e.message } };
+    throw e;
+  }
   revalidatePath('/', 'layout');
-  return { ok: true, id: newId };
+  return { ok: true, id: created, ...(dates.warnings.length ? { warnings: dates.warnings } : {}) };
+}
+
+// ─── Modification ───────────────────────────────────────────────────────────
+
+/** Sites des éléments liés d'une action (événement, rattachements, sources d'origine) : un transfert doit les respecter. */
+async function elementSites(db: DbOrTx, actionId: string): Promise<{ label: string; siteId: string }[]> {
+  const out: { label: string; siteId: string }[] = [];
+  for (const l of await actionLinks(db, actionId)) {
+    const parsed = parseActionLink(l.link);
+    const siteId = parsed ? await parsed.def.siteOf?.(db, parsed.args) : null;
+    if (siteId) out.push({ label: l.label, siteId });
+  }
+  return out;
+}
+
+/** Sources admises par l'événement ou l'audit d'une action dont la source est vide (reprise) ; null : aucune contrainte. */
+async function sourcesOfElement(db: DbOrTx, actionId: string): Promise<readonly SourceKey[] | null> {
+  const kinds = EVENT_AUDIT_LINK_KINDS as readonly string[];
+  const links = (await actionLinks(db, actionId)).filter((l) => kinds.includes(l.kind));
+  if (!links.length) return null;
+  const admitted = new Set<SourceKey>();
+  for (const l of links) {
+    const el = await linkFacts(db, l.link);
+    if (el) admissibleSources(l.kind, el.facts).forEach((s) => admitted.add(s));
+  }
+  return [...admitted];
+}
+
+async function updateAction(id: string, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const from = f.oneOf('from', ACTION_AVANCEMENTS, { required: true });
+  const pilotId = f.str('pilotId', { required: true });
+  const priority = f.oneOf('priority', PRIORITY_KEYS, { required: true });
+  const dueOn = f.date('dueOn', { required: true });
+  const domain = f.oneOf('domain', DOMAIN_KEYS, { required: true });
+  const problem = f.str('problem', { required: true });
+  const detail = f.str('detail', { required: true });
+  const riskLevel = f.int('riskLevel', { min: 0, max: 4 });
+  const estimatedCost = f.decimal('estimatedCost', { min: 0, max: COST_MAX });
+  const actualCost = f.decimal('actualCost', { min: 0, max: COST_MAX });
+  const siteId = f.str('siteId', { required: true });
+  if (siteId === 'all') f.fail('siteId', 'Choisissez un site : une action porte un seul site.');
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const [cur] = await db.select().from(t.actions).where(eq(t.actions.id, id));
+  if (!cur) return { error: 'Action introuvable.' };
+  // Site d'abord : rien de l'état d'une action hors du site sélectionné ou du périmètre n'est révélé (avancement, abandon).
+  const blocked = await requireInSite(cur.siteId);
+  if (blocked) return { error: blocked };
+  if (cur.status === 'abandonnee') return { error: ABANDONED };
+  if (cur.status !== from) {
+    revalidatePath('/', 'layout');
+    return { error: STALE };
+  }
+
+  // Champs selon l'avancement (§ 2.14, D17) : vérification planifiée figée une fois Vérifiée ; date effective à Terminée
+  // et Vérifiée ; pointage à Vérifiée. Nature, constat, résultat et date de vérification ne changent que par « Rouvrir »
+  // puis une nouvelle vérification (D17, décision de l'Integration du 15/10/2026).
+  const verified = cur.status === 'verifiee';
+  const withDone = cur.status === 'terminee' || verified;
+  const verifyDueOn = verified ? cur.verifyDueOn : f.date('verifyDueOn');
+  const doneOn = withDone ? f.date('doneOn') : cur.doneOn;
+  const verifyMethod = cur.verifyMethod;
+  const efficacyNote = cur.efficacyNote;
+  const hours = verified && fd.has('hours') ? f.decimal('hours', { min: 0, max: HOURS_MAX }) : cur.hours;
+  // Source : posée une fois, puis verrouillée ; lue seulement tant qu'elle est vide (reprise).
+  const source = sourceEditable(cur) ? f.oneOf('source', SOURCE_KEYS) : cur.source;
+  if (!f.ok) return f.state();
+
+  const next: ActionCompletion & Record<string, unknown> = {
+    status: cur.status, source, problem, domain, priority, siteId, verifyDueOn, doneOn, closedOn: cur.closedOn, verifyMethod, efficacyNote,
+    effective: cur.effective,
+  };
+  // Champs obligatoires manquants (« à compléter ») exigés, parmi ceux que le formulaire porte à cet avancement.
+  const editable: MissingField[] = ['source', 'problem', 'domain', 'priority', 'siteId', 'verifyDueOn', ...(withDone ? ['doneOn' as const] : [])];
+  missingFields(next).filter((m) => editable.includes(m)).forEach((m) => f.fail(MISSING_FIELD[m], 'Champ obligatoire.'));
+  // D24 : longueurs et dates contrôlées pour les seules valeurs modifiées.
+  if (textTooLong(problem, cur.problem)) f.fail('problem', `${ACTION_TEXT_MAX} caractères au maximum.`);
+  if (textTooLong(detail, cur.detail)) f.fail('detail', `${ACTION_TEXT_MAX} caractères au maximum.`);
+  const now = today();
+  const dates = actionDateErrors({ openedOn: cur.openedOn, dueOn, verifyDueOn, doneOn, closedOn: cur.closedOn }, now, {
+    dueOn: dueOn !== cur.dueOn, verifyDueOn: verifyDueOn !== cur.verifyDueOn, doneOn: doneOn !== cur.doneOn,
+  });
+  Object.entries(dates.fieldErrors).forEach(([k, msg]) => f.fail(k, msg));
+  if (!f.ok) return f.state();
+
+  if (pilotId !== cur.pilotId) {
+    const pilot = await pilotProblem(db, pilotId, now);
+    if (pilot) return { error: 'Certains champs sont à corriger.', fieldErrors: { pilotId: pilot } };
+  }
+  if (source !== cur.source) {
+    const admitted = await sourcesOfElement(db, cur.id);
+    if (admitted && !admitted.includes(source!)) return { error: SOURCE_MISMATCH, fieldErrors: { source: SOURCE_MISMATCH } };
+  }
+  if (siteId !== cur.siteId) {
+    // Transfert (QHSE) : site actif du périmètre, jamais hors du site d'un élément lié.
+    const siteError = await newSiteProblem(siteId);
+    if (siteError) return { error: siteError, fieldErrors: { siteId: siteError } };
+    const off = (await elementSites(db, cur.id)).find((e) => e.siteId !== siteId);
+    if (off) return { error: `L'action doit concerner le site de son élément lié (${off.label}) : choisissez ce site.`, fieldErrors: { siteId: SITE_OF_ELEMENT } };
+  }
+
+  const patch = {
+    pilotId, priority: priority!, dueOn: dueOn!, domain: domain!, problem, detail, riskLevel, estimatedCost, actualCost, siteId,
+    verifyDueOn, doneOn, verifyMethod, efficacyNote, hours, source,
+  } satisfies Partial<ActionInsert>;
+  const before = Object.fromEntries((Object.keys(ACTION_FIELD_LABELS) as ActionField[]).map((k) => [k, cur[k]]));
+  const result = await db.transaction(async (tx) => {
+    const details = actionFieldDetails(before, patch, await nameBook(tx));
+    if (!details.length) return 'unchanged' as const;
+    const done = await tx.update(t.actions).set(patch).where(and(eq(t.actions.id, cur.id), eq(t.actions.status, cur.status))).returning({ id: t.actions.id });
+    if (!done.length) return 'stale' as const;
+    await logChange(tx, {
+      entityType: 'action', entityId: cur.id, action: 'update', byId: session.user.id, details,
+      summary: `Modifiée : ${details.map((d) => d.field.toLowerCase()).join(', ')}`,
+    });
+    // Nouveau responsable : même notification qu'à la création (§ 22.15).
+    if (pilotId !== cur.pilotId) await notifyReassigned(tx, { id: cur.id, detail }, pilotId, { id: session.user.id, name: session.user.name });
+    return 'saved' as const;
+  });
+  if (result === 'stale') {
+    revalidatePath('/', 'layout');
+    return { error: STALE };
+  }
+  if (result === 'saved') revalidatePath('/', 'layout');
+  return { ok: true, id: cur.id, ...(dates.warnings.length ? { warnings: dates.warnings } : {}) };
 }
 
 // ─── Preuves (pièces jointes de l'action) ───────────────────────────────────
 
-/** Ajoute des preuves (photos, PV, attestations) : encadrement ou pilote de l'action, tant qu'elle n'est pas annulée. */
+/** Joint des preuves à une action (ACT-25) : responsable ou QHSE, jamais sur une action abandonnée. */
 export async function addActionFiles(fd: FormData): Promise<{ error?: string; count?: number }> {
   const session = await getSession();
   const f = formReader(fd);
   const actionId = f.str('actionId', { required: true });
   const files = f.files('files');
+  if (!actionId) return { error: 'Action introuvable.' };
   const db = await getDb();
   const [a] = await db.select().from(t.actions).where(eq(t.actions.id, actionId));
   if (!a) return { error: 'Action introuvable.' };
-  if (!canManage(session.role) && a.pilotId !== session.user.id) return { error: 'Votre rôle ne permet pas cette modification.' };
-  if (a.status === 'cancelled') return { error: CANCELLED };
-  const blocked = await requireInSite(a.siteId);
+  const rights = actionRights(session.role, session.user.id, a);
+  if (!rights.qhse && !rights.responsible) return { error: DENIED };
+  const blocked = await ownOrInSite(a, rights.responsible);
   if (blocked) return { error: blocked };
+  if (!rights.canAttach) return { error: ABANDONED };
   if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  if (files.length > MAX_FILES_PER_BATCH) return { error: `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.` };
-  if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) return { error: `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.` };
-  const invalid = files.map(checkUpload).find(Boolean);
+  const invalid = filesProblem(files);
   if (invalid) return { error: invalid };
-  for (const file of files) await saveUpload(file, 'action', actionId, session.user.id);
-  await logChange(null, {
-    entityType: 'action', entityId: actionId, action: 'attach', byId: session.user.id,
-    summary: `${files.length} preuve${files.length > 1 ? 's' : ''} ajoutée${files.length > 1 ? 's' : ''}`,
-    details: files.map((file) => ({ field: 'Fichier', from: null, to: file.name })),
+
+  await db.transaction(async (tx) => {
+    for (const file of files) await saveUpload(file, 'action', actionId, session.user.id, { db: tx });
+    await logChange(tx, {
+      entityType: 'action', entityId: actionId, action: 'attach', byId: session.user.id,
+      summary: `${files.length} preuve${files.length > 1 ? 's' : ''} ajoutée${files.length > 1 ? 's' : ''}`,
+      details: files.map((file) => ({ field: 'Fichier', from: null, to: file.name.slice(0, 200) || 'fichier' })),
+    });
+    // ACT-31 : preuve du responsable (hors QHSE) → chaque animateur QHSE, une notification par fichier.
+    if (rights.responsible && !rights.qhse) {
+      const animators = await qhseAnimatorIds(tx);
+      for (const file of files) {
+        for (const personId of animators) {
+          await notify(tx, {
+            personId, type: 'action_preuve', entityType: 'action', entityId: actionId, byId: session.user.id,
+            title: actionProofTitle(actionId, session.user.name, file.name.slice(0, 200) || 'fichier'), href: actionHref(actionId),
+          });
+        }
+      }
+    }
   });
   revalidatePath('/', 'layout');
   return { count: files.length };
 }
 
-/** Retire une preuve ajoutée par erreur (seule suppression admise, avant clôture) : encadrement ou auteur de l'envoi. */
+/** Retire une preuve ajoutée par erreur (seule suppression physique admise, spec § 10). */
 export async function removeActionFile(attachmentId: string): Promise<{ error?: string }> {
   const session = await getSession();
   const db = await getDb();
@@ -210,15 +299,25 @@ export async function removeActionFile(attachmentId: string): Promise<{ error?: 
   if (!row || row.entityType !== 'action') return { error: 'Pièce jointe introuvable.' };
   const [a] = await db.select().from(t.actions).where(eq(t.actions.id, row.entityId));
   if (!a) return { error: 'Action introuvable.' };
-  if (a.status === 'done' || a.status === 'cancelled') return { error: 'Action clôturée ou annulée : les preuves ne peuvent plus être retirées.' };
-  if (!canManage(session.role) && row.uploadedBy !== session.user.id) return { error: 'Seul l\'auteur de l\'envoi ou l\'encadrement peut retirer cette pièce.' };
-  const blocked = await requireInSite(a.siteId);
+  const rights = actionRights(session.role, session.user.id, a);
+  if (!rights.qhse && !rights.responsible) return { error: DENIED };
+  const blocked = await ownOrInSite(a, rights.responsible);
   if (blocked) return { error: blocked };
-  await deleteAttachment(attachmentId);
-  await logChange(null, {
-    entityType: 'action', entityId: a.id, action: 'detach', byId: session.user.id,
-    summary: 'Preuve retirée', details: [{ field: 'Fichier', from: row.fileName, to: null }],
+  if (a.status === 'verifiee' || a.status === 'abandonnee') return { error: 'Action vérifiée ou abandonnée : les preuves ne peuvent plus être retirées.' };
+  if (!canRemoveProof(rights, a.status, row.uploadedBy, session.user.id)) return { error: "Seul l'auteur de l'envoi, responsable de l'action, ou le service QHSE peut retirer cette preuve." };
+  // Ligne supprimée et journal écrits dans la même transaction ; le fichier n'est effacé qu'après validation. Deux
+  // retraits simultanés : un seul supprime la ligne, donc un seul est journalisé.
+  const removed = await db.transaction(async (tx) => {
+    const gone = await deleteAttachment(attachmentId, { db: tx });
+    if (!gone) return null;
+    await logChange(tx, {
+      entityType: 'action', entityId: a.id, action: 'detach', byId: session.user.id,
+      summary: 'Preuve retirée', details: [{ field: 'Fichier', from: row.fileName, to: null }],
+    });
+    return gone;
   });
+  if (!removed) return { error: 'Pièce jointe introuvable.' };
+  await removeStoredFile(removed);
   revalidatePath('/', 'layout');
   return {};
 }

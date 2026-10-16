@@ -1,10 +1,18 @@
 import { sql } from 'drizzle-orm';
-import { boolean, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
+// Chemin relatif : drizzle-kit charge ce fichier sans les alias de tsconfig.
+import {
+  ACTION_AVANCEMENTS, DOMAIN_KEYS, FOLLOW_REASON_KEYS, PRIORITY_KEYS, REMINDER_SEND_STATUSES, SOURCE_KEYS, VERIFY_METHOD_KEYS, sqlList,
+  type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type ReminderSendStatus, type SourceKey, type VerifyMethod,
+} from '../lib/action-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
 // - archivage : archivedAt / archivedById / archiveReason (élément retiré du suivi, historique conservé) ;
 // - annulation : cancelledAt / cancelledById / cancelReason (saisie annulée, exclue des calculs) ;
 // - historique des modifications : table change_log (src/server/changelog.ts).
+
+/** Contrainte CHECK « colonne in (liste) » sur des clés constantes (src/lib/action-keys.ts, jamais de saisie). */
+const inList = (col: AnyPgColumn, keys: readonly string[]) => sql`${col} in (${sql.raw(sqlList(keys))})`;
 
 // ─── Référentiels ────────────────────────────────────────────────────────────
 
@@ -73,7 +81,8 @@ export const keystoneProjects = pgTable('keystone_projects', {
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(), // uuid
   // event | event (health) | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
-  // | qualification | audit_plan_item | certification — droit de lecture : canReadAttachment (src/lib/uploads.ts)
+  // | qualification | audit_plan_item | certification — droit de lecture : canReadAttachment (src/lib/uploads.ts). Preuve
+  // d'une action (ACT-25) : entity_type « action », déposée seule ou avec un commentaire (comment_id, D10).
   entityType: text('entity_type').notNull(),
   entityId: text('entity_id').notNull(),
   fileName: text('file_name').notNull(),
@@ -85,7 +94,9 @@ export const attachments = pgTable('attachments', {
   // Pièce médicale (certificat, avis d'arrêt, réserves…) : animateur QHSE et direction seulement, refusée par /fichiers aux
   // autres rôles (SEC-06).
   health: boolean('health').notNull().default(false),
-});
+  // Preuve déposée avec un commentaire du fil d'une action (ACT-25, D10) ; null : déposée seule ou autre entité.
+  commentId: integer('comment_id').references((): AnyPgColumn => actionComments.id),
+}, (t) => [index('attachments_comment_idx').on(t.commentId)]);
 
 // ─── Signalements et événements ─────────────────────────────────────────────
 
@@ -208,37 +219,133 @@ export const benignAccidents = pgTable('benign_accidents', {
 
 // ─── Plan d'actions unique ──────────────────────────────────────────────────
 
+// Modèle du service QHSE (docs/specs/actions-qse.md § 4–5, migration 0005 : ACT-17, ACT-18, ACT-19, ACT-35). Les listes
+// (avancement, source, domaine, priorité, nature de vérification, motif de suite) sont des clés de src/lib/action-keys.ts,
+// contrôlées par des contraintes CHECK ; « en retard » et « à compléter » sont calculés (src/lib/action-rules.ts). Pas de
+// CHECK dépendant de l'avancement ni des dates : les bases reprises en contiennent d'incohérentes (D22, D24), le serveur
+// applique ces règles.
 export const actions = pgTable('actions', {
-  id: text('id').primaryKey(),
-  title: text('title').notNull(),
-  description: text('description'),
-  origin: text('origin').notNull(), // ev | audit | risk | watch | client | rev | skills | prevention | docs | env — fixée à la création (ACT-01)
-  originRef: text('origin_ref').notNull(),
+  id: text('id').primaryKey(), // « A-n » (formatActionNumber, ACT-35) ; jamais modifié ni réattribué
+  openedOn: date('opened_on', { mode: 'string' }).notNull(), // Date (ouverture) : date de Paris à la création, non modifiable
+  pilotId: text('pilot_id').notNull().references(() => people.id), // « Responsable » à l'écran
+  status: text('status').$type<Avancement>().notNull().default('a_faire'), // avancement (§ 5.1) ; « en retard » est calculé
+  priority: text('priority').$type<ActionPriority>(), // null = à compléter (reprise)
+  dueOn: date('due_on', { mode: 'string' }).notNull(), // date cible actuelle
+  initialDueOn: date('initial_due_on', { mode: 'string' }).notNull(), // date cible initiale, jamais modifiée
+  doneOn: date('done_on', { mode: 'string' }), // date effective (passage « Terminée »)
+  source: text('source').$type<SourceKey>(), // une des 24 sources (§ 12) ; null = à compléter (reprise) ; verrouillée une fois posée
+  originRef: text('origin_ref').notNull(), // référence d'origine (texte) ; libellé quand la source n'a pas de fiche
   eventId: text('event_id').references(() => events.id),
   reviewId: integer('review_id').references((): AnyPgColumn => reviews.id), // revue de direction d'origine (décision, objectif, préparation)
   // Sources d'origine portées par l'action (ACT-01), comme eventId et reviewId : une au plus par type, conservées sur une
-  // action annulée. Posées à la création (lien explicite de l'écran, ou référence d'origine résolue une fois :
+  // action abandonnée. Posées à la création (lien explicite de l'écran, ou référence d'origine résolue une fois :
   // src/lib/origin-links.ts) et par la reprise (vigie-db reprise-liens), jamais recalculées ; les écrans sources les lisent.
+  // Plans de prévention et permis : liens repris seulement (plus d'action QSE depuis la Prévention, 15/10/2026).
   preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
   permitId: text('permit_id').references((): AnyPgColumn => permits.id),
   documentId: text('document_id').references((): AnyPgColumn => documents.id),
   wasteStreamId: text('waste_stream_id').references((): AnyPgColumn => wasteStreams.id),
   wasteEntryId: integer('waste_entry_id').references((): AnyPgColumn => wasteEntries.id), // enlèvement du registre des déchets
-  siteId: text('site_id').references(() => sites.id), // null = tous sites
-  pilotId: text('pilot_id').notNull().references(() => people.id),
-  dueOn: date('due_on', { mode: 'string' }).notNull(),
-  status: text('status').notNull(), // todo | doing | verify | done | cancelled — « en retard » est calculé
-  kind: text('kind').notNull(), // C (corrective) | P (préventive)
-  verifyDueOn: date('verify_due_on', { mode: 'string' }),
-  efficacyNote: text('efficacy_note'), // constat de la vérification d'efficacité
+  domain: text('domain').$type<ActionDomain>(), // null = à compléter (reprise)
+  problem: text('problem'), // description du problème (≤ 4 000) ; null = à compléter (reprise)
+  detail: text('detail').notNull(), // détail de l'action (≤ 4 000) ; libellé = actionLabel(detail)
+  verifyDueOn: date('verify_due_on', { mode: 'string' }), // vérification planifiée (obligatoire à la création)
+  closedOn: date('closed_on', { mode: 'string' }), // date de vérification = date de clôture
+  verifyMethod: text('verify_method').$type<VerifyMethod>(),
+  efficacyNote: text('efficacy_note'), // constat de vérification
+  effective: boolean('effective'), // résultat : efficace / non efficace (null tant que non vérifiée)
+  newRisk: boolean('new_risk').notNull().default(false), // « Nouveau risque généré »
   verifiedById: text('verified_by_id').references(() => people.id),
-  closedOn: date('closed_on', { mode: 'string' }),
-  // Annulation (statut « cancelled », jamais de suppression) : qui, quand, pourquoi.
+  riskLevel: integer('risk_level'), // 0 à 4 (§ 5.4), échelle propre aux actions (≠ cotation G × P du DUERP)
+  hours: numeric('hours', { precision: 7, scale: 2, mode: 'number' }), // pointage (h), saisi à la clôture
+  estimatedCost: numeric('estimated_cost', { precision: 12, scale: 2, mode: 'number' }), // € TTC
+  actualCost: numeric('actual_cost', { precision: 12, scale: 2, mode: 'number' }), // € TTC
+  followsActionId: text('follows_action_id').references((): AnyPgColumn => actions.id), // action de suite (ACT-23)
+  followReason: text('follow_reason').$type<FollowReason>(),
+  siteId: text('site_id').references(() => sites.id), // un seul site, obligatoire à toute création et modification ; null = reprise « site à compléter »
+  // Origine Vigie avant 0005 (ev, audit, risk, watch, client, rev, skills, prevention, docs, env) : écrite par la reprise
+  // seulement (D9), lue par la reprise des liens (src/lib/origin-links.ts) et comme indication d'une source à compléter.
+  legacyOrigin: text('legacy_origin'),
+  // Abandon (avancement « abandonnee », jamais de suppression) : qui, quand, pourquoi.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check('actions_status_check', inList(t.status, ACTION_AVANCEMENTS)),
+  check('actions_source_check', sql`${t.source} is null or ${inList(t.source, SOURCE_KEYS)}`),
+  check('actions_domain_check', sql`${t.domain} is null or ${inList(t.domain, DOMAIN_KEYS)}`),
+  check('actions_priority_check', sql`${t.priority} is null or ${inList(t.priority, PRIORITY_KEYS)}`),
+  check('actions_verify_method_check', sql`${t.verifyMethod} is null or ${inList(t.verifyMethod, VERIFY_METHOD_KEYS)}`),
+  check('actions_follow_reason_check', sql`${t.followReason} is null or ${inList(t.followReason, FOLLOW_REASON_KEYS)}`),
+  check('actions_follow_pair_check', sql`(${t.followsActionId} is null) = (${t.followReason} is null)`),
+  check('actions_risk_level_check', sql`${t.riskLevel} is null or ${t.riskLevel} between 0 and 4`),
+  check('actions_amounts_check', sql`(${t.hours} is null or ${t.hours} >= 0) and (${t.estimatedCost} is null or ${t.estimatedCost} >= 0) and (${t.actualCost} is null or ${t.actualCost} >= 0)`),
+  index('actions_pilot_idx').on(t.pilotId),
+  index('actions_follows_idx').on(t.followsActionId),
+]);
+
+// Fil de commentaires daté et signé (ACT-24) : jamais modifié ; retrait motivé, texte conservé en base mais jamais envoyé
+// au navigateur (D23).
+export const actionComments = pgTable('action_comments', {
+  id: serial('id').primaryKey(),
+  actionId: text('action_id').notNull().references(() => actions.id),
+  authorId: text('author_id').notNull().references(() => people.id),
+  authorRole: text('author_role'), // rôle Vigie de l'auteur au moment de l'écriture (« signé »)
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+  withdrawnById: text('withdrawn_by_id').references(() => people.id),
+  withdrawReason: text('withdraw_reason'),
+}, (t) => [
+  check('action_comments_body_check', sql`char_length(${t.body}) between 1 and 4000`),
+  check('action_comments_withdraw_check', sql`(${t.withdrawnAt} is null) = (${t.withdrawReason} is null)`),
+  index('action_comments_action_idx').on(t.actionId, t.createdAt),
+]);
+
+// Compteurs de numérotation (ACT-35) : portée → dernier numéro attribué, incrémenté sous verrou dans la transaction de création.
+export const actionCounters = pgTable('action_counters', {
+  scope: text('scope').primaryKey(),
+  last: integer('last').notNull(),
 });
+
+// Notifications d'information (ACT-30, ACT-31 ; réutilisables pour TDB-06) : une ligne par destinataire ; lue au clic ou
+// par « Tout marquer comme lu ». Pas un enregistrement métier tracé (pas de logChange). Purge : TDB-10.
+export const notifications = pgTable('notifications', {
+  id: serial('id').primaryKey(),
+  personId: text('person_id').notNull().references(() => people.id),
+  type: text('type').notNull(), // action_confiee | action_commentaire | action_preuve — libellés : NOTIFICATION_KINDS (src/lib/domain.ts) ; pas de CHECK (types à venir)
+  entityType: text('entity_type').notNull(), // action
+  entityId: text('entity_id').notNull(),
+  title: text('title').notNull(), // « Action A-221 confiée par [C. Lefèvre] : … »
+  href: text('href').notNull(), // /actions?action=A-221
+  byId: text('by_id').references(() => people.id),
+  // Commentaire notifié (action_commentaire, ACT-31) : à son retrait, le titre qui en porte l'extrait est réécrit sans lui
+  // (withdrawCommentNotifications, src/server/notify.ts ; D23 : le texte retiré n'est plus jamais envoyé au navigateur).
+  commentId: integer('comment_id').references((): AnyPgColumn => actionComments.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  readAt: timestamp('read_at', { withTimezone: true }),
+}, (t) => [index('notifications_person_idx').on(t.personId, t.createdAt)]);
+
+// Journal d'envoi du rappel du mercredi par e-mail (ACT-33) : un envoi par personne et par semaine ISO, même après un
+// redémarrage ou avec plusieurs instances (clé primaire réclamée par insert … on conflict do nothing). Purge : TDB-10.
+export const actionReminderSends = pgTable('action_reminder_sends', {
+  personId: text('person_id').notNull().references(() => people.id),
+  week: text('week').notNull(), // « 2026-W42 » (isoWeekKey)
+  status: text('status').$type<ReminderSendStatus>().notNull(),
+  attempts: integer('attempts').notNull().default(1),
+  email: text('email'),
+  actionCount: integer('action_count').notNull().default(0),
+  lateCount: integer('late_count').notNull().default(0),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.personId, t.week] }),
+  check('action_reminder_sends_status_check', inList(t.status, REMINDER_SEND_STATUSES)),
+  check('action_reminder_sends_week_check', sql`${t.week} ~ '^[0-9]{4}-W[0-9]{2}$'`),
+]);
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
 
@@ -830,8 +937,9 @@ export const changeLog = pgTable('change_log', {
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('change_log_entity_idx').on(t.entityType, t.entityId)]);
 
-// État « lu » des échéances calculées (clé stable todoKey), par personne. Les échéances ne sont pas stockées :
-// seules les clés lues le sont ; « Tout marquer comme lu » supprime les clés qui ne correspondent plus à rien.
+// État « lu » des échéances calculées (clé stable todoKey) et des notifications de la cloche, par personne. Les échéances
+// ne sont pas stockées : seules les clés lues le sont (« Tout marquer comme lu » les ajoute) ; les clés qui ne
+// correspondent plus à rien restent (purge : TDB-10).
 export const notificationReads = pgTable('notification_reads', {
   personId: text('person_id').notNull().references(() => people.id),
   itemKey: text('item_key').notNull(),

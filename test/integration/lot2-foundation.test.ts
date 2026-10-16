@@ -80,9 +80,10 @@ describe('jeu de démonstration du lot 2', () => {
     const db = await getDb();
     const rows = await db.select().from(t.actions).where(inArray(t.actions.id, ['A-206', 'A-216', 'A-208', 'A-219', 'A-218', 'A-220']));
     const by = new Map(rows.map((a) => [a.id, a]));
-    expect(by.get('A-206')?.preventionPlanId).toBe('PP-2026-012');
-    expect(by.get('A-220')?.preventionPlanId).toBe('PP-2026-008');
-    expect(by.get('A-216')?.permitId).toBe('PF-2026-031');
+    // Plus d'action QSE depuis la Prévention (réponses du service QHSE du 15/10/2026) : A-206, A-216, A-220 ne sont plus
+    // créées ; aucune action d'un jeu neuf ne porte de plan de prévention ni de permis (liens repris seulement).
+    expect([...by.keys()].sort()).toEqual(['A-208', 'A-218', 'A-219']);
+    expect((await db.select().from(t.actions)).filter((a) => a.preventionPlanId || a.permitId)).toEqual([]);
     expect(by.get('A-208')?.documentId).toBe('PR-QHSE-002');
     expect(by.get('A-219')?.wasteStreamId).toBe('FD-04');
     expect(by.get('A-218')?.wasteEntryId).toEqual(expect.any(Number));

@@ -310,7 +310,7 @@ export async function deleteWasteStream(id: string): Promise<{ error?: string }>
   // Les enlèvements annulés comptent aussi : ils restent au registre et référencent la filière.
   const [{ n }] = await db.select({ n: count() }).from(t.wasteEntries).where(eq(t.wasteEntries.streamId, id));
   if (n > 0) return { error: `Cette filière porte ${n} enlèvement${n > 1 ? 's' : ''} au registre : elle ne peut pas être supprimée.` };
-  // Actions créées depuis la filière (ACT-01, actions.waste_stream_id) : annulées comprises, l'origine est conservée.
+  // Actions créées depuis la filière (ACT-01, actions.waste_stream_id) : abandonnées comprises, l'origine est conservée.
   const linked = (await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.wasteStreamId, id)))
     .map((a) => a.id).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
   if (linked.length) {

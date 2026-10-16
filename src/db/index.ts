@@ -1,8 +1,9 @@
 import 'server-only';
 import { mkdirSync } from 'node:fs';
 import { config } from '@/lib/config';
-import type { StorageConfig } from '@/lib/env';
+import { nextRuntime, type StorageConfig } from '@/lib/env';
 import { startMaintenance } from './maintenance';
+import { scheduledTasks, startScheduler } from './scheduler';
 import { MIGRATIONS_DIR, refuseNewerDatabase } from './migrations';
 import * as schema from './schema';
 import type { Db, DbEngine } from './types';
@@ -81,11 +82,16 @@ async function open(): Promise<Opened> {
   const opened = c.databaseUrl ? await openPostgres(c.databaseUrl, c) : await openPglite(c.dataDir, c);
   if (c.demo) {
     const { seed } = await import('./seed');
-    await seed(opened.db);
+    await seed(opened.db, { files: true });
   }
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
   const stop = startMaintenance(opened.db);
-  return { ...opened, close: async () => { await stop(); await opened.close(); } };
+  // Tâches planifiées (PRD-12, src/db/scheduler.ts) : registre de la configuration (rappel du mercredi par e-mail quand un
+  // transport existe) ; aucune avec VIGIE_SCHEDULER=0, un registre vide, ni pendant la construction (next build).
+  // Démarrage à l'ouverture de la base, donc à la première requête ou sonde de santé : pas de rattrapage (D13).
+  const tasks = c.scheduler && nextRuntime().phase !== 'phase-production-build' ? scheduledTasks(c) : [];
+  const stopTasks = tasks.length ? startScheduler(opened.db, tasks) : async () => {};
+  return { ...opened, close: async () => { await stopTasks(); await stop(); await opened.close(); } };
 }
 
 /**
