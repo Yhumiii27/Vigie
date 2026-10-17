@@ -2,6 +2,7 @@ import 'server-only';
 import { mkdirSync } from 'node:fs';
 import { config } from '@/lib/config';
 import { nextRuntime, type StorageConfig } from '@/lib/env';
+import { declareDatabaseSchema, type RowQuery } from '@/lib/matrix';
 import { startMaintenance } from './maintenance';
 import { scheduledTasks, startScheduler } from './scheduler';
 import { MIGRATIONS_DIR, refuseNewerDatabase } from './migrations';
@@ -24,7 +25,7 @@ export { MIGRATIONS_DIR };
 /** Verrou consultatif PostgreSQL des migrations : un seul serveur les applique à la fois. */
 const MIGRATION_LOCK = 7_302_026;
 
-type Opened = { db: Db; engine: DbEngine; close: () => Promise<void> };
+type Opened = { db: Db; engine: DbEngine; close: () => Promise<void>; query: RowQuery };
 
 // Une seule ouverture par processus (survit au rechargement à chaud).
 const g = globalThis as unknown as { __vigieDb?: Promise<Opened> };
@@ -55,7 +56,7 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
     throw err;
   }
   client.release();
-  return { db: drizzle(pool, { schema }), engine: 'postgres', close: () => pool.end() };
+  return { db: drizzle(pool, { schema }), engine: 'postgres', close: () => pool.end(), query: (sql) => pool.query(sql).then((r) => r.rows) };
 }
 
 async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> {
@@ -74,12 +75,16 @@ async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> 
     await client.close();
     throw err;
   }
-  return { db, engine: 'pglite', close: () => client.close() };
+  return { db, engine: 'pglite', close: () => client.close(), query: (sql) => client.query<Record<string, unknown>>(sql).then((r) => r.rows) };
 }
 
 async function open(): Promise<Opened> {
   const c = config();
   const opened = c.databaseUrl ? await openPostgres(c.databaseUrl, c) : await openPglite(c.dataDir, c);
+  // Schéma migré déclaré à Matrix (src/lib/matrix.ts) : appel non attendu, jamais bloquant (échec : avertissement) ;
+  // rien sans MATRIX_URL ni MATRIX_DECLARATIONS_DIR, ni pendant la construction (next build).
+  const building = nextRuntime().phase === 'phase-production-build';
+  if (!building) void declareDatabaseSchema('vigie', opened.query, c.matrix);
   if (c.demo) {
     const { seed } = await import('./seed');
     await seed(opened.db, { files: true });
@@ -89,7 +94,7 @@ async function open(): Promise<Opened> {
   // Tâches planifiées (PRD-12, src/db/scheduler.ts) : registre de la configuration (rappel du mercredi par e-mail quand un
   // transport existe) ; aucune avec VIGIE_SCHEDULER=0, un registre vide, ni pendant la construction (next build).
   // Démarrage à l'ouverture de la base, donc à la première requête ou sonde de santé : pas de rattrapage (D13).
-  const tasks = c.scheduler && nextRuntime().phase !== 'phase-production-build' ? scheduledTasks(c) : [];
+  const tasks = c.scheduler && !building ? scheduledTasks(c) : [];
   const stopTasks = tasks.length ? startScheduler(opened.db, tasks) : async () => {};
   return { ...opened, close: async () => { await stopTasks(); await stop(); await opened.close(); } };
 }

@@ -96,6 +96,11 @@ export type VigieConfig = {
   mailFrom: string;
   /** Heure d'envoi du rappel du mercredi par e-mail (heure de Paris, 07:00 par défaut). */
   reminderTime: { hour: number; minute: number };
+  /**
+   * Déclaration du schéma de la base à Matrix (catalogue des bases EPC2i, src/lib/matrix.ts) après les migrations :
+   * MATRIX_URL (null : rien n'est envoyé), MATRIX_TOKEN, MATRIX_DECLARATIONS_DIR (copie locale), APP_VERSION.
+   */
+  matrix: { url: string | null; token: string | null; declarationsDir: string | null; version: string | null };
 };
 
 /** Transports d'e-mail disponibles (VIGIE_MAIL_TRANSPORT) ; SMTP ou Microsoft Graph : ACT-34. */
@@ -271,11 +276,20 @@ export function parseConfig(env: Env): VigieConfig {
   const mailFromValue = read('VIGIE_MAIL_FROM', sender) ?? DEFAULT_MAIL_FROM;
   const reminderTime = read('VIGIE_REMINDER_TIME', clockTime) ?? { hour: 7, minute: 0 };
 
+  // Matrix : adresse http(s), identifiants HTTP admis (https://utilisateur:mot-de-passe@matrix.exemple.fr, envoyés en Basic).
+  const matrixDir = blank(env.MATRIX_DECLARATIONS_DIR);
+  const matrix = {
+    url: read('MATRIX_URL', z.url({ protocol: /^https?$/, error: 'URL http(s) attendue (ex. https://matrix.exemple.fr)' })) ?? null,
+    token: blank(env.MATRIX_TOKEN) ?? null,
+    declarationsDir: matrixDir ? path.resolve(/*turbopackIgnore: true*/ process.cwd(), matrixDir) : null,
+    version: blank(env.APP_VERSION) ?? null,
+  };
+
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage,
     publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
-    scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime,
+    scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };
 }
 
