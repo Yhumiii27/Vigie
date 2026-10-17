@@ -503,7 +503,7 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
   for (const { siteId, site, year, rows } of bySiteYear(entries.filter((e) => e.staleBsd), siteOrder)) {
     const oldest = rows.reduce((a, b) => (a.removedOn <= b.removedOn ? a : b));
     todo.push({
-      date: addDays(oldest.removedOn, BSD_STALE_DAYS), kind: 'Déchets', tone: 'warn', overdue: true, count: rows.length, ...owner, siteId,
+      date: addDays(oldest.removedOn, BSD_STALE_DAYS), dueOn: addDays(oldest.removedOn, BSD_STALE_DAYS), kind: 'Déchets', tone: 'warn', overdue: true, count: rows.length, ...owner, siteId,
       title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD non finalisé', 'BSD non finalisés')} plus de ${BSD_STALE_DAYS} j après l'enlèvement · ${short(site)}`,
       href: registerHref(year, currentYear, 'bsd-en-attente'),
     });
@@ -531,7 +531,7 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     const due = `${shiftMonth(missing[0], 1).slice(0, 8)}${String(READING_DUE_DAY).padStart(2, '0')}`;
     const site = s.label.split(' — ')[0];
     todo.push({
-      date: due, kind: 'Consommations', tone: due < now ? 'danger' : 'warn', overdue: due < now, count: missing.length, who: '', siteId: s.id,
+      date: due, dueOn: due, kind: 'Consommations', tone: due < now ? 'danger' : 'warn', overdue: due < now, count: missing.length, who: '', siteId: s.id,
       title: missing.length === 1 ? `Relevés de ${monthLong(missing[0])} · ${site}` : `Relevés manquants (${missing.length} mois depuis ${monthLong(missing[0])}) · ${site}`,
       href: '/environnement?onglet=consommations',
     });

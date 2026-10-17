@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
@@ -16,7 +16,8 @@ import { diffFields, logChange } from './changelog';
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
 // Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
 // 15/10/2026, le service RH gère cette partie) ; ces server actions ne lisent ni n'écrivent aucune action, sauf pour
-// protéger le rattachement d'une action de recyclage reprise (qualification_requirements.renewalActionId) encore non close.
+// protéger le rattachement d'une action de recyclage reprise (actions.qualification_person_id / qualification_title_id,
+// HAB-04) encore non close.
 
 const clean = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -59,12 +60,12 @@ function checkFiles(files: File[]) {
  * d'un titre ou d'un salarié.
  */
 async function openRenewals(db: DbOrTx, by: { titleId: string } | { personId: string }) {
-  const rows = await db.select({ id: t.actions.id, status: t.actions.status }).from(t.qualificationRequirements)
-    .innerJoin(t.actions, eq(t.qualificationRequirements.renewalActionId, t.actions.id))
-    .where(and(
-      isNotNull(t.qualificationRequirements.renewalActionId),
-      'titleId' in by ? eq(t.qualificationRequirements.titleId, by.titleId) : eq(t.qualificationRequirements.personId, by.personId),
-    ));
+  // Actions des exigences en vigueur (une case dont le titre n'est plus requis ne retient plus rien).
+  const rows = await db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions)
+    .innerJoin(t.qualificationRequirements, and(
+      eq(t.qualificationRequirements.personId, t.actions.qualificationPersonId), eq(t.qualificationRequirements.titleId, t.actions.qualificationTitleId),
+    ))
+    .where('titleId' in by ? eq(t.actions.qualificationTitleId, by.titleId) : eq(t.actions.qualificationPersonId, by.personId));
   return rows.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id).sort();
 }
 
@@ -277,11 +278,10 @@ export async function setRequirement(personId: string, titleId: string, required
       if (added.length) await log(tx, true);
     });
   } else {
-    const [req] = await db.select({ actionId: t.qualificationRequirements.renewalActionId }).from(t.qualificationRequirements).where(where);
-    const [action] = req?.actionId
-      ? await db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions).where(eq(t.actions.id, req.actionId))
-      : [];
-    if (action && !isClosedActionStatus(action.status)) {
+    const renewals = await db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions)
+      .where(and(eq(t.actions.qualificationPersonId, personId), eq(t.actions.qualificationTitleId, titleId)));
+    const action = renewals.filter((a) => !isClosedActionStatus(a.status)).sort((a, b) => a.id.localeCompare(b.id))[0];
+    if (action) {
       return { error: `L'action ${action.id} (recyclage) n'est pas close : le service QHSE doit la clôturer ou l'abandonner avant le retrait de l'exigence.` };
     }
     await db.transaction(async (tx) => {

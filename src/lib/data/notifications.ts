@@ -128,7 +128,8 @@ export const loadNotifications = cache(async (): Promise<Notification[]> => {
   const due = todo
     .filter((n) => n.overdue || n.date <= week)
     .map((n): Notification => ({ ...n, urgent: n.tone === 'danger' || !!n.overdue, read: reads.has(n.key), family: 'todo', info: false }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    // Retards du plus ancien au plus récent (date d'échéance réelle, TDB-07), puis par date.
+    .sort((a, b) => (a.dueOn ?? a.date).localeCompare(b.dueOn ?? b.date) || a.date.localeCompare(b.date));
   const infos = [...stored, ...(reminder ? [reminder] : [])].sort((a, b) => b.date.localeCompare(a.date) || storedOrder(b) - storedOrder(a));
   return [...due.filter((n) => n.urgent), ...infos, ...due.filter((n) => !n.urgent)];
 });

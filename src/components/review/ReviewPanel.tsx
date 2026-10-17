@@ -240,7 +240,16 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
               <i className="ph ph-note-pencil" style={{ fontSize: 13 }} />{review.status === 'tenue' ? 'Modifier le compte rendu' : 'Saisir le compte rendu'}
             </button>
           )}
-          {flags.canApprove && review?.status === 'tenue' && <CloseReviewButton id={review.id} allSites={allSites} />}
+          {flags.canSign && review?.status === 'tenue' && !flags.closeBlockers.length && <CloseReviewButton id={review.id} allSites={allSites} />}
+          {flags.canApprove && review?.status === 'tenue' && flags.closeBlockers.length > 0 && (
+            <span role="note" style={{ flexBasis: '100%', fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+              <i className="ph ph-seal-warning" style={{ fontSize: 13, marginRight: 4 }} aria-hidden />
+              Avant le visa de la direction : {flags.closeBlockers.join(' ')}
+            </span>
+          )}
+          {flags.canApprove && !flags.canSign && review?.status === 'tenue' && !flags.closeBlockers.length && (
+            <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>En attente du visa de la direction.</span>
+          )}
           {flags.canEdit && (
             <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setEditing({ kind: 'create' })}>
               <i className="ph ph-calendar-plus" style={{ fontSize: 13 }} />Préparer la prochaine revue

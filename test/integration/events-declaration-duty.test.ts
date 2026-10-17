@@ -44,7 +44,9 @@ async function accident(fields: Record<string, string>) {
 /** Fiche à l'étape « Efficacité vérifiée », avec une action liée Vérifiée : seule la déclaration bloque la clôture. */
 async function readyToClose(id: string, actionId: string) {
   const d = await db();
-  await d.update(t.events).set({ step: 4 }).where(eq(t.events.id, id));
+  await d.update(t.events).set({ step: 4, analysisMethod: '5m' }).where(eq(t.events.id, id));
+  // Analyse des causes exigée à la clôture (EVT-11).
+  await d.insert(t.eventAnalyses).values({ eventId: id, method: '5m', content: [['Milieu', 'Quai encombré']] });
   await d.insert(t.actions).values({
     id: actionId, detail: 'Baliser le quai', source: 'evenement', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali',
     openedOn: '2026-10-09', dueOn: '2026-10-20', initialDueOn: '2026-10-20', status: 'verifiee', doneOn: '2026-10-09', closedOn: '2026-10-09',

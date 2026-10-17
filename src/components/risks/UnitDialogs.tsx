@@ -10,6 +10,7 @@ import { TONE } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
 import type { ArchivedUnitView, WorkUnitView } from '@/lib/data/risks';
 import type { FormState } from '@/lib/forms';
+import { ARCHIVED_SITE_SUFFIX, withCurrent } from '@/lib/form-options';
 import { archiveWorkUnit, moveWorkUnit, restoreWorkUnit, saveWorkUnit } from '@/server/risks';
 
 /** URL de l'écran sur une unité donnée, en conservant le mode brut / résiduel. */
@@ -70,7 +71,7 @@ export function AddUnitButton({ sites, defaultSiteId, viewSite, residual }: { si
 type Position = { isFirst: boolean; isLast: boolean };
 
 /** Crayon à côté du nom de l'unité : renomme l'unité, change son site, la déplace dans la liste ou l'archive si elle n'a plus de risque en vigueur. */
-export function EditUnitButton({ unit, sites, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'count'>; sites: readonly Option[]; viewSite: ViewSite; residual: boolean } & Position) {
+export function EditUnitButton({ unit, sites, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>; sites: readonly Option[]; viewSite: ViewSite; residual: boolean } & Position) {
   return (
     <DialogButton label="" icon="ph-pencil-simple" className="btn btn-ghost btn-icon" tooltip="Modifier l'unité de travail"
       style={{ width: 22, height: 22, color: 'var(--color-neutral-500)' }} title={unit.label} kicker="Modifier l'unité de travail" width={480}>
@@ -79,14 +80,16 @@ export function EditUnitButton({ unit, sites, viewSite, residual, isFirst, isLas
   );
 }
 
-function UnitEditor({ unit, sites, viewSite, residual, isFirst, isLast, onClose }: {
-  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'count'>;
+function UnitEditor({ unit, sites: activeSites, viewSite, residual, isFirst, isLast, onClose }: {
+  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>;
   sites: readonly Option[];
   viewSite: ViewSite;
   residual: boolean;
   onClose: () => void;
 } & Position) {
   const router = useRouter();
+  // DUE-05 : le site archivé d'une unité reste son choix (jamais remplacé en silence par le premier site actif).
+  const sites = withCurrent(activeSites, unit.siteId, `${unit.site}${ARCHIVED_SITE_SUFFIX}`);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();

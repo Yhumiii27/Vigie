@@ -78,9 +78,6 @@ export type CertView = Certification & {
   log: ChangeEntry[];
 };
 
-/** Libellé proposé pour un nouveau constat hors programme quand aucun audit n'est encore saisi. */
-export const DEFAULT_AUDIT = 'Processus Production · juin 2026';
-
 /** Borne de fin de mois pour les comparaisons de chaînes ISO (le « 31 » vaut pour tous les mois). */
 const monthEnd = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-31`;
 
@@ -288,9 +285,10 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
     .filter((p): p is PlanItemView & { cancelled: NonNullable<PlanItemView['cancelled']> } => !!p.cancelled && p.year === year)
     .sort((a, b) => b.cancelled.on.localeCompare(a.cancelled.on) || b.id - a.id);
 
-  // Audits proposés pour rattacher un constat : tout le programme en vigueur hors revues, le plus récent d'abord.
+  // Audits proposés pour rattacher un constat : les audits réalisés du programme en vigueur, hors revues, le plus récent
+  // d'abord (AUD-11 : pas de constat sur un audit à venir ; l'audit d'un constat existant reste proposé par FindingForm).
   const auditOptions: Option[] = plan
-    .filter((p) => !p.isReview)
+    .filter((p) => !p.isReview && p.done)
     .sort((a, b) => planDate(b).localeCompare(planDate(a)) || b.id - a.id)
     .map((p) => [String(p.id), planItemAuditLabel(p)] as Option);
 
@@ -337,9 +335,9 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
       // sa réalisation et son annulation suivent la revue. Une échéance de revue saisie au seul programme reste « à confirmer ».
       if (p.locked) return;
       const when = p.plannedOn ? `prévu le ${fmtDayMonth(p.plannedOn)}` : `prévu en ${monthName(p.month)} ${p.year}`;
-      todo.push({ date: now, kind: p.kind, tone: 'warn', title: `${p.detail ?? p.label} — ${when}, à confirmer`, overdue: true, ...who });
+      todo.push({ date: now, dueOn: p.plannedOn ?? `${p.year}-${String(p.month).padStart(2, '0')}-01`, kind: p.kind, tone: 'warn', title: `${p.detail ?? p.label} — ${when}, à confirmer`, overdue: true, ...who });
     } else if (!p.done && p.plannedOn && p.plannedOn >= now && p.plannedOn <= horizon) {
-      todo.push({ date: p.plannedOn, kind: p.kind, tone: 'neutral', title: p.detail ?? p.label, ...who });
+      todo.push({ date: p.plannedOn, dueOn: p.plannedOn, kind: p.kind, tone: 'neutral', title: p.detail ?? p.label, ...who });
     }
   });
 
@@ -360,9 +358,9 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
     const { who, ownerIds } = leads.forSite(null);
     const base = { kind: 'Certification', who, ownerIds, href: '/audits', siteId: null };
     if (c.validUntil && c.validUntil < now) {
-      todo.push({ ...base, date: now, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
+      todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
     } else if (c.validUntil && c.validUntil <= horizon) {
-      todo.push({ ...base, date: c.validUntil, tone: 'warn', title: `Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}` });
+      todo.push({ ...base, date: c.validUntil, dueOn: c.validUntil, tone: 'warn', title: `Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}` });
     }
     if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', title: `${c.standard} · audit de suivi à programmer`, overdue: true });
   });

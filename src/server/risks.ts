@@ -341,6 +341,11 @@ export async function restoreWorkUnit(_prev: FormState, fd: FormData): Promise<F
   const siteError = await requireInSite(unit.siteId);
   if (siteError) return { error: siteError };
   if (!unit.archivedAt) return { error: "L'unité n'est pas archivée." };
+  // DUE-05 : une unité ne revient pas au document unique d'un site archivé (restaurez le site, ou recréez l'unité ailleurs).
+  if (unit.siteId) {
+    const [site] = await db.select({ archivedAt: t.sites.archivedAt, label: t.sites.label }).from(t.sites).where(eq(t.sites.id, unit.siteId));
+    if (site?.archivedAt) return { error: `Le site « ${site.label} » est archivé : restaurez-le avant de restaurer l'unité.` };
+  }
   await db.transaction(async (tx) => {
     await tx.update(t.workUnits).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.workUnits.id, id));
     await logChange(tx, { entityType: 'work_unit', entityId: id, action: 'restore', summary: `Unité de travail « ${unit.label} » restaurée`, reason });

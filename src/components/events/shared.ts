@@ -70,6 +70,10 @@ export function advanceBlocker(step: number, allLinked: readonly { status: strin
       return `${open} action${s ? 's' : ''} liée${s ? 's' : ''} ${s ? 'ne sont pas encore vérifiées' : "n'est pas encore vérifiée"} : vérifiez-${s ? 'les' : 'la'} (ou abandonnez-${s ? 'les' : 'la'}) dans le plan d'actions avant le passage à l'étape « ${EVENT_STEPS[next]} ».`;
     }
   }
+  // EVT-11 : l'analyse reste exigée à la clôture (fiche dont l'analyse a été vidée avant le contrôle de saveAnalysis,
+  // ou reprise sans analyse), après les autres contrôles de l'étape.
+  const noAnalysis = next === STEP_CLOSED && !ctx.hasAnalysis
+    ? `Analyse des causes (méthode « ${ctx.methodLabel} ») vide : saisissez-la avant la clôture.` : null;
   if (next === STEP_CLOSED && ctx.accident) {
     if (!ctx.accident.health) return AT_CLOSE_RESTRICTED;
     if (ctx.accident.cpamPending) {
@@ -84,7 +88,18 @@ export function advanceBlocker(step: number, allLinked: readonly { status: strin
         : "Saisissez la date de déclaration à la CPAM, ou indiquez pourquoi l'entreprise ne la déclare pas, avant la clôture.";
     }
   }
-  return null;
+  return noAnalysis;
+}
+
+/**
+ * EVT-11 : à partir de l'étape « Actions », l'analyse des causes de la méthode retenue ne se vide plus et la méthode ne
+ * change que pour une méthode déjà renseignée (`filled` : l'analyse qui serait retenue après la modification est saisie).
+ */
+export function analysisChangeBlocker(step: number, filled: boolean, change: 'clear' | 'method'): string | null {
+  if (step < STEP_ACTIONS || filled) return null;
+  return change === 'clear'
+    ? `Événement à l'étape « ${EVENT_STEPS[Math.min(step, STEP_CLOSED)]} » : l'analyse des causes ne peut plus être vidée (modifiez-la plutôt).`
+    : `Événement à l'étape « ${EVENT_STEPS[Math.min(step, STEP_CLOSED)]} » : la méthode d'analyse ne change que pour une méthode déjà renseignée (saisissez d'abord son analyse, ou ramenez l'événement à l'étape « ${EVENT_STEPS[STEP_QUALIFIED]} »).`;
 }
 
 /** Pourquoi aucune action ne peut plus être ajoutée à l'événement (null si possible). */

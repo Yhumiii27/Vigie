@@ -432,36 +432,32 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
   },
 
   // Habilitations : liens repris seulement (aucune action QSE pour un recyclage, 15/10/2026) ; jamais de nouveau lien.
+  // HAB-04 : la case de la matrice est portée par l'action (qualification_person_id / qualification_title_id), conservée
+  // quand l'action est close ou abandonnée et quand le titre n'est plus requis ; jamais détachée.
   qualification: {
     screen: 'skills',
     async attach() { return NON_QSE_LINK_MESSAGE; },
-    async detach(tx, [personId = '', titleId = ''], actionId) {
-      await tx.update(t.qualificationRequirements).set({ renewalActionId: null })
-        .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId), eq(t.qualificationRequirements.renewalActionId, actionId)));
-    },
-    async detachAll(tx, actionId) {
-      await tx.update(t.qualificationRequirements).set({ renewalActionId: null }).where(eq(t.qualificationRequirements.renewalActionId, actionId));
-    },
+    async detach() { /* habilitation d'origine verrouillée */ },
+    async detachAll() { /* la case reste lisible sur une action abandonnée */ },
+    keptOnCancel: true,
     async siteOf(tx, [personId = '']) {
       const [p] = await tx.select({ siteId: t.people.siteId }).from(t.people).where(eq(t.people.id, personId));
       return p ? p.siteId : undefined;
     },
     async facts(db, [personId = '', titleId = '']) {
-      const [q] = await db.select({ person: t.people.name, siteId: t.people.siteId, title: t.trainingTitles.label }).from(t.qualificationRequirements)
-        .innerJoin(t.people, eq(t.qualificationRequirements.personId, t.people.id))
-        .innerJoin(t.trainingTitles, eq(t.qualificationRequirements.titleId, t.trainingTitles.id))
-        .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId)));
+      const [q] = await db.select({ person: t.people.name, siteId: t.people.siteId, title: t.trainingTitles.label }).from(t.people)
+        .innerJoin(t.trainingTitles, eq(t.trainingTitles.id, titleId))
+        .where(eq(t.people.id, personId));
       return q ? { reference: ref(`${q.person} · ${q.title}`), siteId: q.siteId, facts: {} } : null;
     },
     // Case de la matrice (personne × titre) : historique de l'exigence (HAB-03, skill_cell).
     logAs: ([personId, titleId]) => (personId && titleId ? { entityType: 'qualification_requirement', entityId: `${personId}|${titleId}` } : null),
     async sources(db, ids) {
-      const rows = await db.select({ actionId: t.qualificationRequirements.renewalActionId, personId: t.people.id, person: t.people.name, titleId: t.trainingTitles.id, title: t.trainingTitles.label })
-        .from(t.qualificationRequirements)
-        .innerJoin(t.people, eq(t.qualificationRequirements.personId, t.people.id))
-        .innerJoin(t.trainingTitles, eq(t.qualificationRequirements.titleId, t.trainingTitles.id))
-        .where(isNotNull(t.qualificationRequirements.renewalActionId));
-      return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `qualification:${r.personId}:${r.titleId}`, kind: 'qualification', label: `${r.person} · ${r.title}`, href: `/habilitations?salarie=${r.personId}&titre=${r.titleId}` }));
+      const rows = await db.select({ actionId: t.actions.id, personId: t.people.id, person: t.people.name, titleId: t.trainingTitles.id, title: t.trainingTitles.label })
+        .from(t.actions)
+        .innerJoin(t.people, eq(t.actions.qualificationPersonId, t.people.id))
+        .innerJoin(t.trainingTitles, eq(t.actions.qualificationTitleId, t.trainingTitles.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `qualification:${r.personId}:${r.titleId}`, kind: 'qualification', label: `${r.person} · ${r.title}`, href: `/habilitations?salarie=${r.personId}&titre=${r.titleId}` }));
     },
   },
 

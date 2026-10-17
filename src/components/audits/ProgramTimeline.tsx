@@ -435,9 +435,12 @@ function ReportSection({ item, findings, onAddFinding, onLeave }: { item: PlanIt
         <span style={muted}>Aucun rapport joint.</span>
       )}
       <FindingList findings={findings} year={item.year} onLeave={onLeave} />
-      <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={onAddFinding}>
-        <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
-      </button>
+      {/* AUD-11 : un constat suit la réalisation de l'audit. */}
+      {item.done ? (
+        <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={onAddFinding}>
+          <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
+        </button>
+      ) : <span style={muted}>Déclarez l&apos;audit réalisé pour saisir ses constats.</span>}
     </div>
   );
 }

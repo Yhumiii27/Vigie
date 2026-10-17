@@ -96,17 +96,20 @@ describe('AUD-06 : dossier arrêté à la séance', () => {
 
   it('visa le 20/12 : dossier de séance et compte rendu courant figés, sans les NC saisies depuis', async () => {
     setToday('2026-12-20');
-    actAs('Animateur QHSE', 'ville-a');
     const annual = await reviewOn('2026-12-10');
-    expect(await closeReview(annual.id)).toEqual({ error: 'Sélectionnez « Tous les sites » : le dossier archivé couvre tout le périmètre.' });
+    // AUD-15 : visa réservé à la direction.
     actAs('Animateur QHSE', 'all');
+    expect(await closeReview(annual.id)).toEqual({ error: 'Visa réservé à la direction.' });
+    actAs('Direction', 'ville-a');
+    expect(await closeReview(annual.id)).toEqual({ error: 'Sélectionnez « Tous les sites » : le dossier archivé couvre tout le périmètre.' });
+    actAs('Direction', 'all');
     expect(await closeReview(annual.id)).toEqual({});
     const closed = await reviewOn('2026-12-10');
-    expect(closed).toMatchObject({ status: 'cloturee', closedOn: '2026-12-20', closedById: 'clefevre' });
+    expect(closed).toMatchObject({ status: 'cloturee', closedOn: '2026-12-20', closedById: 'hmarchand' });
     const snap = parseReviewSnapshot(closed.snapshot)!;
     expect(snap).toMatchObject({ phase: 'cloture', asOf: '2026-12-10', takenOn: '2026-12-20', seance: { takenOn: '2026-12-15', takenBy: '[C. Lefèvre]' } });
     expect(snap.dossier.header).toMatchObject({ status: 'cloturee', to: '2026-12-10' });
-    expect(snap.dossier.record).toMatchObject({ minutes: 'Compte rendu corrigé', closedOn: '2026-12-20', closedBy: '[C. Lefèvre]' });
+    expect(snap.dossier.record).toMatchObject({ minutes: 'Compte rendu corrigé', closedOn: '2026-12-20', closedBy: '[H. Marchand]' });
     expect(snap.dossier.events.openNc.some((e) => e.id === 'EV-2026-901' || e.id === 'EV-2026-902')).toBe(false);
     expect(await lastLog('review', annual.id)).toMatchObject({ summary: 'Revue clôturée · visa de la direction, dossier figé (indicateurs arrêtés au 10/12/2026)' });
     const page = await loadReviewDossierPage({ revue: String(annual.id) });
@@ -114,9 +117,9 @@ describe('AUD-06 : dossier arrêté à la séance', () => {
   });
 
   it('revue tenue avant le lot 2 (sans dossier de séance) : dossier calculé au visa, arrêté à la séance', async () => {
-    actAs('Animateur QHSE', 'all');
+    actAs('Direction', 'all');
     const db = await getDb();
-    const [old] = await db.insert(t.reviews).values({ reviewOn: '2026-11-05', kind: 'intermediaire', status: 'tenue', minutes: 'Séance de novembre', snapshot: null }).returning();
+    const [old] = await db.insert(t.reviews).values({ reviewOn: '2026-11-05', kind: 'intermediaire', status: 'tenue', minutes: 'Séance de novembre', participantIds: ['hmarchand'], snapshot: null }).returning();
     expect(await closeReview(old.id)).toEqual({});
     const snap = parseReviewSnapshot((await reviewOn('2026-11-05')).snapshot)!;
     expect(snap).toMatchObject({ phase: 'cloture', asOf: '2026-11-05' });

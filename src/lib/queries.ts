@@ -68,6 +68,18 @@ export function controlStatus(c: { nextOn: string }, now = today()): { label: st
   return { label: 'Planifié', tone: 'neutral', days };
 }
 
+/**
+ * Échéance d'une exigence de veille (VEI-03) : suivie par des contrôles périodiques (actifs, rattachés), celle du prochain
+ * contrôle — calculée, jamais la date saisie, qui serait figée ; sinon sa date d'application saisie. `control` : le contrôle
+ * qui la fixe (null : date saisie).
+ */
+export function requirementDue<C extends { requirementId: number | null; archivedAt: Date | null; nextOn: string }>(
+  r: { id: number; dueOn: string | null }, controls: readonly C[],
+): { on: string | null; control: C | null } {
+  const next = controls.filter((c) => c.requirementId === r.id && !c.archivedAt).sort((a, b) => a.nextOn.localeCompare(b.nextOn))[0];
+  return next ? { on: next.nextOn, control: next } : { on: r.dueOn, control: null };
+}
+
 export function skillState(required: boolean, expiresOn: string | null | undefined, has: boolean, now = today()): SkillState {
   if (!required) return 'n';
   if (!has) return 'r';

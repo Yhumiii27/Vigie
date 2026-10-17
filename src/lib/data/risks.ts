@@ -956,9 +956,9 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
     todo.push({ ...base, date: now, tone: 'danger', title: 'Aucune version du DUERP en vigueur', href: '/risques', overdue: true });
   } else {
     if (current.nextUpdateOn < now) {
-      todo.push({ ...base, date: now, tone: 'danger', title: `Mise à jour annuelle du DUERP dépassée depuis le ${fmtDayMonth(current.nextUpdateOn)}`, href: '/risques', overdue: true });
+      todo.push({ ...base, date: now, dueOn: current.nextUpdateOn, tone: 'danger', title: `Mise à jour annuelle du DUERP dépassée depuis le ${fmtDayMonth(current.nextUpdateOn)}`, href: '/risques', overdue: true });
     } else if (daysBetween(now, current.nextUpdateOn) <= TODO_HORIZON_DAYS) {
-      todo.push({ ...base, date: current.nextUpdateOn, tone: 'warn', title: `Mise à jour annuelle du DUERP (version ${current.version})`, href: '/risques' });
+      todo.push({ ...base, date: current.nextUpdateOn, dueOn: current.nextUpdateOn, tone: 'warn', title: `Mise à jour annuelle du DUERP (version ${current.version})`, href: '/risques' });
     }
     if (!current.cseConsultedOn) {
       todo.push({ ...base, date: now, tone: 'warn', title: `Consultation du CSE à renseigner · DUERP ${current.version}`, href: '/risques' });

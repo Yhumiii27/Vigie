@@ -505,6 +505,8 @@ export const homeOf = (role: Role): ScreenKey => ROLES[role].screens?.[0] ?? 'da
 // commente et y joint des preuves, sans transition (src/lib/action-rules.ts : actionRights).
 export const canManage = (role: Role) => role !== 'Salarié';
 export const canApprove = (role: Role) => role === 'Animateur QHSE' || role === 'Direction';
+/** Visa de la revue de direction (clôture, dossier figé) : la direction seulement (AUD-15). */
+export const canSignReview = (role: Role) => role === 'Direction';
 /** Rôle Salarié : ne voit que ses propres données (habilitations, signalements, actions dont il est responsable). */
 export const isEmployee = (role: Role) => role === 'Salarié';
 /**
@@ -561,18 +563,37 @@ export type TodoItem = {
   ownerIds?: string[];
   /** Échéance dépassée ou retard : en tête de liste, urgente dans les notifications. */
   overdue?: boolean;
-  /** Clé stable (état lu) ; par défaut type|lien|intitulé — ne pas mettre de durée relative (« dans 3 j ») dans l'intitulé. */
+  /**
+   * Date d'échéance réelle (TDB-07) : un retard est daté du jour (`date` = aujourd'hui) mais garde ici la date dépassée ;
+   * un élément à venir y reprend sa date. Tri des retards par ancienneté et clé d'état lu (une échéance récurrente, à une
+   * nouvelle date, redevient non lue). Absente : élément sans date propre (écart sans action, fiche à compléter…).
+   */
+  dueOn?: string;
+  /**
+   * Base de la clé d'état lu ; par défaut type|lien|intitulé — ne pas mettre de durée relative (« dans 3 j ») dans
+   * l'intitulé. todoKey y ajoute la gravité et la date d'échéance (TDB-07).
+   */
   key?: string;
   /** Nombre d'éléments sous-jacents regroupés dans l'échéance (badge), 1 par défaut. */
   count?: number;
   /** Échéance qui révèle une donnée de santé (déclaration CPAM d'un AT) : réservée aux rôles canSeeHealth. */
   health?: boolean;
 };
-export const todoKey = (t: TodoItem) => t.key ?? [t.kind, t.href ?? '', t.title].join('|');
+/**
+ * Clé d'état lu (TDB-07) : base (`key`, ou type|lien|intitulé), gravité (`tone`) et date d'échéance (`dueOn`) — une
+ * échéance aggravée (à venir → dépassée) ou récurrente (nouvelle date) redevient non lue ; un retard garde sa clé de jour
+ * en jour (jamais `date`, qui vaut aujourd'hui pour un retard). Les états lus enregistrés avant le paquet 4 (sans gravité
+ * ni date) ne correspondent plus : chaque échéance déjà lue réapparaît non lue une seule fois.
+ */
+export const todoKey = (t: TodoItem) => [t.key ?? [t.kind, t.href ?? '', t.title].join('|'), t.tone, ...(t.dueOn ? [t.dueOn] : [])].join('|');
 /** Rapprochement par identifiant ; repli sur le nom tant qu'un signal ne renseigne pas ownerIds. */
 export const isMine = (t: TodoItem, user: { id: string; name: string }) => (t.ownerIds ? t.ownerIds.includes(user.id) : !!user.name && t.who.includes(user.name));
-/** Tri des échéances : dépassements d'abord, puis par date. */
-export const byUrgency = (a: TodoItem, b: TodoItem) => Number(!!b.overdue) - Number(!!a.overdue) || a.date.localeCompare(b.date);
+/**
+ * Tri des échéances : dépassements d'abord, du plus ancien au plus récent (date d'échéance réelle, TDB-07), puis les
+ * échéances à venir par date.
+ */
+export const byUrgency = (a: TodoItem, b: TodoItem) =>
+  Number(!!b.overdue) - Number(!!a.overdue) || (a.dueOn ?? a.date).localeCompare(b.dueOn ?? b.date) || a.date.localeCompare(b.date);
 
 export const initials = (name: string) =>
   name.replace(/[[\].]/g, '').split(' ').filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();

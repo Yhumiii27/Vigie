@@ -5,7 +5,7 @@ import { and, eq, gte, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
-  addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, fullSignatureOn, isMandatory, isPlanEnded, lcfirst, missingPresets,
+  activityLinkIssues, addHoursLocal, firstMinuteReason, firstMinuteRule, fmtPeriod, fromParisLocal, fullSignatureOn, isMandatory, isPlanEnded, lcfirst, missingPresets,
   parseChecklist, permitDays, permitPlanIssue, planCovers, planEndIssue, planSignIssue, planStatus, referenceNow, signedBeforeStart, validityOver,
   type ChecklistItem, type PlanContentKey, type SiteRule,
 } from '@/components/prevention/model';
@@ -219,6 +219,17 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       if (before.length) f.fail('startOn', `Permis actifs rattachés avant cette date (${refs(before)}) : modifiez-les ou annulez-les avant de réduire la période.`);
       if (after.length) f.fail('endOn', `Permis actifs rattachés après cette date (${refs(after)}) : modifiez-les ou annulez-les avant de réduire la période.`);
     }
+    // PRV-11 : les activités de la carte rattachées (non annulées) restent sur le site, l'entreprise et la période du plan.
+    if (siteId && startOn && endOn && endOn >= startOn) {
+      const issues = activityLinkIssues({ siteId, contractorId, from: startOn, to: endOn }, await linkedActivities(db, 'plan', existing.id), 'all');
+      const named = (list: { title: string }[]) => list.map((a) => `« ${a.title} »`).join(', ');
+      if (issues.site.length) f.fail('siteId', `Activités de la carte rattachées sur le site actuel (${named(issues.site)}) : annulez-les ou rattachez-les à un autre plan avant de changer de site.`);
+      if (issues.contractor.length) f.fail('contractorId', `Activités de la carte rattachées pour cette entreprise (${named(issues.contractor)}) : modifiez-les avant de changer d'entreprise.`);
+      const early = issues.period.filter((a) => a.startOn < startOn);
+      const late = issues.period.filter((a) => a.endOn > endOn);
+      if (early.length) f.fail('startOn', `Activités de la carte rattachées avant cette date (${named(early)}) : modifiez leurs dates avant de réduire la période.`);
+      if (late.length) f.fail('endOn', `Activités de la carte rattachées après cette date (${named(late)}) : modifiez leurs dates avant de réduire la période.`);
+    }
   }
   // Intervention commencée : déplacer sa date de début pourrait effacer un écart R. 4512-6 (plan signé après le début,
   // intervention sans plan signé) ; la modification exige un motif, conservé dans le journal.
@@ -265,6 +276,15 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
     return ref;
   });
   return done(newId);
+}
+
+/** Activités de la carte (non annulées) rattachées à un plan ou à un permis (PRV-11). */
+async function linkedActivities(db: Awaited<ReturnType<typeof getDb>>, kind: 'plan' | 'permit', id: string) {
+  const col = kind === 'plan' ? t.siteActivities.preventionPlanId : t.siteActivities.permitId;
+  return db.select({
+    id: t.siteActivities.id, title: t.siteActivities.title, siteId: t.siteActivities.siteId, contractorId: t.siteActivities.contractorId,
+    startOn: t.siteActivities.startOn, endOn: t.siteActivities.endOn,
+  }).from(t.siteActivities).where(and(eq(col, id), isNull(t.siteActivities.cancelledAt)));
 }
 
 /** Valeur affichée dans l'historique (booléens en clair). */
@@ -572,6 +592,16 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   }
   const knownProject = !keystoneProject || keystoneProject === existing?.keystoneProject || projects.some((p) => `${p.id} · ${p.client}` === keystoneProject);
   if (!knownProject) f.fail('keystoneProject', 'Projet Keystone inconnu.');
+  // PRV-11 : les activités de la carte rattachées (non annulées) restent sur le site et l'entreprise du permis, et
+  // sa validité recoupe chacune d'elles.
+  if (existing && siteId && validFrom && validTo && validTo > validFrom) {
+    const days = permitDays({ validFrom, validTo });
+    const issues = activityLinkIssues({ siteId, contractorId, from: days.from, to: days.to }, await linkedActivities(db, 'permit', existing.id), 'overlap');
+    const named = (list: { title: string }[]) => list.map((a) => `« ${a.title} »`).join(', ');
+    if (issues.site.length) f.fail('siteId', `Activités de la carte rattachées sur le site actuel (${named(issues.site)}) : modifiez-les avant de changer de site.`);
+    if (issues.contractor.length) f.fail('contractorId', `Activités de la carte rattachées pour une autre entreprise (${named(issues.contractor)}) : modifiez-les avant de changer d'entreprise.`);
+    if (issues.period.length) f.fail('validTo', `Activités de la carte rattachées hors de cette validité (${named(issues.period)}) : modifiez leurs dates ou leur permis.`);
+  }
   if (!f.ok) return f.state();
 
   const values = {

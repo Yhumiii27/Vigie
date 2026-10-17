@@ -288,7 +288,7 @@ function ReadOnly({ r }: { r: RequirementView }) {
   );
 }
 
-/** Contrôles périodiques rattachés à l'exigence (site sélectionné), statut calculé. */
+/** Contrôles périodiques rattachés à l'exigence (tous les sites du périmètre, VEI-06), statut calculé. */
 function LinkedControls({ r }: { r: RequirementView }) {
   if (!r.controls.length) return null;
   return (
@@ -299,7 +299,7 @@ function LinkedControls({ r }: { r: RequirementView }) {
           <Link href={`/veille?onglet=controles&controle=${c.id}`} className="vg-link" style={{ fontSize: 12.5, flex: 1, minWidth: 180 }}>
             {c.controlType} · {c.equipment}
           </Link>
-          <span style={muted}>Prochain le {c.next}</span>
+          <span style={muted}>{c.siteLabel} · prochain le {c.next}</span>
           <ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag>
         </div>
       ))}
@@ -426,7 +426,9 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
         <TextArea name="summary" defaultValue={r?.summary} rows={3} maxLength={1000} placeholder="Obligations concrètes pour l'entreprise." />
       </Field>
       <FormRow>
-        <Field name="dueOn" label="Échéance" hint="Date d'application ou de mise en conformité.">
+        <Field name="dueOn" label="Échéance" hint={r?.dueFromControl
+          ? "Suivie par des contrôles : l'échéance affichée est celle du prochain contrôle rattaché ; cette date n'est pas utilisée."
+          : "Date d'application ou de mise en conformité."}>
           <Input name="dueOn" type="date" defaultValue={r?.dueOn ?? ''} />
         </Field>
         <Field name="dueNote" label="Note d'échéance" hint="Ex. Permanent, audit de suivi.">

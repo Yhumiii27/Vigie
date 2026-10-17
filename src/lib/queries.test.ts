@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionBrief, actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, eventView, isOpen,
-  lastFullMonths, lcfirst, safetyRates, skillState, workforceAccident, type ActionRow, type EventRow, type Person,
+  lastFullMonths, lcfirst, requirementDue, safetyRates, skillState, workforceAccident, type ActionRow, type EventRow, type Person,
 } from './queries';
 
 // Règles de calcul de src/lib/queries.ts (QUA-03) : statuts déduits des données et de la date du jour, jamais stockés.
@@ -11,7 +11,7 @@ const NOW = '2026-10-09';
 const action = (over: Partial<ActionRow> = {}): ActionRow => ({
   id: 'A-1', openedOn: '2026-09-01', pilotId: 'p1', status: 'a_faire', priority: 'urgent', dueOn: '2026-10-20', initialDueOn: '2026-10-20',
   doneOn: null, source: 'evenement', originRef: 'EV-2026-131', eventId: null, reviewId: null, preventionPlanId: null, permitId: null,
-  documentId: null, wasteStreamId: null, wasteEntryId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
+  documentId: null, wasteStreamId: null, wasteEntryId: null, qualificationPersonId: null, qualificationTitleId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
   detail: 'Poser un garde-corps\nSelon la norme NF E85-015.', verifyDueOn: '2026-11-15', closedOn: null, verifyMethod: null,
   efficacyNote: null, effective: null, newRisk: false, verifiedById: null, riskLevel: null, hours: null, estimatedCost: null,
   actualCost: null, followsActionId: null, followReason: null, siteId: 'ville-a', legacyOrigin: null, cancelledAt: null,
@@ -251,5 +251,17 @@ describe('TF1 / TG : 12 derniers mois complets (TDB-04)', () => {
     expect(workforceAccident({ type: 'AT', victimKind: 'externe' })).toBe(false);
     expect(workforceAccident({ type: 'AT', victimKind: 'interimaire' })).toBe(false);
     expect(workforceAccident({ type: 'PA', victimKind: null })).toBe(false);
+  });
+});
+
+describe('requirementDue : échéance d’une exigence de veille (VEI-03)', () => {
+  const ctrl = (id: number, nextOn: string, requirementId: number | null = 1, archivedAt: Date | null = null) => ({ id, nextOn, requirementId, archivedAt });
+  it('suivie par des contrôles : prochain contrôle actif rattaché, jamais la date saisie', () => {
+    const due = requirementDue({ id: 1, dueOn: '2026-10-02' }, [ctrl(1, '2026-12-01'), ctrl(2, '2026-11-15'), ctrl(3, '2026-10-20', 2), ctrl(4, '2026-10-10', 1, new Date())]);
+    expect(due).toEqual({ on: '2026-11-15', control: ctrl(2, '2026-11-15') });
+  });
+  it('sans contrôle rattaché : date d’application saisie', () => {
+    expect(requirementDue({ id: 1, dueOn: '2027-01-20' }, [ctrl(3, '2026-10-20', 2)])).toEqual({ on: '2027-01-20', control: null });
+    expect(requirementDue({ id: 1, dueOn: null }, [])).toEqual({ on: null, control: null });
   });
 });

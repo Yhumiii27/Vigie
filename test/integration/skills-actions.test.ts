@@ -30,11 +30,14 @@ async function legacyRenewal(id: string, personId: string, titleId: string, stat
     id, openedOn: '2026-09-01', pilotId: 'clefevre', status, dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null,
     originRef: `Habilitations · ${personId}`, detail: `Recyclage ${titleId} — ${personId}`, siteId: 'ville-a', legacyOrigin: 'skills',
     doneOn: status === 'a_faire' ? null : '2026-10-01', closedOn: status === 'verifiee' ? '2026-10-05' : null,
+    qualificationPersonId: personId, qualificationTitleId: titleId,
   });
   await db_.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
-  await db_.update(t.qualificationRequirements).set({ renewalActionId: id })
-    .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId)));
 }
+/** Action de recyclage reprise de la case (HAB-04 : portée par l'action). */
+const renewalOf = async (personId: string, titleId: string) =>
+  (await (await db()).select({ id: t.actions.id }).from(t.actions)
+    .where(and(eq(t.actions.qualificationPersonId, personId), eq(t.actions.qualificationTitleId, titleId)))).map((a) => a.id);
 const quals = async (personId: string, titleId: string) =>
   (await db()).select().from(t.qualifications).where(and(eq(t.qualifications.personId, personId), eq(t.qualifications.titleId, titleId)));
 const requirement = async (personId: string, titleId: string) =>
@@ -108,7 +111,7 @@ describe('saveQualification : enregistrer une formation', () => {
     ]);
     expect(await action('A-907')).toEqual(stored);
     expect(await changeLog('action', 'A-907')).toHaveLength(actionLog);
-    expect((await requirement('mgirard', 'elec')).renewalActionId).toBe('A-907');
+    expect(await renewalOf('mgirard', 'elec')).toEqual(['A-907']);
     // Matrice : action reprise affichée en consultation seule (libellé, avancement), encore à réaliser.
     const cell = (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
     expect(cell?.renewal).toMatchObject({ id: 'A-907', label: 'Recyclage elec — mgirard', statusLabel: 'À faire', planned: true });
@@ -202,9 +205,13 @@ describe('setRequirement : titre requis pour un salarié', () => {
     expect(await requirement('mgirard', 'elec')).toBeDefined();
     // Recyclage vérifié (clos) : le retrait est permis.
     await legacyRenewal('A-908', 'kbernard', 'sst', 'verifiee');
-    expect((await requirement('kbernard', 'sst')).renewalActionId).toBe('A-908');
+    expect(await renewalOf('kbernard', 'sst')).toEqual(['A-908']);
     expect(await setRequirement('kbernard', 'sst', false)).toEqual({});
     expect(await requirement('kbernard', 'sst')).toBeUndefined();
+    // HAB-04 : le recyclage clos garde son lien vers la case, listé parmi les recyclages précédents.
+    expect(await renewalOf('kbernard', 'sst')).toEqual(['A-908']);
+    const past = (await loadSkillData()).rows.find((x) => x.person.id === 'kbernard')?.cells.find((c) => c.title.id === 'sst');
+    expect(past).toMatchObject({ required: false, renewal: null, pastRenewals: [expect.objectContaining({ id: 'A-908', readable: true, planned: false })] });
     expect(await setRequirement('tnguyen', 'pont-ancien', true)).toEqual({ error: 'Titre archivé : restaurez-le pour modifier ses exigences.' });
     expect(await setRequirement('ylambert', 'sst', true)).toEqual({ error: "Salarié sorti de l'effectif." });
     expect(await setRequirement('inconnu', 'sst', true)).toEqual({ error: 'Salarié ou titre introuvable.' });

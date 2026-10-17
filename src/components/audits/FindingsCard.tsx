@@ -33,7 +33,6 @@ type Props = {
   cancelled: CancelledFindingView[];
   /** Audits du programme proposés au rattachement (hors revues), le plus récent d'abord. */
   auditOptions: Option[];
-  defaultAudit: string;
   /** Saisie sur l'écran Audits (animateur QHSE, direction) ; consultation seule sinon (AUD-02). */
   canEdit: boolean;
   /** Service QHSE (canCreateAction) : « Créer l'action » d'un écart ou d'une piste de progrès (ACT-22). */
@@ -47,7 +46,7 @@ type Props = {
 };
 
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, canEdit, canCreate = false, options, initialFindingId, closeHref }: Props) {
+export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCreate = false, options, initialFindingId, closeHref }: Props) {
   const router = useRouter();
   // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
   // un constat annulé s'affiche dans le filtre « Annulés ».
@@ -139,7 +138,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, defaultAudit, ca
         {editing && !justCancelled && (
           <>
             <FindingForm finding={finding} defaultPlanItemId={group ? group.planItemId : auditOptions.length ? +auditOptions[0][0] : null}
-              defaultAudit={group && group.planItemId == null ? group.label : defaultAudit}
+              defaultAudit={group && group.planItemId == null ? group.label : ''}
               audits={groups.filter((g) => g.planItemId == null).map((g) => g.label)} auditOptions={auditOptions}
               onDone={(key) => { setSelected(key); close(); }} onCancel={close} />
             {finding && (
@@ -242,7 +241,10 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
   onDone: (key: string) => void; onCancel: () => void;
 }) {
   const initialPlan = finding ? finding.planItemId : defaultPlanItemId;
-  const known = initialPlan != null && auditOptions.some(([v]) => v === String(initialPlan));
+  // L'audit d'un constat existant reste proposé, même s'il n'est plus dans la liste (AUD-11 : audits réalisés seulement).
+  const options: Option[] = finding?.planItemId != null && !auditOptions.some(([v]) => v === String(finding.planItemId))
+    ? [[String(finding.planItemId), finding.audit], ...auditOptions] : auditOptions;
+  const known = initialPlan != null && options.some(([v]) => v === String(initialPlan));
   const [choice, setChoice] = useState(known ? String(initialPlan) : OTHER_AUDIT);
   const [audit, setAudit] = useState(finding?.audit ?? defaultAudit);
   const other = choice === OTHER_AUDIT;
@@ -251,7 +253,7 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
       submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'} hidden={{ id: finding?.id }}>
       <Field name="planItemId" label="Audit" hint={other ? undefined : "Le libellé et la date par défaut viennent de l'élément du programme."}>
         <Select name="planItemId" value={choice} onChange={(e) => setChoice(e.target.value)}
-          options={[...auditOptions, [OTHER_AUDIT, 'Autre audit (hors programme)…'] as const]} />
+          options={[...options, [OTHER_AUDIT, 'Autre audit (hors programme)…'] as const]} />
       </Field>
       {other && (
         <>
