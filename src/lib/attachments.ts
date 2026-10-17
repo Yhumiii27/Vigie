@@ -1,4 +1,5 @@
 // Pièces jointes : constantes et formats partagés par le serveur et les composants client (sans dépendance serveur).
+import { parisDay } from './dates';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** Volume maximal d'un envoi (les server actions acceptent 11 Mo, marge multipart comprise). */
@@ -41,7 +42,7 @@ export const toAttachmentItem = (
   opts: { commentWithdrawn?: boolean } = {},
 ): AttachmentItem => ({
   id: r.id, name: r.fileName, mime: r.mimeType, size: r.size, url: `/fichiers/${r.id}`, isImage: r.mimeType.startsWith('image/'),
-  uploadedById: r.uploadedBy, uploadedBy, addedOn: r.createdAt.toISOString().slice(0, 10),
+  uploadedById: r.uploadedBy, uploadedBy, addedOn: parisDay(r.createdAt),
   ...(r.commentId != null ? { commentId: r.commentId } : {}),
   ...(opts.commentWithdrawn ? { commentWithdrawn: true } : {}),
 });

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useState, useTransition } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
@@ -234,7 +234,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
           {current === 'historique' && (
             <>
               <History c={c} canApprove={canApprove && !c.archived} canRemoveFiles={editable} onNotice={setNotice} />
-              <ChangeLogList entries={c.log} title="Journal des modifications" />
+              <LazyChangeLog entity="control" id={c.id} title="Journal des modifications" />
             </>
           )}
           {current === 'realise' && (

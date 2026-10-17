@@ -9,6 +9,7 @@ import { loadPeople } from '../queries';
 import { getSession, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 import type { Option } from './options';
+import { parisDay } from '@/lib/dates';
 
 /** Site tel que la fenêtre « Gérer les sites » l'affiche (actifs et archivés). */
 export type SiteAdminRow = {
@@ -38,7 +39,7 @@ export const loadSiteAdmin = cache(async (): Promise<SiteAdminRow[]> => {
       qhseLeadId: s.qhseLeadId,
       alsaceMoselle: s.alsaceMoselle,
       qhseLead: lead ? `${lead.name}${hasLeft(lead, now) ? " (sorti de l'effectif)" : ''}` : null,
-      archivedOn: s.archivedAt ? s.archivedAt.toISOString().slice(0, 10) : null,
+      archivedOn: s.archivedAt ? parisDay(s.archivedAt) : null,
       archivedBy: s.archivedById ? people.get(s.archivedById)?.name ?? s.archivedById : null,
       archiveReason: s.archiveReason,
     };

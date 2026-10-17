@@ -112,7 +112,10 @@ export function kanbanColumn(a: { status: string; dueOn: string }, today: string
 
 export const PLAN_SCOPES = [['', 'Plan en cours', 'ph-kanban'], ['historique', 'Historique complet', 'ph-clock-counter-clockwise'], ['abandonnees', 'Abandonnées', 'ph-prohibit']] as const;
 export type PlanScope = (typeof PLAN_SCOPES)[number][0];
-export const PLAN_VIEWS = [['liste', 'Liste', 'ph-list'], ['kanban', 'Kanban', 'ph-kanban'], ['responsable', 'Par responsable', 'ph-users']] as const;
+/** Vues de /actions ; « Statistiques » (ACT-29) : lecteurs du plan seulement (canReadPlan), jamais le Salarié. */
+export const PLAN_VIEWS = [
+  ['liste', 'Liste', 'ph-list'], ['kanban', 'Kanban', 'ph-kanban'], ['responsable', 'Par responsable', 'ph-users'], ['statistiques', 'Statistiques', 'ph-chart-bar'],
+] as const;
 export type PlanView = (typeof PLAN_VIEWS)[number][0];
 export const VERIFIED_WINDOW_DAYS = 30;
 /**
@@ -367,6 +370,21 @@ const FOLLOW_UP_LINK_MODES: Record<string, FollowUpLinkMode> = {
 export const followUpLinkMode = (kind: string): FollowUpLinkMode =>
   !isNonQseLinkKind(kind) && Object.hasOwn(FOLLOW_UP_LINK_MODES, kind) ? FOLLOW_UP_LINK_MODES[kind] : 'none';
 
+/**
+ * Liens complémentaires (ACT-02, décidé le 15/10/2026) : rattachés et détachés après la création, depuis la fiche de
+ * l'action comme depuis l'écran de l'élément (linkAction / unlinkAction, QHSE seulement) — risque du DUERP, exigence,
+ * contrôle, version de document, revue, décision de revue. Jamais l'événement ni l'audit (EVENT_AUDIT_LINK_KINDS), ni une
+ * source d'origine (document, filière, enlèvement : fixés à la création), ni un élément sans action QSE (NON_QSE_LINK_KINDS).
+ */
+export const COMPLEMENTARY_LINK_KINDS = ['risk', 'requirement', 'control', 'docversion', 'review', 'reviewdecision'] as const;
+export type ComplementaryLinkKind = (typeof COMPLEMENTARY_LINK_KINDS)[number];
+export const isComplementaryLinkKind = (kind: string): kind is ComplementaryLinkKind => (COMPLEMENTARY_LINK_KINDS as readonly string[]).includes(kind);
+/** Libellé d'un type de lien complémentaire (liste « Type d'élément » de « Rattacher »). */
+export const COMPLEMENTARY_LINK_LABELS: Record<ComplementaryLinkKind, string> = {
+  risk: 'Risque du DUERP', requirement: 'Exigence de veille', control: 'Contrôle périodique', docversion: 'Version de document en révision',
+  review: 'Revue de direction', reviewdecision: 'Décision de revue',
+};
+
 /** Droits d'un lecteur sur une action (fiche, boutons) ; le serveur applique les mêmes règles. */
 export type ActionRights = {
   qhse: boolean; responsible: boolean;
@@ -420,6 +438,7 @@ export type ActionFilters = {
   completer: boolean; // ?completer=1 : actions à compléter
   q: string; // ≤ 100 caractères
   action: string | null; // ?action=<id> : fiche ouverte
+  mois: string | null; // ?mois=AAAA-MM : mois des statistiques (ACT-29), validé par parseStatsMonth
 };
 export const ACTION_FILTER_QUERY_MAX = 100;
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -447,6 +466,7 @@ export function parseActionFilters(sp: SearchParams): ActionFilters {
     completer: first(sp, 'completer') === '1',
     q: first(sp, 'q').slice(0, ACTION_FILTER_QUERY_MAX),
     action: action && action.length <= 64 ? action : null,
+    mois: /^\d{4}-\d{2}$/.test(first(sp, 'mois')) ? first(sp, 'mois') : null,
   };
 }
 /** Paramètres d'URL des filtres (pour hrefWith) : valeurs par défaut omises (vue liste, etat '', faux, vide). */
@@ -463,6 +483,7 @@ export function actionFiltersParams(f: Partial<ActionFilters>): Record<string, s
     completer: f.completer ? '1' : undefined,
     q: f.q || undefined,
     action: f.action ?? undefined,
+    mois: f.mois ?? undefined,
   };
 }
 /** Action telle que les filtres la lisent (ligne de la vue générale). */

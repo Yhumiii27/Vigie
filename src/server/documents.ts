@@ -7,12 +7,13 @@ import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPr
 import { today } from '@/lib/today';
 import { isQhse } from '@/lib/action-rules';
 import { canApprove, canEdit, isClosedActionStatus, type Role } from '@/lib/domain';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 // Documents maîtrisés : création, métadonnées et cycle de vie des versions
 // (brouillon → en revue → approuvée ; la version approuvée précédente est archivée).
@@ -155,13 +156,16 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   const siteError = await requireInSite(meta.siteId, { create: true });
   if (siteError) return { error: siteError, fieldErrors: { siteId: 'Site non autorisé.' } };
 
-  const ids = (await db.select({ id: t.documents.id }).from(t.documents)).map((d) => d.id);
-  if (rawRef && ids.includes(rawRef)) return { error: 'Cette référence est déjà utilisée.', fieldErrors: { ref: `${rawRef} existe déjà.` } };
-  const id = rawRef || nextRef(ids, refPrefix(meta.type as DocType, meta.process!), 3);
+  if (rawRef && (await db.select({ id: t.documents.id }).from(t.documents).where(eq(t.documents.id, rawRef))).length) {
+    return { error: 'Cette référence est déjà utilisée.', fieldErrors: { ref: `${rawRef} existe déjà.` } };
+  }
 
+  let id = rawRef;
   let versionId: number;
   try {
     versionId = await db.transaction(async (tx) => {
+      // Référence automatique tirée sous verrou dans la transaction (PRD-08) ; saisie : contrôlée par la clé primaire.
+      if (!id) id = await nextEntityReference(tx, 'document', refPrefix(meta.type as DocType, meta.process!), 3);
       await tx.insert(t.documents).values({
         id, title: meta.title, type: meta.type!, process: meta.process!, ownerId: meta.ownerId, reviewMonths: meta.reviewMonths!,
         distribution: meta.distribution, siteId: meta.siteId,

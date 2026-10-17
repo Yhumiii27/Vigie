@@ -1,6 +1,6 @@
 # Actions QSE — spécification fonctionnelle de la refonte du plan d'actions
 
-*Rédigée le 15/10/2026. Statut : **paquet 1 livré le 15/10/2026** (ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 sans objet, ACT-40 ; PRD-12 partiel), après le 3ᵉ tour de réponses du service QHSE (15/10/2026, 14:56 UTC), qui tranche les points 3 à 13 et 15 du [§ 22](#22-points-ouverts) ; propositions appliquées par défaut : points 14 et 17. Restent : ACT-34 (C4), ACT-36 et ACT-39 (C3), ACT-29 et ACT-02 (décidés, C1), ACT-41 (C4) et ACT-42 (C3), ajoutés le 15/10/2026. Les écarts de la réalisation à la rédaction initiale sont indiqués dans chaque section (« Livré : … »).*
+*Rédigée le 15/10/2026. Statut : **paquet 1 livré le 15/10/2026** (ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 sans objet, ACT-40 ; PRD-12 partiel), après le 3ᵉ tour de réponses du service QHSE (15/10/2026, 14:56 UTC), qui tranche les points 3 à 13 et 15 du [§ 22](#22-points-ouverts) ; propositions appliquées par défaut : points 14 et 17. Restent : ACT-34 (C4), ACT-36 et ACT-39 (C3), ACT-41 (C4) et ACT-42 (C3), ajoutés le 15/10/2026. **Paquet 2 livré le 17/10/2026** : ACT-02, ACT-29 (§ 12, § 17), avec ACT-03, TDB-06, AUD-12, PRD-08, QUA-09 et une partie de QUA-11. Les écarts de la réalisation à la rédaction initiale sont indiqués dans chaque section (« Livré : … »).*
 
 Sources, par ordre de priorité :
 
@@ -292,7 +292,7 @@ Règles (livrées par le paquet 1) :
 - **Création depuis un écran source** (`NewActionButton`, champ `link`, QHSE seulement) : la source et l'élément lié sont imposés ; le domaine est proposé (événement AT, PA, SD → Sécurité ; NC, RC → Qualité ; ENV → Environnement ; risque du DUERP → Sécurité ; exigence → domaine de l'exigence quand il correspond ; document → Qualité ; Déchets → Environnement), modifiable. Documents : version en cours de révision sans action → lien `docversion` (pose aussi `document_id`), sinon `document`. Environnement : filière et enlèvement → Déchets imposé ; action « BSD manquants » → Déchets ou Veille, rattachée à l'exigence (retrouvée par ce lien seulement).
 - **Création depuis le plan** (QHSE) : la source est choisie ; un sélecteur propose les éléments que la source admet (événements ouverts aux actions, ACT-07 ; constats hors points forts et éléments du programme de l'année et de la précédente ; risques en vigueur ; contrôles ; exigences ; revues non closes et leurs décisions ; documents ; filières et enlèvements), d'un site actif du périmètre, sans élément à action unique déjà pris ; à défaut, la référence d'origine est obligatoire.
 - Aucun autre événement ni audit ne peut être rattaché ni détaché ensuite (`EVENT_AUDIT_LOCKED`) ; la source ne se change pas. Actions reprises portant plusieurs éléments ou un élément qui ne correspond pas à leur source : tolérées telles quelles (lecture de tous les éléments ; la suite ne reprend que l'élément conforme).
-- **Rattachements complémentaires** (risque du DUERP traité, ligne du PAPRIPACT, exigence, contrôle, document, revue, décision) : **gardés** (point 10, 3ᵉ tour), réservés au QHSE (`linkAction` / `unlinkAction`) ; jamais d'autre événement ni d'audit ; une version de document rattachée plus tard ne pose jamais `document_id`. Lien à un équipement, un sous-équipement, un client ou un fournisseur : souhaité, référentiels à identifier (**ACT-42**).
+- **Rattachements complémentaires** (risque du DUERP traité, ligne du PAPRIPACT, exigence, contrôle, document, revue, décision) : **gardés** (point 10, 3ᵉ tour), réservés au QHSE (`linkAction` / `unlinkAction`) ; jamais d'autre événement ni d'audit ; une version de document rattachée plus tard ne pose jamais `document_id`. Livré le 17/10/2026 (ACT-02) : « Rattacher un élément » et « Détacher » depuis la fiche de l'action (`COMPLEMENTARY_LINK_KINDS` : risque, exigence, contrôle, version de document en révision, revue, décision de revue), en plus des boutons des écrans sources. Une action relève d'une seule revue (sa revue ou celle d'une décision qu'elle porte) ; le dossier d'une revue clôturée est figé (AUD-12). Lien à un équipement, un sous-équipement, un client ou un fournisseur : souhaité, référentiels à identifier (**ACT-42**).
 - Source vide d'une action reprise (« à compléter ») : complétée une fois par le QHSE, parmi les sources admises par ses éléments événement ou audit, sinon parmi les 24 ; l'origine Vigie avant reprise (`legacy_origin`) est affichée comme indice.
 
 ## 13. Site
@@ -328,6 +328,7 @@ Mise en œuvre :
 - Première notification d'information de Vigie : table `notifications` (personne, type, entité, libellé, lien, auteur, commentaire `comment_id`, créée le, lue le), écrite dans la transaction de l'écriture (`src/server/notify.ts`), affichée dans la cloche avec les échéances (icône par type ; clé `notification:<id>`), comptée comme non lue, marquée lue au clic ou par « Tout marquer comme lu » ; réutilisable pour TDB-06. Le lien n'est gardé que si la personne peut encore lire l'action (un ancien responsable garde la notification, sans lien).
 - Changement de responsable par le QHSE : même notification au nouveau responsable (point 15, confirmé).
 - Types : « Action confiée », « Commentaire du responsable », « Preuve ajoutée » (ACT-31, [§ 9](#9-fil-de-commentaires), [§ 10](#10-preuves)).
+- Réutilisée le 17/10/2026 (TDB-06) hors du plan d'actions : « Suite de votre signalement » au déclarant nominatif d'un événement qualifié, classé sans suite ou clôturé (entité `event`, lien vers « Mes signalements »).
 
 ### 15.2 Rappel hebdomadaire du mercredi — dans Vigie et par e-mail
 
@@ -360,7 +361,7 @@ Reportée et Abandonnée ne produisent aucune échéance. Les échéances porten
 
 ## 17. Statistiques mensuelles
 
-Non livré par le paquet 1 (ACT-29, désormais C1 : le journal structuré des avancements est stocké depuis 0005). Onglet « Statistiques » de `/actions` (`?vue=statistiques`, pas de nouvelle route), calculées à la demande dans `src/lib/queries.ts`, jamais stockées, sur le site sélectionné ou tout le périmètre ; mois choisi, avec les 12 mois précédents pour les évolutions. Abandonnées exclues des taux, comptées dans la répartition par avancement.
+**Livré le 17/10/2026 (paquet 2, ACT-29).** Onglet « Statistiques » de `/actions` (`?vue=statistiques&mois=AAAA-MM`, pas de nouvelle route ; mois en cours par défaut, 24 derniers mois proposés), réservé aux lecteurs du plan (QHSE et encadrement, `canReadPlan` ; le Salarié revient à la liste de ses actions). Calcul pur `computeActionStats` (`src/lib/action-stats.ts`, testé dans `action-stats.test.ts`) sur les actions et le journal chargés par `loadActionStats` (`src/lib/data/action-stats.ts`), jamais stocké, sur le site sélectionné (« Tous les sites » : tout le périmètre), Abandonnées comprises. Mois choisi et évolution des 12 mois qui se terminent par lui. Abandonnées exclues des taux et des répartitions autres que l'avancement, comptées dans la répartition par avancement.
 
 | Indicateur | Définition proposée |
 |---|---|
@@ -370,6 +371,16 @@ Non livré par le paquet 1 (ACT-29, désormais C1 : le journal structuré des av
 | Taux d'efficacité | actions Vérifiées « Efficace » / actions Vérifiées dans le mois |
 | Évolution mensuelle ouvertes / clôturées | actions ouvertes (date d'ouverture) et clôturées (date de vérification) par mois, sur 12 mois |
 | Respect des dates cibles | actions Terminées dans le mois dont la date effective ≤ **dernière** date cible (tranché le 15/10/2026, **ACT-29** ; la date cible initiale reste affichée « Date cible initiale » et journalisée) / actions Terminées dans le mois |
+
+Définitions appliquées (livré) :
+
+- **Date d'état** : dernier jour du mois ; mois en cours : date du jour (`today()`).
+- **État d'une action à cette date** : action ouverte (date d'ouverture ≤ date d'état) ; avancement = arrivée (`toKey`) du dernier changement du journal daté au plus tard ce jour-là (jour de Paris), entrées « status » (D11) et « reprise » (0005) ; avant son premier changement, son départ (`fromKey`) ; sans changement journalisé, l'avancement actuel. Action reprise : avancement repris atteint à la date de reprise, « À faire » avant (avancement de toute action à son ouverture). Entrées sans clé (ancien modèle) ignorées.
+- **Répartitions** : par avancement, tout le plan (Abandonnées comprises) ; par source, domaine, responsable, niveau de risque, actions non abandonnées (total et dont ouvertes), « À compléter » pour une valeur vide. Responsable, source, domaine et niveau de risque : valeurs actuelles (non journalisées sous forme structurée).
+- **Taux de retard** : ouvertes (À faire → 80 %) à la date d'état dont la date cible actuelle est dépassée (`isLate`) / ouvertes.
+- **Délai moyen de clôture**, **taux d'efficacité** : actions dont l'avancement actuel est Vérifiée et la date de vérification dans le mois (une vérification rouverte depuis ne compte plus) ; délai = date de vérification − date d'ouverture, en jours, moyenne à une décimale.
+- **Respect des dates cibles** : actions non abandonnées dont la date effective est dans le mois ; à l'heure si date effective ≤ date cible actuelle.
+- **Évolution sur 12 mois** : ouvertes (date d'ouverture), clôturées (Vérifiées, date de vérification), abandonnées (date d'abandon), en cours et taux de retard à la fin de chaque mois.
 
 L'état d'une action à une date passée est reconstitué à partir du journal (détail structuré des changements d'avancement) ; pour les actions reprises ou importées sans historique, l'avancement connu est réputé atteint à la date de reprise. La section « Plan d'actions » du dossier de revue de direction (`src/lib/data/review.ts`) est passée aux sources avec le paquet 1 (colonnes ouvertes, Terminées — à vérifier, Vérifiées dans la période, en retard ; site sélectionné) ; les dossiers figés avant 0005 restent lus par origine.
 
@@ -432,7 +443,7 @@ Prérequis : l'extraction, fournie plus tard par le propriétaire de l'applicati
 
 ## 21. Découpage en éléments du backlog
 
-**Au 15/10/2026, paquet 1 livré** : ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-40 ✅ (ACT-22, ACT-31 et ACT-37 tranchés par le 3ᵉ tour et livrés), ACT-38 clos sans objet, ACT-13 ✅, ACT-29 et ACT-02 décidés (C1) ; restent ACT-34 (C4), ACT-36 et ACT-39 (C3), et deux éléments ajoutés le 15/10/2026 : ACT-41 (actions des projets Keystone, C4) et ACT-42 (lien à un équipement, un client ou un fournisseur, C3). Statuts à jour : [`docs/RESTE-A-FAIRE.md`](../RESTE-A-FAIRE.md) § 5. Découpage initial ci-dessous (classes d'avant les réponses).
+**Au 15/10/2026, paquet 1 livré** : ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-40 ✅ (ACT-22, ACT-31 et ACT-37 tranchés par le 3ᵉ tour et livrés), ACT-38 clos sans objet, ACT-13 ✅, ACT-29 et ACT-02 décidés (C1), livrés le 17/10/2026 (paquet 2) ; restent ACT-34 (C4), ACT-36 et ACT-39 (C3), et deux éléments ajoutés le 15/10/2026 : ACT-41 (actions des projets Keystone, C4) et ACT-42 (lien à un équipement, un client ou un fournisseur, C3). Statuts à jour : [`docs/RESTE-A-FAIRE.md`](../RESTE-A-FAIRE.md) § 5. Découpage initial ci-dessous (classes d'avant les réponses).
 
 24 éléments (ACT-17 à ACT-40) — P1 : 21 · P2 : 3 — S : 11 · M : 11 · L : 2 — charge indicative 22,5–64 j. Classes de dépendance :
 

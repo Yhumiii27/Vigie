@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ACTION_LABEL_MAX, KANBAN_COLUMNS, MISSING_LABELS, MOVE_KINDS, NON_QSE_LINK_KINDS, NON_QSE_LINK_MESSAGE, PLAN_SCOPES, PLAN_VIEWS,
+  ACTION_LABEL_MAX, COMPLEMENTARY_LINK_KINDS, COMPLEMENTARY_LINK_LABELS, KANBAN_COLUMNS, MISSING_LABELS, MOVE_KINDS, NON_QSE_LINK_KINDS, NON_QSE_LINK_MESSAGE, PLAN_SCOPES, PLAN_VIEWS,
   QHSE_ONLY_CREATE_MESSAGE, REASON_REQUIRED, SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, VERIFIED_WINDOW_DAYS, VERIFY_BEFORE_DUE_WARNING,
   actionDateErrors, actionDateOrderErrors, actionFiltersParams, actionHref, actionLabel, actionRights, admissibleSources, canCreateAction,
   canReadAction, canReadPlan, canRemoveProof, canWithdrawComment, compareActions, followUpLinkMode, followUpProblem, formatActionNumber,
-  isLate, isNonQseLinkKind, isQhse, isToComplete,
+  isComplementaryLinkKind, isLate, isNonQseLinkKind, isQhse, isToComplete,
   isVerificationDueSoon, isVerificationLate, kanbanColumn, lateDays, matchesActionFilters, missingFields, moveTargets, parseActionFilters,
   parseActionNumber, sourceEditable, textTooLong, transitionKind, transitionSummary, inPlanScope, type ActionCompletion, type ActionFilters,
   type FilterableAction, type TransitionKind,
@@ -110,7 +110,7 @@ describe('Kanban (§ 16)', () => {
 describe('affichage du plan (?etat=) et vues', () => {
   it('listes', () => {
     expect(PLAN_SCOPES.map((s) => s[0])).toEqual(['', 'historique', 'abandonnees']);
-    expect(PLAN_VIEWS.map((v) => v[0])).toEqual(['liste', 'kanban', 'responsable']);
+    expect(PLAN_VIEWS.map((v) => v[0])).toEqual(['liste', 'kanban', 'responsable', 'statistiques']);
     expect(VERIFIED_WINDOW_DAYS).toBe(30);
   });
   it('inPlanScope : plan en cours (Vérifiées 30 j), historique, abandonnées', () => {
@@ -444,7 +444,7 @@ describe('liens repris par une action de suite (D21, réponses du 15/10/2026)', 
 
 describe('filtres de la vue générale (§ 16)', () => {
   const DEFAULTS: ActionFilters = {
-    vue: 'liste', etat: '', avancement: null, retard: false, responsable: null, mes: false, source: null, priorite: null, completer: false, q: '', action: null,
+    vue: 'liste', etat: '', avancement: null, retard: false, responsable: null, mes: false, source: null, priorite: null, completer: false, q: '', action: null, mois: null,
   };
   it('lecture : valeurs par défaut, première valeur d’un tableau, valeurs invalides ignorées, alias', () => {
     expect(parseActionFilters({})).toEqual(DEFAULTS);
@@ -455,6 +455,8 @@ describe('filtres de la vue générale (§ 16)', () => {
     expect(parseActionFilters({ vue: 'grille', etat: 'tout', avancement: 'done', source: 'skills', priorite: 'haute', retard: 'oui', mes: 'true', completer: '2' })).toEqual(DEFAULTS);
     expect(parseActionFilters({ avancement: 'ouvertes' }).avancement).toBe('ouvertes');
     expect(parseActionFilters({ avancement: 'en_retard' }).avancement).toBe('en_retard');
+    expect(parseActionFilters({ vue: 'statistiques', mois: '2026-09' })).toMatchObject({ vue: 'statistiques', mois: '2026-09' });
+    expect(parseActionFilters({ mois: '09-2026' }).mois).toBeNull();
     expect(parseActionFilters({ avancement: 'p60' }).avancement).toBe('p60');
     expect(parseActionFilters({ source: 'dechets', priorite: 'urgent' })).toMatchObject({ source: 'dechets', priorite: 'urgent' });
     expect(parseActionFilters({ retard: '1', mes: '1', completer: '1' })).toMatchObject({ retard: true, mes: true, completer: true });
@@ -467,12 +469,12 @@ describe('filtres de la vue générale (§ 16)', () => {
     expect(Object.values(actionFiltersParams(DEFAULTS)).filter((v) => v !== undefined)).toEqual([]);
     const f: ActionFilters = {
       vue: 'kanban', etat: 'historique', avancement: 'terminee', retard: true, responsable: 'tnguyen', mes: true, source: 'audit_fournisseur',
-      priorite: 'long_terme', completer: true, q: 'garde-corps', action: 'A-215',
+      priorite: 'long_terme', completer: true, q: 'garde-corps', action: 'A-215', mois: '2026-09',
     };
     const params = actionFiltersParams(f);
     expect(params).toEqual({
       vue: 'kanban', etat: 'historique', avancement: 'terminee', retard: '1', responsable: 'tnguyen', mes: '1', source: 'audit_fournisseur',
-      priorite: 'long_terme', completer: '1', q: 'garde-corps', action: 'A-215',
+      priorite: 'long_terme', completer: '1', q: 'garde-corps', action: 'A-215', mois: '2026-09',
     });
     expect(parseActionFilters(params)).toEqual(f);
     expect(actionFiltersParams({ vue: 'liste', etat: '' })).toMatchObject({ vue: undefined, etat: undefined });
@@ -530,5 +532,16 @@ describe('filtres de la vue générale (§ 16)', () => {
       { id: 'X-1', status: 'p40', dueOn: '2026-10-20' },
     ];
     expect([...list].sort((a, b) => compareActions(a, b, TODAY)).map((a) => a.id)).toEqual(['A-201', 'A-205', 'A-190', 'X-1', 'A-214', 'A-9']);
+  });
+});
+
+describe('liens complémentaires (ACT-02)', () => {
+  it('ni événement ni audit, ni source d’origine, ni élément sans action QSE ; un libellé par type', () => {
+    expect([...COMPLEMENTARY_LINK_KINDS]).toEqual(['risk', 'requirement', 'control', 'docversion', 'review', 'reviewdecision']);
+    for (const k of ['event', 'finding', 'plan', 'document', 'wastestream', 'wasteentry', ...NON_QSE_LINK_KINDS]) expect(isComplementaryLinkKind(k), k).toBe(false);
+    for (const k of COMPLEMENTARY_LINK_KINDS) {
+      expect(COMPLEMENTARY_LINK_LABELS[k]).toBeTruthy();
+      expect(followUpLinkMode(k)).not.toBe('none');
+    }
   });
 });

@@ -11,6 +11,7 @@ vi.mock('@/server/plan', () => ({ saveAction: vi.fn(), addActionFiles: vi.fn(), 
 vi.mock('@/server/plan-ui', () => ({ moveAction: vi.fn(), verifyAction: vi.fn(), reopenAction: vi.fn(), abandonAction: vi.fn() }));
 vi.mock('@/server/action-comments', () => ({ addActionComment: vi.fn(), withdrawActionComment: vi.fn() }));
 vi.mock('@/app/actions', () => ({ setSite: vi.fn() }));
+vi.mock('@/server/links', () => ({ linkAction: vi.fn(), unlinkAction: vi.fn() }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: { href: string; children: unknown }) => createElement('a', { href, ...rest }, children as never) }));
 
 const { ActionDetail } = await import('../ActionDetail');
@@ -36,7 +37,7 @@ const detail = (over: Partial<Detail> = {}): Detail => ({
   problem: 'Élingues usées', detail: 'Remplacer les élingues', riskLevel: null, riskLevelLabel: null,
   verifyMethod: null, verifyMethodLabel: null, efficacyNote: null, effective: null, newRisk: false, verifiedById: null, verifiedBy: null,
   previousVerification: null, cancelledBy: null, legacyOriginLabel: null, eventId: 'EV-2026-130', sources: [],
-  follows: null, followUps: [], comments: [], files: [], history: [], healthWarning: false,
+  follows: null, followUps: [], comments: [], files: [], history: [], linkTargets: [], healthWarning: false,
   ...over,
 });
 
@@ -97,6 +98,40 @@ describe('fiche d’action : boutons et mentions selon le lecteur', () => {
 
 const form = (defaults: Parameters<typeof ActionFields>[0]['defaults'], options: Options = OPTIONS) =>
   renderToStaticMarkup(createElement(ActionFields, { options, defaults, onDone: () => {} }));
+
+describe('fiche d’action : rattacher et détacher un lien complémentaire (ACT-02)', () => {
+  const linked = detail({
+    sources: [
+      { kind: 'event', label: 'EV-2026-130', href: '/evenements?sel=EV-2026-130' },
+      { kind: 'risk', label: 'Atelier · Chute', href: '/risques?risque=3', link: 'risk:3' },
+    ],
+    linkTargets: [{ value: 'control:2', label: 'VGP · Pont roulant', kind: 'control' }],
+  });
+  it('QHSE : « Détacher » sur le lien complémentaire seulement, « Rattacher un élément »', () => {
+    const html = fiche('Animateur QHSE', 'clefevre', linked);
+    expect(html.match(/Détacher<\/button>/g)).toHaveLength(1);
+    expect(html).toContain('Rattacher un élément');
+  });
+  it('action d’un autre site : boutons désactivés', () => {
+    const html = fiche('Animateur QHSE', 'clefevre', linked, { elsewhere: 'Ville B' });
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*Rattacher un élément/);
+  });
+  it('Vérifiée : détacher seulement ; Abandonnée : ni l’un ni l’autre', () => {
+    const verified = fiche('Animateur QHSE', 'clefevre', { ...linked, status: 'verifiee' });
+    expect(verified).toContain('Détacher');
+    expect(verified).not.toContain('Rattacher un élément');
+    const abandoned = fiche('Animateur QHSE', 'clefevre', { ...linked, status: 'abandonnee' });
+    expect(abandoned).not.toContain('Détacher');
+    expect(abandoned).not.toContain('Rattacher un élément');
+  });
+  it('responsable, encadrement : ni « Rattacher » ni « Détacher »', () => {
+    for (const [role, user] of [['Salarié', 'tnguyen'], ['Chef de service', 'sbenali']] as const) {
+      const html = fiche(role, user, linked);
+      expect(html, role).not.toContain('Détacher');
+      expect(html, role).not.toContain('Rattacher un élément');
+    }
+  });
+});
 
 describe('formulaire d’action : source et site', () => {
   it('élément imposé sans source indiquée : source déduite du type (DUERP), jamais la liste des 24', () => {

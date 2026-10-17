@@ -10,7 +10,7 @@ import {
   declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
   type AttachmentItem, type DeclarationDuty,
 } from '@/components/events/shared';
-import { addDays, fmtDate, toParisLocal } from '../dates';
+import { addDays, fmtDate, parisDay, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {
   ALL_SITES, AVANCEMENT, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
@@ -29,7 +29,7 @@ import type { Option } from './options';
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Jour calendaire (Europe/Paris) d'un horodatage, au format ISO « AAAA-MM-JJ ». */
-const isoDay = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const isoDay = parisDay;
 
 type StepRow = typeof t.eventSteps.$inferSelect;
 

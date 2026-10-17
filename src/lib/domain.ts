@@ -244,6 +244,7 @@ export const NOTIFICATION_KINDS = {
   action_confiee: 'Action confiée',
   action_commentaire: 'Commentaire du responsable',
   action_preuve: 'Preuve ajoutée',
+  signalement_suite: 'Suite de votre signalement', // TDB-06 : qualifié, classé sans suite ou clôturé, au déclarant
 } as const;
 export type NotificationType = keyof typeof NOTIFICATION_KINDS;
 /** Clés d'état lu de la cloche : notification stockée « notification:<id> », rappel du mercredi « rappel-actions|2026-W42 ». */

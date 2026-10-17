@@ -79,7 +79,9 @@ export async function linkAction(link: string, actionId: string): Promise<Result
 export async function unlinkAction(link: string, actionId: string): Promise<Result> {
   const c = await check(link, actionId, 'unlink');
   if ('error' in c) return { error: c.error };
-  await c.db.transaction(async (tx) => {
+  const error = await c.db.transaction(async (tx) => {
+    const blocked = await c.parsed.def.detachBlocked?.(tx, c.parsed.args, actionId);
+    if (blocked) return blocked;
     const before = await labelsOf(tx, c);
     await c.parsed.def.detach(tx, c.parsed.args, actionId);
     // Historique seulement si l'action était bien rattachée à cette source (detach est sans effet sinon).
@@ -90,7 +92,9 @@ export async function unlinkAction(link: string, actionId: string): Promise<Resu
       const source = c.parsed.def.logAs?.(c.parsed.args);
       if (source) await logChange(tx, { ...source, action: 'unlink', summary: `Action ${actionId} détachée (elle reste dans le plan d'actions)`, byId: c.byId });
     }
+    return null;
   });
+  if (error) return { error };
   revalidatePath('/', 'layout');
   return {};
 }

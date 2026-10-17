@@ -7,7 +7,7 @@ import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
-import { fmtDate } from '@/lib/dates';
+import { fmtDate, parisDay } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { EntryDetail, EntryView, EventOption, StreamView } from '@/lib/data/environment';
 import { cancelWasteEntry, saveWasteEntry } from '@/server/environment';
@@ -149,7 +149,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
     <div style={{ display: 'grid', gap: 14 }}>
       {entry.cancelled && (
         <Note icon="ph-prohibit">
-          Enlèvement annulé le {fmtDate(entry.cancelled.at.slice(0, 10))} par {entry.cancelled.by} : {entry.cancelled.reason}
+          Enlèvement annulé le {fmtDate(parisDay(new Date(entry.cancelled.at)))} par {entry.cancelled.by} : {entry.cancelled.reason}
           {' '}Il reste inscrit au registre pour traçabilité, hors indicateurs, échéances et export.
         </Note>
       )}

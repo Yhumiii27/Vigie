@@ -1,12 +1,12 @@
 # Vigie — reste à faire (développement)
 
-*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026 (lot 1), le 12/10/2026 (lot 2), puis le 15/10/2026 : refonte des actions QSE alignée sur Power Apps, feuille de route réorganisée par classe de dépendance et livraison du paquet 1 (refonte des actions QSE).*
+*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026 (lot 1), le 12/10/2026 (lot 2), puis le 15/10/2026 : refonte des actions QSE alignée sur Power Apps, feuille de route réorganisée par classe de dépendance et livraison du paquet 1 (refonte des actions QSE), puis le 17/10/2026 : livraison du paquet 2 (suites de la refonte des actions, hors UX-05, UX-06 et éléments PA).*
 
 **État du logiciel après les lots 1 et 2 (12/10/2026).** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Le lot 1 rend Vigie déployable : mode démonstration explicite (`VIGIE_DEMO=1` : sélecteur de rôle, jeu de démonstration, `VIGIE_TODAY`, aperçu mobile ; `npm run dev` et l'application Mac), PostgreSQL en production et PGlite en démonstration, connexion Microsoft Entra ID (OIDC + PKCE, session chiffrée, `src/proxy.ts`), rôles applicatifs et périmètre de sites, responsable QHSE par site, contrôle de l'hôte, CSP et cookies, données de santé des AT restreintes, signalement terrain sans compte par jeton de poste, image Docker et `docker-compose.yml`, sauvegardes chiffrées (dont la sauvegarde avant migration) et pièces jointes chiffrées au repos, contrôle des migrations, tests Vitest et CI GitHub Actions ; exploitation : [`docs/EXPLOITATION.md`](EXPLOITATION.md). Le lot 2 fiabilise et met en conformité : rubriques de la déclaration d'accident du travail (lésions et pièces médicales restreintes), délai CPAM de 48 h hors dimanches et fériés, déclaration selon la victime (entreprise de travail temporaire informée sous 24 h pour un intérimaire, TF1/TG sur les accidents de l'effectif), clôture d'un AT subordonnée à la déclaration, registre des accidents bénins par site, qualification exigeante, écarts R. 4512-6 passés et contenu réglementaire des plans de prévention, fiche imprimable des permis, DUERP en lecture pour tous avec registre des demandes d'accès et impression, PAPRIPACT, programme d'audit lié aux revues (report, annulation), contributions de revue, dossier de revue figé à la séance, échéances du responsable sur tout son périmètre et sur un écran fermé, TF1/TG sur 12 mois complets, actions rattachées à leur source par un vrai lien (avec reprise), mentions de l'arrêté du 31 mai 2021 au registre des déchets, navigation mobile et fenêtres accessibles, et lève les réserves de sécurité et d'exploitation du lot 1 ; une seule migration (`drizzle/0004_compliance.sql`). Tests Vitest : 72 fichiers (597 tests, dont 39 fichiers d'intégration rejoués sur PostgreSQL) et 2 fichiers de bout en bout sur le serveur construit. Aucun connecteur Keystone, Cursus ou Trackdéchets n'existe encore, et les seuls échanges de fichiers restent l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets. La connexion Entra n'a été éprouvée qu'avec un fournisseur OIDC factice : l'inscription de l'application dans le tenant reste à faire.
 
 **Alignement sur Power Apps (15/10/2026).** Le service QHSE suit aujourd'hui ses actions dans l'application Power Apps « Créer Actions QSE ». Son formulaire (reçu le 15/10/2026), deux tours de réponses du service QHSE et les arbitrages de l'utilisateur du même jour fixent la refonte du plan d'actions de Vigie, décrite dans [`docs/specs/actions-qse.md`](specs/actions-qse.md) : 24 éléments ajoutés au [§ 5](#5-plan-dactions-act) (ACT-17 à ACT-40), dont 16 prêts à développer qui forment, avec PRD-12, le premier paquet de la feuille de route. Arbitrages du 15/10/2026 : rappel du mercredi dans Vigie **et** par e-mail (la notification à la création reste dans Vigie seulement) ; rôle du responsable validé (il consulte ses actions, commente dans le fil et joint des preuves ; l'avancement est géré par le service QHSE) ; format des numéros AC-AA#### gardé pour plus tard, le service QHSE recherchant la règle actuelle ; extraction des actions Power Apps fournie plus tard par le propriétaire de l'application, pour reprendre les actions existantes avec leurs numéros AC. D'autres formulaires Power Apps suivront : les éléments des écrans concernés portent la marque **PA** et pourront évoluer à leur réception.
 
-**Avancement.** 85 éléments livrés (✅) : les 23 du lot 1 (TDB-01 et SEC-06 terminés au lot 2) et les 28 du lot 2, plus PRD-09, PRD-11, PRD-15, QUA-13 (avec le lot 1), EVT-23, AUD-30, SEC-14 (avec le lot 2), DUE-11 et AUD-10 (livrés avec DUE-01 et AUD-01, constatés le 15/10/2026), et les 25 du paquet 1 de la refonte des actions QSE (15/10/2026 : ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 — clos sans objet —, ACT-40 ; avec lui EVT-25, EVT-26, DUE-04, HAB-11). 25 éléments partiels (◐), qui restent ouverts : PRD-13, SEC-07, QUA-28 (lot 1), SEC-09, DOC-04, DOC-10 (lot 2), TDB-15, AUD-11, AUD-14, UX-11, QUA-25 (constatés le 15/10/2026), PRD-12, ACT-03, EVT-15, AUD-12, AUD-13, PRD-08, UX-06, TDB-06, TDB-12, QUA-09, QUA-11, QUA-23, QUA-26, DOC-13 (paquet 1). 11 éléments remplacés (↪) par la refonte des actions : ACT-04 à ACT-11, ACT-14 à ACT-16. Reste : 242 éléments ouverts (P1 : 10 · P2 : 123 · P3 : 109), 250–730 j ; par classe : C1 : 166 (137,5–378 j) · C2 : 41 (54,5–168 j) · C3 : 14 (19,5–60 j) · C4 : 21 (38,5–124 j). Dans les tableaux, le statut précède l'intitulé et la colonne « Classe » donne la dépendance ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ce qui reste, ou l'effet de la refonte des actions. Les preuves `fichier:ligne` décrivent l'état au commit `e8e3a3c`, sauf pour ACT-17 à ACT-42 (état au 15/10/2026).
+**Avancement.** 92 éléments livrés (✅) : les 23 du lot 1 (TDB-01 et SEC-06 terminés au lot 2) et les 28 du lot 2, plus PRD-09, PRD-11, PRD-15, QUA-13 (avec le lot 1), EVT-23, AUD-30, SEC-14 (avec le lot 2), DUE-11 et AUD-10 (livrés avec DUE-01 et AUD-01, constatés le 15/10/2026), et les 25 du paquet 1 de la refonte des actions QSE (15/10/2026 : ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 — clos sans objet —, ACT-40 ; avec lui EVT-25, EVT-26, DUE-04, HAB-11), et les 7 du paquet 2 (17/10/2026 : ACT-02, ACT-03, ACT-29, TDB-06, AUD-12, PRD-08, QUA-09). 20 éléments partiels (◐), qui restent ouverts : PRD-13, SEC-07, QUA-28 (lot 1), SEC-09, DOC-04, DOC-10 (lot 2), TDB-15, AUD-11, AUD-14, UX-11, QUA-25 (constatés le 15/10/2026), PRD-12, EVT-15, AUD-13, UX-06, TDB-12, QUA-23, QUA-26, DOC-13 (paquet 1), QUA-11 (paquet 2). 11 éléments remplacés (↪) par la refonte des actions : ACT-04 à ACT-11, ACT-14 à ACT-16. Reste : 235 éléments ouverts (P1 : 10 · P2 : 116 · P3 : 109), 245–717 j ; par classe : C1 : 159 (132,5–365 j) · C2 : 41 (54,5–168 j) · C3 : 14 (19,5–60 j) · C4 : 21 (38,5–124 j). Dans les tableaux, le statut précède l'intitulé et la colonne « Classe » donne la dépendance ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ce qui reste, ou l'effet de la refonte des actions. Les preuves `fichier:ligne` décrivent l'état au commit `e8e3a3c`, sauf pour ACT-17 à ACT-42 (état au 15/10/2026).
 
 **Réserves des lots 1 et 2**, à reprendre dans les paquets de la feuille de route (détail sous chaque élément) :
 
@@ -39,27 +39,27 @@
 
 ## 1. Synthèse
 
-Éléments encore ouverts au 15/10/2026, après les lots 1 et 2, l'ajout de la refonte des actions QSE et la livraison de son paquet 1 (les partiels ◐ comptent pour leur taille entière ; les éléments remplacés ↪ ne comptent plus). Aucun P0 ouvert : les sept bloquants ont été livrés au lot 1. Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j ; ajoutés le 15/10/2026 : 24 éléments (ACT-17 à ACT-40, P1 : 21 · P2 : 3), 22,5–64 j, puis 5 après les réponses du service QHSE (ACT-41, ACT-42, EVT-29, HAB-21, PRV-21 ; P2 : 3 · P3 : 2), 4,5–11 j.
+Éléments encore ouverts au 17/10/2026, après les lots 1 et 2, l'ajout de la refonte des actions QSE et la livraison de ses paquets 1 et 2 (les partiels ◐ comptent pour leur taille entière ; les éléments remplacés ↪ ne comptent plus). Aucun P0 ouvert : les sept bloquants ont été livrés au lot 1. Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j ; ajoutés le 15/10/2026 : 24 éléments (ACT-17 à ACT-40, P1 : 21 · P2 : 3), 22,5–64 j, puis 5 après les réponses du service QHSE (ACT-41, ACT-42, EVT-29, HAB-21, PRV-21 ; P2 : 3 · P3 : 2), 4,5–11 j.
 
 | Groupe | Préfixe | P1 | P2 | P3 | Ouverts | dont ◐ | C1 | C2 | C3 | C4 | S / M / L | Charge restante (j) | ✅ Livrés |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|:-:|--:|--:|
-| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | 1 | 4 | 9 | **14** | 3 | 11 | 3 | · | · | 8 / 6 / 0 | 10–26 | 4 |
+| [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | 1 | 3 | 9 | **13** | 2 | 10 | 3 | · | · | 8 / 5 / 0 | 9–23 | 5 |
 | [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 16 | 3 | **19** | 1 | 12 | 7 | · | · | 6 / 11 / 2 | 20–59 | 10 |
-| [Plan d'actions](#5-plan-dactions-act) | ACT | 3 | 4 | 2 | **9** | 1 | 4 | · | 3 | 2 | 4 / 4 / 1 | 9–26 | 22 |
+| [Plan d'actions](#5-plan-dactions-act) | ACT | 3 | 1 | 2 | **6** | · | 1 | · | 3 | 2 | 3 / 2 / 1 | 6,5–19 | 25 |
 | [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 9 | 9 | **18** | · | 7 | 8 | 2 | 1 | 8 / 7 / 3 | 20–59 | 3 |
 | [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 7 | 9 | **16** | · | 13 | 2 | · | 1 | 9 / 6 / 1 | 13,5–37 | 4 |
 | [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 10 | 9 | **19** | · | 12 | 4 | · | 3 | 6 / 10 / 3 | 22–66 | 2 |
 | [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 9 | 7 | **16** | · | 15 | · | · | 1 | 8 / 8 / 0 | 12–32 | 2 |
-| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 10 | 18 | **28** | 4 | 27 | 1 | · | · | 15 / 12 / 1 | 22,5–61 | 8 |
+| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 9 | 18 | **27** | 3 | 26 | 1 | · | · | 14 / 12 / 1 | 22–60 | 9 |
 | [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 10 | 11 | **21** | 3 | 14 | 4 | 2 | 1 | 13 / 5 / 3 | 20,5–58 | 2 |
 | [Intégrations](#12-intégrations-int) | INT | 4 | 6 | 7 | **17** | · | 3 | · | 2 | 12 | 2 / 8 / 7 | 30–96 | · |
 | [Imports, exports et impression](#13-imports-exports-et-impression-imp) | IMP | 1 | 6 | 2 | **9** | · | 2 | 7 | · | · | 2 / 5 / 2 | 12–37 | · |
-| [Production et exploitation](#14-production-et-exploitation-prd) | PRD | 1 | 4 | · | **5** | 3 | 5 | · | · | · | 2 / 3 / 0 | 4–11 | 10 |
+| [Production et exploitation](#14-production-et-exploitation-prd) | PRD | 1 | 3 | · | **4** | 2 | 4 | · | · | · | 1 / 3 / 0 | 3,5–10 | 11 |
 | [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | · | 6 | 1 | **7** | 2 | 5 | · | 2 | · | 2 / 4 / 1 | 8–24 | 7 |
-| [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | 5 | 15 | **20** | 6 | 19 | · | 1 | · | 8 / 11 / 1 | 18–51 | 8 |
+| [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | 4 | 15 | **19** | 5 | 18 | · | 1 | · | 7 / 11 / 1 | 17,5–50 | 9 |
 | [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | 11 | 2 | **13** | 2 | 13 | · | · | · | 3 / 9 / 1 | 13,5–40 | 3 |
 | [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | 6 | 5 | **11** | · | 4 | 5 | 2 | · | 0 / 9 / 2 | 15–47 | · |
-| **Total** | | **10** | **123** | **109** | **242** | 25 | **166** | **41** | **14** | **21** | 96 / 118 / 28 | **250–730** | **85** |
+| **Total** | | **10** | **116** | **109** | **235** | 20 | **159** | **41** | **14** | **21** | 92 / 115 / 28 | **245–717** | **92** |
 
 Plus 11 éléments remplacés (↪ ACT-04 à ACT-11, ACT-14 à ACT-16 : repris par les éléments de la refonte, 7–17 j), comptés ni ouverts ni livrés.
 
@@ -67,15 +67,15 @@ Par classe de dépendance et par priorité (ouverts et partiels ; contenu et ord
 
 | Classe | P1 | P2 | P3 | Ouverts | dont PA | S / M / L | Charge (j) |
 |---|--:|--:|--:|--:|--:|:-:|--:|
-| **C1** Prêt à développer | 1 | 85 | 80 | **166** | 90 | 81 / 79 / 6 | 137,5–378 |
+| **C1** Prêt à développer | 1 | 78 | 80 | **159** | 90 | 77 / 76 / 6 | 132,5–365 |
 | **C2** À valider | 2 | 24 | 15 | **41** | 36 | 9 / 23 / 9 | 54,5–168 |
 | **C3** En attente d'éléments | 2 | 6 | 6 | **14** | 7 | 5 / 5 / 4 | 19,5–60 |
 | **C4** Dépend d'un tiers technique | 5 | 8 | 8 | **21** | 14 | 1 / 11 / 9 | 38,5–124 |
-| **Total** | **10** | **123** | **109** | **242** | 147 | 96 / 118 / 28 | **250–730** |
+| **Total** | **10** | **116** | **109** | **235** | 147 | 92 / 115 / 28 | **245–717** |
 
 Refonte des actions QSE (ACT-17 à ACT-42) : paquet 1 livré le 15/10/2026 ; restent ACT-34, ACT-36, ACT-39, ACT-41 et ACT-42 (C3 : 3 · C4 : 2, 5,5–17 j). Les P1 restants attendent une décision (TDB-03, IMP-01 : C2), des éléments (ACT-36, ACT-39 : C3) ou un tiers technique (INT-01 à INT-04, ACT-34 : C4) ; PRD-12 (◐, C1) garde ses autres tâches planifiées.
 
-Par type (répartition par type des éléments de la refonte estimée : les types ne figurent pas dans les tableaux) :
+Par type (au 15/10/2026, avant le paquet 2 ; répartition par type des éléments de la refonte estimée : les types ne figurent pas dans les tableaux) :
 
 | Type | Ouverts | dont P1 | dont C1 | ✅ Livrés |
 |---|--:|--:|--:|--:|
@@ -105,18 +105,19 @@ Règles communes : les éléments d'un même paquet qui ajoutent une colonne ou 
 - **Lot 2 — Fiabilisation et conformité prioritaire (12/10/2026)** — 28 éléments (P1), 27,5–79 j : TDB-02, TDB-04, TDB-05, EVT-01 à EVT-05, ACT-01, PRV-01 à PRV-03, DUE-01, DUE-02, HAB-01, VEI-01, VEI-02, AUD-01 à AUD-06, DOC-01, DOC-02, UX-01 à UX-03 ; terminés : TDB-01 et SEC-06 ; livrés avec lui : EVT-23, AUD-30, SEC-14 ; partiels : SEC-09, DOC-04, DOC-10 (◐) ; réserves de sécurité et d'exploitation du lot 1 levées. Une seule migration (`drizzle/0004_compliance.sql`), suivie de la reprise des liens d'origine des actions (`vigie-db reprise-liens`, `docs/EXPLOITATION.md` § 6) ; points mineurs non corrigés en tête du document.
 - **Constaté le 15/10/2026** — DUE-11 (vue imprimable du DUERP, livrée avec DUE-01) et AUD-10 (journal des changements du programme faits par la revue, livré avec AUD-01) : ✅ ; TDB-15, AUD-11, AUD-14, UX-11, QUA-25 : ◐.
 - **Paquet 1 — Refonte des actions QSE (15/10/2026)** — 19 éléments (P1 : 18 · P2 : 1) : ACT-17 à ACT-28 (dont ACT-22, décidé et appliqué), ACT-30 à ACT-33 (dont ACT-31, ajouté au paquet par la réponse du service QHSE), ACT-35, ACT-37 (décidé et appliqué), ACT-40 ; tranchés avec lui : ACT-13 ✅, ACT-38 clos sans objet, ACT-02 et ACT-29 décidés (C1) ; livrés avec lui : EVT-25, EVT-26, DUE-04, HAB-11 ; partiels : PRD-12, ACT-03, EVT-15, AUD-12, AUD-13, PRD-08, UX-06, TDB-06, TDB-12, QUA-09, QUA-11, QUA-23, QUA-26, DOC-13 (◐). Une seule migration (`drizzle/0005_actions_qse.sql`) porte le modèle et la reprise ; réponses du service QHSE du 15/10/2026 appliquées (création réservée au QHSE, 24 sources, aucune action QSE depuis Habilitations ni Prévention, autovérification admise, rappel du mercredi avec les Terminées) ; spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md).
+- **Paquet 2 — Suites de la refonte des actions (17/10/2026)** — 7 éléments livrés (P2, C1) : ACT-02 (« Rattacher un élément » / « Détacher » un lien complémentaire depuis la fiche action, QHSE seulement), ACT-03 (historique de l'action tenu par les autres modules : site d'un événement, réserves d'un contrôle, programme de prévention), ACT-29 (onglet « Statistiques » de `/actions`, calculé, jamais stocké), TDB-06 (suite d'un signalement notifiée au déclarant), AUD-12 (une action relève d'une seule revue ; dossier d'une revue clôturée figé), PRD-08 (références des autres fiches tirées sous verrou dans la transaction de création), QUA-09 (jours de Paris partout) ; partiel : QUA-11 (veille et prévention ; restent risques, audits, environnement). Aucune migration. Restent du paquet : UX-05, UX-06 et les éléments PA (EVT-22, VEI-05, HAB-06, IMP-07).
 
 ### Vue d'ensemble
 
 | Classe | Éléments | dont P1 | Charge (j) | Démarrage |
 |---|--:|--:|--:|---|
-| **C1** Prêt à développer | 166 | 1 | 137,5–378 | tout de suite, dans l'ordre des paquets 2 à 15 (paquet 1 livré) |
+| **C1** Prêt à développer | 159 | 1 | 132,5–365 | tout de suite, dans l'ordre des paquets 2 à 15 (paquet 1 livré, paquet 2 livré hors UX-05, UX-06 et éléments PA) |
 | **C2** À valider | 41 | 2 | 54,5–168 | à la réponse (décisions ci-dessous, questions au [§ 19](#19-questions-ouvertes)) |
 | **C3** En attente d'éléments | 14 | 2 | 19,5–60 | à réception de l'élément attendu |
 | **C4** Dépend d'un tiers technique | 21 | 5 | 38,5–124 | quand le système externe est disponible |
-| **Total** | **242** | **10** | **250–730** | |
+| **Total** | **235** | **10** | **245–717** | |
 
-### Classe 1 — Prêt à développer (166 éléments, 137,5–378 j)
+### Classe 1 — Prêt à développer (159 éléments, 132,5–365 j)
 
 Aucune dépendance externe et décisions prises. Ordre recommandé : la refonte des actions d'abord (paquet 1, livré le 15/10/2026), puis ses suites (paquets 2 et 10) ; ensuite les P2, puis les P3, par thème. Le paquet 1 regroupait tous les P1 de la classe 1 (les 16 éléments de la refonte et PRD-12) ; seul PRD-12 (◐) reste en P1 de classe 1 ; les autres P1 attendent une décision (TDB-03 et IMP-01 : C2), des éléments (ACT-36, ACT-39 : C3) ou un tiers technique (INT-01 à INT-04, ACT-34 : C4).
 
@@ -124,22 +125,22 @@ Aucune dépendance externe et décisions prises. Ordre recommandé : la refonte 
 
 Voir « Livré » ci-dessus. Restent de la refonte : ACT-34 (compte d'envoi des e-mails, C4), ACT-36 et ACT-39 (numéros AC et import de l'extraction Power Apps, C3), ACT-41 (C4) et ACT-42 (C3) ; la bascule de Power Apps vers Vigie attend ACT-36 et ACT-39, l'envoi réel du rappel par e-mail attend ACT-34. Suites de classe 1 : paquets 2 et 10.
 
-#### Paquet 2 — Suites de la refonte des actions (P2 · 14 éléments, 16–48 j)
+#### Paquet 2 — Suites de la refonte des actions (P2 · 14 éléments, 16–48 j) : livré le 17/10/2026, sauf UX-05, UX-06 et les éléments PA
 
-À enchaîner après le paquet 1 : ces éléments réutilisent le nouveau modèle (notifications, fil, preuves, filtres, fiche) ou en dépendent.
+À enchaîner après le paquet 1 : ces éléments réutilisent le nouveau modèle (notifications, fil, preuves, filtres, fiche) ou en dépendent. Livrés le 17/10/2026 (✅) : ACT-02, ACT-03, ACT-29, TDB-06, AUD-12, PRD-08, QUA-09 ; partiel (◐) : QUA-11 ; aucune migration (les références des autres fiches réutilisent la table de numérotation `action_counters`, portée « ref:<préfixe> »). Restent : EVT-22, VEI-05, HAB-06, IMP-07 (PA, à placer après la réception des formulaires Power Apps de leurs écrans), UX-05, UX-06 et la fin de QUA-11 (risques, audits, environnement).
 
-- **ACT-03** Tracer les changements d'action faits par les autres modules — S · ◐ cascade de site seulement (recyclage sans objet)
-- **ACT-02** Rattacher une action existante depuis toutes les sources — M · décidé le 15/10/2026 : « Rattacher » / « Détacher » un lien complémentaire depuis la fiche action
-- **ACT-29** Statistiques mensuelles — M · décidé le 15/10/2026 : état du plan à la fin du mois, dernière date cible
-- **TDB-06** Notifications d'information (réaffectation d'une action, suite d'un signalement) — M · après ACT-30
+- **ACT-03** ✅ Tracer les changements d'action faits par les autres modules — S · livré le 17/10/2026
+- **ACT-02** ✅ Rattacher une action existante depuis toutes les sources — M · livré le 17/10/2026 : « Rattacher » / « Détacher » un lien complémentaire depuis la fiche action
+- **ACT-29** ✅ Statistiques mensuelles — M · livré le 17/10/2026 : état du plan à la fin du mois, dernière date cible
+- **TDB-06** ✅ Notifications d'information (réaffectation d'une action, suite d'un signalement) — M · livré le 17/10/2026
 - **EVT-22** Espace salarié mobile (mes actions, mes habilitations) — L · PA · après ACT-24 et ACT-25
 - **VEI-05** Écart ou réserve dont l'action est clôturée : relancer pour boucler — M · PA · après ACT-23
-- **AUD-12** Rattacher une action d'une autre revue la déplace — S · source unique d'ACT-20
+- **AUD-12** ✅ Rattacher une action d'une autre revue la déplace — S · livré le 17/10/2026
 - **HAB-06** Session de formation collective et recyclage groupé — L · PA · après ACT-20
 - **IMP-07** Impression des fiches événement et action — M · PA · fiche action après ACT-23
-- **PRD-08** Numéros de référence sûrs — S · même mécanisme qu'ACT-35
-- **QUA-09** Dates en UTC — S · partie Actions avec la refonte
-- **QUA-11** Historiques à l'ouverture d'une fiche — M · actions faites par ACT-24 ; autres écrans
+- **PRD-08** ✅ Numéros de référence sûrs — S · livré le 17/10/2026 (même mécanisme qu'ACT-35)
+- **QUA-09** ✅ Dates en UTC — S · livré le 17/10/2026
+- **QUA-11** ◐ Historiques à l'ouverture d'une fiche — M · actions (ACT-24), veille et prévention livrées ; restent risques, audits, environnement
 - **UX-05** Photos : galerie et allègement — M · avec SEC-09
 - **UX-06** Mise en page tablette — M · vue des actions après ACT-27
 
@@ -469,7 +470,7 @@ Système externe ou infrastructure : API, tenant Microsoft, messagerie, héberge
 
 18 éléments — P1 : 5 · P2 : 4 · P3 : 9 — charge indicative 13,5–36 j.
 
-Au 15/10/2026 : 4 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05) · 3 partiels (◐ TDB-06, TDB-12, TDB-15) — reste 14 éléments ouverts (C1 : 11 · C2 : 3 ; PA : 3), charge indicative 10–26 j.
+Au 17/10/2026 : 5 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05, TDB-06) · 2 partiels (◐ TDB-12, TDB-15) — reste 13 éléments ouverts (C1 : 10 · C2 : 3 ; PA : 3), charge indicative 9–23 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -478,7 +479,7 @@ Au 15/10/2026 : 4 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05) · 3 partiels (�
 | TDB-03 | Saisie mensuelle des heures travaillées (base du TF1/TG) | **P1** | M | Levée du report « aucune saisie/import » | C2 |
 | TDB-04 | ✅ TF1/TG : fenêtre de 12 mois, mois manquants et « — » sans heures | **P1** | S | — | — |
 | TDB-05 | ✅ « Mes échéances » consolidées tous sites | **P1** | M | — | — |
-| TDB-06 | ◐ Notifications d'information (réaffectation d'une action, suite d'un signalement) | P2 | M | ACT-30 | C1 |
+| TDB-06 | ✅ Notifications d'information (réaffectation d'une action, suite d'un signalement) | P2 | M | ACT-30 | — |
 | TDB-07 | État lu : clé avec date d'échéance et gravité, retards triés par ancienneté | P2 | M | — | C1 |
 | TDB-08 | Archivage d'un site : avertir des éléments encore ouverts | P2 | M | — | C2 |
 | TDB-09 | Traçabilité des sites : journaliser la règle Seveso / PP et afficher l'historique | P2 | S | — | C1 |
@@ -508,6 +509,7 @@ Au 15/10/2026 : 4 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05) · 3 partiels (�
 - **TDB-06** — La cloche ne contient que des échéances : rien quand une action est confiée ou réaffectée, ni pour le déclarant quand son signalement est qualifié, classé ou clôturé. (preuve : src/lib/data/notifications.ts:24-34 ; src/server/plan.ts:117-146)
   **À revoir avec ACT-30 (15/10/2026)** — la notification « action confiée » est livrée par ACT-30 (table de notifications d'information réutilisable, dans la cloche seulement, jamais par e-mail) ; restent la réaffectation d'une action (proposition non bloquante d'ACT-30) et l'information du déclarant quand son signalement est qualifié, classé ou clôturé.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : notifications d'information stockées (« Action confiée » à la création et à la réaffectation, commentaires et preuves du responsable au QHSE), cloche réutilisable. Reste : information du déclarant quand son signalement est qualifié, classé ou clôturé.
+  ✅ **Livré (17/10/2026, paquet 2)** — suite d'un signalement : son déclarant nominatif (`declarant_id`, jamais un signalement anonyme ni un déclarant externe sans compte) reçoit une notification stockée « Suite de votre signalement » quand il est qualifié, classé sans suite ou clôturé (`notifyReportOutcome`, `src/server/notify.ts`, dans la transaction de `advanceEvent` / `dismissEvent`), sauf s'il est l'auteur du changement ; intitulé de l'événement seul (aucune donnée de santé), lien vers « Mes signalements » (`/signaler/mes-signalements/<id>`), gardé tant qu'il en est le déclarant ; cloche seulement, aucun e-mail, aucune migration (type `signalement_suite`, entité `event`). La réaffectation d'une action était livrée par ACT-30.
 - **TDB-07** — todoKey ignore la date et le ton : une échéance récurrente ou aggravée reste lue. Les retards ont tous la date du jour. Ajouter dueOn à TodoItem, à la clé et au tri. (preuve : src/lib/domain.ts:319-336 ; src/lib/data/watch.ts:265-298 ; src/lib/data/audits.ts:259-275 ; src/lib/data/review.ts:640-650)
 - **TDB-08** — archiveSite ne vérifie que le dernier site actif. Afficher le décompte des éléments ouverts, voire bloquer ou proposer un transfert. (preuve : src/server/sites.ts:71-94 ; src/components/SitesManager.tsx:84-90)
   **À revoir avec ACT-20 (15/10/2026)** — un transfert en masse vers un autre site doit garder la règle du site unique des actions.
@@ -634,15 +636,15 @@ Au 15/10/2026 : 10 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 
 42 éléments (16 à l'inventaire du 10/10/2026, 24 ajoutés le 15/10/2026 par la refonte des actions QSE, 2 après les réponses du service QHSE du même jour) — P1 : 22 · P2 : 8 · P3 : 12 — charge indicative 37–103 j.
 
-Au 15/10/2026 : 22 livrés (✅ ACT-01, ACT-13, ACT-17, ACT-18, ACT-19, ACT-20, ACT-21, ACT-22, ACT-23, ACT-24, ACT-25, ACT-26, ACT-27, ACT-28, ACT-30, ACT-32, ACT-33, ACT-35, ACT-37, ACT-40, ACT-31, ACT-38) · 1 partiel (◐ ACT-03) · 11 remplacés (↪ ACT-04, ACT-05, ACT-06, ACT-07, ACT-08, ACT-09, ACT-10, ACT-11, ACT-14, ACT-15, ACT-16) — reste 9 éléments ouverts (C1 : 4 · C3 : 3 · C4 : 2), charge indicative 9–26 j.
+Au 17/10/2026 : 25 livrés (✅ ACT-01, ACT-13, ACT-17, ACT-18, ACT-19, ACT-20, ACT-21, ACT-22, ACT-23, ACT-24, ACT-25, ACT-26, ACT-27, ACT-28, ACT-30, ACT-32, ACT-33, ACT-35, ACT-37, ACT-40, ACT-31, ACT-38, ACT-02, ACT-03, ACT-29) · 11 remplacés (↪ ACT-04, ACT-05, ACT-06, ACT-07, ACT-08, ACT-09, ACT-10, ACT-11, ACT-14, ACT-15, ACT-16) — reste 6 éléments ouverts (C1 : 1 · C3 : 3 · C4 : 2), charge indicative 6,5–19 j.
 
 **Refonte des actions QSE (15/10/2026).** Le formulaire Power Apps « Créer Actions QSE », deux tours de réponses du service QHSE et les arbitrages de l'utilisateur du 15/10/2026 redéfinissent le plan d'actions : dix avancements conduits par le service QHSE, vérification d'efficacité planifiée dès la création avec actions de suite, responsable qui consulte ses actions, commente et joint des preuves, 22 sources, un seul site et au plus un événement ou un audit liés, numéro unique jamais réattribué, notification à la création (cloche seulement) et rappel du mercredi (cloche et e-mail), vue générale filtrable et statistiques mensuelles, reprise de toutes les actions Power Apps. Spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md) (points ouverts : § 22, repris au [§ 19](#19-questions-ouvertes)). 24 éléments ajoutés (ACT-17 à ACT-40, second tableau) ; 11 éléments remplacés (↪), qui ne comptent plus dans le reste à faire ; ACT-01 ✅, ACT-02, ACT-03, ACT-12 et ACT-13 à revoir avec la refonte (note sous chaque élément).
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
 | ACT-01 | ✅ Rattacher les actions Prévention, Documents et Environnement par un vrai lien | **P1** | L | Script de reprise par originRef | — |
-| ACT-02 | Rattacher une action existante depuis toutes les sources | P2 | M | — | C1 |
-| ACT-03 | ◐ Tracer les changements d'action faits par les autres modules | P2 | S | — | C1 |
+| ACT-02 | ✅ Rattacher une action existante depuis toutes les sources | P2 | M | — | — |
+| ACT-03 | ✅ Tracer les changements d'action faits par les autres modules | P2 | S | — | — |
 | ACT-04 | ↪ Historique de l'action : tous les champs modifiés | P2 | S | — | ↪ ACT-20 |
 | ACT-05 | ↪ Motif obligatoire pour rouvrir une action clôturée | P2 | S | — | ↪ ACT-21 |
 | ACT-06 | ↪ Champ Site des « Nouvelle action » ouvertes depuis les autres écrans | P3 | S | — | ↪ ACT-20 |
@@ -682,7 +684,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 | ACT-37 | ✅ Source des actions créées par Habilitations, Prévention, Environnement et audits fournisseurs | **P1** | S | ACT-18 | — |
 | ACT-39 | Import de l'extraction Power Apps | **P1** | L | ACT-17, ACT-18, ACT-20, ACT-24, ACT-26, ACT-35, ACT-36, ACT-37 | C3 |
 | ACT-40 | ✅ Tests de bout en bout et de migration de la refonte | **P1** | M | ACT-19, ACT-21, ACT-23, ACT-24, ACT-25, ACT-30, ACT-32, ACT-33 | — |
-| ACT-29 | Statistiques mensuelles | P2 | M | ACT-21, ACT-23, ACT-27 | C1 |
+| ACT-29 | ✅ Statistiques mensuelles | P2 | M | ACT-21, ACT-23, ACT-27 | — |
 | ACT-31 | ✅ Avertir le QHSE des commentaires et preuves du responsable | P2 | S | ACT-24, ACT-25, ACT-30 | — |
 | ACT-38 | ✅ Priorité proposée d'après le niveau de risque — sans objet | P2 | S | ACT-20 | — |
 | ACT-41 | Actions des projets Keystone remontées dans le plan d'actions | P2 | M | API Keystone (INT-02) | C4 |
@@ -695,9 +697,11 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 - **ACT-02** — Événement, habilitation, document, plan et permis n'ont pas LinkActionButton ; la fiche action ne permet pas d'ajouter ou détacher une source. (preuve : Utilisations de LinkActionButton limitées à src/components/watch/\*, review/ReviewPanel.tsx, audits/\*, risks/RiskSheet.tsx ; src/components/prevention/PlanDialogs.tsx:419-430 (liste sans « Rattacher ») ; src/components/actions/ActionDetail.tsx:137-153 (sources affichées, sans ajout ni détachement) ; src/lib/action-links.ts:230-263 (type qualification sans bouton))
   **À revoir avec ACT-20 (15/10/2026)** — un seul événement ou audit lié par action, source non modifiable après création ; le maintien des rattachements complémentaires (risque, exigence, contrôle, recyclage) est à confirmer par le service QHSE (point 10 de la spécification, § 19) : selon la réponse, l'élément est développé tel quel ou abandonné.
   **Décidé (15/10/2026)** — un seul événement ou audit lié, posé à la création (jamais rattaché ni détaché ensuite, livré par ACT-20) ; les rattachements complémentaires (risque, exigence, contrôle, document, revue, décision) sont **gardés**, réservés au QHSE (`LinkActionButton`, `linkAction` / `unlinkAction`) ; habilitations, plans de prévention et permis n'en reçoivent plus (pas d'action QSE). Reste : « Rattacher » / « Détacher » un lien complémentaire depuis la fiche de l'action (la fiche n'a pas la valeur du lien). Passe en classe C1. Rattacher une action à un équipement, un client ou un fournisseur : **ACT-42**.
+  ✅ **Livré (17/10/2026, paquet 2)** — fiche action : « Rattacher un élément » (type, puis élément : risque du DUERP, exigence, contrôle, version de document en révision, revue, décision de revue ; éléments du site de l'action ou communs, encore ouverts aux actions, sans ceux déjà liés ni une autre revue) et « Détacher » (confirmation en ligne) sur chaque lien complémentaire (`COMPLEMENTARY_LINK_KINDS`, `src/lib/action-rules.ts`) ; QHSE seulement, sur le site de l'action, action non close pour rattacher, non abandonnée pour détacher (mêmes règles que `linkAction` / `unlinkAction`) ; le lien « kind:args » n'est envoyé qu'au QHSE (`PlanSource.link`), les éléments proposés sont calculés à l'ouverture de la fiche (`linkTargets`). Journal de l'action et de la source inchangé.
 - **ACT-03** — Le recyclage passe l'action en « verify » par UPDATE direct (date passée reprise) et la cascade de site d'un événement n'écrit rien : passer par applyActionStatus et logChange. (preuve : src/server/skills.ts:155-159 ; src/server/events.ts:306-310)
   **À revoir avec ACT-21 et ACT-22 (15/10/2026)** — le recyclage enregistré ne fait plus passer l'action « verify » par écriture directe (`src/server/skills.ts:152`) : règle tranchée par ACT-22, passage par le cycle de vie d'ACT-21 et `logChange` ; la trace de la cascade de site d'un événement se fait dès maintenant.
   ◐ **Partiel (15/10/2026)** — l'enregistrement d'une formation ne touche plus aucune action (pas d'action QSE pour un recyclage, réponse du service QHSE) : la moitié « recyclage » est sans objet. Reste : la cascade du site d'un événement vers ses actions n'écrit rien dans le journal des actions (`src/server/events.ts`).
+  ✅ **Livré (17/10/2026, paquet 2)** — historique de l'action tenu, dans la transaction de l'écriture, quand un autre module la modifie : changement de site d'un événement (« Site modifié avec l'événement EV-… », détail Site), nouvelles réserves d'un contrôle et annulation d'un enregistrement qui rétablit d'autres réserves (« Détachée de … », motif de l'annulation), inscription et retrait au programme de prévention (PAPRIPACT, création du programme comprise). Réserve : à l'enregistrement d'un contrôle, l'entrée est écrite après le stockage du rapport, comme celle du contrôle.
 - **ACT-04** — diffFields ignore verifyDueOn, kind et description. (preuve : src/server/plan.ts:116-121)
   ↪ **Remplacé par ACT-20 (15/10/2026)** — journal de tous les champs du nouveau formulaire (`diffFields`), y compris ceux qu'ignore aujourd'hui `saveAction` (vérification planifiée, description).
   Livré avec ACT-20 le 15/10/2026.
@@ -771,6 +775,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
   ✅ **Livré (15/10/2026, paquet 1)** — écrans au nouveau modèle : Événements (source Évènement QSE ou Réclamation client imposée, étape « Efficacité vérifiée » quand les actions liées sont Vérifiées ou Abandonnées), DUERP et PAPRIPACT, Audits (source selon la ligne du programme ; « Fournisseurs » → Audit fournisseur), Revue (Objectif QSE pour une décision « objectif » ; dossier par source, dossiers figés lus tels quels), Veille et contrôles, Documents (Revue documentaire), Environnement (Déchets ; action BSD : Déchets ou Veille), tableau de bord ; boutons de création pour le QHSE seulement (sinon « Les actions QSE sont créées par le service QHSE. ») ; **Habilitations et Prévention ne créent plus d'action** (réponses du 15/10/2026 : recyclages gérés par le RH, actions immédiates des plans de prévention), actions reprises en consultation ; écrans communs (audits, revue, veille) : action d'un site hors périmètre réduite à son numéro. Réserve : un plan de prévention se clôt désormais après un écart R. 4512-6 sans action QSE (**PRV-21**).
 - **ACT-29** — Onglet « Statistiques » de /actions (?vue=statistiques, sans nouvelle route), calculé dans src/lib/queries.ts, jamais stocké, sur le site sélectionné ou le périmètre, pour un mois avec les 12 mois précédents : répartition par avancement, source, domaine, responsable et niveau de risque ; taux de retard ; délai moyen de clôture (date de vérification − date d'ouverture) ; taux d'efficacité (Efficace / Vérifiées) ; évolution mensuelle ouvertes / clôturées ; respect des dates cibles. État passé reconstitué par le journal structuré d'ACT-21 ; Abandonnées exclues des taux. Remplace ACT-16 ; la section « Plan d'actions » du dossier de revue passe aux sources. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
   **Décidé (15/10/2026)** — définitions tranchées par le service QHSE le 15/10/2026 : répartitions = état de tout le plan à la fin du mois ; respect des dates cibles mesuré à la **dernière** date cible (la date cible initiale, `initial_due_on`, reste affichée et journalisée). Journal structuré des avancements stocké depuis le paquet 1. Passe en classe C1.
+  ✅ **Livré (17/10/2026, paquet 2)** — onglet « Statistiques » de `/actions` (`?vue=statistiques&mois=AAAA-MM`, QHSE et encadrement ; le Salarié revient à la liste de ses actions) : site sélectionné ou tout le périmètre ; mois choisi (24 derniers mois) ; actions ouvertes, taux de retard, délai moyen de clôture, taux d'efficacité, respect des dates cibles (dernière date cible) ; répartitions par avancement (Abandonnées comprises), source, domaine, responsable et niveau de risque (hors Abandonnées, dont ouvertes) ; évolution sur 12 mois (ouvertes, clôturées, abandonnées, en cours et taux de retard en fin de mois). Calcul pur `computeActionStats` (`src/lib/action-stats.ts`) sur `loadActionStats` (`src/lib/data/action-stats.ts`), jamais stocké ; état reconstitué par le journal structuré (entrées « status » et « reprise ») ; action reprise sans historique : avancement réputé atteint à la date de reprise, « À faire » avant. Réserves : responsable, source, domaine, niveau de risque et date cible sont les valeurs actuelles ; mois en cours arrêté à la date du jour.
 - **ACT-30** — Première notification d'information de Vigie (aujourd'hui la cloche ne montre que des échéances calculées, src/lib/data/notifications.ts:24-34) : table notifications (ACT-17) ; à la création d'une action, notification à son responsable « Action … confiée par … » avec le lien vers la fiche ; aucune si le responsable est l'auteur ; jamais d'e-mail (décision du service QHSE) ; affichée dans la cloche avec les échéances, non lue jusqu'au clic ou « Tout marquer comme lu » (src/server/notifications.ts) ; réutilisable pour TDB-06. Proposition non bloquante : même notification quand le QHSE change le responsable. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
   ✅ **Livré (15/10/2026, paquet 1)** — table `notifications`, notification « Action A-n confiée par … » au responsable à la création et à la réaffectation (§ 22.15 confirmé), jamais d'e-mail ; cloche (`src/lib/data/notifications.ts`) : clé `notification:<id>`, non lue jusqu'au clic ou « Tout marquer comme lu », lien gardé seulement si la personne peut lire l'action. Réserve : la notification d'un ancien responsable reste listée, sans lien.
 - **ACT-31** — Le responsable rend compte par le fil et les preuves, mais c'est le QHSE qui passe l'action « Terminée » : sans avertissement, le QHSE doit ouvrir chaque fiche. Proposition : notification d'information (ACT-30) au responsable QHSE du site de l'action pour chaque commentaire ou preuve ajouté par un responsable, regroupée par action et par jour. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
@@ -1041,7 +1046,7 @@ Au 15/10/2026 : 2 livrés (✅ VEI-01, VEI-02) — reste 16 éléments ouverts (
 
 36 éléments — P1 : 6 · P2 : 11 · P3 : 19 — charge indicative 28,5–77 j.
 
-Au 15/10/2026 : 8 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, AUD-10, AUD-30) · 4 partiels (◐ AUD-11, AUD-12, AUD-13, AUD-14) — reste 28 éléments ouverts (C1 : 27 · C2 : 1 ; PA : 19), charge indicative 22,5–61 j.
+Au 17/10/2026 : 9 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, AUD-10, AUD-30, AUD-12) · 3 partiels (◐ AUD-11, AUD-13, AUD-14) — reste 27 éléments ouverts (C1 : 26 · C2 : 1 ; PA : 19), charge indicative 22–60 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1056,7 +1061,7 @@ Au 15/10/2026 : 8 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, A
 | AUD-09 | Types de constat : écart majeur, observation, délai de réponse | P2 | M | — | C1 · PA |
 | AUD-10 | ✅ Journaliser les changements du programme faits par la revue | P2 | S | — | — |
 | AUD-11 | ◐ Contrôles de saisie des constats | P2 | S | — | C1 |
-| AUD-12 | ◐ Rattacher une action d'une autre revue la déplace | P2 | S | ACT-20 (source unique) | C1 |
+| AUD-12 | ✅ Rattacher une action d'une autre revue la déplace | P2 | S | ACT-20 (source unique) | — |
 | AUD-13 | ◐ Objectifs QHSE mesurables reliés aux indicateurs | P2 | L | — | C1 · PA |
 | AUD-14 | ◐ Contrôles avant clôture et visa | P2 | S | — | C1 · PA |
 | AUD-15 | Visa de la direction possible par l'animateur QHSE | P2 | S | — | C1 |
@@ -1104,6 +1109,7 @@ Au 15/10/2026 : 8 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, A
 - **AUD-12** — Rattacher une action déjà liée à une autre revue réécrit son reviewId sans contrôle. (preuve : src/lib/action-links.ts:265-271,285-296)
   **À revoir avec ACT-20 (15/10/2026)** — rattacher l'action d'une autre revue est refusé (source unique, verrouillée).
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : rattacher à une revue (ou à une de ses décisions) une action qui relève d'une autre revue est refusé. Reste : les autres contrôles de rattachement d'une revue.
+  ✅ **Livré (17/10/2026, paquet 2)** — une action relève d'une seule revue : sa revue ou celle d'une décision qu'elle porte (ligne reprise sans `review_id`) — rattacher à une autre revue ou à ses décisions est refusé ; détacher la revue est refusé tant qu'une décision de cette revue est portée par l'action ; dossier d'une revue clôturée ou annulée figé (détacher la revue ou une décision refusé) ; rien n'est écrit en cas de refus (`detachBlocked`, `src/lib/action-links.ts`).
 - **AUD-13** — TF1_TARGET constant ; objectifs de revue en texte libre (ISO §6.2, §9.1). (preuve : src/lib/data/dashboard.ts:13,66 ; src/lib/data/review.ts:369 ; src/db/schema.ts:416-426)
   **À revoir avec ACT-20 (15/10/2026)** — la source « Objectif QSE » vise les décisions de revue de nature « objectif », puis l'entité objectif quand elle existera.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : la source « Objectif QSE » est imposée aux actions des décisions de revue de nature « objectif ». Reste : objectifs mesurables reliés aux indicateurs (TF1 cible…).
@@ -1281,7 +1287,7 @@ Au 15/10/2026 : aucun livré — reste 9 éléments ouverts (C1 : 2 · C2 : 7 ; 
 
 15 éléments — P0 : 4 · P1 : 4 · P2 : 7 — charge indicative 11,5–31 j.
 
-Au 15/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07, PRD-09, PRD-11, PRD-15) · 3 partiels (◐ PRD-12, PRD-08, PRD-13) — reste 5 éléments ouverts (C1 : 5), charge indicative 4–11 j.
+Au 17/10/2026 : 11 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07, PRD-08, PRD-09, PRD-11, PRD-15) · 2 partiels (◐ PRD-12, PRD-13) — reste 4 éléments ouverts (C1 : 4), charge indicative 3,5–10 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1293,7 +1299,7 @@ Au 15/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, 
 | PRD-06 | ✅ Règles et tests de migration | **P1** | M | — | — |
 | PRD-07 | ✅ URL publique des QR codes | **P1** | S | — | — |
 | PRD-12 | ◐ Tâches planifiées | **P1** | M | — (livré avec ACT-33) | C1 |
-| PRD-08 | ◐ Numéros de référence sûrs | P2 | S | ACT-35 | C1 |
+| PRD-08 | ✅ Numéros de référence sûrs | P2 | S | ACT-35 | — |
 | PRD-09 | ✅ Configuration centralisée | P2 | S | — | — |
 | PRD-10 | Journalisation serveur | P2 | S | — | C1 |
 | PRD-11 | ✅ Supervision et santé | P2 | S | — | — |
@@ -1320,6 +1326,7 @@ Au 15/10/2026 : 10 livrés (✅ PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, 
 - **PRD-08** — Les références (A-n, PP-, etc.) sont calculées par max + 1 hors transaction : risque de doublon en écritures simultanées. (preuve : src/server/plan.ts:128-131 (A-n hors transaction) ; src/server/prevention.ts:78,227-228,542-543 ; src/server/documents.ts:112-114 ; src/server/environment.ts:209-211 ; src/server/audits.ts:99-102 ; src/server/pp-import.ts:502-504 ; à l'inverse src/server/events.ts:344-345 calcule dans la transaction ; src/lib/forms.ts:89-92 (nextRef))
   **À revoir avec ACT-35 (15/10/2026)** — la numérotation sûre des actions est traitée par ACT-35 (compteur sous verrou, jamais réattribué) ; restent les autres références (EE-, PP-, permis, documents, FD-, cert-), à passer au même mécanisme.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : numérotation des actions sous verrou, jamais réattribuée (ACT-35). Reste : les autres références (PP-, EE-, permis, documents, FD-, cert-).
+  ✅ **Livré (17/10/2026, paquet 2)** — `nextEntityReference` (`src/server/references.ts`) : compteur par préfixe dans la table de numérotation `action_counters` (portée « ref:<préfixe> », sans migration), upsert verrouillant dans la transaction de création, toujours au-delà des références existantes et journalisées (fiche supprimée : jamais réattribuée) ; entreprises (EE-), plans (PP-), permis, documents (référence automatique), filières (FD-), référentiels (cert-) et événements (EV-, signalement terrain compris). Réserve : l'import d'un plan de prévention réserve sa référence avant d'enregistrer le fichier source (référence perdue, jamais réattribuée, si la création échoue). `nextRef` ne sert plus qu'à l'aperçu de la référence proposée d'un document.
 - **PRD-09** — Variables d'environnement lues et validées en un seul module (zod). (preuve : src/lib/dates.ts:10 (VIGIE_TODAY renvoyé tel quel) ; src/db/index.ts:20 (VIGIE_DATA_DIR) ; src/lib/uploads.ts:12 (VIGIE_UPLOAD_DIR) ; src/lib/pp-import/ai.ts:20-34 (VIGIE_AI_IMPORT, ANTHROPIC_API_KEY) ; package.json:25 (zod disponible))
   ✅ **Livré (11/10/2026)** — `src/lib/env.ts` (zod, seule lecture de `process.env`, erreurs explicites au démarrage par `src/instrumentation.ts`) et `src/lib/config.ts` côté application ; `.env.example` réécrit (production, Docker Compose, démonstration).
 - **PRD-10** — Erreurs serveur journalisées avec leur référence (instrumentation.ts). (preuve : src/app/(app)/error.tsx:8,17-19 et src/app/error.tsx:8,19 (référence affichée, console.error côté client seulement) ; aucun src/instrumentation.ts ; les console.error serveur se limitent à src/server/pp-import.ts:118-540)
@@ -1391,7 +1398,7 @@ Au 15/10/2026 : 7 livrés (✅ SEC-01, SEC-02, SEC-03, SEC-04, SEC-05, SEC-06, S
 
 28 éléments — P1 : 7 · P2 : 6 · P3 : 15 — charge indicative 28–81 j.
 
-Au 15/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, QUA-07, QUA-13) · 6 partiels (◐ QUA-09, QUA-11, QUA-23, QUA-25, QUA-26, QUA-28) — reste 20 éléments ouverts (C1 : 19 · C3 : 1 ; PA : 3), charge indicative 18–51 j.
+Au 17/10/2026 : 9 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, QUA-07, QUA-09, QUA-13) · 5 partiels (◐ QUA-11, QUA-23, QUA-25, QUA-26, QUA-28) — reste 19 éléments ouverts (C1 : 18 · C3 : 1 ; PA : 3), charge indicative 17,5–50 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1403,7 +1410,7 @@ Au 15/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, Q
 | QUA-06 | ✅ Non-régression du cloisonnement Salarié | **P1** | M | — | — |
 | QUA-07 | ✅ Corriger addMonths en fin de mois | **P1** | S | — | — |
 | QUA-08 | Tests de bout en bout Playwright | P2 | L | — | C1 |
-| QUA-09 | ◐ Dates en UTC | P2 | S | — | C1 |
+| QUA-09 | ✅ Dates en UTC | P2 | S | — | — |
 | QUA-10 | Tests de l'import de plan de prévention | P2 | M | — | C1 · PA |
 | QUA-11 | ◐ Historiques à l'ouverture d'une fiche | P2 | M | — | C1 |
 | QUA-12 | Modifications simultanées | P2 | M | — | C1 |
@@ -1443,10 +1450,12 @@ Au 15/10/2026 : 8 livrés (✅ QUA-01, QUA-02, QUA-03, QUA-04, QUA-05, QUA-06, Q
 - **QUA-09** — Plusieurs dates du jour sont calculées en UTC : un helper parisDay commun. (preuve : src/lib/data/actions.ts:83 (isoDay) ; src/lib/attachments.ts:32 (addedOn) ; src/lib/data/audits.ts:113 ; src/lib/data/review.ts:169,602 ; src/lib/data/sites.ts:23 ; src/components/skills/TitlesManager.tsx:34)
   **À revoir avec ACT-17 (15/10/2026)** — la partie Actions (`src/lib/data/actions.ts`) est réécrite par la refonte : y appliquer le helper ; les autres modules ensuite.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : `parisDay` (`src/lib/dates.ts`) dans le code des actions. Reste : les autres modules.
+  ✅ **Livré (17/10/2026, paquet 2)** — `parisDay` (`src/lib/dates.ts`) pour toute date du jour tirée d'un horodatage : pièces jointes (`addedOn`), annulations des constats, éléments du programme et revues, archivage des sites et des titres de formation, annulation d'un enlèvement ; copies locales remplacées (`src/server/events.ts`, `src/lib/data/events.ts`, risques, veille, documents).
 - **QUA-10** — Tests sur les formulaires d'exemple et leurs résultats attendus. (preuve : samples/README.md:5-11 (résultats attendus) ; src/lib/pp-import/pdf-form.ts, docx.ts, mapping.ts ; scripts/pp-samples.mjs)
 - **QUA-11** — Les journaux sont chargés pour toute la liste : les charger à l'ouverture de la fiche. (preuve : src/lib/data/actions.ts:149 (loadChangeLogs('action', toutes les actions)) ; src/components/actions/ActionDetail.tsx:287 ; src/lib/data/risks.ts:320, prevention.ts:375-377, audits.ts:98-100, watch.ts:122-123, documents.ts:182)
   **À revoir avec ACT-24 (15/10/2026)** — la fiche action charge son fil de commentaires et son historique à l'ouverture (ACT-24) ; restent les autres écrans (risques, prévention, audits, veille, documents).
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : fil et historique d'une action chargés à l'ouverture de sa fiche. Reste : risques, prévention, audits, veille, documents.
+  ◐ **Partiel (17/10/2026, paquet 2)** — livré : historique chargé au premier dépliage (`LazyChangeLog`, server action `loadEntityHistory`, `src/server/history.ts` : écran ouvert au rôle et fiche du site sélectionné) pour les exigences et contrôles (veille), les plans de prévention et les entreprises extérieures ; celui des permis reste chargé avec la liste (date de délivrance, PRV-04). Reste : risques, audits (constats, programme, référentiels), environnement (filières, enlèvements).
 - **QUA-12** — Écriture conditionnelle (version ou updatedAt) pour éviter qu'une modification en écrase une autre. (preuve : src/server/events.ts:305 (update events set v where id) ; src/server/events.ts:316-319 (nextEventId) ; src/lib/forms.ts:89-92 (nextRef) ; src/server/risks.ts:39-40 (isUniqueViolation, seul cas traité))
   **À revoir avec ACT-35 (15/10/2026)** — la numérotation des actions passe sous verrou ; le contrôle des modifications simultanées reste à faire partout.
 - **QUA-13** — Routes, date de démonstration et conventions (requireInSite, logChange, archivage) à mettre à jour. (preuve : README.md:12 (VIGIE_TODAY=2026-10-06), :24-40 (table des routes incomplète), :29 (« suppression des risques ») ; .env.example:6 ; CLAUDE.md, section Conventions (pas de requireInSite / logChange / archivage) ; src/lib/guard.ts:32, src/server/changelog.ts)

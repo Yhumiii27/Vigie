@@ -18,13 +18,20 @@
 
 import type { ChangeEntry } from '@/components/ChangeLog';
 import type { ActionDomain, ActionPriority, Avancement, FollowReason, SourceKey, VerifyMethod } from './action-keys';
-import type { ActionRights, KanbanKey } from './action-rules';
+import type { ActionRights, ComplementaryLinkKind, KanbanKey } from './action-rules';
 import type { AttachmentItem } from './attachments';
 import type { AvancementGroup, Tone } from './domain';
 import type { Option } from './form-options';
 
 /** Élément lié affiché par la fiche (source, rattachements complémentaires, liens repris). */
-export type PlanSource = { kind: string; label: string; href: string | null; detail?: string; detachOnAbandon?: boolean };
+export type PlanSource = {
+  kind: string; label: string; href: string | null; detail?: string; detachOnAbandon?: boolean;
+  /** Lien « kind:args » d'un lien complémentaire (ACT-02 : « Détacher » de la fiche) ; QHSE seulement, sinon absent. */
+  link?: string;
+};
+
+/** Élément proposé par « Rattacher » de la fiche (ACT-02) : lien complémentaire (COMPLEMENTARY_LINK_KINDS). */
+export type LinkTargetOption = { value: string; label: string; kind: ComplementaryLinkKind };
 
 /** Ligne de la vue générale (Liste, Kanban, Par responsable) : jamais de fil, de preuves ni d'historique (QUA-11). */
 export type ActionListItem = {
@@ -67,6 +74,8 @@ export type ActionDetailView = ActionListItem & {
   follows: { id: string; label: string; reason: FollowReason } | null;
   followUps: { id: string; label: string; reason: FollowReason; statusLabel: string; tone: Tone }[]; // « Suivie par A-n »
   comments: ActionCommentView[]; files: AttachmentItem[]; // preuves visibles du lecteur (celles d'un commentaire ont commentId ; D23)
+  /** « Rattacher » (ACT-02) : éléments rattachables à l'action, QHSE seulement (canLink, site sélectionné) ; sinon vide. */
+  linkTargets: LinkTargetOption[];
   history: ChangeEntry[];
   /** Élément lié = accident du travail (§ 4) : calculé seulement pour le QHSE (lecteur qui reçoit les listes du formulaire) ;
    *  toujours false pour les autres lecteurs, pour ne pas révéler la nature de l'événement d'un collègue. */
@@ -89,6 +98,7 @@ export type ActionTargetOption = {
   siteId: string | null; // site proposé quand l'élément est choisi (null : élément commun, le QHSE choisit)
   sources: readonly SourceKey[]; // admissibleSources(kind, facts) ; l'option n'est proposée que pour ces sources (RC / non-RC, piste d'audit…)
   healthWarning?: boolean; // événement de type AT : avertissement « aucune donnée de santé » (§ 4)
+  reviewId?: number; // décision de revue : sa revue (« Rattacher » de la fiche écarte les décisions d'une autre revue, AUD-12)
 };
 
 /** Valeurs proposées par un écran (création, QHSE seulement) ou valeurs actuelles (modification). */

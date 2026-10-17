@@ -98,7 +98,10 @@ describe('autres listes des actions (§ 5)', () => {
     expect(VERIFY_METHOD_KEYS.map((k) => VERIFY_METHODS[k])).toEqual(['Audit / visite', 'Écrit', 'Réunion', 'Visuelle', 'Autre']);
     expect(FOLLOW_REASON_KEYS.map((k) => FOLLOW_REASONS[k])).toEqual(['Non efficace', 'Nouveau risque']);
     expect(REVIEW_FOLLOW_UP.cancelled.label).toBe('Action abandonnée');
-    expect(NOTIFICATION_KINDS).toEqual({ action_confiee: 'Action confiée', action_commentaire: 'Commentaire du responsable', action_preuve: 'Preuve ajoutée' });
+    expect(NOTIFICATION_KINDS).toEqual({
+      action_confiee: 'Action confiée', action_commentaire: 'Commentaire du responsable', action_preuve: 'Preuve ajoutée',
+      signalement_suite: 'Suite de votre signalement',
+    });
     expect(sqlList(['a', 'b'])).toBe("'a', 'b'");
   });
   it('rapprochement des libellés sans accents, casse ni espaces (import Power Apps)', () => {

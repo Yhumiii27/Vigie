@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input } from '@/components/form';
@@ -94,7 +94,7 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
         ))}
       </div>
 
-      <ChangeLogList entries={c.history} />
+      <LazyChangeLog entity="contractor" id={c.id} />
 
       <ErrorLine error={error} />
       {canManage && (

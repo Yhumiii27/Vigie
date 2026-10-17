@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/components/events/shared';
 import { entryRef } from '@/components/environment/model';
@@ -41,6 +41,8 @@ type LinkKind = {
   attach(tx: DbOrTx, args: string[], actionId: string): Promise<string | null>;
   /** Détache l'action de cette source (sans effet si elle n'y est pas rattachée). */
   detach(tx: DbOrTx, args: string[], actionId: string): Promise<void>;
+  /** Détachement refusé (unlinkAction) : message, ou null ; absent = toujours admis. Jamais appelé par l'abandon (detachAll). */
+  detachBlocked?(tx: DbOrTx, args: string[], actionId: string): Promise<string | null>;
   /** Détache l'action de toutes les sources de ce type (annulation de l'action). */
   detachAll(tx: DbOrTx, actionId: string): Promise<void>;
   /** Source conservée sur une action annulée (detachAll sans effet) : absente des sources détachées. */
@@ -472,6 +474,14 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     async detach(tx, [a], actionId) {
       await tx.update(t.actions).set({ reviewId: null }).where(and(eq(t.actions.id, actionId), eq(t.actions.reviewId, num(a))));
     },
+    // AUD-12 : dossier d'une revue clôturée figé ; une décision de la revue encore portée par l'action la retient.
+    async detachBlocked(tx, [a], actionId) {
+      const closed = await closedReview(tx, num(a));
+      if (closed) return closed;
+      const [d] = await tx.select({ id: t.reviewDecisions.id }).from(t.reviewDecisions)
+        .where(and(eq(t.reviewDecisions.reviewId, num(a)), eq(t.reviewDecisions.actionId, actionId)));
+      return d ? `L'action ${actionId} porte une décision de cette revue : détachez d'abord la décision.` : null;
+    },
     async detachAll() { /* la revue d'origine reste lisible sur une action abandonnée */ },
     keptOnCancel: true,
     async facts(db, [a]) {
@@ -503,6 +513,10 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     async detach(tx, [a], actionId) {
       await tx.update(t.reviewDecisions).set({ actionId: null }).where(and(eq(t.reviewDecisions.id, num(a)), eq(t.reviewDecisions.actionId, actionId)));
     },
+    async detachBlocked(tx, [a]) {
+      const [d] = await tx.select({ reviewId: t.reviewDecisions.reviewId }).from(t.reviewDecisions).where(eq(t.reviewDecisions.id, num(a)));
+      return d ? closedReview(tx, d.reviewId) : null;
+    },
     async detachAll(tx, actionId) {
       await tx.update(t.reviewDecisions).set({ actionId: null }).where(eq(t.reviewDecisions.actionId, actionId));
     },
@@ -520,10 +534,22 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
   ...ORIGIN_KINDS,
 };
 
-/** Garde minimale AUD-12 : une action porte une seule revue de direction ; une autre revue est refusée. */
+/**
+ * AUD-12 : une action relève d'une seule revue de direction — sa revue (`review_id`) ou celle d'une décision qu'elle porte
+ * (ligne reprise sans `review_id`) ; rattacher l'action d'une autre revue (à la revue ou à une de ses décisions) est
+ * refusé, jamais un déplacement silencieux.
+ */
 async function otherReview(tx: DbOrTx, actionId: string, reviewId: number): Promise<string | null> {
   const [a] = await tx.select({ reviewId: t.actions.reviewId }).from(t.actions).where(eq(t.actions.id, actionId));
-  return a?.reviewId != null && a.reviewId !== reviewId ? `L'action ${actionId} relève déjà d'une autre revue de direction.` : null;
+  const [d] = await tx.select({ reviewId: t.reviewDecisions.reviewId }).from(t.reviewDecisions)
+    .where(and(eq(t.reviewDecisions.actionId, actionId), ne(t.reviewDecisions.reviewId, reviewId)));
+  return (a?.reviewId != null && a.reviewId !== reviewId) || d ? `L'action ${actionId} relève déjà d'une autre revue de direction.` : null;
+}
+
+/** AUD-12 : revue clôturée ou annulée — son dossier est figé, ses rattachements ne changent plus. */
+async function closedReview(tx: DbOrTx, reviewId: number): Promise<string | null> {
+  const [r] = await tx.select({ status: t.reviews.status }).from(t.reviews).where(eq(t.reviews.id, reviewId));
+  return r && (r.status === 'cloturee' || r.status === 'annulee') ? 'Revue clôturée : son dossier est figé, le rattachement ne change plus.' : null;
 }
 
 /** Décompose un lien `type:arg[:arg]` ; null si le type est inconnu. */
@@ -618,14 +644,15 @@ export async function moveSlot(tx: DbOrTx, kind: string, args: string[], fromId:
   return def.attach(tx, args, toId);
 }
 
-/** Sources de chaque action (identifiant → sources), pour la fiche action et le plan (sans le lien interne). */
-export const loadLinkSources = cache(async (): Promise<Map<string, ActionSource[]>> => {
+/**
+ * Sources d'une action (fiche action) : chaque élément lié, avec le lien « kind:args » qui le désigne (« Détacher » d'un
+ * lien complémentaire, ACT-02 ; l'appelant ne l'envoie au navigateur que pour le QHSE).
+ */
+export const loadActionSources = cache(async (actionId: string): Promise<(ActionSource & { link: string })[]> => {
   const db = await getDb();
-  const all = (await Promise.all(Object.values(ACTION_LINKS).map((def) => def.sources(db)))).flat();
-  const map = new Map<string, ActionSource[]>();
+  const all = (await Promise.all(Object.values(ACTION_LINKS).map((def) => def.sources(db, [actionId])))).flat();
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  all.forEach(({ actionId, link, ...src }) => map.set(actionId, [...(map.get(actionId) ?? []), src]));
-  return map;
+  return all.map(({ actionId: _id, ...src }) => src);
 });
 
 /** Actions encore ouvertes parmi `ids` (contrôle avant rattachement). */

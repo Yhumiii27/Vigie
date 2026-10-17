@@ -9,12 +9,13 @@ import {
 } from '@/components/environment/model';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { STEP_CLOSED, canEdit } from '@/lib/domain';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { currentPersonId } from '@/lib/session';
 import { fmtSiret, isEuVatNumber, isSiret, normalizeSiret } from '@/lib/siret';
 import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 const MAX_QUANTITY = 9_999_999_999;
 const MAX_CONSUMPTION = 999_999_999;
@@ -287,8 +288,7 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
       if (details.length) await logChange(tx, { entityType: 'waste_stream', entityId: current.id, action: 'update', summary: 'Filière modifiée', details });
       return current.id;
     }
-    const ids = (await tx.select({ id: t.wasteStreams.id }).from(t.wasteStreams)).map((s) => s.id);
-    const newId = nextRef(ids, 'FD-', 2);
+    const newId = await nextEntityReference(tx, 'waste_stream', 'FD-', 2);
     await tx.insert(t.wasteStreams).values({ id: newId, ...values });
     await logChange(tx, { entityType: 'waste_stream', entityId: newId, action: 'create', summary: `Filière créée : ${label}` });
     return newId;

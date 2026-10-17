@@ -24,6 +24,7 @@ import { addActionFiles, removeActionFile } from '@/server/plan';
 import { abandonAction, reopenAction } from '@/server/plan-ui';
 import { ActionThread } from './detail/ActionThread';
 import { CostsBlock } from './detail/CostsBlock';
+import { DetachLinkButton, LinkTargetForm } from './detail/LinkForms';
 import {
   commentAnchor, detailButtons, editDefaults, editOptions, missingSummary, readOnlyNotice, showPreviousVerification, showVerification,
   threadWritable, writesBlocked, type DetailButton,
@@ -35,7 +36,7 @@ export type ActionDetailProps = {
   detail: ActionDetailView; rights: ActionRights; options: ActionFormOptions; currentUserId: string; today: string; verifyDefault: string;
 };
 
-type Step = 'view' | DetailButton;
+type Step = 'view' | DetailButton | 'link';
 
 const BUTTONS: Record<DetailButton, { label: string; icon: string; primary?: boolean; danger?: boolean }> = {
   edit: { label: 'Modifier', icon: 'ph-pencil-simple' },
@@ -103,6 +104,16 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
         <ReasonForm action={reopenAction} hidden={{ id: d.id, from }} submitLabel="Rouvrir" submitIcon="ph-arrow-counter-clockwise"
           message={`L’action revient à « ${AVANCEMENT.terminee.label} » ; date, nature, constat et résultat de la vérification sont effacés (conservés dans l’historique).${d.followUps.length ? ' Les actions de suite déjà créées restent en place.' : ''}`}
           onDone={done('Vérification rouverte.')} onCancel={back} />
+      </Section>
+    );
+  }
+  if (step === 'link') {
+    return (
+      <Section root={root}>
+        <Meta d={d} />
+        <StepHead icon="ph-link" title="Rattacher un élément"
+          text="Lien complémentaire (risque, exigence, contrôle, version de document, revue, décision) : journalisé sur l’action et sur l’élément." />
+        <LinkTargetForm actionId={d.id} targets={d.linkTargets} onDone={(label) => { setStep('view'); setFlash(`Rattachée à ${label}.`); }} onCancel={back} />
       </Section>
     );
   }
@@ -184,9 +195,21 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
               <li key={`${s.kind}-${s.href ?? ''}-${i}`}>
                 {s.href ? <Link href={s.href} className="vg-link">{s.label}</Link> : <span>{s.label}</span>}
                 {s.detail && <span className="vg-muted"> · {s.detail}</span>}
+                {s.link && rights.canUnlink && (
+                  <DetachLinkButton actionId={d.id} link={s.link} label={s.label} disabled={blocked}
+                    onDone={(label) => setFlash(`Détachée de ${label} ; l’action reste dans le plan.`)} />
+                )}
               </li>
             ))}
           </ul>
+        )}
+        {rights.canLink && d.linkTargets.length > 0 && (
+          <div>
+            <button type="button" className="vg-text-btn" disabled={blocked} onClick={() => go('link')}
+              title={blocked ? `Sélectionnez le site ${rights.elsewhere} pour modifier cette action.` : 'Lien complémentaire : risque, exigence, contrôle, version de document, revue, décision'}>
+              <Icon name="ph-link" size={12} />Rattacher un élément
+            </button>
+          </div>
         )}
         {d.follows && (
           <div style={{ fontSize: 12.5 }}>

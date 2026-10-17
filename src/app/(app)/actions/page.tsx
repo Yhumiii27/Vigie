@@ -7,14 +7,16 @@ import { KanbanBoard } from '@/components/actions/KanbanBoard';
 import { ActionFiltersBar, hasFilters, planParams } from '@/components/actions/plan/ActionFilters';
 import { AbandonedList, ActionList } from '@/components/actions/plan/ActionList';
 import { ByResponsable } from '@/components/actions/plan/ByResponsable';
+import { ActionStatsView } from '@/components/actions/plan/ActionStats';
 import { Icon, hrefWith } from '@/components/ui';
-import { KANBAN_COLUMNS, VERIFIED_ALL_LABEL, canCreateAction, parseActionFilters } from '@/lib/action-rules';
+import { KANBAN_COLUMNS, VERIFIED_ALL_LABEL, canCreateAction, canReadPlan, parseActionFilters } from '@/lib/action-rules';
 import type { ActionDefaults } from '@/lib/action-view';
 import { addDays } from '@/lib/dates';
 import { SCREENS, TONE, isEmployee } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { ALL_SITES } from '@/lib/session';
 import { loadActionDetail, loadActionFormOptions, loadActionPlan } from '@/lib/data/actions';
+import { loadActionStats } from '@/lib/data/action-stats';
 
 export const metadata: Metadata = { title: SCREENS.actions.title };
 
@@ -34,12 +36,16 @@ const lcSite = (label: string) => {
  */
 export default async function ActionsPage({ searchParams }: PageProps<'/actions'>) {
   const session = await guard('actions');
-  const filters = parseActionFilters(await searchParams);
+  const parsed = parseActionFilters(await searchParams);
+  // Statistiques (ACT-29) : lecteurs du plan seulement ; le Salarié revient à la vue Liste de ses actions.
+  const statsView = parsed.vue === 'statistiques' && canReadPlan(session.role);
+  const filters = parsed.vue === 'statistiques' && !statsView ? { ...parsed, vue: 'liste' as const } : parsed;
   const create = canCreateAction(session.role);
-  const [plan, options, link] = await Promise.all([
+  const [plan, options, link, stats] = await Promise.all([
     loadActionPlan(filters),
     loadActionFormOptions({ targets: create }),
     filters.action ? loadActionDetail(filters.action) : null,
+    statsView ? loadActionStats(filters.mois) : null,
   ]);
   const { items, responsables, counts, totals, now } = plan;
   const employee = isEmployee(session.role);
@@ -86,7 +92,7 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
 
         <ActionPlanProvider requestedId={requested} payload={link?.payload ?? null} options={options}
           currentUserId={session.user.id} today={now} verifyDefault={addDays(now, 30)}>
-          {filtered && (
+          {filtered && !stats && (
             <div style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
               {items.length === 0
                 ? (filters.mes ? "Vous n'êtes responsable d'aucune action correspondant à ces critères." : 'Aucune action ne correspond à ces critères.')
@@ -94,7 +100,10 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
             </div>
           )}
 
-          {emptyPlan ? (
+          {stats ? (
+            <ActionStatsView stats={stats} siteLabel={session.site.id === ALL_SITES ? 'tous les sites du périmètre' : session.site.label}
+              today={now} href={(mois) => hrefWith('/actions', { vue: 'statistiques' }, { mois })} />
+          ) : emptyPlan ? (
             <div className="card" style={{ alignItems: 'center', justifyItems: 'center', textAlign: 'center', gap: 10, padding: '28px 16px' }}>
               <Icon name="ph-list-checks" size={26} style={{ color: 'var(--color-neutral-500)' }} />
               <div style={{ fontSize: 13, color: 'var(--color-neutral-300)' }}>

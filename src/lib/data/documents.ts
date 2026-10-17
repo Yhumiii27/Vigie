@@ -6,7 +6,7 @@ import {
   DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
   type DocStatus, type DocType, type VersionStatus,
 } from '@/components/documents/meta';
-import { addDays, addMonths, daysBetween, fmtDayMonth } from '../dates';
+import { addDays, addMonths, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import { canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
 import { actionView, lcfirst, loadActions, loadPeople, type ActionRow, type Person } from '../queries';
@@ -85,7 +85,7 @@ export type DocumentRow = {
   actionTitle: string;
 };
 
-const dayOf = (iso: string) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(new Date(iso));
+const dayOf = (iso: string) => parisDay(new Date(iso));
 const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr');
 export const matchesSearch = (d: Pick<DocumentRow, 'id' | 'title'>, q: string) => !q || fold(`${d.id} ${d.title}`).includes(fold(q));
 

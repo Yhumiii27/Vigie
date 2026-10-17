@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtDecimal, formReader, nextRef } from './forms';
+import { fmtDecimal, formReader, maxRefNumber, nextRef } from './forms';
 
 // Lecture et validation des formulaires des server actions (QUA-03).
 
@@ -109,5 +109,14 @@ describe('nextRef', () => {
     expect(nextRef(['A-214', 'A-9', 'B-500'], 'A-')).toBe('A-215');
     expect(nextRef([], 'PP-2026-', 3)).toBe('PP-2026-001');
     expect(nextRef(['PP-2026-015', 'PP-2025-041'], 'PP-2026-', 3)).toBe('PP-2026-016');
+  });
+});
+
+describe('maxRefNumber (PRD-08)', () => {
+  it('plus grand numéro du préfixe ; suite non numérique ou trop longue ignorée', () => {
+    expect(maxRefNumber(['EE-001', 'EE-007', 'EE-01x', 'PP-2026-099'], 'EE-')).toBe(7);
+    expect(maxRefNumber([], 'EE-')).toBe(0);
+    expect(maxRefNumber(['cert-3', 'cert-12', 'cert-'], 'cert-')).toBe(12);
+    expect(maxRefNumber(['EV-2026-12345678901'], 'EV-2026-')).toBe(0);
   });
 });

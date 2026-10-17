@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, desc, eq, isNull, max, ne } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -311,6 +311,17 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
 }
 
 /**
+ * Détachement d'une action par un changement des réserves d'un contrôle (enregistrement ou annulation d'un
+ * enregistrement) : entrée « unlink » dans l'historique de l'action (ACT-03 : changements faits par les autres modules).
+ */
+async function logControlDetach(tx: DbOrTx | null, control: { id: number; controlType: string; equipment: string }, actionId: string, why: string, byId: string, reason?: string | null) {
+  await logChange(tx, {
+    entityType: 'action', entityId: actionId, action: 'unlink', byId, reason: reason ?? null,
+    summary: `Détachée de ${control.controlType} · ${control.equipment} (${why}) : l'action reste dans le plan d'actions`,
+  });
+}
+
+/**
  * Enregistre un contrôle réalisé (historique + rapport joint). S'il est le plus récent,
  * il met à jour le contrôle : dernier = date, prochain = date + périodicité, réserves (l'état précédent est conservé
  * sur l'enregistrement pour pouvoir l'annuler). De nouvelles réserves détachent l'action de levée des précédentes.
@@ -368,6 +379,9 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
     summary: `Contrôle du ${fmtDate(performedOn!)} enregistré${latest ? '' : " dans l'historique (antérieur au dernier)"}`,
     details: latest ? diffFields(control, { lastOn: performedOn!, reserves }, { lastOn: 'Dernier contrôle', reserves: 'Réserves' }, fmtLog) : [],
   });
+  // Nouvelles réserves : l'action de levée des précédentes est détachée du contrôle (elle reste au plan) ; son historique
+  // le trace (ACT-03), une fois l'enregistrement définitif (rapport stocké).
+  if (control.actionId && actionId !== control.actionId) await logControlDetach(null, control, control.actionId, `nouvelles réserves au contrôle du ${fmtDate(performedOn!)}`, session.user.id);
   revalidatePath('/', 'layout');
   return { ok: true, id: String(recordId) };
 }
@@ -455,7 +469,9 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   await db.transaction(async (tx) => {
     await tx.update(t.controlRecords).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.controlRecords.id, record.id));
     if (next) {
-      await tx.update(t.controls).set({ ...next, actionId: next.reserves !== control.reserves ? null : control.actionId }).where(eq(t.controls.id, control.id));
+      const detached = next.reserves !== control.reserves && control.actionId;
+      await tx.update(t.controls).set({ ...next, actionId: detached ? null : control.actionId }).where(eq(t.controls.id, control.id));
+      if (detached) await logControlDetach(tx, control, detached, `réserves rétablies par l'annulation de l'enregistrement du ${fmtDate(record.performedOn)}`, session.user.id, reason);
     }
     await logChange(tx, {
       entityType: 'control', entityId: control.id, action: 'cancel_record', reason,

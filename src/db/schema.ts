@@ -314,8 +314,8 @@ export const actionCounters = pgTable('action_counters', {
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   personId: text('person_id').notNull().references(() => people.id),
-  type: text('type').notNull(), // action_confiee | action_commentaire | action_preuve — libellés : NOTIFICATION_KINDS (src/lib/domain.ts) ; pas de CHECK (types à venir)
-  entityType: text('entity_type').notNull(), // action
+  type: text('type').notNull(), // action_confiee | action_commentaire | action_preuve | signalement_suite (TDB-06) — libellés : NOTIFICATION_KINDS (src/lib/domain.ts) ; pas de CHECK (types à venir)
+  entityType: text('entity_type').notNull(), // action | event (suite d'un signalement, TDB-06)
   entityId: text('entity_id').notNull(),
   title: text('title').notNull(), // « Action A-221 confiée par [C. Lefèvre] : … »
   href: text('href').notNull(), // /actions?action=A-221
