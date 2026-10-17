@@ -9,12 +9,13 @@ import {
 } from '@/components/environment/model';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { STEP_CLOSED, canEdit } from '@/lib/domain';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { currentPersonId } from '@/lib/session';
 import { fmtSiret, isEuVatNumber, isSiret, normalizeSiret } from '@/lib/siret';
 import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 const MAX_QUANTITY = 9_999_999_999;
 const MAX_CONSUMPTION = 999_999_999;
@@ -116,6 +117,8 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   if (current?.cancelledAt) return { error: "Enlèvement annulé : il n'est plus modifiable." };
   const [stream] = streamId ? await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, streamId)) : [];
   if (streamId && !stream) f.fail('streamId', 'Filière inconnue.');
+  // Filière archivée (DOC-09) : plus de nouvel enlèvement ; un enlèvement déjà inscrit dessus reste modifiable.
+  else if (stream?.archivedAt && stream.id !== current?.streamId) f.fail('streamId', 'Filière archivée : réactivez-la ou choisissez une filière en service.');
   if (stream && !transporter) transporter = stream.collector;
   // Transporteur = collecteur de la filière : ses mentions (SIRET, adresse, récépissé) complètent celles laissées vides.
   if (stream && transporter === stream.collector) {
@@ -233,7 +236,8 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
   const f = formReader(fd);
   const id = f.opt('id');
   const [current] = id ? await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, id)) : [];
-  if (id && !current) return { error: 'Filière introuvable (supprimée entre-temps ?).' };
+  if (id && !current) return { error: 'Filière introuvable.' };
+  if (current?.archivedAt) return { error: 'Filière archivée : réactivez-la pour la modifier.' };
   const currentSiteError = current ? await requireInSite(current.siteId) : null;
   if (currentSiteError) return { error: currentSiteError };
   const [{ n: used }] = current
@@ -287,8 +291,7 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
       if (details.length) await logChange(tx, { entityType: 'waste_stream', entityId: current.id, action: 'update', summary: 'Filière modifiée', details });
       return current.id;
     }
-    const ids = (await tx.select({ id: t.wasteStreams.id }).from(t.wasteStreams)).map((s) => s.id);
-    const newId = nextRef(ids, 'FD-', 2);
+    const newId = await nextEntityReference(tx, 'waste_stream', 'FD-', 2);
     await tx.insert(t.wasteStreams).values({ id: newId, ...values });
     await logChange(tx, { entityType: 'waste_stream', entityId: newId, action: 'create', summary: `Filière créée : ${label}` });
     return newId;
@@ -297,30 +300,56 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
   return { ok: true, id: savedId };
 }
 
-/** Supprime une filière qui ne porte aucun enlèvement (le registre est conservé tel quel). */
-export async function deleteWasteStream(id: string): Promise<{ error?: string }> {
+/**
+ * Archive une filière (DOC-09 : jamais supprimée) : motif obligatoire. Elle n'est plus proposée pour un nouvel enlèvement ;
+ * ses enlèvements (registre conservé 3 ans, R. 541-43), ses actions et son historique restent consultables.
+ */
+export async function archiveWasteStream(_prev: FormState, fd: FormData): Promise<FormState> {
   const error = await requireEnvManager();
   if (error) return { error };
-  if (typeof id !== 'string' || !id) return { error: 'Filière introuvable.' };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
   const db = await getDb();
-  const [stream] = await db.select({ siteId: t.wasteStreams.siteId }).from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
-  if (!stream) return { error: 'Filière introuvable (déjà supprimée ?).' };
+  const [stream] = await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
+  if (!stream) return { error: 'Filière introuvable.' };
+  if (stream.archivedAt) return { error: 'Cette filière est déjà archivée.' };
   const siteError = await requireInSite(stream.siteId);
   if (siteError) return { error: siteError };
-  // Les enlèvements annulés comptent aussi : ils restent au registre et référencent la filière.
-  const [{ n }] = await db.select({ n: count() }).from(t.wasteEntries).where(eq(t.wasteEntries.streamId, id));
-  if (n > 0) return { error: `Cette filière porte ${n} enlèvement${n > 1 ? 's' : ''} au registre : elle ne peut pas être supprimée.` };
-  // Actions créées depuis la filière (ACT-01, actions.waste_stream_id) : abandonnées comprises, l'origine est conservée.
-  const linked = (await db.select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.wasteStreamId, id)))
-    .map((a) => a.id).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
-  if (linked.length) {
-    const many = linked.length > 1;
-    return { error: `Cette filière porte ${linked.length} action${many ? 's' : ''} du plan (${linked.join(', ')}) : elle ne peut pas être supprimée.` };
-  }
-  const deleted = await db.delete(t.wasteStreams).where(eq(t.wasteStreams.id, id)).returning({ id: t.wasteStreams.id });
-  if (!deleted.length) return { error: 'Filière introuvable (déjà supprimée ?).' };
+  const byId = await currentPersonId();
+  const archived = await db.transaction(async (tx) => {
+    const [row] = await tx.update(t.wasteStreams).set({ archivedAt: new Date(), archivedById: byId, archiveReason: reason })
+      .where(and(eq(t.wasteStreams.id, id), isNull(t.wasteStreams.archivedAt))).returning({ id: t.wasteStreams.id });
+    if (row) await logChange(tx, { entityType: 'waste_stream', entityId: id, action: 'archive', summary: `Filière archivée : ${stream.label}`, reason, byId });
+    return !!row;
+  });
+  if (!archived) return { error: 'Cette filière est déjà archivée.' };
   revalidatePath('/', 'layout');
-  return {};
+  return { ok: true, id };
+}
+
+/** Réactive une filière archivée (motif obligatoire) ; son site doit être actif et dans le périmètre. */
+export async function restoreWasteStream(_prev: FormState, fd: FormData): Promise<FormState> {
+  const error = await requireEnvManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [stream] = await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
+  if (!stream) return { error: 'Filière introuvable.' };
+  if (!stream.archivedAt) return { error: "Cette filière n'est pas archivée." };
+  const siteError = await requireInSite(stream.siteId, { create: true });
+  if (siteError) return { error: siteError };
+  const byId = await currentPersonId();
+  await db.transaction(async (tx) => {
+    await tx.update(t.wasteStreams).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.wasteStreams.id, id));
+    await logChange(tx, { entityType: 'waste_stream', entityId: id, action: 'restore', summary: `Filière réactivée : ${stream.label}`, reason, byId });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id };
 }
 
 // ─── Établissement ──────────────────────────────────────────────────────────
@@ -357,6 +386,9 @@ export async function saveSiteSiret(_prev: FormState, fd: FormData): Promise<For
 
 // ─── Consommations ──────────────────────────────────────────────────────────
 
+const fmtNumber = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+const monthLabel = (iso: string) => new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+
 /**
  * Saisit les relevés d'un mois pour un site (électricité, gaz, eau). Une valeur saisie remplace
  * la précédente ; un champ vidé efface le relevé correspondant.
@@ -388,15 +420,29 @@ export async function saveConsumptionMonth(_prev: FormState, fd: FormData): Prom
   }
 
   await db.transaction(async (tx) => {
+    // DOC-10 : relevés du mois journalisés (valeur précédente → nouvelle), dans la transaction de l'écriture.
+    const before = new Map((await tx.select().from(t.consumptions).where(and(eq(t.consumptions.siteId, siteId!), eq(t.consumptions.month, month!))))
+      .map((c) => [c.kind, c.value]));
+    const details: { field: string; from: string | null; to: string | null }[] = [];
     for (const { kind, value } of values) {
       const key = and(eq(t.consumptions.siteId, siteId!), eq(t.consumptions.month, month!), eq(t.consumptions.kind, kind));
-      if (value == null) {
+      const v = value == null ? null : Math.round(value * 100) / 100;
+      const prev = before.get(kind) ?? null;
+      if (v === prev) continue;
+      const k = CONSUMPTION_KINDS.find((c) => c.key === kind)!;
+      details.push({ field: `${k.label} (${k.unit})`, from: prev == null ? null : fmtNumber(prev), to: v == null ? null : fmtNumber(v) });
+      if (v == null) {
         await tx.delete(t.consumptions).where(key);
       } else {
-        const v = Math.round(value * 100) / 100;
         await tx.insert(t.consumptions).values({ siteId: siteId!, month: month!, kind, value: v })
           .onConflictDoUpdate({ target: [t.consumptions.siteId, t.consumptions.month, t.consumptions.kind], set: { value: v } });
       }
+    }
+    if (details.length) {
+      await logChange(tx, {
+        entityType: 'consumption', entityId: `${siteId}|${month}`, action: before.size ? 'update' : 'create',
+        summary: `Relevés de ${monthLabel(month!)} ${before.size ? 'modifiés' : 'saisis'}`, details,
+      });
     }
   });
   revalidatePath('/', 'layout');

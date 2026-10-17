@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, desc, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf } from '../dates';
+import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   ACTION_SOURCES, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, PLAN_ITEM_STATES, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
@@ -222,7 +222,7 @@ function reviewView(r: Review, people: Map<string, Person>) {
     participantIds: ids, participants: ids.map((id) => name(id) ?? id),
     externalParticipants: r.externalParticipants, customerPerception: r.customerPerception, resourceNeeds: r.resourceNeeds, minutes: r.minutes,
     nextReviewOn: r.nextReviewOn, recordedBy: name(r.recordedById), closedOn: r.closedOn, closedBy: name(r.closedById),
-    cancelledOn: r.cancelledAt ? r.cancelledAt.toISOString().slice(0, 10) : null, cancelledBy: name(r.cancelledById), cancelReason: r.cancelReason,
+    cancelledOn: r.cancelledAt ? parisDay(r.cancelledAt) : null, cancelledBy: name(r.cancelledById), cancelReason: r.cancelReason,
     hasSnapshot: !!parseReviewSnapshot(r.snapshot),
     /** Dossier de séance déjà figé (AUD-06) : une correction du compte rendu sans changement de date ne le recalcule pas. */
     seanceFrozen: !!parseReviewSnapshot(r.snapshot),
@@ -819,7 +819,7 @@ export async function loadReviewDossierPage({ revue }: { revue?: string | string
   if (isCancelled(review)) {
     const people = await loadPeople();
     const by = review.cancelledById ? people.get(review.cancelledById)?.name ?? review.cancelledById : null;
-    const on = review.cancelledAt ? review.cancelledAt.toISOString().slice(0, 10) : null;
+    const on = review.cancelledAt ? parisDay(review.cancelledAt) : null;
     return { ...base, mode: 'cancelled' as const, dossier: null, cancel: { on, by, reason: review.cancelReason, kind: kindOf(review.kind).label } };
   }
   const snap = parseReviewSnapshot(review.snapshot);

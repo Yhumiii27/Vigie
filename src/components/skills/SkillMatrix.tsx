@@ -14,6 +14,7 @@ import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/d
 import type { Person } from '@/lib/queries';
 import { addQualificationFiles, cancelQualification, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
 import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { PersonForm } from './PersonForm';
 import { lapseFor } from './rules';
 import { TitlesButton } from './TitlesManager';
@@ -189,6 +190,8 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
       )}
 
       <HistoryTable entries={cell.history} onCancel={canManage ? (e) => onCancelTraining(e.id) : undefined} />
+      {/* Journal de la case (HAB-03) : formations, attestations, exigence — à la saisie seulement, chargé à l'ouverture. */}
+      {canManage && <LazyChangeLog entity="skill_cell" id={`${row.person.id}|${cell.title.id}`} title="Historique des modifications" />}
 
       {canManage && (
         <div className="dialog-actions" style={{ marginTop: 0, flexWrap: 'wrap' }}>

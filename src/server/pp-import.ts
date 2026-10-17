@@ -17,7 +17,7 @@ import { planStatus } from '@/components/prevention/model';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { config } from '@/lib/config';
@@ -35,7 +35,8 @@ import {
   type DetectResponse, type ImportField, type ParseResult,
 } from '@/lib/pp-import/types';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
-import { logChange, loggedIds } from './changelog';
+import { logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ARCHIVED_CONTRACTOR = 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.';
@@ -500,11 +501,11 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   const siteError = await requireInSite(siteId, { create: true });
   if (siteError) return { error: siteError };
 
-  // Références des brouillons supprimés comprises : elles ne sont jamais réattribuées.
-  const planIds = (await db.select({ id: t.preventionPlans.id }).from(t.preventionPlans)).map((r) => r.id);
-  const planId = nextRef([...planIds, ...(await loggedIds(db, 'prevention_plan'))], `PP-${now.slice(0, 4)}-`, 3);
-  const newContractorId = isNew && !existingByName ? nextRef(contractors.map((c) => c.id), 'EE-', 3) : null;
-  const contractorId = existingByName?.id ?? newContractorId ?? contractorChoice;
+  // Référence du plan réservée sous verrou avant l'enregistrement du fichier source, qui la porte (PRD-08) : jamais
+  // réattribuée, même si la création échoue ensuite (brouillons supprimés compris). Celle d'une nouvelle entreprise est
+  // tirée dans la transaction de création.
+  const planId = await db.transaction((tx) => nextEntityReference(tx, 'prevention_plan', `PP-${now.slice(0, 4)}-`, 3));
+  const createContractor = isNew && !existingByName;
   const formData: PpFormData = {
     source: {
       fileName: received.file.name.slice(0, 200),
@@ -515,7 +516,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
     sections,
   };
   const values = {
-    siteId, contractorId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
+    siteId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
     keystoneProject, inspectionOn, interferenceRisks, measures, ownerId,
     signedEuOn: signedEuOn ?? null, signedEeOn: signedEeOn ?? null,
   };
@@ -531,11 +532,13 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   }
   try {
     await db.transaction(async (tx) => {
+      const newContractorId = createContractor ? await nextEntityReference(tx, 'contractor', 'EE-', 3) : null;
       if (newContractorId) {
         await tx.insert(t.contractors).values({ id: newContractorId, name: newName, trade: newTrade, contactName, contactPhone, contactEmail });
         await logChange(tx, { entityType: 'contractor', entityId: newContractorId, action: 'create', summary: 'Entreprise ajoutée (import d’un plan de prévention)', byId: session.user.id });
       }
-      await tx.insert(t.preventionPlans).values({ id: planId, ...values, status, formData, importedFromId: attachmentId });
+      const contractorId = existingByName?.id ?? newContractorId ?? contractorChoice;
+      await tx.insert(t.preventionPlans).values({ id: planId, ...values, contractorId, status, formData, importedFromId: attachmentId });
       await logChange(tx, { entityType: 'prevention_plan', entityId: planId, action: 'create', summary: `Plan de prévention créé par import (${formData.source.fileName})`, byId: session.user.id });
     });
   } catch (e) {

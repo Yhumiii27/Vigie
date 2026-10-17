@@ -9,7 +9,7 @@ import {
   treatmentLabel, type BsdStatus, type ConsumptionKind,
 } from '@/components/environment/model';
 import { hrefWith } from '@/components/ui';
-import { addDays, daysBetween, fmtDate, fmtDayMonth } from '../dates';
+import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { ActionDefaults } from '../action-view';
 import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, severityTone, type TodoItem, type Tone } from '../domain';
@@ -64,6 +64,8 @@ export type StreamView = {
   sourceActionCount: number;
   /** Journal des modifications de la filière (création, valeurs par défaut des mentions…). */
   history: ChangeEntry[];
+  /** Filière archivée (DOC-09) : plus proposée pour un nouvel enlèvement ; quand, par qui, pourquoi. */
+  archived: { on: string; by: string; reason: string } | null;
 };
 
 /** Action rattachée : libellé court (actionLabel du détail), avancement affiché (« En retard » le cas échéant), date cible. */
@@ -323,8 +325,11 @@ export async function loadEnvironment(requestedYear?: number) {
       actions: streamActions(s.id),
       sourceActionCount: streamSources.filter((a) => a.streamId === s.id).length,
       history: streamHistory.get(s.id) ?? [],
+      archived: s.archivedAt
+        ? { on: parisDay(s.archivedAt), by: s.archivedById ? people.get(s.archivedById)?.name ?? s.archivedById : '—', reason: s.archiveReason ?? '' }
+        : null,
     };
-  }).sort((a, b) => a.siteId.localeCompare(b.siteId) || Number(b.hazardous) - Number(a.hazardous) || a.id.localeCompare(b.id, 'fr', { numeric: true }));
+  }).sort((a, b) => Number(!!a.archived) - Number(!!b.archived) || a.siteId.localeCompare(b.siteId) || Number(b.hazardous) - Number(a.hazardous) || a.id.localeCompare(b.id, 'fr', { numeric: true }));
 
   // ── Consommations : 12 derniers mois et cumul de l'année comparé à N-1 sur les mêmes mois
   const currentMonth = `${now.slice(0, 7)}-01`;

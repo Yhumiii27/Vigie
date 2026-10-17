@@ -126,7 +126,6 @@ export type PlanView = {
   /** Brouillon saisi par erreur : sans signature ni inspection réalisée, sans permis, action, activité ni événement rattachés. */
   deletable: boolean;
   cancelled: CancelInfo | null;
-  history: ChangeEntry[];
   /** gap : permis sans plan signé (écart compté avec ce plan quand le plan est lui-même en écart). */
   permits: { id: string; type: PermitType; stateLabel: string; tone: Tone; validity: string; requested: boolean; gap: boolean }[];
   /**
@@ -233,7 +232,6 @@ export type ContractorView = {
   permitList: { id: string; typeLabel: string; icon: string; validity: string; stateLabel: string; tone: Tone }[];
   /** Motif empêchant l'archivage (plans ou permis en cours sur un site quelconque), null sinon. */
   archiveBlock: string | null;
-  history: ChangeEntry[];
 };
 
 /**
@@ -248,7 +246,7 @@ const loadRows = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.permits),
     db.select().from(t.sites).orderBy(asc(t.sites.sort)),
     // Activités de la carte (tous sites) : rattachements qui empêchent de supprimer ou d'annuler un plan.
-    db.select({ planId: t.siteActivities.preventionPlanId, endOn: t.siteActivities.endOn }).from(t.siteActivities),
+    db.select({ planId: t.siteActivities.preventionPlanId, endOn: t.siteActivities.endOn, cancelled: isNotNull(t.siteActivities.cancelledAt) }).from(t.siteActivities),
     db.select({
       id: t.events.id, planId: t.events.preventionPlanId, permitId: t.events.permitId, type: t.events.type, title: t.events.title,
       occurredOn: t.events.occurredOn, step: t.events.step, dismissedAt: t.events.dismissedAt,
@@ -405,15 +403,15 @@ export async function loadPrevention() {
   const permitIds = permits.map((p) => p.id);
   const importIds = plans.map((p) => p.importedFromId).filter((id): id is string => !!id);
 
-  const [preventionActions, attachments, imported, planLogs, permitLogs, contractorLogs, procedure] = await Promise.all([
+  const [preventionActions, attachments, imported, permitLogs, procedure] = await Promise.all([
     // Actions reprises (bases antérieures au 15/10/2026), abandonnées comprises : elles restent rattachées (un plan qui en
     // a une n'est plus un brouillon supprimable). Source par les colonnes posées à la création (ACT-01).
     planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
     planIds.length ? db.select().from(t.attachments).where(eq(t.attachments.entityType, PLAN_ATTACHMENT)).orderBy(asc(t.attachments.createdAt)) : [],
     importIds.length ? db.select({ id: t.attachments.id }).from(t.attachments).where(inArray(t.attachments.id, importIds)) : [],
-    loadChangeLogs('prevention_plan', planIds),
+    // Historique des plans et des entreprises : chargé à l'ouverture de leur fiche (QUA-11, LazyChangeLog) ; celui des
+    // permis reste chargé ici, il porte la date de délivrance affichée (PRV-04).
     loadChangeLogs('permit', permitIds),
-    loadChangeLogs('contractor', contractors.map((c) => c.id)),
     loadProcedure(db),
   ]);
   const linkedActions = preventionActions.filter((a) => a.status !== 'abandonnee');
@@ -513,7 +511,7 @@ export async function loadPrevention() {
     const actions = actionsOf('preventionPlanId', p.id);
     const openPermitIds = allPermits.filter((x) => x.preventionPlanId === p.id && isOpenPermit(x)).map((x) => x.id);
     const endCheck = { mandatory, now, openPermitIds };
-    const liveActivities = activities.filter((a) => a.planId === p.id && a.endOn >= now).length;
+    const liveActivities = activities.filter((a) => a.planId === p.id && !a.cancelled && a.endOn >= now).length;
     const form = parseFormData(p.formData);
     const gapKind = startGap(p, now, rule);
     return {
@@ -580,7 +578,6 @@ export async function loadPrevention() {
       cancelled: p.status === 'annule'
         ? { on: p.cancelledAt ? fmtInstant(p.cancelledAt) : '—', by: name(p.cancelledById), reason: p.cancelReason ?? '' }
         : null,
-      history: planLogs.get(p.id) ?? [],
       permits: permitViews.filter((x) => x.preventionPlanId === p.id)
         .map((x) => ({ id: x.id, type: x.type, stateLabel: x.stateLabel, tone: x.tone, validity: x.validity, requested: x.status === 'demande', gap: x.planGap })),
       actions,
@@ -630,7 +627,6 @@ export async function loadPrevention() {
       planList: cp.map((p) => ({ id: p.id, title: p.title, period: p.period, statusLabel: p.statusLabel, tone: p.tone, site: p.site })),
       permitList: cr.map((p) => ({ id: p.id, typeLabel: p.typeLabel, icon: p.icon, validity: p.validity, stateLabel: p.stateLabel, tone: p.tone })),
       archiveBlock: busy.length ? `Plans ou permis en cours (${busy.join(', ')}) : clôturez-les ou annulez-les avant d'archiver.` : null,
-      history: contractorLogs.get(c.id) ?? [],
     };
   });
   const activeContractors = contractors.filter((c) => !c.archivedAt);

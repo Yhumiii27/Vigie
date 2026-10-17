@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
-import { and, eq, isNotNull, isNull, like, ne, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
@@ -15,19 +15,21 @@ import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';
 import { loadFirstAiders } from '@/lib/data/events';
 import { resolveReportToken } from '@/lib/data/report-posts';
-import { fmtDate, fromParisLocal, referenceNow, toParisLocal } from '@/lib/dates';
+import { fmtDate, fromParisLocal, parisDay, referenceNow, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
   BENIGN_CAREGIVER_KEYS, D8_STEPS, ENV_ASPECTS, ENV_MEDIA, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, METHODS, NC_ORIGINS, SEVERITY, STEP_CLOSED,
   STEP_QUALIFIED, VICTIM_KINDS, VICTIM_KIND_KEYS, canSeeHealth, type AnalysisMethod, type EventType, type VictimKind,
 } from '@/lib/domain';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { REPORT_LIMITS, ReportLimitError, anonymousPhoto, checkedPhoto, clientIp, countPostReport, hitReportLimit } from '@/lib/report-guard';
 import { readReportToken } from '@/lib/report-token';
 import { ALL_SITES, getOptionalSession, inSite, type Session } from '@/lib/session';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { notifyReportOutcome } from './notify';
+import { nextEntityReference } from './references';
 
 const METHOD_KEYS = METHODS.map(([k]) => k);
 const done = () => revalidatePath('/', 'layout');
@@ -48,8 +50,6 @@ async function activeBenign(db: DbOrTx, eventId: string): Promise<BenignRow | un
   return row;
 }
 
-/** Jour calendaire (Europe/Paris) d'un instant. */
-const parisDay = (d: Date) => toParisLocal(d).slice(0, 10);
 
 /**
  * Date et heure saisies dans un champ datetime-local (heure de Paris) : invalide, postérieure à maintenant (date du jour
@@ -100,6 +100,9 @@ export async function advanceEvent(id: string): Promise<{ error?: string }> {
       .where(and(eq(t.events.id, id), eq(t.events.step, ev.step), isNull(t.events.dismissedAt))).returning({ id: t.events.id });
     if (!row) return false;
     await tx.insert(t.eventSteps).values({ eventId: id, kind: 'advance', fromStep: ev.step, toStep: ev.step + 1, byId: session.user.id });
+    // TDB-06 : le déclarant est informé de la qualification et de la clôture de son signalement.
+    const outcome = ev.step + 1 === STEP_QUALIFIED ? 'qualifie' : ev.step + 1 === STEP_CLOSED ? 'cloture' : null;
+    if (outcome) await notifyReportOutcome(tx, ev, outcome, session.user);
     return true;
   });
   if (!moved) return { error: CONCURRENT };
@@ -169,6 +172,7 @@ export async function dismissEvent(_prev: FormState, fd: FormData): Promise<Form
     if (!row) return false;
     await tx.insert(t.eventSteps).values({ eventId: id, kind: 'dismiss', fromStep: ev.step, toStep: ev.step, reason, byId: session.user.id });
     await logChange(tx, { entityType: 'event', entityId: id, action: 'cancel', summary: 'Événement classé sans suite', reason, byId: session.user.id });
+    await notifyReportOutcome(tx, ev, 'classe', session.user);
     return true;
   });
   if (!saved) return { error: CONCURRENT };
@@ -203,8 +207,10 @@ export async function restoreEvent(_prev: FormState, fd: FormData): Promise<Form
   return { ok: true, id };
 }
 
+const methodLabel = (key: string | null) => METHODS.find(([k]) => k === key)?.[1] ?? key;
+
 export async function setAnalysisMethod(id: string, method: string): Promise<{ error?: string }> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
   if (!METHOD_KEYS.includes(method as AnalysisMethod)) return { error: "Méthode d'analyse inconnue." };
   const db = await getDb();
@@ -212,7 +218,15 @@ export async function setAnalysisMethod(id: string, method: string): Promise<{ e
   if (!ev) return { error: 'Événement introuvable.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
-  await db.update(t.events).set({ analysisMethod: method }).where(eq(t.events.id, id));
+  if (ev.analysisMethod === method) return {};
+  // EVT-12 : changement de méthode journalisé (le contenu des autres méthodes est conservé).
+  await db.transaction(async (tx) => {
+    await tx.update(t.events).set({ analysisMethod: method }).where(eq(t.events.id, id));
+    await logChange(tx, {
+      entityType: 'event', entityId: id, action: 'update', byId: session.user.id, summary: `Méthode d'analyse : ${methodLabel(method)}`,
+      details: [{ field: "Méthode d'analyse", from: methodLabel(ev.analysisMethod), to: methodLabel(method) }],
+    });
+  });
   done();
   return {};
 }
@@ -434,9 +448,21 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
 
   await db.transaction(async (tx) => {
     await tx.update(t.events).set(v).where(eq(t.events.id, id));
-    // Les actions rattachées au site de l'événement le suivent s'il change de site.
+    // Les actions rattachées au site de l'événement le suivent s'il change de site ; chacune trace le changement dans son
+    // historique (ACT-03), dans la même transaction.
     if (v.siteId !== ev.siteId) {
-      await tx.update(t.actions).set({ siteId: v.siteId }).where(and(eq(t.actions.eventId, id), eq(t.actions.siteId, ev.siteId)));
+      const moved = await tx.update(t.actions).set({ siteId: v.siteId })
+        .where(and(eq(t.actions.eventId, id), eq(t.actions.siteId, ev.siteId))).returning({ id: t.actions.id });
+      if (moved.length) {
+        const labels = new Map((await tx.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label]));
+        for (const a of moved) {
+          await logChange(tx, {
+            entityType: 'action', entityId: a.id, action: 'update', byId: session.user.id,
+            summary: `Site modifié avec l'événement ${id}`,
+            details: [{ field: 'Site', from: labels.get(ev.siteId) ?? ev.siteId, to: labels.get(v.siteId) ?? v.siteId }],
+          });
+        }
+      }
     }
     if (details.length) await logChange(tx, { entityType: 'event', entityId: id, action: 'update', summary: 'Fiche modifiée', details });
   });
@@ -444,12 +470,8 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   return { ok: true, id };
 }
 
-/** Prochaine référence d'événement de l'année (EV-AAAA-n). */
-async function nextEventId(db: DbOrTx) {
-  const prefix = `EV-${today().slice(0, 4)}-`;
-  const existing = await db.select({ id: t.events.id }).from(t.events).where(like(t.events.id, `${prefix}%`));
-  return nextRef(existing.map((e) => e.id), prefix);
-}
+/** Prochaine référence d'événement de l'année (EV-AAAA-n), sous verrou dans la transaction de création (PRD-08). */
+const nextEventId = (tx: DbOrTx) => nextEntityReference(tx, 'event', `EV-${today().slice(0, 4)}-`);
 
 /**
  * Crée un événement complet depuis le bureau (saisie a posteriori : réclamation reçue par mail, NC d'audit, AT déclaré
@@ -746,7 +768,7 @@ const texts = (fd: FormData, name: string) => fd.getAll(name).map((v) => (typeof
 
 /** Enregistre le contenu de l'analyse des causes pour la méthode donnée (formats lus par la fiche événement). */
 export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
   const f = formReader(fd);
   const eventId = f.str('eventId', { required: true });
@@ -790,12 +812,22 @@ export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<Form
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
   const key = and(eq(t.eventAnalyses.eventId, eventId), eq(t.eventAnalyses.method, method));
-  if (content === null) {
-    await db.delete(t.eventAnalyses).where(key);
-  } else {
-    await db.insert(t.eventAnalyses).values({ eventId, method, content })
-      .onConflictDoUpdate({ target: [t.eventAnalyses.eventId, t.eventAnalyses.method], set: { content } });
-  }
+  // EVT-12 : enregistrement de l'analyse journalisé sur l'événement (méthode seulement : le contenu, libre, peut décrire
+  // les circonstances d'un accident ; il reste sur la fiche, lu avec les mêmes droits).
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select({ content: t.eventAnalyses.content }).from(t.eventAnalyses).where(key);
+    if (JSON.stringify(before?.content ?? null) === JSON.stringify(content)) return;
+    if (content === null) {
+      await tx.delete(t.eventAnalyses).where(key);
+    } else {
+      await tx.insert(t.eventAnalyses).values({ eventId, method, content })
+        .onConflictDoUpdate({ target: [t.eventAnalyses.eventId, t.eventAnalyses.method], set: { content } });
+    }
+    await logChange(tx, {
+      entityType: 'event', entityId: eventId, action: 'update', byId: session.user.id,
+      summary: content === null ? `Analyse des causes (${methodLabel(method)}) vidée` : `Analyse des causes (${methodLabel(method)}) ${before ? 'modifiée' : 'saisie'}`,
+    });
+  });
   done();
   return { ok: true, id: eventId };
 }
@@ -1011,6 +1043,14 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
         severity,
         step: 0,
         description,
+      });
+      // EVT-12 : réception journalisée. Auteur : le déclarant connecté, jamais pour un signalement anonyme ni sans compte
+      // (byId null, « Vigie ») ; le canal seul, sans nom ni adresse.
+      await logChange(tx, {
+        entityType: 'event', entityId: id, action: 'create', byId: report.declarantId,
+        summary: report.reportedVia === REPORTED_VIA.anonymous ? 'Signalement anonyme reçu'
+          : report.reportedVia === REPORTED_VIA.post ? `Signalement reçu sans compte (QR code du poste « ${publicPost?.name ?? report.location} »)`
+            : 'Signalement reçu depuis Vigie',
       });
       return id;
     });

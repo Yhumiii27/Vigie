@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
@@ -515,7 +515,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
         reportHref={canManage ? `/evenements?nouveau=1&plan=${encodeURIComponent(plan.id)}` : null} />
 
-      <ChangeLogList entries={plan.history} />
+      <LazyChangeLog entity="prevention_plan" id={plan.id} />
 
       <ErrorLine error={error} />
       {editable && (

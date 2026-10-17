@@ -115,8 +115,19 @@ export function formReader(fd: FormData) {
   };
 }
 
-/** Prochaine référence séquentielle « PRÉFIXE + n » (ex. A-216, EV-2026-133, PP-2026-015). */
+/** Plus grand numéro des références « PRÉFIXE + n » de `existing` (0 sans aucune) ; une suite non numérique est ignorée. */
+export function maxRefNumber(existing: string[], prefix: string) {
+  return Math.max(0, ...existing.filter((id) => id.startsWith(prefix)).map((id) => {
+    const rest = id.slice(prefix.length);
+    return /^\d{1,9}$/.test(rest) ? Number(rest) : 0;
+  }));
+}
+
+/**
+ * Prochaine référence séquentielle « PRÉFIXE + n » (ex. EV-2026-133, PP-2026-015) d'après les références connues : aperçu
+ * côté navigateur seulement (référence proposée d'un document). À l'enregistrement, la référence est tirée sous verrou dans
+ * la transaction de création (nextEntityReference, src/server/references.ts, PRD-08).
+ */
 export function nextRef(existing: string[], prefix: string, pad = 0) {
-  const max = Math.max(0, ...existing.filter((id) => id.startsWith(prefix)).map((id) => Number(id.slice(prefix.length)) || 0));
-  return `${prefix}${String(max + 1).padStart(pad, '0')}`;
+  return `${prefix}${String(maxRefNumber(existing, prefix) + 1).padStart(pad, '0')}`;
 }

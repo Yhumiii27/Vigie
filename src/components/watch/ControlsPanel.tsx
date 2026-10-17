@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useState, useTransition } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
@@ -234,7 +234,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
           {current === 'historique' && (
             <>
               <History c={c} canApprove={canApprove && !c.archived} canRemoveFiles={editable} onNotice={setNotice} />
-              <ChangeLogList entries={c.log} title="Journal des modifications" />
+              <LazyChangeLog entity="control" id={c.id} title="Journal des modifications" />
             </>
           )}
           {current === 'realise' && (
@@ -396,6 +396,8 @@ function Suggestions({ id, values }: { id: string; values: string[] }) {
   return <datalist id={id}>{values.map((v) => <option key={v} value={v} />)}</datalist>;
 }
 
+const RECORD_HINT = '« Enregistrer un contrôle » le met à jour (historique, réserves et action de levée).';
+
 function ControlForm({ c, options, requirementOptions, defaultSite, suggestions, today, onDone, onCancel }: {
   c?: ControlView; options: Opts; requirementOptions: readonly Option[]; defaultSite: string; suggestions: ControlSuggestions; today: string;
   onDone: () => void; onCancel: () => void;
@@ -440,16 +442,17 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
         <Field name="siteId" label="Site" hint={sites !== options.sites ? "Site archivé : conservé tant qu'aucun autre site n'est choisi." : undefined}>
           <Select name="siteId" options={sites} defaultValue={c ? c.siteId ?? '' : defaultSite} placeholder="Tous les sites" />
         </Field>
-        <Field name="reserves" label="Réserves en cours" hint="Vide = aucune. Mises à jour à chaque contrôle enregistré.">
-          <Input name="reserves" defaultValue={c?.reserves ?? ''} placeholder="Ex. 1 · fin de course à régler" maxLength={160} />
+        <Field name="reserves" label="Réserves en cours" hint={c ? RECORD_HINT : 'Vide = aucune. Mises à jour à chaque contrôle enregistré.'}>
+          {/* VEI-09 : à la modification, champ en lecture (non envoyé) ; il change par un contrôle enregistré. */}
+          <Input name="reserves" defaultValue={c?.reserves ?? ''} placeholder={c ? 'Aucune' : 'Ex. 1 · fin de course à régler'} maxLength={160} disabled={!!c} />
         </Field>
       </FormRow>
       <Field name="requirementId" label="Exigence réglementaire" hint="Texte dont relève le contrôle : un contrôle dépassé y suggère un écart.">
         <Select name="requirementId" options={reqs} defaultValue={c?.requirementId != null ? String(c.requirementId) : ''} placeholder="Aucune" />
       </Field>
       <FormRow>
-        <Field name="lastOn" label="Dernier contrôle">
-          <Input name="lastOn" type="date" value={lastOn} max={today} onChange={(e) => setLastOn(e.target.value)} />
+        <Field name="lastOn" label="Dernier contrôle" hint={c ? RECORD_HINT : undefined}>
+          <Input name="lastOn" type="date" value={lastOn} max={today} onChange={(e) => setLastOn(e.target.value)} disabled={!!c} />
         </Field>
         <Field name="nextOn" label="Prochain contrôle"
           hint={manualNext !== null ? (

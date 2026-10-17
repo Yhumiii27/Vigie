@@ -43,6 +43,13 @@
       "when": 1792077043936,
       "tag": "0005_actions_qse",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792239274287,
+      "tag": "0006_traceability_journal",
+      "breakpoints": true
     }
   ]
 }

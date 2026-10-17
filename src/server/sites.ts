@@ -145,7 +145,7 @@ export async function restoreSite(_prev: FormState, fd: FormData): Promise<FormS
  * Réservé à l'animateur QHSE et à la direction.
  */
 export async function saveSiteRule(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireApprover();
+  const { session, error } = await requireApprover();
   if (error) return { error };
   const f = formReader(fd);
   const siteId = f.str('siteId', { required: true });
@@ -154,10 +154,28 @@ export async function saveSiteRule(_prev: FormState, fd: FormData): Promise<Form
   if (!f.ok) return f.state();
 
   const db = await getDb();
-  const [site] = await db.select({ archivedAt: t.sites.archivedAt }).from(t.sites).where(eq(t.sites.id, siteId));
+  const [site] = await db.select({ archivedAt: t.sites.archivedAt, label: t.sites.label, seveso: t.sites.seveso, ppFromFirstMinute: t.sites.ppFromFirstMinute })
+    .from(t.sites).where(eq(t.sites.id, siteId));
   if (!site) return { error: 'Site inconnu.' };
   if (site.archivedAt) return { error: 'Site archivé : réactivez-le pour modifier sa règle.' };
-  const [row] = await db.update(t.sites).set({ seveso, ppFromFirstMinute }).where(eq(t.sites.id, siteId)).returning({ id: t.sites.id });
+  // La règle s'applique aussi aux interventions passées (écarts R. 4512-6 recalculés) : chaque changement est journalisé
+  // sur le site (TDB-09), dans la transaction de l'écriture.
+  const sevesoLabel = (v: string | null) => SEVESO_LEVELS.find(([k]) => k === v)?.[1] ?? 'Non classé';
+  const details = [
+    ...((site.seveso ?? null) !== (seveso ?? null) ? [{ field: 'Classement Seveso', from: sevesoLabel(site.seveso), to: sevesoLabel(seveso) }] : []),
+    ...(site.ppFromFirstMinute !== ppFromFirstMinute
+      ? [{ field: 'Plan de prévention dès la première minute', from: site.ppFromFirstMinute ? 'oui' : 'non', to: ppFromFirstMinute ? 'oui' : 'non' }] : []),
+  ];
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(t.sites).set({ seveso, ppFromFirstMinute }).where(eq(t.sites.id, siteId)).returning({ id: t.sites.id });
+    if (updated && details.length) {
+      await logChange(tx, {
+        byId: session.user.id, entityType: 'site', entityId: siteId, action: 'update', details,
+        summary: `Règle de prévention du site « ${site.label} » modifiée : écarts des interventions recalculés`,
+      });
+    }
+    return updated;
+  });
   if (!row) return { error: 'Site inconnu.' };
   revalidatePath('/', 'layout');
   return { ok: true, id: row.id };

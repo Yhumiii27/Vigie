@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { DialogButton } from '@/components/Dialog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Field, Input, Select } from '@/components/form';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { TONE } from '@/lib/domain';
@@ -100,32 +101,36 @@ function UnitEditor({ unit, sites, viewSite, residual, isFirst, isLast, onClose 
   }
 
   return (
-    <div style={{ position: 'relative' }}>
-      {error && <div role="alert" className="vg-form-error" style={{ marginBottom: 8 }}>{error}</div>}
-      <UnitFields unit={unit} sites={sites} defaultSiteId={unit.siteId ?? sites[0]?.[0] ?? ''} viewSite={viewSite} onCancel={onClose}
-        onDone={(_, siteId) => {
-          onClose();
-          // Unité déplacée vers un autre site : elle quitte la liste affichée, on revient à la première unité.
-          if (hiddenFrom(viewSite, siteId)) router.push(unitHref(null, residual), { scroll: false });
-        }} />
-      {/* Groupe à gauche des boutons du formulaire (Annuler / Enregistrer restent à droite). */}
-      <span style={{ position: 'absolute', left: 0, bottom: 0, display: 'flex', gap: 4, alignItems: 'center' }}>
-        <button type="button" className="btn btn-ghost" disabled={unit.count > 0 || pending}
-          title={unit.count > 0 ? `Unité non vide : ${unit.count} risque${unit.count > 1 ? 's' : ''} en vigueur à archiver ou déplacer d'abord.` : "Retirer l'unité du document unique (motif obligatoire, historique conservé)"}
-          style={{ color: unit.count > 0 ? 'var(--color-neutral-600)' : 'var(--color-neutral-400)' }}
-          onClick={() => { setError(null); setConfirming(true); }}>
-          <i className="ph ph-archive" style={{ fontSize: 14 }} />Archiver
-        </button>
-        <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans la liste" disabled={isFirst || pending}
-          onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'up'); setError(r.error ?? null); })}>
-          <i className="ph ph-arrow-up" style={{ fontSize: 14 }} />
-        </button>
-        <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans la liste" disabled={isLast || pending}
-          onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'down'); setError(r.error ?? null); })}>
-          <i className="ph ph-arrow-down" style={{ fontSize: 14 }} />
-        </button>
-      </span>
-    </div>
+    <>
+      <div style={{ position: 'relative' }}>
+        {error && <div role="alert" className="vg-form-error" style={{ marginBottom: 8 }}>{error}</div>}
+        <UnitFields unit={unit} sites={sites} defaultSiteId={unit.siteId ?? sites[0]?.[0] ?? ''} viewSite={viewSite} onCancel={onClose}
+          onDone={(_, siteId) => {
+            onClose();
+            // Unité déplacée vers un autre site : elle quitte la liste affichée, on revient à la première unité.
+            if (hiddenFrom(viewSite, siteId)) router.push(unitHref(null, residual), { scroll: false });
+          }} />
+        {/* Groupe à gauche des boutons du formulaire (Annuler / Enregistrer restent à droite). */}
+        <span style={{ position: 'absolute', left: 0, bottom: 0, display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button type="button" className="btn btn-ghost" disabled={unit.count > 0 || pending}
+            title={unit.count > 0 ? `Unité non vide : ${unit.count} risque${unit.count > 1 ? 's' : ''} en vigueur à archiver ou déplacer d'abord.` : "Retirer l'unité du document unique (motif obligatoire, historique conservé)"}
+            style={{ color: unit.count > 0 ? 'var(--color-neutral-600)' : 'var(--color-neutral-400)' }}
+            onClick={() => { setError(null); setConfirming(true); }}>
+            <i className="ph ph-archive" style={{ fontSize: 14 }} />Archiver
+          </button>
+          <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans la liste" disabled={isFirst || pending}
+            onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'up'); setError(r.error ?? null); })}>
+            <i className="ph ph-arrow-up" style={{ fontSize: 14 }} />
+          </button>
+          <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans la liste" disabled={isLast || pending}
+            onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'down'); setError(r.error ?? null); })}>
+            <i className="ph ph-arrow-down" style={{ fontSize: 14 }} />
+          </button>
+        </span>
+      </div>
+      {/* Historique de l'unité (DUE-06), chargé à l'ouverture. */}
+      <div style={{ marginTop: 14 }}><LazyChangeLog entity="work_unit" id={unit.id} /></div>
+    </>
   );
 }
 

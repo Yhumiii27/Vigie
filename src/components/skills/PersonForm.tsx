@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { addMonths, fmtDate } from '@/lib/dates';
 import type { Option } from '@/lib/data/options';
@@ -108,6 +109,8 @@ export function PersonForm({ person, sites, archivedSites, services, defaultSite
         {note('ph-plugs-connected', 'Saisie provisoire : le connecteur Cursus, propriétaire des données personnelles des salariés, alimentera cette fiche.')}
       </ActionForm>
       {person && <LeaveSection person={person} today={today} onDone={onDone} />}
+      {/* Historique de la fiche (HAB-03), chargé à l'ouverture. */}
+      {person && <LazyChangeLog entity="person" id={person.id} title="Historique de la fiche" />}
     </div>
   );
 }

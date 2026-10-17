@@ -4,7 +4,7 @@ import { asc, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { REVIEW_TRACK, isReviewPlanItem } from '@/components/audits/shared';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { addDays, fmtDate, fmtDayMonth, monthName, monthOf, yearOf } from '../dates';
+import { addDays, fmtDate, fmtDayMonth, monthName, monthOf, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   FINDING_KINDS, REVIEW_STATUS, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type ReviewStatus, type TodoItem, type Tone,
@@ -171,7 +171,7 @@ const readAudits = cache(async () => {
     id: f.id, audit: f.audit, planItemId: f.planItemId, clause: f.clause, foundOn: f.foundOn,
     kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId),
     track: f.planItemId != null ? trackOf.get(f.planItemId) ?? null : null,
-    cancelled: f.cancelledAt ? { on: f.cancelledAt.toISOString().slice(0, 10), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
+    cancelled: f.cancelledAt ? { on: parisDay(f.cancelledAt), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
     log: findingLogs.get(String(f.id)) ?? [],
   }));
   const active = findingViews.filter((f) => !f.cancelled);
@@ -181,7 +181,7 @@ const readAudits = cache(async () => {
     const r = p.reviewId != null ? reviewsById.get(p.reviewId) : undefined;
     const st = r ? REVIEW_STATUS[r.status as ReviewStatus] ?? REVIEW_STATUS.planifiee : null;
     const locked = p.reviewId != null;
-    const cancelled = p.cancelledAt ? { on: p.cancelledAt.toISOString().slice(0, 10), by: name(p.cancelledById), reason: p.cancelReason ?? '' } : null;
+    const cancelled = p.cancelledAt ? { on: parisDay(p.cancelledAt), by: name(p.cancelledById), reason: p.cancelReason ?? '' } : null;
     const reschedulable = !p.done && !cancelled && !locked;
     return {
       id: p.id, year: p.year, track: p.track, month: p.month, label: p.label, plannedOn: p.plannedOn, detail: p.detail,

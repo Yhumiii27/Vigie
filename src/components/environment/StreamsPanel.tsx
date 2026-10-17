@@ -4,18 +4,19 @@ import Link from 'next/link';
 import { useId, useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
 import { Icon, ToneTag, hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { StreamView } from '@/lib/data/environment';
-import { deleteWasteStream, saveWasteStream } from '@/server/environment';
+import { archiveWasteStream, restoreWasteStream, saveWasteStream } from '@/server/environment';
 import {
   QUALIFICATION_KEYS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS, WASTE_UNITS, defaultQualification, fmtDelta, fmtQty, isHazardousCode, isRecovery,
   isTransitCode, normalizeEwc, qualificationError, treatmentLabel,
 } from './model';
 import {
-  CompanyIdField, DeleteZone, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
+  CompanyIdField, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
 } from './parts';
 import { streamActionDefaults } from './action-defaults';
 
@@ -50,8 +51,9 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
 }) {
   const registerHref = (id: string) => hrefWith('/environnement', { annee }, { filiere: id });
   const [selId, setSelId] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
   const stream = selId ? streams.find((s) => s.id === selId) ?? null : null;
-  const close = () => setSelId(null);
+  const close = () => { setSelId(null); setArchiving(false); };
 
   return (
     <div className="card" style={{ padding: '6px 14px 10px' }}>
@@ -74,7 +76,8 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
               return (
                 <tr key={s.id} {...(canManage ? rowOpener(() => setSelId(s.id)) : {})}>
                   <td style={{ minWidth: 200 }}>
-                    <span style={{ fontWeight: 500 }}>{s.label}</span>
+                    <span style={{ fontWeight: 500, color: s.archived ? 'var(--color-neutral-400)' : undefined }}>{s.label}</span>
+                    {s.archived && <ToneTag tone="neutral" style={{ marginLeft: 8 }}>Archivée</ToneTag>}
                     <div style={muted}>{[s.id, showSite && shortSite(s.site), s.channel].filter(Boolean).join(' · ')}</div>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -135,14 +138,28 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
                 </Note>
               </div>
             )}
-            <StreamForm key={stream.id} stream={stream} sites={sites} defaultSite={stream.siteId} suggestions={suggestions} onDone={close} onCancel={close} />
-            <div style={{ marginTop: 12 }}><ChangeLogList entries={stream.history} /></div>
-            {/* Les enlèvements annulés restent au registre et référencent la filière, comme les actions créées depuis sa fiche
-                (annulées comprises, ACT-01) : elle n'est alors plus supprimable. */}
-            {stream.entryCount + stream.cancelledCount === 0 && stream.sourceActionCount === 0 && (
-              <DeleteZone label="Supprimer la filière" run={() => deleteWasteStream(stream.id)} onDone={close}
-                question={<>Supprimer la filière « {stream.label} » ? Aucun enlèvement n&apos;est inscrit au registre.</>} />
+            {stream.archived ? (
+              // Filière archivée (DOC-09) : consultation seule, réactivation avec motif.
+              <div style={{ display: 'grid', gap: 12 }}>
+                <Note icon="ph-archive">
+                  Filière archivée le {fmtDate(stream.archived.on)} par {stream.archived.by}{stream.archived.reason ? ` · ${stream.archived.reason}` : ''}. Elle n&apos;est plus proposée pour un nouvel enlèvement ; son registre et ses actions restent consultables.
+                </Note>
+                <ReasonForm action={restoreWasteStream} hidden={{ id: stream.id }} submitLabel="Réactiver la filière" submitIcon="ph-arrow-counter-clockwise"
+                  placeholder="Ex. reprise de l'activité, archivage par erreur" onDone={close} onCancel={close} />
+              </div>
+            ) : archiving ? (
+              <ReasonForm action={archiveWasteStream} hidden={{ id: stream.id }} submitLabel="Archiver la filière" submitIcon="ph-archive"
+                message="La filière n'est plus proposée pour un nouvel enlèvement. Ses enlèvements (registre conservé 3 ans), ses actions et son historique restent consultables ; elle peut être réactivée."
+                placeholder="Ex. déchet plus produit, changement de prestataire" onDone={close} onCancel={() => setArchiving(false)} />
+            ) : (
+              <>
+                <StreamForm key={stream.id} stream={stream} sites={sites} defaultSite={stream.siteId} suggestions={suggestions} onDone={close} onCancel={close} />
+                <div style={{ marginTop: 12 }}>
+                  <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setArchiving(true)}><Icon name="ph-archive" size={13} />Archiver la filière</button>
+                </div>
+              </>
             )}
+            <div style={{ marginTop: 12 }}><ChangeLogList entries={stream.history} /></div>
           </>
         )}
       </Dialog>

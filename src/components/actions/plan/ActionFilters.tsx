@@ -37,15 +37,29 @@ type Props = {
 export function ActionFiltersBar({ filters: f, responsables, counts, employee, userName, mineCount }: Props) {
   const params = planParams(f);
   const href = (patch: Record<string, string | undefined>) => hrefWith(PATH, params, patch);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div className="vg-plan-views" style={{ maxWidth: '100%' }}>
+        <SegLinks pad="5px 11px" options={PLAN_VIEWS.filter(([key]) => !employee || key !== 'statistiques')
+          .map(([key, label, icon]) => ({ href: href({ vue: key === 'liste' ? undefined : key, mois: undefined }), label, icon, on: f.vue === key }))} />
+      </div>
+      {/* Statistiques (ACT-29) : tout le plan du site sélectionné, sans les filtres de la liste. */}
+      {f.vue !== 'statistiques' && <ListFilters f={f} href={href} responsables={responsables} counts={counts} employee={employee} userName={userName} mineCount={mineCount} params={params} />}
+    </div>
+  );
+}
+
+function ListFilters({ f, href, responsables, counts, employee, userName, mineCount, params }: Omit<Props, 'filters'> & {
+  f: ActionFilters; href: (patch: Record<string, string | undefined>) => string; params: ReturnType<typeof planParams>;
+}) {
   const avancement = shownAvancement(f);
   const avancementLabel = avancement === 'ouvertes' ? 'ouvertes' : avancement === 'en_retard' ? 'en retard' : avancement ? AVANCEMENT[avancement].label : 'tous';
   const responsable = f.mes ? userName : f.responsable ? responsables.find(([id]) => id === f.responsable)?.[1] ?? 'personne sortie' : null;
   const scope = PLAN_SCOPES.find(([k]) => k === f.etat) ?? PLAN_SCOPES[0];
   const filtered = hasFilters(f);
-
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <SegLinks pad="5px 11px" options={PLAN_VIEWS.map(([key, label, icon]) => ({ href: href({ vue: key === 'liste' ? undefined : key }), label, icon, on: f.vue === key }))} />
+    <>
       <Filter label={`Affichage : ${scope[1].toLowerCase()}`} icon={scope[2]}
         options={PLAN_SCOPES.map(([k, label]) => ({
           href: href({ etat: k || undefined }), on: f.etat === k,
@@ -107,7 +121,7 @@ export function ActionFiltersBar({ filters: f, responsables, counts, employee, u
           Effacer les filtres
         </Link>
       )}
-    </div>
+    </>
   );
 }
 

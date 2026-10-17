@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { firstMinuteReason, ruleBasis, type SiteRule } from '@/components/prevention/model';
 import { ConfirmButton, ErrorLine, Facts, Notice, SectionTitle, muted, useRun } from '@/components/prevention/parts';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
+import { ReasonForm } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import {
-  deleteActivity, deleteRoute, deleteZone, replaceSitePlan, resetSitePlan, saveActivity, saveMapSettings, saveRoute, saveZone,
+  cancelActivity, deleteRoute, deleteZone, replaceSitePlan, resetSitePlan, saveActivity, saveMapSettings, saveRoute, saveZone,
 } from '@/server/sitemap';
 import { activeOn, containingZone, lacksSignedPlan, type Conflict, type Pt } from './coactivity';
 import {
@@ -274,7 +276,8 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
   activity: ActivityView; zones: ZoneView[]; routes: RouteView[]; conflicts: Conflict[]; others: Map<number, ActivityView>; date: string;
   canManage: boolean; rule: SiteRule; onEdit: () => void; onMove: () => void; onDeleted: () => void;
 }) {
-  const { pending, error, run } = useRun();
+  const { pending, error } = useRun();
+  const [cancelling, setCancelling] = useState(false);
   const zone = zones.find((z) => z.id === activity.zoneId);
   const used = routes.filter((r) => activity.routeIds.includes(r.id));
   const mine = conflicts.filter((c) => c.a === activity.id || c.b === activity.id);
@@ -342,11 +345,17 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
           );
         })}
       </div>
+      {/* Historique de l'activité (PRV-12), chargé à l'ouverture. */}
+      <LazyChangeLog entity="site_activity" id={activity.id} />
       <ErrorLine error={error} />
-      {canManage && (
+      {canManage && cancelling && (
+        <ReasonForm action={cancelActivity} hidden={{ id: activity.id }} submitLabel="Annuler l'activité" submitIcon="ph-prohibit"
+          message="L'activité est retirée de la carte et de la coactivité ; elle reste tracée avec son motif."
+          placeholder="Ex. intervention annulée, activité saisie en double" onCancel={() => setCancelling(false)} onDone={onDeleted} />
+      )}
+      {canManage && !cancelling && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <ConfirmButton label="Supprimer" confirmLabel="Supprimer" icon="ph-trash" question="Supprimer cette activité de la carte ?" pending={pending}
-            onConfirm={() => run(() => deleteActivity(activity.id), onDeleted)} />
+          <button type="button" className="btn btn-ghost vg-btn-sm" disabled={pending} onClick={() => setCancelling(true)}><Icon name="ph-prohibit" size={13} />Annuler l&apos;activité</button>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onMove}><Icon name="ph-map-pin" size={13} />{activity.geometry ? 'Déplacer sur la carte' : 'Placer sur la carte'}</button>
           <button type="button" className="btn btn-primary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
         </div>
@@ -390,6 +399,8 @@ export function ScaleForm({ map, measured, onDone, onCancel, onMeasure }: { map:
           <Input name="proximityMeters" inputMode="numeric" defaultValue={String(map.proximityMeters)} />
         </Field>
       </FormRow>
+      {/* Historique de la carte du site (PRV-12) : zones, voies, plan de fond, échelle. */}
+      <LazyChangeLog entity="site_map" id={map.siteId} title="Historique de la carte" />
     </ActionForm>
   );
 }

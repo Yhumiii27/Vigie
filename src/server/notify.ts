@@ -9,14 +9,15 @@ import { today } from '@/lib/today';
 // destinataire, écrite dans la transaction de l'écriture qui la provoque. Pas un enregistrement métier tracé (pas de
 // logChange) ; lue au clic ou par « Tout marquer comme lu » (flux D). Types et libellés : NOTIFICATION_KINDS
 // (src/lib/domain.ts) — action confiée au responsable (ACT-30, jamais d'e-mail) ; commentaire ou preuve ajoutés par le
-// responsable, adressés à chaque animateur QHSE (ACT-31, une notification par commentaire ou par preuve).
+// responsable, adressés à chaque animateur QHSE (ACT-31, une notification par commentaire ou par preuve) ; suite d'un
+// signalement (qualifié, classé sans suite, clôturé), adressée à son déclarant (TDB-06).
 // Pas de 'use server' : ce module n'expose aucune action appelable depuis le navigateur ; il ne lit jamais la session
 // (auteur `byId` passé explicitement : appelable dans une transaction PGlite).
 
 export type NewNotification = {
   personId: string | null | undefined;
   type: NotificationType;
-  entityType: 'action';
+  entityType: 'action' | 'event';
   entityId: string;
   title: string;
   href: string;
@@ -64,6 +65,30 @@ export const actionCommentTitle = (id: string, author: string, excerpt80: string
     ? ` · ${fileNames.length > 1 ? 'preuves' : 'preuve'} ${fileNames.map((f) => `« ${f} »`).join(', ')}` : ''}`;
 /** « A-215 : preuve « photo.jpg » ajoutée par [T. Nguyen] » (ACT-31, une notification par fichier). */
 export const actionProofTitle = (id: string, author: string, fileName: string) => `${id} : preuve « ${fileName} » ajoutée par ${author}`;
+/** Suite donnée à un signalement (TDB-06), notifiée à son déclarant nominatif. */
+export type ReportOutcome = 'qualifie' | 'classe' | 'cloture';
+const OUTCOME_LABELS: Record<ReportOutcome, string> = { qualifie: 'qualifié', classe: 'classé sans suite', cloture: 'clôturé' };
+/** « Votre signalement EV-2026-131 a été qualifié par [C. Lefèvre] : Chute de plain-pied… » (TDB-06). */
+export const reportOutcomeTitle = (id: string, outcome: ReportOutcome, author: string, title: string) =>
+  `Votre signalement ${id} a été ${OUTCOME_LABELS[outcome]} par ${author} : ${textExcerpt(title, 80)}`;
+/** Fiche « Mes signalements » d'un signalement (lien de la notification au déclarant). */
+export const myReportHref = (id: string) => `/signaler/mes-signalements/${encodeURIComponent(id)}`;
+
+/**
+ * Information du déclarant (TDB-06) : son signalement est qualifié, classé sans suite ou clôturé. Déclarant nominatif de
+ * l'effectif seulement (declarant_id, jamais un signalement anonyme ni un déclarant externe sans compte) ; rien quand il
+ * est l'auteur du changement. Intitulé de l'événement seul (jamais une donnée de santé : l'intitulé d'un AT n'en porte
+ * pas) ; lien vers « Mes signalements ». Dans la transaction de l'écriture.
+ */
+export async function notifyReportOutcome(tx: DbOrTx, ev: { id: string; title: string; declarantId: string | null; anonymous: boolean },
+  outcome: ReportOutcome, by: { id: string; name: string }): Promise<number | null> {
+  if (!ev.declarantId || ev.anonymous) return null;
+  return notify(tx, {
+    personId: ev.declarantId, type: 'signalement_suite', entityType: 'event', entityId: ev.id, byId: by.id,
+    title: reportOutcomeTitle(ev.id, outcome, by.name, ev.title), href: myReportHref(ev.id),
+  });
+}
+
 /** « A-215 : commentaire de [T. Nguyen] — (commentaire retiré) » : titre d'une notification ACT-31 après le retrait. */
 export const actionCommentWithdrawnTitle = (id: string, author: string) => `${id} : commentaire de ${author} — (commentaire retiré)`;
 

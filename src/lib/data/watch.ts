@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { and, asc, desc, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fileIcon, fmtSize } from '../attachments';
-import { addDays, addMonths, fmtDate, fmtDayMonth } from '../dates';
+import { addDays, addMonths, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   CONTROL_HORIZON_DAYS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
@@ -13,7 +13,6 @@ import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, 
 import { canReadAction } from '../action-rules';
 import { currentSiteId, getSession, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
-import { loadChangeLogs } from './changelog';
 import { loadPreventionCompliance } from './prevention';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
 
@@ -34,7 +33,7 @@ const NEEDS_ACTION = new Set<string>(REQUIREMENT_NEEDS_ACTION);
 const equipShort = (e: string) => e.split(' — ')[0];
 
 /** Jour (AAAA-MM-JJ, heure de Paris) d'un horodatage d'archivage ou d'annulation. */
-const dayOf = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(d);
+const dayOf = parisDay;
 
 /** « Archivée le 30/06/2026 par Claire Lefèvre · motif » (archivage, annulation). */
 const traceLabel = (verb: string, at: Date | null, by: string, reason: string | null) =>
@@ -112,7 +111,8 @@ export async function loadWatch() {
   const actionIds = [...new Set([...reqs, ...controls].map((r) => r.actionId).filter((id): id is string => !!id))];
   const controlIds = controls.map((c) => c.id);
   const reqIds = reqs.map((r) => r.id);
-  const [actions, records, evaluations, reqLogs, ctrlLogs] = await Promise.all([
+  // Journaux des exigences et des contrôles : chargés à l'ouverture de leur fiche (QUA-11, LazyChangeLog).
+  const [actions, records, evaluations] = await Promise.all([
     actionIds.length ? db.select().from(t.actions).where(inArray(t.actions.id, actionIds)) : Promise.resolve([]),
     controlIds.length
       ? db.select().from(t.controlRecords).where(inArray(t.controlRecords.controlId, controlIds)).orderBy(desc(t.controlRecords.performedOn), desc(t.controlRecords.id))
@@ -121,8 +121,6 @@ export async function loadWatch() {
       ? db.select().from(t.requirementEvaluations).where(inArray(t.requirementEvaluations.requirementId, reqIds))
         .orderBy(desc(t.requirementEvaluations.evaluatedOn), desc(t.requirementEvaluations.id))
       : Promise.resolve([]),
-    loadChangeLogs('requirement', reqIds),
-    loadChangeLogs('control', controlIds),
   ]);
   const fileKeys = [
     ...records.map((r) => ['control_record', String(r.id)] as const),
@@ -186,7 +184,6 @@ export async function loadWatch() {
         const v = evalOf(e.evaluation);
         return { id: e.id, date: fmtDate(e.evaluatedOn), evaluation: e.evaluation, label: v.label, tone: v.tone, note: e.note, by: name(e.evaluatedById), files: filesOf('requirement_evaluation', e.id) };
       }),
-      log: reqLogs.get(String(r.id)) ?? [],
     };
   });
   const reqBrief = new Map(reqs.map((r) => [r.id, { id: r.id, text: r.text, archived: !!r.archivedAt }]));
@@ -235,7 +232,6 @@ export async function loadWatch() {
         requirement: c.requirementId ? reqBrief.get(c.requirementId) ?? null : null,
         action: actionOf(c.actionId),
         records: recs,
-        log: ctrlLogs.get(String(c.id)) ?? [],
       };
     }),
   };

@@ -654,6 +654,8 @@ export async function createPreventionProgram(_prev: FormState, fd: FormData): P
       const sources = await loadProgramSources(tx);
       const ids = programDefaultIds(sources.actions, riskLinkedActionIds(sources), year!);
       if (ids.length) await tx.insert(t.preventionProgramActions).values(ids.map((actionId) => ({ year: year!, actionId })));
+      // Historique de chaque action reprise (ACT-03 : changements faits par les autres modules).
+      for (const actionId of ids) await logProgramLine(tx, actionId, year!, 'add', session.user.id);
       await logChange(tx, {
         entityType: 'prevention_program', entityId: String(year), action: 'create',
         summary: `Programme ${year} créé · ${plural(ids.length, 'action reprise', 'actions reprises')} du DUERP ${current.version}`,
@@ -705,9 +707,17 @@ async function programLineContext(db: DbOrTx, year: number, actionId: string) {
   return { program, action } as const;
 }
 
+/** Inscription ou retrait d'une action au programme de prévention (PAPRIPACT), tracé dans l'historique de l'action (ACT-03). */
+async function logProgramLine(tx: DbOrTx, actionId: string, year: number, kind: 'add' | 'remove', byId: string) {
+  await logChange(tx, {
+    entityType: 'action', entityId: actionId, action: kind === 'add' ? 'link' : 'unlink', byId,
+    summary: kind === 'add' ? `Inscrite au programme de prévention ${year} (PAPRIPACT)` : `Retirée du programme de prévention ${year} (PAPRIPACT)`,
+  });
+}
+
 /** Ajoute une action du plan rattachée à un risque du DUERP en vigueur au programme en préparation. */
 export async function addProgramAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireRiskApprover();
+  const { session, error } = await requireRiskApprover();
   if (error) return { error };
   const f = formReader(fd);
   const year = f.int('year', { required: true });
@@ -728,6 +738,7 @@ export async function addProgramAction(_prev: FormState, fd: FormData): Promise<
     const rows = await tx.insert(t.preventionProgramActions).values({ year: year!, actionId, ...line }).onConflictDoNothing()
       .returning({ actionId: t.preventionProgramActions.actionId });
     if (!rows.length) return false;
+    await logProgramLine(tx, actionId, year!, 'add', session.user.id);
     await logChange(tx, {
       entityType: 'prevention_program', entityId: String(year), action: 'add', summary: `Action ${actionId} ajoutée au programme`,
       details: diffFields(EMPTY_LINE, line, PROGRAM_LINE_LABELS, programLineFmt),
@@ -772,7 +783,7 @@ export async function saveProgramAction(_prev: FormState, fd: FormData): Promise
  * check-list d'une revue planifiée), le retrait et ses valeurs sont journalisés ; un programme arrêté n'est plus modifiable.
  */
 export async function removeProgramAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireRiskApprover();
+  const { session, error } = await requireRiskApprover();
   if (error) return { error };
   const f = formReader(fd);
   const year = f.int('year', { required: true });
@@ -788,6 +799,7 @@ export async function removeProgramAction(_prev: FormState, fd: FormData): Promi
   if (siteError) return { error: siteError };
   await db.transaction(async (tx) => {
     await tx.delete(t.preventionProgramActions).where(where);
+    await logProgramLine(tx, actionId, year!, 'remove', session.user.id);
     await logChange(tx, {
       entityType: 'prevention_program', entityId: String(year), action: 'remove', summary: `Action ${actionId} retirée du programme`,
       details: diffFields(before, EMPTY_LINE, PROGRAM_LINE_LABELS, programLineFmt),

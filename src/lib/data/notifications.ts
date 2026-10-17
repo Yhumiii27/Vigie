@@ -15,7 +15,7 @@ import { loadSiteDirectory, loadVisibleTodo, shortSiteLabel, type VisibleTodo } 
 
 // Cloche de l'en-tête (docs/specs/actions-qse.md § 15) : trois familles d'éléments.
 // 1. Notifications d'information stockées (table notifications, ACT-30 « Action confiée », ACT-31 commentaire ou preuve
-//    du responsable) : non lues (50 au plus) et lues depuis moins de NOTIFY_HORIZON_DAYS jours ; clé « notification:<id> »,
+//    du responsable, TDB-06 suite d'un signalement au déclarant, sans site : « Mes signalements ») : non lues (50 au plus) et lues depuis moins de NOTIFY_HORIZON_DAYS jours ; clé « notification:<id> »,
 //    état lu dans la ligne elle-même (read_at).
 // 2. Rappel du mercredi (ACT-32, D12) : élément calculé, jamais une échéance (ni À faire, ni tableau de bord, ni badges) ;
 //    actions de la personne ouvertes ou Terminées sur tous les sites (D19), daté du mercredi de la semaine, clé
@@ -68,12 +68,13 @@ async function loadStored(): Promise<Notification[]> {
   const n = t.notifications;
   const author = aliasedTable(t.people, 'author');
   const select = {
-    id: n.id, type: n.type, title: n.title, href: n.href, createdAt: n.createdAt, readAt: n.readAt, who: author.name, siteId: t.actions.siteId,
-    pilotId: t.actions.pilotId,
+    id: n.id, type: n.type, entityType: n.entityType, title: n.title, href: n.href, createdAt: n.createdAt, readAt: n.readAt, who: author.name,
+    siteId: t.actions.siteId, pilotId: t.actions.pilotId, declarantId: t.events.declarantId, anonymous: t.events.anonymous,
   };
   const base = () => db.select(select).from(n)
     .leftJoin(author, eq(author.id, n.byId))
-    .leftJoin(t.actions, and(eq(n.entityType, 'action'), eq(t.actions.id, n.entityId)));
+    .leftJoin(t.actions, and(eq(n.entityType, 'action'), eq(t.actions.id, n.entityId)))
+    .leftJoin(t.events, and(eq(n.entityType, 'event'), eq(t.events.id, n.entityId)));
   const since = fromParisLocal(`${addDays(today(), -NOTIFY_HORIZON_DAYS)}T00:00`) ?? new Date(0);
   const [unread, read] = await Promise.all([
     base().where(and(eq(n.personId, user.id), isNull(n.readAt))).orderBy(desc(n.createdAt), desc(n.id)).limit(STORED_UNREAD_MAX),
@@ -82,7 +83,10 @@ async function loadStored(): Promise<Notification[]> {
   const labels = new Map(sites.map((s) => [s.id, shortSiteLabel(s.label)]));
   return [...unread, ...read].map((r): Notification => {
     const elsewhere = !!siteId && !!r.siteId && r.siteId !== siteId;
-    const readable = r.pilotId !== null && canReadAction(role, user.id, { pilotId: r.pilotId, siteId: r.siteId }, allowedSiteIds);
+    // Suite d'un signalement (TDB-06) : « Mes signalements », tous sites, tant que la personne en est le déclarant nominatif.
+    const readable = r.entityType === 'event'
+      ? r.declarantId === user.id && r.anonymous === false
+      : r.pilotId !== null && canReadAction(role, user.id, { pilotId: r.pilotId, siteId: r.siteId }, allowedSiteIds);
     return {
       key: `${STORED_NOTIFICATION_KEY_PREFIX}${r.id}`, date: parisDay(r.createdAt), kind: isNotificationType(r.type) ? NOTIFICATION_KINDS[r.type] : 'Information',
       tone: 'accent', title: r.title, who: r.who ?? '', href: readable ? r.href : undefined, siteId: r.siteId, source: screenOfHref(r.href),

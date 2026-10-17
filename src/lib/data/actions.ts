@@ -4,14 +4,14 @@ import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { addActionBlocker } from '@/components/events/shared';
 import { entryRef } from '@/components/environment/model';
-import { ACTION_LINKS, loadLinkSources } from '../action-links';
+import { ACTION_LINKS, loadActionSources } from '../action-links';
 import {
-  SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
+  SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, isComplementaryLinkKind, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
   canReadPlan, compareActions, inPlanScope, isLate, isQhse, isToComplete, isVerificationDueSoon, isVerificationLate,
   matchesActionFilters, type ActionFilters, type LinkFacts,
 } from '../action-rules';
 import type {
-  ActionCommentView, ActionDetailPayload, ActionDetailView, ActionFormOptions, ActionListItem, ActionTargetOption, PlanSource,
+  ActionCommentView, ActionDetailPayload, ActionDetailView, ActionFormOptions, ActionListItem, ActionTargetOption, LinkTargetOption, PlanSource,
 } from '../action-view';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, fmtDate, fmtDayMonth, fmtParisDateTime, parisDay } from '../dates';
@@ -227,7 +227,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   [...openReviews.values()].forEach((r) => add('review', r.id, fmtReview(r.reviewOn), null));
   decisions
     .filter((d) => openReviews.has(d.reviewId) && free(d.actionId))
-    .forEach((d) => add('reviewdecision', d.id, `Décision · ${fmtReview(openReviews.get(d.reviewId)!.reviewOn)} — ${d.text}`, null, { decisionKind: d.kind }));
+    .forEach((d) => add('reviewdecision', d.id, `Décision · ${fmtReview(openReviews.get(d.reviewId)!.reviewOn)} — ${d.text}`, null, { decisionKind: d.kind }, { reviewId: d.reviewId }));
   documents.filter((d) => keep(d.siteId)).forEach((d) => add('document', d.id, `${d.id} · ${d.title}`, d.siteId));
   streams.filter((s) => keep(s.siteId)).forEach((s) => add('wastestream', s.id, `${s.id} · ${s.label}`, s.siteId));
   entries
@@ -250,7 +250,8 @@ type Reader = { role: Session['role']; userId: string; restricted: boolean };
  */
 async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
   const db = await getDb();
-  const links = (await loadLinkSources()).get(a.id) ?? [];
+  const links = await loadActionSources(a.id);
+  const qhse = isQhse(reader.role);
   const first = a.originRef.split(/[\s·,]+/)[0] ?? '';
   const eventIds = [...new Set([a.eventId, a.originRef, first].filter((x): x is string => !!x))];
   const events = new Map((eventIds.length
@@ -274,6 +275,8 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
     list.push({
       kind: s.kind, label: s.label, href: readable ? s.href : null, ...(readable && s.detail ? { detail: s.detail } : {}),
       detachOnAbandon: !ACTION_LINKS[s.kind]?.keptOnCancel,
+      // « Détacher » de la fiche (ACT-02) : lien complémentaire, QHSE seulement.
+      ...(qhse && !reader.restricted && isComplementaryLinkKind(s.kind) ? { link: s.link } : {}),
     });
   }
   if (!list.length) {
@@ -289,6 +292,42 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
     }
   }
   return list.map((s) => (s.href && !canOpen(reader.role, s.href) ? { ...s, href: null, detail: undefined } : s));
+}
+
+/**
+ * « Rattacher » de la fiche (ACT-02, QHSE) : liens complémentaires (COMPLEMENTARY_LINK_KINDS) que linkAction accepterait —
+ * éléments du sélecteur du plan (loadActionTargets : site sélectionné ou commun, en vigueur, élément à action unique libre)
+ * du site de l'action ou communs, plus les versions de document en révision (brouillon, en revue) libres ; jamais un
+ * élément déjà lié à l'action, ni une autre revue que celle de l'action (AUD-12 : une action relève d'une seule revue).
+ */
+async function complementaryTargets(a: ActionRow, sources: PlanSource[]): Promise<LinkTargetOption[]> {
+  const db = await getDb();
+  const [targets, versions, statuses, decisionReviews] = await Promise.all([
+    loadActionTargets(),
+    db.select({ id: t.documentVersions.id, documentId: t.documentVersions.documentId, version: t.documentVersions.version, status: t.documentVersions.status, actionId: t.documentVersions.actionId, siteId: t.documents.siteId, title: t.documents.title })
+      .from(t.documentVersions).innerJoin(t.documents, eq(t.documentVersions.documentId, t.documents.id)).orderBy(asc(t.documentVersions.documentId), asc(t.documentVersions.id)),
+    db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
+    db.select({ reviewId: t.reviewDecisions.reviewId }).from(t.reviewDecisions).where(eq(t.reviewDecisions.actionId, a.id)),
+  ]);
+  const linked = new Set(sources.map((s) => s.link).filter(Boolean));
+  const reviewId = a.reviewId ?? decisionReviews[0]?.reviewId ?? null;
+  const open = new Set(statuses.filter((s) => !isClosedActionStatus(s.status)).map((s) => s.id));
+  const keep = await siteFilter('site');
+  const out: LinkTargetOption[] = [];
+  for (const o of targets) {
+    const kind = o.value.split(':')[0];
+    if (!isComplementaryLinkKind(kind) || linked.has(o.value) || !inSite(o.siteId, a.siteId)) continue;
+    if (kind === 'review' && reviewId != null) continue; // une seule revue par action (déjà rattachée)
+    if (kind === 'reviewdecision' && reviewId != null && o.reviewId !== reviewId) continue;
+    out.push({ value: o.value, label: o.label, kind });
+  }
+  for (const v of versions) {
+    const value = `docversion:${v.id}`;
+    if ((v.status !== 'brouillon' && v.status !== 'en_revue') || linked.has(value) || (v.actionId && open.has(v.actionId))) continue;
+    if (!keep(v.siteId) || !inSite(v.siteId, a.siteId)) continue;
+    out.push({ value, label: clip(`${v.documentId} · version ${v.version} (${v.status === 'brouillon' ? 'brouillon' : 'en revue'}) — ${v.title}`), kind: 'docversion' });
+  }
+  return out;
 }
 
 /** Nom d'une preuve jointe à un commentaire retiré, à la place du nom réel dans l'historique lu par qui n'est pas QHSE (D23). */
@@ -383,11 +422,13 @@ export const loadActionDetail = cache(async (id: string): Promise<{ payload: Act
       const v = actionView(f, people, now);
       return { id: f.id, label: v.label, reason: f.followReason!, statusLabel: v.statusLabel, tone: v.tone };
     }),
-    comments, files, history: entries,
+    comments, files, history: entries, linkTargets: [],
     healthWarning: qhse && event?.type === 'AT',
   };
   const elsewhere = here ? null : siteLabel;
-  return { payload: { detail, rights: actionRights(role, user.id, a, { elsewhere }) }, elsewhere: null };
+  const rights = actionRights(role, user.id, a, { elsewhere });
+  detail.linkTargets = rights.canLink && !elsewhere ? await complementaryTargets(a, sources) : [];
+  return { payload: { detail, rights }, elsewhere: null };
 });
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badges) ──

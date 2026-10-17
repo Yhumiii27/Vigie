@@ -80,11 +80,13 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const scopeSites = d.sites.map((s) => [s.id, s.label] as const);
   const streamOptions: StreamOption[] = d.streams.map(({
     id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
-    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived,
   }) => ({
     id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
-    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived,
   }));
+  // Filières en service (DOC-09) : seules proposées pour un nouvel enlèvement et comptées dans l'onglet.
+  const activeStreams = d.streams.filter((s) => !s.archived);
   const transporters = uniq([...live.map((e) => e.transporter), ...d.streams.map((s) => s.collector)]);
   // Identité connue des transporteurs et des installations (mentions du registre) : enlèvements, du plus ancien au plus
   // récent, puis filières (le collecteur et l'installation de la filière font foi).
@@ -149,7 +151,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
 
   const tabs: [Tab, string, string][] = [
     ['registre', 'Registre des déchets', String(live.length)],
-    ['filieres', 'Filières', String(d.streams.length)],
+    ['filieres', 'Filières', String(activeStreams.length)],
     ['consommations', 'Consommations', '12 mois'],
   ];
   const yearOptions = d.years.map((y) => ({ href: hrefWith(PATH, params, { annee: y === d.currentYear ? undefined : String(y) }), label: String(y), on: y === d.year }));
@@ -309,7 +311,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <SegLinks size={12} pad="4px 10px" options={yearOptions} />
                   <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-                    {plural(d.streams.filter((s) => s.hazardous).length, 'filière dangereuse', 'filières dangereuses')} · cumuls {d.year} {d.periodNote} et {d.year - 1}
+                    {plural(activeStreams.filter((s) => s.hazardous).length, 'filière dangereuse', 'filières dangereuses')} · cumuls {d.year} {d.periodNote} et {d.year - 1}
                   </span>
                 </div>
                 <StreamsPanel streams={d.streams} year={d.year} annee={annee} isCurrent={d.isCurrent} canManage={manage} showSite={d.showSite} sites={allOptions.sites}

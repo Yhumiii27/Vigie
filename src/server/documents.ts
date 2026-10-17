@@ -7,12 +7,13 @@ import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPr
 import { today } from '@/lib/today';
 import { isQhse } from '@/lib/action-rules';
 import { canApprove, canEdit, isClosedActionStatus, type Role } from '@/lib/domain';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { inSite } from '@/lib/session';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 // Documents maîtrisés : création, métadonnées et cycle de vie des versions
 // (brouillon → en revue → approuvée ; la version approuvée précédente est archivée).
@@ -87,12 +88,28 @@ async function readAction(f: Reader, fd: FormData, db: Db, role: Role, current: 
   return posted;
 }
 
-/** Journal d'un changement d'action liée d'une version, sur les actions concernées (dans la transaction de l'écriture). */
-async function logVersionLink(tx: DbOrTx, before: string | null, after: string | null, label: string, byId: string) {
+/** Journal d'un changement d'action liée d'une version, sur les actions concernées et sur le document (dans la transaction de l'écriture). */
+async function logVersionLink(tx: DbOrTx, before: string | null, after: string | null, label: string, byId: string, documentId: string) {
   if (before === after) return;
   if (before) await logChange(tx, { entityType: 'action', entityId: before, action: 'unlink', summary: `Détachée de ${label}`, byId });
   if (after) await logChange(tx, { entityType: 'action', entityId: after, action: 'link', summary: `Rattachée à ${label}`, byId });
+  await logChange(tx, {
+    entityType: 'document', entityId: documentId, action: after ? 'link' : 'unlink', byId,
+    summary: after ? `Action ${after} rattachée à ${label}` : `Action ${before} détachée de ${label}`,
+    ...(before && after ? { details: [{ field: 'Action liée', from: before, to: after }] } : {}),
+  });
 }
+
+/**
+ * Journal du cycle de vie d'un document (DOC-04) : création, révision, brouillon, soumission, approbation, renvoi,
+ * abandon, fichier, dans la transaction de l'écriture (historique de la fiche, LazyChangeLog « document »).
+ */
+const logDoc = (db: DbOrTx | null, documentId: string, entry: { action: string; summary: string; reason?: string | null; details?: { field: string; from: string | null; to: string | null }[]; byId: string }) =>
+  logChange(db, { entityType: 'document', entityId: documentId, ...entry });
+
+/** DOC-05 : une version ne part en revue ni n'est approuvée sans son fichier. */
+const NO_FILE = 'Joignez le fichier de la version (brouillon) avant de la soumettre ou de l’approuver.';
+const hasFile = async (versionId: number) => (await listAttachments(ENTITY, String(versionId))).length > 0;
 
 /** Fichier facultatif (un seul par version). */
 function readFile(f: Reader) {
@@ -155,13 +172,16 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   const siteError = await requireInSite(meta.siteId, { create: true });
   if (siteError) return { error: siteError, fieldErrors: { siteId: 'Site non autorisé.' } };
 
-  const ids = (await db.select({ id: t.documents.id }).from(t.documents)).map((d) => d.id);
-  if (rawRef && ids.includes(rawRef)) return { error: 'Cette référence est déjà utilisée.', fieldErrors: { ref: `${rawRef} existe déjà.` } };
-  const id = rawRef || nextRef(ids, refPrefix(meta.type as DocType, meta.process!), 3);
+  if (rawRef && (await db.select({ id: t.documents.id }).from(t.documents).where(eq(t.documents.id, rawRef))).length) {
+    return { error: 'Cette référence est déjà utilisée.', fieldErrors: { ref: `${rawRef} existe déjà.` } };
+  }
 
+  let id = rawRef;
   let versionId: number;
   try {
     versionId = await db.transaction(async (tx) => {
+      // Référence automatique tirée sous verrou dans la transaction (PRD-08) ; saisie : contrôlée par la clé primaire.
+      if (!id) id = await nextEntityReference(tx, 'document', refPrefix(meta.type as DocType, meta.process!), 3);
       await tx.insert(t.documents).values({
         id, title: meta.title, type: meta.type!, process: meta.process!, ownerId: meta.ownerId, reviewMonths: meta.reviewMonths!,
         distribution: meta.distribution, siteId: meta.siteId,
@@ -169,7 +189,8 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
       const [v] = await tx.insert(t.documentVersions).values({
         documentId: id, version: 'A', status: 'brouillon', summary, authorId: session.user.id, actionId,
       }).returning({ id: t.documentVersions.id });
-      await logVersionLink(tx, null, actionId, `${id} · version A`, session.user.id);
+      await logDoc(tx, id, { action: 'create', byId: session.user.id, summary: `Document créé · version A en brouillon (${summary})` });
+      await logVersionLink(tx, null, actionId, `${id} · version A`, session.user.id, id);
       return v.id;
     });
   } catch (err) {
@@ -186,6 +207,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
       await db.delete(t.documents).where(eq(t.documents.id, id));
       return { error: uploadError(err), fieldErrors: { file: 'Fichier non enregistré.' } };
     }
+    await logDoc(null, id, { action: 'attach', byId: session.user.id, summary: 'Fichier joint à la version A', details: [{ field: 'Fichier', from: null, to: file.name }] });
   }
   return done(id);
 }
@@ -267,7 +289,7 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
   if (siteError) return { error: siteError };
 
   // Contrôle et insertion dans la même transaction : pas de seconde révision en cours sur un double envoi.
-  const created = await db.transaction(async (tx): Promise<{ error: string } | { versionId: number }> => {
+  const created = await db.transaction(async (tx): Promise<{ error: string } | { versionId: number; version: string }> => {
     const versions = await tx.select().from(t.documentVersions).where(eq(t.documentVersions.documentId, documentId));
     if (!versions.length) return { error: 'Document introuvable.' };
     const pending = versions.find((v) => v.status === 'brouillon' || v.status === 'en_revue');
@@ -278,8 +300,12 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
     const [v] = await tx.insert(t.documentVersions).values({
       documentId, version, status: 'brouillon', summary, authorId: session.user.id, actionId,
     }).returning({ id: t.documentVersions.id });
-    await logVersionLink(tx, null, actionId, `${documentId} · version ${version}`, session.user.id);
-    return { versionId: v.id };
+    await logDoc(tx, documentId, {
+      action: 'create', byId: session.user.id,
+      summary: `${relaunch ? 'Document relancé' : 'Révision ouverte'} · version ${version} en brouillon (${summary})`,
+    });
+    await logVersionLink(tx, null, actionId, `${documentId} · version ${version}`, session.user.id, documentId);
+    return { versionId: v.id, version };
   });
   if ('error' in created) return { error: created.error };
 
@@ -287,9 +313,12 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
     try {
       await saveUpload(file, ENTITY, String(created.versionId), session.user.id);
     } catch (err) {
+      // Version jamais diffusée retirée (brouillon de cette requête) ; son ouverture reste au journal, annulée.
       await db.delete(t.documentVersions).where(eq(t.documentVersions.id, created.versionId));
+      await logDoc(null, documentId, { action: 'cancel', byId: session.user.id, summary: `Révision ${created.version} non enregistrée : le fichier n'a pas pu être stocké` });
       return { error: uploadError(err), fieldErrors: { file: 'Fichier non enregistré.' } };
     }
+    await logDoc(null, documentId, { action: 'attach', byId: session.user.id, summary: `Fichier joint à la version ${created.version}`, details: [{ field: 'Fichier', from: null, to: file.name }] });
   }
   return done(documentId);
 }
@@ -332,27 +361,37 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
   const row = await db.transaction(async (tx) => {
     const [updated] = await tx.update(t.documentVersions).set({ summary, actionId })
       .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
-    if (updated) await logVersionLink(tx, v.actionId, actionId, `${v.documentId} · version ${v.version}`, session.user.id);
+    if (updated) {
+      if (summary !== v.summary) {
+        await logDoc(tx, v.documentId, { action: 'update', byId: session.user.id, summary: `Brouillon de la version ${v.version} modifié`, details: [{ field: 'Objet de la modification', from: v.summary || null, to: summary }] });
+      }
+      await logVersionLink(tx, v.actionId, actionId, `${v.documentId} · version ${v.version}`, session.user.id, v.documentId);
+    }
     return updated;
   });
   if (!row) return STALE;
 
+  const previous = file || removeFile ? await listAttachments(ENTITY, String(v.id)) : [];
   if (file) {
     try {
       await replaceFile(v.id, file, session.user.id);
     } catch (err) {
       return { error: uploadError(err), fieldErrors: { file: 'Fichier non enregistré.' } };
     }
-  } else if (removeFile) {
-    const previous = await listAttachments(ENTITY, String(v.id));
+    await logDoc(null, v.documentId, {
+      action: 'attach', byId: session.user.id, summary: `Fichier ${previous.length ? 'remplacé' : 'joint'} · version ${v.version}`,
+      details: [{ field: 'Fichier', from: previous[0]?.fileName ?? null, to: file.name }],
+    });
+  } else if (removeFile && previous.length) {
     await Promise.all(previous.map((p) => deleteAttachment(p.id)));
+    await logDoc(null, v.documentId, { action: 'detach', byId: session.user.id, summary: `Fichier retiré · version ${v.version}`, details: [{ field: 'Fichier', from: previous[0].fileName, to: null }] });
   }
   return done(v.documentId);
 }
 
 /** Brouillon → en revue. */
 export async function submitVersion(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireDocEditor();
+  const { session, error } = await requireDocEditor();
   if (error) return { error };
   const f = formReader(fd);
   const loaded = await loadVersionInSite(f);
@@ -362,9 +401,15 @@ export async function submitVersion(_prev: FormState, fd: FormData): Promise<For
   if (!v) return { error: 'Version introuvable.' };
   if (v.status !== 'brouillon') return { error: 'Cette version a déjà été soumise.' };
   if (!v.summary.trim()) return { error: "Précisez l'objet de la modification avant de soumettre." };
+  if (!(await hasFile(v.id))) return { error: NO_FILE };
   const db = await getDb();
-  const [row] = await db.update(t.documentVersions).set({ status: 'en_revue', submittedOn: today() })
-    .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+  const row = await db.transaction(async (tx) => {
+    // Nouvelle soumission : le renvoi en brouillon précédent est traité (échéance de l'auteur levée, DOC-06).
+    const [r] = await tx.update(t.documentVersions).set({ status: 'en_revue', submittedOn: today(), returnedOn: null, returnReason: null })
+      .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+    if (r) await logDoc(tx, v.documentId, { action: 'status', byId: session.user.id, summary: `Version ${v.version} soumise en revue` });
+    return r;
+  });
   if (!row) return STALE;
   return done(v.documentId);
 }
@@ -380,13 +425,19 @@ export async function approveVersion(_prev: FormState, fd: FormData): Promise<Fo
   if (!f.ok) return f.state();
   if (!v) return { error: 'Version introuvable.' };
   if (v.status !== 'en_revue') return { error: "Seule une version en revue peut être approuvée." };
+  if (!(await hasFile(v.id))) return { error: NO_FILE };
   const db = await getDb();
   const approved = await db.transaction(async (tx) => {
     const [row] = await tx.update(t.documentVersions).set({ status: 'approuve', approverId: session.user.id, approvedOn: today() })
       .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'en_revue'))).returning({ id: t.documentVersions.id });
     if (!row) return false;
-    await tx.update(t.documentVersions).set({ status: 'archive' })
-      .where(and(eq(t.documentVersions.documentId, v.documentId), eq(t.documentVersions.status, 'approuve'), ne(t.documentVersions.id, v.id)));
+    const archived = await tx.update(t.documentVersions).set({ status: 'archive' })
+      .where(and(eq(t.documentVersions.documentId, v.documentId), eq(t.documentVersions.status, 'approuve'), ne(t.documentVersions.id, v.id)))
+      .returning({ version: t.documentVersions.version });
+    await logDoc(tx, v.documentId, {
+      action: 'status', byId: session.user.id,
+      summary: `Version ${v.version} approuvée et en vigueur${archived.length ? ` · version ${archived.map((a) => a.version).join(', ')} archivée` : ''}`,
+    });
     return true;
   });
   if (!approved) return STALE;
@@ -395,18 +446,24 @@ export async function approveVersion(_prev: FormState, fd: FormData): Promise<Fo
 
 /** En revue → brouillon (corrections demandées par l'approbateur). */
 export async function returnToDraft(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireApprover();
+  const { session, error } = await requireApprover();
   if (error) return { error };
   const f = formReader(fd);
   const loaded = await loadVersionInSite(f);
   if ('error' in loaded) return { error: loaded.error };
   const { v } = loaded;
+  // DOC-06 : corrections demandées, motif obligatoire ; échéance de l'auteur jusqu'à la nouvelle soumission.
+  const reason = f.reason();
   if (!f.ok) return f.state();
   if (!v) return { error: 'Version introuvable.' };
   if (v.status !== 'en_revue') return { error: "Cette version n'est pas en revue." };
   const db = await getDb();
-  const [row] = await db.update(t.documentVersions).set({ status: 'brouillon', submittedOn: null })
-    .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'en_revue'))).returning({ id: t.documentVersions.id });
+  const row = await db.transaction(async (tx) => {
+    const [r] = await tx.update(t.documentVersions).set({ status: 'brouillon', submittedOn: null, returnedOn: today(), returnReason: reason })
+      .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'en_revue'))).returning({ id: t.documentVersions.id });
+    if (r) await logDoc(tx, v.documentId, { action: 'status', byId: session.user.id, reason, summary: `Version ${v.version} renvoyée en brouillon : corrections demandées` });
+    return r;
+  });
   if (!row) return STALE;
   return done(v.documentId);
 }
@@ -423,6 +480,8 @@ export async function abandonDraft(_prev: FormState, fd: FormData): Promise<Form
   const loaded = await loadVersionInSite(f);
   if ('error' in loaded) return { error: loaded.error };
   const { v } = loaded;
+  // Abandon = archivage de la version sans approbation : motif obligatoire (DOC-04).
+  const reason = f.reason();
   if (!f.ok) return f.state();
   if (!v) return { error: 'Version introuvable.' };
   if (v.status !== 'brouillon') return { error: 'Seul un brouillon peut être abandonné.' };
@@ -432,8 +491,17 @@ export async function abandonDraft(_prev: FormState, fd: FormData): Promise<Form
   if (!inForce.length && !canApprove(session.role)) {
     return { error: "Sans version en vigueur, abandonner ce brouillon retire le document : réservé à l'animateur QHSE et à la direction." };
   }
-  const [row] = await db.update(t.documentVersions).set({ status: 'archive' })
-    .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+  const row = await db.transaction(async (tx) => {
+    const [r] = await tx.update(t.documentVersions).set({ status: 'archive', returnedOn: null, returnReason: null })
+      .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
+    if (r) {
+      await logDoc(tx, v.documentId, {
+        action: 'archive', byId: session.user.id, reason,
+        summary: inForce.length ? `Brouillon de la version ${v.version} abandonné` : `Brouillon de la version ${v.version} abandonné : document classé « Abandonné »`,
+      });
+    }
+    return r;
+  });
   if (!row) return STALE;
   return done(v.documentId);
 }

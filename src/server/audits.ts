@@ -9,11 +9,12 @@ import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { FINDING_KINDS, canEdit } from '@/lib/domain';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
-import { diffFields, logChange, loggedIds } from './changelog';
+import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 type Result = { error?: string };
 
@@ -96,10 +97,13 @@ export async function saveCertification(_prev: FormState, fd: FormData): Promise
     });
     if (!ok) return { error: 'Référentiel introuvable.' };
   } else {
-    const rows = await db.select({ id: t.certifications.id, sort: t.certifications.sort }).from(t.certifications);
-    // Jamais la référence d'un référentiel retiré : son journal la suit.
-    certId = nextRef([...rows.map((r) => r.id), ...(await loggedIds(db, 'certification'))], 'cert-');
-    await db.insert(t.certifications).values({ id: certId, ...values, sort: nextSort(rows) });
+    // Référence tirée sous verrou dans la transaction (PRD-08) ; jamais celle d'un référentiel retiré : son journal la suit.
+    certId = await db.transaction(async (tx) => {
+      const rows = await tx.select({ id: t.certifications.id, sort: t.certifications.sort }).from(t.certifications);
+      const ref = await nextEntityReference(tx, 'certification', 'cert-');
+      await tx.insert(t.certifications).values({ id: ref, ...values, sort: nextSort(rows) });
+      return ref;
+    });
   }
 
   try {

@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
@@ -29,7 +30,7 @@ type View = { kind: 'list' } | { kind: 'snapshot'; version: string } | { kind: '
 type Loaded = { version: string; detail?: DuerpVersionDetail; error?: string };
 
 /** Bouton « Versions archivées » : historique des versions, consultation et export des instantanés. */
-export function VersionsButton({ versions, canApprove, people }: { versions: DuerpVersionView[]; canApprove: boolean; people: readonly Option[] }) {
+export function VersionsButton({ versions, canApprove, people, history = false }: { versions: DuerpVersionView[]; canApprove: boolean; people: readonly Option[]; history?: boolean }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>({ kind: 'list' });
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -73,6 +74,10 @@ export function VersionsButton({ versions, canApprove, people }: { versions: Due
           </button>
         )}
         {view.kind === 'list' && <VersionList versions={versions} canApprove={canApprove} onShow={showSnapshot} onEdit={(version) => setView({ kind: 'edit', version })} />}
+        {/* Historique des versions (DUE-06) : ouverture, compléments, archivage — à la saisie seulement. */}
+        {view.kind === 'list' && history && versions.map((v) => (
+          <LazyChangeLog key={v.version} entity="duerp_version" id={v.version} title={`Historique de la version ${v.version}`} />
+        ))}
         {view.kind === 'snapshot' && <SnapshotView key={view.version} loaded={loaded?.version === view.version ? loaded : { version: view.version }} />}
         {editing && (
           <VersionFields mode="edit" people={people} defaults={editing}

@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { addMonths, daysBetween, fmtDayMonth, yearOf } from '../dates';
+import { addMonths, daysBetween, fmtDayMonth, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   DUERP_ACCESS_CHANNELS, DUERP_REQUESTERS, DUERP_REQUIREMENT_LINK, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, PROGRAM_SHORT,
@@ -199,7 +199,7 @@ export const levelName = (n: number) => RISK_LEVELS[riskLevel(n)].label.replace(
 type RiskRow = typeof t.risks.$inferSelect;
 
 /** Jour (AAAA-MM-JJ, heure de Paris) d'un horodatage. */
-const dayOf = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(d);
+const dayOf = parisDay;
 const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /**

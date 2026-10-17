@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, desc, eq, isNull, max, ne } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -236,6 +236,8 @@ const CTRL_LABELS = {
   requirementId: 'Exigence',
 } as const;
 
+const RECORD_TO_CHANGE = 'Modifié par « Enregistrer un contrôle » (ou l’annulation d’un enregistrement) : le changement est alors tracé dans l’historique.';
+
 /** Contrôle du site sélectionné, chargé pour une modification ; `error` si introuvable, hors site ou archivé (sauf `archived`). */
 async function loadControlForEdit(id: number, opts: { archived?: boolean } = {}) {
   const db = await getDb();
@@ -262,9 +264,16 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   const responsibleId = f.opt('responsibleId');
   const siteId = f.oneOf('siteId', siteIds); // vide = tous les sites
   const requirementId = f.int('requirementId');
-  const lastOn = f.date('lastOn', { required: true });
+  // VEI-09 : à la modification, « Dernier contrôle » et « Réserves en cours » ne changent que par un contrôle enregistré
+  // (« Enregistrer un contrôle ») ou l'annulation d'un enregistrement : historique et détachement de l'action de levée.
+  const current = id ? await loadControlForEdit(id) : null;
+  if (current?.error) return { error: current.error };
+  const before = current?.control ?? null;
+  const lastOn = before && !fd.has('lastOn') ? before.lastOn : f.date('lastOn', { required: true });
   let nextOn = f.date('nextOn');
-  const reserves = f.str('reserves', { max: 160 }) || null;
+  const reserves = before && !fd.has('reserves') ? before.reserves : f.str('reserves', { max: 160 }) || null;
+  if (before && lastOn && lastOn !== before.lastOn) f.fail('lastOn', RECORD_TO_CHANGE);
+  if (before && reserves !== before.reserves) f.fail('reserves', RECORD_TO_CHANGE);
   if (lastOn && lastOn > today()) f.fail('lastOn', "Le dernier contrôle ne peut pas être postérieur à aujourd'hui.");
   if (lastOn && periodMonths && !nextOn && !f.fieldErrors.nextOn) nextOn = addMonths(lastOn, periodMonths);
   if (lastOn && nextOn && nextOn <= lastOn) f.fail('nextOn', 'Le prochain contrôle doit suivre le dernier.');
@@ -272,9 +281,6 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   if (responsibleId && !responsible) f.fail('responsibleId', 'Responsable inconnu.');
   if (!f.ok) return f.state();
 
-  const current = id ? await loadControlForEdit(id) : null;
-  if (current?.error) return { error: current.error };
-  const before = current?.control ?? null;
   // Responsable sorti de l'effectif : conservé tant qu'il n'est pas remplacé, jamais choisi à nouveau (VEI-01).
   if (responsible && hasLeft(responsible, today()) && responsibleId !== before?.responsibleId) {
     return { error: 'Certains champs sont à corriger.', fieldErrors: { responsibleId: "Responsable sorti de l'effectif : choisissez une personne présente." } };
@@ -308,6 +314,22 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   }
   revalidatePath('/', 'layout');
   return { ok: true, id: String(savedId) };
+}
+
+/**
+ * Détachement d'une action par un changement des réserves d'un contrôle (enregistrement ou annulation d'un
+ * enregistrement) : entrée « unlink » dans l'historique de l'action (ACT-03 : changements faits par les autres modules).
+ */
+async function logControlDetach(tx: DbOrTx | null, control: { id: number; controlType: string; equipment: string }, actionId: string, why: string, byId: string, reason?: string | null) {
+  await logChange(tx, {
+    entityType: 'action', entityId: actionId, action: 'unlink', byId, reason: reason ?? null,
+    summary: `Détachée de ${control.controlType} · ${control.equipment} (${why}) : l'action reste dans le plan d'actions`,
+  });
+  // VEI-04 : aussi dans l'historique du contrôle.
+  await logChange(tx, {
+    entityType: 'control', entityId: control.id, action: 'unlink', byId, reason: reason ?? null,
+    summary: `Action ${actionId} détachée (${why}) : elle reste dans le plan d'actions`,
+  });
 }
 
 /**
@@ -368,6 +390,9 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
     summary: `Contrôle du ${fmtDate(performedOn!)} enregistré${latest ? '' : " dans l'historique (antérieur au dernier)"}`,
     details: latest ? diffFields(control, { lastOn: performedOn!, reserves }, { lastOn: 'Dernier contrôle', reserves: 'Réserves' }, fmtLog) : [],
   });
+  // Nouvelles réserves : l'action de levée des précédentes est détachée du contrôle (elle reste au plan) ; son historique
+  // le trace (ACT-03), une fois l'enregistrement définitif (rapport stocké).
+  if (control.actionId && actionId !== control.actionId) await logControlDetach(null, control, control.actionId, `nouvelles réserves au contrôle du ${fmtDate(performedOn!)}`, session.user.id);
   revalidatePath('/', 'layout');
   return { ok: true, id: String(recordId) };
 }
@@ -455,7 +480,9 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   await db.transaction(async (tx) => {
     await tx.update(t.controlRecords).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.controlRecords.id, record.id));
     if (next) {
-      await tx.update(t.controls).set({ ...next, actionId: next.reserves !== control.reserves ? null : control.actionId }).where(eq(t.controls.id, control.id));
+      const detached = next.reserves !== control.reserves && control.actionId;
+      await tx.update(t.controls).set({ ...next, actionId: detached ? null : control.actionId }).where(eq(t.controls.id, control.id));
+      if (detached) await logControlDetach(tx, control, detached, `réserves rétablies par l'annulation de l'enregistrement du ${fmtDate(record.performedOn)}`, session.user.id, reason);
     }
     await logChange(tx, {
       entityType: 'control', entityId: control.id, action: 'cancel_record', reason,

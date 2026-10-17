@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input } from '@/components/form';
 import { ReasonForm } from '@/components/ReasonDialog';
-import { fmtDate } from '@/lib/dates';
+import { fmtDate, parisDay } from '@/lib/dates';
 import type { ArchivedRecord, TrainingTitle } from '@/lib/data/skills';
 import { archiveTitle, restoreTitle, saveTitle } from '@/server/skills';
 import { HistoryTable } from './common';
@@ -34,7 +34,7 @@ function ArchivedRow({ title, records, canManage }: { title: TrainingTitle; reco
   const [open, setOpen] = useState(false);
   const count = records.reduce((n, r) => n + r.entries.length, 0);
   const restore = () => start(async () => { setError((await restoreTitle(title.id)).error ?? null); });
-  const on = title.archivedAt ? fmtDate(new Date(title.archivedAt).toISOString().slice(0, 10)) : '';
+  const on = title.archivedAt ? fmtDate(parisDay(new Date(title.archivedAt))) : '';
   const row = (
     <tr>
       <td>

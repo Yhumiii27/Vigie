@@ -1,8 +1,11 @@
 import { getOptionalSession } from '@/lib/session';
 import { canReadAttachment, readAttachment } from '@/lib/uploads';
+import { logAccess } from '@/server/access-log';
 
 // Sert une pièce jointe (photo de signalement, document, rapport de contrôle), selon le droit sur l'entité propriétaire
 // et le périmètre de sites de la personne connectée. Sans session (proxy contourné, session expirée) : 404.
+// Consultation tracée (SEC-11, journal des consultations) ; pièce médicale jamais gardée en cache par le navigateur
+// (poste partagé), les autres pièces une heure.
 export async function GET(_req: Request, ctx: RouteContext<'/fichiers/[id]'>) {
   const { id } = await ctx.params;
   const session = await getOptionalSession();
@@ -11,12 +14,15 @@ export async function GET(_req: Request, ctx: RouteContext<'/fichiers/[id]'>) {
   if (!session) return notFound();
   const file = await readAttachment(id);
   if (!file || !(await canReadAttachment(file.row, session))) return notFound();
+  await logAccess({
+    kind: 'fichier', entityType: file.row.entityType, entityId: file.row.entityId, attachmentId: file.row.id, health: file.row.health, personId: session.user.id,
+  });
   return new Response(new Uint8Array(file.data), {
     headers: {
       'Content-Type': file.row.mimeType,
       'Content-Length': String(file.data.length),
       'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.row.fileName)}`,
-      'Cache-Control': 'private, max-age=3600',
+      'Cache-Control': file.row.health ? 'private, no-store' : 'private, max-age=3600',
       'X-Content-Type-Options': 'nosniff',
     },
   });

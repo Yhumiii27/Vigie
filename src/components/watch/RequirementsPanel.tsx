@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
@@ -262,7 +262,7 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
           {view === 'historique' && (
             <>
               <EvaluationHistory r={r} />
-              <ChangeLogList entries={r.log} title="Journal des modifications" />
+              <LazyChangeLog entity="requirement" id={r.id} title="Journal des modifications" />
             </>
           )}
         </>

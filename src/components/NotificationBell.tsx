@@ -17,9 +17,12 @@ type Item = {
 
 const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
-/** Icône des informations : action confiée (ACT-30), commentaire ou preuve du responsable (ACT-31), rappel du mercredi (ACT-32). */
+/**
+ * Icône des informations : action confiée (ACT-30), commentaire ou preuve du responsable (ACT-31), suite d'un signalement
+ * (TDB-06), rappel du mercredi (ACT-32).
+ */
 const FAMILY_ICON: Record<Exclude<NotificationFamily, 'todo'>, string> = {
-  action_confiee: 'ph-user-plus', action_commentaire: 'ph-chat-circle-text', action_preuve: 'ph-paperclip', rappel: 'ph-calendar-check',
+  action_confiee: 'ph-user-plus', action_commentaire: 'ph-chat-circle-text', action_preuve: 'ph-paperclip', signalement_suite: 'ph-megaphone', rappel: 'ph-calendar-check',
   information: 'ph-info',
 };
 

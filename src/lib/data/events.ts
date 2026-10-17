@@ -10,7 +10,7 @@ import {
   declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
   type AttachmentItem, type DeclarationDuty,
 } from '@/components/events/shared';
-import { addDays, fmtDate, toParisLocal } from '../dates';
+import { addDays, fmtDate, parisDay, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {
   ALL_SITES, AVANCEMENT, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
@@ -22,6 +22,7 @@ import { loadChangeLog } from './changelog';
 import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
+import { logAccess } from '@/server/access-log';
 import type { Option } from './options';
 
 // ─── Signalements et événements ─────────────────────────────────────────────
@@ -29,7 +30,7 @@ import type { Option } from './options';
 const clip = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Jour calendaire (Europe/Paris) d'un horodatage, au format ISO « AAAA-MM-JJ ». */
-const isoDay = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const isoDay = parisDay;
 
 type StepRow = typeof t.eventSteps.$inferSelect;
 
@@ -270,11 +271,13 @@ export const loadVisibleEvents = cache(async () => {
 export async function loadEventDetail(id: string) {
   const db = await getDb();
   const now = today();
-  const [people, events, { role }] = await Promise.all([loadPeople(), loadVisibleEvents(), getSession()]);
+  const [people, events, { role, user }] = await Promise.all([loadPeople(), loadVisibleEvents(), getSession()]);
   const row = events.find((x) => x.id === id);
   if (!row) return null;
   const health = canSeeHealth(role);
   const at = row.type === 'AT';
+  // SEC-11 : fiche d'un accident du travail ouverte avec ses données de santé — consultation tracée.
+  if (health && at) await logAccess({ kind: 'sante', entityType: 'event', entityId: row.id, personId: user.id });
   const e = health ? row : withoutHealth(row);
   // Les actions liées sont lues sans filtre de site : elles suivent l'événement.
   const [actions, analyses, files, steps, links, wasteEntries, entry, [site], firstAiders] = await Promise.all([
@@ -555,7 +558,7 @@ export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: 
  * l'année seulement.
  */
 export async function loadBenignRegister(siteId: string | null, year?: number) {
-  const { role, allowedSiteIds, siteOptions } = await getSession();
+  const { role, allowedSiteIds, siteOptions, user } = await getSession();
   if (!canSeeHealth(role)) return null;
   const sites = siteOptions.filter((s) => s.id !== ALL_SITES);
   if (!siteId) return { site: null, sites, entries: [], years: [] as number[], year: null as number | null, firstAiders: [] as FirstAider[] };
@@ -571,6 +574,8 @@ export async function loadBenignRegister(siteId: string | null, year?: number) {
     loadFirstAiders(siteId, now),
   ]);
   if (!site) return null;
+  // SEC-11 : registre (données de santé) ouvert — consultation tracée.
+  await logAccess({ kind: 'registre_benin', entityType: 'site', entityId: site.id, personId: user.id });
   const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : '—');
   const yearOf = (r: (typeof rows)[number]) => +toParisLocal(r.entry.careGivenAt).slice(0, 4);
   const years = [...new Set(rows.map(yearOf))].sort((a, b) => b - a);

@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, gte } from 'drizzle-orm';
+import { and, eq, gte, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
@@ -11,12 +11,13 @@ import {
 } from '@/components/prevention/model';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { formReader, nextRef, type FormState } from '@/lib/forms';
+import { formReader, type FormState } from '@/lib/forms';
 import { MAX_BATCH_BYTES } from '@/lib/attachments';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
-import { diffFields, logChange, loggedIds } from './changelog';
+import { diffFields, logChange } from './changelog';
+import { nextEntityReference } from './references';
 
 type Result = { error?: string };
 
@@ -78,10 +79,12 @@ export async function saveContractor(_prev: FormState, fd: FormData): Promise<Fo
     });
     return done(id);
   }
-  const newId = nextRef(all.map((c) => c.id), 'EE-', 3);
-  await db.transaction(async (tx) => {
-    await tx.insert(t.contractors).values({ id: newId, ...values });
-    await logChange(tx, { entityType: 'contractor', entityId: newId, action: 'create', summary: 'Entreprise ajoutée' });
+  // Référence tirée sous verrou dans la transaction de création (PRD-08).
+  const newId = await db.transaction(async (tx) => {
+    const ref = await nextEntityReference(tx, 'contractor', 'EE-', 3);
+    await tx.insert(t.contractors).values({ id: ref, ...values });
+    await logChange(tx, { entityType: 'contractor', entityId: ref, action: 'create', summary: 'Entreprise ajoutée' });
+    return ref;
   });
   return done(newId);
 }
@@ -253,12 +256,13 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
     return done(existing.id);
   }
 
-  const ids = (await db.select({ id: t.preventionPlans.id }).from(t.preventionPlans)).map((r) => r.id);
-  const newId = nextRef([...ids, ...(await loggedIds(db, 'prevention_plan'))], `PP-${now.slice(0, 4)}-`, 3);
   const status = planStatus({ ...values, signedEuOn: null, signedEeOn: null, status: 'brouillon' }, now);
-  await db.transaction(async (tx) => {
-    await tx.insert(t.preventionPlans).values({ id: newId, ...values, status });
-    await logChange(tx, { entityType: 'prevention_plan', entityId: newId, action: 'create', summary: 'Plan de prévention créé' });
+  // Référence tirée sous verrou dans la transaction (PRD-08) ; brouillons supprimés compris (journal) : jamais réattribuée.
+  const newId = await db.transaction(async (tx) => {
+    const ref = await nextEntityReference(tx, 'prevention_plan', `PP-${now.slice(0, 4)}-`, 3);
+    await tx.insert(t.preventionPlans).values({ id: ref, ...values, status });
+    await logChange(tx, { entityType: 'prevention_plan', entityId: ref, action: 'create', summary: 'Plan de prévention créé' });
+    return ref;
   });
   return done(newId);
 }
@@ -406,7 +410,7 @@ export async function cancelPlan(_prev: FormState, fd: FormData): Promise<FormSt
   const issue = await planEndBlock(db, plan, 'annuler');
   if (issue) return { error: issue };
   const live = await db.select({ id: t.siteActivities.id }).from(t.siteActivities)
-    .where(and(eq(t.siteActivities.preventionPlanId, plan.id), gte(t.siteActivities.endOn, today())));
+    .where(and(eq(t.siteActivities.preventionPlanId, plan.id), gte(t.siteActivities.endOn, today()), isNull(t.siteActivities.cancelledAt)));
   if (live.length) return { error: "Activités de la carte en cours ou à venir rattachées au plan : retirez ou modifiez les activités de la carte rattachées avant d'annuler le plan." };
   await db.transaction(async (tx) => {
     await tx.update(t.preventionPlans)
@@ -585,11 +589,11 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
     });
     return done(existing.id);
   }
-  const ids = (await db.select({ id: t.permits.id }).from(t.permits)).map((r) => r.id);
-  const newId = nextRef(ids, `${PERMIT_TYPES[type!].prefix}-${today().slice(0, 4)}-`, 3);
-  await db.transaction(async (tx) => {
-    await tx.insert(t.permits).values({ id: newId, ...values, status: 'demande' });
-    await logChange(tx, { entityType: 'permit', entityId: newId, action: 'create', summary: 'Demande de permis enregistrée' });
+  const newId = await db.transaction(async (tx) => {
+    const ref = await nextEntityReference(tx, 'permit', `${PERMIT_TYPES[type!].prefix}-${today().slice(0, 4)}-`, 3);
+    await tx.insert(t.permits).values({ id: ref, ...values, status: 'demande' });
+    await logChange(tx, { entityType: 'permit', entityId: ref, action: 'create', summary: 'Demande de permis enregistrée' });
+    return ref;
   });
   return done(newId);
 }
