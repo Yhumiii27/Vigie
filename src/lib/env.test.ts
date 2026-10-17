@@ -174,4 +174,11 @@ describe('parseConfig', () => {
     expect(secureCookies(parseConfig({ VIGIE_DEMO: '1', VIGIE_PUBLIC_URL: 'http://localhost:3200' }))).toBe(false);
     expect(secureCookies(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr' }))).toBe(true);
   });
+
+  it('Matrix : rien par défaut ; adresse http(s) avec identifiants admise, autre valeur refusée', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1' }).matrix).toEqual({ url: null, token: null, declarationsDir: null, version: null });
+    const c = parseConfig({ VIGIE_DEMO: '1', MATRIX_URL: 'https://moi:mdp@matrix.exemple.fr', MATRIX_TOKEN: ' jeton ', MATRIX_DECLARATIONS_DIR: '/tmp/decl', APP_VERSION: '1.2.3' });
+    expect(c.matrix).toEqual({ url: 'https://moi:mdp@matrix.exemple.fr', token: 'jeton', declarationsDir: path.resolve('/tmp/decl'), version: '1.2.3' });
+    expect(() => parseConfig({ VIGIE_DEMO: '1', MATRIX_URL: 'matrix.exemple.fr' })).toThrow(/MATRIX_URL : URL http\(s\) attendue/);
+  });
 });

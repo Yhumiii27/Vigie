@@ -109,5 +109,6 @@ Le `Dockerfile` à la racine produit l'image décrite dans [`docs/EXPLOITATION.m
 | Volume persistant | `/data` : base PGlite dans `/data/db` (sans `DATABASE_URL`), pièces jointes dans `/data/uploads`, sauvegardes dans `/data/backups` — mêmes chemins que la première image Coolify : un volume existant est repris tel quel |
 | Instance de démonstration | `VIGIE_DEMO=1` et `VIGIE_PUBLIC_URL=https://<domaine>` (hôte admis) : jeu de démonstration, sélecteur de rôle, aucune connexion |
 | Production | variables de [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md) § 4 : `VIGIE_PUBLIC_URL` (https), Entra ID, secrets, `DATABASE_URL` recommandé |
+| Matrix (catalogue des bases) | `MATRIX_URL` (adresse de Matrix, `https://identifiant:mot-de-passe@…` derrière l'authentification HTTP de Coolify) et `MATRIX_TOKEN` (jeton partagé avec Matrix, en-tête `X-Matrix-Token`) : après les migrations, Vigie déclare le schéma de sa base (`POST /api/declarations`, `src/lib/matrix.ts`), sans jamais bloquer le démarrage (échec : avertissement). Sans `MATRIX_URL`, rien n'est envoyé. |
 
 Sans `VIGIE_DEMO=1` ni configuration Entra ID, le serveur s'arrête au démarrage ou affiche « Configuration incomplète ». Une instance de démonstration n'a pas d'authentification : protéger l'accès au niveau de l'hébergeur (authentification HTTP de Coolify, par exemple).
