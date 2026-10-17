@@ -10,8 +10,8 @@ import { today } from '@/lib/today';
 import { canEdit, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
-import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
-import { logChange } from './changelog';
+import { checkUpload, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
+import { diffFields, logChange } from './changelog';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
 // Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
@@ -30,6 +30,9 @@ function uniqueId(base: string, existing: Set<string>, sep = '') {
 const titleSlug = (label: string) => clean(label).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'titre';
 
 const done = () => revalidatePath('/', 'layout');
+
+/** Journal de l'exigence « titre requis pour ce salarié » (case de la matrice, HAB-03) : identifiant « personne|titre ». */
+const requirementKey = (personId: string, titleId: string) => `${personId}|${titleId}`;
 
 /**
  * Saisie réservée aux rôles qui ont accès à l'écran « Habilitations et formations » (hors salariés et lecture seule) :
@@ -141,11 +144,14 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
       id = row.id;
       await logChange(tx, { entityType: 'qualification', entityId: id, action: 'create', summary: `${summary} enregistrée` });
     }
-    await tx.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
+    const added = await tx.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing().returning({ personId: t.qualificationRequirements.personId });
+    if (added.length) {
+      await logChange(tx, { entityType: 'qualification_requirement', entityId: requirementKey(personId, titleId), action: 'create', summary: `Titre « ${title.label} » requis (formation enregistrée)` });
+    }
     return { id };
   });
   if ('error' in result) return { error: result.error };
-  for (const file of files) await saveUpload(file, 'qualification', String(result.id), session.user.id);
+  await saveAttestations(files, result.id, session.user.id);
   done();
   return { ok: true, id: String(result.id) };
 }
@@ -193,24 +199,51 @@ export async function addQualificationFiles(fd: FormData): Promise<{ error?: str
   if (row.q.cancelledAt) return { error: 'Formation annulée : ajout impossible.' };
   const blocked = await frozenReason(row);
   if (blocked) return { error: blocked };
-  for (const file of files) await saveUpload(file, 'qualification', String(id), session.user.id);
+  await saveAttestations(files, id, session.user.id);
   done();
   return { count: files.length };
 }
 
+/** Attestations d'une formation : chaque fichier joint est journalisé sur la formation (HAB-03), avec l'enregistrement de la pièce. */
+async function saveAttestations(files: File[], qualificationId: number, userId: string) {
+  if (!files.length) return;
+  const db = await getDb();
+  for (const file of files) {
+    await db.transaction(async (tx) => {
+      const att = await saveUpload(file, 'qualification', String(qualificationId), userId, { db: tx });
+      await logChange(tx, {
+        entityType: 'qualification', entityId: qualificationId, action: 'attach', byId: userId,
+        summary: 'Attestation jointe', details: [{ field: 'Fichier', from: null, to: att.fileName }],
+      });
+    });
+  }
+}
+
 /** Retire une attestation ajoutée par erreur (seule suppression admise), tant que la formation n'est ni annulée ni figée. */
 export async function removeQualificationFile(attachmentId: string): Promise<{ error?: string }> {
-  const { error } = await requireSkillsEditor();
+  const { session, error } = await requireSkillsEditor();
   if (error) return { error };
+  if (typeof attachmentId !== 'string' || !attachmentId) return { error: 'Pièce jointe introuvable.' };
   const db = await getDb();
-  const [file] = await db.select({ entityType: t.attachments.entityType, entityId: t.attachments.entityId }).from(t.attachments).where(eq(t.attachments.id, attachmentId));
+  const [file] = await db.select({ entityType: t.attachments.entityType, entityId: t.attachments.entityId, fileName: t.attachments.fileName }).from(t.attachments).where(eq(t.attachments.id, attachmentId));
   if (!file || file.entityType !== 'qualification') return { error: 'Pièce jointe introuvable.' };
   const row = await findQualification(db, Number(file.entityId));
   if (!row) return { error: 'Formation introuvable.' };
   if (row.q.cancelledAt) return { error: 'Formation annulée : ses attestations sont conservées.' };
   const blocked = await frozenReason(row);
   if (blocked) return { error: blocked };
-  await deleteAttachment(attachmentId);
+  // Ligne supprimée et journal dans la même transaction ; le fichier stocké n'est effacé qu'après validation.
+  const removed = await db.transaction(async (tx) => {
+    const r = await deleteAttachment(attachmentId, { db: tx });
+    if (r) {
+      await logChange(tx, {
+        entityType: 'qualification', entityId: row.q.id, action: 'detach', byId: session.user.id,
+        summary: 'Attestation retirée (ajoutée par erreur)', details: [{ field: 'Fichier', from: file.fileName, to: null }],
+      });
+    }
+    return r;
+  });
+  if (removed) await removeStoredFile(removed);
   done();
   return {};
 }
@@ -220,12 +253,13 @@ export async function removeQualificationFile(attachmentId: string): Promise<{ e
  * Retirer l'exigence est refusé tant que l'action de recyclage reprise rattachée n'est pas close (le lien serait perdu).
  */
 export async function setRequirement(personId: string, titleId: string, required: boolean): Promise<{ error?: string }> {
-  const { error } = await requireSkillsEditor();
+  const { session, error } = await requireSkillsEditor();
   if (error) return { error };
+  if (typeof personId !== 'string' || typeof titleId !== 'string') return { error: 'Salarié ou titre introuvable.' };
   const db = await getDb();
   const [[person], [title]] = await Promise.all([
     db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, personId)),
-    db.select({ id: t.trainingTitles.id, archivedAt: t.trainingTitles.archivedAt }).from(t.trainingTitles).where(eq(t.trainingTitles.id, titleId)),
+    db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, archivedAt: t.trainingTitles.archivedAt }).from(t.trainingTitles).where(eq(t.trainingTitles.id, titleId)),
   ]);
   if (!person || !title) return { error: 'Salarié ou titre introuvable.' };
   if (title.archivedAt) return { error: 'Titre archivé : restaurez-le pour modifier ses exigences.' };
@@ -233,8 +267,15 @@ export async function setRequirement(personId: string, titleId: string, required
   const blocked = await requireInSite(person.siteId);
   if (blocked) return { error: blocked };
   const where = and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId));
+  const log = (tx: DbOrTx, on: boolean) => logChange(tx, {
+    entityType: 'qualification_requirement', entityId: requirementKey(personId, titleId), action: on ? 'create' : 'delete', byId: session.user.id,
+    summary: on ? `Titre « ${title.label} » requis pour ce salarié` : `Titre « ${title.label} » n'est plus requis (formations conservées)`,
+  });
   if (required) {
-    await db.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
+    await db.transaction(async (tx) => {
+      const added = await tx.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing().returning({ personId: t.qualificationRequirements.personId });
+      if (added.length) await log(tx, true);
+    });
   } else {
     const [req] = await db.select({ actionId: t.qualificationRequirements.renewalActionId }).from(t.qualificationRequirements).where(where);
     const [action] = req?.actionId
@@ -243,13 +284,21 @@ export async function setRequirement(personId: string, titleId: string, required
     if (action && !isClosedActionStatus(action.status)) {
       return { error: `L'action ${action.id} (recyclage) n'est pas close : le service QHSE doit la clôturer ou l'abandonner avant le retrait de l'exigence.` };
     }
-    await db.delete(t.qualificationRequirements).where(where);
+    await db.transaction(async (tx) => {
+      const removed = await tx.delete(t.qualificationRequirements).where(where).returning({ personId: t.qualificationRequirements.personId });
+      if (removed.length) await log(tx, false);
+    });
   }
   done();
   return {};
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Champs de la fiche salarié suivis par le journal (HAB-03). */
+const PERSON_LABELS = {
+  name: 'Nom', job: 'Poste', service: 'Service', siteId: 'Site de rattachement', inSkillsMatrix: 'Suivi dans la matrice', email: 'E-mail', matricule: 'Matricule',
+} as const;
 
 /**
  * Ajoute ou modifie un salarié (saisie provisoire, en attendant le connecteur Cursus). Fiche d'un salarié sorti : réintégrer d'abord.
@@ -261,9 +310,10 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
   if (error) return { error };
   const db = await getDb();
   const [sites, people] = await Promise.all([
-    db.select({ id: t.sites.id }).from(t.sites),
+    db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
     db.select({
       id: t.people.id, sort: t.people.sort, siteId: t.people.siteId, leftOn: t.people.leftOn, email: t.people.email, matricule: t.people.matricule,
+      name: t.people.name, job: t.people.job, service: t.people.service, inSkillsMatrix: t.people.inSkillsMatrix,
     }).from(t.people),
   ]);
   const f = formReader(fd);
@@ -292,9 +342,12 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
     if (hasLeft(prev)) return { error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." };
     const blocked = (await requireInSite(prev.siteId)) ?? (siteId !== prev.siteId ? await requireInSite(siteId, { create: true }) : null);
     if (blocked) return { error: blocked };
+    const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
+    const fmt = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
+    const details = diffFields({ ...prev, siteId: siteLabel(prev.siteId) }, { ...values, siteId: siteLabel(values.siteId) }, PERSON_LABELS, fmt);
     await db.transaction(async (tx) => {
       await tx.update(t.people).set(values).where(eq(t.people.id, id));
-      await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée' });
+      if (details.length) await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée', details });
     });
     done();
     return { ok: true, id };

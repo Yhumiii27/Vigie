@@ -207,8 +207,10 @@ export async function restoreEvent(_prev: FormState, fd: FormData): Promise<Form
   return { ok: true, id };
 }
 
+const methodLabel = (key: string | null) => METHODS.find(([k]) => k === key)?.[1] ?? key;
+
 export async function setAnalysisMethod(id: string, method: string): Promise<{ error?: string }> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
   if (!METHOD_KEYS.includes(method as AnalysisMethod)) return { error: "Méthode d'analyse inconnue." };
   const db = await getDb();
@@ -216,7 +218,15 @@ export async function setAnalysisMethod(id: string, method: string): Promise<{ e
   if (!ev) return { error: 'Événement introuvable.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
-  await db.update(t.events).set({ analysisMethod: method }).where(eq(t.events.id, id));
+  if (ev.analysisMethod === method) return {};
+  // EVT-12 : changement de méthode journalisé (le contenu des autres méthodes est conservé).
+  await db.transaction(async (tx) => {
+    await tx.update(t.events).set({ analysisMethod: method }).where(eq(t.events.id, id));
+    await logChange(tx, {
+      entityType: 'event', entityId: id, action: 'update', byId: session.user.id, summary: `Méthode d'analyse : ${methodLabel(method)}`,
+      details: [{ field: "Méthode d'analyse", from: methodLabel(ev.analysisMethod), to: methodLabel(method) }],
+    });
+  });
   done();
   return {};
 }
@@ -758,7 +768,7 @@ const texts = (fd: FormData, name: string) => fd.getAll(name).map((v) => (typeof
 
 /** Enregistre le contenu de l'analyse des causes pour la méthode donnée (formats lus par la fiche événement). */
 export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { error };
   const f = formReader(fd);
   const eventId = f.str('eventId', { required: true });
@@ -802,12 +812,22 @@ export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<Form
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
   const key = and(eq(t.eventAnalyses.eventId, eventId), eq(t.eventAnalyses.method, method));
-  if (content === null) {
-    await db.delete(t.eventAnalyses).where(key);
-  } else {
-    await db.insert(t.eventAnalyses).values({ eventId, method, content })
-      .onConflictDoUpdate({ target: [t.eventAnalyses.eventId, t.eventAnalyses.method], set: { content } });
-  }
+  // EVT-12 : enregistrement de l'analyse journalisé sur l'événement (méthode seulement : le contenu, libre, peut décrire
+  // les circonstances d'un accident ; il reste sur la fiche, lu avec les mêmes droits).
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select({ content: t.eventAnalyses.content }).from(t.eventAnalyses).where(key);
+    if (JSON.stringify(before?.content ?? null) === JSON.stringify(content)) return;
+    if (content === null) {
+      await tx.delete(t.eventAnalyses).where(key);
+    } else {
+      await tx.insert(t.eventAnalyses).values({ eventId, method, content })
+        .onConflictDoUpdate({ target: [t.eventAnalyses.eventId, t.eventAnalyses.method], set: { content } });
+    }
+    await logChange(tx, {
+      entityType: 'event', entityId: eventId, action: 'update', byId: session.user.id,
+      summary: content === null ? `Analyse des causes (${methodLabel(method)}) vidée` : `Analyse des causes (${methodLabel(method)}) ${before ? 'modifiée' : 'saisie'}`,
+    });
+  });
   done();
   return { ok: true, id: eventId };
 }
@@ -1023,6 +1043,14 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
         severity,
         step: 0,
         description,
+      });
+      // EVT-12 : réception journalisée. Auteur : le déclarant connecté, jamais pour un signalement anonyme ni sans compte
+      // (byId null, « Vigie ») ; le canal seul, sans nom ni adresse.
+      await logChange(tx, {
+        entityType: 'event', entityId: id, action: 'create', byId: report.declarantId,
+        summary: report.reportedVia === REPORTED_VIA.anonymous ? 'Signalement anonyme reçu'
+          : report.reportedVia === REPORTED_VIA.post ? `Signalement reçu sans compte (QR code du poste « ${publicPost?.name ?? report.location} »)`
+            : 'Signalement reçu depuis Vigie',
       });
       return id;
     });

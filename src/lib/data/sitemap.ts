@@ -31,7 +31,8 @@ async function fetchRows(db: Db) {
     db.select().from(t.siteMaps),
     db.select().from(t.mapZones).orderBy(asc(t.mapZones.id)),
     db.select().from(t.mapRoutes).orderBy(asc(t.mapRoutes.id)),
-    db.select().from(t.siteActivities).orderBy(asc(t.siteActivities.startOn), asc(t.siteActivities.id)),
+    // Activités annulées (PRV-12) : hors de la carte et de la coactivité, leur historique reste en base.
+    db.select().from(t.siteActivities).where(isNull(t.siteActivities.cancelledAt)).orderBy(asc(t.siteActivities.startOn), asc(t.siteActivities.id)),
     db.select().from(t.contractors),
     db.select().from(t.preventionPlans),
     db.select().from(t.permits),

@@ -793,6 +793,10 @@ export const documentVersions = pgTable('document_versions', {
   submittedOn: date('submitted_on', { mode: 'string' }),
   approvedOn: date('approved_on', { mode: 'string' }),
   actionId: text('action_id').references(() => actions.id), // action à l'origine de la révision
+  // Dernier renvoi en brouillon par l'approbateur (DOC-06) : date et motif, échéance de l'auteur tant que la version
+  // n'est pas soumise à nouveau (remis à null à la soumission).
+  returnedOn: date('returned_on', { mode: 'string' }),
+  returnReason: text('return_reason'),
 });
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
@@ -821,6 +825,10 @@ export const wasteStreams = pgTable('waste_streams', {
   // Installation de destination : SIRET (ou n° de TVA intracommunautaire) et adresse.
   destinationSiret: text('destination_siret'),
   destinationAddress: text('destination_address'),
+  // Filière archivée (DOC-09 : jamais supprimée) : plus proposée pour un nouvel enlèvement, registre et actions conservés.
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 // Registre chronologique des déchets sortants.
@@ -920,6 +928,10 @@ export const siteActivities = pgTable('site_activities', {
   vehicles: boolean('vehicles').notNull().default(false), // véhicules ou engins en circulation
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Activité annulée (PRV-12 : jamais supprimée) : retirée de la carte et de la coactivité, historique conservé.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 });
 
 // ─── Traçabilité et notifications ───────────────────────────────────────────
@@ -936,6 +948,24 @@ export const changeLog = pgTable('change_log', {
   byId: text('by_id').references(() => people.id),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('change_log_entity_idx').on(t.entityType, t.entityId)]);
+
+// Journal des consultations (SEC-11), distinct du journal des modifications : fichier servi par /fichiers (`fichier`,
+// entité de la pièce), données de santé d'un accident du travail affichées (`sante`, event) et registre des accidents
+// bénins ouvert (`registre_benin`, site). Écrit par logAccess (src/server/access-log.ts), une entrée par personne, nature
+// et élément sur une fenêtre de quelques minutes ; lu par les seuls rôles habilités aux données de santé. Durée de
+// conservation : à fixer avec le DPO (SEC-10).
+export const accessLog = pgTable('access_log', {
+  id: serial('id').primaryKey(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  personId: text('person_id').references(() => people.id),
+  kind: text('kind').notNull(), // fichier | sante | registre_benin
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  /** Pièce consultée (attachments.id) pour un fichier ; null sinon. */
+  attachmentId: text('attachment_id'),
+  /** Pièce médicale (attachments.health) : consultation d'une donnée de santé. */
+  health: boolean('health').notNull().default(false),
+}, (t) => [index('access_log_entity_idx').on(t.entityType, t.entityId), index('access_log_person_idx').on(t.personId, t.at)]);
 
 // État « lu » des échéances calculées (clé stable todoKey) et des notifications de la cloche, par personne. Les échéances
 // ne sont pas stockées : seules les clés lues le sont (« Tout marquer comme lu » les ajoute) ; les clés qui ne

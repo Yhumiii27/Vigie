@@ -127,7 +127,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
             <a href="/risques/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer</a>
-            <VersionsButton versions={versions} canApprove={approve} people={approve ? options.people : []} />
+            <VersionsButton versions={versions} canApprove={approve} people={approve ? options.people : []} history={edit} />
             {edit && (
               <NewVersionButton canApprove={approve} people={options.people} current={version?.version ?? null} nextVersion={nextVersion}
                 nextUpdateOn={nextUpdateOn} defaultValidatorId={version?.validatedById ?? session.user.id} totals={totals} />

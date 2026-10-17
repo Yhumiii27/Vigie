@@ -6,6 +6,7 @@ import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
 import { Icon } from '@/components/ui';
 import { TONE } from '@/lib/domain';
 import type { ConsumptionRecord, EnvironmentData } from '@/lib/data/environment';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { saveConsumptionMonth } from '@/server/environment';
 import { CONSUMPTION_KINDS, fmtDelta, fmtNum, monthInitial, monthLong, monthShort, type ConsumptionKind } from './model';
 import { Note, muted, rowOpener, shortSite } from './parts';
@@ -215,6 +216,8 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
             ? `Relevés déjà saisis pour ${monthLong(`${month}-01`)} : les valeurs modifiées remplacent les précédentes.`
             : 'Relevés des factures ou des compteurs du site. Laissez vide une énergie non consommée sur le site.'}
       </Note>
+      {/* Historique des relevés du mois (DOC-10), chargé à l'ouverture ; rechargé au changement de site ou de mois. */}
+      {hasExisting && <LazyChangeLog key={`${siteId}|${month}`} entity="consumption" id={`${siteId}|${month}-01`} title="Historique des relevés du mois" />}
     </ActionForm>
   );
 }

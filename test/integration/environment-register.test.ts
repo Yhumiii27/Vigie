@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { form } from '../next-mocks';
-import { actAs, freshDemoDatabase, lastLog } from '../helpers';
+import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { loadEnvironment, loadEnvironmentSignals, loadWasteRegisterCsv } from '@/lib/data/environment';
-import { deleteWasteStream, saveSiteSiret, saveWasteEntry, saveWasteStream } from '@/server/environment';
+import { archiveWasteStream, restoreWasteStream, saveConsumptionMonth, saveSiteSiret, saveWasteEntry, saveWasteStream } from '@/server/environment';
+import { loadEntityHistory } from '@/server/history';
 import { saveAction } from '@/server/plan';
-import { abandonAction } from '@/server/plan-ui';
 
 // Registre chronologique des déchets : mentions de l'arrêté du 31 mai 2021 (DOC-02) — SIRET de l'établissement, mentions
 // du collecteur et de l'installation sur la filière, copies figées sur chaque enlèvement, signalement et export.
@@ -203,7 +203,7 @@ describe('registre : mentions incomplètes, échéance, export', () => {
   });
 });
 
-describe('deleteWasteStream : filière sans enlèvement', () => {
+describe('archivage d’une filière (DOC-09) : jamais supprimée', () => {
   const newStream = async (label: string) => {
     const r = await saveWasteStream({}, form({
       label, ewcCode: '16 06 01*', treatmentCode: 'R4', channel: 'Regroupement', collector: '[Collecteur DD Ouest]',
@@ -223,43 +223,61 @@ describe('deleteWasteStream : filière sans enlèvement', () => {
     return r.id!;
   };
   const view = async (id: string) => (await loadEnvironment()).streams.find((s) => s.id === id)!;
+  const entryForm = (streamId: string) => form({ streamId, removedOn: '2026-10-05', quantity: '12', transporter: '', bsdNumber: '', bsdStatus: '', notes: '', eventId: '' });
 
-  it('droits et site : Chef de service et autre site refusés, filière conservée', async () => {
+  it('droits, motif et site : Chef de service, motif vide et autre site refusés, filière en service', async () => {
     actAs('Animateur QHSE', 'ville-a');
     const id = await newStream('Batteries (droits)');
     actAs('Chef de service', 'ville-a');
-    expect(await deleteWasteStream(id)).toEqual({ error: DENIED });
+    expect(await archiveWasteStream({}, form({ id, reason: 'Test' }))).toEqual({ error: DENIED });
+    actAs('Animateur QHSE', 'ville-a');
+    expect(await archiveWasteStream({}, form({ id, reason: '' }))).toMatchObject({ fieldErrors: { reason: expect.any(String) } });
     actAs('Animateur QHSE', 'ville-b');
-    expect(await deleteWasteStream(id)).toEqual({ error: expect.stringContaining('autre site') });
-    expect(await stream(id)).toBeDefined();
+    expect(await archiveWasteStream({}, form({ id, reason: 'Test' }))).toEqual({ error: expect.stringContaining('autre site') });
+    expect((await stream(id)).archivedAt).toBeNull();
   });
 
-  it('action créée depuis la filière (ACT-01), abandonnée comprise : suppression refusée sans exception, filière conservée', async () => {
+  it('archivée avec motif et journal ; plus de nouvel enlèvement ni de modification ; réactivée avec motif', async () => {
     actAs('Animateur QHSE', 'ville-a');
-    const id = await newStream('Batteries (action)');
+    const id = await newStream('Batteries (archive)');
     const actionId = await actionFrom(id);
-    expect(await view(id)).toMatchObject({ entryCount: 0, cancelledCount: 0, sourceActionCount: 1 });
-    expect(await deleteWasteStream(id)).toEqual({ error: `Cette filière porte 1 action du plan (${actionId}) : elle ne peut pas être supprimée.` });
-    expect(await stream(id)).toBeDefined();
+    expect(await archiveWasteStream({}, form({ id, reason: 'Déchet plus produit' }))).toMatchObject({ ok: true, id });
+    expect(await stream(id)).toMatchObject({ archivedById: 'clefevre', archiveReason: 'Déchet plus produit' });
+    expect(await lastLog('waste_stream', id)).toMatchObject({ action: 'archive', reason: 'Déchet plus produit', byId: 'clefevre' });
+    // Création depuis la filière journalisée sur elle (logAs, ACT-01) ; action et historique conservés.
+    expect((await changeLog('waste_stream', id)).map((e) => e.action)).toEqual(['create', 'link', 'archive']);
+    expect(await view(id)).toMatchObject({ archived: { by: '[C. Lefèvre]', reason: 'Déchet plus produit' }, sourceActionCount: 1 });
+    expect((await view(id)).actions.map((a) => a.id)).toContain(actionId);
+    expect(await archiveWasteStream({}, form({ id, reason: 'Encore' }))).toEqual({ error: 'Cette filière est déjà archivée.' });
+    expect(await saveWasteEntry({}, entryForm(id))).toMatchObject({ fieldErrors: { streamId: expect.stringContaining('archivée') } });
+    expect(await saveWasteStream({}, await streamForm(id, { label: 'Renommée' }))).toEqual({ error: 'Filière archivée : réactivez-la pour la modifier.' });
 
-    // Filière : action listée (libellé du détail), avec la filière pour source.
-    expect((await view(id)).actions).toEqual([expect.objectContaining({ id: actionId, label: `Action de test · ${id}`, wasteStreamId: id })]);
-    expect(await (await getDb()).select({ source: t.actions.source, wasteStreamId: t.actions.wasteStreamId }).from(t.actions).where(eq(t.actions.id, actionId)))
-      .toEqual([{ source: 'dechets', wasteStreamId: id }]);
-
-    // Abandonnée, l'action garde son origine : la filière reste verrouillée.
-    expect(await abandonAction({}, form({ id: actionId, from: 'a_faire', reason: 'Doublon de test' }))).toMatchObject({ ok: true });
-    expect(await view(id)).toMatchObject({ actions: [], sourceActionCount: 1 });
-    expect(await deleteWasteStream(id)).toEqual({ error: expect.stringContaining(actionId) });
-    expect(await stream(id)).toBeDefined();
+    expect(await restoreWasteStream({}, form({ id, reason: '' }))).toMatchObject({ fieldErrors: { reason: expect.any(String) } });
+    expect(await restoreWasteStream({}, form({ id, reason: 'Reprise de la production' }))).toMatchObject({ ok: true });
+    expect(await lastLog('waste_stream', id)).toMatchObject({ action: 'restore', reason: 'Reprise de la production' });
+    expect((await stream(id)).archivedAt).toBeNull();
+    expect(await saveWasteEntry({}, entryForm(id))).toMatchObject({ ok: true });
   });
+});
 
-  it('sans enlèvement ni action : supprimée', async () => {
+describe('relevés de consommation journalisés (DOC-10)', () => {
+  it('saisie, modification et effacement journalisés par mois et par site ; historique au même droit que l’écran', async () => {
     actAs('Animateur QHSE', 'ville-a');
-    const id = await newStream('Batteries (libre)');
-    expect(await view(id)).toMatchObject({ sourceActionCount: 0 });
-    expect(await deleteWasteStream(id)).toEqual({});
-    expect(await stream(id)).toBeUndefined();
+    const key = 'ville-a|2026-09-01';
+    const before = (await changeLog('consumption', key)).length;
+    expect(await saveConsumptionMonth({}, form({ siteId: 'ville-a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
+    const first = await lastLog('consumption', key);
+    expect(first).toMatchObject({ byId: 'clefevre' });
+    const detail = (first?.details as { field: string; to: string | null }[]).find((d) => d.field === 'Électricité (kWh)');
+    expect(detail?.to).toMatch(/^1\s500$/);
+    // Même valeurs : aucune entrée.
+    expect(await saveConsumptionMonth({}, form({ siteId: 'ville-a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
+    expect((await changeLog('consumption', key)).length).toBe(before + 1);
+    expect(await loadEntityHistory('consumption', key)).toMatchObject({ entries: [expect.objectContaining({ id: first!.id })] });
+    actAs('Salarié', 'ville-a');
+    expect(await loadEntityHistory('consumption', key)).toEqual({ error: 'Historique introuvable.' });
+    actAs('Animateur QHSE', 'ville-b');
+    expect(await loadEntityHistory('consumption', key)).toEqual({ error: 'Historique introuvable.' });
   });
 });
 

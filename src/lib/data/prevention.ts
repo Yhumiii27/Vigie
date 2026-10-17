@@ -246,7 +246,7 @@ const loadRows = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.permits),
     db.select().from(t.sites).orderBy(asc(t.sites.sort)),
     // Activités de la carte (tous sites) : rattachements qui empêchent de supprimer ou d'annuler un plan.
-    db.select({ planId: t.siteActivities.preventionPlanId, endOn: t.siteActivities.endOn }).from(t.siteActivities),
+    db.select({ planId: t.siteActivities.preventionPlanId, endOn: t.siteActivities.endOn, cancelled: isNotNull(t.siteActivities.cancelledAt) }).from(t.siteActivities),
     db.select({
       id: t.events.id, planId: t.events.preventionPlanId, permitId: t.events.permitId, type: t.events.type, title: t.events.title,
       occurredOn: t.events.occurredOn, step: t.events.step, dismissedAt: t.events.dismissedAt,
@@ -511,7 +511,7 @@ export async function loadPrevention() {
     const actions = actionsOf('preventionPlanId', p.id);
     const openPermitIds = allPermits.filter((x) => x.preventionPlanId === p.id && isOpenPermit(x)).map((x) => x.id);
     const endCheck = { mandatory, now, openPermitIds };
-    const liveActivities = activities.filter((a) => a.planId === p.id && a.endOn >= now).length;
+    const liveActivities = activities.filter((a) => a.planId === p.id && !a.cancelled && a.endOn >= now).length;
     const form = parseFormData(p.formData);
     const gapKind = startGap(p, now, rule);
     return {

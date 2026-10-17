@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from './form';
 import { Dialog } from './Dialog';
+import { LazyChangeLog } from './LazyChangeLog';
 import { SEVESO_LEVELS } from './prevention/model';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
@@ -104,6 +105,10 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
             <Checkbox name="alsaceMoselle" label="Droit local d'Alsace-Moselle (Bas-Rhin, Haut-Rhin, Moselle)" defaultChecked={view.edit?.alsaceMoselle ?? false} />
           </Field>
         </ActionForm>
+      )}
+      {/* Historique du site (TDB-09) : création, modifications, règle de prévention, SIRET, archivage. */}
+      {view !== 'list' && 'edit' in view && view.edit && (
+        <div style={{ marginTop: 12 }}><LazyChangeLog entity="site" id={view.edit.id} /></div>
       )}
 
       {view !== 'list' && 'archive' in view && (

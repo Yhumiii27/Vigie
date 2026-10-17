@@ -177,6 +177,7 @@ const ORIGIN_KINDS: Record<string, LinkKind> = {
       const [s] = await tx.select({ id: t.wasteStreams.id, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).where(eq(t.wasteStreams.id, id));
       return s && { ...s, reference: s.id };
     },
+    logAs: ([id]) => (id ? { entityType: 'waste_stream', entityId: id } : null),
     async sources(db, ids) {
       const rows = await db.select({ actionId: t.actions.id, id: t.wasteStreams.id, label: t.wasteStreams.label })
         .from(t.actions).innerJoin(t.wasteStreams, eq(t.actions.wasteStreamId, t.wasteStreams.id));
@@ -355,6 +356,7 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
       const [r] = await db.select({ text: t.requirements.text }).from(t.requirements).where(eq(t.requirements.id, num(a)));
       return r ? { reference: ref(r.text), siteId: null, facts: {} } : null;
     },
+    logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'requirement', entityId: num(a) } : null),
     async sources(db, ids) {
       const rows = await db.select({ actionId: t.requirements.actionId, id: t.requirements.id, text: t.requirements.text }).from(t.requirements).where(isNotNull(t.requirements.actionId));
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `requirement:${r.id}`, kind: 'requirement', label: `Exigence · ${r.text.slice(0, 60)}`, href: `/veille?onglet=exigences&exigence=${r.id}` }));
@@ -385,6 +387,7 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
       const [c] = await db.select({ siteId: t.controls.siteId, equipment: t.controls.equipment, type: t.controls.controlType }).from(t.controls).where(eq(t.controls.id, num(a)));
       return c ? { reference: ref(`${c.type} · ${c.equipment}`), siteId: c.siteId, facts: {} } : null;
     },
+    logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'control', entityId: num(a) } : null),
     async sources(db, ids) {
       const rows = await db.select({ actionId: t.controls.actionId, id: t.controls.id, equipment: t.controls.equipment, type: t.controls.controlType }).from(t.controls).where(isNotNull(t.controls.actionId));
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `control:${r.id}`, kind: 'control', label: `${r.type} · ${r.equipment}`, href: `/veille?onglet=controles&controle=${r.id}` }));
@@ -450,6 +453,8 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
         .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId)));
       return q ? { reference: ref(`${q.person} · ${q.title}`), siteId: q.siteId, facts: {} } : null;
     },
+    // Case de la matrice (personne × titre) : historique de l'exigence (HAB-03, skill_cell).
+    logAs: ([personId, titleId]) => (personId && titleId ? { entityType: 'qualification_requirement', entityId: `${personId}|${titleId}` } : null),
     async sources(db, ids) {
       const rows = await db.select({ actionId: t.qualificationRequirements.renewalActionId, personId: t.people.id, person: t.people.name, titleId: t.trainingTitles.id, title: t.trainingTitles.label })
         .from(t.qualificationRequirements)

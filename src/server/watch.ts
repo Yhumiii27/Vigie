@@ -236,6 +236,8 @@ const CTRL_LABELS = {
   requirementId: 'Exigence',
 } as const;
 
+const RECORD_TO_CHANGE = 'Modifié par « Enregistrer un contrôle » (ou l’annulation d’un enregistrement) : le changement est alors tracé dans l’historique.';
+
 /** Contrôle du site sélectionné, chargé pour une modification ; `error` si introuvable, hors site ou archivé (sauf `archived`). */
 async function loadControlForEdit(id: number, opts: { archived?: boolean } = {}) {
   const db = await getDb();
@@ -262,9 +264,16 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   const responsibleId = f.opt('responsibleId');
   const siteId = f.oneOf('siteId', siteIds); // vide = tous les sites
   const requirementId = f.int('requirementId');
-  const lastOn = f.date('lastOn', { required: true });
+  // VEI-09 : à la modification, « Dernier contrôle » et « Réserves en cours » ne changent que par un contrôle enregistré
+  // (« Enregistrer un contrôle ») ou l'annulation d'un enregistrement : historique et détachement de l'action de levée.
+  const current = id ? await loadControlForEdit(id) : null;
+  if (current?.error) return { error: current.error };
+  const before = current?.control ?? null;
+  const lastOn = before && !fd.has('lastOn') ? before.lastOn : f.date('lastOn', { required: true });
   let nextOn = f.date('nextOn');
-  const reserves = f.str('reserves', { max: 160 }) || null;
+  const reserves = before && !fd.has('reserves') ? before.reserves : f.str('reserves', { max: 160 }) || null;
+  if (before && lastOn && lastOn !== before.lastOn) f.fail('lastOn', RECORD_TO_CHANGE);
+  if (before && reserves !== before.reserves) f.fail('reserves', RECORD_TO_CHANGE);
   if (lastOn && lastOn > today()) f.fail('lastOn', "Le dernier contrôle ne peut pas être postérieur à aujourd'hui.");
   if (lastOn && periodMonths && !nextOn && !f.fieldErrors.nextOn) nextOn = addMonths(lastOn, periodMonths);
   if (lastOn && nextOn && nextOn <= lastOn) f.fail('nextOn', 'Le prochain contrôle doit suivre le dernier.');
@@ -272,9 +281,6 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   if (responsibleId && !responsible) f.fail('responsibleId', 'Responsable inconnu.');
   if (!f.ok) return f.state();
 
-  const current = id ? await loadControlForEdit(id) : null;
-  if (current?.error) return { error: current.error };
-  const before = current?.control ?? null;
   // Responsable sorti de l'effectif : conservé tant qu'il n'est pas remplacé, jamais choisi à nouveau (VEI-01).
   if (responsible && hasLeft(responsible, today()) && responsibleId !== before?.responsibleId) {
     return { error: 'Certains champs sont à corriger.', fieldErrors: { responsibleId: "Responsable sorti de l'effectif : choisissez une personne présente." } };
@@ -318,6 +324,11 @@ async function logControlDetach(tx: DbOrTx | null, control: { id: number; contro
   await logChange(tx, {
     entityType: 'action', entityId: actionId, action: 'unlink', byId, reason: reason ?? null,
     summary: `Détachée de ${control.controlType} · ${control.equipment} (${why}) : l'action reste dans le plan d'actions`,
+  });
+  // VEI-04 : aussi dans l'historique du contrôle.
+  await logChange(tx, {
+    entityType: 'control', entityId: control.id, action: 'unlink', byId, reason: reason ?? null,
+    summary: `Action ${actionId} détachée (${why}) : elle reste dans le plan d'actions`,
   });
 }
 

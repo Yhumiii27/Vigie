@@ -30,6 +30,11 @@
       "when": 1792077043936,
       "sql": "bed3635d62aa0d14ea6b8c3cb6a5576ad74ac44d07252b7368d8c9e04ded0cdd",
       "snapshot": "46fab1def768da5cbdf1c5f0fb2f6effd8dabd801f8fa4e5f75161dfb3bcf986"
+    },
+    "0006_traceability_journal": {
+      "when": 1792239274287,
+      "sql": "c5bf12a71a33be75e0a0480fe56c235c26afb4d6e09444affd867418ffd28d6b",
+      "snapshot": "66f090217231d5d6d79dae7e9e7143bcb69250bbfdf9a15c47842b1221d53002"
     }
   }
 }

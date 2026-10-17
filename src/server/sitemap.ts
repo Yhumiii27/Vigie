@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { isPlanEnded, planCovers, planStatus } from '@/components/prevention/model';
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/components/sitemap/coactivity';
@@ -10,12 +10,17 @@ import { findConflict, zoneAt } from '@/lib/data/sitemap';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireManager } from '@/lib/guard';
-import { currentSiteId, inSite } from '@/lib/session';
+import { requireInSite, requireManager } from '@/lib/guard';
+import { loadPeople } from '@/lib/queries';
 import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
-import { logChange } from './changelog';
+import { diffFields, logChange } from './changelog';
 
 // Carte du site et coactivité : zones, voies, activités, plan de fond et échelle.
+// Traçabilité (PRV-12) : chaque écriture est journalisée dans sa transaction — activités sur leur fiche
+// (`site_activity`), zones, voies, plan de fond et échelle dans l'historique de la carte du site (`site_map`, identifiant
+// du site). Une activité ne se supprime plus : elle s'annule avec un motif (retirée de la carte et de la coactivité).
+// Zones et voies (dessin du plan) restent supprimables ; leur suppression est journalisée sur la carte. Site : contrôlé
+// par requireInSite après chargement (création sur un site actif du périmètre seulement).
 
 type Result = { error?: string };
 
@@ -71,9 +76,19 @@ async function siteExists(siteId: string) {
   return !!row;
 }
 
-const OTHER_SITE = 'Élément hors du site sélectionné : choisissez ce site ou « Tous les sites » dans la barre latérale.';
-/** Le site de l'élément est visible avec le site sélectionné (ou « Tous les sites »). */
-const visible = async (siteId: string | null | undefined) => inSite(await currentSiteId(), siteId);
+/** Journal de la carte d'un site (zones, voies, plan de fond, échelle). */
+const MAP = 'site_map';
+const ACTIVITY = 'site_activity';
+
+const ZONE_LABELS = { name: 'Nom', kind: 'Type', notes: 'Notes' } as const;
+const ROUTE_LABELS = { name: 'Nom', kind: 'Type', shared: 'Voie commune', notes: 'Notes' } as const;
+const ACTIVITY_LABELS = {
+  title: 'Intitulé', team: 'Équipe', contractorId: 'Entreprise extérieure', ownerId: 'Responsable', keystoneProject: 'Projet Keystone', zoneId: 'Zone',
+  startOn: 'Début', endOn: 'Fin', hours: 'Plage horaire', vehicles: 'Véhicules ou engins', notes: 'Notes', preventionPlanId: 'Plan de prévention',
+  permitId: 'Permis', routeIds: 'Voies empruntées',
+} as const;
+const fmtLog = (v: unknown) =>
+  v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtDate(String(v)) : String(v);
 
 // ─── Zones ──────────────────────────────────────────────────────────────────
 
@@ -93,17 +108,30 @@ export async function saveZone(_prev: FormState, fd: FormData): Promise<FormStat
   if (!id && !polygon) return { error: 'Dessinez le contour de la zone sur la carte.' };
   if (!f.ok) return f.state();
   if (!(await siteExists(siteId))) return { error: 'Site inconnu.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
 
   const db = await getDb();
   if (id) {
-    const [current] = await db.select({ siteId: t.mapZones.siteId }).from(t.mapZones).where(eq(t.mapZones.id, id));
+    const [current] = await db.select().from(t.mapZones).where(eq(t.mapZones.id, id));
     if (!current) return { error: 'Zone introuvable.' };
     if (current.siteId !== siteId) return { error: 'Une zone ne change pas de site.' };
-    await db.update(t.mapZones).set({ name, kind: kind!, notes, ...(polygon ? { polygon } : {}) }).where(eq(t.mapZones.id, id));
+    const blocked = await requireInSite(current.siteId);
+    if (blocked) return { error: blocked };
+    const details = diffFields(current, { name, kind: kind!, notes }, ZONE_LABELS, fmtLog);
+    await db.transaction(async (tx) => {
+      await tx.update(t.mapZones).set({ name, kind: kind!, notes, ...(polygon ? { polygon } : {}) }).where(eq(t.mapZones.id, id));
+      if (details.length || polygon) {
+        await logChange(tx, { entityType: MAP, entityId: siteId, action: 'update', summary: `Zone « ${name} » modifiée${polygon ? ' (contour redessiné)' : ''}`, details });
+      }
+    });
     return done(id);
   }
-  const [row] = await db.insert(t.mapZones).values({ siteId, name, kind: kind!, notes, polygon: polygon! }).returning({ id: t.mapZones.id });
+  const blocked = await requireInSite(siteId, { create: true });
+  if (blocked) return { error: blocked };
+  const row = await db.transaction(async (tx) => {
+    const [r] = await tx.insert(t.mapZones).values({ siteId, name, kind: kind!, notes, polygon: polygon! }).returning({ id: t.mapZones.id });
+    await logChange(tx, { entityType: MAP, entityId: siteId, action: 'create', summary: `Zone « ${name} » ajoutée à la carte` });
+    return r;
+  });
   return done(row.id);
 }
 
@@ -112,12 +140,23 @@ export async function deleteZone(id: number): Promise<Result> {
   const { error } = await requireManager();
   if (error) return { error };
   const db = await getDb();
-  const [zone] = await db.select({ siteId: t.mapZones.siteId }).from(t.mapZones).where(eq(t.mapZones.id, id));
+  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id));
   if (!zone) return { error: 'Zone introuvable.' };
-  if (!(await visible(zone.siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(zone.siteId);
+  if (blocked) return { error: blocked };
   const deleted = await db.transaction(async (tx) => {
-    await tx.update(t.siteActivities).set({ zoneId: null }).where(eq(t.siteActivities.zoneId, id));
-    return tx.delete(t.mapZones).where(eq(t.mapZones.id, id)).returning({ id: t.mapZones.id });
+    const moved = await tx.update(t.siteActivities).set({ zoneId: null }).where(eq(t.siteActivities.zoneId, id)).returning({ id: t.siteActivities.id });
+    for (const a of moved) {
+      await logChange(tx, { entityType: ACTIVITY, entityId: a.id, action: 'update', summary: `Zone « ${zone.name} » supprimée de la carte : l'activité garde sa position` });
+    }
+    const rows = await tx.delete(t.mapZones).where(eq(t.mapZones.id, id)).returning({ id: t.mapZones.id });
+    if (rows.length) {
+      await logChange(tx, {
+        entityType: MAP, entityId: zone.siteId, action: 'delete',
+        summary: `Zone « ${zone.name} » supprimée de la carte${moved.length ? ` (${moved.length} activité${moved.length > 1 ? 's' : ''} sans zone)` : ''} ; son QR code de poste n'ouvre plus le signalement`,
+      });
+    }
+    return rows;
   });
   if (!deleted.length) return { error: 'Zone introuvable.' };
   return ok();
@@ -142,17 +181,30 @@ export async function saveRoute(_prev: FormState, fd: FormData): Promise<FormSta
   if (!id && !polyline) return { error: 'Tracez la voie sur la carte.' };
   if (!f.ok) return f.state();
   if (!(await siteExists(siteId))) return { error: 'Site inconnu.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
 
   const db = await getDb();
   if (id) {
-    const [current] = await db.select({ siteId: t.mapRoutes.siteId }).from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
+    const [current] = await db.select().from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
     if (!current) return { error: 'Voie introuvable.' };
     if (current.siteId !== siteId) return { error: 'Une voie ne change pas de site.' };
-    await db.update(t.mapRoutes).set({ name, kind: kind!, shared, notes, ...(polyline ? { polyline } : {}) }).where(eq(t.mapRoutes.id, id));
+    const blocked = await requireInSite(current.siteId);
+    if (blocked) return { error: blocked };
+    const details = diffFields(current, { name, kind: kind!, shared, notes }, ROUTE_LABELS, fmtLog);
+    await db.transaction(async (tx) => {
+      await tx.update(t.mapRoutes).set({ name, kind: kind!, shared, notes, ...(polyline ? { polyline } : {}) }).where(eq(t.mapRoutes.id, id));
+      if (details.length || polyline) {
+        await logChange(tx, { entityType: MAP, entityId: siteId, action: 'update', summary: `Voie « ${name} » modifiée${polyline ? ' (tracé redessiné)' : ''}`, details });
+      }
+    });
     return done(id);
   }
-  const [row] = await db.insert(t.mapRoutes).values({ siteId, name, kind: kind!, shared, notes, polyline: polyline! }).returning({ id: t.mapRoutes.id });
+  const blocked = await requireInSite(siteId, { create: true });
+  if (blocked) return { error: blocked };
+  const row = await db.transaction(async (tx) => {
+    const [r] = await tx.insert(t.mapRoutes).values({ siteId, name, kind: kind!, shared, notes, polyline: polyline! }).returning({ id: t.mapRoutes.id });
+    await logChange(tx, { entityType: MAP, entityId: siteId, action: 'create', summary: `Voie « ${name} » ajoutée à la carte` });
+    return r;
+  });
   return done(row.id);
 }
 
@@ -163,14 +215,20 @@ export async function deleteRoute(id: number): Promise<Result> {
   const db = await getDb();
   const [route] = await db.select().from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
   if (!route) return { error: 'Voie introuvable.' };
-  if (!(await visible(route.siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(route.siteId);
+  if (blocked) return { error: blocked };
   await db.transaction(async (tx) => {
     const acts = await tx.select({ id: t.siteActivities.id, routeIds: t.siteActivities.routeIds }).from(t.siteActivities).where(eq(t.siteActivities.siteId, route.siteId));
+    let n = 0;
     for (const a of acts) {
       const ids = parseIds(a.routeIds);
-      if (ids.includes(id)) await tx.update(t.siteActivities).set({ routeIds: ids.filter((x) => x !== id) }).where(eq(t.siteActivities.id, a.id));
+      if (!ids.includes(id)) continue;
+      await tx.update(t.siteActivities).set({ routeIds: ids.filter((x) => x !== id) }).where(eq(t.siteActivities.id, a.id));
+      await logChange(tx, { entityType: ACTIVITY, entityId: a.id, action: 'update', summary: `Voie « ${route.name} » supprimée de la carte : retirée des voies empruntées` });
+      n++;
     }
     await tx.delete(t.mapRoutes).where(eq(t.mapRoutes.id, id));
+    await logChange(tx, { entityType: MAP, entityId: route.siteId, action: 'delete', summary: `Voie « ${route.name} » supprimée de la carte${n ? ` (retirée de ${n} activité${n > 1 ? 's' : ''})` : ''}` });
   });
   return ok();
 }
@@ -183,12 +241,20 @@ export async function saveShape(kind: 'zone' | 'route', id: number, points: Pt[]
   if (!clean) return { error: kind === 'zone' ? 'Contour de zone invalide.' : 'Tracé de voie invalide.' };
   const db = await getDb();
   const [current] = kind === 'zone'
-    ? await db.select({ siteId: t.mapZones.siteId }).from(t.mapZones).where(eq(t.mapZones.id, id))
-    : await db.select({ siteId: t.mapRoutes.siteId }).from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
-  if (current && !(await visible(current.siteId))) return { error: OTHER_SITE };
-  const rows = kind === 'zone'
-    ? await db.update(t.mapZones).set({ polygon: clean }).where(eq(t.mapZones.id, id)).returning({ id: t.mapZones.id })
-    : await db.update(t.mapRoutes).set({ polyline: clean }).where(eq(t.mapRoutes.id, id)).returning({ id: t.mapRoutes.id });
+    ? await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id))
+    : await db.select({ siteId: t.mapRoutes.siteId, name: t.mapRoutes.name }).from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
+  if (!current) return { error: kind === 'zone' ? 'Zone introuvable.' : 'Voie introuvable.' };
+  const blocked = await requireInSite(current.siteId);
+  if (blocked) return { error: blocked };
+  const rows = await db.transaction(async (tx) => {
+    const r = kind === 'zone'
+      ? await tx.update(t.mapZones).set({ polygon: clean }).where(eq(t.mapZones.id, id)).returning({ id: t.mapZones.id })
+      : await tx.update(t.mapRoutes).set({ polyline: clean }).where(eq(t.mapRoutes.id, id)).returning({ id: t.mapRoutes.id });
+    if (r.length) {
+      await logChange(tx, { entityType: MAP, entityId: current.siteId, action: 'update', summary: kind === 'zone' ? `Contour de la zone « ${current.name} » déplacé` : `Tracé de la voie « ${current.name} » déplacé` });
+    }
+    return r;
+  });
   if (!rows.length) return { error: kind === 'zone' ? 'Zone introuvable.' : 'Voie introuvable.' };
   return ok();
 }
@@ -225,8 +291,8 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   const db = await getDb();
   const [sites, zones, routes, contractors, people, projects, plan, permit, existing] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
-    db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId }).from(t.mapZones),
-    db.select({ id: t.mapRoutes.id, siteId: t.mapRoutes.siteId }).from(t.mapRoutes),
+    db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones),
+    db.select({ id: t.mapRoutes.id, siteId: t.mapRoutes.siteId, name: t.mapRoutes.name }).from(t.mapRoutes),
     db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.people.id }).from(t.people),
     db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
@@ -235,9 +301,11 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
     id ? db.select().from(t.siteActivities).where(eq(t.siteActivities.id, id)).then((r) => r[0]) : undefined,
   ]);
   if (id && !existing) return { error: 'Activité introuvable.' };
+  if (existing?.cancelledAt) return { error: 'Activité annulée : elle ne se modifie plus.' };
   if (!sites.some((s) => s.id === siteId)) return { error: 'Site inconnu.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
-  if (existing && existing.siteId !== siteId) return { error: "Une activité ne change pas de site : supprimez-la et créez-la sur l'autre site." };
+  if (existing && existing.siteId !== siteId) return { error: "Une activité ne change pas de site : annulez-la et créez-la sur l'autre site." };
+  const siteBlocked = await requireInSite(siteId, { create: !existing });
+  if (siteBlocked) return { error: siteBlocked };
   const contractor = contractors.find((c) => c.id === contractorId);
   if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
   else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.');
@@ -267,11 +335,44 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
     routeIds, vehicles, notes, preventionPlanId, permitId,
   };
   if (existing) {
-    await db.update(t.siteActivities).set(values).where(eq(t.siteActivities.id, existing.id));
+    const view = await activityLogView({ ...values, routeIds: parseIds(values.routeIds) }, zones, routes);
+    const details = diffFields(await activityLogView({ ...existing, routeIds: parseIds(existing.routeIds) }, zones, routes), view, ACTIVITY_LABELS, fmtLog);
+    const moved = JSON.stringify(existing.geometry ?? null) !== JSON.stringify(values.geometry ?? null);
+    await db.transaction(async (tx) => {
+      await tx.update(t.siteActivities).set(values).where(eq(t.siteActivities.id, existing.id));
+      if (details.length || moved) {
+        await logChange(tx, { entityType: ACTIVITY, entityId: existing.id, action: 'update', summary: `Activité modifiée${moved ? ' (position sur la carte)' : ''}`, details });
+      }
+    });
     return done(existing.id);
   }
-  const [row] = await db.insert(t.siteActivities).values({ siteId, ...values }).returning({ id: t.siteActivities.id });
+  const row = await db.transaction(async (tx) => {
+    const [r] = await tx.insert(t.siteActivities).values({ siteId, ...values }).returning({ id: t.siteActivities.id });
+    await logChange(tx, { entityType: ACTIVITY, entityId: r.id, action: 'create', summary: `Activité « ${title} » ajoutée à la carte (${fmtDate(startOn!)} → ${fmtDate(endOn!)})` });
+    return r;
+  });
   return done(row.id);
+}
+
+/** Activité telle que le journal l'affiche : entreprise, responsable, zone et voies par leur nom. */
+async function activityLogView(
+  a: { title: string; team: string; contractorId: string | null; ownerId: string | null; keystoneProject: string | null; zoneId: number | null; startOn: string; endOn: string;
+    hours: string | null; vehicles: boolean; notes: string | null; preventionPlanId: string | null; permitId: string | null; routeIds: number[] },
+  zones: { id: number; name?: string }[], routes: { id: number; name?: string }[],
+) {
+  const db = await getDb();
+  const [people, [contractor]] = await Promise.all([
+    loadPeople(),
+    a.contractorId ? db.select({ name: t.contractors.name }).from(t.contractors).where(eq(t.contractors.id, a.contractorId)) : Promise.resolve([]),
+  ]);
+  return {
+    ...a,
+    team: a.team === 'externe' ? 'Entreprise extérieure' : 'Équipe interne',
+    contractorId: a.contractorId ? contractor?.name ?? a.contractorId : null,
+    ownerId: a.ownerId ? people.get(a.ownerId)?.name ?? a.ownerId : null,
+    zoneId: a.zoneId != null ? zones.find((z) => z.id === a.zoneId)?.name ?? String(a.zoneId) : null,
+    routeIds: a.routeIds.length ? a.routeIds.map((r) => routes.find((x) => x.id === r)?.name ?? String(r)).join(', ') : null,
+  };
 }
 
 /** Déplace une activité sur la carte ; sa zone suit la nouvelle position. */
@@ -281,23 +382,48 @@ export async function moveActivity(id: number, at: Pt): Promise<Result> {
   const point = cleanPoints([at], 1);
   if (!point) return { error: 'Position invalide.' };
   const db = await getDb();
-  const [row] = await db.select({ siteId: t.siteActivities.siteId }).from(t.siteActivities).where(eq(t.siteActivities.id, id));
+  const [row] = await db.select({ siteId: t.siteActivities.siteId, zoneId: t.siteActivities.zoneId, cancelledAt: t.siteActivities.cancelledAt }).from(t.siteActivities).where(eq(t.siteActivities.id, id));
   if (!row) return { error: 'Activité introuvable.' };
-  if (!(await visible(row.siteId))) return { error: OTHER_SITE };
+  if (row.cancelledAt) return { error: 'Activité annulée : elle ne se modifie plus.' };
+  const blocked = await requireInSite(row.siteId);
+  if (blocked) return { error: blocked };
   const zoneId = await zoneAt(row.siteId, point[0]);
-  await db.update(t.siteActivities).set({ geometry: { type: 'point', at: point[0] }, zoneId }).where(eq(t.siteActivities.id, id));
+  const zoneName = async (zid: number | null) => (zid == null ? null
+    : (await db.select({ name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, zid)))[0]?.name ?? String(zid));
+  const details = zoneId !== row.zoneId ? [{ field: 'Zone', from: await zoneName(row.zoneId), to: await zoneName(zoneId) }] : [];
+  await db.transaction(async (tx) => {
+    await tx.update(t.siteActivities).set({ geometry: { type: 'point', at: point[0] }, zoneId }).where(eq(t.siteActivities.id, id));
+    await logChange(tx, { entityType: ACTIVITY, entityId: id, action: 'update', summary: 'Activité déplacée sur la carte', details });
+  });
   return ok();
 }
 
-export async function deleteActivity(id: number): Promise<Result> {
-  const { error } = await requireManager();
+/**
+ * Annule une activité de la carte (saisie erronée, intervention annulée) : jamais supprimée (PRV-12), motif obligatoire ;
+ * elle sort de la carte, de la coactivité et des rattachements qui bloquent l'annulation d'un plan de prévention.
+ */
+export async function cancelActivity(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
   if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
   const db = await getDb();
-  const [row] = await db.select({ siteId: t.siteActivities.siteId }).from(t.siteActivities).where(eq(t.siteActivities.id, id));
+  const [row] = await db.select({ siteId: t.siteActivities.siteId, title: t.siteActivities.title, cancelledAt: t.siteActivities.cancelledAt })
+    .from(t.siteActivities).where(eq(t.siteActivities.id, id!));
   if (!row) return { error: 'Activité introuvable.' };
-  if (!(await visible(row.siteId))) return { error: OTHER_SITE };
-  await db.delete(t.siteActivities).where(eq(t.siteActivities.id, id));
-  return ok();
+  if (row.cancelledAt) return { error: 'Cette activité est déjà annulée.' };
+  const blocked = await requireInSite(row.siteId);
+  if (blocked) return { error: blocked };
+  const cancelled = await db.transaction(async (tx) => {
+    const [r] = await tx.update(t.siteActivities).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason })
+      .where(and(eq(t.siteActivities.id, id!), isNull(t.siteActivities.cancelledAt))).returning({ id: t.siteActivities.id });
+    if (r) await logChange(tx, { entityType: ACTIVITY, entityId: id!, action: 'cancel', summary: `Activité « ${row.title} » annulée : retirée de la carte`, reason, byId: session.user.id });
+    return !!r;
+  });
+  if (!cancelled) return { error: 'Cette activité est déjà annulée.' };
+  return done(id!);
 }
 
 // ─── Plan de fond et échelle ────────────────────────────────────────────────
@@ -315,10 +441,19 @@ export async function saveMapSettings(_prev: FormState, fd: FormData): Promise<F
   if (metersPerUnit != null && metersPerUnit > 100_000) f.fail('metersPerUnit', 'Maximum 100 000 m.');
   if (!f.ok) return f.state();
   if (!(await siteExists(siteId))) return { error: 'Site inconnu.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(siteId, { create: true });
+  if (blocked) return { error: blocked };
   const db = await getDb();
   const values = { metersPerUnit: Math.round(metersPerUnit! * 100) / 100, proximityMeters: proximityMeters!, updatedAt: new Date() };
-  await db.insert(t.siteMaps).values({ siteId, ...defaultSize(siteId), ...values }).onConflictDoUpdate({ target: t.siteMaps.siteId, set: values });
+  const [before] = await db.select().from(t.siteMaps).where(eq(t.siteMaps.siteId, siteId));
+  const details = diffFields(
+    { metersPerUnit: before?.metersPerUnit ?? DEFAULT_PLANS[siteId]?.metersPerUnit ?? null, proximityMeters: before?.proximityMeters ?? DEFAULT_PROXIMITY_METERS },
+    values, { metersPerUnit: 'Largeur représentée (m)', proximityMeters: 'Distance de coactivité (m)' },
+  );
+  await db.transaction(async (tx) => {
+    await tx.insert(t.siteMaps).values({ siteId, ...defaultSize(siteId), ...values }).onConflictDoUpdate({ target: t.siteMaps.siteId, set: values });
+    if (details.length) await logChange(tx, { entityType: MAP, entityId: siteId, action: 'update', summary: 'Échelle de la carte modifiée', details });
+  });
   return done(siteId);
 }
 
@@ -342,14 +477,21 @@ export async function replaceSitePlan(_prev: FormState, fd: FormData): Promise<F
   }
   if (!f.ok) return f.state();
   if (!(await siteExists(siteId))) return { error: 'Site inconnu.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(siteId, { create: true });
+  if (blocked) return { error: blocked };
 
   const db = await getDb();
   const [current] = await db.select().from(t.siteMaps).where(eq(t.siteMaps.siteId, siteId));
   const att = await saveUpload(file!, SITE_MAP_ATTACHMENT, siteId, session.user.id);
   const values = { attachmentId: att.id, width: width!, height: height!, updatedAt: new Date() };
-  await db.insert(t.siteMaps).values({ siteId, ...values, metersPerUnit: DEFAULT_PLANS[siteId]?.metersPerUnit ?? null, proximityMeters: DEFAULT_PROXIMITY_METERS })
-    .onConflictDoUpdate({ target: t.siteMaps.siteId, set: values });
+  await db.transaction(async (tx) => {
+    await tx.insert(t.siteMaps).values({ siteId, ...values, metersPerUnit: DEFAULT_PLANS[siteId]?.metersPerUnit ?? null, proximityMeters: DEFAULT_PROXIMITY_METERS })
+      .onConflictDoUpdate({ target: t.siteMaps.siteId, set: values });
+    await logChange(tx, {
+      entityType: MAP, entityId: siteId, action: 'update', byId: session.user.id, summary: 'Plan de fond remplacé',
+      details: [{ field: 'Plan de fond', from: current?.attachmentId ? 'plan importé' : 'plan schématique', to: att.fileName }],
+    });
+  });
   if (current?.attachmentId) await deleteAttachment(current.attachmentId);
   return done(siteId);
 }
@@ -359,11 +501,15 @@ export async function resetSitePlan(siteId: string): Promise<Result> {
   const { error } = await requireManager();
   if (error) return { error };
   if (!DEFAULT_PLANS[siteId]) return { error: "Ce site n'a pas de plan schématique par défaut." };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(siteId);
+  if (blocked) return { error: blocked };
   const db = await getDb();
   const [current] = await db.select().from(t.siteMaps).where(eq(t.siteMaps.siteId, siteId));
   if (!current?.attachmentId) return { error: 'Le plan schématique est déjà affiché.' };
-  await db.update(t.siteMaps).set({ attachmentId: null, ...defaultSize(siteId), updatedAt: new Date() }).where(eq(t.siteMaps.siteId, siteId));
+  await db.transaction(async (tx) => {
+    await tx.update(t.siteMaps).set({ attachmentId: null, ...defaultSize(siteId), updatedAt: new Date() }).where(eq(t.siteMaps.siteId, siteId));
+    await logChange(tx, { entityType: MAP, entityId: siteId, action: 'update', summary: 'Retour au plan schématique par défaut' });
+  });
   await deleteAttachment(current.attachmentId);
   return ok();
 }
@@ -380,7 +526,8 @@ export async function addConflictToPlan(siteId: string, date: string, key: strin
   const { error } = await requireManager();
   if (error) return { error };
   if (!isRealDate(date)) return { error: 'Date invalide.' };
-  if (!(await visible(siteId))) return { error: OTHER_SITE };
+  const blocked = await requireInSite(siteId);
+  if (blocked) return { error: blocked };
   const found = await findConflict(siteId, date, key);
   if (!found) return { error: "Cette situation de coactivité n'est plus détectée : rechargez la carte." };
   if (!found.conflict.planIds.includes(planId)) return { error: `Le plan ${planId} ne concerne pas cette situation.` };

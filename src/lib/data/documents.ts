@@ -35,8 +35,11 @@ export type VersionView = {
   statusLabel: string;
   tone: Tone;
   summary: string;
+  authorId: string | null;
   author: string;
   approver: string;
+  /** Dernier renvoi en brouillon (DOC-06) : date et corrections demandées, jusqu'à la nouvelle soumission. */
+  returned: { on: string; reason: string } | null;
   submittedOn: string | null;
   approvedOn: string | null;
   file: { id: string; name: string; size: number } | null;
@@ -124,7 +127,8 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
     const action = v.actionId ? actionById.get(v.actionId) : undefined;
     return {
       id: v.id, version: v.version, status: v.status as VersionStatus, statusLabel: s.label, tone: s.tone, summary: v.summary,
-      author: name(v.authorId), approver: v.approverId ? name(v.approverId) : '—', submittedOn: v.submittedOn, approvedOn: v.approvedOn,
+      authorId: v.authorId, author: name(v.authorId), approver: v.approverId ? name(v.approverId) : '—', submittedOn: v.submittedOn, approvedOn: v.approvedOn,
+      returned: v.status === 'brouillon' && v.returnedOn ? { on: v.returnedOn, reason: v.returnReason ?? '' } : null,
       file: fileOf.get(String(v.id)) ?? null,
       action: action ? linked(action) : null,
     };
@@ -311,5 +315,16 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
       href: href(r.id),
     } satisfies TodoItem)))
     : [];
-  return { todo: [...reviews, ...approvals].sort((a, b) => a.date.localeCompare(b.date)) };
+  // Brouillon renvoyé par l'approbateur (DOC-06) : corrections à apporter par l'auteur, jusqu'à la nouvelle soumission.
+  const returns: TodoItem[] = rows.flatMap((r) => r.versions.filter((v) => v.returned && v.authorId).map((v) => ({
+    date: v.returned!.on,
+    kind: 'Révision documentaire',
+    tone: 'warn',
+    title: `${r.id} · version ${v.version} renvoyée en brouillon : corrections demandées`,
+    who: v.author,
+    ownerIds: [v.authorId!],
+    siteId: r.siteId,
+    href: href(r.id),
+  } satisfies TodoItem)));
+  return { todo: [...reviews, ...approvals, ...returns].sort((a, b) => a.date.localeCompare(b.date)) };
 });

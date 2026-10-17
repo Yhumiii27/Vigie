@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { NewActionButton, type ActionDefaults } from '@/components/ActionFormDialog';
 import { actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
@@ -31,38 +31,6 @@ export function Note({ icon, tone, children }: { icon: string; tone?: 'warn' | '
     <div className="vg-inset" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', fontSize: 12, color: 'var(--color-neutral-300)' }}>
       <i className={`ph ${icon}`} aria-hidden style={{ fontSize: 15, flex: 'none', marginTop: 1, color: tone ? TONE[tone].dot : 'var(--color-accent)' }} />
       <span style={{ textWrap: 'pretty', minWidth: 0 }}>{children}</span>
-    </div>
-  );
-}
-
-/** Suppression en deux temps sous le formulaire d'une fenêtre ; appelle `onDone` une fois l'élément supprimé. */
-export function DeleteZone({ run, onDone, label, question }: { run: () => Promise<{ error?: string }>; onDone: () => void; label: string; question: ReactNode }) {
-  const [asking, setAsking] = useState(false);
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingTop: 10, marginTop: 2, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
-      {!asking ? (
-        <button type="button" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)' }} onClick={() => setAsking(true)}>
-          <i className="ph ph-trash" style={{ fontSize: 13 }} />{label}
-        </button>
-      ) : (
-        <>
-          <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', flex: '1 1 220px', textWrap: 'pretty' }}>{question}</span>
-          <span style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); setError(null); }}>Annuler</button>
-            <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} style={{ color: 'var(--tone-danger-fg)', borderColor: TONE.danger.dot }}
-              onClick={() => start(async () => {
-                const r = await run();
-                if (r.error) setError(r.error);
-                else onDone();
-              })}>
-              <i className="ph ph-trash" style={{ fontSize: 13 }} />{pending ? 'Suppression…' : 'Confirmer la suppression'}
-            </button>
-          </span>
-        </>
-      )}
-      {error && <span role="alert" style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </div>
   );
 }

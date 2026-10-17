@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, gte } from 'drizzle-orm';
+import { and, eq, gte, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, FIRE_WATCH_HOURS, MAX_PLAN_FILES, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, PLAN_CONTENT, PLAN_CONTENT_KEYS,
@@ -410,7 +410,7 @@ export async function cancelPlan(_prev: FormState, fd: FormData): Promise<FormSt
   const issue = await planEndBlock(db, plan, 'annuler');
   if (issue) return { error: issue };
   const live = await db.select({ id: t.siteActivities.id }).from(t.siteActivities)
-    .where(and(eq(t.siteActivities.preventionPlanId, plan.id), gte(t.siteActivities.endOn, today())));
+    .where(and(eq(t.siteActivities.preventionPlanId, plan.id), gte(t.siteActivities.endOn, today()), isNull(t.siteActivities.cancelledAt)));
   if (live.length) return { error: "Activités de la carte en cours ou à venir rattachées au plan : retirez ou modifiez les activités de la carte rattachées avant d'annuler le plan." };
   await db.transaction(async (tx) => {
     await tx.update(t.preventionPlans)

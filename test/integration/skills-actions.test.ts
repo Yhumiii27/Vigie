@@ -101,7 +101,11 @@ describe('saveQualification : enregistrer une formation', () => {
     const list = await quals('mgirard', 'elec');
     expect(list).toHaveLength(before + 1); // jamais écrasée
     expect(list.find((q) => q.id === id)).toMatchObject({ obtainedOn: '2026-10-05', expiresOn: '2029-10-05', provider: '[Apave]', recordedById: 'clefevre', cancelledAt: null });
-    expect(await lastLog('qualification', id)).toMatchObject({ action: 'create', summary: 'Formation du 05/10/2026 (échéance 05/10/2029) enregistrée', byId: 'clefevre' });
+    // Création, puis attestation jointe (HAB-03 : chaque fichier journalisé sur la formation).
+    expect((await changeLog('qualification', id)).map(({ action, summary, byId }) => ({ action, summary, byId }))).toEqual([
+      { action: 'create', summary: 'Formation du 05/10/2026 (échéance 05/10/2029) enregistrée', byId: 'clefevre' },
+      { action: 'attach', summary: 'Attestation jointe', byId: 'clefevre' },
+    ]);
     expect(await action('A-907')).toEqual(stored);
     expect(await changeLog('action', 'A-907')).toHaveLength(actionLog);
     expect((await requirement('mgirard', 'elec')).renewalActionId).toBe('A-907');

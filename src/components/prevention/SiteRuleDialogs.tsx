@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DialogButton } from '@/components/Dialog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Field, Select } from '@/components/form';
 import type { SiteRuleView } from '@/lib/data/prevention';
 import { saveSiteRule } from '@/server/sites';
@@ -46,7 +47,12 @@ function SiteRuleForm({ site, onDone, onCancel }: { site: SiteRuleView; onDone: 
 export function SiteRuleButton({ site }: { site: SiteRuleView }) {
   return (
     <DialogButton label="Modifier" icon="ph-pencil-simple" className="btn btn-ghost vg-btn-sm" title={site.label} kicker="Règle du site · plans de prévention" width={560}>
-      {(close) => <SiteRuleForm site={site} onDone={close} onCancel={close} />}
+      {(close) => (
+        <>
+          <SiteRuleForm site={site} onDone={close} onCancel={close} />
+          <div style={{ marginTop: 12 }}><LazyChangeLog entity="site" id={site.id} title="Historique du site" /></div>
+        </>
+      )}
     </DialogButton>
   );
 }

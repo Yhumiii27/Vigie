@@ -21,7 +21,7 @@ import { entryActionDefaults } from './action-defaults';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
-  | 'pop' | 'qualification' | 'collectorSiret' | 'collectorAddress' | 'collectorReceipt' | 'destinationSiret' | 'destinationAddress'>;
+  | 'pop' | 'qualification' | 'collectorSiret' | 'collectorAddress' | 'collectorReceipt' | 'destinationSiret' | 'destinationAddress' | 'archived'>;
 
 const BSD_OPTIONS = BSD_STATUS_KEYS.map((k) => [k, BSD_STATUS[k].label] as const);
 const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
@@ -198,7 +198,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
 export function NewEntryButton({ streams, today, showSite, transporters, carriers, defaultStreamId, events }: {
   streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string; events: readonly EventOption[];
 }) {
-  const none = streams.length === 0;
+  const none = !streams.some((s) => !s.archived);
   return (
     <DialogButton label="Nouvel enlèvement" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvel enlèvement" kicker="Registre des déchets"
       width={620} disabled={none} tooltip={none ? "Créez d'abord une filière (onglet Filières)." : undefined}>
@@ -209,11 +209,13 @@ export function NewEntryButton({ streams, today, showSite, transporters, carrier
 
 // ─── Formulaire d'enlèvement ────────────────────────────────────────────────
 
-function EntryForm({ entry, streams, today, showSite, transporters, carriers, defaultStreamId, events, onDone, onCancel }: {
+function EntryForm({ entry, streams: allStreams, today, showSite, transporters, carriers, defaultStreamId, events, onDone, onCancel }: {
   entry?: EntryView; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string;
   events: readonly EventOption[]; onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
+  // Filières en service, plus la filière archivée de l'enlèvement modifié (DOC-09).
+  const streams = allStreams.filter((s) => !s.archived || s.id === entry?.streamId);
   const initialStream = entry?.streamId ?? (defaultStreamId && streams.some((s) => s.id === defaultStreamId) ? defaultStreamId : streams.length === 1 ? streams[0].id : '');
   const [streamId, setStreamId] = useState(initialStream);
   const stream = streams.find((s) => s.id === streamId);

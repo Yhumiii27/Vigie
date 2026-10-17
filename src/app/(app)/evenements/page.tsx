@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
+import { EventAccessLog } from '@/components/events/AccessLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { PageHeader } from '@/components/PageHeader';
 import { AccidentSection } from '@/components/events/AccidentSection';
@@ -432,6 +433,8 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
 
       <EventHistory entries={history} />
       <ChangeLogList entries={log} title="Journal des modifications" />
+      {/* SEC-11 : consultations des données de santé et des pièces jointes, pour les rôles habilités seulement. */}
+      {health && <EventAccessLog eventId={e.id} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
@@ -17,6 +18,9 @@ import { nextVersion } from './meta';
 type Mode = 'view' | 'edit' | 'revise' | 'draft' | 'submit' | 'approve' | 'return' | 'abandon' | 'obsolete' | 'action';
 
 const APPROVER_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+/** DOC-05 : une version ne part en revue ni n'est approuvée sans son fichier. */
+const NO_FILE_HINT = 'Joignez d’abord le fichier de la version (« Modifier le brouillon »).';
+const NO_FILE_APPROVE_HINT = 'Aucun fichier joint : renvoyez la version en brouillon pour que son auteur le joigne.';
 
 const H6 = ({ children }: { children: ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 
@@ -84,12 +88,12 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
       buttons.push(
         <button key="abandon" type="button" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--color-neutral-400)' }} disabled={abandonLocked} title={abandonLocked ? APPROVER_ONLY : undefined} onClick={() => setMode('abandon')}>Abandonner</button>,
         <button key="draft" type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setMode('draft')}><Icon name="ph-pencil-simple" size={13} />Modifier le brouillon</button>,
-        <button key="submit" type="button" className="btn btn-primary vg-btn-sm" onClick={() => setMode('submit')}><Icon name="ph-paper-plane-tilt" size={13} />Soumettre en revue</button>,
+        <button key="submit" type="button" className="btn btn-primary vg-btn-sm" disabled={!pending.file} title={pending.file ? undefined : NO_FILE_HINT} onClick={() => setMode('submit')}><Icon name="ph-paper-plane-tilt" size={13} />Soumettre en revue</button>,
       );
     } else if (pending?.status === 'en_revue') {
       buttons.push(
         <button key="return" type="button" className="btn btn-secondary vg-btn-sm" disabled={!canApprove} title={approveHint} onClick={() => setMode('return')}><Icon name="ph-arrow-u-up-left" size={13} />Renvoyer en brouillon</button>,
-        <button key="approve" type="button" className="btn btn-primary vg-btn-sm" disabled={!canApprove} title={approveHint} onClick={() => setMode('approve')}><Icon name="ph-seal-check" size={13} />Approuver la version {pending.version}</button>,
+        <button key="approve" type="button" className="btn btn-primary vg-btn-sm" disabled={!canApprove || !pending.file} title={approveHint ?? (pending.file ? undefined : NO_FILE_APPROVE_HINT)} onClick={() => setMode('approve')}><Icon name="ph-seal-check" size={13} />Approuver la version {pending.version}</button>,
       );
     } else if (current) {
       buttons.push(
@@ -134,6 +138,15 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           <Icon name="ph-prohibit" size={14} style={{ color: 'var(--color-neutral-400)', flex: 'none', alignSelf: 'center' }} />
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
             Rendu obsolète le {fmtDate(doc.retired.on)} par {doc.retired.by}.{doc.retired.reason && <> Motif : {doc.retired.reason}</>}
+          </span>
+        </div>
+      )}
+
+      {pending?.status === 'brouillon' && pending.returned && mode === 'view' && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE.warn.bg }}>
+          <Icon name="ph-arrow-u-up-left" size={14} style={{ color: TONE.warn.dot, flex: 'none', alignSelf: 'center' }} />
+          <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>
+            Version {pending.version} renvoyée en brouillon le {fmtDate(pending.returned.on)} · corrections demandées : {pending.returned.reason}
           </span>
         </div>
       )}
@@ -221,6 +234,8 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               </table>
             </div>
           </section>
+          {/* Journal du cycle de vie (DOC-04), chargé à l'ouverture : à la saisie seulement. */}
+          {canManage && <LazyChangeLog entity="document" id={doc.id} title="Historique du document" />}
         </>
       )}
 
@@ -232,18 +247,21 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           {mode === 'draft' && pending && <DraftForm version={pending} options={options} onDone={back} onCancel={back} />}
           {mode === 'submit' && pending && (
             <ConfirmForm action={submitVersion} hidden={{ versionId: pending.id }} submitLabel="Soumettre en revue" submitIcon="ph-paper-plane-tilt" onDone={back} onCancel={back}
-              message={<>La version {pending.version} est transmise pour approbation à l&apos;animateur QHSE ou à la direction. Elle n&apos;est plus modifiable, sauf renvoi en brouillon.{!pending.file && <> Aucun fichier n&apos;est joint à cette version.</>}</>} />
+              message={<>La version {pending.version} est transmise pour approbation à l&apos;animateur QHSE ou à la direction. Elle n&apos;est plus modifiable, sauf renvoi en brouillon.</>} />
           )}
           {mode === 'approve' && pending && (
             <ConfirmForm action={approveVersion} hidden={{ versionId: pending.id }} submitLabel={`Approuver la version ${pending.version}`} submitIcon="ph-seal-check" onDone={back} onCancel={back}
               message={<>La version {pending.version} entre en vigueur ce jour{current ? <> et remplace la version {current.version}, qui est archivée</> : null}. Diffusion attendue : {doc.distribution || 'à préciser'}.</>} />
           )}
           {mode === 'return' && pending && (
-            <ConfirmForm action={returnToDraft} hidden={{ versionId: pending.id }} submitLabel="Renvoyer en brouillon" onDone={back} onCancel={back}
+            <ReasonForm action={returnToDraft} hidden={{ versionId: pending.id }} submitLabel="Renvoyer en brouillon" onDone={back} onCancel={back}
+              reasonLabel="Corrections demandées" placeholder="Ex. compléter le § 4, joindre la version signée…"
+              hint="Obligatoire : transmis à l'auteur (échéance « À faire ») et conservé dans l'historique du document."
               message={<>La version {pending.version} repasse en brouillon pour correction par son auteur ({pending.author}){current ? <> ; la version {current.version} reste en vigueur</> : null}.</>} />
           )}
           {mode === 'abandon' && pending && (
-            <ConfirmForm action={abandonDraft} hidden={{ versionId: pending.id }} submitLabel="Abandonner le brouillon" onDone={back} onCancel={back}
+            <ReasonForm action={abandonDraft} hidden={{ versionId: pending.id }} submitLabel="Abandonner le brouillon" onDone={back} onCancel={back}
+              placeholder="Ex. révision devenue sans objet, doublon…"
               message={current
                 ? <>Le brouillon {pending.version} est abandonné et conservé dans l&apos;historique ; la version {current.version} reste en vigueur.</>
                 : <>Le brouillon {pending.version} est abandonné. Le document n&apos;ayant jamais été approuvé, il est classé « Abandonné » et conservé pour traçabilité ; il pourra être relancé par une nouvelle version.</>} />
