@@ -101,13 +101,19 @@ export function shapeMismatches(snapshot: ShapeSnapshot, db: DbCatalogue): strin
   return out;
 }
 
-/** Lit le catalogue du schéma public (colonnes, contraintes, index), même requête sur PostgreSQL et PGlite. */
-export async function readCatalogue(query: Query): Promise<DbCatalogue> {
-  const col = await query("select table_name, column_name, is_nullable from information_schema.columns where table_schema = 'public' order by 1, 2");
+/**
+ * Lit le catalogue d'un schéma (public par défaut ; vigie sur le serveur) : colonnes des tables (les vues pub_ de la
+ * migration de partage, absentes des instantanés, et le journal des migrations, dans vigie sur le serveur, sont
+ * écartés), contraintes, index ; même requête sur PostgreSQL et PGlite.
+ */
+export async function readCatalogue(query: Query, schema = 'public'): Promise<DbCatalogue> {
+  const col = await query(`select c.table_name, c.column_name, c.is_nullable from information_schema.columns c
+    join information_schema.tables t on t.table_schema = c.table_schema and t.table_name = c.table_name and t.table_type = 'BASE TABLE'
+    where c.table_schema = $1 and c.table_name <> '__drizzle_migrations' order by 1, 2`, [schema]);
   const con = await query(`select c.relname as table_name, k.conname as name, k.contype::text as type
     from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' order by 1, 2`);
-  const idx = await query("select tablename, indexname from pg_indexes where schemaname = 'public' order by 1, 2");
+    where n.nspname = $1 order by 1, 2`, [schema]);
+  const idx = await query('select tablename, indexname from pg_indexes where schemaname = $1 order by 1, 2', [schema]);
   return {
     columns: col.rows.map((r) => ({ table: String(r.table_name), column: String(r.column_name), nullable: r.is_nullable === 'YES' })),
     constraints: con.rows.map((r) => ({ table: String(r.table_name), name: String(r.name), type: String(r.type) })),
@@ -124,17 +130,17 @@ export type DetailedCatalogue = {
   indexes: { table: string; name: string; definition: string }[];
 };
 
-/** Lit le catalogue détaillé du schéma public (tables ordinaires), même requête sur PostgreSQL et PGlite. */
-export async function readDetailedCatalogue(query: Query): Promise<DetailedCatalogue> {
+/** Lit le catalogue détaillé d'un schéma (public par défaut ; tables ordinaires), même requête sur PostgreSQL et PGlite. */
+export async function readDetailedCatalogue(query: Query, schema = 'public'): Promise<DetailedCatalogue> {
   const col = await query(`select c.relname as table_name, a.attname as column_name, format_type(a.atttypid, a.atttypmod) as type,
       a.attnotnull as not_null, pg_get_expr(d.adbin, d.adrelid) as default_value
     from pg_attribute a join pg_class c on c.oid = a.attrelid join pg_namespace n on n.oid = c.relnamespace
     left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
-    where n.nspname = 'public' and c.relkind in ('r', 'p') and a.attnum > 0 and not a.attisdropped order by 1, 2`);
+    where n.nspname = $1 and c.relkind in ('r', 'p') and a.attnum > 0 and not a.attisdropped order by 1, 2`, [schema]);
   const con = await query(`select c.relname as table_name, k.conname as name, pg_get_constraintdef(k.oid) as definition
     from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' order by 1, 2`);
-  const idx = await query("select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2");
+    where n.nspname = $1 order by 1, 2`, [schema]);
+  const idx = await query('select tablename, indexname, indexdef from pg_indexes where schemaname = $1 order by 1, 2', [schema]);
   return {
     columns: col.rows.map((r) => ({
       table: String(r.table_name), column: String(r.column_name), type: String(r.type), notNull: r.not_null === true || r.not_null === 't',
