@@ -107,7 +107,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('ouverture sur PostgreSQL', () =
     await client.connect();
     const demo = process.env.VIGIE_DEMO;
     try {
-      // Disposition d'avant (migrate() de Drizzle, search_path par défaut : public).
+      // Disposition d'avant (migrate() de Drizzle dans public). Le search_path par défaut ("$user", public) viserait le
+      // schéma vigie quand le rôle s'appelle vigie (service PostgreSQL de la CI) : public est donc fixé explicitement.
+      await client.query('set search_path to public');
       await pgMigrate(pgDrizzle(client), { migrationsFolder: MIGRATIONS_DIR });
       process.env.VIGIE_DEMO = '1';
       resetConfig();
