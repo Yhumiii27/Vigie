@@ -246,6 +246,11 @@ export const actions = pgTable('actions', {
   documentId: text('document_id').references((): AnyPgColumn => documents.id),
   wasteStreamId: text('waste_stream_id').references((): AnyPgColumn => wasteStreams.id),
   wasteEntryId: integer('waste_entry_id').references((): AnyPgColumn => wasteEntries.id), // enlèvement du registre des déchets
+  // Habilitation d'une action de recyclage reprise (HAB-04, 0007 : reprise de qualification_requirements.renewal_action_id) :
+  // case de la matrice (salarié × titre), conservée sur l'action close ou abandonnée et quand le titre n'est plus requis ;
+  // jamais posée par Vigie (aucune action QSE pour un recyclage, 15/10/2026).
+  qualificationPersonId: text('qualification_person_id').references(() => people.id),
+  qualificationTitleId: text('qualification_title_id').references((): AnyPgColumn => trainingTitles.id),
   domain: text('domain').$type<ActionDomain>(), // null = à compléter (reprise)
   problem: text('problem'), // description du problème (≤ 4 000) ; null = à compléter (reprise)
   detail: text('detail').notNull(), // détail de l'action (≤ 4 000) ; libellé = actionLabel(detail)
@@ -537,7 +542,7 @@ export const trainingTitles = pgTable('training_titles', {
 export const qualificationRequirements = pgTable('qualification_requirements', {
   personId: text('person_id').notNull().references(() => people.id),
   titleId: text('title_id').notNull().references(() => trainingTitles.id),
-  renewalActionId: text('renewal_action_id').references(() => actions.id), // recyclage planifié
+  // Recyclage repris : porté par l'action (actions.qualification_person_id / qualification_title_id, HAB-04).
 }, (t) => [primaryKey({ columns: [t.personId, t.titleId] })]);
 
 // Historique des formations suivies : une ligne par formation, jamais écrasée. La qualification en cours d'une case

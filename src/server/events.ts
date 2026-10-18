@@ -7,7 +7,7 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
   MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
-  advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
+  advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
 } from '@/components/events/shared';
 import { canCreateAction } from '@/lib/action-rules';
@@ -18,7 +18,7 @@ import { resolveReportToken } from '@/lib/data/report-posts';
 import { fmtDate, fromParisLocal, parisDay, referenceNow, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
-  BENIGN_CAREGIVER_KEYS, D8_STEPS, ENV_ASPECTS, ENV_MEDIA, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, METHODS, NC_ORIGINS, SEVERITY, STEP_CLOSED,
+  BENIGN_CAREGIVER_KEYS, D8_STEPS, ENV_ASPECTS, ENV_MEDIA, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, METHODS, NC_ORIGINS, SEVERITY, STEP_ACTIONS, STEP_CLOSED,
   STEP_QUALIFIED, VICTIM_KINDS, VICTIM_KIND_KEYS, canSeeHealth, type AnalysisMethod, type EventType, type VictimKind,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
@@ -219,6 +219,13 @@ export async function setAnalysisMethod(id: string, method: string): Promise<{ e
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
   if (ev.analysisMethod === method) return {};
+  // EVT-11 : après « Actions », la nouvelle méthode doit déjà porter une analyse.
+  if (ev.step >= STEP_ACTIONS) {
+    const [target] = await db.select({ content: t.eventAnalyses.content }).from(t.eventAnalyses)
+      .where(and(eq(t.eventAnalyses.eventId, id), eq(t.eventAnalyses.method, method)));
+    const refused = analysisChangeBlocker(ev.step, analysisFilled(method, target?.content), 'method');
+    if (refused) return { error: refused };
+  }
   // EVT-12 : changement de méthode journalisé (le contenu des autres méthodes est conservé).
   await db.transaction(async (tx) => {
     await tx.update(t.events).set({ analysisMethod: method }).where(eq(t.events.id, id));
@@ -811,6 +818,11 @@ export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<Form
   if (!ev) return { error: 'Événement introuvable.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
+  // EVT-11 : l'analyse de la méthode retenue ne se vide plus après « Actions » (les autres méthodes restent libres).
+  if (method === ev.analysisMethod) {
+    const refused = analysisChangeBlocker(ev.step, analysisFilled(method, content), 'clear');
+    if (refused) return { error: refused };
+  }
   const key = and(eq(t.eventAnalyses.eventId, eventId), eq(t.eventAnalyses.method, method));
   // EVT-12 : enregistrement de l'analyse journalisé sur l'événement (méthode seulement : le contenu, libre, peut décrire
   // les circonstances d'un accident ; il reste sur la fiche, lu avec les mêmes droits).

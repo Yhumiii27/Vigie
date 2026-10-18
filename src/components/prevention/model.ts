@@ -377,6 +377,39 @@ export const permitDays = (p: { validFrom: Date; validTo: Date }) => ({ from: to
 /** La période du plan couvre les jours `from` à `to`. */
 export const planCovers = (plan: Pick<PlanLike, 'startOn' | 'endOn'>, from: string, to: string) => plan.startOn <= from && to <= plan.endOn;
 
+/** Activité de la carte rattachée à un plan ou à un permis (contrôles de cohérence, PRV-11). */
+export type LinkedActivity = { id: number; title: string; siteId: string; contractorId: string | null; startOn: string; endOn: string };
+
+/**
+ * PRV-11 : activités de la carte (non annulées) qui ne seraient plus cohérentes avec le plan ou le permis modifié —
+ * autre site, autre entreprise extérieure, ou période qui ne les couvre plus (`cover: 'all'`, plan) ou ne recoupe plus
+ * aucun de leurs jours (`cover: 'overlap'`, permis, souvent journalier).
+ */
+export function activityLinkIssues(
+  next: { siteId: string; contractorId: string | null; from: string; to: string }, activities: LinkedActivity[], cover: 'all' | 'overlap',
+) {
+  const outside = (a: LinkedActivity) => (cover === 'all' ? !(next.from <= a.startOn && a.endOn <= next.to) : a.endOn < next.from || a.startOn > next.to);
+  return {
+    site: activities.filter((a) => a.siteId !== next.siteId),
+    contractor: activities.filter((a) => !!next.contractorId && !!a.contractorId && a.contractorId !== next.contractorId),
+    period: activities.filter(outside),
+  };
+}
+
+/** Pourquoi un permis ne peut pas être rattaché à une activité de la carte (PRV-11), null si possible. */
+export function permitActivityBlocker(
+  permit: { id: string; status: string; validFrom: Date; validTo: Date }, startOn: string | null, endOn: string | null, opts: { keptLink: boolean; datesChanged: boolean },
+): string | null {
+  if (!opts.keptLink && (permit.status === 'clos' || permit.status === 'annule')) {
+    return `Le permis ${permit.id} est ${permit.status === 'annule' ? 'annulé' : 'clos'} : demandez un nouveau permis.`;
+  }
+  if ((!opts.keptLink || opts.datesChanged) && startOn && endOn && endOn >= startOn) {
+    const d = permitDays(permit);
+    if (endOn < d.from || startOn > d.to) return `Le permis ${permit.id} est valable ${fmtPeriod(d.from, d.to)} : il ne couvre aucun jour de l'activité.`;
+  }
+  return null;
+}
+
 /** Nature du défaut de plan d'un permis : aucun plan, plan clos ou annulé, période ne couvrant pas la validité, plan non signé. */
 export type PermitPlanIssueKind = 'missing' | 'closed' | 'dates' | 'unsigned';
 

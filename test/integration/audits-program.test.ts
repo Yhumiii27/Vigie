@@ -112,7 +112,10 @@ describe('AUD-03 : annuler un élément du programme', () => {
     const annual = await planItem('Annuelle 10/12');
     expect(await cancelPlanItem({}, form({ id: String(annual.id), reason: 'x' }))).toEqual({ error: "Échéance d'une revue de direction : annulez la revue depuis sa carte." });
     const nc = await planItem('[Fourn. F] · NC');
-    expect(await saveFinding({}, form({ planItemId: String(nc.id), kind: 'piste', text: 'Relancer le plan d’actions du fournisseur' }))).toMatchObject({ ok: true });
+    // AUD-11 : pas de constat sur un audit non réalisé ; constat d'une base antérieure simulé en base.
+    expect(await saveFinding({}, form({ planItemId: String(nc.id), kind: 'piste', text: 'Relancer le plan d’actions du fournisseur' })))
+      .toMatchObject({ fieldErrors: { planItemId: 'Choisissez un audit réalisé.' } });
+    await (await getDb()).insert(t.auditFindings).values({ audit: 'NC fournisseur', planItemId: nc.id, kind: 'piste', text: 'Relancer le plan d’actions du fournisseur', foundOn: '2026-10-01' });
     expect(await cancelPlanItem({}, form({ id: String(nc.id), reason: 'x' })))
       .toEqual({ error: "Des constats ou un rapport sont rattachés à cet audit : l'audit a eu lieu, déclarez-le réalisé." });
     const db = await getDb();

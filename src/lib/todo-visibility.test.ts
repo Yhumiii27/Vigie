@@ -37,7 +37,8 @@ describe('responsable sans accès à l’écran source (TDB-02)', () => {
     expect(x.key).toBe(todoKey(src));
     expect(x.key).toContain('/audits?constat=3');
     const keyed = mine({ key: 'clé-propre' });
-    expect(visibleTodo([keyed], as('Chef de service'))[0].key).toBe('clé-propre');
+    expect(visibleTodo([keyed], as('Chef de service'))[0].key).toBe(todoKey(keyed));
+    expect(todoKey(keyed).startsWith('clé-propre|')).toBe(true);
   });
 
   it('un non-responsable sans accès à l’écran ne la voit pas', () => {

@@ -733,13 +733,14 @@ export type PreventionData = Awaited<ReturnType<typeof loadPrevention>>;
 
 /**
  * Indicateur calculé pour la veille réglementaire (exigence du domaine PREVENTION_REQUIREMENT_DOMAIN, R. 4512-6) :
- * interventions sans plan signé en cours et écarts passés sur 12 mois (PRV-01), sur le site sélectionné, même calcul que
- * l'écran. gapCount compte les deux ; l'évaluation de conformité reste un jugement du pilote, affiché à côté.
+ * interventions sans plan signé en cours et écarts passés sur 12 mois (PRV-01), sur tout le périmètre de la personne
+ * (VEI-06 : l'exigence vaut pour l'entreprise, quel que soit le site sélectionné), même calcul que l'écran. gapCount compte
+ * les deux ; l'évaluation de conformité reste un jugement du pilote, affiché à côté.
  */
 export const loadPreventionCompliance = cache(async (): Promise<{
   gapCount: number; currentGapCount: number; pastGapCount: number; label: string; tone: Tone; href: string;
 }> => {
-  const { gapCount: current, pastGapCount: past } = gapSummary(await loadRows());
+  const { gapCount: current, pastGapCount: past } = gapSummary(await loadRows('perimeter'));
   const pastLabel = `${plural(past, 'écart passé', 'écarts passés')} sur 12 mois`;
   return {
     gapCount: current + past,
@@ -782,18 +783,18 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const kind = 'Plan de prévention';
     const siteId = p.siteId;
     if (gaps.planGaps.has(p.id)) {
-      todo.push({ date: now, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
+      todo.push({ date: now, dueOn: p.startOn, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
       return;
     }
     if (p.endOn < now) {
-      todo.push({ date: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
+      todo.push({ date: p.endOn, dueOn: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
       return;
     }
     const toSignBeforeStart = p.startOn > now && p.startOn <= horizon && isMandatory(p, ruleOf(p.siteId)) && !isFullySigned(p);
     if (toSignBeforeStart) {
-      todo.push({ date: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds, siteId });
+      todo.push({ date: p.startOn, dueOn: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds, siteId });
     } else if (!isFullySigned(p) && p.inspectionOn && p.inspectionOn > now && p.inspectionOn <= horizon) {
-      todo.push({ date: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
+      todo.push({ date: p.inspectionOn, dueOn: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
     }
   });
   permits.forEach((p) => {
@@ -823,7 +824,7 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const { from } = permitDays(p);
     if (p.status === 'demande' && from <= horizon) {
       const validity = fmtLocalRange(toParisLocal(p.validFrom), toParisLocal(p.validTo));
-      todo.push({ date: from > now ? from : now, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
+      todo.push({ date: from > now ? from : now, dueOn: from, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
     }
   });
 

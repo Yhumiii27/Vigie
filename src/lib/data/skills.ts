@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { lapseFor, period, type Lapse } from '@/components/skills/rules';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
@@ -19,8 +19,8 @@ export type TrainingTitle = typeof t.trainingTitles.$inferSelect;
 export type KeystoneAssignment = typeof t.keystoneAssignments.$inferSelect;
 
 /**
- * Action de recyclage reprise, rattachée à l'exigence (qualification_requirements.renewalActionId), tant qu'elle n'est
- * pas close (Vérifiée ou Abandonnée). Consultation seule : depuis les réponses du service QHSE du 15/10/2026, aucun
+ * Action de recyclage reprise, portée par l'action (actions.qualification_person_id / qualification_title_id, HAB-04) :
+ * `renewal` tant qu'elle n'est pas close (Vérifiée ou Abandonnée), puis dans `pastRenewals`. Consultation seule : depuis les réponses du service QHSE du 15/10/2026, aucun
  * recyclage ni formation ne donne lieu à une action QSE (le service RH les gère) ; seules les actions d'une base reprise
  * restent rattachées, et le service QHSE les clôt ou les abandonne dans le plan d'actions.
  */
@@ -70,8 +70,10 @@ export type SkillCell = {
   files: AttachmentItem[];
   /** Toutes les formations de la case, annulées comprises, de la plus récente à la plus ancienne. */
   history: QualificationEntry[];
-  /** Action de recyclage reprise encore rattachée (consultation seule, voir RenewalInfo). */
+  /** Action de recyclage reprise encore ouverte (consultation seule, voir RenewalInfo). */
   renewal: RenewalInfo | null;
+  /** Actions de recyclage reprises closes (Vérifiées ou Abandonnées) de la case, la plus récente d'abord (HAB-04). */
+  pastRenewals: RenewalInfo[];
 };
 
 export type SkillRow = {
@@ -129,27 +131,31 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const titles = allTitles.filter((ti) => !ti.archivedAt);
   const archivedTitles = allTitles.filter((ti) => ti.archivedAt);
 
-  const renewalIds = [...new Set(reqs.map((r) => r.renewalActionId).filter((id): id is string => !!id))];
   const qualIds = quals.map((q) => String(q.id));
   const [renewalActions, files] = await Promise.all([
-    renewalIds.length ? db.select().from(t.actions).where(inArray(t.actions.id, renewalIds)) : [],
+    db.select().from(t.actions).where(and(isNotNull(t.actions.qualificationPersonId), isNotNull(t.actions.qualificationTitleId)))
+      .orderBy(desc(t.actions.openedOn), desc(t.actions.id)),
     qualIds.length
       ? db.select().from(t.attachments).where(and(eq(t.attachments.entityType, 'qualification'), inArray(t.attachments.entityId, qualIds))).orderBy(asc(t.attachments.createdAt))
       : [],
   ]);
-  const renewals = new Map<string, RenewalInfo>();
+  // Actions de recyclage reprises par case (« personne:titre »), la plus récente d'abord : ouverte et closes (HAB-04).
+  const renewals = new Map<string, { open: RenewalInfo | null; past: RenewalInfo[] }>();
   renewalActions.forEach((a) => {
-    if (isClosedActionStatus(a.status)) return;
-    const planned = a.status !== 'terminee';
+    const key = `${a.qualificationPersonId}:${a.qualificationTitleId}`;
+    const slot = renewals.get(key) ?? { open: null, past: [] };
+    renewals.set(key, slot);
+    const closed = isClosedActionStatus(a.status);
+    const planned = !closed && a.status !== 'terminee';
+    let info: RenewalInfo;
     if (!canReadAction(session.role, session.user.id, a, session.allowedSiteIds)) {
-      renewals.set(a.id, { id: a.id, label: '', dueOn: '', status: '', statusLabel: 'Action QSE reprise', tone: 'neutral', pilot: '', planned, readable: false });
-      return;
+      info = { id: a.id, label: '', dueOn: '', status: '', statusLabel: 'Action QSE reprise', tone: 'neutral', pilot: '', planned, readable: false };
+    } else {
+      const v = actionView(a, people, now);
+      info = { id: a.id, label: v.label, dueOn: a.dueOn, status: a.status, statusLabel: v.statusLabel, tone: v.tone, pilot: v.pilot, planned, readable: true };
     }
-    const v = actionView(a, people, now);
-    renewals.set(a.id, {
-      id: a.id, label: v.label, dueOn: a.dueOn, status: a.status, statusLabel: v.statusLabel, tone: v.tone,
-      pilot: v.pilot, planned, readable: true,
-    });
+    if (closed) slot.past.push(info);
+    else slot.open ??= info;
   });
 
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '—' : '—');
@@ -204,7 +210,9 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
           provider: q?.provider ?? null,
           files: q?.files ?? [],
           history: entries,
-          renewal: r?.renewalActionId ? renewals.get(r.renewalActionId) ?? null : null,
+          // Recyclage ouvert : seulement tant que le titre est requis (comme avant HAB-04) ; les recyclages clos restent listés.
+          renewal: r ? renewals.get(key)?.open ?? null : null,
+          pastRenewals: renewals.get(key)?.past ?? [],
         };
       }),
     };
@@ -289,15 +297,15 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
       const action = c.renewal ? ` · action ${c.renewal.id}${c.renewal.readable ? ` (${lcfirst(c.renewal.statusLabel)})` : ''}` : '';
       const suffix = `${a ? `, affecté à ${project} ${period(a.startOn, a.endOn)}` : ''}${action}`;
       if (c.state === 'x') {
-        todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} expiré depuis le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
+        todo.push({ ...base, date: now, dueOn: c.expiresOn!, tone: 'danger', overdue: true, title: `${name} expiré depuis le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
       } else if (c.state === 'r') {
         todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} jamais suivi${suffix}` });
       } else if (c.state === 's') {
         // Recyclage à la veille d'une affectation seulement si le titre ne la couvre pas ; sinon l'échéance du titre.
         const date = [c.expiresOn, eve].filter(inWindow).sort()[0];
-        if (date) todo.push({ ...base, date, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
+        if (date) todo.push({ ...base, date, dueOn: c.expiresOn!, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
       } else if (a && inWindow(eve)) {
-        todo.push({ ...base, date: eve, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}, avant la fin de l'affectation ${project}${action}` });
+        todo.push({ ...base, date: eve, dueOn: c.expiresOn!, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}, avant la fin de l'affectation ${project}${action}` });
       }
     });
   });

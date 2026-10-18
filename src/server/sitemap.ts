@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { isPlanEnded, planCovers, planStatus } from '@/components/prevention/model';
+import { isPlanEnded, permitActivityBlocker, planCovers, planStatus } from '@/components/prevention/model';
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/components/sitemap/coactivity';
 import { DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KIND_KEYS, SITE_MAP_ATTACHMENT, ZONE_KIND_KEYS, isRealDate } from '@/components/sitemap/model';
 import { findConflict, zoneAt } from '@/lib/data/sitemap';
@@ -325,6 +325,13 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   if (permitId) {
     if (!permit || permit.siteId !== siteId) f.fail('permitId', 'Permis introuvable sur ce site.');
     else if (permit.contractorId && permit.contractorId !== contractorId) f.fail('permitId', 'Ce permis concerne une autre entreprise.');
+    else {
+      // PRV-11 : permis en vigueur et valable pendant l'activité (un rattachement existant reste admis s'il est clos).
+      const blocked = permitActivityBlocker(permit, startOn, endOn, {
+        keptLink: permit.id === existing?.permitId, datesChanged: !!existing && (existing.startOn !== startOn || existing.endOn !== endOn),
+      });
+      if (blocked) f.fail('permitId', blocked);
+    }
   }
   if (!f.ok) return f.state();
 

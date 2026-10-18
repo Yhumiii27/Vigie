@@ -163,6 +163,14 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
             <RenewalLink renewal={cell.renewal} />
           </Fact>
         )}
+        {cell.pastRenewals.length > 0 && (
+          // HAB-04 : les anciens recyclages repris gardent leur lien vers la case.
+          <Fact label="Actions de recyclage précédentes" wide>
+            <span style={{ display: 'grid', gap: 4 }}>
+              {cell.pastRenewals.map((r) => <RenewalLink key={r.id} renewal={r} showDue={false} />)}
+            </span>
+          </Fact>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>

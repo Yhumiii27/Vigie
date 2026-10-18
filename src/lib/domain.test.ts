@@ -216,8 +216,26 @@ describe('échéances', () => {
   it('tri : dépassements d’abord, puis par date ; clé stable', () => {
     const list = [item({ date: '2026-10-12' }), item({ date: '2026-10-20', overdue: true }), item({ date: '2026-10-10' })];
     expect(list.sort(byUrgency).map((t) => t.date)).toEqual(['2026-10-20', '2026-10-10', '2026-10-12']);
-    expect(todoKey(item({ href: '/actions?action=A-1' }))).toBe('Action|/actions?action=A-1|T');
-    expect(todoKey(item({ key: 'site-lead|ville-b' }))).toBe('site-lead|ville-b');
+    expect(todoKey(item({ href: '/actions?action=A-1' }))).toBe('Action|/actions?action=A-1|T|warn');
+    expect(todoKey(item({ key: 'site-lead|ville-b' }))).toBe('site-lead|ville-b|warn');
+  });
+  it('TDB-07 : retards triés par ancienneté (date d’échéance réelle), tous datés du jour', () => {
+    const late = (dueOn: string, title: string) => item({ date: '2026-10-09', overdue: true, tone: 'danger', dueOn, title });
+    const list = [late('2026-10-01', 'récent'), item({ date: '2026-10-11', dueOn: '2026-10-11', title: 'à venir' }), late('2026-08-15', 'ancien'), late('2026-09-20', 'moyen')];
+    expect(list.sort(byUrgency).map((t) => t.title)).toEqual(['ancien', 'moyen', 'récent', 'à venir']);
+  });
+  it('TDB-07 : clé d’état lu avec gravité et date d’échéance ; un retard garde sa clé de jour en jour', () => {
+    const upcoming = item({ href: '/veille?controle=1', title: 'VGP', tone: 'warn', date: '2026-10-20', dueOn: '2026-10-20' });
+    expect(todoKey(upcoming)).toBe('Action|/veille?controle=1|VGP|warn|2026-10-20');
+    // Aggravée (dépassée) : nouvelle clé, l'échéance redevient non lue.
+    const overdue = { ...upcoming, tone: 'danger' as const, overdue: true, date: '2026-10-21' };
+    expect(todoKey(overdue)).not.toBe(todoKey(upcoming));
+    // Le lendemain, même retard : même clé (la date du jour n'y figure pas).
+    expect(todoKey({ ...overdue, date: '2026-10-22' })).toBe(todoKey(overdue));
+    // Récurrente (contrôle suivant) : nouvelle date, nouvelle clé.
+    expect(todoKey({ ...upcoming, dueOn: '2027-04-20', date: '2027-04-20' })).not.toBe(todoKey(upcoming));
+    // Élément sans date propre : clé sans date, stable.
+    expect(todoKey(item({ key: 'papripact|2026|cse', date: '2026-10-09' }))).toBe(todoKey(item({ key: 'papripact|2026|cse', date: '2026-10-10' })));
   });
 });
 

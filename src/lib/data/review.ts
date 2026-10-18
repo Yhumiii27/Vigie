@@ -7,15 +7,16 @@ import { today } from '@/lib/today';
 import {
   ACTION_SOURCES, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, FINDING_KINDS, NC_ORIGINS, PLAN_ITEM_STATES, REQUIREMENT_EVAL, REVIEW_AUTO_OWNER,
   REVIEW_CLOSE_DAYS, REVIEW_DECISION_KINDS, REVIEW_FOLLOW_UP, REVIEW_KINDS, REVIEW_SOURCES, REVIEW_STATUS, RISK_ACTION_THRESHOLD, SOURCE_KEYS,
-  TODO_HORIZON_DAYS, canApprove, canEdit, canReadReviewDossier, canSee, isClosedActionStatus, isEmployee, isOpenAvancement, type ReviewDecisionKind,
+  TODO_HORIZON_DAYS, canApprove, canSignReview, canEdit, canReadReviewDossier, canSee, isClosedActionStatus, isEmployee, isOpenAvancement, type ReviewDecisionKind,
   type ReviewKind, type ReviewSource, type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
 import {
   actionBrief, certificationStatus, controlStatus, isOpen, lastFullMonths, loadActions, loadAllActions, loadControls,
-  loadEvents, loadPeople, safetyRates, workforceAccident, type ActionBrief, type ActionRow, type Person,
+  loadEvents, loadPeople, requirementDue, safetyRates, workforceAccident, type ActionBrief, type ActionRow, type Person,
 } from '../queries';
 import { SOURCE_TO_COMPLETE, actionHref, actionLabel, canCreateAction, isLate } from '../action-rules';
 import type { ActionFormOptions } from '../action-view';
+import { reviewCloseBlockers } from '../review-rules';
 import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { planItemAuditLabel, planItemState } from './audits';
@@ -311,6 +312,8 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
     /** Service QHSE : création des actions des décisions et de la revue (ACT-22). */
     canCreateActions: createActions,
     canApprove: canApprove(session.role),
+    /** Visa de la direction (clôture) : la direction seulement (AUD-15). */
+    canSign: canSignReview(session.role),
     /** Dossier consolidé (/revue-de-direction) : animateur QHSE et direction (AUD-02). */
     canDossier: canReadReviewDossier(session.role),
     userId: session.user.id,
@@ -319,7 +322,7 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   if (!current) {
     return { now, review: null, reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
       defaults: { nextOn: addMonths(now, 1), holdNext: { on: addMonths(now, 1), kind: 'ordinaire' as ReviewKind }, originRef: '', copyFrom: null },
-      flags: { ...flags, editable: false, mine: false } };
+      flags: { ...flags, editable: false, mine: false, closeBlockers: [] as string[] } };
   }
   const [rec, changes, programme] = await Promise.all([readReviewRecord(current, reviews), loadChangeLog('review', current.id), reviewProgramme(current.id, now)]);
   const previous = rec.prior[0] ?? null;
@@ -353,7 +356,11 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
       originRef: `Revue de direction ${fmtDate(current.reviewOn)}`,
       copyFrom: current.id,
     },
-    flags: { ...flags, editable, mine: items.some((i) => i.ownerId === session.user.id) },
+    flags: {
+      ...flags, editable, mine: items.some((i) => i.ownerId === session.user.id),
+      /** Contrôles avant le visa (AUD-14), affichés à la place du bouton de clôture. */
+      closeBlockers: current.status === 'tenue' ? reviewCloseBlockers({ ...current, participantIds: current.participantIds as string[] }, rec.decisions) : [],
+    },
   };
 }
 export type ReviewCardData = Awaited<ReturnType<typeof loadReviewCard>>;
@@ -677,9 +684,11 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   const liveReqs = reqs.filter((r) => !r.archivedAt);
   const requirements = liveReqs.map((r) => {
     const ev = REQUIREMENT_EVAL[r.evaluation] ?? { label: r.evaluation, tone: 'neutral' as Tone };
+    // VEI-03 : exigence suivie par des contrôles : échéance du prochain contrôle rattaché.
+    const due = requirementDue(r, controls);
     return {
       id: r.id, text: r.text, domain: r.domain, evalLabel: ev.label, evalNote: r.evaluationNote, tone: ev.tone, lastEvaluatedOn: r.lastEvaluatedOn,
-      dueOn: r.dueOn, dueNote: r.dueNote, pilot: name(r.pilotId), action: briefOf(r.actionId), href: `/veille?exigence=${r.id}`,
+      dueOn: due.on, dueNote: due.control ? 'prochain contrôle' : r.dueNote, pilot: name(r.pilotId), action: briefOf(r.actionId), href: `/veille?exigence=${r.id}`,
     };
   });
   const requirementCounts = Object.entries(REQUIREMENT_EVAL).map(([key, ev]) => ({ key, label: ev.label, tone: ev.tone, n: liveReqs.filter((r) => r.evaluation === key).length }));
@@ -868,16 +877,16 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
       const ownerIds = i.ownerId ? [i.ownerId] : qhse.ownerIds;
       const links = { href, ...(i.ownerId ? { readHref: `/audits/contributions?revue=${r.id}` } : {}) };
       if (i.dueOn! < now) {
-        todo.push({ date: now, kind, tone: 'danger', title: `${i.label} — attendu le ${fmtDayMonth(i.dueOn!)} · revue du ${day}`, who, ...links, ownerIds, overdue: true, siteId: null });
+        todo.push({ date: now, dueOn: i.dueOn!, kind, tone: 'danger', title: `${i.label} — attendu le ${fmtDayMonth(i.dueOn!)} · revue du ${day}`, who, ...links, ownerIds, overdue: true, siteId: null });
       } else if (i.dueOn! <= horizon) {
-        todo.push({ date: i.dueOn!, kind, tone: 'warn', title: `${i.label} · revue du ${day}`, who, ...links, ownerIds, siteId: null });
+        todo.push({ date: i.dueOn!, dueOn: i.dueOn!, kind, tone: 'warn', title: `${i.label} · revue du ${day}`, who, ...links, ownerIds, siteId: null });
       }
     });
     if (r.status === 'planifiee' && r.reviewOn < now) {
-      todo.push({ date: now, kind, tone: 'danger', title: `Revue de direction du ${day} — compte rendu à saisir`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
+      todo.push({ date: now, dueOn: r.reviewOn, kind, tone: 'danger', title: `Revue de direction du ${day} — compte rendu à saisir`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
     }
     if (r.status === 'tenue' && addDays(r.reviewOn, REVIEW_CLOSE_DAYS) < now) {
-      todo.push({ date: now, kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
+      todo.push({ date: now, dueOn: addDays(r.reviewOn, REVIEW_CLOSE_DAYS), kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
     }
   });
   return { todo };

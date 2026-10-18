@@ -276,6 +276,13 @@ describe('migration 0005 — base de démonstration 0004', () => {
     }
     const risks = await base.db.select().from(t.riskActions);
     expect(risks.map((r) => `${r.riskId}:${r.actionId}`).sort()).toEqual((fixture.tables.risk_actions as Row[]).map((r) => `${r.risk_id}:${r.action_id}`).sort());
+    // HAB-04 (0007) : le recyclage repris passe de l'exigence à l'action (case de la matrice conservée).
+    const renewals = (fixture.tables.qualification_requirements as Row[]).filter((r) => r.renewal_action_id);
+    expect(renewals.length).toBeGreaterThan(0);
+    for (const r of renewals) {
+      expect(action(String(r.renewal_action_id))).toMatchObject({ qualificationPersonId: r.person_id, qualificationTitleId: r.title_id });
+    }
+    expect((await base.db.select().from(t.actions)).filter((a) => a.qualificationPersonId).map((a) => a.id)).toEqual(renewals.map((r) => r.renewal_action_id));
   });
 
   it('données des autres tables inchangées (nombre de lignes)', async () => {

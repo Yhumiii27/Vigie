@@ -8,7 +8,7 @@ import { planStart, relabelDay, reviewSlot } from '@/lib/data/audits';
 import { fmtDate, fmtDayMonth, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
-  REVIEW_DECISION_KEYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_KIND_KEYS, REVIEW_SOURCES, REVIEW_SOURCE_KEYS, canEdit,
+  REVIEW_DECISION_KEYS, REVIEW_DECISION_KINDS, REVIEW_KINDS, REVIEW_KIND_KEYS, REVIEW_SOURCES, REVIEW_SOURCE_KEYS, canEdit, canSignReview,
   type ReviewKind, type ReviewSource,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
@@ -17,6 +17,7 @@ import { ALL_SITES, getSession } from '@/lib/session';
 import {
   buildReviewDossier, followingReview, isEditableReview, parseReviewSnapshot, reviewRecordParts, withRecordParts, type Review, type ReviewSnapshot,
 } from '@/lib/data/review';
+import { reviewCloseBlockers } from '@/lib/review-rules';
 import { diffFields, logChange } from './changelog';
 
 type Result = { error?: string };
@@ -24,6 +25,7 @@ type PlanRow = typeof t.auditPlanItems.$inferSelect;
 
 const DENIED = 'Votre rôle ne permet pas cette modification.';
 const NOT_FOUND = 'Revue introuvable.';
+const SIGNER_ONLY = 'Visa réservé à la direction.';
 /** Dossier de séance et dossier du visa : tout le périmètre (AUD-06). */
 const SEANCE_ALL_SITES = 'Sélectionnez « Tous les sites » : le dossier de séance, figé à la saisie du compte rendu, couvre tout le périmètre.';
 
@@ -36,7 +38,14 @@ async function requireReviewEditor() {
   return canEdit(r.session.role, 'audits') ? r : { ...r, error: DENIED };
 }
 
-/** Clôture (visa de la direction) et annulation : animateur QHSE et direction. */
+/** Visa de la direction (clôture, dossier figé) : la direction seulement (AUD-15). */
+async function requireReviewSigner() {
+  const r = await requireApprover();
+  if (r.error) return r;
+  return canSignReview(r.session.role) && canEdit(r.session.role, 'audits') ? r : { ...r, error: SIGNER_ONLY };
+}
+
+/** Annulation d'une revue planifiée : animateur QHSE et direction. */
 async function requireReviewApprover() {
   const r = await requireApprover();
   if (r.error) return r;
@@ -345,7 +354,7 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
  * indicateurs arrêtés à la date de la séance (AUD-06).
  */
 export async function closeReview(id: number): Promise<Result> {
-  const { error, session } = await requireReviewApprover();
+  const { error, session } = await requireReviewSigner();
   if (error) return { error };
   if (!validId(id)) return { error: NOT_FOUND };
   if (session.site.id !== ALL_SITES) return { error: 'Sélectionnez « Tous les sites » : le dossier archivé couvre tout le périmètre.' };
@@ -353,7 +362,11 @@ export async function closeReview(id: number): Promise<Result> {
   const reviews: Review[] = await db.select().from(t.reviews);
   const review = reviews.find((r) => r.id === id);
   if (!review) return { error: NOT_FOUND };
-  if (review.status !== 'tenue') return { error: 'Saisissez le compte rendu avant de clôturer la revue.' };
+  // AUD-14 : compte rendu complet (participants, synthèse) et décisions pilotées avant le visa.
+  const decisions = await db.select({ text: t.reviewDecisions.text, pilotId: t.reviewDecisions.pilotId }).from(t.reviewDecisions)
+    .where(eq(t.reviewDecisions.reviewId, review.id));
+  const blockers = reviewCloseBlockers({ ...review, participantIds: review.participantIds as string[] }, decisions);
+  if (blockers.length) return { error: blockers.join(' ') };
 
   const now = today();
   const seance = parseReviewSnapshot(review.snapshot);

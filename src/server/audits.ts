@@ -209,6 +209,11 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
     f.fail('plannedOn', `La date prévue doit tomber en ${monthName(month)} ${year}.`);
   }
   if (doneOnInput && doneOnInput > now) f.fail('doneOn', 'Date de réalisation future.');
+  // AUD-11 : une date « Réalisé le » sans la case cochée n'est jamais perdue en silence (sauf la date déjà enregistrée
+  // d'un élément dont on annule la réalisation).
+  if (doneOnInput && !done && !(before?.done && before.doneOn === doneOnInput)) {
+    f.fail('doneOn', "Cochez « Réalisé » pour enregistrer cette date, ou effacez-la.");
+  }
   if (review && files.length) f.fail('report', "Une revue de direction ne porte pas de rapport d'audit.");
   checkFiles(f, 'report', files);
   if (!f.ok) return f.state();
@@ -443,6 +448,14 @@ export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormS
   if (planItemId) {
     const [item] = await db.select().from(t.auditPlanItems).where(eq(t.auditPlanItems.id, planItemId));
     if (!item || isReviewPlanItem(item)) return { error: 'Audit introuvable.', fieldErrors: { planItemId: 'Choisissez un audit du programme.' } };
+    // AUD-11 : un constat se rattache à un audit réalisé (en vigueur) ; un constat déjà rattaché garde son audit.
+    const kept = before?.planItemId === item.id;
+    if (!kept && (item.cancelledAt || !item.done)) {
+      return {
+        error: item.cancelledAt ? 'Audit annulé : choisissez un autre audit.' : "Cet audit n'est pas réalisé : déclarez-le réalisé dans le programme avant d'en saisir les constats.",
+        fieldErrors: { planItemId: 'Choisissez un audit réalisé.' },
+      };
+    }
     audit = planItemAuditLabel(item);
     foundOn ??= item.doneOn ?? item.plannedOn;
   }

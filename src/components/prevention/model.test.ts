@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   PLAN_CONTENT, START_GAP_LABEL,
-  addHoursLocal, firstFullSignatureOn, fmtLocalRange, fmtPeriod, fromParisLocal, fullSignatureOn, inGapWindow, isInProgress, isMandatory, lacksSignedPlan,
+  activityLinkIssues, addHoursLocal, firstFullSignatureOn, fmtLocalRange, fmtPeriod, fromParisLocal, fullSignatureOn, inGapWindow, isInProgress, isMandatory, lacksSignedPlan,
   lcfirst, legalReason, mandatoryReason, missingPlanContent, missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan,
-  permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
+  permitActivityBlocker, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
   toParisLocal, validityOver, type PlanContent, type SiteRule,
 } from './model';
 
@@ -271,5 +271,34 @@ describe('dates et heures (Europe/Paris)', () => {
     expect(fmtLocalRange('2026-10-06T08:00', '2026-10-09T18:00')).toBe('06/10 08:00 → 09/10 18:00');
     expect(fmtPeriod('2026-10-05', '2026-10-09')).toBe('du 05/10 au 09/10/2026');
     expect(fmtPeriod('2025-12-29', '2026-01-02')).toBe('du 29/12/2025 au 02/01/2026');
+  });
+});
+
+describe('PRV-11 : activités de la carte rattachées à un plan ou à un permis', () => {
+  const act = (id: number, startOn: string, endOn: string, over: Partial<{ siteId: string; contractorId: string | null }> = {}) =>
+    ({ id, title: `A${id}`, siteId: 'ville-a', contractorId: 'EE-001', startOn, endOn, ...over });
+  it('plan : site, entreprise et période qui couvre chaque activité', () => {
+    const list = [act(1, '2026-10-05', '2026-10-09'), act(2, '2026-10-12', '2026-10-12', { contractorId: null }), act(3, '2026-10-01', '2026-10-02', { siteId: 'ville-b' })];
+    const r = activityLinkIssues({ siteId: 'ville-a', contractorId: 'EE-004', from: '2026-10-06', to: '2026-10-12' }, list, 'all');
+    expect(r.site.map((a) => a.id)).toEqual([3]);
+    expect(r.contractor.map((a) => a.id)).toEqual([1, 3]); // activité sans entreprise : jamais en conflit
+    expect(r.period.map((a) => a.id)).toEqual([1, 3]);
+    expect(activityLinkIssues({ siteId: 'ville-a', contractorId: 'EE-001', from: '2026-10-05', to: '2026-10-12' }, list.slice(0, 2), 'all'))
+      .toEqual({ site: [], contractor: [], period: [] });
+  });
+  it('permis : sa validité recoupe chaque activité (un jour suffit)', () => {
+    const list = [act(1, '2026-10-05', '2026-10-09'), act(2, '2026-10-12', '2026-10-13')];
+    expect(activityLinkIssues({ siteId: 'ville-a', contractorId: null, from: '2026-10-09', to: '2026-10-09' }, list, 'overlap').period.map((a) => a.id)).toEqual([2]);
+  });
+  it('rattacher un permis : en vigueur et valable un jour de l’activité ; un rattachement existant reste admis', () => {
+    const permit = { id: 'PF-1', status: 'delivre', validFrom: paris('2026-10-05T13:30'), validTo: paris('2026-10-05T17:00') };
+    const fresh = { keptLink: false, datesChanged: false };
+    expect(permitActivityBlocker(permit, '2026-10-05', '2026-10-05', fresh)).toBeNull();
+    expect(permitActivityBlocker(permit, '2026-10-06', '2026-10-08', fresh)).toBe("Le permis PF-1 est valable du 05/10 au 05/10/2026 : il ne couvre aucun jour de l'activité.");
+    expect(permitActivityBlocker({ ...permit, status: 'clos' }, '2026-10-05', '2026-10-05', fresh)).toBe('Le permis PF-1 est clos : demandez un nouveau permis.');
+    expect(permitActivityBlocker({ ...permit, status: 'annule' }, '2026-10-05', '2026-10-05', fresh)).toBe('Le permis PF-1 est annulé : demandez un nouveau permis.');
+    // Permis déjà rattaché, désormais clos : l'activité se modifie encore, tant que ses dates ne sortent pas de la validité.
+    expect(permitActivityBlocker({ ...permit, status: 'clos' }, '2026-10-06', '2026-10-08', { keptLink: true, datesChanged: false })).toBeNull();
+    expect(permitActivityBlocker({ ...permit, status: 'clos' }, '2026-10-06', '2026-10-08', { keptLink: true, datesChanged: true })).toMatch(/ne couvre aucun jour/);
   });
 });

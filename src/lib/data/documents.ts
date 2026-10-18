@@ -292,6 +292,7 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
     .filter((r) => r.nextReviewOn && (r.overdue || r.dueSoon))
     .map((r) => ({
       date: r.overdue ? now : r.nextReviewOn!,
+      dueOn: r.nextReviewOn!,
       kind: 'Revue documentaire',
       tone: r.overdue ? 'danger' : 'warn',
       overdue: r.overdue,

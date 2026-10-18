@@ -145,7 +145,9 @@ describe('clôture d’un AT sans déclaration CPAM (EVT-02)', () => {
     actAs('Animateur QHSE', 'ville-a');
     id = await created({ type: 'AT', injury: 'arret', victimKind: 'salarie', victimId: 'mgirard', circumstances: 'Chute de plain-pied.' });
     const db = await getDb();
-    await db.update(t.events).set({ step: 4 }).where(eq(t.events.id, id));
+    await db.update(t.events).set({ step: 4, analysisMethod: '5m' }).where(eq(t.events.id, id));
+    // Analyse des causes exigée à la clôture (EVT-11).
+    await db.insert(t.eventAnalyses).values({ eventId: id, method: '5m', content: [['Milieu', 'Sol glissant']] });
     await db.insert(t.actions).values({
       id: 'A-960', detail: 'Baliser le passage', source: 'evenement', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali',
       openedOn: '2026-10-09', dueOn: '2026-10-20', initialDueOn: '2026-10-20', status: 'verifiee', doneOn: '2026-10-09', closedOn: '2026-10-09',

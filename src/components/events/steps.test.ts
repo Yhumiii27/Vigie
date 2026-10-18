@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AT_CLOSE_RESTRICTED, LOCATION_UNSPECIFIED, addActionBlocker, advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty,
+  AT_CLOSE_RESTRICTED, LOCATION_UNSPECIFIED, addActionBlocker, advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty,
   eventLockReason, mentionsInjury, missingQualification, needsCpam, neutralAccidentTitle, normalizeTree, qualificationInput, readD8, victimLabel, type DeclarationDuty, type QualifiableEvent,
 } from './shared';
 
@@ -194,5 +194,20 @@ describe('analyse des causes', () => {
     expect(analysisFilled('8d', { current: 2 })).toBe(true);
     expect(analysisFilled('why', null)).toBe(false);
     expect(readD8({ current: 12, notes: ['a', 3] })).toEqual({ current: 8, notes: ['a', ''] });
+  });
+});
+
+describe('EVT-11 : analyse des causes après l’étape « Actions »', () => {
+  it('analyse retenue : ni vidée ni remplacée par une méthode vide à partir de « Actions »', () => {
+    expect(analysisChangeBlocker(2, false, 'clear')).toBeNull();
+    expect(analysisChangeBlocker(3, true, 'clear')).toBeNull();
+    expect(analysisChangeBlocker(3, false, 'clear')).toBe("Événement à l'étape « Actions » : l'analyse des causes ne peut plus être vidée (modifiez-la plutôt).");
+    expect(analysisChangeBlocker(4, true, 'method')).toBeNull();
+    expect(analysisChangeBlocker(4, false, 'method')).toMatch(/^Événement à l'étape « Efficacité vérifiée » : la méthode d'analyse ne change que pour une méthode déjà renseignée/);
+  });
+  it('clôture : analyse exigée, après les autres contrôles', () => {
+    expect(advanceBlocker(4, [done], { ...ctx, hasAnalysis: false })).toBe("Analyse des causes (méthode « Arbre des causes ») vide : saisissez-la avant la clôture.");
+    expect(advanceBlocker(4, [open], { ...ctx, hasAnalysis: false })).toMatch(/n'est pas encore vérifiée/);
+    expect(advanceBlocker(3, [done], { ...ctx, hasAnalysis: false })).toBeNull();
   });
 });

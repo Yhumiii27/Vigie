@@ -40,7 +40,7 @@ describe('jeu de démonstration du plan d’actions QSE (base neuve)', () => {
     const retired = [...RETIRED_DEMO_ACTIONS] as string[];
     expect(await db.select().from(t.actions).where(isNotNull(t.actions.preventionPlanId))).toEqual([]);
     expect(await db.select().from(t.actions).where(isNotNull(t.actions.permitId))).toEqual([]);
-    expect(await db.select().from(t.qualificationRequirements).where(isNotNull(t.qualificationRequirements.renewalActionId))).toEqual([]);
+    expect(await db.select().from(t.actions).where(isNotNull(t.actions.qualificationPersonId))).toEqual([]);
     expect(await db.select().from(t.changeLog).where(and(eq(t.changeLog.entityType, 'action'), inArray(t.changeLog.entityId, retired)))).toEqual([]);
   });
 

@@ -159,7 +159,8 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     actAs('Animateur QHSE', 'ville-b');
     const badge = (await loadPreventionSignals()).badge;
     expect(await kpi(GAP_KPI)).toMatchObject({ value: '0', sub: 'conforme', tone: 'ok' });
-    expect(await loadPreventionCompliance()).toMatchObject({ gapCount: 0, tone: 'ok', label: 'Aucun écart R. 4512-6 sur 12 mois' });
+    // VEI-06 : l'indicateur de la veille couvre tout le périmètre (site A compris), quel que soit le site sélectionné.
+    expect(await loadPreventionCompliance()).toMatchObject({ gapCount: 3, currentGapCount: 2, pastGapCount: 1 });
 
     await setPlan('PP-2026-012', { signedEuOn: '2026-09-22', signedEeOn: '2026-09-22', firstSignedOn: '2026-09-22' }); // début le 21/09
     expect(await kpi(GAP_KPI)).toMatchObject({ value: '1', sub: 'aucun en cours', tone: 'warn', note: '1 plan signé après le démarrage (PP-2026-012)' });
@@ -171,8 +172,8 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     }]);
     expect(d.kpis.find((k) => k.label === 'Interventions sans plan signé')).toMatchObject({ value: '0' });
     expect(await loadPreventionCompliance()).toEqual({
-      gapCount: 1, currentGapCount: 0, pastGapCount: 1, tone: 'warn', href: '/prevention',
-      label: 'Aucune intervention en cours sans plan signé · 1 écart passé sur 12 mois',
+      gapCount: 4, currentGapCount: 2, pastGapCount: 2, tone: 'danger', href: '/prevention',
+      label: '2 interventions sans plan signé · 2 écarts passés sur 12 mois',
     });
     const signals = await loadPreventionSignals();
     expect(signals.badge).toBe(badge);
@@ -243,6 +244,11 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect((await plan('PP-2026-013')).startOn).toBe('2026-10-05');
 
     actAs('Animateur QHSE', 'ville-a');
+    // PRV-11 : l'activité de la carte rattachée (début le 05/10) ne serait plus couverte par le plan.
+    expect(await savePlan({}, planForm(row, { startOn: '2026-10-06', reason }))).toMatchObject({
+      fieldErrors: { startOn: "Activités de la carte rattachées avant cette date (« Maintenance du pont roulant 10 t (fins de course, câble) ») : modifiez leurs dates avant de réduire la période." },
+    });
+    await (await getDb()).update(t.siteActivities).set({ startOn: '2026-10-06' }).where(eq(t.siteActivities.title, 'Maintenance du pont roulant 10 t (fins de course, câble)'));
     expect(await savePlan({}, planForm(row, { startOn: '2026-10-06', reason }))).toEqual({ ok: true, id: 'PP-2026-013' });
     const log = await lastLog('prevention_plan', 'PP-2026-013');
     expect(log).toMatchObject({ action: 'update', reason, byId: 'clefevre', summary: 'Plan modifié, signatures effacées' });

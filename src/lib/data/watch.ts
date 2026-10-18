@@ -9,9 +9,9 @@ import {
   CONTROL_HORIZON_DAYS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   type TodoItem, type Tone,
 } from '../domain';
-import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople } from '../queries';
+import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
-import { currentSiteId, getSession, inSite } from '../session';
+import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import { loadPreventionCompliance } from './prevention';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
@@ -104,6 +104,9 @@ export async function loadWatch() {
       : r.domain === PREVENTION_REQUIREMENT_DOMAIN ? { ...prevention, gap: prevention.gapCount > 0 }
         : null;
   const controls = allControls.filter((c) => inSite(site, c.siteId));
+  // VEI-06 : une exigence vaut pour toute l'entreprise — ses contrôles rattachés sont lus sur tout le périmètre de la
+  // personne, quel que soit le site sélectionné (l'onglet « Contrôles périodiques » reste filtré par site).
+  const perimeterControls = allControls.filter((c) => inPerimeter(session.allowedSiteIds, c.siteId));
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
 
@@ -143,16 +146,21 @@ export async function loadWatch() {
   };
 
   // Contrôles actifs du site, avec statut calculé (base des contrôles rattachés aux exigences).
-  const controlState = new Map(controls.map((c) => [c.id, controlStatus(c, now)]));
+  const controlState = new Map(perimeterControls.map((c) => [c.id, controlStatus(c, now)]));
   const evalOf = (e: string) => REQUIREMENT_EVAL[e] ?? { label: e, tone: 'neutral' as Tone };
 
   const requirements = reqs.map((r) => {
     const ev = evalOf(r.evaluation);
     const archived = !!r.archivedAt;
-    const linked = controls.filter((c) => c.requirementId === r.id && !c.archivedAt).map((c) => {
+    const linked = perimeterControls.filter((c) => c.requirementId === r.id && !c.archivedAt).map((c) => {
       const s = controlState.get(c.id)!;
-      return { id: c.id, equipment: c.equipment, controlType: c.controlType, status: s.label, tone: s.tone, next: fmtDate(c.nextOn), overdue: s.days < 0 };
+      return {
+        id: c.id, equipment: c.equipment, controlType: c.controlType, status: s.label, tone: s.tone, next: fmtDate(c.nextOn), overdue: s.days < 0,
+        siteId: c.siteId, siteLabel: c.siteId ? siteLabel.get(c.siteId) ?? c.siteId : 'Tous les sites',
+      };
     });
+    // VEI-03 : exigence suivie par des contrôles : échéance du prochain contrôle rattaché (calculée).
+    const due = requirementDue(r, perimeterControls);
     const late = linked.find((c) => c.overdue);
     const indicator = archived ? null : indicatorOf(r);
     const reviewOn = r.lastEvaluatedOn && r.evaluation !== 'a_evaluer' ? addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS) : null;
@@ -161,7 +169,11 @@ export async function loadWatch() {
       ...r,
       archived,
       archivedLabel: traceLabel('Archivée', r.archivedAt, name(r.archivedById), r.archiveReason),
-      due: duerpDue ?? [r.dueOn && fmtDate(r.dueOn), r.dueNote].filter(Boolean).join(' · '),
+      due: duerpDue ?? (due.control
+        ? `${fmtDate(due.on!)} · prochain contrôle (${lcfirst(due.control.controlType)}, ${lcfirst(equipShort(due.control.equipment))})`
+        : [r.dueOn && fmtDate(r.dueOn), r.dueNote].filter(Boolean).join(' · ')),
+      /** Échéance tirée du prochain contrôle rattaché (VEI-03) : la date saisie n'est plus proposée. */
+      dueFromControl: !!due.control,
       indicator,
       evalLabel: r.evaluationNote ? `${ev.label} · ${r.evaluationNote}` : ev.label,
       tone: ev.tone,
@@ -270,8 +282,8 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const who = [c.organization, c.responsibleId ? people.get(c.responsibleId)?.name : ''].filter(Boolean).join(' · ');
     const title = `${c.controlType} · ${lcfirst(equipShort(c.equipment))}`;
     const base = { kind: 'Contrôle', who, href: `/veille?onglet=controles&controle=${c.id}`, ownerIds: c.responsibleId ? [c.responsibleId] : undefined, siteId: c.siteId };
-    if (s.days < 0) todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}` });
-    else if (c.nextOn <= ctrlHorizon) todo.push({ ...base, date: c.nextOn, tone: 'warn', title });
+    if (s.days < 0) todo.push({ ...base, date: now, dueOn: c.nextOn, tone: 'danger', overdue: true, title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}` });
+    else if (c.nextOn <= ctrlHorizon) todo.push({ ...base, date: c.nextOn, dueOn: c.nextOn, tone: 'warn', title });
     // Réserves sans action de levée : même urgence qu'un écart sans action (VEI-02).
     if (c.reserves && !c.actionId) {
       todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — réserves « ${c.reserves} » sans action de levée` });
@@ -279,6 +291,9 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
   });
 
   const horizon = addDays(now, TODO_HORIZON_DAYS);
+  // VEI-03 : exigence suivie par des contrôles (rattachés, actifs, sur le périmètre) : son échéance est celle du prochain
+  // contrôle, déjà signalée par le contrôle lui-même ; la date d'application saisie (figée) ne déclenche plus d'échéance.
+  const followed = new Set(controls.filter((c) => c.requirementId != null && !c.archivedAt).map((c) => c.requirementId!));
   reqs.forEach((r) => {
     const base = {
       kind: 'Veille', who: r.pilotId ? people.get(r.pilotId)?.name ?? '' : '',
@@ -288,21 +303,21 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     };
     const compliant = r.evaluation === 'conforme';
     // Exigence DUERP : l'échéance de mise à jour est celle de la version en vigueur, signalée par l'écran Risques.
-    const dated = r.linkedTo !== 'duerp';
+    const dated = r.linkedTo !== 'duerp' && !followed.has(r.id);
     if (NEEDS_ACTION.has(r.evaluation) && !r.actionId) {
       todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${r.text} — ${r.evaluation === 'analyse' ? "analyse d'écart sans action" : 'écart sans action'}` });
     } else if (r.evaluation === 'a_evaluer') {
       todo.push({ ...base, date: now, tone: 'warn', title: `${r.text} — conformité à évaluer` });
     } else if (dated && r.dueOn && r.dueOn < now && !compliant) {
-      todo.push({ ...base, date: now, tone: 'danger', overdue: true, count: 0, title: `${r.text} — date d'application dépassée depuis le ${fmtDayMonth(r.dueOn)}` });
+      todo.push({ ...base, date: now, dueOn: r.dueOn, tone: 'danger', overdue: true, count: 0, title: `${r.text} — date d'application dépassée depuis le ${fmtDayMonth(r.dueOn)}` });
     } else if (dated && r.dueOn && r.dueOn <= horizon && !compliant) {
-      todo.push({ ...base, date: r.dueOn, tone: 'warn', count: 0, title: `${r.text} — applicable le ${fmtDayMonth(r.dueOn)}` });
+      todo.push({ ...base, date: r.dueOn, dueOn: r.dueOn, tone: 'warn', count: 0, title: `${r.text} — applicable le ${fmtDayMonth(r.dueOn)}` });
     } else if (r.lastEvaluatedOn) {
       const reviewOn = addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS);
       if (reviewOn <= horizon) {
         const late = reviewOn < now;
         todo.push({
-          ...base, date: late ? now : reviewOn, tone: 'warn', overdue: late || undefined, count: 0,
+          ...base, date: late ? now : reviewOn, dueOn: reviewOn, tone: 'warn', overdue: late || undefined, count: 0,
           title: `${r.text} — réévaluation annuelle${late ? ` en retard depuis le ${fmtDayMonth(reviewOn)}` : ''}`,
         });
       }

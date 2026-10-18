@@ -10,7 +10,7 @@ import { canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
-import { DEFAULT_AUDIT, loadAudits } from '@/lib/data/audits';
+import { loadAudits } from '@/lib/data/audits';
 import { loadFormOptions } from '@/lib/data/options';
 
 export const metadata: Metadata = { title: SCREENS.audits.title };
@@ -54,7 +54,7 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
           initialId={openElement} closeHref={closeHref} aside={<><Aside>{period}</Aside>{yearNav}</>} />
 
         {/* Pas de `key` liée au lien profond : la fermeture retire ?constat= de l'URL sans remonter la carte ni changer de groupe. */}
-        <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} defaultAudit={DEFAULT_AUDIT} canEdit={edit}
+        <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} canEdit={edit}
           canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} />
 
         <div id="revue" style={{ scrollMarginTop: 16 }}>

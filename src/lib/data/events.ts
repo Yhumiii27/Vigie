@@ -522,7 +522,7 @@ export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: 
     if (e.step === 0) {
       const due = addDays(isoDay(e.createdAt), QUALIFY_DELAY_DAYS);
       todo.push({
-        date: due, kind: 'Signalement à qualifier', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
+        date: due, dueOn: due, kind: 'Signalement à qualifier', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
         who: e.pilotId ? who(e.pilotId) : lead.who, href, ownerIds: e.pilotId ? [e.pilotId] : lead.ownerIds, overdue: due < now,
       });
     }
@@ -542,7 +542,7 @@ export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: 
         const pilot = e.pilotId && healthOwner(e.pilotId) ? e.pilotId : null;
         const owners = [...new Set([...lead.ownerIds, ...(pilot ? [pilot] : [])])];
         todo.push({
-          date: due, kind: deadline.kind, tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
+          date: due, dueOn: due, kind: deadline.kind, tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`, siteId: e.siteId,
           who: pilot ? who(pilot) : lead.who, href, ownerIds: owners, overdue: due < now, health: true,
         });
       }
