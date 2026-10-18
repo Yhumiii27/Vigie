@@ -82,9 +82,9 @@ function parseFilter(raw: string): Saved {
 
 /** Ligne « à traiter » : titre requis à échéance proche, expiré ou jamais suivi, ou manque pendant une affectation. */
 const toTreat = (r: SkillRow, today: string) =>
-  r.cells.some((c) => c.state === 's' || c.state === 'x' || c.state === 'r' || r.assignments.some((a) => lapseFor(c.state, c.expiresOn, a, today) !== null));
+  r.cells.some((c) => c.state === 's' || c.state === 'x' || c.state === 'r' || c.state === 'p' || r.assignments.some((a) => lapseFor(c.state, c.expiresOn, a, today) !== null));
 
-const LEGEND: SkillState[] = ['v', 's', 'x', 'r', 'n'];
+const LEGEND: SkillState[] = ['v', 's', 'x', 'r', 'p', 'n'];
 const sub = (text: string) => <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{text}</span>;
 
 /** Recyclage planifié par une action reprise encore à réaliser (ni close ni Terminée). */
@@ -155,6 +155,12 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
         <Fact label="Obtenu le">{cell.obtainedOn ? fmtDate(cell.obtainedOn) : '—'}</Fact>
         <Fact label="Échéance">{cell.expiresOn ? fmtDate(cell.expiresOn) : cell.obtainedOn ? 'Sans échéance' : '—'}</Fact>
         <Fact label="Organisme de formation">{cell.provider ?? '—'}</Fact>
+        {cell.title.scopeLabel && <Fact label={cell.title.scopeLabel}>{cell.scope ?? '—'}</Fact>}
+        {cell.missingPrerequisites.length > 0 && (
+          <Fact label="Prérequis non valide" wide>
+            <span style={{ color: 'var(--tone-danger-fg)' }}>aucun titre valide parmi {cell.missingPrerequisites.join(', ')} : titre inopérant tant qu&apos;un prérequis n&apos;est pas valide.</span>
+          </Fact>
+        )}
         <Fact label="Prochaine affectation Keystone">
           {next ? <>{next.project}{sub(`${next.activity} · ${period(next.startOn, next.endOn)}`)}</> : '—'}
         </Fact>
@@ -342,7 +348,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   const cellName = row && cell ? `${cell.title.label} — ${row.person.name}` : '';
   // Correction de la formation en cours (même ligne de l'historique) ; sinon nouvelle formation datée du jour.
   const initial = cell?.qualificationId && cell.obtainedOn
-    ? { qualificationId: cell.qualificationId, obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider }
+    ? { qualificationId: cell.qualificationId, obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider, scope: cell.scope }
     : undefined;
   // Recherchée même annulée : la fenêtre reste montée le temps que l'annulation réussie la referme.
   const toCancel = cell?.history.find((e) => e.id === cancelId);

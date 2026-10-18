@@ -1,12 +1,12 @@
 # Vigie — reste à faire (développement)
 
-*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026 (lot 1), le 12/10/2026 (lot 2), puis le 15/10/2026 : refonte des actions QSE alignée sur Power Apps, feuille de route réorganisée par classe de dépendance et livraison du paquet 1 (refonte des actions QSE), puis le 17/10/2026 : livraison du paquet 2 (suites de la refonte des actions, hors UX-05, UX-06 et éléments PA), du paquet 3 (traçabilité et journal) et du paquet 4 (cohérence des données et corrections).*
+*Arrêté au 10/10/2026, après le commit `e8e3a3c` (« Compléter les écrans de Vigie : traçabilité, échéances et liens entre modules ») ; statuts mis à jour le 11/10/2026 (lot 1), le 12/10/2026 (lot 2), puis le 15/10/2026 : refonte des actions QSE alignée sur Power Apps, feuille de route réorganisée par classe de dépendance et livraison du paquet 1 (refonte des actions QSE), puis le 17/10/2026 : livraison du paquet 2 (suites de la refonte des actions, hors UX-05, UX-06 et éléments PA), du paquet 3 (traçabilité et journal) et du paquet 4 (cohérence des données et corrections), puis le 18/10/2026 : livraison du paquet 5 (conformité réglementaire, hors aptitude médicale de HAB-10).*
 
 **État du logiciel après les lots 1 et 2 (12/10/2026).** Les écrans de la maquette sont en place (tableau de bord et « À faire », événements et signalement terrain, plan d'actions, DUERP, habilitations, veille et contrôles, audits et revue de direction, prévention et carte du site, documents maîtrisés, environnement), avec annulation, archivage et classement motivés, journal des modifications, échéances transverses, badges et liens entre modules. Le lot 1 rend Vigie déployable : mode démonstration explicite (`VIGIE_DEMO=1` : sélecteur de rôle, jeu de démonstration, `VIGIE_TODAY`, aperçu mobile ; `npm run dev` et l'application Mac), PostgreSQL en production et PGlite en démonstration, connexion Microsoft Entra ID (OIDC + PKCE, session chiffrée, `src/proxy.ts`), rôles applicatifs et périmètre de sites, responsable QHSE par site, contrôle de l'hôte, CSP et cookies, données de santé des AT restreintes, signalement terrain sans compte par jeton de poste, image Docker et `docker-compose.yml`, sauvegardes chiffrées (dont la sauvegarde avant migration) et pièces jointes chiffrées au repos, contrôle des migrations, tests Vitest et CI GitHub Actions ; exploitation : [`docs/EXPLOITATION.md`](EXPLOITATION.md). Le lot 2 fiabilise et met en conformité : rubriques de la déclaration d'accident du travail (lésions et pièces médicales restreintes), délai CPAM de 48 h hors dimanches et fériés, déclaration selon la victime (entreprise de travail temporaire informée sous 24 h pour un intérimaire, TF1/TG sur les accidents de l'effectif), clôture d'un AT subordonnée à la déclaration, registre des accidents bénins par site, qualification exigeante, écarts R. 4512-6 passés et contenu réglementaire des plans de prévention, fiche imprimable des permis, DUERP en lecture pour tous avec registre des demandes d'accès et impression, PAPRIPACT, programme d'audit lié aux revues (report, annulation), contributions de revue, dossier de revue figé à la séance, échéances du responsable sur tout son périmètre et sur un écran fermé, TF1/TG sur 12 mois complets, actions rattachées à leur source par un vrai lien (avec reprise), mentions de l'arrêté du 31 mai 2021 au registre des déchets, navigation mobile et fenêtres accessibles, et lève les réserves de sécurité et d'exploitation du lot 1 ; une seule migration (`drizzle/0004_compliance.sql`). Tests Vitest : 72 fichiers (597 tests, dont 39 fichiers d'intégration rejoués sur PostgreSQL) et 2 fichiers de bout en bout sur le serveur construit. Aucun connecteur Keystone, Cursus ou Trackdéchets n'existe encore, et les seuls échanges de fichiers restent l'import des plans de prévention et les exports CSV du DUERP et du registre des déchets. La connexion Entra n'a été éprouvée qu'avec un fournisseur OIDC factice : l'inscription de l'application dans le tenant reste à faire.
 
 **Alignement sur Power Apps (15/10/2026).** Le service QHSE suit aujourd'hui ses actions dans l'application Power Apps « Créer Actions QSE ». Son formulaire (reçu le 15/10/2026), deux tours de réponses du service QHSE et les arbitrages de l'utilisateur du même jour fixent la refonte du plan d'actions de Vigie, décrite dans [`docs/specs/actions-qse.md`](specs/actions-qse.md) : 24 éléments ajoutés au [§ 5](#5-plan-dactions-act) (ACT-17 à ACT-40), dont 16 prêts à développer qui forment, avec PRD-12, le premier paquet de la feuille de route. Arbitrages du 15/10/2026 : rappel du mercredi dans Vigie **et** par e-mail (la notification à la création reste dans Vigie seulement) ; rôle du responsable validé (il consulte ses actions, commente dans le fil et joint des preuves ; l'avancement est géré par le service QHSE) ; format des numéros AC-AA#### gardé pour plus tard, le service QHSE recherchant la règle actuelle ; extraction des actions Power Apps fournie plus tard par le propriétaire de l'application, pour reprendre les actions existantes avec leurs numéros AC. D'autres formulaires Power Apps suivront : les éléments des écrans concernés portent la marque **PA** et pourront évoluer à leur réception.
 
-**Avancement.** 116 éléments livrés (✅) : les 23 du lot 1 (TDB-01 et SEC-06 terminés au lot 2) et les 28 du lot 2, plus PRD-09, PRD-11, PRD-15, QUA-13 (avec le lot 1), EVT-23, AUD-30, SEC-14 (avec le lot 2), DUE-11 et AUD-10 (livrés avec DUE-01 et AUD-01, constatés le 15/10/2026), et les 25 du paquet 1 de la refonte des actions QSE (15/10/2026 : ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 — clos sans objet —, ACT-40 ; avec lui EVT-25, EVT-26, DUE-04, HAB-11), et les 7 du paquet 2 (17/10/2026 : ACT-02, ACT-03, ACT-29, TDB-06, AUD-12, PRD-08, QUA-09), et les 13 du paquet 3 (17/10/2026 : TDB-09, EVT-12, PRV-12, DUE-06, HAB-03, VEI-04, VEI-09, DOC-04, DOC-05, DOC-06, DOC-09, DOC-10, SEC-11), et les 11 du paquet 4 (17/10/2026 : TDB-07, EVT-11, PRV-11, DUE-05, HAB-04, VEI-03, VEI-06, AUD-07, AUD-11 et AUD-14 — partiels jusque-là —, AUD-15). 16 éléments partiels (◐), qui restent ouverts : PRD-13, SEC-07, QUA-28 (lot 1), SEC-09 (lot 2), TDB-15, UX-11, QUA-25 (constatés le 15/10/2026), PRD-12, EVT-15, AUD-13, UX-06, TDB-12, QUA-23, QUA-26, DOC-13 (paquet 1), QUA-11 (paquet 2). 11 éléments remplacés (↪) par la refonte des actions : ACT-04 à ACT-11, ACT-14 à ACT-16. Reste : 211 éléments ouverts (P1 : 10 · P2 : 92 · P3 : 109), 230–681 j ; par classe : C1 : 135 (117,5–329 j) · C2 : 41 (54,5–168 j) · C3 : 14 (19,5–60 j) · C4 : 21 (38,5–124 j). Dans les tableaux, le statut précède l'intitulé et la colonne « Classe » donne la dépendance ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ce qui reste, ou l'effet de la refonte des actions. Les preuves `fichier:ligne` décrivent l'état au commit `e8e3a3c`, sauf pour ACT-17 à ACT-42 (état au 15/10/2026).
+**Avancement.** 129 éléments livrés (✅) : les 23 du lot 1 (TDB-01 et SEC-06 terminés au lot 2) et les 28 du lot 2, plus PRD-09, PRD-11, PRD-15, QUA-13 (avec le lot 1), EVT-23, AUD-30, SEC-14 (avec le lot 2), DUE-11 et AUD-10 (livrés avec DUE-01 et AUD-01, constatés le 15/10/2026), et les 25 du paquet 1 de la refonte des actions QSE (15/10/2026 : ACT-13, ACT-17 à ACT-28, ACT-30 à ACT-33, ACT-35, ACT-37, ACT-38 — clos sans objet —, ACT-40 ; avec lui EVT-25, EVT-26, DUE-04, HAB-11), et les 7 du paquet 2 (17/10/2026 : ACT-02, ACT-03, ACT-29, TDB-06, AUD-12, PRD-08, QUA-09), et les 13 du paquet 3 (17/10/2026 : TDB-09, EVT-12, PRV-12, DUE-06, HAB-03, VEI-04, VEI-09, DOC-04, DOC-05, DOC-06, DOC-09, DOC-10, SEC-11), et les 11 du paquet 4 (17/10/2026 : TDB-07, EVT-11, PRV-11, DUE-05, HAB-04, VEI-03, VEI-06, AUD-07, AUD-11 et AUD-14 — partiels jusque-là —, AUD-15), et les 13 du paquet 5 (18/10/2026 : EVT-09, EVT-10, EVT-17, PRV-07, DUE-03, VEI-10, VEI-11, AUD-08, AUD-09, AUD-13 — partiel jusque-là —, DOC-12, CNF-03, CNF-05). 16 éléments partiels (◐), qui restent ouverts : PRD-13, SEC-07, QUA-28 (lot 1), SEC-09 (lot 2), TDB-15, UX-11, QUA-25 (constatés le 15/10/2026), PRD-12, EVT-15, UX-06, TDB-12, QUA-23, QUA-26, DOC-13 (paquet 1), QUA-11 (paquet 2), HAB-10 (paquet 5). 11 éléments remplacés (↪) par la refonte des actions : ACT-04 à ACT-11, ACT-14 à ACT-16. Reste : 198 éléments ouverts (P1 : 10 · P2 : 79 · P3 : 109), 216,5–641 j ; par classe : C1 : 122 (104–289 j) · C2 : 41 (54,5–168 j) · C3 : 14 (19,5–60 j) · C4 : 21 (38,5–124 j). Dans les tableaux, le statut précède l'intitulé et la colonne « Classe » donne la dépendance ; sous chaque élément, une note décrit ce qui a été livré et les réserves, ce qui reste, ou l'effet de la refonte des actions. Les preuves `fichier:ligne` décrivent l'état au commit `e8e3a3c`, sauf pour ACT-17 à ACT-42 (état au 15/10/2026).
 
 **Réserves des lots 1 et 2**, à reprendre dans les paquets de la feuille de route (détail sous chaque élément) :
 
@@ -39,27 +39,27 @@
 
 ## 1. Synthèse
 
-Éléments encore ouverts au 17/10/2026, après les lots 1 et 2, l'ajout de la refonte des actions QSE, la livraison de ses paquets 1 et 2 et celle des paquets 3 et 4 (les partiels ◐ comptent pour leur taille entière ; les éléments remplacés ↪ ne comptent plus). Aucun P0 ouvert : les sept bloquants ont été livrés au lot 1. Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j ; ajoutés le 15/10/2026 : 24 éléments (ACT-17 à ACT-40, P1 : 21 · P2 : 3), 22,5–64 j, puis 5 après les réponses du service QHSE (ACT-41, ACT-42, EVT-29, HAB-21, PRV-21 ; P2 : 3 · P3 : 2), 4,5–11 j.
+Éléments encore ouverts au 18/10/2026, après les lots 1 et 2, l'ajout de la refonte des actions QSE, la livraison de ses paquets 1 et 2 et celle des paquets 3, 4 et 5 (les partiels ◐ comptent pour leur taille entière ; les éléments remplacés ↪ ne comptent plus). Aucun P0 ouvert : les sept bloquants ont été livrés au lot 1. Inventaire initial (10/10/2026) : 309 éléments (P0 : 7 · P1 : 50 · P2 : 129 · P3 : 123), 135 / 140 / 34, 309,5–895 j ; ajoutés le 15/10/2026 : 24 éléments (ACT-17 à ACT-40, P1 : 21 · P2 : 3), 22,5–64 j, puis 5 après les réponses du service QHSE (ACT-41, ACT-42, EVT-29, HAB-21, PRV-21 ; P2 : 3 · P3 : 2), 4,5–11 j.
 
 | Groupe | Préfixe | P1 | P2 | P3 | Ouverts | dont ◐ | C1 | C2 | C3 | C4 | S / M / L | Charge restante (j) | ✅ Livrés |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|:-:|--:|--:|
 | [Tableau de bord, échéances et navigation](#3-tableau-de-bord-échéances-et-navigation-tdb) | TDB | 1 | 1 | 9 | **11** | 2 | 8 | 3 | · | · | 7 / 4 / 0 | 7,5–19 | 7 |
-| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 14 | 3 | **17** | 1 | 10 | 7 | · | · | 4 / 11 / 2 | 19–57 | 12 |
+| [Événements et signalement terrain](#4-événements-et-signalement-terrain-evt) | EVT | · | 11 | 3 | **14** | 1 | 7 | 7 | · | · | 4 / 8 / 2 | 16–48 | 15 |
 | [Plan d'actions](#5-plan-dactions-act) | ACT | 3 | 1 | 2 | **6** | · | 1 | · | 3 | 2 | 3 / 2 / 1 | 6,5–19 | 25 |
-| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 7 | 9 | **16** | · | 5 | 8 | 2 | 1 | 7 / 6 / 3 | 18,5–55 | 5 |
-| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 5 | 9 | **14** | · | 11 | 2 | · | 1 | 7 / 6 / 1 | 12,5–35 | 6 |
-| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 8 | 9 | **17** | · | 10 | 4 | · | 3 | 6 / 8 / 3 | 20–60 | 4 |
-| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 5 | 7 | **12** | · | 11 | · | · | 1 | 4 / 8 / 0 | 10–28 | 6 |
-| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 5 | 18 | **23** | 1 | 22 | 1 | · | · | 10 / 12 / 1 | 20–56 | 13 |
-| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 5 | 11 | **16** | 1 | 9 | 4 | 2 | 1 | 9 / 4 / 3 | 17,5–51 | 7 |
+| [Prévention et carte du site](#6-prévention-et-carte-du-site-prv) | PRV | · | 6 | 9 | **15** | · | 4 | 8 | 2 | 1 | 6 / 6 / 3 | 18–54 | 6 |
+| [Risques / DUERP](#7-risques--duerp-due) | DUE | · | 4 | 9 | **13** | · | 10 | 2 | · | 1 | 6 / 6 / 1 | 12–34 | 7 |
+| [Habilitations et formations](#8-habilitations-et-formations-hab) | HAB | · | 8 | 9 | **17** | 1 | 10 | 4 | · | 3 | 6 / 8 / 3 | 20–60 | 4 |
+| [Veille et contrôles](#9-veille-et-contrôles-vei) | VEI | · | 3 | 7 | **10** | · | 9 | · | · | 1 | 4 / 6 / 0 | 8–22 | 8 |
+| [Audits et revue de direction](#10-audits-et-revue-de-direction-aud) | AUD | · | 2 | 18 | **20** | · | 19 | 1 | · | · | 10 / 10 / 0 | 15–40 | 16 |
+| [Documents et environnement](#11-documents-et-environnement-doc) | DOC | · | 4 | 11 | **15** | 1 | 8 | 4 | 2 | 1 | 8 / 4 / 3 | 17–50 | 8 |
 | [Intégrations](#12-intégrations-int) | INT | 4 | 6 | 7 | **17** | · | 3 | · | 2 | 12 | 2 / 8 / 7 | 30–96 | · |
 | [Imports, exports et impression](#13-imports-exports-et-impression-imp) | IMP | 1 | 6 | 2 | **9** | · | 2 | 7 | · | · | 2 / 5 / 2 | 12–37 | · |
 | [Production et exploitation](#14-production-et-exploitation-prd) | PRD | 1 | 3 | · | **4** | 2 | 4 | · | · | · | 1 / 3 / 0 | 3,5–10 | 11 |
 | [Sécurité et RGPD](#15-sécurité-et-rgpd-sec) | SEC | · | 5 | 1 | **6** | 2 | 4 | · | 2 | · | 2 / 3 / 1 | 7–21 | 8 |
 | [Qualité, tests, performance et dette technique](#16-qualité-tests-performance-et-dette-technique-qua) | QUA | · | 4 | 15 | **19** | 5 | 18 | · | 1 | · | 7 / 11 / 1 | 17,5–50 | 9 |
 | [UX et accessibilité](#17-ux-et-accessibilité-ux) | UX | · | 11 | 2 | **13** | 2 | 13 | · | · | · | 3 / 9 / 1 | 13,5–40 | 3 |
-| [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | 6 | 5 | **11** | · | 4 | 5 | 2 | · | 0 / 9 / 2 | 15–47 | · |
-| **Total** | | **10** | **92** | **109** | **211** | 16 | **135** | **41** | **14** | **21** | 74 / 109 / 28 | **230–681** | **116** |
+| [Conformité réglementaire transverse](#18-conformité-réglementaire-transverse-cnf) | CNF | · | 4 | 5 | **9** | · | 2 | 5 | 2 | · | 0 / 7 / 2 | 13–41 | 2 |
+| **Total** | | **10** | **79** | **109** | **198** | 16 | **122** | **41** | **14** | **21** | 71 / 100 / 27 | **216,5–641** | **129** |
 
 Plus 11 éléments remplacés (↪ ACT-04 à ACT-11, ACT-14 à ACT-16 : repris par les éléments de la refonte, 7–17 j), comptés ni ouverts ni livrés.
 
@@ -67,11 +67,11 @@ Par classe de dépendance et par priorité (ouverts et partiels ; contenu et ord
 
 | Classe | P1 | P2 | P3 | Ouverts | dont PA | S / M / L | Charge (j) |
 |---|--:|--:|--:|--:|--:|:-:|--:|
-| **C1** Prêt à développer | 1 | 54 | 80 | **135** | 79 | 59 / 70 / 6 | 117,5–329 |
+| **C1** Prêt à développer | 1 | 41 | 80 | **122** | 66 | 56 / 61 / 5 | 104–289 |
 | **C2** À valider | 2 | 24 | 15 | **41** | 36 | 9 / 23 / 9 | 54,5–168 |
 | **C3** En attente d'éléments | 2 | 6 | 6 | **14** | 7 | 5 / 5 / 4 | 19,5–60 |
 | **C4** Dépend d'un tiers technique | 5 | 8 | 8 | **21** | 14 | 1 / 11 / 9 | 38,5–124 |
-| **Total** | **10** | **92** | **109** | **211** | 136 | 74 / 109 / 28 | **230–681** |
+| **Total** | **10** | **79** | **109** | **198** | 123 | 71 / 100 / 27 | **216,5–641** |
 
 Refonte des actions QSE (ACT-17 à ACT-42) : paquet 1 livré le 15/10/2026 ; restent ACT-34, ACT-36, ACT-39, ACT-41 et ACT-42 (C3 : 3 · C4 : 2, 5,5–17 j). Les P1 restants attendent une décision (TDB-03, IMP-01 : C2), des éléments (ACT-36, ACT-39 : C3) ou un tiers technique (INT-01 à INT-04, ACT-34 : C4) ; PRD-12 (◐, C1) garde ses autres tâches planifiées.
 
@@ -97,7 +97,7 @@ Depuis le 15/10/2026, la feuille de route range les éléments ouverts par class
 
 Règles communes : les éléments d'un même paquet qui ajoutent une colonne ou une table partagent une migration drizzle (une migration publiée ne se modifie jamais) ; toute nouvelle server action est testée pour ses droits, son site, son motif et son journal (`test/integration/`).
 
-**Marque PA** — 136 éléments ouverts (C1 : 79 · C2 : 36 · C3 : 7 · C4 : 14) touchent un écran dont le formulaire Power Apps est attendu (événements et NC, prévention, DUERP, habilitations, veille, audits, documents, environnement). Ils restent développables, mais leurs champs et leurs règles peuvent changer à réception du formulaire : dans un paquet, commencer par les éléments sans marque, et placer après la réception du formulaire les éléments PA de son domaine s'il est annoncé à brève échéance. Le formulaire des actions, déjà reçu, n'en porte plus.
+**Marque PA** — 123 éléments ouverts (C1 : 66 · C2 : 36 · C3 : 7 · C4 : 14) touchent un écran dont le formulaire Power Apps est attendu (événements et NC, prévention, DUERP, habilitations, veille, audits, documents, environnement). Ils restent développables, mais leurs champs et leurs règles peuvent changer à réception du formulaire : dans un paquet, commencer par les éléments sans marque, et placer après la réception du formulaire les éléments PA de son domaine s'il est annoncé à brève échéance. Le formulaire des actions, déjà reçu, n'en porte plus.
 
 ### Livré
 
@@ -108,18 +108,19 @@ Règles communes : les éléments d'un même paquet qui ajoutent une colonne ou 
 - **Paquet 2 — Suites de la refonte des actions (17/10/2026)** — 7 éléments livrés (P2, C1) : ACT-02 (« Rattacher un élément » / « Détacher » un lien complémentaire depuis la fiche action, QHSE seulement), ACT-03 (historique de l'action tenu par les autres modules : site d'un événement, réserves d'un contrôle, programme de prévention), ACT-29 (onglet « Statistiques » de `/actions`, calculé, jamais stocké), TDB-06 (suite d'un signalement notifiée au déclarant), AUD-12 (une action relève d'une seule revue ; dossier d'une revue clôturée figé), PRD-08 (références des autres fiches tirées sous verrou dans la transaction de création), QUA-09 (jours de Paris partout) ; partiel : QUA-11 (veille et prévention ; restent risques, audits, environnement). Aucune migration. Restent du paquet : UX-05, UX-06 et les éléments PA (EVT-22, VEI-05, HAB-06, IMP-07).
 - **Paquet 3 — Traçabilité et journal (17/10/2026)** — 13 éléments livrés (P2, C1) : TDB-09 (règle Seveso / plan de prévention d'un site journalisée, historique du site), EVT-12 (analyse, méthode et réception des signalements au journal), PRV-12 (carte du site journalisée, activité annulée avec motif au lieu d'être supprimée, `requireInSite`), DUE-06 (historiques des unités et des versions du DUERP), HAB-03 (exigences, attestations et fiche salarié journalisées, historiques de la case et de la fiche), VEI-04 (rattachements des exigences et contrôles dans leur historique), VEI-09 (« Dernier contrôle » et réserves changés par un contrôle enregistré seulement), DOC-04 (cycle de vie des documents journalisé, historique de la fiche), DOC-05 (pas de soumission ni d'approbation sans fichier), DOC-06 (renvoi en brouillon motivé, échéance de l'auteur), DOC-09 (filière archivée avec motif, plus supprimée), DOC-10 (relevés de consommation journalisés), SEC-11 (journal des consultations : pièces jointes, données de santé d'un AT, registre des accidents bénins). Historiques chargés à l'ouverture (`LazyChangeLog`, `loadEntityHistory` étendu, mêmes droits que l'écran). Une migration (`drizzle/0006_traceability_journal.sql` : colonnes d'annulation des activités, d'archivage des filières, de renvoi des versions, table `access_log` ; colonnes et table ajoutées, sans reprise). Réserves : zones et voies de la carte restent supprimables (journalisées) ; conservation du journal des consultations à fixer (SEC-10).
 - **Paquet 4 — Cohérence des données et corrections (17/10/2026)** — 11 éléments livrés (P2, C1), avec DOC-05 (livré au paquet 3) : TDB-07 (état lu avec gravité et date d'échéance, retards triés par ancienneté ; les échéances déjà lues réapparaissent non lues une fois), EVT-11 (analyse des causes ni vidée ni remplacée par une méthode vide après « Actions », exigée à la clôture), PRV-11 (plan, permis et activités de la carte cohérents après modification), DUE-05 (unité d'un site archivé gardée sur son site, restauration refusée), HAB-04 (recyclage repris porté par l'action, conservé clos ou abandonné, historique dans la case), VEI-03 (échéance d'une exigence suivie par des contrôles = prochain contrôle), VEI-06 (contrôles rattachés et indicateur R. 4512-6 sur tout le périmètre), AUD-07 (plus de libellé d'audit codé en dur), AUD-11 (constats sur un audit réalisé, « Réalisé le » jamais perdu), AUD-14 (participants, synthèse et pilotes exigés avant le visa), AUD-15 (visa réservé à la direction). Une migration (`drizzle/0007_qualification_renewals.sql` : colonnes `actions.qualification_person_id` / `qualification_title_id` remplies depuis `qualification_requirements.renewal_action_id`, colonne supprimée ; `docs/EXPLOITATION.md` § 6).
+- **Paquet 5 — Conformité réglementaire (18/10/2026)** — 13 éléments livrés (P2, C1, PA) : EVT-09 (maladie professionnelle réservée aux rôles habilités aux données de santé, questionnaire employeur à 30 jours francs ; accident de trajet hors TF1 / TG), EVT-10 (synthèse imprimable de la DAT et feuille d'accident), EVT-17 (traitement des produits non conformes, quantité, coût de non-qualité), PRV-07 (date, nom et qualité des signataires), DUE-03 (transmission au SPST, dépôt sur le portail), VEI-10 (sites concernés, lien officiel, texte joint), VEI-11 (résultat du contrôle, défavorable signalé), AUD-08 (cycle de 3 ans, renouvellement, suspension), AUD-09 (écart majeur, observation, délai de réponse), AUD-13 (objectifs QHSE mesurables calculés ; cible TF1 tirée de l'objectif — partiel jusque-là), DOC-12 (BSD refusé ou accepté partiellement), CNF-03 (bilan annuel SSCT d'après les statistiques d'ACT-29), CNF-05 (contexte, parties intéressées, risques et opportunités) ; partiel : HAB-10 (prérequis entre titres, catégories et niveaux ; aptitude médicale selon HAB-02). Une migration (`drizzle/0008_regulatory_compliance.sql` : colonnes ajoutées, toutes facultatives ou avec valeur par défaut, et tables `qhse_objectives`, `context_items`, sans reprise ; `docs/EXPLOITATION.md` § 6). Points appliqués par défaut et libellés à relire par le service QHSE : [§ 19](#19-questions-ouvertes).
 
 ### Vue d'ensemble
 
 | Classe | Éléments | dont P1 | Charge (j) | Démarrage |
 |---|--:|--:|--:|---|
-| **C1** Prêt à développer | 135 | 1 | 117,5–329 | tout de suite, dans l'ordre des paquets 2 à 15 (paquets 1, 3 et 4 livrés, paquet 2 livré hors UX-05, UX-06 et éléments PA) |
+| **C1** Prêt à développer | 122 | 1 | 104–289 | tout de suite, dans l'ordre des paquets 2 à 15 (paquets 1, 3, 4 et 5 livrés — paquet 5 hors aptitude médicale de HAB-10 —, paquet 2 livré hors UX-05, UX-06 et éléments PA) |
 | **C2** À valider | 41 | 2 | 54,5–168 | à la réponse (décisions ci-dessous, questions au [§ 19](#19-questions-ouvertes)) |
 | **C3** En attente d'éléments | 14 | 2 | 19,5–60 | à réception de l'élément attendu |
 | **C4** Dépend d'un tiers technique | 21 | 5 | 38,5–124 | quand le système externe est disponible |
-| **Total** | **211** | **10** | **230–681** | |
+| **Total** | **198** | **10** | **216,5–641** | |
 
-### Classe 1 — Prêt à développer (135 éléments, 117,5–329 j)
+### Classe 1 — Prêt à développer (122 éléments, 104–289 j)
 
 Aucune dépendance externe et décisions prises. Ordre recommandé : la refonte des actions d'abord (paquet 1, livré le 15/10/2026), puis ses suites (paquets 2 et 10) ; ensuite les P2, puis les P3, par thème. Le paquet 1 regroupait tous les P1 de la classe 1 (les 16 éléments de la refonte et PRD-12) ; seul PRD-12 (◐) reste en P1 de classe 1 ; les autres P1 attendent une décision (TDB-03 et IMP-01 : C2), des éléments (ACT-36, ACT-39 : C3) ou un tiers technique (INT-01 à INT-04, ACT-34 : C4).
 
@@ -180,24 +181,24 @@ Corrections côté serveur et contrôles de saisie, sans décision attendue. Liv
 - **AUD-15** ✅ Visa de la direction possible par l'animateur QHSE — S · livré le 17/10/2026
 - **DOC-05** ✅ Version approuvée sans fichier — S · PA · livré le 17/10/2026 avec le paquet 3
 
-#### Paquet 5 — Conformité réglementaire (P2 · 14 éléments, 14,5–43 j)
+#### Paquet 5 — Conformité réglementaire (P2 · 14 éléments, 14,5–43 j) : livré le 18/10/2026, sauf l'aptitude médicale de HAB-10
 
-Contenus fixés par les textes ; libellés réglementaires à faire relire par le service QHSE à la recette (non bloquant).
+Contenus fixés par les textes ; libellés réglementaires à faire relire par le service QHSE à la recette (non bloquant, liste au [§ 19](#19-questions-ouvertes)). Livrés le 18/10/2026 (✅) : 13 éléments, AUD-13 compris (partiel jusque-là) ; partiel (◐) : HAB-10 (aptitude médicale selon HAB-02) ; une migration (`drizzle/0008_regulatory_compliance.sql`). Voir « Livré » ci-dessus.
 
-- **EVT-09** Maladies professionnelles et accidents de trajet — M · PA
-- **EVT-10** Synthèse imprimable de la DAT et feuille d'accident — M · PA
-- **EVT-17** Traitement des produits non conformes et coût de non-qualité — M · PA
-- **PRV-07** Signataires du plan et date de signature EU — S · PA
-- **DUE-03** Transmission de chaque version au SPST et dépôt sur le portail — S · PA
-- **HAB-10** Niveaux, catégories CACES et prérequis entre titres — M · PA · aptitude médicale selon HAB-02
-- **VEI-10** Applicabilité par site et référence du texte — M · PA
-- **VEI-11** Résultat du contrôle réalisé — M · PA
-- **AUD-08** Cycle de certification : renouvellement, suspension, historique — M · PA
-- **AUD-09** Types de constat : écart majeur, observation, délai de réponse — M · PA
-- **AUD-13** Objectifs QHSE mesurables reliés aux indicateurs — L · PA
-- **DOC-12** Statuts de BSD refus et acceptation partielle — S · PA
-- **CNF-03** Bilan annuel SSCT — M · PA · statistiques d'ACT-29
-- **CNF-05** Contexte et risques du système de management — M · PA
+- **EVT-09** ✅ Maladies professionnelles et accidents de trajet — M · PA · livré le 18/10/2026
+- **EVT-10** ✅ Synthèse imprimable de la DAT et feuille d'accident — M · PA · livré le 18/10/2026
+- **EVT-17** ✅ Traitement des produits non conformes et coût de non-qualité — M · PA · livré le 18/10/2026
+- **PRV-07** ✅ Signataires du plan et date de signature EU — S · PA · livré le 18/10/2026
+- **DUE-03** ✅ Transmission de chaque version au SPST et dépôt sur le portail — S · PA · livré le 18/10/2026
+- **HAB-10** ◐ Niveaux, catégories CACES et prérequis entre titres — M · PA · livré le 18/10/2026 hors aptitude médicale (selon HAB-02)
+- **VEI-10** ✅ Applicabilité par site et référence du texte — M · PA · livré le 18/10/2026
+- **VEI-11** ✅ Résultat du contrôle réalisé — M · PA · livré le 18/10/2026
+- **AUD-08** ✅ Cycle de certification : renouvellement, suspension, historique — M · PA · livré le 18/10/2026
+- **AUD-09** ✅ Types de constat : écart majeur, observation, délai de réponse — M · PA · livré le 18/10/2026
+- **AUD-13** ✅ Objectifs QHSE mesurables reliés aux indicateurs — L · PA · livré le 18/10/2026
+- **DOC-12** ✅ Statuts de BSD refus et acceptation partielle — S · PA · livré le 18/10/2026
+- **CNF-03** ✅ Bilan annuel SSCT — M · PA · statistiques d'ACT-29 · livré le 18/10/2026
+- **CNF-05** ✅ Contexte et risques du système de management — M · PA · livré le 18/10/2026
 
 #### Paquet 6 — Fonctions des modules (P2 · 11 éléments, 9–25 j)
 
@@ -540,7 +541,7 @@ Au 17/10/2026 : 7 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05, TDB-06, TDB-07, T
 
 29 éléments — P1 : 7 · P2 : 16 · P3 : 6 — charge indicative 30,5–89 j.
 
-Au 17/10/2026 : 12 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, EVT-07, EVT-11, EVT-12, EVT-23, EVT-25, EVT-26) · 1 partiel (◐ EVT-15) — reste 17 éléments ouverts (C1 : 10 · C2 : 7 ; PA : 16), charge indicative 19–57 j.
+Au 18/10/2026 : 15 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, EVT-07, EVT-09, EVT-10, EVT-11, EVT-12, EVT-17, EVT-23, EVT-25, EVT-26) · 1 partiel (◐ EVT-15) — reste 14 éléments ouverts (C1 : 7 · C2 : 7 ; PA : 13), charge indicative 16–48 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -552,15 +553,15 @@ Au 17/10/2026 : 12 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 | EVT-06 | ✅ « Nouveau signalement » : lieu de démonstration et cible du bouton | **P1** | S | — | — |
 | EVT-07 | ✅ Parcours terrain authentifié et signalement sans compte | **P1** | L | Entra ID | — |
 | EVT-08 | Suivi de l'arrêt de travail : périodes, reprise, jours perdus calculés | P2 | M | Décision : saisie ou paie / Cursus | C2 · PA |
-| EVT-09 | Maladies professionnelles et accidents de trajet | P2 | M | Victime de l'AT | C1 · PA |
-| EVT-10 | Synthèse imprimable de la DAT et feuille d'accident | P2 | M | Victime de l'AT | C1 · PA |
+| EVT-09 | ✅ Maladies professionnelles et accidents de trajet | P2 | M | Victime de l'AT | — |
+| EVT-10 | ✅ Synthèse imprimable de la DAT et feuille d'accident | P2 | M | Victime de l'AT | — |
 | EVT-11 | ✅ Analyse des causes vidable ou méthode changeable après « Actions » | P2 | S | — | — |
 | EVT-12 | ✅ Journal : analyse, méthode et réception des signalements terrain | P2 | S | — | — |
 | EVT-13 | Filtres de la liste : blessure, étape, pilote, période, gravité, ancienneté | P2 | M | — | C1 · PA |
 | EVT-14 | Événements liés sur les fiches contrôle et document | P2 | M | — | C1 · PA |
 | EVT-15 | ◐ Échéances événement manquantes | P2 | M | — | C2 · PA |
 | EVT-16 | Clôture d'un événement réservée aux approbateurs ? | P2 | S | — | C2 · PA |
-| EVT-17 | Traitement des produits non conformes et coût de non-qualité | P2 | M | — | C1 · PA |
+| EVT-17 | ✅ Traitement des produits non conformes et coût de non-qualité | P2 | M | — | — |
 | EVT-18 | Formulaire terrain : choix du site et QR code périmé | P2 | M | — | C2 · PA |
 | EVT-19 | Rattacher l'événement à sa zone et protéger les zones porteuses de QR | P2 | M | — | C1 · PA |
 | EVT-20 | Signalement installable (PWA) | P2 | M | HTTPS | C1 |
@@ -599,7 +600,9 @@ Au 17/10/2026 : 12 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 - **EVT-08** — lostDays est saisi à la main et vaut 0 s'il manque. Gérer les périodes d'arrêt (prolongation, rechute, reprise), calculer TG, signaler visite de reprise (R. 4624-31) et pré-reprise. (preuve : src/server/events.ts:193 ; src/lib/data/dashboard.ts:40 ; src/components/events/EventEditButton.tsx:125-127)
   *Question : Dates d'arrêt saisies par la QHSE ou venues de la paie / Cursus ?*
 - **EVT-09** — Ajouter les types MP (R. 461-9) et accident de trajet, ce dernier exclu du TF1/TG. (preuve : src/lib/domain.ts:14-23 ; src/lib/data/dashboard.ts:35-40)
+  ✅ **Livré (18/10/2026, paquet 5)** — type « Maladie professionnelle » (MP) : événement réservé à l'animateur QHSE et à la direction (`canSeeEventType` : absent des listes, fiches, indicateurs, échéances, pièces jointes et server actions des autres rôles, « Événement introuvable »), jamais signalé depuis le terrain ; intitulé imposé « Maladie professionnelle » (ni victime ni maladie), sans rattachement ; tableau, maladie, certificat médical initial, déclaration reçue de la CPAM et questionnaire employeur (échéance de santé à 30 jours francs de sa réception, R. 461-9 CSS) dans `HEALTH_LABELS` ; pièces médicales admises. Accident de trajet (case « Accident de trajet », `events.commute`, L. 411-2) : déclaré comme un AT (48 h, rubriques de la DAT), exclu du TF1, du TG, des jours sans accident et de la pyramide (`workforceAccident`). Réserve : délais de la caisse (réserves motivées d'une MP) non suivis — à confirmer (§ 19, paquet 5).
 - **EVT-10** — Vue d'impression navigateur des rubriques DAT pour net-entreprises et feuille d'accident (L. 441-5). (preuve : aucune occurrence de « Cerfa » ni de vue d'impression DAT dans src ; src/db/schema.ts:73-107)
+  ✅ **Livré (18/10/2026, paquet 5)** — « Synthèse DAT » de la fiche d'un AT (`/evenements/imprimer/<id>`, animateur QHSE et direction, `HEALTH_PAGES`, consultation tracée) : rubriques à reporter sur net-entreprises.fr (Cerfa 14463 : établissement et SIRET, victime, accident, lésions, témoins, tiers, déclaration et réserves), puis feuille d'accident à remettre à la victime (Cerfa 11383, L. 441-5) avec cadres de remise. Pas de génération du Cerfa officiel.
 - **EVT-11** — La règle n'est vérifiée qu'au passage à l'étape 3 : un événement peut être clôturé sans analyse. (preuve : src/components/events/shared.ts:25-28 ; src/server/events.ts:160-172,406-408)
   ✅ **Livré (17/10/2026, paquet 4)** — à partir de l'étape « Actions », l'analyse de la méthode retenue ne se vide plus et la méthode ne change que pour une méthode déjà renseignée (`analysisChangeBlocker`, `saveAnalysis`, `setAnalysisMethod`, refus sans écriture) ; la clôture exige encore l'analyse (fiche reprise ou vidée auparavant), après les autres contrôles de l'étape (`advanceBlocker`). Les autres méthodes restent modifiables. Réserve : les événements du jeu de démonstration aux étapes 3 et 4 sans analyse doivent la recevoir avant leur clôture.
 - **EVT-12** — saveAnalysis, setAnalysisMethod et createReport n'écrivent pas de change_log (byId: null pour un anonyme). (preuve : src/server/events.ts:160-172,361-414,475-526 ; src/server/changelog.ts:33-34)
@@ -614,6 +617,7 @@ Au 17/10/2026 : 12 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 - **EVT-16** — advanceEvent n'exige que requireManager alors que réouverture et classement exigent requireApprover. (preuve : src/server/events.ts:38-40,71-73,101-103)
   *Question : Qui valide la clôture ?*
 - **EVT-17** — Ajouter décision de traitement (retouche, rebut, dérogation, retour), quantités et coût (ISO 9001 §8.7). (preuve : src/db/schema.ts:73-107)
+  ✅ **Livré (18/10/2026, paquet 5)** — NC et réclamation client : décision de traitement (retouche ou reprise, rebut, acceptation par dérogation, retour au fournisseur), quantité concernée, coût de non-qualité (€ HT) et précisions (autorité et conditions obligatoires pour une dérogation), journalisés ; coût de non-qualité repris par les objectifs QHSE (AUD-13).
 - **EVT-18** — Sans QR, le site n'est pas modifiable (premier site sous « Tous ») ; un QR de zone supprimée vide le lieu sans message. (preuve : src/server/events.ts:498-499 ; src/components/ReportForm.tsx:215 ; src/app/signaler/page.tsx:18-19 ; src/lib/data/events.ts:284-292)
   *Question : Code de poste stable indépendant de l'id de zone ?*
 - **EVT-19** — L'événement ne garde que le lieu en texte ; deleteZone invalide les QR imprimés sans avertir. Ajouter zoneId, archivage de zone, lien vers le QR. (preuve : src/db/schema.ts:79 ; src/server/sitemap.ts:109-123 ; src/components/sitemap/dialogs.tsx:58-63)
@@ -814,7 +818,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 
 21 éléments — P1 : 3 · P2 : 9 · P3 : 9 — charge indicative 22,5–66 j.
 
-Au 17/10/2026 : 5 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-11, PRV-12) — reste 16 éléments ouverts (C1 : 5 · C2 : 8 · C3 : 2 · C4 : 1 ; PA : 16), charge indicative 18,5–55 j.
+Au 18/10/2026 : 6 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-11, PRV-12) — reste 15 éléments ouverts (C1 : 4 · C2 : 8 · C3 : 2 · C4 : 1 ; PA : 15), charge indicative 18–54 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -824,7 +828,7 @@ Au 17/10/2026 : 5 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-11, PRV-12) — reste
 | PRV-04 | Traçabilité de la délivrance, de la check-list et de la clôture des permis | P2 | M | Migration drizzle | C2 · PA |
 | PRV-05 | Protocoles de sécurité de chargement et déchargement | P2 | M | — | C2 · PA |
 | PRV-06 | Inspection commune « préalable » acceptée après le début des travaux | P2 | S | — | C2 · PA |
-| PRV-07 | Signataires du plan et date de signature EU | P2 | S | Migration drizzle | C1 · PA |
+| PRV-07 | ✅ Signataires du plan et date de signature EU | P2 | S | Migration drizzle | — |
 | PRV-08 | Intervenants des permis reliés au personnel et aux habilitations | P2 | M | Niveaux d'habilitation ; Cursus | C3 · PA |
 | PRV-09 | Dossier entreprise extérieure : pièces de vigilance, intervenants, accueil | P2 | L | Migration drizzle | C2 · PA |
 | PRV-10 | Situations de coactivité : état « maîtrisée » | P2 | M | — | C1 · PA |
@@ -855,6 +859,7 @@ Au 17/10/2026 : 5 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-11, PRV-12) — reste
 - **PRV-06** — Seule la fin de l'intervention borne la date de l'inspection commune préalable. (preuve : src/server/prevention.ts:158)
   *Question : Refus strict ou écart tracé ?*
 - **PRV-07** — Signature EU forcée au jour, sans nom ni qualité des signataires ; l'impression affiche le responsable du plan. (preuve : src/server/prevention.ts:259-276, 279-310 ; src/app/(app)/prevention/imprimer/plan/[id]/page.tsx:137-140)
+  ✅ **Livré (18/10/2026, paquet 5)** — « Signer pour l'entreprise utilisatrice » ouvre un formulaire : date de signature (jamais future, jamais avant l'inspection commune), nom et qualité du signataire ; signature EE : nom et qualité obligatoires ; signataires journalisés, effacés avec les signatures par une modification, imprimés sur le plan (`signed_eu_name` / `signed_eu_quality`, `signed_ee_name` / `signed_ee_quality`).
 - **PRV-08** — performer est un texte libre : choisir les intervenants internes et contrôler leurs titres valides à la délivrance. (preuve : src/db/schema.ts:490 ; src/components/prevention/PermitDialogs.tsx:166-168 ; src/server/prevention.ts:470 ; src/components/prevention/model.ts:152)
   *Question : Quels titres par type de permis ?*
 - **PRV-09** — Ajouter assurance, attestation URSSAF (D. 8222-5), Kbis avec échéances, intervenants avec accueil sécurité, signaux d'expiration. (preuve : src/db/schema.ts:430-441 ; src/components/prevention/ContractorDialogs.tsx:62-68)
@@ -884,13 +889,13 @@ Au 17/10/2026 : 5 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-11, PRV-12) — reste
 
 20 éléments — P1 : 2 · P2 : 9 · P3 : 9 — charge indicative 19–54 j.
 
-Au 17/10/2026 : 6 livrés (✅ DUE-01, DUE-02, DUE-04, DUE-05, DUE-06, DUE-11) — reste 14 éléments ouverts (C1 : 11 · C2 : 2 · C4 : 1 ; PA : 14), charge indicative 12,5–35 j.
+Au 18/10/2026 : 7 livrés (✅ DUE-01, DUE-02, DUE-03, DUE-04, DUE-05, DUE-06, DUE-11) — reste 13 éléments ouverts (C1 : 10 · C2 : 2 · C4 : 1 ; PA : 13), charge indicative 12–34 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
 | DUE-01 | ✅ Mise à disposition du DUERP aux salariés, anciens salariés et instances | **P1** | M | — | — |
 | DUE-02 | ✅ PAPRIPACT : programme annuel de prévention | **P1** | L | Suivi des consultations CSE | — |
-| DUE-03 | Transmission de chaque version au SPST et dépôt sur le portail | P2 | S | Migration drizzle | C1 · PA |
+| DUE-03 | ✅ Transmission de chaque version au SPST et dépôt sur le portail | P2 | S | Migration drizzle | — |
 | DUE-04 | ✅ Annulation d'une action : détachement absent de l'historique du risque | P2 | S | — | — |
 | DUE-05 | ✅ Unités sur un site archivé déplacées en silence | P2 | S | — | — |
 | DUE-06 | ✅ Historique des unités en vigueur et des versions jamais affiché | P2 | S | — | — |
@@ -917,6 +922,7 @@ Au 17/10/2026 : 6 livrés (✅ DUE-01, DUE-02, DUE-04, DUE-05, DUE-06, DUE-11) �
   ✅ **Livré (12/10/2026)** — programme annuel par année (`prevention_programs`, `prevention_program_actions` : coût estimé, ressources, indicateur sur les lignes du programme seulement), prérempli depuis le DUERP, figé avec un instantané à la consultation du CSE, rouvert avec motif ; panneau `ProgramPanel`, impression `/risques/imprimer/programme?annee=`, échéances « consultation du CSE à saisir » et « programme à établir ». Réserve : un programme peut être figé sans coût ni indicateur sur ses lignes (champs optionnels, décision du lot 2), sans avertissement rappelant les mentions de L. 4121-3-1 (conditions d'exécution, indicateurs, coût, calendrier) ; l'impression ne signale que les lignes sans coût.
   *Question : Champs coût et ressources sur toutes les actions ?*
 - **DUE-03** — Ajouter date de transmission SPST, échéance associée, et emplacement pour le futur dépôt numérique. (preuve : src/db/schema.ts:157-168 ; src/lib/data/risks.ts:498-500 ; src/components/risks/VersionDialogs.tsx:200-215 (formulaire de version sans transmission SPST))
+  ✅ **Livré (18/10/2026, paquet 5)** — version du DUERP : « Transmise au SPST le » et « Déposée sur le portail numérique le » (dates jamais futures ni antérieures à la mise à jour, journalisées) ; échéance « Transmission au SPST à renseigner » tant que la version en vigueur ne l'a pas (comme la consultation du CSE) ; colonnes de la liste des versions, bandeau de l'écran. Le dépôt sur le portail n'est qu'une date (portail non ouvert).
 - **DUE-04** — detachAllLinks n'appelle pas logAs ; l'état « Annulée » de la fiche n'est jamais atteint. (preuve : src/server/plan-ui.ts:116-124 ; src/lib/action-links.ts:92-94,346-354 ; src/components/risks/RiskSheet.tsx:172-176 (affichage « Annulée » inatteignable))
   **À revoir avec ACT-21 (15/10/2026)** — l'annulation devient l'avancement « Abandonnée » (motif obligatoire) ; la trace du détachement dans l'historique du risque se fait dès maintenant ; l'affichage d'une action abandonnée sur la fiche attend la réponse (§ 19).
   ✅ **Livré (15/10/2026, paquet 1)** — l'abandon d'une action (motif obligatoire) la détache et l'écrit dans l'historique du risque (« Action A-n abandonnée : détachée ») ; la fiche du risque ne la montre plus parmi ses actions ouvertes.
@@ -947,7 +953,7 @@ Au 17/10/2026 : 6 livrés (✅ DUE-01, DUE-02, DUE-04, DUE-05, DUE-06, DUE-11) �
 
 21 éléments — P1 : 1 · P2 : 10 · P3 : 10 — charge indicative 23–68 j.
 
-Au 17/10/2026 : 4 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-11) — reste 17 éléments ouverts (C1 : 10 · C2 : 4 · C4 : 3 ; PA : 14), charge indicative 20–60 j.
+Au 18/10/2026 : 4 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-11) · 1 partiel (◐ HAB-10) — reste 17 éléments ouverts (C1 : 10 · C2 : 4 · C4 : 3 ; PA : 14), charge indicative 20–60 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -961,7 +967,7 @@ Au 17/10/2026 : 4 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-11) — reste 17 él�
 | HAB-08 | Date d'entrée, contrat et formation sécurité à l'embauche | P2 | M | Cursus | C4 · PA |
 | HAB-21 | Habilitations et formations en consultation seule pour le service QHSE (données du RH) | P2 | M | Cursus (INT-03) ; formulaire Power Apps | C4 · PA |
 | HAB-09 | Prévision des recyclages à 12 mois et plan de formation | P2 | M | — | C1 · PA |
-| HAB-10 | Niveaux, catégories CACES et prérequis entre titres | P2 | M | — | C1 · PA |
+| HAB-10 | ◐ Niveaux, catégories CACES et prérequis entre titres | P2 | M | HAB-02 (aptitude médicale) | C1 · PA |
 | HAB-11 | ✅ Vue Salarié : lien mort vers l'action de recyclage | P3 | S | — | — |
 | HAB-12 | Droits sur les titres suivis communs à tous les sites | P3 | S | — | C1 |
 | HAB-13 | Efficacité des formations et sensibilisation (ISO §7.2-7.3) | P3 | M | — | C1 · PA |
@@ -990,6 +996,7 @@ Au 17/10/2026 : 4 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-11) — reste 17 él�
 - **HAB-08** — Ajouter date d'entrée, type de contrat, poste à risques ; générer l'accueil sécurité (L. 4141-2) et la formation renforcée CDD/intérim (L. 4154-2). (preuve : src/db/schema.ts:24-39 (pas de date d'entrée ni de contrat) ; src/db/seed.ts:28 (« Monteur · arrivé le 28/09 » dans job), 233 (titre accueil), 290 (constat intérimaires) ; src/server/skills.ts:300-309 (création sans exigence))
 - **HAB-09** — Vue « À prévoir » par mois et titre. (preuve : src/lib/domain.ts:152 (SKILL_SOON_DAYS = 60), 312 (TODO_HORIZON_DAYS = 15) ; src/components/skills/rules.ts:50-56 (renewalDue limité au besoin immédiat) ; src/lib/queries.ts:70-76)
 - **HAB-10** — Autorisation de conduite conditionnée au CACES et à l'aptitude (R. 4323-56). (preuve : src/db/schema.ts:286-301 (pas de niveau, catégorie ni prérequis) ; src/db/seed.ts:233-234 (elec, r484, r489, conduite indépendants) ; src/lib/queries.ts:70-76 (état calculé sans dépendance))
+  ◐ **Partiel (18/10/2026, paquet 5)** — livré : titres prérequis d'un titre (au moins un en cours de validité, ex. autorisation de conduite : CACES R484 ou R489, R. 4323-56 ; ni soi-même, ni archivé, ni circulaire), état calculé « Prérequis non valide » de la matrice et échéance ; catégories ou niveaux obtenus saisis avec la formation d'un titre qui en porte (« Catégories CACES », « Indices d'habilitation »), journalisés. Reste : aptitude médicale à la conduite, selon la réponse de HAB-02 (donnée de santé, avis du DPO) — rien n'est stocké d'ici là.
 - **HAB-11** — L'action est pilotée par la QHSE, invisible au Salarié. (preuve : src/components/skills/common.tsx:16,41 (pilote = QHSE_LEAD), 90 et 101 (liens /actions?action=) ; src/components/skills/SkillMatrix.tsx:160 ; src/components/skills/SkillAlerts.tsx:78,116 ; src/lib/data/actions.ts:252-265 (Salarié non pilote : action introuvable))
   **À revoir avec ACT-21 (15/10/2026)** — le responsable consulte ses actions (décision du 15/10/2026), mais le pilote d'un recyclage est le responsable QHSE du site : afficher le recyclage sans lien pour le Salarié.
   ✅ **Livré (15/10/2026, intégration du paquet 1)** — une action de recyclage reprise qu'on ne peut pas lire (`canReadAction` : Salarié qui n'en est pas responsable) est réduite à son numéro, sans lien vers la fiche ; aucune nouvelle action de recyclage n'est créée.
@@ -1009,7 +1016,7 @@ Au 17/10/2026 : 4 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-11) — reste 17 él�
 
 18 éléments — P1 : 2 · P2 : 9 · P3 : 7 — charge indicative 13–34 j.
 
-Au 17/10/2026 : 6 livrés (✅ VEI-01, VEI-02, VEI-03, VEI-04, VEI-06, VEI-09) — reste 12 éléments ouverts (C1 : 11 · C4 : 1 ; PA : 11), charge indicative 10–28 j.
+Au 18/10/2026 : 8 livrés (✅ VEI-01, VEI-02, VEI-03, VEI-04, VEI-06, VEI-09, VEI-10, VEI-11) — reste 10 éléments ouverts (C1 : 9 · C4 : 1 ; PA : 9), charge indicative 8–22 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1022,8 +1029,8 @@ Au 17/10/2026 : 6 livrés (✅ VEI-01, VEI-02, VEI-03, VEI-04, VEI-06, VEI-09) �
 | VEI-07 | Rattachement explicite d'une exigence à un indicateur (linkedTo) | P2 | S | — | C1 · PA |
 | VEI-08 | Pièces jointes à compléter ou retirer après coup | P2 | S | — | C1 · PA |
 | VEI-09 | ✅ Modifier « Dernier contrôle » contourne l'historique | P2 | S | — | — |
-| VEI-10 | Applicabilité par site et référence du texte | P2 | M | — | C1 · PA |
-| VEI-11 | Résultat du contrôle réalisé | P2 | M | — | C1 · PA |
+| VEI-10 | ✅ Applicabilité par site et référence du texte | P2 | M | — | — |
+| VEI-11 | ✅ Résultat du contrôle réalisé | P2 | M | — | — |
 | VEI-12 | Indicateurs calculés : registre des déchets et certification ISO 9001 | P3 | M | linkedTo éditable | C1 · PA |
 | VEI-13 | Filtres, recherche et tri | P3 | M | — | C1 · PA |
 | VEI-14 | Métrologie : étalonnage des équipements de mesure | P3 | M | — | C1 · PA |
@@ -1049,7 +1056,9 @@ Au 17/10/2026 : 6 livrés (✅ VEI-01, VEI-02, VEI-03, VEI-04, VEI-06, VEI-09) �
 - **VEI-09** — Modifier « Dernier contrôle » met la date à jour directement, sans contrôle enregistré ni détachement des actions. (preuve : src/server/watch.ts:282-288 (cf. 326) ; src/components/watch/ControlsPanel.tsx:413-422 ; src/lib/data/watch.ts:214-215)
   ✅ **Livré (17/10/2026, paquet 3)** — à la modification d'un contrôle, « Dernier contrôle » et « Réserves en cours » sont en lecture (non envoyés) et refusés par `saveControl` s'ils changent : ils ne changent que par « Enregistrer un contrôle » ou l'annulation d'un enregistrement (historique, détachement de l'action de levée). La création garde les deux champs.
 - **VEI-10** — Ajouter à l'exigence les sites concernés, l'URL Légifrance et la pièce du texte. (preuve : src/db/schema.ts:207-230 ; src/lib/data/watch.ts:260,275)
+  ✅ **Livré (18/10/2026, paquet 5)** — exigence : sites concernés (aucun : tous ; fixés par le périmètre complet seulement), lien vers le texte officiel (https, Légifrance ou EUR-Lex), texte joint (pièces `requirement`, ajout et retrait journalisés) ; liste filtrée sur le site sélectionné, échéance rattachée au seul site concerné.
 - **VEI-11** — Saisir le résultat du contrôle : favorable, avec réserves, défavorable, mise à l'arrêt. (preuve : src/db/schema.ts:253-271 ; src/lib/queries.ts:63-68 ; src/server/watch.ts:307-336)
+  ✅ **Livré (18/10/2026, paquet 5)** — résultat obligatoire du contrôle enregistré : favorable, favorable avec réserves (réserves exigées), défavorable, mise à l'arrêt ; affiché dans l'historique et le statut ; un dernier contrôle défavorable ou à l'arrêt est signalé (échéance en retard) jusqu'à un nouveau contrôle favorable. Les saisies antérieures restent sans résultat.
 - **VEI-12** — BSD manquants et état de certification dans indicatorOf. (preuve : src/lib/data/watch.ts:101-104 ; src/lib/data/environment.ts:196-200,322-337)
 - **VEI-13** — Filtres par évaluation, domaine, pilote et responsable ; tri par échéance. (preuve : src/app/(app)/veille/page.tsx:46-49,103-108 ; src/lib/data/watch.ts:91-92)
 - **VEI-14** — Catégorie métrologie, hors tolérance ouvrant une NC. (preuve : src/db/schema.ts:232-271)
@@ -1062,7 +1071,7 @@ Au 17/10/2026 : 6 livrés (✅ VEI-01, VEI-02, VEI-03, VEI-04, VEI-06, VEI-09) �
 
 36 éléments — P1 : 6 · P2 : 11 · P3 : 19 — charge indicative 28,5–77 j.
 
-Au 17/10/2026 : 13 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, AUD-07, AUD-10, AUD-11, AUD-12, AUD-14, AUD-15, AUD-30) · 1 partiel (◐ AUD-13) — reste 23 éléments ouverts (C1 : 22 · C2 : 1 ; PA : 18), charge indicative 20–56 j.
+Au 18/10/2026 : 16 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, AUD-07, AUD-08, AUD-09, AUD-10, AUD-11, AUD-12, AUD-13, AUD-14, AUD-15, AUD-30) — reste 20 éléments ouverts (C1 : 19 · C2 : 1 ; PA : 15), charge indicative 15–40 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1073,12 +1082,12 @@ Au 17/10/2026 : 13 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, 
 | AUD-05 | ✅ Section 1 du dossier : décisions sans action et actions annulées | **P1** | S | — | — |
 | AUD-06 | ✅ Dossier figé calculé à la clôture, pas à la séance | **P1** | M | — | — |
 | AUD-07 | ✅ Supprimer le libellé d'audit codé en dur | P2 | S | — | — |
-| AUD-08 | Cycle de certification : renouvellement, suspension, historique | P2 | M | — | C1 · PA |
-| AUD-09 | Types de constat : écart majeur, observation, délai de réponse | P2 | M | — | C1 · PA |
+| AUD-08 | ✅ Cycle de certification : renouvellement, suspension, historique | P2 | M | — | — |
+| AUD-09 | ✅ Types de constat : écart majeur, observation, délai de réponse | P2 | M | — | — |
 | AUD-10 | ✅ Journaliser les changements du programme faits par la revue | P2 | S | — | — |
 | AUD-11 | ✅ Contrôles de saisie des constats | P2 | S | — | — |
 | AUD-12 | ✅ Rattacher une action d'une autre revue la déplace | P2 | S | ACT-20 (source unique) | — |
-| AUD-13 | ◐ Objectifs QHSE mesurables reliés aux indicateurs | P2 | L | — | C1 · PA |
+| AUD-13 | ✅ Objectifs QHSE mesurables reliés aux indicateurs | P2 | L | — | — |
 | AUD-14 | ✅ Contrôles avant clôture et visa | P2 | S | — | — |
 | AUD-15 | ✅ Visa de la direction possible par l'animateur QHSE | P2 | S | — | — |
 | AUD-16 | Échéances : décisions sans suite, prochaine revue non planifiée | P2 | S | — | C1 · PA |
@@ -1118,7 +1127,9 @@ Au 17/10/2026 : 13 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, 
 - **AUD-07** — DEFAULT_AUDIT préremplit le libellé d'audit des constats. (preuve : src/lib/data/audits.ts:65 ; src/app/(app)/audits/page.tsx:11,48 ; src/components/audits/FindingsCard.tsx:138,237)
   ✅ **Livré (17/10/2026, paquet 4)** — `DEFAULT_AUDIT` supprimé : un constat hors programme part d'un libellé vide.
 - **AUD-08** — Échéance de certification visible à 15 j seulement ; ni cycle de 3 ans, ni renouvellement, ni suspension, ni historique. (preuve : src/lib/data/audits.ts:283-288 ; src/lib/domain.ts:182,312 (CERT_SOON_DAYS = 30, TODO_HORIZON_DAYS = 15) ; src/lib/queries.ts:140-148 ; src/db/schema.ts:332-343)
+  ✅ **Livré (18/10/2026, paquet 5)** — cycle de certification : certificat de 3 ans au plus (ISO/IEC 17021-1, refus sinon) ; « Renouveler le certificat » (nouveau cycle, le précédent au journal) ; suspension par l'organisme (date, motif) et levée motivée, statut « Certificat suspendu » et échéance ; fin de validité signalée à 30 jours (au lieu de 15) ; « audit de renouvellement à programmer » à 6 mois de la fin de validité sans audit programmé avant. Historique : journal du référentiel.
 - **AUD-09** — Trois types seulement (écart mineur, piste, point fort) : ajouter écart majeur, observation et délai de réponse. (preuve : src/lib/domain.ts:161-165 ; src/db/schema.ts:369 (kind : ecart_mineur | piste | point_fort) ; src/lib/data/audits.ts:271-274)
+  ✅ **Livré (18/10/2026, paquet 5)** — types « Écart majeur » et « Observation » ; délai de réponse d'un écart (« Réponse attendue le », jamais avant le constat, ignoré pour les autres types), journalisé ; échéance datée du délai, puis en retard.
 - **AUD-10** — ensurePlanItem et moveReview sans logChange. (preuve : src/server/review.ts:71-81,96-103,232)
   ✅ **Livré (constaté le 15/10/2026)** — avec AUD-01 au lot 2 : `ensurePlanItem` et `moveReview` journalisent sur l'élément du programme le rattachement, la création et le déplacement faits par la revue, avec le détail des champs modifiés (`src/server/review.ts`, `diffFields`).
 - **AUD-11** — Constat accepté sur un audit futur ; la date « Réalisé le » est perdue si la case n'est pas cochée. (preuve : src/server/audits.ts:224 (doneOn null si non coché) ; src/server/audits.ts:327,337-341 (aucun contrôle item.done, foundOn ??= plannedOn))
@@ -1131,6 +1142,7 @@ Au 17/10/2026 : 13 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, 
 - **AUD-13** — TF1_TARGET constant ; objectifs de revue en texte libre (ISO §6.2, §9.1). (preuve : src/lib/data/dashboard.ts:13,66 ; src/lib/data/review.ts:369 ; src/db/schema.ts:416-426)
   **À revoir avec ACT-20 (15/10/2026)** — la source « Objectif QSE » vise les décisions de revue de nature « objectif », puis l'entité objectif quand elle existera.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : la source « Objectif QSE » est imposée aux actions des décisions de revue de nature « objectif ». Reste : objectifs mesurables reliés aux indicateurs (TF1 cible…).
+  ✅ **Livré (18/10/2026, paquet 5)** — carte « Objectifs QHSE » de l'écran Audits (`qhse_objectives`) : objectif d'une année, d'un site ou de tous les sites, indicateur calculé (TF1, TG, AT avec arrêt, remontées PA + SD, NC, réclamations, coût de non-qualité, actions efficaces, actions en retard, contrôles dépassés), cible, pilote, décision de revue « objectif » facultative ; valeur et état calculés à l'affichage, jamais stockés ; archivage motivé, historique ; cible TF1 du tableau de bord et du dossier de revue tirée de l'objectif (plus de `TF1_TARGET`) ; section « Objectifs QHSE » du dossier de revue (§9.3.2 c).
 - **AUD-14** — Clôture et visa ne vérifient ni les participants, ni le compte rendu, ni les décisions sans pilote. (preuve : src/server/review.ts:184-194,257-266,401-402)
   ◐ **Partiel (constaté le 15/10/2026)** — livré : la clôture exige le compte rendu (revue « tenue »). Reste : contrôles des participants et des décisions sans pilote avant la clôture et le visa.
   ✅ **Livré (17/10/2026, paquet 4)** — avant le visa : participants de l'entreprise, synthèse de la séance et pilote de chaque décision exigés (`reviewCloseBlockers`, `src/lib/review-rules.ts`), affichés à la place du bouton « Clôturer » ; refus sans écriture.
@@ -1165,7 +1177,7 @@ Au 17/10/2026 : 13 livrés (✅ AUD-01, AUD-02, AUD-03, AUD-04, AUD-05, AUD-06, 
 
 23 éléments — P1 : 2 · P2 : 10 · P3 : 11 — charge indicative 22–62 j.
 
-Au 17/10/2026 : 7 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-09, DOC-10) · 1 partiel (◐ DOC-13) — reste 16 éléments ouverts (C1 : 9 · C2 : 4 · C3 : 2 · C4 : 1 ; PA : 16), charge indicative 17,5–51 j.
+Au 18/10/2026 : 8 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-09, DOC-10, DOC-12) · 1 partiel (◐ DOC-13) — reste 15 éléments ouverts (C1 : 8 · C2 : 4 · C3 : 2 · C4 : 1 ; PA : 15), charge indicative 17–50 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
@@ -1180,7 +1192,7 @@ Au 17/10/2026 : 7 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-09, D
 | DOC-09 | ✅ Archivage d'une filière déchets | P2 | S | — | — |
 | DOC-10 | ✅ Journal des filières et relevés | P2 | S | — | — |
 | DOC-11 | Pièces jointes d'un enlèvement | P2 | M | — | C1 · PA |
-| DOC-12 | Statuts de BSD refus et acceptation partielle | P2 | S | — | C1 · PA |
+| DOC-12 | ✅ Statuts de BSD refus et acceptation partielle | P2 | S | — | — |
 | DOC-13 | ◐ Action liée d'une version : contrôles contournés | P3 | S | ACT-28 | C1 · PA |
 | DOC-14 | Échéances documentaires | P3 | S | — | C1 · PA |
 | DOC-15 | Revue périodique sans modification | P3 | M | — | C1 · PA |
@@ -1214,6 +1226,7 @@ Au 17/10/2026 : 7 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-09, D
   ✅ **Livré (17/10/2026, paquet 3)** — relevés de consommation journalisés par site et par mois (`consumption`, « site|AAAA-MM-01 » : valeur précédente → nouvelle par énergie, saisie, modification ou effacement), dans la transaction ; historique du mois dans la fenêtre de saisie (chargé à l'ouverture).
 - **DOC-11** — Joindre bordereau et certificat à un enlèvement. (preuve : src/lib/uploads.ts:71-112 ; src/components/environment/WasteRegister.tsx:111-160)
 - **DOC-12** — Quatre statuts de BSD seulement : ajouter refus et acceptation partielle. (preuve : src/components/environment/model.ts:9-15,21)
+  ✅ **Livré (18/10/2026, paquet 5)** — statuts de BSD « Refusé » et « Accepté partiellement » : motif obligatoire, quantité refusée (toute la quantité pour un refus, la part saisie sinon), journalisés et affichés sur l'enlèvement ; taux de valorisation calculé sur la quantité acceptée.
 - **DOC-13** — L'action liée à une version est lue par readAction au lieu de checkActionLink : les contrôles de rattachement sont contournés. (preuve : src/server/documents.ts:43-49,105,183,240 ; src/lib/action-links.ts:324-330 ; src/server/links.ts:17-31,38-58)
   **À revoir avec ACT-28 (15/10/2026)** — `DocumentPanel` fait partie des écrans qui créent des actions : corriger avec leur adaptation.
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : changer l'action liée d'une version suit les règles de `linkAction` (QHSE, action ni Vérifiée ni Abandonnée, site) et se journalise sur les actions. Reste : passer par `checkActionLink` lui-même.
@@ -1570,15 +1583,15 @@ Au 15/10/2026 : 3 livrés (✅ UX-01, UX-02, UX-03) · 2 partiels (◐ UX-06, UX
 
 11 éléments — P2 : 6 · P3 : 5 — charge indicative 15–47 j.
 
-Au 15/10/2026 : aucun livré — reste 11 éléments ouverts (C1 : 4 · C2 : 5 · C3 : 2 ; PA : 9), charge indicative 15–47 j.
+Au 18/10/2026 : 2 livrés (✅ CNF-03, CNF-05) — reste 9 éléments ouverts (C1 : 2 · C2 : 5 · C3 : 2 ; PA : 7), charge indicative 13–41 j.
 
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
 | CNF-01 | Registre des dangers graves et imminents | P2 | M | — | C2 · PA |
 | CNF-02 | Instances CSE / CSSCT | P2 | M | — | C2 |
-| CNF-03 | Bilan annuel SSCT | P2 | M | — | C1 · PA |
+| CNF-03 | ✅ Bilan annuel SSCT | P2 | M | — | — |
 | CNF-04 | Évaluation des fournisseurs | P2 | L | — | C3 · PA |
-| CNF-05 | Contexte et risques du système de management | P2 | M | — | C1 · PA |
+| CNF-05 | ✅ Contexte et risques du système de management | P2 | M | — | — |
 | CNF-06 | Produits chimiques | P2 | L | — | C2 · PA |
 | CNF-07 | Satisfaction client | P3 | M | — | C3 · PA |
 | CNF-08 | Situations d'urgence | P3 | M | — | C1 · PA |
@@ -1590,8 +1603,10 @@ Au 15/10/2026 : aucun livré — reste 11 éléments ouverts (C1 : 4 · C2 : 5 �
 - **CNF-02** — Réunions, ordres du jour et PV des instances. (preuve : src/db/schema.ts:164 (duerpVersions.cseConsultedOn, seule donnée CSE) ; src/db/schema.ts:388 (reviews.externalParticipants, texte libre) ; aucune table de réunion CSE/CSSCT parmi les pgTable de src/db/schema.ts)
 - **CNF-03** — Bilan annuel santé, sécurité et conditions de travail présenté au CSE (L. 2312-27). (preuve : src/components/review/DossierView.tsx:83-552 (sections ISO 9001 §9.3 uniquement, pas de rapport ni de programme SSCT) ; rg « PAPRIPACT|programme annuel de prévention|rapport annuel » dans src : aucun résultat ; src/lib/data/dashboard.ts (TF1/TG calculés sur hoursWorked du seed))
   **À revoir avec ACT-29 (15/10/2026)** — les statistiques de la refonte alimentent le bilan ; TF1/TG restent « — » sans heures travaillées (TDB-03).
+  ✅ **Livré (18/10/2026, paquet 5)** — « Bilan SSCT » de l'écran Évaluation des risques (`/risques/bilan-ssct?annee=`, animateur QHSE et direction) : bilan imprimable de l'année (par défaut l'année écoulée, site sélectionné) — accidents du travail, de trajet, d'intérimaires et de personnes extérieures, jours perdus, TF1 / TG, maladies professionnelles, presque-accidents et situations dangereuses ; actions Sécurité et Santé du plan d'après les statistiques d'ACT-29 (ouvertes, vérifiées, efficacité, retard, liste des actions vérifiées) ; versions du DUERP (CSE, SPST) ; programmes annuels de prévention de l'année et de la suivante ; contrôles, plans de prévention, formations. Calculé, jamais stocké ; à compléter par l'employeur avant présentation au CSE.
 - **CNF-04** — Fournisseurs comme entité évaluée (ISO 9001 §8.4) au lieu d'une simple origine de NC. (preuve : src/lib/domain.ts:52 (NC_ORIGINS : « Fournisseurs » simple catégorie) ; src/db/schema.ts:91 (events.ncOrigin texte, pas de supplierId) ; src/components/review/DossierView.tsx:178-218 (synthèse existante) ; src/db/schema.ts:430-442 (contractors réservé à la prévention))
 - **CNF-05** — Enjeux, parties intéressées, risques et opportunités (ISO 9001 §4.1, §6.1). (preuve : src/components/review/DossierView.tsx:83-552 (sections listées : aucune pour les enjeux, parties intéressées ou risques et opportunités) ; rg « enjeu|parties int|opportunit » dans src : seulement l'aide de ReviewDialogs.tsx:84)
+  ✅ **Livré (18/10/2026, paquet 5)** — carte « Contexte, risques et opportunités » de l'écran Audits (`context_items`) : enjeux externes et internes (§4.1), parties intéressées et leurs attentes (§4.2), risques et opportunités avec leur traitement obligatoire (§6.1) ; saisie par l'animateur QHSE et la direction, archivage motivé, historique ; section du dossier de revue (§9.3.2 b et e).
 - **CNF-06** — Inventaire des produits, FDS et repérage des CMR. (preuve : src/db/seed.ts:162 (« FDS » en texte libre dans existingMeasures d'un risque) ; aucune table produit chimique ou FDS dans src/db/schema.ts ; rg « CMR » : seulement prevention/model.ts:15 et pp-import/text.ts:32)
 - **CNF-07** — Enquêtes de satisfaction en plus du texte libre de la revue. (preuve : src/db/schema.ts:389 (reviews.customerPerception, texte libre) ; src/components/review/ReviewDialogs.tsx:134 ; src/components/review/DossierView.tsx:149-176 (section alimentée par les RC et le texte libre))
 - **CNF-08** — Situations d'urgence identifiées et exercices planifiés et tracés. (preuve : src/components/audits/ProgramTimeline.tsx:222 (exercices seulement suggérés comme ligne libre du programme) ; src/lib/domain.ts:167-170 (PLAN_TRACK_KINDS sans type exercice) ; aucune table pour les situations d'urgence dans src/db/schema.ts)
@@ -1648,6 +1663,27 @@ D'après le § 22 de la spécification ([`docs/specs/actions-qse.md`](specs/acti
 | 17 | Direction comptée dans le « service QHSE » pour les droits sur les actions — *proposition appliquée par défaut (paquet 1)* | C2 | responsable produit | non | ACT-21 |
 | 18 | Autres formulaires Power Apps (événements, audits…) : écrans sources et éléments liés susceptibles de changer | C3 | utilisateur | non | ACT-28, éléments PA |
 | 19 | Compte d'envoi des e-mails ; heure d'envoi du rappel (proposition : mercredi 7 h) | C4 | informatique | oui (envoi réel) | ACT-34 |
+
+### Paquet 5 (conformité réglementaire) : points appliqués par défaut, à confirmer par le service QHSE
+
+Livré le 18/10/2026. Lecture la plus prudente retenue là où le backlog ne tranchait pas ; non bloquant : la réponse peut corriger la règle sans reprise de données (« non » : proposition appliquée par défaut).
+
+| # | Point à confirmer | Élément | Bloquant |
+|--:|---|---|:-:|
+| 1 | Une maladie professionnelle est **réservée à l'animateur QHSE et à la direction** dans son ensemble (liste, fiche, échéances, pièces jointes), sans rattachement (risque, équipement, document) et avec l'intitulé imposé « Maladie professionnelle » ; seul son numéro et cet intitulé paraissent dans une action liée. Faut-il ouvrir la fiche (sans les champs de santé) à son pilote d'un autre rôle ? | EVT-09 | non |
+| 2 | Délais d'une maladie professionnelle : seul le retour du questionnaire employeur (30 jours francs après réception, R. 461-9 CSS) est suivi ; réserves motivées de l'employeur et consultation du dossier (délais de la caisse) non suivies. À compléter ? | EVT-09 | non |
+| 3 | Accident de trajet exclu aussi des « jours sans accident avec arrêt » et de la pyramide (en plus du TF1 / TG), et inscriptible au registre des accidents bénins comme un AT : à confirmer. | EVT-09 | non |
+| 4 | Aptitude médicale à la conduite (R. 4323-56) : rien n'est stocké tant que HAB-02 (suivi de l'état de santé : Cursus ou Vigie, avis du DPO) n'est pas tranché ; un titre prérequis vaut dès qu'**au moins un** des titres listés est valide (CACES R484 **ou** R489 pour l'autorisation de conduite). | HAB-10 | oui (aptitude) |
+| 5 | Transmission du DUERP au SPST : échéance « à renseigner » dès la mise à jour (aucun délai réglementaire chiffré) ; dépôt sur le portail numérique : date seulement, sans échéance tant que le portail n'est pas ouvert. | DUE-03 | non |
+| 6 | Certification : alerte « audit de renouvellement à programmer » à **6 mois** de la fin de validité, fin de validité signalée à 30 jours, certificat refusé au-delà de **3 ans** après son émission (ISO/IEC 17021-1). Délais à confirmer avec l'organisme. | AUD-08 | non |
+| 7 | Objectifs QHSE : valeurs calculées sur tout le périmètre de l'objectif (site ou tous les sites), quel que soit le périmètre de la personne qui consulte (agrégats seulement) ; cible « ne pas dépasser » comprise au sens large (TF1 ≤ 4 pour « TF1 < 4 » de la revue) ; liste des dix indicateurs à valider. | AUD-13 | non |
+| 8 | Lien vers le texte d'une exigence limité à Légifrance et EUR-Lex (https) ; sites concernés fixés par le périmètre complet seulement (direction, animateur QHSE). | VEI-10 | non |
+| 9 | Contrôle défavorable ou mise à l'arrêt : signalé jusqu'à un nouveau contrôle favorable, sans blocage d'autre écran (permis, affectations). | VEI-11 | non |
+| 10 | BSD refusé ou accepté partiellement : aucune échéance ; le déchet repris s'inscrit comme un nouvel enlèvement ; taux de valorisation calculé sur la quantité acceptée. | DOC-12 | non |
+| 11 | Bilan SSCT : année écoulée par défaut, site sélectionné, actions des domaines Sécurité et Santé ; réservé à l'animateur QHSE et à la direction jusqu'à sa présentation au CSE (accidentologie). | CNF-03 | non |
+| 12 | Signataires du plan de prévention : nom et qualité saisis librement (pas une fiche du personnel). | PRV-07 | non |
+
+**Libellés réglementaires à relire à la recette** (non bloquant) : « Maladie professionnelle », « Tableau de maladie professionnelle », « Certificat médical initial du », « Déclaration reçue de la CPAM le », « Questionnaire employeur reçu le / retourné le » et l'aide « À retourner à la caisse sous 30 jours francs (R. 461-9) » ; « Accident de trajet (domicile – travail, ou travail – lieu de repas) » et son aide (L. 411-2) ; la synthèse de la DAT (« rubriques à reporter sur net-entreprises.fr (Cerfa 14463) », « Feuille d'accident du travail · à remettre à la victime », Cerfa 11383, L. 441-5) ; traitements « Retouche ou reprise », « Rebut », « Acceptation par dérogation », « Retour au fournisseur » ; « Transmise au SPST le » (R. 4121-4), « Déposée sur le portail numérique le » (L. 4121-3-1) ; « Titres prérequis », « Prérequis non valide », « Catégories CACES », « Indices d'habilitation » ; résultats « Favorable », « Favorable avec réserves », « Défavorable », « Mise à l'arrêt » ; « Écart majeur », « Observation », « Réponse attendue le » ; « Renouveler le certificat », « Suspension par l'organisme », « Lever la suspension » et le refus « 3 ans au plus (ISO/IEC 17021-1) » ; statuts de BSD « Refusé », « Accepté partiellement » ; libellés des dix indicateurs d'objectif ; natures du contexte (enjeux externes et internes §4.1, parties intéressées §4.2, risques et opportunités §6.1) ; titres et rubriques du « Bilan annuel santé, sécurité et conditions de travail » (L. 2312-27).
 
 ### Questions par élément (80 : 55 ouvertes — C2 : 41 · C3 : 14 — et 25 tranchées : 3 au lot 1, 12 au lot 2, 10 le 15/10/2026)
 
@@ -1718,7 +1754,7 @@ D'après le § 22 de la spécification ([`docs/specs/actions-qse.md`](specs/acti
 
 **Habilitations et formations**
 
-- **HAB-02** *Suivi de l'état de santé au travail : VIP, SIR, aptitude, reprise* — **C2** · Le suivi de l'état de santé au travail (dates des VIP, SIR, aptitude, visites de reprise) est-il tenu dans Cursus, et lu par le connecteur INT-03, ou saisi dans Vigie ?
+- **HAB-02** *Suivi de l'état de santé au travail : VIP, SIR, aptitude, reprise* — **C2** · Le suivi de l'état de santé au travail (dates des VIP, SIR, aptitude, visites de reprise) est-il tenu dans Cursus, et lu par le connecteur INT-03, ou saisi dans Vigie ? *La réponse débloque aussi l'aptitude médicale à la conduite de HAB-10 (◐ depuis le paquet 5 : rien n'est stocké d'ici là).*
 - **HAB-05** *Sortie d'un salarié : responsabilités ouvertes et échéances postérieures* — **C2** · À la sortie d'un salarié : bloquer la sortie tant qu'il porte des responsabilités ouvertes (actions dont il est responsable, pilotages, échéances postérieures à la date de sortie), ou proposer de les réaffecter en masse ?
 - **HAB-07** *Exigences par poste ou par activité* — **C2** · Lever le hors-périmètre des exigences par poste ou par activité, décidé auparavant ? Si oui, le poste est-il saisi dans Vigie ou lu dans Cursus ?
 - **HAB-19** *Vue Salarié : titres archivés et dépôt de son attestation* — **C2** · Le salarié peut-il déposer lui-même l'attestation d'une formation, qui ne compte qu'après validation par le service QHSE ?

@@ -2,10 +2,10 @@ import 'server-only';
 import { cache } from 'react';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { computeActionStats, parseStatsMonth, statusTransition, type ActionStats, type StatusTransition } from '../action-stats';
+import { computeActionStats, parseStatsMonth, statusTransition, type ActionStats, type StatsAction, type StatusTransition } from '../action-stats';
 import { canReadPlan } from '../action-rules';
 import { parisDay } from '../dates';
-import { loadAllActions, loadPeople } from '../queries';
+import { loadAllActions, loadPeople, type ActionRow } from '../queries';
 import { getSession } from '../session';
 import { today } from '@/lib/today';
 
@@ -21,6 +21,17 @@ export const loadActionStats = cache(async (rawMonth: string | null): Promise<Ac
   const now = today();
   const month = parseStatsMonth(rawMonth, now);
   const [rows, people] = await Promise.all([loadAllActions('site'), loadPeople()]);
+  return computeActionStats({
+    ...(await statsInput(rows)), month, today: now,
+    pilotNames: new Map([...people.values()].map((p) => [p.id, p.name])),
+  });
+});
+
+/**
+ * Entrées du calcul des statistiques (computeActionStats) pour les actions données : champs lus et journal structuré des
+ * avancements (entrées « status » et « reprise »). Repris par le bilan annuel SSCT (CNF-03).
+ */
+export async function statsInput(rows: readonly ActionRow[]): Promise<{ actions: StatsAction[]; transitions: StatusTransition[] }> {
   const db = await getDb();
   const ids = new Set(rows.map((a) => a.id));
   const logs = ids.size
@@ -31,12 +42,11 @@ export const loadActionStats = cache(async (rawMonth: string | null): Promise<Ac
     .filter((l) => ids.has(l.entityId))
     .map((l) => statusTransition({ actionId: l.entityId, action: l.action, day: parisDay(l.at), seq: l.id, details: l.details }))
     .filter((x): x is StatusTransition => x !== null);
-  return computeActionStats({
+  return {
     actions: rows.map((a) => ({
       id: a.id, openedOn: a.openedOn, status: a.status, dueOn: a.dueOn, doneOn: a.doneOn, closedOn: a.closedOn, effective: a.effective,
       source: a.source, domain: a.domain, pilotId: a.pilotId, riskLevel: a.riskLevel, cancelledOn: a.cancelledAt ? parisDay(a.cancelledAt) : null,
     })),
-    transitions, month, today: now,
-    pilotNames: new Map([...people.values()].map((p) => [p.id, p.name])),
-  });
-});
+    transitions,
+  };
+}

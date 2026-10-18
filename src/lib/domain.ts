@@ -13,7 +13,7 @@ export const TONE = {
   accent: { fg: 'var(--color-accent-100)', bg: 'var(--color-accent-800)', dot: 'var(--color-accent)' },
 } as const satisfies Record<Tone, { fg: string; bg: string; dot: string }>;
 
-export type EventType = 'AT' | 'PA' | 'SD' | 'NC' | 'RC' | 'ENV';
+export type EventType = 'AT' | 'PA' | 'SD' | 'NC' | 'RC' | 'ENV' | 'MP';
 
 export const EVENT_TYPES: Record<EventType, { label: string; tone: Tone; icon: string }> = {
   AT: { label: 'Accident', tone: 'danger', icon: 'ph-first-aid' },
@@ -22,8 +22,19 @@ export const EVENT_TYPES: Record<EventType, { label: string; tone: Tone; icon: s
   NC: { label: 'Non-conformité', tone: 'accent', icon: 'ph-x-square' },
   RC: { label: 'Réclamation client', tone: 'accent', icon: 'ph-chat-centered-text' },
   ENV: { label: 'Environnement', tone: 'neutral', icon: 'ph-leaf' },
+  // EVT-09 : maladie professionnelle (déclarée par la victime à la CPAM, L. 461-5 CSS) — donnée de santé : type réservé aux
+  // rôles canSeeHealth (canSeeEventType), jamais signalé depuis le terrain.
+  MP: { label: 'Maladie professionnelle', tone: 'danger', icon: 'ph-stethoscope' },
 };
 export const EVENT_TYPE_KEYS = Object.keys(EVENT_TYPES) as EventType[];
+/** Types d'événement réservés aux rôles habilités aux données de santé (EVT-09) : listes, fiche, échéances, server actions. */
+export const HEALTH_EVENT_TYPES: readonly EventType[] = ['MP'];
+/** Le rôle peut-il voir un événement de ce type (maladie professionnelle : canSeeHealth) ? */
+export const canSeeEventType = (role: Role, type: string) => !(HEALTH_EVENT_TYPES as readonly string[]).includes(type) || canSeeHealth(role);
+/** Types proposés au signalement terrain (/signaler, createReport) : ni maladie professionnelle (déclarée par la victime). */
+export const REPORT_TYPE_KEYS = EVENT_TYPE_KEYS.filter((k) => !(HEALTH_EVENT_TYPES as readonly string[]).includes(k));
+/** Questionnaire de la caisse à l'employeur (maladie professionnelle, R. 461-9 CSS) : retour sous 30 jours francs. */
+export const MP_QUESTIONNAIRE_DAYS = 30;
 
 export const EVENT_STEPS = ['Déclaré', 'Qualifié', 'Analyse des causes', 'Actions', 'Efficacité vérifiée', 'Clôturé'] as const;
 export const STEP_QUALIFIED = 1; // l'étape « Qualifié » exige un pilote désigné
@@ -67,6 +78,7 @@ export const QUALIFICATION_FIELDS: Record<EventType, QualificationField[]> = {
   NC: ['ncOrigin'],
   RC: ['customer', 'customerRef'],
   ENV: ['envAspect', 'envMedium'],
+  MP: ['victim'],
 };
 
 /** Donneur de soins d'un accident bénin (D. 441-1 CSS) : secouriste du travail de l'effectif, ou professionnel de santé. */
@@ -93,6 +105,19 @@ export const METHODS: [AnalysisMethod, string][] = [['5m', '5M'], ['tree', 'Arbr
 export const D8_STEPS = ['D1 · Équipe', 'D2 · Description', 'D3 · Actions immédiates', 'D4 · Causes racines', 'D5 · Actions correctives', 'D6 · Mise en œuvre', 'D7 · Prévention', 'D8 · Clôture'];
 
 export const NC_ORIGINS = ['Fournisseurs', 'Fabrication', 'Conception BE', 'Mise en service', 'Réclamation client'];
+
+/**
+ * Traitement d'un produit non conforme (EVT-17, ISO 9001 §8.7.1) : décision, quantité concernée et coût de non-qualité.
+ * Une dérogation (acceptation en l'état) exige l'autorité qui l'a accordée (client, donneur d'ordre).
+ */
+export type NcDisposition = 'retouche' | 'rebut' | 'derogation' | 'retour';
+export const NC_DISPOSITIONS: Record<NcDisposition, string> = {
+  retouche: 'Retouche ou reprise',
+  rebut: 'Rebut',
+  derogation: 'Acceptation par dérogation',
+  retour: 'Retour au fournisseur',
+};
+export const NC_DISPOSITION_KEYS = Object.keys(NC_DISPOSITIONS) as NcDisposition[];
 
 // ─── Plan d'actions (docs/specs/actions-qse.md § 5, § 12) ───────────────────
 // Clés stockées : src/lib/action-keys.ts (contraintes CHECK de la base) ; règles pures (retard, transitions, droits,
@@ -320,17 +345,47 @@ export const REQUIREMENT_EVAL: Record<string, { label: string; tone: Tone }> = {
   analyse: { label: "Analyse d'écart en cours", tone: 'accent' },
   a_evaluer: { label: 'À évaluer', tone: 'warn' },
 };
+/**
+ * Résultat d'un contrôle réalisé (VEI-11) : avis de l'organisme. Défavorable ou mise à l'arrêt : l'équipement est signalé
+ * jusqu'à un nouveau contrôle favorable ; « avec réserves » exige les réserves.
+ */
+export type ControlResult = 'favorable' | 'reserves' | 'defavorable' | 'arret';
+export const CONTROL_RESULTS: Record<ControlResult, { label: string; tone: Tone }> = {
+  favorable: { label: 'Favorable', tone: 'ok' },
+  reserves: { label: 'Favorable avec réserves', tone: 'warn' },
+  defavorable: { label: 'Défavorable', tone: 'danger' },
+  arret: { label: "Mise à l'arrêt", tone: 'danger' },
+};
+export const CONTROL_RESULT_KEYS = Object.keys(CONTROL_RESULTS) as ControlResult[];
+/** Résultats qui interdisent l'usage de l'équipement tant qu'un nouveau contrôle n'est pas favorable. */
+export const isBlockingControlResult = (r: string | null | undefined) => r === 'defavorable' || r === 'arret';
+
+/** Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1). */
+export type ContextKind = 'enjeu_interne' | 'enjeu_externe' | 'partie_interessee' | 'risque' | 'opportunite';
+export const CONTEXT_KINDS: Record<ContextKind, { label: string; plural: string; clause: string; tone: Tone; detail: string }> = {
+  enjeu_externe: { label: 'Enjeu externe', plural: 'Enjeux externes', clause: '§4.1', tone: 'accent', detail: 'Description' },
+  enjeu_interne: { label: 'Enjeu interne', plural: 'Enjeux internes', clause: '§4.1', tone: 'accent', detail: 'Description' },
+  partie_interessee: { label: 'Partie intéressée', plural: 'Parties intéressées', clause: '§4.2', tone: 'neutral', detail: 'Exigences et attentes pertinentes' },
+  risque: { label: 'Risque', plural: 'Risques', clause: '§6.1', tone: 'danger', detail: 'Description' },
+  opportunite: { label: 'Opportunité', plural: 'Opportunités', clause: '§6.1', tone: 'ok', detail: 'Description' },
+};
+export const CONTEXT_KIND_KEYS = Object.keys(CONTEXT_KINDS) as ContextKind[];
+/** Risques et opportunités : leur traitement (actions prévues) est attendu (§6.1.2). */
+export const contextNeedsTreatment = (k: string) => k === 'risque' || k === 'opportunite';
+
 /** Évaluations qui appellent une action dans le plan d'actions unique. */
 export const REQUIREMENT_NEEDS_ACTION = ['ecart', 'analyse'] as const;
 /** Périodicité de réévaluation de la conformité d'une exigence (alerte dans les échéances). */
 export const REQUIREMENT_REVIEW_MONTHS = 12;
 
-export type SkillState = 'v' | 's' | 'x' | 'r' | 'n';
+export type SkillState = 'v' | 's' | 'x' | 'r' | 'p' | 'n';
 export const SKILL_STATES: Record<SkillState, { label: string; icon: string; bg: string; fg: string; border: string }> = {
   v: { label: 'Valide', icon: 'ph-check', bg: TONE.ok.bg, fg: TONE.ok.fg, border: '1px solid transparent' },
   s: { label: 'Expire sous 60 jours', icon: 'ph-clock', bg: TONE.warn.bg, fg: TONE.warn.fg, border: '1px solid transparent' },
   x: { label: 'Expiré', icon: 'ph-x', bg: TONE.danger.bg, fg: TONE.danger.fg, border: '1px solid transparent' },
   r: { label: 'Requis, jamais suivi', icon: 'ph-warning', bg: 'transparent', fg: TONE.danger.dot, border: `1px dashed ${TONE.danger.dot}` },
+  // HAB-10 : titre détenu mais inopérant, un titre prérequis (CACES d'une autorisation de conduite, R. 4323-56) n'étant pas valide.
+  p: { label: 'Prérequis non valide', icon: 'ph-link-break', bg: TONE.danger.bg, fg: TONE.danger.fg, border: `1px dashed ${TONE.danger.dot}` },
   n: { label: 'Non requis', icon: 'ph-minus', bg: 'transparent', fg: 'var(--color-neutral-700)', border: '1px solid transparent' },
 };
 export const SKILL_SOON_DAYS = 60;
@@ -342,11 +397,20 @@ export const SKILL_FILTERS = [
 ] as const;
 export type SkillFilter = (typeof SKILL_FILTERS)[number]['key'];
 
+/**
+ * Types de constat (AUD-09) : écarts (majeur, mineur) avec un délai de réponse (plan d'actions attendu par l'organisme ou
+ * l'auditeur), observation, piste de progrès, point fort. Ordre de la liste du formulaire.
+ */
 export const FINDING_KINDS: Record<string, { label: string; tone: Tone }> = {
+  ecart_majeur: { label: 'Écart majeur', tone: 'danger' },
   ecart_mineur: { label: 'Écart mineur', tone: 'danger' },
+  observation: { label: 'Observation', tone: 'warn' },
   piste: { label: 'Piste de progrès', tone: 'warn' },
   point_fort: { label: 'Point fort', tone: 'ok' },
 };
+
+/** Constats qui sont des écarts (AUD-09) : délai de réponse proposé, action attendue. */
+export const FINDING_GAP_KINDS: readonly string[] = ['ecart_majeur', 'ecart_mineur'];
 
 /** Nature d'un élément du programme annuel selon sa ligne (intitulé repris dans les échéances). */
 export const PLAN_TRACK_KINDS: Record<string, string> = {
@@ -365,6 +429,13 @@ export type PlanItemState = keyof typeof PLAN_ITEM_STATES;
 
 /** Audit de suivi ou fin de validité du certificat considérés comme proches (jours). */
 export const CERT_SOON_DAYS = 30;
+/** Cycle de certification (ISO/IEC 17021-1) : un certificat vaut 3 ans au plus après son émission (AUD-08). */
+export const CERT_CYCLE_MONTHS = 36;
+/**
+ * Renouvellement à préparer (AUD-08) : fin de validité dans moins de 6 mois sans audit de renouvellement programmé avant
+ * cette date (proposition, délai à confirmer par le service QHSE).
+ */
+export const CERT_RENEWAL_NOTICE_DAYS = 180;
 
 // ─── Revue de direction (ISO 9001 §9.3) ─────────────────────────────────────
 

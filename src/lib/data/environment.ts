@@ -115,6 +115,11 @@ export type EntryView = {
   gaps: string[];
   bsdNumber: string | null;
   bsdStatus: BsdStatus | null;
+  /** DOC-12 : quantité refusée par l'installation (refus total ou partiel) et motif. */
+  bsdRefusedQuantity: number | null;
+  bsdRefusalReason: string | null;
+  /** Tonnes acceptées par l'installation (enlevées moins refusées) : base du taux de valorisation (DOC-12). */
+  acceptedTonnes: number | null;
   bsdLabel: string | null;
   bsdTone: Tone;
   /** Déchet dangereux sans bordereau Trackdéchets. */
@@ -213,6 +218,9 @@ const loadEnvironmentBase = cache(async (scope: SiteScope = 'site') => {
         gaps: live ? registerGaps({ removedOn: e.removedOn, siteSiret: siret, ...mentions }) : [],
         bsdNumber: e.bsdNumber,
         bsdStatus: status,
+        bsdRefusedQuantity: e.bsdRefusedQuantity,
+        bsdRefusalReason: e.bsdRefusalReason,
+        acceptedTonnes: toTonnes(Math.max(0, e.quantity - (e.bsdRefusedQuantity ?? 0)), s.unit),
         bsdLabel: missingBsd ? 'BSD manquant' : status ? BSD_STATUS[status].label : null,
         bsdTone: missingBsd ? 'danger' : status ? BSD_STATUS[status].tone : 'neutral',
         missingBsd,
@@ -280,7 +288,8 @@ export async function loadEnvironment(requestedYear?: number) {
   const totalT = tonnesOf(yearEntries);
   const prevT = tonnesOf(prevEntries);
   const hazardousT = tonnesOf(yearEntries.filter((e) => e.hazardous));
-  const recoveryT = tonnesOf(yearEntries.filter((e) => e.recovery));
+  // DOC-12 : la part refusée par l'installation n'est pas valorisée par elle.
+  const recoveryT = sum(yearEntries.filter((e) => e.recovery).map((e) => e.acceptedTonnes ?? 0));
   const volumeCount = yearEntries.filter((e) => e.tonnes == null).length;
   const missing = yearEntries.filter((e) => e.missingBsd);
   const missingOther = entries.filter((e) => e.missingBsd && e.year !== year);

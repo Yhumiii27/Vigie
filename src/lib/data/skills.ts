@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { lapseFor, period, type Lapse } from '@/components/skills/rules';
+import { lapseFor, missingPrerequisites, period, type Lapse } from '@/components/skills/rules';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
@@ -49,6 +49,8 @@ export type QualificationEntry = {
   obtainedOn: string;
   expiresOn: string | null;
   provider: string | null;
+  /** Catégories ou niveaux obtenus (HAB-10). */
+  scope: string | null;
   /** Instant de saisie (ISO). */
   recordedAt: string;
   recordedBy: string;
@@ -66,6 +68,10 @@ export type SkillCell = {
   qualificationId: number | null;
   obtainedOn: string | null;
   provider: string | null;
+  /** Catégories ou niveaux de la formation en cours (HAB-10). */
+  scope: string | null;
+  /** Prérequis non satisfaits (HAB-10, libellés : aucun n'est valide) : état « p » quand le titre est par ailleurs valide. */
+  missingPrerequisites: string[];
   /** Attestations de la formation en cours. */
   files: AttachmentItem[];
   /** Toutes les formations de la case, annulées comprises, de la plus récente à la plus ancienne. */
@@ -173,7 +179,7 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
     const key = `${q.personId}:${q.titleId}`;
     const list = history.get(key) ?? [];
     list.push({
-      id: q.id, obtainedOn: q.obtainedOn, expiresOn: q.expiresOn, provider: q.provider,
+      id: q.id, obtainedOn: q.obtainedOn, expiresOn: q.expiresOn, provider: q.provider, scope: q.scope,
       recordedAt: q.recordedAt.toISOString(), recordedBy: name(q.recordedById),
       cancelled: q.cancelledAt ? { at: q.cancelledAt.toISOString(), by: name(q.cancelledById), reason: q.cancelReason ?? '' } : null,
       files: filesOf.get(String(q.id)) ?? [],
@@ -186,8 +192,12 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const active = visible.filter((p) => !hasLeft(p, now));
   const departed = visible.filter((p) => hasLeft(p, now)).sort((a, b) => b.leftOn!.localeCompare(a.leftOn!));
 
+  const activeTitleIds = new Set(titles.map((ti) => ti.id));
+  const titleLabel = new Map(allTitles.map((ti) => [ti.id, ti.label]));
   const rows: SkillRow[] = active.filter((p) => p.inSkillsMatrix).map((p) => {
     const upcoming = assignments.filter((a) => a.personId === p.id && a.endOn >= now);
+    // Formation en cours de chaque titre de la personne (dernière non annulée), requis ou non : base des prérequis (HAB-10).
+    const held = new Map(titles.map((ti) => [ti.id, (history.get(`${p.id}:${ti.id}`) ?? []).find((e) => !e.cancelled)]));
     return {
       person: p,
       assignments: upcoming,
@@ -198,7 +208,10 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
         const entries = history.get(key) ?? [];
         // La qualification en cours est la dernière formation non annulée.
         const q = entries.find((e) => !e.cancelled);
-        const state = skillState(!!r, q?.expiresOn, !!q, now);
+        const base = skillState(!!r, q?.expiresOn, !!q, now);
+        // Titre valide (ou expirant) dont un prérequis n'est pas valide : inopérant (HAB-10, R. 4323-56).
+        const gaps = q ? missingPrerequisites(ti.prerequisiteIds ?? [], held, activeTitleIds, now) : [];
+        const state: SkillState = (base === 'v' || base === 's') && gaps.length ? 'p' : base;
         const expiresOn = q?.expiresOn ?? null;
         return {
           title: ti,
@@ -208,6 +221,8 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
           qualificationId: q?.id ?? null,
           obtainedOn: q?.obtainedOn ?? null,
           provider: q?.provider ?? null,
+          scope: q?.scope ?? null,
+          missingPrerequisites: gaps.map((id) => titleLabel.get(id) ?? id),
           files: q?.files ?? [],
           history: entries,
           // Recyclage ouvert : seulement tant que le titre est requis (comme avant HAB-04) ; les recyclages clos restent listés.
@@ -300,6 +315,9 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
         todo.push({ ...base, date: now, dueOn: c.expiresOn!, tone: 'danger', overdue: true, title: `${name} expiré depuis le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
       } else if (c.state === 'r') {
         todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} jamais suivi${suffix}` });
+      } else if (c.state === 'p') {
+        // HAB-10 : titre inopérant tant qu'un prérequis (CACES…) n'est pas valide.
+        todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} : aucun prérequis valide (${c.missingPrerequisites.join(' ou ')})${suffix}` });
       } else if (c.state === 's') {
         // Recyclage à la veille d'une affectation seulement si le titre ne la couvre pas ; sinon l'échéance du titre.
         const date = [c.expiresOn, eve].filter(inWindow).sort()[0];

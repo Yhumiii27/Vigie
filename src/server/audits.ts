@@ -6,9 +6,9 @@ import { getDb, schema as t } from '@/db';
 import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/components/audits/shared';
 import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
-import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
+import { addMonths, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { FINDING_KINDS, canEdit } from '@/lib/domain';
+import { CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS, canEdit } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
@@ -79,6 +79,8 @@ export async function saveCertification(_prev: FormState, fd: FormData): Promise
   const files = f.files('certificate');
   if (issuedOn && validUntil && validUntil <= issuedOn) f.fail('validUntil', "La fin de validité doit suivre la date d'émission.");
   if (tone === 'ok' && !validUntil && !f.fieldErrors.validUntil) f.fail('validUntil', 'Indiquez la fin de validité du certificat');
+  // AUD-08 : un certificat vaut un cycle de 3 ans au plus (ISO/IEC 17021-1).
+  if (issuedOn && validUntil && validUntil > addMonths(issuedOn, CERT_CYCLE_MONTHS)) f.fail('validUntil', CYCLE_TOO_LONG);
   checkFiles(f, 'certificate', files);
   if (!f.ok) return f.state();
 
@@ -121,6 +123,94 @@ export async function saveCertification(_prev: FormState, fd: FormData): Promise
   if (files.length) await logChange(db, { entityType: 'certification', entityId: certId!, action: 'attach', summary: `Certificat joint : ${files.map((x) => x.name).join(', ')}`, byId });
   revalidatePath('/', 'layout');
   return { ok: true, id: certId! };
+}
+
+const CYCLE_TOO_LONG = 'Un certificat vaut au plus 3 ans après son émission (cycle de certification, ISO/IEC 17021-1).';
+
+/** Référentiel certifié modifiable par le cycle de certification (AUD-08), ou message d'erreur. */
+async function certifiedCert(id: string) {
+  const db = await getDb();
+  const [cert] = await db.select().from(t.certifications).where(eq(t.certifications.id, id));
+  if (!cert) return { error: 'Référentiel introuvable.' as string, db, cert: undefined };
+  if (cert.tone !== 'ok' || !cert.issuedOn) return { error: 'Référentiel non certifié : enregistrez d’abord le certificat (Modifier).', db, cert: undefined };
+  return { error: null, db, cert };
+}
+
+/**
+ * Renouvelle le certificat après l'audit de renouvellement (AUD-08) : nouveau cycle (émission, fin de validité dans les
+ * 3 ans, organisme) ; le cycle précédent reste au journal du référentiel. Refusé pendant une suspension.
+ */
+export async function renewCertification(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const issuedOn = f.date('issuedOn', { required: true });
+  const validUntil = f.date('validUntil', { required: true });
+  const organization = f.str('organization', { max: 120 }) || null;
+  if (issuedOn && issuedOn > today()) f.fail('issuedOn', "Date d'émission future.");
+  if (issuedOn && validUntil && validUntil <= issuedOn) f.fail('validUntil', "La fin de validité doit suivre la date d'émission.");
+  if (issuedOn && validUntil && validUntil > addMonths(issuedOn, CERT_CYCLE_MONTHS)) f.fail('validUntil', CYCLE_TOO_LONG);
+  if (!f.ok) return f.state();
+  const { error: certError, db, cert } = await certifiedCert(id);
+  if (!cert) return { error: certError ?? 'Référentiel introuvable.' };
+  if (cert.suspendedOn) return { error: 'Certificat suspendu : levez la suspension avant de le renouveler.' };
+  if (issuedOn! <= cert.issuedOn!) return { error: 'Certains champs sont à corriger.', fieldErrors: { issuedOn: `Le nouveau certificat suit le précédent (émis le ${fmtDate(cert.issuedOn!)}).` } };
+  const next = { issuedOn: issuedOn!, validUntil: validUntil!, organization: organization ?? cert.organization };
+  await db.transaction(async (tx) => {
+    await tx.update(t.certifications).set(next).where(eq(t.certifications.id, cert.id));
+    await logChange(tx, {
+      entityType: 'certification', entityId: cert.id, action: 'renew', byId: session.user.id,
+      summary: `Certificat renouvelé · nouveau cycle du ${fmtDate(next.issuedOn)} au ${fmtDate(next.validUntil)}`,
+      details: diffFields(certShown(cert), certShown({ ...cert, ...next }), CERT_FIELDS),
+    });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: cert.id };
+}
+
+/** Suspension du certificat par l'organisme (AUD-08) : date et motif obligatoires ; statut « suspendu » jusqu'à la levée. */
+export async function suspendCertification(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const suspendedOn = f.date('suspendedOn', { required: true });
+  const reason = f.reason();
+  if (suspendedOn && suspendedOn > today()) f.fail('suspendedOn', 'Date future.');
+  if (!f.ok) return f.state();
+  const { error: certError, db, cert } = await certifiedCert(id);
+  if (!cert) return { error: certError ?? 'Référentiel introuvable.' };
+  if (cert.suspendedOn) return { error: 'Certificat déjà suspendu.' };
+  if (suspendedOn! < cert.issuedOn!) return { error: 'Certains champs sont à corriger.', fieldErrors: { suspendedOn: `Au plus tôt le ${fmtDate(cert.issuedOn!)} (émission).` } };
+  await db.transaction(async (tx) => {
+    await tx.update(t.certifications).set({ suspendedOn, suspendedById: session.user.id, suspendReason: reason }).where(eq(t.certifications.id, cert.id));
+    await logChange(tx, { entityType: 'certification', entityId: cert.id, action: 'suspend', reason, byId: session.user.id, summary: `Certificat suspendu le ${fmtDate(suspendedOn!)}` });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: cert.id };
+}
+
+/** Levée de la suspension (décision de l'organisme), motif obligatoire ; la suspension reste au journal. */
+export async function reinstateCertification(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const { error: certError, db, cert } = await certifiedCert(id);
+  if (!cert) return { error: certError ?? 'Référentiel introuvable.' };
+  if (!cert.suspendedOn) return { error: "Le certificat n'est pas suspendu." };
+  await db.transaction(async (tx) => {
+    await tx.update(t.certifications).set({ suspendedOn: null, suspendedById: null, suspendReason: null }).where(eq(t.certifications.id, cert.id));
+    await logChange(tx, {
+      entityType: 'certification', entityId: cert.id, action: 'reinstate', reason, byId: session.user.id,
+      summary: `Suspension levée (suspendu depuis le ${fmtDate(cert.suspendedOn!)})`,
+    });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: cert.id };
 }
 
 /** Retire un certificat joint par erreur. */
@@ -418,9 +508,9 @@ export async function cancelPlanItem(_prev: FormState, fd: FormData): Promise<Fo
 
 // ─── Constats d'audit ───────────────────────────────────────────────────────
 
-const FINDING_FIELDS = { audit: 'Audit', kind: 'Type', clause: 'Exigence', foundOn: 'Date du constat', text: 'Constat' } as const;
-type FindingFields = { audit: string; kind: string; clause: string | null; foundOn: string | null; text: string };
-const findingShown = (x: FindingFields) => ({ ...x, kind: FINDING_KINDS[x.kind]?.label ?? x.kind, foundOn: shownDate(x.foundOn) });
+const FINDING_FIELDS = { audit: 'Audit', kind: 'Type', clause: 'Exigence', foundOn: 'Date du constat', text: 'Constat', responseDueOn: 'Réponse attendue le' } as const;
+type FindingFields = { audit: string; kind: string; clause: string | null; foundOn: string | null; text: string; responseDueOn: string | null };
+const findingShown = (x: FindingFields) => ({ ...x, kind: FINDING_KINDS[x.kind]?.label ?? x.kind, foundOn: shownDate(x.foundOn), responseDueOn: shownDate(x.responseDueOn) });
 
 export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireAuditEditor();
@@ -435,7 +525,10 @@ export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormS
   const text = f.str('text', { required: true, max: 400 });
   const clause = f.str('clause', { max: 40 }) || null;
   const foundOnInput = f.date('foundOn');
+  // AUD-09 : délai de réponse d'un écart (plan d'actions attendu par l'organisme ou l'auditeur).
+  const responseDueOn = kind && FINDING_GAP_KINDS.includes(kind) ? f.date('responseDueOn') : null;
   if (foundOnInput && foundOnInput > today()) f.fail('foundOn', 'Date du constat future.');
+  if (responseDueOn && foundOnInput && responseDueOn < foundOnInput) f.fail('responseDueOn', 'La réponse ne peut pas être attendue avant le constat.');
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -459,7 +552,8 @@ export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormS
     audit = planItemAuditLabel(item);
     foundOn ??= item.doneOn ?? item.plannedOn;
   }
-  const values = { audit, planItemId, clause, foundOn, kind: kind!, text };
+  if (responseDueOn && foundOn && responseDueOn < foundOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { responseDueOn: 'La réponse ne peut pas être attendue avant le constat.' } };
+  const values = { audit, planItemId, clause, foundOn, kind: kind!, text, responseDueOn };
   if (before) {
     await db.transaction(async (tx) => {
       await tx.update(t.auditFindings).set(values).where(eq(t.auditFindings.id, before.id));

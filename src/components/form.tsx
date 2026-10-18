@@ -103,12 +103,14 @@ export function Select({ name, options, placeholder, ...rest }: SelectHTMLAttrib
 }
 
 /** Case à cocher ; contrôlée avec `checked` + `onChange` (section dépendante de la case), sinon `defaultChecked`. */
-export function Checkbox({ name, label, defaultChecked, checked, onChange }: {
+export function Checkbox({ name, label, defaultChecked, checked, onChange, value }: {
   name: string; label: ReactNode; defaultChecked?: boolean; checked?: boolean; onChange?: (checked: boolean) => void;
+  /** Valeur soumise (cases de même nom, lues par formReader(fd).list) ; « on » par défaut. */
+  value?: string;
 }) {
   return (
     <label className="vg-check">
-      <input type="checkbox" name={name}
+      <input type="checkbox" name={name} value={value}
         {...(checked !== undefined ? { checked } : { defaultChecked })}
         onChange={onChange ? (e) => onChange(e.target.checked) : undefined} />
       <span className="vg-check-box"><i className="ph ph-check" /></span>

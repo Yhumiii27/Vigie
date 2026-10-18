@@ -12,7 +12,7 @@ import { AccessRegister } from '@/components/risks/AccessRegister';
 import { ProgramPanel } from '@/components/risks/ProgramPanel';
 import { NewVersionButton, VersionsButton } from '@/components/risks/VersionDialogs';
 import { fmtDate, yearOf } from '@/lib/dates';
-import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, isEmployee, riskLevel } from '@/lib/domain';
+import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, canSeeHealth, isEmployee, riskLevel } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions, type FormOptions } from '@/lib/data/options';
 import { loadDuerpAccessRegister, loadPreventionProgram, loadRisks } from '@/lib/data/risks';
@@ -105,8 +105,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
     { k: 'Conservation', v: version.retentionLabel },
     {
       k: 'Validation',
-      v: [version.validatedBy, version.cseConsultedOn ? `CSE consulté le ${fmtDate(version.cseConsultedOn)}` : 'consultation du CSE à renseigner'].filter(Boolean).join(' · '),
-      color: version.cseConsultedOn ? undefined : TONE.warn.fg,
+      v: [
+        version.validatedBy, version.cseConsultedOn ? `CSE consulté le ${fmtDate(version.cseConsultedOn)}` : 'consultation du CSE à renseigner',
+        version.spstSentOn ? `transmise au SPST le ${fmtDate(version.spstSentOn)}` : 'transmission au SPST à renseigner',
+      ].filter(Boolean).join(' · '),
+      color: version.cseConsultedOn && version.spstSentOn ? undefined : TONE.warn.fg,
       link: requirementLink ? { href: requirementLink, label: 'Exigence R. 4121-1' } : undefined,
     },
   ] : [{ k: 'Version', v: 'Aucune version en vigueur', color: TONE.warn.fg }];
@@ -127,6 +130,10 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
             <a href="/risques/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer</a>
+            {/* CNF-03 : bilan annuel SSCT présenté au CSE (accidentologie : rôles habilités aux données de santé). */}
+            {canSeeHealth(session.role) && (
+              <a href="/risques/bilan-ssct" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-chart-bar" size={13} />Bilan SSCT</a>
+            )}
             <VersionsButton versions={versions} canApprove={approve} people={approve ? options.people : []} history={edit} />
             {edit && (
               <NewVersionButton canApprove={approve} people={options.people} current={version?.version ?? null} nextVersion={nextVersion}

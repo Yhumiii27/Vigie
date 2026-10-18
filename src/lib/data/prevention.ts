@@ -89,6 +89,9 @@ export type PlanView = {
   measures: string;
   signedEuOn: string | null;
   signedEeOn: string | null;
+  /** Signataires (PRV-07) : nom et qualité, null pour une signature antérieure. */
+  signedEu: { name: string; quality: string | null } | null;
+  signedEe: { name: string; quality: string | null } | null;
   /** Première signature complète (EU et EE), conservée quand une modification a effacé les signatures. */
   firstSignedOn: string | null;
   /**
@@ -536,6 +539,8 @@ export async function loadPrevention() {
       measures: p.measures,
       signedEuOn: p.signedEuOn,
       signedEeOn: p.signedEeOn,
+      signedEu: p.signedEuOn && p.signedEuName ? { name: p.signedEuName, quality: p.signedEuQuality } : null,
+      signedEe: p.signedEeOn && p.signedEeName ? { name: p.signedEeName, quality: p.signedEeQuality } : null,
       firstSignedOn: p.firstSignedOn,
       startGap: gapKind && {
         kind: gapKind, label: START_GAP_LABEL[gapKind], past: !gaps.planGaps.has(p.id),

@@ -5,7 +5,7 @@ import { ReportForm } from '@/components/ReportForm';
 import { reportQuery } from '@/components/events/shared';
 import { LOGIN_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { resolveReportPost, resolveReportToken, type ReportTokenCheck } from '@/lib/data/report-posts';
-import { EVENT_TYPE_KEYS } from '@/lib/domain';
+import { REPORT_TYPE_KEYS } from '@/lib/domain';
 import { ALL_SITES, getOptionalSession } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Signaler', robots: { index: false, follow: false } };
@@ -24,7 +24,7 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
   const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
   const token = str(sp[REPORT_TOKEN_PARAM]);
   const [session, check] = await Promise.all([getOptionalSession(), token ? resolveReportToken(token) : null]);
-  const type = EVENT_TYPE_KEYS.find((k) => k === str(sp.type));
+  const type = REPORT_TYPE_KEYS.find((k) => k === str(sp.type));
   // Les paramètres du QR code sont conservés (retour depuis « Mes signalements », retour après la connexion).
   const qs = reportQuery(sp);
   const loginHref = `${LOGIN_PATH}?retour=${encodeURIComponent(`/signaler${qs}`)}`;

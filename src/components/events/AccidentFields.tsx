@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import type { Option } from '@/lib/form-options';
 import { VICTIM_KINDS, VICTIM_KIND_KEYS } from '@/lib/domain';
 import { RestrictedNote } from './FieldGrid';
@@ -11,7 +11,7 @@ import { INJURIES, declarationDuty } from './shared';
 export type AccidentValues = {
   victimKind?: string | null; victimId?: string | null; victimName?: string | null; victimCompany?: string | null;
   workSchedule?: string | null; knownAt?: string | null; activity?: string | null; circumstances?: string | null;
-  witnesses?: string | null; thirdParty?: string | null;
+  witnesses?: string | null; thirdParty?: string | null; commute?: boolean | null;
   injury?: string | null; lostDays?: number | null; cpamDeclaredOn?: string | null;
   lesionNature?: string | null; lesionSite?: string | null; careGiven?: string | null; reservesOn?: string | null;
 };
@@ -40,6 +40,11 @@ export function AccidentFields({ event: e, people, health, benign }: { event: Ac
   return (
     <>
       <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Accident du travail · déclaration</h6>
+      <Field name="commute" label="Nature de l'accident"
+        hint="Accident de trajet (L. 411-2 CSS) : déclaré comme un accident du travail, mais exclu du TF1, du TG, des jours sans accident et de la pyramide.">
+        <input type="hidden" name="commuteField" value="1" />
+        <Checkbox name="commute" label="Accident de trajet (domicile – travail, ou travail – lieu de repas)" defaultChecked={!!e.commute} />
+      </Field>
       <FormRow>
         <Field name="victimKind" label="Victime" hint={!victimKind ? requiredHint() : undefined}>
           <Select name="victimKind" options={VICTIM_OPTIONS} value={victimKind} onChange={(ev) => setVictimKind(ev.target.value)} placeholder="À préciser" />

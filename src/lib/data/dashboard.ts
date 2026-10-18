@@ -11,11 +11,11 @@ import {
 import { currentSiteId, getSession, inPerimeter } from '../session';
 import { loadReadKeys } from './notifications';
 import { loadSiteDirectory, loadVisibleTodo, shortSiteLabel, type VisibleTodo } from './todo';
+import { tf1Target } from './objectives';
 import { requirementProjects } from './watch';
 
 // ─── Tableau de bord ────────────────────────────────────────────────────────
 
-export const TF1_TARGET = 4;
 /** Échéances affichées dans la carte « À traiter » ; la suite est sur la page À faire. */
 export const MAX_TODO = 7;
 
@@ -30,7 +30,8 @@ const MAX_MISSING_SHOWN = 2;
 export type SafetySummary = {
   tf1: number | null;
   tg: number | null;
-  target: number;
+  /** Cible TF1 de l'objectif QHSE de l'année (AUD-13) ; null sans objectif. */
+  target: number | null;
   /** Fenêtre de calcul : « oct. 2025 – sept. 2026 ». */
   period: string;
   /** Mois sans heures saisies (« sept. 2026 », avec le site si plusieurs sites sont consolidés), null s'il n'en manque pas. */
@@ -45,7 +46,7 @@ export type SafetySummary = {
  */
 async function loadSafety(now: string, site: string | null, allowed: string[] | null, events: EventRow[]) {
   const db = await getDb();
-  const [directory, allHours] = await Promise.all([loadSiteDirectory(), db.select().from(t.hoursWorked)]);
+  const [directory, allHours, target] = await Promise.all([loadSiteDirectory(), db.select().from(t.hoursWorked), tf1Target(+now.slice(0, 4), site)]);
   const months = lastFullMonths(now);
   const scope = directory.filter((s) => (site ? s.id === site : inPerimeter(allowed, s.id)));
   const ids = new Set(scope.map((s) => s.id));
@@ -63,7 +64,7 @@ async function loadSafety(now: string, site: string | null, allowed: string[] | 
     ? `${gaps.slice(0, MAX_MISSING_SHOWN).join(', ')}${gaps.length > MAX_MISSING_SHOWN ? ` +${gaps.length - MAX_MISSING_SHOWN}` : ''}`
     : null;
   const summary: SafetySummary = {
-    tf1: rates.tf1, tg: rates.tg, target: TF1_TARGET,
+    tf1: rates.tf1, tg: rates.tg, target,
     period: `${fmtMonthYear(months[0])} – ${fmtMonthYear(months[months.length - 1])}`,
     missing, complete: rates.hours > 0 && !rates.missing.length,
   };
@@ -75,7 +76,7 @@ function safetyKpi(rates: SafetyRates, s: SafetySummary, year: string) {
   const noHours = rates.hours === 0;
   const note = noHours ? 'Heures travaillées non saisies'
     : s.missing ? `Heures manquantes : ${s.missing} — taux sur les mois saisis`
-      : `Objectif ${year} : TF1 < ${TF1_TARGET} · ${s.period}`;
+      : s.target != null ? `Objectif ${year} : TF1 ≤ ${fr(s.target, 1)} · ${s.period}` : `Aucun objectif TF1 ${year} · ${s.period}`;
   return {
     value: s.tf1 == null ? '—' : fr(s.tf1, 1),
     sub: s.tg == null ? '' : `TG ${fr(s.tg, 2)}`,

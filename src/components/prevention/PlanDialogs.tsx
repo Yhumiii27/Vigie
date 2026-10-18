@@ -182,10 +182,36 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
 
 // ─── Fiche ──────────────────────────────────────────────────────────────────
 
+/** Nom et qualité du signataire (PRV-07, R. 4512-7 : chef d'entreprise ou son représentant). */
+function SignerFields({ prefix, defaultName }: { prefix: 'signedEu' | 'signedEe'; defaultName?: string }) {
+  return (
+    <FormRow>
+      <Field name={`${prefix}Name`} label="Nom du signataire">
+        <Input name={`${prefix}Name`} defaultValue={defaultName ?? ''} maxLength={120} autoComplete="off" />
+      </Field>
+      <Field name={`${prefix}Quality`} label="Qualité" hint="Chef d'entreprise ou son représentant : fonction.">
+        <Input name={`${prefix}Quality`} maxLength={120} placeholder="Directeur de site, chef de chantier…" />
+      </Field>
+    </FormRow>
+  );
+}
+
+function EuSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
+  return (
+    <ActionForm action={signPlanEu} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" hidden={{ id: plan.id }}>
+      <Field name="signedEuOn" label="Signé pour l'entreprise utilisatrice le">
+        <Input name="signedEuOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
+      </Field>
+      <SignerFields prefix="signedEu" defaultName={plan.owner ?? undefined} />
+    </ActionForm>
+  );
+}
+
 function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
   const [fileError, setFileError] = useState<string | null>(null);
   return (
     <ActionForm action={recordPlanEeSignature} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" encType="multipart/form-data" hidden={{ id: plan.id }}>
+      <SignerFields prefix="signedEe" />
       <FormRow>
         <Field name="signedEeOn" label={`Signé par ${plan.contractor} le`}>
           <Input name="signedEeOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
@@ -199,14 +225,16 @@ function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; to
   );
 }
 
-function SignatureBox({ title, signedOn, children }: { title: string; signedOn: string | null; children?: ReactNode }) {
+function SignatureBox({ title, signedOn, signer, children }: { title: string; signedOn: string | null; signer?: { name: string; quality: string | null } | null; children?: ReactNode }) {
   return (
     <div className="vg-inset" style={{ display: 'grid', gap: 8, padding: '10px 12px', alignContent: 'start' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Icon name={signedOn ? 'ph-seal-check' : 'ph-pen-nib'} size={16} style={{ color: signedOn ? 'var(--tone-ok-dot)' : 'var(--color-neutral-500)' }} />
         <span style={{ fontWeight: 500, fontSize: 12.5 }}>{title}</span>
       </div>
-      <span style={{ fontSize: 12, color: signedOn ? 'var(--tone-ok-fg)' : 'var(--color-neutral-400)' }}>{signedOn ? `Signé le ${fmtDate(signedOn)}` : 'Signature attendue'}</span>
+      <span style={{ fontSize: 12, color: signedOn ? 'var(--tone-ok-fg)' : 'var(--color-neutral-400)' }}>
+        {signedOn ? `Signé le ${fmtDate(signedOn)}${signer ? ` par ${signer.name}${signer.quality ? ` (${signer.quality})` : ''}` : ''}` : 'Signature attendue'}
+      </span>
       {children}
     </div>
   );
@@ -353,6 +381,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
   plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCancelPlan: () => void; onDeleted: () => void;
 }) {
   const [eeOpen, setEeOpen] = useState(false);
+  const [euOpen, setEuOpen] = useState(false);
   const { pending, error, run } = useRun();
   const ended = plan.status === 'clos' || plan.status === 'annule';
   const editable = canManage && !ended;
@@ -445,15 +474,15 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       <div style={{ display: 'grid', gap: 6 }}>
         <SectionTitle>Signatures</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-          <SignatureBox title="Entreprise utilisatrice" signedOn={plan.signedEuOn}>
-            {editable && !plan.signedEuOn && (
+          <SignatureBox title="Entreprise utilisatrice" signedOn={plan.signedEuOn} signer={plan.signedEu}>
+            {editable && !plan.signedEuOn && !euOpen && (
               <button type="button" className="btn btn-primary vg-btn-sm" style={{ justifySelf: 'start' }} disabled={pending || !!signBlock}
-                title={signBlock ?? undefined} onClick={() => run(() => signPlanEu(plan.id))}>
+                title={signBlock ?? undefined} onClick={() => setEuOpen(true)}>
                 <Icon name="ph-pen-nib" size={13} />Signer pour l&apos;entreprise utilisatrice
               </button>
             )}
           </SignatureBox>
-          <SignatureBox title={`Entreprise extérieure · ${plan.contractor}`} signedOn={plan.signedEeOn}>
+          <SignatureBox title={`Entreprise extérieure · ${plan.contractor}`} signedOn={plan.signedEeOn} signer={plan.signedEe}>
             {editable && !plan.signedEeOn && !eeOpen && (
               <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} disabled={!!signBlock}
                 title={signBlock ?? undefined} onClick={() => setEeOpen(true)}>
@@ -467,6 +496,11 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
             {signBlock}
             <button type="button" className="vg-text-btn" onClick={onEdit}>{plan.inspectionDone ? 'Compléter le plan' : "Renseigner l'inspection commune"}</button>
           </span>
+        )}
+        {euOpen && !plan.signedEuOn && (
+          <div className="vg-inset" style={{ padding: '10px 12px' }}>
+            <EuSignatureForm plan={plan} today={options.today} onDone={() => setEuOpen(false)} onCancel={() => setEuOpen(false)} />
+          </div>
         )}
         {eeOpen && !plan.signedEeOn && (
           <div className="vg-inset" style={{ padding: '10px 12px' }}>

@@ -21,7 +21,9 @@ import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { planItemAuditLabel, planItemState } from './audits';
 import { loadChangeLog } from './changelog';
-import { TF1_TARGET } from './dashboard';
+import { loadContext } from './context';
+import { loadObjectives, tf1Target } from './objectives';
+import { fmtObjectiveTarget, fmtObjectiveValue } from '../objectives';
 import { loadDocuments } from './documents';
 import { loadEnvironment } from './environment';
 import { loadFormOptions } from './options';
@@ -525,6 +527,8 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     loadAllActions('perimeter'),
   ]);
   const { rec, header, record } = parts;
+  // AUD-13 et CNF-05 : objectifs de l'année de la date d'arrêt (cible TF1 comprise), contexte du système de management.
+  const [objectiveData, contextData, target] = await Promise.all([loadObjectives(yearOf(asOf)), loadContext(), tf1Target(yearOf(asOf), site)]);
   const { now, people, prior } = rec;
   const from = header.from;
   const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '—' : '—');
@@ -563,7 +567,7 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   const safety = {
     tf1: rates.tf1 == null ? '—' : fr(rates.tf1, 1),
     tg: rates.tg == null ? '—' : fr(rates.tg, 2),
-    target: TF1_TARGET,
+    target,
     daysWithout: lastArret ? String(daysBetween(lastArret.occurredOn, asOf)) : '—',
     daysNote: lastArret ? `Dernier AT avec arrêt le ${fmtDate(lastArret.occurredOn)}` : 'Aucun accident avec arrêt enregistré',
     /** Mois de la fenêtre sans heures travaillées saisies (hors TF1 / TG). */
@@ -787,6 +791,15 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     documents: documentView,
     environment,
     skills: { counts: skillCounts, alerts: skillAlerts, href: '/habilitations' },
+    // §9.3.2 c (AUD-13) : degré de réalisation des objectifs ; valeurs calculées à la date d'arrêt du dossier.
+    objectives: objectiveData.objectives.map((o) => ({
+      label: o.label, indicator: o.indicatorLabel, target: fmtObjectiveTarget(o.indicator, o.target), value: fmtObjectiveValue(o.indicator, o.value),
+      status: o.status.label, tone: o.status.tone, site: o.site,
+    })),
+    // §9.3.2 b et e (CNF-05) : enjeux, parties intéressées, risques et opportunités et leur traitement.
+    context: contextData.groups.filter((g) => g.items.length).map((g) => ({
+      kind: g.kind, label: g.plural, clause: g.clause, items: g.items.map((i) => ({ label: i.label, detail: i.detail, treatment: i.treatment })),
+    })),
     checklist: rec.checklist,
     decisions: rec.decisions,
     extraActions: rec.extraActions,

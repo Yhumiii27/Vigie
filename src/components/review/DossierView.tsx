@@ -107,7 +107,7 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
           <div className="rd-kpis">
             <Kpi label="Jours sans accident avec arrêt" value={d.safety.daysWithout} note={d.safety.daysNote} />
             <Kpi label="TF1 · taux de fréquence" value={d.safety.tf1}
-              note={`Accidents avec arrêt par million d'heures · objectif < ${d.safety.target}${d.safety.missingMonths ? ` · ${plural(d.safety.missingMonths, 'mois', 'mois')} sans heures saisies` : ''}`} />
+              note={`Accidents avec arrêt par million d'heures${d.safety.target != null ? ` · objectif ${typeof d.safety.target === 'number' ? `≤ ${d.safety.target.toLocaleString('fr-FR')}` : d.safety.target}` : ' · aucun objectif TF1'}${d.safety.missingMonths ? ` · ${plural(d.safety.missingMonths, 'mois', 'mois')} sans heures saisies` : ''}`} />
             <Kpi label="TG · taux de gravité" value={d.safety.tg} note="Jours perdus pour 1 000 heures travaillées" />
           </div>
           <h3 className="rd-h3">Pyramide des événements sécurité</h3>
@@ -571,6 +571,47 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
           ) : <Empty>Aucune affectation à venir sur un titre manquant, expiré ou expirant avant la fin de l&apos;affectation.</Empty>}
           <h3 className="rd-h3">Besoins en ressources</h3>
           <RecordText text={r.resourceNeeds} held={held} placeholder="effectifs, équipements, budget, formations à programmer" />
+        </Section>
+      )}
+
+      {/* AUD-13 (§9.3.2 c) : objectifs QHSE mesurables et leur degré de réalisation ; absent des dossiers figés avant le paquet 5. */}
+      {d.objectives && (
+        <Section n={n()} title="Objectifs QHSE" aside={`${d.objectives.filter((o) => o.tone === 'ok').length}/${d.objectives.length} atteints`}>
+          {d.objectives.length ? (
+            <table className="table rd-table">
+              <thead><tr><th>Objectif</th><th>Indicateur</th><th>Cible</th><th>Valeur</th><th>État</th></tr></thead>
+              <tbody>
+                {d.objectives.map((o) => (
+                  <tr key={`${o.label}-${o.indicator}-${o.site}`}>
+                    <td style={{ fontWeight: 500 }}>{o.label}<span className="rd-muted" style={{ display: 'block', fontSize: 11.5, fontWeight: 400 }}>{o.site}</span></td>
+                    <td>{o.indicator}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{o.target}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{o.value}</td>
+                    <td><ToneTag tone={o.tone} style={{ whiteSpace: 'nowrap' }}>{o.status}</ToneTag></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <Empty>Aucun objectif mesurable enregistré pour l&apos;année.</Empty>}
+        </Section>
+      )}
+
+      {/* CNF-05 (§9.3.2 b et e) : enjeux, parties intéressées, risques et opportunités. */}
+      {d.context && (
+        <Section n={n()} title="Contexte, risques et opportunités" aside="ISO 9001 §4.1 · §4.2 · §6.1">
+          {d.context.length ? d.context.map((g) => (
+            <div key={g.kind}>
+              <h3 className="rd-h3">{g.label} <span className="rd-muted" style={{ fontWeight: 400 }}>· {g.clause}</span></h3>
+              <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4, fontSize: 12.5 }}>
+                {g.items.map((i) => (
+                  <li key={i.label}>
+                    <span style={{ fontWeight: 500 }}>{i.label}</span>{i.detail && <> — {i.detail}</>}
+                    {i.treatment && <span className="rd-muted" style={{ display: 'block' }}>Traitement : {i.treatment}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )) : <Empty>Aucun enjeu, partie intéressée, risque ou opportunité enregistré.</Empty>}
         </Section>
       )}
 

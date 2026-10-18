@@ -165,6 +165,12 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
           <span style={{ display: 'block', marginTop: 2, color: 'var(--color-neutral-400)' }}>À compléter — {gapHelp(entry).join(' ; ')}.</span>
         </Note>
       )}
+      {entry.bsdRefusedQuantity != null && (
+        <Note icon="ph-prohibit" tone="warn">
+          Bordereau {entry.bsdNumber} « {entry.bsdLabel?.toLowerCase()} » : quantité refusée par l&apos;installation {fmtQty(entry.bsdRefusedQuantity, entry.unit)}
+          {entry.bsdRefusalReason ? ` — ${entry.bsdRefusalReason}` : ''}. Le déchet refusé revient au site : inscrivez sa nouvelle filière.
+        </Note>
+      )}
       {entry.staleBsd && (
         <Note icon="ph-hourglass-medium" tone="warn">
           Bordereau {entry.bsdNumber} encore « {entry.bsdLabel?.toLowerCase()} » {entry.age} jours après l&apos;enlèvement (seuil {BSD_STALE_DAYS} j) :
@@ -231,6 +237,7 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
   const fillCarrier = (c: Carrier) => setCarrier({ siret: c.siret ?? '', address: c.address ?? '', receipt: c.receipt ?? '' });
   const editCarrier = (k: keyof Carrier, v: string) => { setCarrier((c) => ({ ...c, [k]: v })); setManualCarrier(true); };
   const [bsd, setBsd] = useState(entry?.bsdNumber ?? '');
+  const [bsdStatus, setBsdStatus] = useState<string>(entry?.bsdStatus ?? '');
   // Codes, exutoire et mentions enregistrés à l'inscription tant que la filière ne change pas ; sinon ceux de la filière choisie.
   const info = entry && streamId === entry.streamId ? entry : stream;
   const [qualification, setQualification] = useState(entry?.qualification ?? stream?.qualification ?? '');
@@ -316,9 +323,22 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
             style={{ textTransform: 'uppercase' }} />
         </Field>
         <Field name="bsdStatus" label="Statut du bordereau" hint={bsd.trim() ? 'Émis par défaut.' : undefined}>
-          <Select name="bsdStatus" options={BSD_OPTIONS} placeholder="—" defaultValue={entry?.bsdStatus ?? ''} disabled={!bsd.trim()} />
+          <Select name="bsdStatus" options={BSD_OPTIONS} placeholder="—" value={bsdStatus} onChange={(e) => setBsdStatus(e.target.value)} disabled={!bsd.trim()} />
         </Field>
       </FormRow>
+      {/* DOC-12 : refus total ou partiel par l'installation de destination. */}
+      {bsd.trim() && (bsdStatus === 'refuse' || bsdStatus === 'accepte_partiel') && (
+        <FormRow>
+          {bsdStatus === 'accepte_partiel' && (
+            <Field name="bsdRefusedQuantity" label="Quantité refusée" hint="Part refusée par l'installation, dans l'unité de la filière.">
+              <Input name="bsdRefusedQuantity" inputMode="decimal" defaultValue={entry?.bsdRefusedQuantity ?? ''} />
+            </Field>
+          )}
+          <Field name="bsdRefusalReason" label="Motif du refus" hint="Tel qu'indiqué sur le bordereau par l'installation de destination.">
+            <Input name="bsdRefusalReason" defaultValue={entry?.bsdRefusalReason ?? ''} maxLength={300} />
+          </Field>
+        </FormRow>
+      )}
       {eventOptions.length > 0 && (
         <Field name="eventId" label="Événement lié" hint="Facultatif : déversement ou fuite à l'origine de l'enlèvement.">
           <Select name="eventId" options={eventOptions} placeholder="Aucun" defaultValue={entry?.eventId ?? ''} />

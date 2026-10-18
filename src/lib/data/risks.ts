@@ -122,6 +122,9 @@ export type DuerpVersionView = {
   validatedById: string | null;
   validatedBy: string;
   cseConsultedOn: string | null;
+  /** DUE-03 : transmission au SPST (L. 4121-3, R. 4121-4) et dépôt sur le portail numérique (L. 4121-3-1 V). */
+  spstSentOn: string | null;
+  portalDepositedOn: string | null;
   archivedOn: string | null;
   comment: string | null;
   /** Instantané des risques disponible dans Vigie (faux pour les versions archivées hors Vigie). */
@@ -318,7 +321,8 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
       return {
         version: v.version, current: v.current, updatedOn: v.updatedOn, nextUpdateOn: v.nextUpdateOn, retention: v.retention,
         validatedById: v.validatedById, validatedBy: v.validatedById ? people.get(v.validatedById)?.name ?? '' : '',
-        cseConsultedOn: v.cseConsultedOn, archivedOn: v.archivedOn, comment: v.comment ?? snap.comment ?? null,
+        cseConsultedOn: v.cseConsultedOn, spstSentOn: v.spstSentOn, portalDepositedOn: v.portalDepositedOn,
+        archivedOn: v.archivedOn, comment: v.comment ?? snap.comment ?? null,
         hasSnapshot: !v.current && !!snap.risks, riskCount: snap.risks ? snap.risks.length : null,
       };
     })
@@ -962,6 +966,10 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
     }
     if (!current.cseConsultedOn) {
       todo.push({ ...base, date: now, tone: 'warn', title: `Consultation du CSE à renseigner · DUERP ${current.version}`, href: '/risques' });
+    }
+    // DUE-03 : chaque mise à jour est transmise au service de prévention et de santé au travail (R. 4121-4).
+    if (!current.spstSentOn) {
+      todo.push({ ...base, date: now, tone: 'warn', title: `Transmission au SPST à renseigner · DUERP ${current.version}`, href: '/risques', key: `duerp|${current.version}|spst` });
     }
   }
 

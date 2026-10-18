@@ -66,13 +66,19 @@ const Meta = ({ rows }: { rows: [string, ReactNode][] }) => (
   </dl>
 );
 
-function SignatureBox({ title, who, signedOn }: { title: string; who: string; signedOn: string | null }) {
+/** Cadre de signature (PRV-07) : signataire (nom, qualité) et date enregistrés, sinon lignes à remplir. */
+function SignatureBox({ title, who, signedOn, signer }: { title: string; who: string; signedOn: string | null; signer: { name: string; quality: string | null } | null }) {
   return (
     <div>
       <span className="pp-sign-title">{title}</span>
       <span className="pp-muted">{who}</span>
       {signedOn
-        ? <span>Signé le {fmtDate(signedOn)}</span>
+        ? (
+          <>
+            {signer ? <span>{signer.name}{signer.quality ? ` · ${signer.quality}` : ''}</span> : ['Nom', 'Qualité'].map((l) => <span key={l} className="pp-blank">{l}</span>)}
+            <span>Signé le {fmtDate(signedOn)}</span>
+          </>
+        )
         : ['Nom', 'Qualité', 'Date', 'Signature'].map((l) => <span key={l} className="pp-blank">{l}</span>)}
     </div>
   );
@@ -195,8 +201,8 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
       <Section num={8} title="Signatures">
         <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>Le plan est arrêté d&apos;un commun accord après l&apos;inspection commune et signé par les deux entreprises avant le début des travaux.</p>
         <div className="pp-sign">
-          <SignatureBox title="Pour l'entreprise utilisatrice" who={plan.owner ?? plan.site} signedOn={plan.signedEuOn} />
-          <SignatureBox title="Pour l'entreprise extérieure" who={plan.contractor} signedOn={plan.signedEeOn} />
+          <SignatureBox title="Pour l'entreprise utilisatrice" who={plan.site} signedOn={plan.signedEuOn} signer={plan.signedEu} />
+          <SignatureBox title="Pour l'entreprise extérieure" who={plan.contractor} signedOn={plan.signedEeOn} signer={plan.signedEe} />
         </div>
       </Section>
 

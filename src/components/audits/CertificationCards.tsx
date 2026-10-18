@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
-import { Dialog } from '@/components/Dialog';
+import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, TextArea } from '@/components/form';
 import { Dot } from '@/components/ui';
 import { FileError, checkPickedFiles } from '@/components/watch/parts';
@@ -11,12 +11,66 @@ import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { CertView } from '@/lib/data/audits';
-import { deleteCertification, removeCertificationFile, saveCertification } from '@/server/audits';
+import { ReasonButton } from '@/components/ReasonDialog';
+import { deleteCertification, reinstateCertification, removeCertificationFile, renewCertification, saveCertification, suspendCertification } from '@/server/audits';
 import { DeleteButton, DialogFooter, FileList, RadioSeg, fileUrl } from './parts';
 import { CERT_TONES, CERT_TONE_LABELS, certDot } from './shared';
 import styles from './audits.module.css';
 
 type Editing = { id: string | null } | null;
+
+/**
+ * Cycle de certification (AUD-08) : renouvellement après l'audit de renouvellement (nouveau cycle de 3 ans au plus),
+ * suspension par l'organisme et levée, chacune au journal du référentiel (motif obligatoire pour la suspension et sa levée).
+ */
+function CertificationCycle({ cert, onDone }: { cert: CertView; onDone: () => void }) {
+  return (
+    <div className="vg-inset" style={{ display: 'grid', gap: 8, padding: '10px 12px' }}>
+      <span style={{ fontSize: 12.5, fontWeight: 500 }}>Cycle de certification</span>
+      <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+        Certificat émis le {fmtDate(cert.issuedOn!)}{cert.validUntil ? `, valable jusqu'au ${fmtDate(cert.validUntil)}` : ''}.
+        {cert.suspendedOn && <> Suspendu depuis le {fmtDate(cert.suspendedOn)}{cert.suspendReason ? ` — ${cert.suspendReason}` : ''}.</>}
+      </span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {!cert.suspendedOn && (
+          <DialogButton label="Renouveler le certificat" className="btn btn-secondary vg-btn-sm" title={`Renouveler ${cert.standard}`} kicker="Cycle de certification" width={520}>
+            {(close) => (
+              <ActionForm action={renewCertification} hidden={{ id: cert.id }} submitLabel="Enregistrer le renouvellement" onCancel={close} onDone={() => { close(); onDone(); }}>
+                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+                  Nouveau certificat après l&apos;audit de renouvellement : le cycle précédent reste au journal du référentiel.
+                </p>
+                <FormRow>
+                  <Field name="issuedOn" label="Nouveau certificat émis le">
+                    <Input name="issuedOn" type="date" />
+                  </Field>
+                  <Field name="validUntil" label="Valable jusqu'au" hint="3 ans au plus après l'émission.">
+                    <Input name="validUntil" type="date" />
+                  </Field>
+                </FormRow>
+                <Field name="organization" label="Organisme certificateur" hint="Vide : inchangé.">
+                  <Input name="organization" defaultValue={cert.organization ?? ''} maxLength={120} />
+                </Field>
+              </ActionForm>
+            )}
+          </DialogButton>
+        )}
+        {cert.suspendedOn ? (
+          <ReasonButton label="Lever la suspension" icon="ph-seal-check" title={`Lever la suspension de ${cert.standard}`} kicker="Cycle de certification"
+            action={reinstateCertification} hidden={{ id: cert.id }} submitLabel="Lever la suspension" onDone={onDone}
+            placeholder="Ex. décision de l'organisme du …, écarts levés" />
+        ) : (
+          <ReasonButton label="Suspension par l'organisme" icon="ph-prohibit" title={`Suspendre ${cert.standard}`} kicker="Cycle de certification"
+            action={suspendCertification} hidden={{ id: cert.id }} submitLabel="Enregistrer la suspension" onDone={onDone}
+            placeholder="Ex. écart majeur non levé dans le délai, audit de suivi non réalisé">
+            <Field name="suspendedOn" label="Suspendu le">
+              <Input name="suspendedOn" type="date" />
+            </Field>
+          </ReasonButton>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
@@ -141,6 +195,7 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
                 )}
               </DialogFooter>
             )}
+            {cert && cert.tone === 'ok' && cert.issuedOn && <CertificationCycle cert={cert} onDone={close} />}
             {cert && <ChangeLogList entries={cert.log} />}
           </>
         )}

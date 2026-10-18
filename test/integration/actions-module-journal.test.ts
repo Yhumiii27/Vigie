@@ -58,7 +58,7 @@ describe('réserves d’un contrôle : l’action de levée détachée et tracé
     actAs('Animateur QHSE', 'ville-a');
     const db = await getDb();
     // Contrôle 1 (A-217 lève « 1 · fin de course à régler »).
-    const r = await recordControl({}, form({ controlId: '1', performedOn: '2026-10-05', organization: 'Apave', reserves: '2 · garde-corps à reprendre' }));
+    const r = await recordControl({}, form({ controlId: '1', performedOn: '2026-10-05', organization: 'Apave', reserves: '2 · garde-corps à reprendre', result: 'reserves' }));
     expect(r, JSON.stringify(r)).toMatchObject({ ok: true });
     expect((await db.select().from(t.controls).where(eq(t.controls.id, 1)))[0].actionId).toBeNull();
     expect(await lastLog('action', 'A-217')).toMatchObject({
@@ -79,7 +79,7 @@ describe('réserves d’un contrôle : l’action de levée détachée et tracé
     await db.update(t.controls).set({ actionId: 'A-217' }).where(eq(t.controls.id, 1));
     const [c] = await db.select().from(t.controls).where(eq(t.controls.id, 1));
     const before = (await changeLog('action', 'A-217')).length;
-    expect(await recordControl({}, form({ controlId: '1', performedOn: '2026-10-06', organization: 'Apave', reserves: c.reserves ?? '' }))).toMatchObject({ ok: true });
+    expect(await recordControl({}, form({ controlId: '1', performedOn: '2026-10-06', organization: 'Apave', reserves: c.reserves ?? '', result: c.reserves ? 'reserves' : 'favorable' }))).toMatchObject({ ok: true });
     expect((await db.select().from(t.controls).where(eq(t.controls.id, 1)))[0].actionId).toBe('A-217');
     expect((await changeLog('action', 'A-217')).length).toBe(before);
   });

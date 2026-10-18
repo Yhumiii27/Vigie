@@ -225,6 +225,8 @@ export type ReportedVia = (typeof REPORTED_VIA)[keyof typeof REPORTED_VIA];
 export const FIRST_AID_TITLE_FALLBACK = /\b(sst|sauveteurs?[\s-]+secouristes?)\b/i;
 /** Registre imprimable d'un site : `${BENIGN_REGISTER_PATH}?site=<id>`. */
 export const BENIGN_REGISTER_PATH = '/evenements/registre-benin';
+/** Synthèse imprimable de la déclaration d'un AT et feuille d'accident (EVT-10) : `${DAT_PRINT_PATH}/<id>`. */
+export const DAT_PRINT_PATH = '/evenements/imprimer';
 
 /**
  * Pourquoi l'AT ne peut pas être inscrit au registre des accidents bénins (null si possible) : accident du travail sans
@@ -270,6 +272,9 @@ export const HEALTH_LABELS = {
   // Déclaration d'accident du travail (EVT-01) et déclaration non faite par l'entreprise (EVT-02).
   lesionNature: 'Nature des lésions', lesionSite: 'Siège des lésions', careGiven: 'Soins dispensés', reservesOn: 'Réserves motivées',
   cpamWaivedAt: 'Déclaration CPAM non faite (date)', cpamWaivedById: 'Déclaration CPAM non faite (par)', cpamWaiverReason: 'Motif sans déclaration CPAM',
+  // Maladie professionnelle (EVT-09, R. 461-9 CSS) : l'événement MP entier est réservé (canSeeEventType) ; ses champs aussi.
+  mpTable: 'Tableau de maladie professionnelle', mpDisease: 'Maladie déclarée', mpCertificateOn: 'Certificat médical initial',
+  mpInformedOn: 'Déclaration reçue de la CPAM', mpQuestionnaireReceivedOn: 'Questionnaire employeur reçu', mpQuestionnaireReturnedOn: 'Questionnaire employeur retourné',
 } as const;
 export type HealthField = keyof typeof HEALTH_LABELS;
 /** Toutes les colonnes de santé (withoutHealth). */
@@ -278,7 +283,16 @@ export const HEALTH_FIELDS = Object.keys(HEALTH_LABELS) as HealthField[];
  * Données de santé saisies dans le formulaire de la fiche (readEventForm, submitsHealth, journal de saveEvent) ; l'absence
  * de déclaration motivée (cpamWaived*) a ses propres actions (waiveCpamDeclaration, cancelCpamWaiver).
  */
-export const HEALTH_FORM_FIELDS = ['injury', 'lostDays', 'cpamDeclaredOn', 'lesionNature', 'lesionSite', 'careGiven', 'reservesOn'] as const satisfies readonly HealthField[];
+export const HEALTH_FORM_FIELDS = [
+  'injury', 'lostDays', 'cpamDeclaredOn', 'lesionNature', 'lesionSite', 'careGiven', 'reservesOn',
+  'mpTable', 'mpDisease', 'mpCertificateOn', 'mpInformedOn', 'mpQuestionnaireReceivedOn', 'mpQuestionnaireReturnedOn',
+] as const satisfies readonly HealthField[];
+/** Maladie professionnelle (EVT-09) : champs propres au type MP (données de santé). */
+export const MP_FIELDS = ['mpTable', 'mpDisease', 'mpCertificateOn', 'mpInformedOn', 'mpQuestionnaireReceivedOn', 'mpQuestionnaireReturnedOn'] as const satisfies readonly HealthField[];
+/** Intitulé imposé d'une maladie professionnelle : ni la victime, ni la maladie (visible dans les actions liées). */
+export const MP_TITLE = 'Maladie professionnelle';
+/** Refus d'une maladie professionnelle saisie par un rôle non habilité (EVT-09). */
+export const MP_DENIED = "Les maladies professionnelles sont réservées à l'animateur QHSE et à la direction (données de santé).";
 /** Libellé du journal : pièce médicale ajoutée, retirée ou reclassée (attachments.health). */
 export const HEALTH_FILE_FIELD = 'Pièce médicale';
 /** Libellé du journal : inscription au registre des accidents bénins (donnée de santé : nature de l'accident). */
@@ -301,6 +315,10 @@ export function withoutHealth<T extends Record<HealthField, unknown>>(row: T): T
 
 /** Types d'événement qui portent une origine de non-conformité. */
 export const hasNcOrigin = (type: string) => type === 'NC' || type === 'RC';
+/** Types d'événement qui portent le traitement d'un produit non conforme (EVT-17) : NC et réclamation client. */
+export const hasNcDisposition = hasNcOrigin;
+/** Accident du travail ou de trajet (type AT) ; maladie professionnelle (type MP). */
+export const isOccupationalDisease = (type: string) => type === 'MP';
 
 // ─── Analyse des causes ─────────────────────────────────────────────────────
 

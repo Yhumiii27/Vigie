@@ -13,7 +13,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { addMonths, fmtDate } from '@/lib/dates';
-import { TONE } from '@/lib/domain';
+import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, TONE } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
@@ -364,6 +364,7 @@ function History({ c, canApprove, canRemoveFiles, onNotice }: {
           <div style={{ display: 'grid', gap: 5, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, textDecoration: r.cancelled ? 'line-through' : undefined }}>
               <span>{r.organization}</span>
+              {r.result && <ToneTag tone={r.cancelled ? 'neutral' : r.result.tone}>{r.result.label}</ToneTag>}
               <ToneTag tone={r.cancelled ? 'neutral' : r.reserves ? 'warn' : 'ok'}>{r.reserves ? `Réserves · ${r.reserves}` : 'Sans réserve'}</ToneTag>
             </div>
             {r.cancelLabel && <span style={{ ...muted, fontSize: 11.5, color: 'var(--color-neutral-300)' }}>{r.cancelLabel}</span>}
@@ -469,6 +470,8 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
   );
 }
 
+const RESULT_OPTIONS = CONTROL_RESULT_KEYS.map((k) => [k, CONTROL_RESULTS[k].label] as const);
+
 function RecordForm({ c, today, suggestions, onDone, onCancel }: {
   c: ControlView; today: string; suggestions: ControlSuggestions; onDone: () => void; onCancel: () => void;
 }) {
@@ -489,6 +492,10 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
           <Input name="organization" defaultValue={c.organization} list={`${uid}-orgs`} maxLength={120} />
         </Field>
       </FormRow>
+      {/* VEI-11 : avis de l'organisme ; défavorable ou mise à l'arrêt : équipement signalé jusqu'à un contrôle favorable. */}
+      <Field name="result" label="Résultat du contrôle" hint="Défavorable ou mise à l'arrêt : l'équipement est signalé jusqu'à un nouveau contrôle favorable.">
+        <Select name="result" options={RESULT_OPTIONS} defaultValue="" placeholder="Choisir…" />
+      </Field>
       <Field name="reserves" label="Réserves"
         hint={`Nombre et objet, ex. « 1 · fin de course à régler ». Vide = aucune réserve.${c.actionId ? ` Des réserves différentes détachent ${c.actionId}, qui reste dans le plan d'actions.` : ''}`}>
         <Input name="reserves" placeholder="Aucune" maxLength={160} />

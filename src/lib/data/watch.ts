@@ -2,12 +2,13 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { fileIcon, fmtSize } from '../attachments';
+import { fileIcon, fmtSize, toAttachmentItem } from '../attachments';
+import { appliesToSite } from '../watch-rules';
 import { addDays, addMonths, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
-  CONTROL_HORIZON_DAYS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
-  type TodoItem, type Tone,
+  CONTROL_HORIZON_DAYS, CONTROL_RESULTS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
+  isBlockingControlResult, type ControlResult, type TodoItem, type Tone,
 } from '../domain';
 import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
@@ -128,10 +129,12 @@ export async function loadWatch() {
   const fileKeys = [
     ...records.map((r) => ['control_record', String(r.id)] as const),
     ...evaluations.map((e) => ['requirement_evaluation', String(e.id)] as const),
+    // VEI-10 : textes joints aux exigences.
+    ...reqs.map((r) => ['requirement', String(r.id)] as const),
   ];
   const files = fileKeys.length
     ? await db.select().from(t.attachments)
-      .where(and(inArray(t.attachments.entityType, ['control_record', 'requirement_evaluation']), inArray(t.attachments.entityId, [...new Set(fileKeys.map(([, id]) => id))])))
+      .where(and(inArray(t.attachments.entityType, ['control_record', 'requirement_evaluation', 'requirement']), inArray(t.attachments.entityId, [...new Set(fileKeys.map(([, id]) => id))])))
       .orderBy(asc(t.attachments.createdAt))
     : [];
   const filesOf = (type: string, id: number) => files.filter((f) => f.entityType === type && f.entityId === String(id)).map(fileView);
@@ -149,7 +152,8 @@ export async function loadWatch() {
   const controlState = new Map(perimeterControls.map((c) => [c.id, controlStatus(c, now)]));
   const evalOf = (e: string) => REQUIREMENT_EVAL[e] ?? { label: e, tone: 'neutral' as Tone };
 
-  const requirements = reqs.map((r) => {
+  // VEI-10 : exigences applicables au site sélectionné (« Tous les sites » : toutes) ; sites concernés affichés.
+  const requirements = reqs.filter((r) => appliesToSite(r.siteIds, site)).map((r) => {
     const ev = evalOf(r.evaluation);
     const archived = !!r.archivedAt;
     const linked = perimeterControls.filter((c) => c.requirementId === r.id && !c.archivedAt).map((c) => {
@@ -168,6 +172,8 @@ export async function loadWatch() {
     return {
       ...r,
       archived,
+      siteLabels: r.siteIds?.length ? r.siteIds.map((x) => (siteLabel.get(x) ?? x).split(' — ')[0]) : [],
+      textFiles: files.filter((f) => f.entityType === 'requirement' && f.entityId === String(r.id)).map((f) => toAttachmentItem(f, f.uploadedBy ? people.get(f.uploadedBy)?.name : undefined)),
       archivedLabel: traceLabel('Archivée', r.archivedAt, name(r.archivedById), r.archiveReason),
       due: duerpDue ?? (due.control
         ? `${fmtDate(due.on!)} · prochain contrôle (${lcfirst(due.control.controlType)}, ${lcfirst(equipShort(due.control.equipment))})`
@@ -209,6 +215,8 @@ export async function loadWatch() {
       organization: r.organization,
       reserves: r.reserves,
       notes: r.notes,
+      /** VEI-11 : résultat du contrôle (null pour une saisie antérieure). */
+      result: r.result && r.result in CONTROL_RESULTS ? { key: r.result as ControlResult, ...CONTROL_RESULTS[r.result as ControlResult] } : null,
       recordedBy: name(r.recordedById),
       cancelled: !!r.cancelledAt,
       cancelLabel: traceLabel('Annulé', r.cancelledAt, name(r.cancelledById), r.cancelReason),
@@ -228,6 +236,8 @@ export async function loadWatch() {
       const recs = recordsByControl.get(c.id) ?? [];
       const head = recs.find((r) => !r.cancelled);
       if (head && head.performedOn === c.lastOn) head.latest = true;
+      // VEI-11 : dernier contrôle défavorable ou mise à l'arrêt : équipement signalé jusqu'à un nouveau contrôle favorable.
+      const blocked = !archived && head?.latest && head.result && isBlockingControlResult(head.result.key) ? head.result : null;
       return {
         ...c,
         archived,
@@ -235,8 +245,9 @@ export async function loadWatch() {
         period: `${c.periodMonths} mois`,
         last: fmtDate(c.lastOn),
         next: fmtDate(c.nextOn),
-        status: archived ? 'Équipement réformé' : s.label,
-        tone: archived ? 'neutral' as Tone : s.tone,
+        status: archived ? 'Équipement réformé' : blocked ? `${blocked.label} · ${s.label.toLowerCase()}` : s.label,
+        tone: archived ? 'neutral' as Tone : blocked ? 'danger' as Tone : s.tone,
+        lastResult: head?.latest ? head.result : null,
         days: s.days,
         filter,
         responsible: name(c.responsibleId),
@@ -274,6 +285,12 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     loadPeople(),
     db.select().from(t.requirements).where(isNull(t.requirements.archivedAt)).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
   ]);
+  // VEI-11 : résultat du dernier contrôle réalisé (le plus récent non annulé à la date du dernier contrôle).
+  const records = controls.length
+    ? await db.select({ controlId: t.controlRecords.controlId, performedOn: t.controlRecords.performedOn, result: t.controlRecords.result }).from(t.controlRecords)
+      .where(and(inArray(t.controlRecords.controlId, controls.map((c) => c.id)), isNull(t.controlRecords.cancelledAt)))
+      .orderBy(desc(t.controlRecords.performedOn), desc(t.controlRecords.id))
+    : [];
   const todo: TodoItem[] = [];
 
   const ctrlHorizon = addDays(now, CONTROL_HORIZON_DAYS);
@@ -284,6 +301,15 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const base = { kind: 'Contrôle', who, href: `/veille?onglet=controles&controle=${c.id}`, ownerIds: c.responsibleId ? [c.responsibleId] : undefined, siteId: c.siteId };
     if (s.days < 0) todo.push({ ...base, date: now, dueOn: c.nextOn, tone: 'danger', overdue: true, title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}` });
     else if (c.nextOn <= ctrlHorizon) todo.push({ ...base, date: c.nextOn, dueOn: c.nextOn, tone: 'warn', title });
+    // VEI-11 : dernier contrôle défavorable ou mise à l'arrêt, tant qu'un nouveau contrôle favorable n'est pas enregistré.
+    const lastRecord = records.find((r) => r.controlId === c.id);
+    const result = lastRecord?.result ?? null;
+    if (lastRecord && lastRecord.performedOn === c.lastOn && isBlockingControlResult(result)) {
+      todo.push({
+        ...base, date: now, dueOn: c.lastOn, tone: 'danger', overdue: true, key: `controle-resultat|${c.id}|${c.lastOn}`,
+        title: `${title} — ${CONTROL_RESULTS[result as ControlResult].label.toLowerCase()} le ${fmtDayMonth(c.lastOn)} : nouveau contrôle favorable attendu`,
+      });
+    }
     // Réserves sans action de levée : même urgence qu'un écart sans action (VEI-02).
     if (c.reserves && !c.actionId) {
       todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — réserves « ${c.reserves} » sans action de levée` });
@@ -298,8 +324,8 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const base = {
       kind: 'Veille', who: r.pilotId ? people.get(r.pilotId)?.name ?? '' : '',
       href: `/veille?exigence=${r.id}`, ownerIds: r.pilotId ? [r.pilotId] : undefined,
-      // Exigence de veille : commune à tous les sites.
-      siteId: null,
+      // Exigence de veille : commune à tous les sites, ou propre au seul site où elle s'applique (VEI-10).
+      siteId: r.siteIds?.length === 1 ? r.siteIds[0] : null,
     };
     const compliant = r.evaluation === 'conforme';
     // Exigence DUERP : l'échéance de mise à jour est celle de la version en vigueur, signalée par l'écran Risques.

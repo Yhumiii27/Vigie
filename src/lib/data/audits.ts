@@ -4,10 +4,11 @@ import { asc, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { REVIEW_TRACK, isReviewPlanItem } from '@/components/audits/shared';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { addDays, fmtDate, fmtDayMonth, monthName, monthOf, yearOf, parisDay } from '../dates';
+import { addDays, daysBetween, fmtDate, fmtDayMonth, monthName, monthOf, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
-  FINDING_KINDS, REVIEW_STATUS, TODO_HORIZON_DAYS, planTrackKind, type PlanItemState, type ReviewStatus, type TodoItem, type Tone,
+  CERT_RENEWAL_NOTICE_DAYS, CERT_SOON_DAYS, FINDING_GAP_KINDS, FINDING_KINDS, REVIEW_STATUS, TODO_HORIZON_DAYS, planTrackKind,
+  type PlanItemState, type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
 import { actionBrief, certificationStatus, loadAllActions, loadPeople, type ActionBrief } from '../queries';
 import { loadQhseLeads } from './leads';
@@ -53,6 +54,8 @@ export type PlanItemView = {
 export type FindingView = {
   id: number; audit: string; planItemId: number | null; clause: string | null; foundOn: string | null;
   kind: string; text: string; sort: number; actionId: string | null; action: ActionBrief | null;
+  /** Réponse attendue (plan d'actions) au plus tard le (écarts, AUD-09). */
+  responseDueOn: string | null;
   /** Ligne du programme de l'élément rattaché (source de l'action, D20) ; null hors programme. */
   track: string | null;
   /** Annulation (constat saisi par erreur ou en double) : hors groupes et échéances, visible avec le filtre « Annulés ». */
@@ -166,7 +169,7 @@ const readAudits = cache(async () => {
   const trackOf = new Map(items.map((p) => [p.id, p.track]));
   const findingViews: FindingView[] = findings.map((f) => ({
     id: f.id, audit: f.audit, planItemId: f.planItemId, clause: f.clause, foundOn: f.foundOn,
-    kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId),
+    kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId), responseDueOn: f.responseDueOn,
     track: f.planItemId != null ? trackOf.get(f.planItemId) ?? null : null,
     cancelled: f.cancelledAt ? { on: parisDay(f.cancelledAt), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
     log: findingLogs.get(String(f.id)) ?? [],
@@ -341,28 +344,41 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
     }
   });
 
-  // c) Écarts et pistes de progrès sans action au plan d'actions.
+  // c) Écarts, observations et pistes de progrès sans action au plan d'actions ; un écart dont la réponse est attendue
+  // à une date (AUD-09) est daté de ce délai tant qu'il n'est pas dépassé.
   active.filter((f) => f.kind !== 'point_fort' && !f.actionId).forEach((f) => {
     // Responsable de l'élément du programme, sinon les responsables QHSE (constat commun aux sites).
     const ownerId = f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null;
     const owners = ownerId ? { who: name(ownerId), ownerIds: [ownerId] } : leads.forSite(null);
-    todo.push({
-      date: now, kind: "Constat d'audit", tone: f.kind === 'ecart_mineur' ? 'danger' : 'warn', overdue: true,
-      title: `${FINDING_KINDS[f.kind]?.label ?? f.kind} sans action — ${clip(f.text, 90)}`,
-      who: owners.who, ownerIds: owners.ownerIds, href: `/audits?constat=${f.id}`, siteId: null,
-    });
+    const gap = FINDING_GAP_KINDS.includes(f.kind);
+    const base = { kind: "Constat d'audit", who: owners.who, ownerIds: owners.ownerIds, href: `/audits?constat=${f.id}`, siteId: null };
+    const label = `${FINDING_KINDS[f.kind]?.label ?? f.kind} sans action — ${clip(f.text, 90)}`;
+    if (gap && f.responseDueOn && f.responseDueOn >= now) {
+      todo.push({ ...base, date: f.responseDueOn, dueOn: f.responseDueOn, tone: 'warn', title: `${label} · réponse attendue le ${fmtDayMonth(f.responseDueOn)}` });
+    } else {
+      todo.push({
+        ...base, date: now, dueOn: f.responseDueOn ?? undefined, tone: gap ? 'danger' : 'warn', overdue: true,
+        title: f.responseDueOn ? `${label} · réponse attendue depuis le ${fmtDayMonth(f.responseDueOn)}` : label,
+      });
+    }
   });
 
   // d) Certificats : expiré, fin de validité proche, audit de suivi non programmé (l'audit à venir relève du programme).
   certs.filter((c) => c.tone === 'ok').forEach((c) => {
     const { who, ownerIds } = leads.forSite(null);
     const base = { kind: 'Certification', who, ownerIds, href: '/audits', siteId: null };
+    // AUD-08 : suspension par l'organisme, jusqu'à sa levée.
+    if (c.suspendedOn) todo.push({ ...base, date: now, dueOn: c.suspendedOn, tone: 'danger', title: `Certificat ${c.standard} suspendu depuis le ${fmtDayMonth(c.suspendedOn)}`, overdue: true });
     if (c.validUntil && c.validUntil < now) {
       todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
-    } else if (c.validUntil && c.validUntil <= horizon) {
+    } else if (c.validUntil && daysBetween(now, c.validUntil) <= CERT_SOON_DAYS) {
+      // AUD-08 : fin de validité signalée 30 jours avant (et non plus 15).
       todo.push({ ...base, date: c.validUntil, dueOn: c.validUntil, tone: 'warn', title: `Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}` });
     }
-    if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', title: `${c.standard} · audit de suivi à programmer`, overdue: true });
+    // AUD-08 : renouvellement à préparer — fin de cycle sous 6 mois sans audit programmé avant la fin de validité.
+    if (c.validUntil && c.validUntil >= now && daysBetween(now, c.validUntil) <= CERT_RENEWAL_NOTICE_DAYS && !(c.nextAudit && c.nextAudit.plannedOn <= c.validUntil)) {
+      todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'warn', overdue: true, key: `certification|${c.id}|renouvellement`, title: `${c.standard} · audit de renouvellement à programmer avant le ${fmtDate(c.validUntil)}` });
+    } else if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', title: `${c.standard} · audit de suivi à programmer`, overdue: true });
   });
 
   // Les contributions attendues pour la revue de direction relèvent de loadReviewSignals (src/lib/data/review.ts).

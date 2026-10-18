@@ -166,7 +166,25 @@ export const events = pgTable('events', {
   dismissedById: text('dismissed_by_id').references(() => people.id),
   dismissReason: text('dismiss_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  // EVT-09 : accident de trajet (AT, L. 411-2 CSS) — déclaré comme un AT (48 h, rubriques de la DAT), exclu du TF1/TG,
+  // des jours sans accident et de la pyramide (workforceAccident, src/lib/queries.ts).
+  commute: boolean('commute').notNull().default(false),
+  // EVT-09 : maladie professionnelle (type MP) — déclarée par la victime à la CPAM (L. 461-5 CSS), instruite par la caisse
+  // (R. 461-9) ; événement réservé aux rôles canSeeHealth (loadSiteEvents), champs listés dans HEALTH_LABELS.
+  mpTable: text('mp_table'), // tableau des maladies professionnelles (« 57 », « hors tableau »)
+  mpDisease: text('mp_disease'), // maladie déclarée
+  mpCertificateOn: date('mp_certificate_on', { mode: 'string' }), // certificat médical initial
+  mpInformedOn: date('mp_informed_on', { mode: 'string' }), // double de la déclaration reçu de la CPAM le
+  mpQuestionnaireReceivedOn: date('mp_questionnaire_received_on', { mode: 'string' }), // questionnaire employeur reçu le
+  mpQuestionnaireReturnedOn: date('mp_questionnaire_returned_on', { mode: 'string' }), // questionnaire retourné le (30 jours francs)
+  // EVT-17 : traitement d'un produit non conforme (NC, RC ; ISO 9001 §8.7) — NC_DISPOSITIONS, quantité, coût de non-qualité.
+  ncDisposition: text('nc_disposition'),
+  ncQuantity: numeric('nc_quantity', { precision: 12, scale: 2, mode: 'number' }),
+  ncCost: numeric('nc_cost', { precision: 12, scale: 2, mode: 'number' }), // € HT
+  ncDispositionNote: text('nc_disposition_note'), // dérogation : accordée par (client, autorité) et conditions
+}, (t) => [
+  check('events_nc_amounts_check', sql`(${t.ncQuantity} is null or ${t.ncQuantity} >= 0) and (${t.ncCost} is null or ${t.ncCost} >= 0)`),
+]);
 
 // Contenu de l'analyse des causes, une ligne par méthode et par événement.
 export const eventAnalyses = pgTable('event_analyses', {
@@ -362,6 +380,10 @@ export const duerpVersions = pgTable('duerp_versions', {
   retention: text('retention').notNull(),
   validatedById: text('validated_by_id').references(() => people.id),
   cseConsultedOn: date('cse_consulted_on', { mode: 'string' }),
+  // DUE-03 : transmission de la version au service de prévention et de santé au travail (L. 4121-3 et R. 4121-4), à chaque
+  // mise à jour ; dépôt sur le portail numérique (L. 4121-3-1 V), en attente de l'ouverture du portail.
+  spstSentOn: date('spst_sent_on', { mode: 'string' }),
+  portalDepositedOn: date('portal_deposited_on', { mode: 'string' }),
   archivedOn: date('archived_on', { mode: 'string' }),
   comment: text('comment'), // objet de la mise à jour de la version
   snapshot: jsonb('snapshot'), // risques figés à l'archivage (null pour les versions antérieures à Vigie)
@@ -464,6 +486,10 @@ export const requirements = pgTable('requirements', {
   // L'exigence concerne les projets Keystone livrés après sa date d'application (nombre calculé : concernedCount).
   affectsProjects: boolean('affects_projects').notNull().default(false),
   linkedTo: text('linked_to'), // 'duerp' : échéance et état calculés depuis la version en vigueur du DUERP (écran /risques)
+  // VEI-10 : sites où l'exigence s'applique ([] : tous les sites) et lien vers le texte sur Légifrance ; texte joint :
+  // attachments 'requirement'.
+  siteIds: jsonb('site_ids').$type<string[]>().notNull().default([]),
+  legifranceUrl: text('legifrance_url'),
   actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
   // Archivage (« texte abrogé ») : jamais de suppression, motif conservé.
@@ -500,6 +526,8 @@ export const controlRecords = pgTable('control_records', {
   organization: text('organization').notNull(),
   reserves: text('reserves'),
   notes: text('notes'),
+  // VEI-11 : résultat du contrôle (CONTROL_RESULTS) ; null pour les saisies antérieures.
+  result: text('result'),
   recordedById: text('recorded_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   // État du contrôle avant cet enregistrement (renseigné quand il est devenu le dernier), pour annuler une saisie erronée.
@@ -533,6 +561,10 @@ export const trainingTitles = pgTable('training_titles', {
   sort: integer('sort').notNull().default(0),
   // Titre de secourisme (SST) : ses titulaires valides peuvent donner les soins inscrits au registre des accidents bénins (EVT-04).
   firstAid: boolean('first_aid').notNull().default(false),
+  // HAB-10 : titres exigés pour que celui-ci soit valide (CACES avant l'autorisation de conduite, R. 4323-56) et libellé du
+  // champ « portée » de ses formations (catégories CACES, indices d'habilitation électrique).
+  prerequisiteIds: jsonb('prerequisite_ids').$type<string[]>().notNull().default([]),
+  scopeLabel: text('scope_label'),
   // Titre retiré du suivi (historique conservé).
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
@@ -554,6 +586,7 @@ export const qualifications = pgTable('qualifications', {
   obtainedOn: date('obtained_on', { mode: 'string' }).notNull(),
   expiresOn: date('expires_on', { mode: 'string' }),
   provider: text('provider'),
+  scope: text('scope'), // HAB-10 : catégories ou niveaux obtenus (« 1A, 3, 5 », « B1V, BR »)
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   recordedById: text('recorded_by_id').references(() => people.id),
   // Formation enregistrée par erreur : annulée avec un motif (jamais supprimée) et exclue du calcul de l'état.
@@ -585,6 +618,10 @@ export const certifications = pgTable('certifications', {
   issuedOn: date('issued_on', { mode: 'string' }), // émission du certificat
   validUntil: date('valid_until', { mode: 'string' }), // fin de validité (fin de cycle)
   sort: integer('sort').notNull().default(0),
+  // AUD-08 : suspension du certificat par l'organisme (motif) ; levée par la reprise, cycles et renouvellements au journal.
+  suspendedOn: date('suspended_on', { mode: 'string' }),
+  suspendedById: text('suspended_by_id').references(() => people.id),
+  suspendReason: text('suspend_reason'),
 });
 // Le prochain audit de suivi n'est pas stocké : élément du programme rattaché (certificationId) non réalisé le plus proche.
 
@@ -621,8 +658,9 @@ export const auditFindings = pgTable('audit_findings', {
   planItemId: integer('plan_item_id').references(() => auditPlanItems.id), // audit du programme (null = constat hors programme)
   clause: text('clause'), // exigence ou paragraphe, ex. « §8.2.3 »
   foundOn: date('found_on', { mode: 'string' }), // date du constat
-  kind: text('kind').notNull(), // ecart_mineur | piste | point_fort
+  kind: text('kind').notNull(), // FINDING_KINDS : ecart_majeur | ecart_mineur | observation | piste | point_fort
   text: text('text').notNull(),
+  responseDueOn: date('response_due_on', { mode: 'string' }), // AUD-09 : réponse attendue (plan d'actions) au plus tard le
   actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
   // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, l'action liée reste au plan.
@@ -682,6 +720,41 @@ export const reviewDecisions = pgTable('review_decisions', {
   sort: integer('sort').notNull().default(0),
 });
 
+// Objectifs QHSE mesurables (AUD-13, ISO 9001 §6.2 et §9.1) : cible d'un indicateur calculé de Vigie (OBJECTIVE_INDICATORS,
+// src/lib/objectives.ts) pour une année ; la valeur atteinte n'est jamais stockée. Décision de revue d'origine facultative.
+export const qhseObjectives = pgTable('qhse_objectives', {
+  id: serial('id').primaryKey(),
+  year: integer('year').notNull(),
+  label: text('label').notNull(),
+  indicator: text('indicator').notNull(), // clé de OBJECTIVE_INDICATORS
+  target: numeric('target', { precision: 12, scale: 2, mode: 'number' }).notNull(),
+  siteId: text('site_id').references(() => sites.id), // null : tous les sites
+  pilotId: text('pilot_id').references(() => people.id),
+  reviewDecisionId: integer('review_decision_id').references(() => reviewDecisions.id),
+  sort: integer('sort').notNull().default(0),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
+}, (t) => [check('qhse_objectives_target_check', sql`${t.target} >= 0`)]);
+
+// Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1) : enjeux internes et externes, parties
+// intéressées et leurs attentes, risques et opportunités avec leur traitement. Élément commun à l'entreprise.
+export const contextItems = pgTable('context_items', {
+  id: serial('id').primaryKey(),
+  kind: text('kind').notNull(), // CONTEXT_KINDS : enjeu_interne | enjeu_externe | partie_interessee | risque | opportunite
+  label: text('label').notNull(),
+  detail: text('detail').notNull().default(''), // description, attentes ou exigences pertinentes
+  treatment: text('treatment').notNull().default(''), // actions prévues, maîtrise (risques et opportunités)
+  sort: integer('sort').notNull().default(0),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
+});
+
 // ─── Plans de prévention et permis ──────────────────────────────────────────
 
 export const contractors = pgTable('contractors', {
@@ -726,6 +799,11 @@ export const preventionPlans = pgTable('prevention_plans', {
   status: text('status').notNull(), // brouillon | a_signer | signe | clos | annule
   signedEuOn: date('signed_eu_on', { mode: 'string' }), // entreprise utilisatrice
   signedEeOn: date('signed_ee_on', { mode: 'string' }), // entreprise extérieure
+  // PRV-07 : nom et qualité des signataires (R. 4512-7 : plan arrêté et signé par les deux chefs d'entreprise ou leurs représentants).
+  signedEuName: text('signed_eu_name'),
+  signedEuQuality: text('signed_eu_quality'),
+  signedEeName: text('signed_ee_name'),
+  signedEeQuality: text('signed_ee_quality'),
   // PRV-01 : date de la première signature complète (EU et EE, la plus tardive des deux). Elle est conservée quand une
   // modification efface les signatures. Null = jamais signé par les deux, ou ligne antérieure (repli dans le code sur les
   // signatures actuelles).
@@ -860,7 +938,10 @@ export const wasteEntries = pgTable('waste_entries', {
   // Adresse de prise en charge lorsqu'elle se distingue de celle de l'établissement (chantier, autre dépôt).
   pickupAddress: text('pickup_address'),
   bsdNumber: text('bsd_number'), // bordereau Trackdéchets (obligatoire pour les déchets dangereux)
-  bsdStatus: text('bsd_status'), // brouillon | emis | collecte | traite
+  bsdStatus: text('bsd_status'), // BSD_STATUSES : brouillon | emis | collecte | traite | refuse | accepte_partiel
+  // DOC-12 : refus (total ou partiel) par l'installation de destination : quantité refusée et motif.
+  bsdRefusedQuantity: numeric('bsd_refused_quantity', { precision: 12, scale: 2, mode: 'number' }),
+  bsdRefusalReason: text('bsd_refusal_reason'),
   transporter: text('transporter').notNull(),
   notes: text('notes'),
   // Événement à l'origine de l'enlèvement (déversement éliminé en déchet dangereux…), facultatif.

@@ -223,7 +223,7 @@ describe('veille : rattachements et contrôles journalisés (VEI-04, VEI-09)', (
     const [control] = await d.select().from(t.controls).where(and(eq(t.controls.siteId, 'ville-a'), isNull(t.controls.archivedAt)));
     const a = await openAction();
     await d.update(t.controls).set({ actionId: a.id, reserves: 'Fin de course à régler' }).where(eq(t.controls.id, control.id));
-    expect(await recordControl({}, form({ controlId: String(control.id), performedOn: '2026-10-08', organization: 'Apave', reserves: 'Câble usé', notes: '' }))).toMatchObject({ ok: true });
+    expect(await recordControl({}, form({ controlId: String(control.id), performedOn: '2026-10-08', organization: 'Apave', reserves: 'Câble usé', result: 'reserves', notes: '' }))).toMatchObject({ ok: true });
     expect(await lastLog('control', control.id)).toMatchObject({ action: 'unlink', summary: expect.stringContaining(`Action ${a.id} détachée`) });
   });
 

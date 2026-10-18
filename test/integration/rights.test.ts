@@ -18,6 +18,10 @@ import { archiveSite } from '@/server/sites';
 import { archiveTitle, cancelQualification } from '@/server/skills';
 import { archiveControl, archiveRequirement, cancelControlRecord } from '@/server/watch';
 
+/** Signature EU (PRV-07) : date, nom et qualité du signataire. */
+const signEu = (id: string, extra: Record<string, string> = {}) =>
+  signPlanEu({}, form({ id, signedEuOn: '2026-10-09', signedEuName: '[H. Marchand]', signedEuQuality: 'Directeur de site', ...extra }));
+
 // Droits et garde-fous communs des server actions (QUA-04) : saisie (requireManager), validation (requireApprover),
 // site sélectionné et périmètre de sites (requireInSite), motif obligatoire des annulations et archivages, journal.
 
@@ -38,7 +42,7 @@ describe('saisie et validation par rôle', () => {
     const results: Record<string, unknown> = {};
     for (const role of ROLE_KEYS) {
       actAs(role);
-      results[role] = await signPlanEu('PP-inconnu');
+      results[role] = await signEu('PP-inconnu');
     }
     expect(results).toEqual({
       'Animateur QHSE': { error: 'Plan de prévention introuvable.' }, Direction: { error: 'Plan de prévention introuvable.' },
@@ -132,7 +136,7 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
     restricted();
     cookieJar.set('vigie_site', 'ville-b');
     const outside = { error: 'Cet élément appartient à un site hors de votre périmètre.' };
-    expect(await signPlanEu('PP-2026-016')).toEqual(outside);
+    expect(await signEu('PP-2026-016')).toEqual(outside);
     expect(await savePlan({}, form({
       contractorId: 'EE-001', siteId: 'ville-a', title: 'Hors périmètre', location: 'Atelier', startOn: '2026-11-02', endOn: '2026-11-03', estimatedHours: '8',
     }))).toEqual(outside);

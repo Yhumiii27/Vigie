@@ -60,6 +60,17 @@ describe('décision du proxy (SEC-14)', () => {
     expect(routeDecision('/evenements', 'Chef de projet', false)).toEqual({ kind: 'pass' });
   });
 
+  it('synthèse de la DAT et bilan SSCT (paquet 5) : animateur QHSE et direction seulement', () => {
+    for (const role of ['Salarié', 'Chef de service', 'Chef de projet'] as const) {
+      expect(routeDecision('/evenements/imprimer/EV-2026-119', role, false), role).toEqual({ kind: 'redirect', to: '/evenements' });
+      expect(routeDecision('/risques/bilan-ssct', role, false), role).toEqual({ kind: 'redirect', to: '/risques' });
+    }
+    for (const role of ['Animateur QHSE', 'Direction'] as const) {
+      expect(routeDecision('/evenements/imprimer/EV-2026-119', role, false), role).toEqual({ kind: 'pass' });
+      expect(routeDecision('/risques/bilan-ssct', role, false), role).toEqual({ kind: 'pass' });
+    }
+  });
+
   it('routes publiques et route handlers (403 eux-mêmes) : jamais redirigés', () => {
     for (const p of ['/risques/export', '/environnement/registre', '/fichiers/abc', '/api/sante', '/auth/acces', '/_introuvable']) {
       expect(screenOfPath(p), p).toBeNull();
@@ -108,7 +119,8 @@ describe('ROLE_ROUTES et gardes des pages (src/app)', () => {
   });
 
   it('aperçu mobile, QR codes des postes, pages de santé : contrôle dans la page aussi', () => {
-    const source = (url: string) => readFileSync(files.find((f) => f.kind === 'page' && f.url === url)!.file, 'utf8');
+    // Page du chemin, ou première page sous ce chemin (synthèse DAT : /evenements/imprimer/[id]).
+    const source = (url: string) => readFileSync(files.find((f) => f.kind === 'page' && (f.url === url || f.url.startsWith(`${url}/`)))!.file, 'utf8');
     expect(source(SCREENS.mobile.path)).toMatch(/if \(!isDemo\(\)\) notFound\(\)/);
     expect(source('/signaler/postes')).toMatch(/!canManage\(role\)/);
     for (const h of HEALTH_PAGES) expect(source(h.path), h.path).toMatch(/!canSeeHealth\(session\.role\)\) redirect\(/);

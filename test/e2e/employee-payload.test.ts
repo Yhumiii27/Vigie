@@ -140,5 +140,20 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
       expect(body, path).not.toMatch(/Pincement|Majeur droit|Rinçage oculaire|Secouristes du travail/);
       expect(found(body, EVENT_REF), path).toEqual([]);
     });
+
+    it('synthèse de la DAT et bilan SSCT (paquet 5, données de santé) : renvoi, aucune donnée transmise', async () => {
+      for (const [path, back] of [['/evenements/imprimer/EV-2026-119', '/evenements'], ['/risques/bilan-ssct?annee=2026', '/risques']] as const) {
+        const { status, location, body } = await load(path, rsc);
+        expect(status === 307 ? location : body, path).toContain(back);
+        expect(body, path).not.toMatch(/Feuille d.accident|Bilan annuel santé|Maladies professionnelles déclarées|Entorse|Tendinopathie/);
+        expect(found(body, EVENT_REF), path).toEqual([]);
+      }
+      // Maladie professionnelle du jeu (EV-2026-134, dont il est la victime) : jamais dans ses écrans.
+      for (const path of ['/evenements?etat=tous', '/habilitations']) {
+        const { body } = await load(path, rsc);
+        expect(body, path).not.toContain('EV-2026-134');
+        expect(body, path).not.toMatch(/Tendinopathie|Maladie professionnelle/);
+      }
+    });
   });
 });
