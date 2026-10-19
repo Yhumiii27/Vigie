@@ -9,7 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { tarStream } from '@/db/archive';
 import { extractBackup } from '@/db/backup';
-import { MIGRATIONS_DIR } from '@/db/migrations';
+import { SERVER_SCHEMA, migrateServer } from '@/db/migrations';
 import { parseStorageConfig } from '@/lib/env';
 
 // `vigie-db restore --remplacer` sur PostgreSQL (PRD-02) : la base actuelle n'est remplacée qu'en une transaction ;
@@ -31,7 +31,7 @@ function vigieDb(...args: string[]) {
 
 async function sql<T = Record<string, unknown>>(q: string): Promise<T[]> {
   const { Client } = await import('pg');
-  const client = new Client({ connectionString: env.DATABASE_URL, application_name: 'vigie-tests' });
+  const client = new Client({ connectionString: env.DATABASE_URL, application_name: 'vigie-tests', options: `-c search_path=${SERVER_SCHEMA}` });
   await client.connect();
   try {
     return (await client.query(q)).rows as T[];
@@ -46,11 +46,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     dir = await mkdtemp(path.join(tmpdir(), 'vigie-db-pg-'));
     env = { ...process.env, VIGIE_BACKUP_DIR: path.join(dir, 'backups'), VIGIE_UPLOAD_DIR: path.join(dir, 'uploads') };
     const { Client } = await import('pg');
-    const { drizzle } = await import('drizzle-orm/node-postgres');
-    const { migrate } = await import('drizzle-orm/node-postgres/migrator');
-    const client = new Client({ connectionString: env.DATABASE_URL, application_name: 'vigie-tests' });
+    const client = new Client({ connectionString: env.DATABASE_URL, application_name: 'vigie-tests', options: `-c search_path=${SERVER_SCHEMA}` });
     await client.connect();
-    await migrate(drizzle(client), { migrationsFolder: MIGRATIONS_DIR });
+    await migrateServer((q, p) => client.query(q, p));
     await client.query("insert into sites (id, label, sort) values ('ville-a', 'Site A', 1), ('ville-b', 'Site B', 2)");
     // Compteurs du signalement sans compte (empreintes d'adresses IP) : jamais copiés dans une sauvegarde PostgreSQL.
     await client.query("insert into report_rate_limits (key, window_start, hits) values ('ip:empreinte', now(), 3)");
@@ -77,12 +75,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     ])), createWriteStream(bad));
 
     await sql("delete from sites where id = 'ville-b'");
-    const tables = (await sql<{ n: number }>("select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')"))[0].n;
+    const tables = (await sql<{ n: number }>(`select count(*)::int as n from pg_tables where schemaname = '${SERVER_SCHEMA}'`))[0].n;
     const refused = vigieDb('restore', bad, '--remplacer');
     expect(refused.code).toBe(1);
     expect(refused.out).toMatch(/unsupported version|version/);
     expect(refused.out).toMatch(/base actuelle est inchangée/);
-    expect((await sql<{ n: number }>("select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')"))[0].n).toBe(tables);
+    expect((await sql<{ n: number }>(`select count(*)::int as n from pg_tables where schemaname = '${SERVER_SCHEMA}'`))[0].n).toBe(tables);
     expect(await siteIds()).toEqual(['ville-a']);
 
     const restored = vigieDb('restore', path.join(dir, 'backups', good), '--remplacer');
@@ -90,5 +88,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     expect(restored.code).toBe(0);
     expect(await siteIds()).toEqual(['ville-a', 'ville-b']);
     expect(await sql('select key from report_rate_limits')).toEqual([]);
+    // Schéma vigie seulement (serveur commun EPC2I) : vues pub_ restaurées, rien dans public ni drizzle.
+    expect((await sql<{ v: string }>(`select table_name as v from information_schema.views where table_schema = '${SERVER_SCHEMA}' order by 1`)).map((r) => r.v))
+      .toEqual(['pub_hse_projet', 'pub_journal', 'pub_non_conformites']);
+    expect(await sql("select tablename from pg_tables where schemaname in ('public', 'drizzle')")).toEqual([]);
   });
 });

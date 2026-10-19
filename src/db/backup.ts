@@ -3,7 +3,8 @@
 //
 // Une sauvegarde est un fichier unique dans VIGIE_BACKUP_DIR : archive tar (manifest.json, base, pièces jointes),
 // chiffrée (AES-256-GCM, clé dérivée de VIGIE_UPLOAD_KEY) quand la clé est définie : vigie-<date>-<moteur>-<motif>.tar[.enc].
-// - PostgreSQL : pg_dump au format personnalisé (base.pgdump), restauré par pg_restore ;
+// - PostgreSQL : pg_dump au format personnalisé (base.pgdump) du seul schéma vigie (serveur commun EPC2I : les autres
+//   schémas appartiennent aux autres outils), restauré par pg_restore dans ce schéma, sans le recréer ;
 // - PGlite : copie du dossier de données (dumpDataDir, base-pglite.tar.gz), rechargée par loadDataDir.
 // Le manifeste porte l'empreinte (SHA-256) de la base et de chaque pièce jointe, contrôlées à l'extraction. Quand
 // VIGIE_UPLOAD_KEY est définie, une archive en clair est refusée sauf demande explicite (--accepter-clair).
@@ -20,7 +21,7 @@ import { pipeline } from 'node:stream/promises';
 import { childProcessEnv, type StorageConfig } from '../lib/env';
 import { decryptFileStream, encryptStream, fileIsEncrypted, fileKeys } from '../lib/encryption';
 import { readTar, tarStream, type TarEntry } from './archive';
-import { migrationState, type Query } from './migrations';
+import { DB_LAYOUT, SERVER_SCHEMA, migrationState, type Query } from './migrations';
 import type { DbEngine } from './types';
 
 export type BackupReason = 'manuelle' | 'avant-migration' | 'avant-restauration';
@@ -34,6 +35,12 @@ export type Manifest = {
   /** Archive chiffrée (clé dérivée de VIGIE_UPLOAD_KEY). */
   encrypted: boolean;
   migrations: { applied: number; last: string | null; lastWhen: number | null; pending: string[] };
+  /**
+   * PostgreSQL : schéma sauvegardé (vigie). Absent : sauvegarde PostgreSQL d'une version antérieure (schémas public et
+   * drizzle), que cette version ne restaure pas (pas de reprise, décision du 18/10/2026). Champ facultatif : le
+   * manifeste reste en version 1.
+   */
+  schema?: string;
   database: { file: string; size: number; sha256: string };
   /**
    * Pièces jointes copiées telles quelles (chiffrées au repos ou non) ; absentes des sauvegardes avant migration.
@@ -80,38 +87,67 @@ function run(cmd: string, args: string[], env: Record<string, string>): Promise<
 }
 
 /**
- * Copie d'une base PostgreSQL au format personnalisé de pg_dump (compressé, restaurable par pg_restore), sans les
- * compteurs du signalement sans compte (empreintes d'adresses IP conservées 24 h : la table est restaurée vide).
+ * Copie du schéma vigie d'une base PostgreSQL au format personnalisé de pg_dump (compressé, restaurable par pg_restore),
+ * sans les compteurs du signalement sans compte (empreintes d'adresses IP conservées 24 h : la table est restaurée vide).
+ * Le rôle de Vigie (vigie_app) est propriétaire de tout ce qu'il copie ; les autres schémas ne sont jamais lus.
  */
 export async function pgDump(url: string, file: string) {
   const c = pgConnection(url);
-  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', '--exclude-table-data=public.report_rate_limits', `--file=${file}`, `--dbname=${c.dbname}`], c.env);
+  await run('pg_dump', ['--format=custom', '--no-owner', '--no-privileges', `--schema=${SERVER_SCHEMA}`,
+    `--exclude-table-data=${SERVER_SCHEMA}.report_rate_limits`, `--file=${file}`, `--dbname=${c.dbname}`], c.env);
 }
 
 /**
- * Restaure une copie pg_dump dans une base **vide**, en une transaction (en cas d'erreur, la base reste vide).
- * Base non vide : pgReplace.
+ * Restaure une copie pg_dump dans le schéma vigie **vide**, en une transaction (en cas d'erreur, il reste vide). Avec
+ * --schema, pg_restore ne recrée pas le schéma, ce que vigie_app n'a pas le droit de faire sur le serveur commun.
+ * Schéma non vide : pgReplace.
  */
 export async function pgRestore(url: string, file: string) {
   const c = pgConnection(url);
-  await run('pg_restore', ['--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction', `--dbname=${c.dbname}`, file], c.env);
+  await run('pg_restore', ['--no-owner', '--no-privileges', `--schema=${SERVER_SCHEMA}`, '--exit-on-error', '--single-transaction', `--dbname=${c.dbname}`, file], c.env);
 }
 
 /**
- * Remplace le contenu d'une base (schémas drizzle et public) par une copie pg_dump, en une seule transaction : en cas
- * d'erreur, la base est inchangée. pg_restore écrit d'abord le script SQL de la copie dans `work` (copie illisible,
- * format ou version non pris en charge : erreur avant toute modification), puis psql exécute la suppression des
- * schémas et ce script dans la même transaction (--single-transaction, arrêt et annulation à la première erreur).
- * Les copies de Vigie ne contiennent pas d'objets larges, seul cas où pg_restore écrirait ses propres BEGIN/COMMIT.
+ * Vide le schéma vigie sans le supprimer (vigie_app ne pourrait pas le recréer) : vues, tables (index, contraintes et
+ * séquences liées comprises), séquences, fonctions et types restants. Les objets d'autres schémas qui en dépendent
+ * (matrix.journal_unifie, qui lit vigie.pub_journal) partent avec CASCADE : reposer le partage après une restauration
+ * (Matrix, infra/postgres/README.md, « Restaurer le schéma d'un outil »).
+ */
+export const EMPTY_SERVER_SCHEMA_SQL = `do $vigie$
+declare r record;
+begin
+  for r in select c.relkind, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+           where n.nspname = '${SERVER_SCHEMA}' and c.relkind in ('v', 'm', 'r', 'p', 'f') order by c.relkind desc loop
+    execute format('drop %s if exists %I.%I cascade',
+      case r.relkind when 'v' then 'view' when 'm' then 'materialized view' when 'f' then 'foreign table' else 'table' end, '${SERVER_SCHEMA}', r.relname);
+  end loop;
+  for r in select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = '${SERVER_SCHEMA}' and c.relkind = 'S' loop
+    execute format('drop sequence if exists %I.%I cascade', '${SERVER_SCHEMA}', r.relname);
+  end loop;
+  for r in select p.oid::regprocedure::text as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = '${SERVER_SCHEMA}' loop
+    execute format('drop routine if exists %s cascade', r.sig);
+  end loop;
+  for r in select t.typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+           where n.nspname = '${SERVER_SCHEMA}' and t.typtype in ('e', 'd', 'c', 'r') and (t.typrelid = 0 or (select relkind from pg_class where oid = t.typrelid) = 'c') loop
+    execute format('drop type if exists %I.%I cascade', '${SERVER_SCHEMA}', r.typname);
+  end loop;
+end
+$vigie$;`;
+
+/**
+ * Remplace le contenu du schéma vigie par une copie pg_dump, en une seule transaction : en cas d'erreur, la base est
+ * inchangée. pg_restore écrit d'abord le script SQL de la copie dans `work` (copie illisible, format ou version non pris
+ * en charge : erreur avant toute modification), puis psql exécute le vidage du schéma (EMPTY_SERVER_SCHEMA_SQL) et ce
+ * script dans la même transaction (--single-transaction, arrêt et annulation à la première erreur). Les copies de Vigie
+ * ne contiennent pas d'objets larges, seul cas où pg_restore écrirait ses propres BEGIN/COMMIT.
  */
 export async function pgReplace(url: string, file: string, work: string) {
   const c = pgConnection(url);
   const script = path.join(/*turbopackIgnore: true*/ work, 'restauration.sql');
-  await run('pg_restore', ['--no-owner', '--no-privileges', `--file=${script}`, file], c.env);
+  await run('pg_restore', ['--no-owner', '--no-privileges', `--schema=${SERVER_SCHEMA}`, `--file=${script}`, file], c.env);
   try {
     await run('psql', ['--no-psqlrc', '--quiet', '--single-transaction', '--set=ON_ERROR_STOP=1', `--dbname=${c.dbname}`,
-      '--command=set client_min_messages = warning; drop schema if exists drizzle cascade; drop schema if exists public cascade; create schema public;',
-      `--file=${script}`], c.env);
+      `--command=set client_min_messages = warning; ${EMPTY_SERVER_SCHEMA_SQL}`, `--file=${script}`], c.env);
   } finally {
     await rm(script, { force: true });
   }
@@ -179,7 +215,7 @@ export async function createBackup(storage: StorageConfig, source: DbSource, opt
   try {
     const dbName = DB_FILE[source.engine];
     const dbFile = path.join(/*turbopackIgnore: true*/ work, dbName);
-    const state = await migrationState(source.query);
+    const state = await migrationState(source.query, source.engine);
     if (source.engine === 'postgres') await pgDump(source.url, dbFile);
     else await writeFile(dbFile, Buffer.from(await (await source.dump()).arrayBuffer()), { mode: 0o600 });
     const dbSize = (await stat(dbFile)).size;
@@ -191,6 +227,7 @@ export async function createBackup(storage: StorageConfig, source: DbSource, opt
     const manifest: Manifest = {
       format: 'vigie-sauvegarde', version: 1, createdAt: now.toISOString(), reason: opts.reason, engine: source.engine, encrypted: encrypt,
       migrations: { applied: state.applied, last: state.last, lastWhen: state.lastWhen, pending: state.pending.map((m) => m.tag) },
+      ...(source.engine === 'postgres' ? { schema: DB_LAYOUT.postgres.tables } : {}),
       database: { file: dbName, size: dbSize, sha256: await sha256File(dbFile) },
       uploads: { included: opts.uploads, count: uploads.length, bytes: uploads.reduce((n, u) => n + u.size, 0), files },
     };
@@ -383,7 +420,7 @@ const doneBackups = () => (g.__vigieMigrationBackups ??= new Map());
 export async function backupBeforeMigrate(storage: StorageConfig, source: DbSource): Promise<string | null> {
   if (!storage.backupBeforeMigrate) return null;
   if (source.engine === 'pglite' && storage.dataDir.startsWith('memory://')) return null;
-  const state = await migrationState(source.query);
+  const state = await migrationState(source.query, source.engine);
   if (state.applied === 0 || state.pending.length === 0) return null;
   const tags = state.pending.map((m) => m.tag).join(', ');
   const key = JSON.stringify([source.engine === 'postgres' ? source.url : storage.dataDir, state.lastWhen, state.pending.map((m) => m.tag)]);

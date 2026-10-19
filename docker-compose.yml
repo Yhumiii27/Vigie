@@ -38,6 +38,8 @@ services:
       - path: .env
         required: true
     environment:
+      # Base dédiée : Vigie y crée son schéma vigie au premier démarrage (le rôle vigie a le droit CREATE). Serveur commun
+      # EPC2I : postgres://vigie_app:…@hôte:5432/epc2i, schéma créé par le socle (docs/EXPLOITATION.md § 2).
       DATABASE_URL: postgres://vigie:${POSTGRES_PASSWORD}@db:5432/vigie
       # Chemins des volumes (fixés par l'image : ne pas les redéfinir dans .env).
       VIGIE_UPLOAD_DIR: /data/uploads

@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb, getDb } from '@/db';
-import { MIGRATIONS_DIR, NewerDatabaseError, readJournal, refuseNewerDatabase, type Query } from '@/db/migrations';
+import { DB_LAYOUT, MIGRATIONS_DIR, NewerDatabaseError, SERVER_SCHEMA, migrateServer, readJournal, refuseNewerDatabase, type Query } from '@/db/migrations';
 import { resetConfig } from '@/lib/env';
 
 // Base migrée par une version plus récente de Vigie (réserve PRD-06 du lot 1) : refusée à l'ouverture, à chaque essai,
@@ -89,13 +89,12 @@ describe('base migrée par une version plus récente', () => {
 
   it.skipIf(!process.env.TEST_DATABASE_URL)('PostgreSQL : ouverture refusée, aucune migration ni sauvegarde', async () => {
     const { Client } = await import('pg');
-    const { drizzle: pgDrizzle } = await import('drizzle-orm/node-postgres');
-    const { migrate: pgMigrate } = await import('drizzle-orm/node-postgres/migrator');
-    const client = new Client({ connectionString: pgUrl, application_name: 'vigie-tests' });
+    const client = new Client({ connectionString: pgUrl, application_name: 'vigie-tests', options: `-c search_path=${SERVER_SCHEMA}` });
     await client.connect();
     try {
-      await pgMigrate(pgDrizzle(client), { migrationsFolder: MIGRATIONS_DIR });
-      await client.query('insert into drizzle.__drizzle_migrations (hash, created_at) values ($1, $2)', ['futur', FUTURE]);
+      // Disposition du serveur : migrations réécrites dans le schéma vigie, journal vigie.__drizzle_migrations.
+      await migrateServer((q, p) => client.query(q, p));
+      await client.query(`insert into ${DB_LAYOUT.postgres.journal} (hash, created_at) values ($1, $2)`, ['futur', FUTURE]);
       process.env.DATABASE_URL = pgUrl;
       process.env.VIGIE_BACKUP_DIR = path.join(dir, 'backups-pg');
       resetConfig();

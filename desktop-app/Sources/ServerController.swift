@@ -494,6 +494,9 @@ struct NodeRuntime: Sendable {
         environment["VIGIE_DESKTOP"] = "1"
         // Application Mac : toujours la démonstration (sélecteur de rôle, jeu de démonstration, base PGlite locale).
         environment["VIGIE_DEMO"] = "1"
+        // Jamais le serveur PostgreSQL commun, même si un .env.local du projet définit DATABASE_URL : Next ne remplit
+        // depuis les fichiers .env que les variables absentes, et Vigie traite une valeur vide comme une absence.
+        environment["DATABASE_URL"] = ""
         if let watchdog {
             // Guillemets : le chemin contient des espaces (« Application Support »).
             let escaped = watchdog.path.replacingOccurrences(of: "\\", with: "\\\\")

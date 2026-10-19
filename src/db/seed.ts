@@ -5,7 +5,7 @@ import { DEMO_QHSE_LEAD, DEMO_ROLE_PEOPLE } from '../lib/demo';
 import type { Role } from '../lib/domain';
 import { backfillActionLinks } from '../lib/origin-links';
 import * as t from './schema';
-import type { Db } from './types';
+import type { Db, Tx } from './types';
 import { seedActions, upgradeDemoActions } from './seeds/actions';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
@@ -463,10 +463,18 @@ async function upgradeDemoWasteMentions(db: Db) {
  * jeu sans fichiers (aucune écriture dans .data/uploads depuis une vérification en mémoire).
  */
 export async function seed(db: Db, opts: { files?: boolean } = {}) {
-  const [[sites], [people]] = await Promise.all([db.select({ n: count() }).from(t.sites), db.select({ n: count() }).from(t.people)]);
-  if (sites.n > 0 || people.n > 0) return upgradeDemo(db);
+  const empty = async (q: Db | Tx) => {
+    const [[sites], [people]] = await Promise.all([q.select({ n: count() }).from(t.sites), q.select({ n: count() }).from(t.people)]);
+    return sites.n === 0 && people.n === 0;
+  };
+  if (!(await empty(db))) return upgradeDemo(db);
 
   await db.transaction(async (tx) => {
+    // Recompté en première instruction de la transaction : sur PostgreSQL, deux instances qui démarrent ensemble ont pu
+    // compter toutes deux une base vide ; le verrou d'écriture (src/db/index.ts) fait attendre la seconde, qui voit ici
+    // le jeu déjà chargé par la première et ne le charge pas une deuxième fois.
+    // Jeu chargé entre-temps par une autre instance : rien à faire (sa mise à niveau est sans objet sur un jeu neuf).
+    if (!(await empty(tx))) return false;
     await tx.insert(t.sites).values([
       // Établissement Seveso seuil haut : plan de prévention écrit dès la première minute d'intervention.
       // SIRET fictifs (clé de Luhn valide) : registre des déchets (DOC-02).
@@ -688,5 +696,6 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
       { entityType: 'control', entityId: String(controlIds[8]), action: 'archive', summary: 'Contrôle archivé · équipement réformé', reason: 'Équipement réformé : remplacé par le pont roulant 10 t', byId: 'clefevre', at: new Date('2026-06-30T10:00:00+02:00') },
       { entityType: 'site', entityId: 'ville-c', action: 'archive', summary: 'Site archivé', reason: 'Dépôt fermé fin mars 2026 : activité regroupée sur le site de [Ville A].', byId: 'hmarchand', at: new Date('2026-03-31T16:00:00Z') },
     ]);
+    return true;
   });
 }

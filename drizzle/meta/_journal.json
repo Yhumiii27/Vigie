@@ -57,6 +57,20 @@
       "when": 1792276627199,
       "tag": "0007_qualification_renewals",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792315314277,
+      "tag": "0008_partage_prerequis",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792315355975,
+      "tag": "0009_partage",
+      "breakpoints": true
     }
   ]
 }

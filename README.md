@@ -25,7 +25,7 @@ docker compose --profile https up -d --build   # ou Caddy sur 80/443 (VIGIE_DOMA
 curl -s http://127.0.0.1:3000/api/sante        # {"statut":"ok","base":"postgres",…}
 ```
 
-Hors démonstration (image Docker, ou `npm run build && npm start` sur un serveur Node.js 22) : aucun jeu de démonstration ni sélecteur de rôle ; `DATABASE_URL` choisit PostgreSQL (sinon PGlite dans `VIGIE_DATA_DIR`) ; `VIGIE_PUBLIC_URL` est obligatoire, et l'authentification Microsoft Entra ID aussi (page « Configuration incomplète » tant qu'elle n'est pas configurée, jamais de rôle par défaut). Une base vide ouvre l'écran « Créer le premier site » (direction, animateur QHSE). Toutes les variables sont décrites dans `.env.example` et validées au démarrage par `src/lib/env.ts` : une valeur invalide arrête le serveur avec la liste des variables à corriger. Inscription de l'application dans Entra ID, reverse proxy, sauvegardes (`npm run db:backup`, `db:restore`, sauvegarde automatique avant migration), mises à jour (dont la reprise des liens d'origine des actions après la migration 0004 : `npm run db:reprise-liens`) et rotation des secrets : [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md).
+Hors démonstration (image Docker, ou `npm run build && npm start` sur un serveur Node.js 22) : aucun jeu de démonstration ni sélecteur de rôle ; `DATABASE_URL` choisit PostgreSQL, schéma `vigie` (serveur commun EPC2I : rôle `vigie_app` sur la base `epc2i`, mise en place dans `docs/EXPLOITATION.md` § 2 ; sinon PGlite dans `VIGIE_DATA_DIR`, schéma `public`) ; `VIGIE_PUBLIC_URL` est obligatoire, et l'authentification Microsoft Entra ID aussi (page « Configuration incomplète » tant qu'elle n'est pas configurée, jamais de rôle par défaut). Une base vide ouvre l'écran « Créer le premier site » (direction, animateur QHSE). Toutes les variables sont décrites dans `.env.example` et validées au démarrage par `src/lib/env.ts` : une valeur invalide arrête le serveur avec la liste des variables à corriger. Inscription de l'application dans Entra ID, reverse proxy, sauvegardes (`npm run db:backup`, `db:restore`, sauvegarde automatique avant migration), mises à jour (dont la reprise des liens d'origine des actions après la migration 0004 : `npm run db:reprise-liens`) et rotation des secrets : [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md).
 
 Essai de la connexion sans tenant Entra : `node scripts/oidc-mock.mjs` (fournisseur OIDC factice) puis `scripts/e2e-auth.sh` (parcours complet avec curl ; prérequis en tête du script).
 
@@ -35,8 +35,8 @@ Essai de la connexion sans tenant Entra : `node scripts/oidc-mock.mjs` (fourniss
 npm run typecheck   # next typegen puis tsc
 npm run lint
 npm test            # Vitest : tests unitaires et d'intégration, PGlite en mémoire
-TEST_DATABASE_URL=postgres://vigie@127.0.0.1:5432/postgres npm test   # intégration sur PostgreSQL (une base neuve par fichier)
-npm run db:check    # migrations publiées inchangées, schéma = migrations, application à une base vide
+TEST_DATABASE_URL=postgres://vigie@127.0.0.1:5432/postgres npm test   # intégration sur PostgreSQL (une base neuve par fichier, schéma vigie ; rôle superutilisateur)
+npm run db:check    # migrations publiées inchangées, schéma = migrations, application à une base vide (public et schéma vigie du serveur)
 ```
 
 `VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e` contrôle la charge des pages du Salarié contre `npm run start:demo`. Intégration continue : `.github/workflows/ci.yml` (Node de `.nvmrc`). Une migration publiée ne se modifie jamais : voir `CLAUDE.md`.

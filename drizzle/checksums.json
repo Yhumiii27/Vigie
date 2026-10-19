@@ -40,6 +40,16 @@
       "when": 1792276627199,
       "sql": "a4f5876fa844f8c9a105124273ecc6534bd866247f018e47018eace3f91f8248",
       "snapshot": "0e4cb02ca00a57277713d204663c7bc77d80dac1e975be6efe09f4cdd08a5330"
+    },
+    "0008_partage_prerequis": {
+      "when": 1792315314277,
+      "sql": "7a20ae8df59d150264fc808d797e574ec6a95a06d8d93c8962a16b70ec1a6b73",
+      "snapshot": "e04b4886ccc2aa7ea5966c174d6c6397f8a9cdeda0e8c6ae82ffbb469f30ef70"
+    },
+    "0009_partage": {
+      "when": 1792315355975,
+      "sql": "966a4019e547738427e17990c99df9c88dc3636334419a29eca01a8b4a121222",
+      "snapshot": "569325f4bfe4551f2ecf00b8c43976e8289c089426a6690b845d1a7eb2deec1c"
     }
   }
 }
