@@ -21,7 +21,7 @@ export type EditableEvent = {
   description: string; immediateMeasures: string; ncOrigin: string | null;
   customer: string | null; customerRef: string | null; envAspect: string | null; envMedium: string | null;
   controlId: number | null; riskId: number | null; documentId: string | null; preventionPlanId: string | null; permitId: string | null;
-  ncDisposition?: string | null; ncQuantity?: number | null; ncCost?: number | null; ncDispositionNote?: string | null;
+  ncDisposition?: string | null; ncQuantity?: number | null; ncCostKeur?: number | null; ncDispositionNote?: string | null;
 } & AccidentValues & MpValues;
 
 /** Valeurs proposées à la création (site, lieu, plan ou permis d'origine, déclarant = utilisateur courant). */
@@ -55,8 +55,8 @@ function NcDispositionFields({ e }: { e: EventDefaults }) {
         <Field name="ncQuantity" label="Quantité concernée" hint="Pièces, lots ou unités.">
           <Input name="ncQuantity" inputMode="decimal" defaultValue={num(e.ncQuantity)} />
         </Field>
-        <Field name="ncCost" label="Coût de non-qualité (€ HT)" hint="Retouche, rebut, transport, temps passé.">
-          <Input name="ncCost" inputMode="decimal" defaultValue={num(e.ncCost)} />
+        <Field name="ncCostKeur" label="Coût de non-qualité (k€ HT)" hint="Retouche, rebut, transport, temps passé ; 1,45 pour 1 450 €.">
+          <Input name="ncCostKeur" inputMode="decimal" defaultValue={num(e.ncCostKeur)} />
         </Field>
       </FormRow>
       <Field name="ncDispositionNote" label={disposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement'}

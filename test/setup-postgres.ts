@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll } from 'vitest';
+import { SERVER_SCHEMA } from '@/db/migrations';
 
 // Mode PostgreSQL des tests d'intégration (QUA-04) : avec TEST_DATABASE_URL (serveur PostgreSQL, base d'administration,
 // ex. postgres://vigie@127.0.0.1:55433/postgres), chaque fichier de test/integration reçoit sa propre base vide, créée
-// avant le fichier (DATABASE_URL) puis supprimée après. Les fichiers de test restent inchangés : getDb() ouvre
-// PostgreSQL au lieu de PGlite en mémoire, applique les migrations et, en démonstration, le jeu de démonstration.
+// avant le fichier (DATABASE_URL) puis supprimée après, avec son schéma vigie (comme le socle du serveur commun EPC2I :
+// Vigie n'y crée jamais de schéma). Les fichiers de test restent inchangés : getDb() ouvre PostgreSQL au lieu de PGlite
+// en mémoire, applique les migrations dans le schéma vigie et, en démonstration, le jeu de démonstration.
 // Sans TEST_DATABASE_URL : PGlite en mémoire (VIGIE_DATA_DIR=memory://, posé par chaque fichier).
 //   TEST_DATABASE_URL=postgres://vigie@127.0.0.1:55433/postgres npx vitest run test/integration
 
@@ -17,9 +19,9 @@ function databaseUrl(url: string, name: string) {
   return u.toString();
 }
 
-async function onServer(sql: string) {
+async function onServer(sql: string, url = admin) {
   const { Client } = await import('pg');
-  const client = new Client({ connectionString: admin, application_name: 'vigie-tests' });
+  const client = new Client({ connectionString: url, application_name: 'vigie-tests' });
   await client.connect();
   try {
     await client.query(sql);
@@ -37,6 +39,7 @@ if (admin) {
     name = `vigie_test_${process.pid}_${randomBytes(4).toString('hex')}`;
     await onServer(`create database "${name}"`);
     process.env.DATABASE_URL = databaseUrl(admin, name);
+    await onServer(`create schema ${SERVER_SCHEMA}`, process.env.DATABASE_URL);
   });
 
   // Exécuté après les afterAll du fichier de test (ordre inverse d'enregistrement) : la base est déjà fermée.

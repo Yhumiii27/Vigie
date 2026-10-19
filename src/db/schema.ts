@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, serial, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 // Chemin relatif : drizzle-kit charge ce fichier sans les alias de tsconfig.
 import {
   ACTION_AVANCEMENTS, DOMAIN_KEYS, FOLLOW_REASON_KEYS, PRIORITY_KEYS, REMINDER_SEND_STATUSES, SOURCE_KEYS, VERIFY_METHOD_KEYS, sqlList,
@@ -177,13 +177,30 @@ export const events = pgTable('events', {
   mpInformedOn: date('mp_informed_on', { mode: 'string' }), // double de la déclaration reçu de la CPAM le
   mpQuestionnaireReceivedOn: date('mp_questionnaire_received_on', { mode: 'string' }), // questionnaire employeur reçu le
   mpQuestionnaireReturnedOn: date('mp_questionnaire_returned_on', { mode: 'string' }), // questionnaire retourné le (30 jours francs)
-  // EVT-17 : traitement d'un produit non conforme (NC, RC ; ISO 9001 §8.7) — NC_DISPOSITIONS, quantité, coût de non-qualité.
+  // EVT-17 : traitement d'un produit non conforme (NC, RC ; ISO 9001 §8.7) — NC_DISPOSITIONS, quantité ; coût de non-qualité : nc_cost_keur.
   ncDisposition: text('nc_disposition'),
   ncQuantity: numeric('nc_quantity', { precision: 12, scale: 2, mode: 'number' }),
-  ncCost: numeric('nc_cost', { precision: 12, scale: 2, mode: 'number' }), // € HT
   ncDispositionNote: text('nc_disposition_note'), // dérogation : accordée par (client, autorité) et conditions
+  // Partage avec Keystone (serveur commun EPC2I, Matrix partage/50-vigie.sql ; vue pub_non_conformites, migration 0009).
+  // Colonnes prêtes, sans saisie dans Vigie à ce jour : code projet Keystone (D02, keystone.pub_projets.code, à la place
+  // du texte libre keystone_project), volet NC de Keystone (D13), fournisseur Keystone (D16). Références croisées en
+  // texte, sans clé étrangère vers un autre schéma (contrôle à la saisie, puis contrôle d'orphelins de Matrix).
+  keystoneProjectCode: text('keystone_project_code'),
+  ncNumber: text('nc_number'), // « NCR-029 », unique par projet Keystone
+  keystoneActivityCode: text('keystone_activity_code'), // keystone.pub_activites.code
+  partRef: text('part_ref'), // keystone.pub_articles.ref
+  keystoneDeliverableNumber: text('keystone_deliverable_number'), // keystone.pub_livrables.number
+  supplierId: uuid('supplier_id'), // keystone.pub_fournisseurs.id (origine « Fournisseurs »)
+  supplierName: text('supplier_name'), // nom du fournisseur au moment de la saisie
+  rootCause: text('root_cause'), // synthèse ; le détail reste dans event_analyses
+  ncCostKeur: numeric('nc_cost_keur', { precision: 12, scale: 2, mode: 'number' }), // coût de non-qualité (k€)
+  isoClause: text('iso_clause'), // « 8.7 Control of nonconforming outputs »
 }, (t) => [
-  check('events_nc_amounts_check', sql`(${t.ncQuantity} is null or ${t.ncQuantity} >= 0) and (${t.ncCost} is null or ${t.ncCost} >= 0)`),
+  check('events_nc_quantity_check', sql`${t.ncQuantity} >= 0`),
+  check('events_nc_number_check', sql`${t.ncNumber} is null or (${t.ncNumber} ~ '^NCR-[0-9]{3,}$' and ${t.type} = 'NC' and ${t.keystoneProjectCode} is not null)`),
+  check('events_nc_cost_keur_check', sql`${t.ncCostKeur} >= 0`),
+  index('events_keystone_project_code_idx').on(t.keystoneProjectCode),
+  uniqueIndex('events_nc_number_par_projet').on(t.keystoneProjectCode, t.ncNumber).where(sql`${t.ncNumber} is not null`),
 ]);
 
 // Contenu de l'analyse des causes, une ligne par méthode et par événement.
@@ -768,7 +785,10 @@ export const contractors = pgTable('contractors', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+  // D16 (Matrix partage/50-vigie.sql) : fournisseur Keystone de l'entreprise (keystone.pub_fournisseurs.id), facultatif,
+  // sans unicité (deux agences d'une même société) ; sans saisie dans Vigie à ce jour.
+  supplierId: uuid('supplier_id'),
+}, (t) => [index('contractors_supplier_id_idx').on(t.supplierId)]);
 
 // Plan de prévention (Code du travail R. 4512-6 à R. 4512-12).
 export const preventionPlans = pgTable('prevention_plans', {
@@ -815,7 +835,9 @@ export const preventionPlans = pgTable('prevention_plans', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+  // D02 (Matrix partage/50-vigie.sql) : code projet Keystone, lu par vigie.pub_hse_projet ; sans saisie dans Vigie à ce jour.
+  keystoneProjectCode: text('keystone_project_code'),
+}, (t) => [index('prevention_plans_keystone_project_code_idx').on(t.keystoneProjectCode)]);
 
 // Modèles d'import du formulaire de plan de prévention : correspondance entre les champs
 // détectés dans le fichier (PDF remplissable, Word, scan) et les champs de Vigie.
@@ -849,7 +871,9 @@ export const permits = pgTable('permits', {
   closedAt: timestamp('closed_at', { withTimezone: true }), // instant de clôture ou d'annulation
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'), // motif d'annulation (statut annule)
-});
+  // D02 (Matrix partage/50-vigie.sql) : code projet Keystone, lu par vigie.pub_hse_projet ; sans saisie dans Vigie à ce jour.
+  keystoneProjectCode: text('keystone_project_code'),
+}, (t) => [index('permits_keystone_project_code_idx').on(t.keystoneProjectCode)]);
 
 // ─── Documents maîtrisés ────────────────────────────────────────────────────
 
@@ -1018,7 +1042,9 @@ export const siteActivities = pgTable('site_activities', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+  // D02 (Matrix partage/50-vigie.sql) : code projet Keystone ; sans saisie dans Vigie à ce jour.
+  keystoneProjectCode: text('keystone_project_code'),
+}, (t) => [index('site_activities_keystone_project_code_idx').on(t.keystoneProjectCode)]);
 
 // ─── Traçabilité et notifications ───────────────────────────────────────────
 

@@ -120,10 +120,10 @@ describe('EVT-17 : traitement d’un produit non conforme', () => {
     actAs('Chef de service', 'ville-a');
     const nc = { type: 'NC', ncOrigin: 'Fabrication', title: 'NC de test' };
     expect(await createEvent({}, baseEvent({ ...nc, ncDisposition: 'derogation' }))).toMatchObject({ fieldErrors: { ncDispositionNote: expect.any(String) } });
-    expect(await createEvent({}, baseEvent({ ...nc, ncCost: '-3' }))).toMatchObject({ fieldErrors: { ncCost: expect.any(String) } });
-    const r = await createEvent({}, baseEvent({ ...nc, ncDisposition: 'rebut', ncQuantity: '12', ncCost: '1 250,50' }));
-    expect(await event(r.id!)).toMatchObject({ ncDisposition: 'rebut', ncQuantity: 12, ncCost: 1250.5 });
-    expect(await saveEvent({}, baseEvent({ id: r.id!, ...nc, ncDisposition: 'derogation', ncDispositionNote: '[Client A], dérogation n° 12', ncQuantity: '12', ncCost: '1250.5' })))
+    expect(await createEvent({}, baseEvent({ ...nc, ncCostKeur: '-3' }))).toMatchObject({ fieldErrors: { ncCostKeur: expect.any(String) } });
+    const r = await createEvent({}, baseEvent({ ...nc, ncDisposition: 'rebut', ncQuantity: '12', ncCostKeur: '1,25' }));
+    expect(await event(r.id!)).toMatchObject({ ncDisposition: 'rebut', ncQuantity: 12, ncCostKeur: 1.25 });
+    expect(await saveEvent({}, baseEvent({ id: r.id!, ...nc, ncDisposition: 'derogation', ncDispositionNote: '[Client A], dérogation n° 12', ncQuantity: '12', ncCostKeur: '1.25' })))
       .toEqual({ ok: true, id: r.id });
     expect((await lastLog('event', r.id!))?.details).toEqual(expect.arrayContaining([
       expect.objectContaining({ field: 'Traitement du produit', from: 'Rebut', to: 'Acceptation par dérogation' }),

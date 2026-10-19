@@ -321,7 +321,7 @@ function readEventForm(f: Reader, health: boolean) {
   const nc = !!type && hasNcDisposition(type);
   const ncDisposition = nc ? f.oneOf('ncDisposition', NC_DISPOSITION_KEYS) : null;
   const ncQuantity = nc ? f.decimal('ncQuantity', { min: 0, max: 9_999_999_999 }) : null;
-  const ncCost = nc ? f.decimal('ncCost', { min: 0, max: 9_999_999_999 }) : null;
+  const ncCostKeur = nc ? f.decimal('ncCostKeur', { min: 0, max: 9_999_999_999 }) : null; // k€ HT, lu par la vue pub_non_conformites
   const ncDispositionNote = nc ? text('ncDispositionNote', 500) : null;
   if (ncDisposition === 'derogation' && !ncDispositionNote) f.fail('ncDispositionNote', 'Indiquez qui a accordé la dérogation (client, donneur d’ordre) et ses conditions.');
   // Maladie professionnelle : aucun rattachement (le risque, le document ou l'équipement révéleraient la maladie).
@@ -348,7 +348,7 @@ function readEventForm(f: Reader, health: boolean) {
     customer, customerRef, envAspect, envMedium,
     injury, lostDays, cpamDeclaredOn, lesionNature, lesionSite, careGiven, reservesOn,
     commute, mpTable, mpDisease, mpCertificateOn, mpInformedOn, mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn,
-    ncDisposition, ncQuantity, ncCost, ncDispositionNote,
+    ncDisposition, ncQuantity, ncCostKeur, ncDispositionNote,
     controlId, riskId, documentId, preventionPlanId, permitId,
   };
 }
@@ -427,7 +427,7 @@ const LABELS: Partial<Record<keyof EventValues, string>> = {
   workSchedule: 'Horaire de travail', knownAt: "Connu de l'employeur le", activity: 'Activité de la victime', circumstances: 'Circonstances',
   witnesses: 'Témoins', thirdParty: 'Tiers impliqué', customer: 'Client', customerRef: 'Référence client',
   envAspect: 'Aspect environnemental', envMedium: 'Milieu',
-  commute: 'Accident de trajet', ncDisposition: 'Traitement du produit', ncQuantity: 'Quantité concernée', ncCost: 'Coût de non-qualité (€ HT)',
+  commute: 'Accident de trajet', ncDisposition: 'Traitement du produit', ncQuantity: 'Quantité concernée', ncCostKeur: 'Coût de non-qualité (k€ HT)',
   ncDispositionNote: 'Dérogation, conditions du traitement',
   // Données de santé saisies dans le formulaire (jamais les colonnes de l'absence de déclaration motivée : pas de faux écart).
   ...Object.fromEntries(HEALTH_FORM_FIELDS.map((k) => [k, HEALTH_LABELS[k]])),
@@ -468,7 +468,7 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   // Champs ajoutés au paquet 5 (trajet, traitement d'une NC) absents du formulaire reçu (appel direct, ancien formulaire) :
   // valeurs enregistrées conservées tant que le type ne change pas.
   if (v.type === ev.type) {
-    for (const k of ['commute', 'ncDisposition', 'ncQuantity', 'ncCost', 'ncDispositionNote'] as const) {
+    for (const k of ['commute', 'ncDisposition', 'ncQuantity', 'ncCostKeur', 'ncDispositionNote'] as const) {
       // Case à cocher décochée : jamais envoyée, d'où le marqueur `commuteField` du formulaire.
       if (!fd.has(k === 'commute' ? 'commuteField' : k)) (v as Record<string, unknown>)[k] = ev[k];
     }

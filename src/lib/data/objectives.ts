@@ -31,7 +31,7 @@ export const loadObjectiveData = cache(async (): Promise<ObjectiveData> => {
   const [events, actions, controls, hours, sites] = await Promise.all([
     db.select({
       type: t.events.type, injury: t.events.injury, lostDays: t.events.lostDays, occurredOn: t.events.occurredOn, siteId: t.events.siteId,
-      victimKind: t.events.victimKind, commute: t.events.commute, ncCost: t.events.ncCost, dismissedAt: t.events.dismissedAt,
+      victimKind: t.events.victimKind, commute: t.events.commute, ncCostKeur: t.events.ncCostKeur, dismissedAt: t.events.dismissedAt,
     }).from(t.events),
     db.select({ siteId: t.actions.siteId, status: t.actions.status, dueOn: t.actions.dueOn, closedOn: t.actions.closedOn, effective: t.actions.effective }).from(t.actions),
     db.select({ siteId: t.controls.siteId, nextOn: t.controls.nextOn, archivedAt: t.controls.archivedAt }).from(t.controls),

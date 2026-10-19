@@ -129,10 +129,10 @@ describe('migration 0005 — base de démonstration 0004', () => {
 
   it('toutes les migrations appliquées ; forme de la base = dernier instantané (étape 5b)', async () => {
     expect(base.engine).toBe(process.env.TEST_DATABASE_URL ? 'postgres' : 'pglite');
-    const [{ n }] = (await base.query('select count(*)::int as n from drizzle.__drizzle_migrations')).rows as { n: number }[];
+    const [{ n }] = (await base.query(`select count(*)::int as n from ${base.journal}`)).rows as { n: number }[];
     expect(n).toBe(readJournal().length);
-    expect(shapeMismatches(snapshotOf(lastTag()), await readCatalogue(base.query))).toEqual([]);
-    const columns = (await base.query("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'actions'")).rows.map((r) => r.column_name);
+    expect(shapeMismatches(snapshotOf(lastTag()), await readCatalogue(base.query, base.schema))).toEqual([]);
+    const columns = (await base.query("select column_name from information_schema.columns where table_schema = $1 and table_name = 'actions'", [base.schema])).rows.map((r) => r.column_name);
     for (const old of ['title', 'description', 'origin', 'kind']) expect(columns).not.toContain(old);
   });
 
@@ -373,7 +373,7 @@ describe('migration 0005 — base vide', () => {
     expect(await base.db.select().from(t.actionCounters)).toEqual([{ scope: 'A', last: 0 }]);
     expect(await base.db.select().from(t.changeLog)).toEqual([]);
     expect(await base.db.select().from(t.actions)).toEqual([]);
-    expect(shapeMismatches(snapshotOf(lastTag()), await readCatalogue(base.query))).toEqual([]);
+    expect(shapeMismatches(snapshotOf(lastTag()), await readCatalogue(base.query, base.schema))).toEqual([]);
   });
 });
 
@@ -392,11 +392,11 @@ describe('migration 0005 — avancement inconnu : migration annulée, base laiss
 
   it('la contrainte actions_status_check échoue ; rien n’est appliqué', async () => {
     await expect(base.migrateAll()).rejects.toThrow();
-    const [{ n }] = (await base.query('select count(*)::int as n from drizzle.__drizzle_migrations')).rows as { n: number }[];
+    const [{ n }] = (await base.query(`select count(*)::int as n from ${base.journal}`)).rows as { n: number }[];
     expect(n).toBe(DEMO_0004_MIGRATIONS);
     const [row] = (await base.query("select title, status from actions where id = 'A-1'")).rows;
     expect(row).toEqual({ title: 'X', status: 'en_pause' });
-    const [{ c }] = (await base.query("select to_regclass('public.action_counters')::text as c")).rows;
+    const [{ c }] = (await base.query(`select to_regclass('${base.schema}.action_counters')::text as c`)).rows;
     expect(c).toBeNull();
   });
 });

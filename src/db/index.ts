@@ -1,11 +1,12 @@
 import 'server-only';
 import { mkdirSync } from 'node:fs';
+import { sql } from 'drizzle-orm';
 import { config } from '@/lib/config';
 import { nextRuntime, type StorageConfig } from '@/lib/env';
 import { declareDatabaseSchema, type RowQuery } from '@/lib/matrix';
 import { startMaintenance } from './maintenance';
 import { scheduledTasks, startScheduler } from './scheduler';
-import { MIGRATIONS_DIR, refuseNewerDatabase } from './migrations';
+import { MIGRATION_LOCK_SQL, MIGRATION_UNLOCK_SQL, MIGRATIONS_DIR, SERVER_SCHEMA, hasLegacyServerLayout, migrateServer, refuseNewerDatabase, type Query } from './migrations';
 import * as schema from './schema';
 import type { Db, DbEngine } from './types';
 
@@ -22,33 +23,58 @@ export type { Db, DbEngine, DbOrTx, Tx } from './types';
 // est retentée à la requête suivante.
 
 export { MIGRATIONS_DIR };
-/** Verrou consultatif PostgreSQL des migrations : un seul serveur les applique à la fois. */
-const MIGRATION_LOCK = 7_302_026;
 
 type Opened = { db: Db; engine: DbEngine; close: () => Promise<void>; query: RowQuery };
 
 // Une seule ouverture par processus (survit au rechargement à chaud).
 const g = globalThis as unknown as { __vigieDb?: Promise<Opened> };
 
+/** Verrou d'écriture de Vigie sur le serveur (clé dérivée du schéma, comme celle des migrations). */
+const WRITE_LOCK = sql`select pg_advisory_xact_lock(hashtext(${`${SERVER_SCHEMA}.ecritures`}))`;
+
+/**
+ * Serveur PostgreSQL (commun EPC2I, rôle vigie_app ; ou base dédiée) : tables et journal dans le schéma vigie.
+ *
+ * Ordre à l'ouverture, sous le verrou de session des migrations (clé hashtext('vigie.migrations'), pris avant toute
+ * lecture du journal : deux instances qui démarrent ensemble appliquent chaque migration une seule fois) : base d'une
+ * version antérieure (tables dans public) refusée, schéma vigie présent, base plus récente refusée, sauvegarde avant
+ * migration, migrations (migrateServer : "public". réécrit en "vigie."). Aucun CREATE SCHEMA sur le serveur commun : le
+ * schéma y est créé par le socle ; il n'est créé ici que sur une base dédiée où le rôle a le droit CREATE (docker-compose.yml).
+ *
+ * Écritures (§ 4.5 du plan de Matrix) : chaque db.transaction() prend d'abord le verrou d'écriture de Vigie, et les
+ * transactions d'écriture passent l'une après l'autre, comme dans PGlite ; les lectures hors transaction restent
+ * parallèles. Les numéros et références (nextActionNumber, nextEntityReference) sont déjà calculés dans la transaction
+ * de l'écriture, sur un compteur ; le verrou couvre en plus les contrôles « lire puis écrire » (unicité vérifiée avant
+ * l'insertion, remplissage de démonstration, mises à niveau) que PGlite sérialisait de fait.
+ */
 async function openPostgres(url: string, storage: StorageConfig): Promise<Opened> {
   const { Pool } = await import('pg');
   const { drizzle } = await import('drizzle-orm/node-postgres');
-  const { migrate } = await import('drizzle-orm/node-postgres/migrator');
   // application_name : db:restore repère les connexions d'un serveur Vigie encore ouvert sur la base.
-  const pool = new Pool({ connectionString: url, max: 10, application_name: 'vigie' });
+  // search_path : noms non qualifiés et requêtes Drizzle (pgTable, sans schéma) résolus dans vigie (aussi posé sur le
+  // rôle vigie_app par le socle).
+  const pool = new Pool({ connectionString: url, max: 10, application_name: 'vigie', options: `-c search_path=${SERVER_SCHEMA}` });
   // Connexion inactive coupée par le serveur : le pool la remplace, sans arrêter le processus.
   pool.on('error', (err) => console.error('[vigie] PostgreSQL :', err.message));
   const client = await pool.connect();
+  const query: Query = (q, p) => client.query(q, p);
   try {
-    await client.query('select pg_advisory_lock($1::bigint)', [MIGRATION_LOCK]);
+    await client.query(MIGRATION_LOCK_SQL);
     try {
+      if (await hasLegacyServerLayout(query)) {
+        throw new Error(`Base PostgreSQL d'une version antérieure de Vigie (tables dans le schéma public, journal drizzle.__drizzle_migrations) : `
+          + `Vigie utilise désormais le schéma ${SERVER_SCHEMA} et ne reprend pas ces données (décision du 18/10/2026). `
+          + `Donner à DATABASE_URL une base où le schéma ${SERVER_SCHEMA} est vide (serveur commun EPC2I : rôle vigie_app), `
+          + 'ou garder la version précédente de Vigie pour cette base.');
+      }
+      await ensureServerSchema(query);
       // Base migrée par une version plus récente : refusée avant toute sauvegarde ou migration (PRD-06).
-      await refuseNewerDatabase((q, p) => client.query(q, p));
+      await refuseNewerDatabase(query, 'postgres');
       const { backupBeforeMigrate } = await import('./backup');
-      await backupBeforeMigrate(storage, { engine: 'postgres', url, query: (q, p) => client.query(q, p) });
-      await migrate(drizzle(client, { schema }), { migrationsFolder: MIGRATIONS_DIR });
+      await backupBeforeMigrate(storage, { engine: 'postgres', url, query });
+      await migrateServer(query);
     } finally {
-      await client.query('select pg_advisory_unlock($1::bigint)', [MIGRATION_LOCK]);
+      await client.query(MIGRATION_UNLOCK_SQL);
     }
   } catch (err) {
     client.release();
@@ -56,7 +82,28 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
     throw err;
   }
   client.release();
-  return { db: drizzle(pool, { schema }), engine: 'postgres', close: () => pool.end(), query: (sql) => pool.query(sql).then((r) => r.rows) };
+  const db: Db = drizzle(pool, { schema });
+  const transaction = db.transaction.bind(db);
+  db.transaction = ((fn, config) => transaction(async (tx) => {
+    await tx.execute(WRITE_LOCK);
+    return fn(tx);
+  }, config)) as Db['transaction'];
+  return { db, engine: 'postgres', close: () => pool.end(), query: (q) => pool.query(q).then((r) => r.rows) };
+}
+
+/**
+ * Schéma vigie présent (serveur commun : créé par le socle). Absent : créé seulement si le rôle a le droit CREATE sur
+ * la base (base dédiée, docker-compose.yml) ; sinon erreur qui nomme le remède, sans rien tenter.
+ */
+async function ensureServerSchema(query: Query) {
+  const [{ present, creatable }] = (await query(`select exists (select from pg_namespace where nspname = $1) as present,
+    has_database_privilege(current_database(), 'CREATE') as creatable`, [SERVER_SCHEMA])).rows as { present: boolean; creatable: boolean }[];
+  if (present) return;
+  if (!creatable) {
+    throw new Error(`Schéma ${SERVER_SCHEMA} absent de la base, et le rôle de DATABASE_URL ne peut pas le créer : `
+      + 'serveur commun EPC2I, jouer le socle (Matrix, infra/postgres/init/01 à 03) ; base dédiée, donner le droit CREATE au rôle.');
+  }
+  await query(`create schema ${SERVER_SCHEMA}`);
 }
 
 async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> {
@@ -75,15 +122,19 @@ async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> 
     await client.close();
     throw err;
   }
-  return { db, engine: 'pglite', close: () => client.close(), query: (sql) => client.query<Record<string, unknown>>(sql).then((r) => r.rows) };
+  return { db, engine: 'pglite', close: () => client.close(), query: (q) => client.query<Record<string, unknown>>(q).then((r) => r.rows) };
 }
 
 async function open(): Promise<Opened> {
   const c = config();
-  const opened = c.databaseUrl ? await openPostgres(c.databaseUrl, c) : await openPglite(c.dataDir, c);
-  // Schéma migré déclaré à Matrix (src/lib/matrix.ts) : appel non attendu, jamais bloquant (échec : avertissement) ;
-  // rien sans MATRIX_URL ni MATRIX_DECLARATIONS_DIR, ni pendant la construction (next build).
+  // `next build` pré-rend des pages qui lisent la base : jamais le serveur PostgreSQL pendant la construction (DATABASE_URL
+  // n'est pas censée y être disponible ; si elle l'est, la construction reste sur PGlite).
   const building = nextRuntime().phase === 'phase-production-build';
+  const url = building ? null : c.databaseUrl;
+  const opened = url ? await openPostgres(url, c) : await openPglite(c.dataDir, c);
+  // Schéma migré déclaré à Matrix (src/lib/matrix.ts) : appel non attendu, jamais bloquant (échec : avertissement) ;
+  // rien sans MATRIX_URL ni MATRIX_DECLARATIONS_DIR, ni pendant la construction (next build). current_schema() : vigie
+  // sur le serveur (search_path du pool), public en PGlite.
   if (!building) void declareDatabaseSchema('vigie', opened.query, c.matrix);
   if (c.demo) {
     const { seed } = await import('./seed');

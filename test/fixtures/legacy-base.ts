@@ -3,7 +3,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Query } from '@/db/migrations';
-import { MIGRATIONS_DIR } from '@/db/migrations';
+import { DB_LAYOUT, MIGRATIONS_DIR, SERVER_SCHEMA, migrateServer } from '@/db/migrations';
 import * as schema from '@/db/schema';
 import type { Db } from '@/db/types';
 import { resetConfig } from '@/lib/env';
@@ -14,7 +14,7 @@ import { resetConfig } from '@/lib/env';
 //
 // Moteur : PGlite dans un dossier temporaire ; PostgreSQL sur DATABASE_URL quand elle est posée (TEST_DATABASE_URL :
 // une base vide par fichier, test/setup-postgres.ts — à appeler dans un beforeAll ou un test, jamais au chargement du
-// fichier). Le chargement de l'instantané désactive les déclencheurs des clés étrangères (session_replication_role =
+// fichier), dans la disposition du serveur (schéma vigie, migrateServer, journal vigie.__drizzle_migrations). Le chargement de l'instantané désactive les déclencheurs des clés étrangères (session_replication_role =
 // replica, transaction unique) : les cycles people ↔ sites, actions ↔ contrôles… empêchent un ordre d'insertion ; sur
 // PostgreSQL, cela demande un rôle superutilisateur (vérifié avant).
 //
@@ -37,6 +37,9 @@ export function readDemo0004(): Fixture {
 
 export type LegacyBase = {
   engine: 'pglite' | 'postgres';
+  /** Schéma des tables (public en PGlite, vigie sur PostgreSQL) et journal des migrations (schéma.table). */
+  schema: string;
+  journal: string;
   /** Requête brute (un seul client : begin / commit possibles). */
   query: Query;
   /** Drizzle avec le schéma actuel (src/db/schema.ts) : à utiliser après migrateAll() seulement. */
@@ -66,21 +69,20 @@ async function truncatedMigrations(n: number): Promise<{ dir: string; drop: () =
 /**
  * Ouvre une base vide : PostgreSQL sur DATABASE_URL quand elle est posée, sinon PGlite dans `dataDir` (dossier
  * temporaire créé et supprimé par close() quand il n'est pas fourni). `reset` (PostgreSQL) : vide d'abord la base du
- * fichier (schémas public et drizzle recréés) — pour enchaîner plusieurs bases anciennes dans un même fichier de test.
+ * fichier (schéma vigie recréé) — pour enchaîner plusieurs bases anciennes dans un même fichier de test.
  */
 export async function openLegacyBase(opts: { dataDir?: string; reset?: boolean } = {}): Promise<LegacyBase> {
   const url = process.env.DATABASE_URL;
   if (url) {
     const { Client } = await import('pg');
     const { drizzle } = await import('drizzle-orm/node-postgres');
-    const { migrate } = await import('drizzle-orm/node-postgres/migrator');
-    const client = new Client({ connectionString: url, application_name: 'vigie-tests' });
+    const client = new Client({ connectionString: url, application_name: 'vigie-tests', options: `-c search_path=${SERVER_SCHEMA}` });
     await client.connect();
     const query: Query = (q, p) => client.query(q, p as unknown[]);
     if (opts.reset) {
-      for (const sql of ['drop schema if exists drizzle cascade', 'drop schema if exists public cascade', 'create schema public']) await query(sql);
+      for (const sql of [`drop schema if exists ${SERVER_SCHEMA} cascade`, `create schema ${SERVER_SCHEMA}`]) await query(sql);
     }
-    return base('postgres', query, drizzle(client, { schema }) as unknown as Db, (folder) => migrate(drizzle(client), { migrationsFolder: folder }).then(() => undefined), () => client.end());
+    return base('postgres', query, drizzle(client, { schema }) as unknown as Db, (folder) => migrateServer(query, folder).then(() => undefined), () => client.end());
   }
   const { PGlite } = await import('@electric-sql/pglite');
   const { drizzle } = await import('drizzle-orm/pglite');
@@ -100,7 +102,7 @@ function base(
   engine: LegacyBase['engine'], query: Query, db: Db, migrateFolder: (folder: string) => Promise<void>, close: () => Promise<void>,
 ): LegacyBase {
   return {
-    engine, query, db, close,
+    engine, query, db, close, schema: DB_LAYOUT[engine].tables, journal: DB_LAYOUT[engine].journal,
     async migrateUpTo(n) {
       const m = await truncatedMigrations(n);
       try {
@@ -122,7 +124,7 @@ async function loadFixture(engine: LegacyBase['engine'], query: Query, fixture: 
     if (!rolsuper) throw new Error('TEST_DATABASE_URL : un rôle superutilisateur est requis pour charger la base 0004 (session_replication_role).');
   }
   const tables = new Set(
-    ((await query("select tablename from pg_tables where schemaname = 'public'")).rows as { tablename: string }[]).map((r) => r.tablename),
+    ((await query('select tablename from pg_tables where schemaname = $1', [DB_LAYOUT[engine].tables])).rows as { tablename: string }[]).map((r) => r.tablename),
   );
   for (const name of Object.keys(fixture.tables)) {
     if (!tables.has(name)) throw new Error(`Instantané : table ${name} absente de la base (niveau de migration différent ?).`);
@@ -136,7 +138,7 @@ async function loadFixture(engine: LegacyBase['engine'], query: Query, fixture: 
     }
     // Séquences des colonnes serial : reprises après le plus grand identifiant chargé (table vide : prochain = 1).
     const serials = (await query(`select table_name, column_name from information_schema.columns
-      where table_schema = 'public' and column_default like 'nextval(%' order by 1, 2`)).rows as { table_name: string; column_name: string }[];
+      where table_schema = $1 and column_default like 'nextval(%' order by 1, 2`, [DB_LAYOUT[engine].tables])).rows as { table_name: string; column_name: string }[];
     for (const { table_name: table, column_name: column } of serials) {
       await query(`select setval(pg_get_serial_sequence($1, $2), coalesce(max(${ident(column)}), 1), max(${ident(column)}) is not null) from ${ident(table)}`, [
         ident(table), column,
@@ -155,7 +157,7 @@ const PREPARED_ENV = ['VIGIE_DATA_DIR', 'VIGIE_BACKUP_DIR', 'VIGIE_UPLOAD_DIR'] 
 /**
  * Prépare une base de démonstration 0004 (instantané demo-0004.json) là où le prochain getDb() l'ouvrira : PGlite dans
  * un VIGIE_DATA_DIR temporaire posé ici (DATABASE_URL absente), ou la base PostgreSQL du fichier (DATABASE_URL), vidée
- * d'abord (schémas public et drizzle recréés : le fichier a pu ouvrir sa base avant). Ferme la base ouverte (closeDb).
+ * d'abord (schéma vigie recréé : le fichier a pu ouvrir sa base avant). Ferme la base ouverte (closeDb).
  * Pose aussi un VIGIE_BACKUP_DIR temporaire (sauvegarde automatique avant migration) et, s'il n'est pas déjà posé, un
  * VIGIE_UPLOAD_DIR temporaire : rien n'est écrit dans .data/. L'appelant pose VIGIE_DEMO / VIGIE_TODAY puis appelle
  * getDb() : migration 0005, puis mise à niveau de démonstration (upgradeDemo). `cleanup` (après closeDb()) supprime les

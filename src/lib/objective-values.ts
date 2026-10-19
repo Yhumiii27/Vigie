@@ -8,7 +8,7 @@ import { OBJECTIVE_INDICATORS, type ObjectiveIndicator } from './objectives';
 
 export type ObjectiveEvent = {
   type: string; injury: string | null; lostDays: number | null; occurredOn: string; siteId: string; victimKind: string | null;
-  commute: boolean | null; ncCost: number | null; dismissedAt: Date | string | null;
+  commute: boolean | null; ncCostKeur: number | null; dismissedAt: Date | string | null;
 };
 export type ObjectiveAction = { siteId: string | null; status: string; dueOn: string; closedOn: string | null; effective: boolean | null };
 export type ObjectiveControl = { siteId: string | null; nextOn: string; archivedAt: Date | string | null };
@@ -51,7 +51,7 @@ export function objectiveValue(indicator: ObjectiveIndicator, data: ObjectiveDat
     case 'remontees': return events.filter((e) => e.type === 'PA' || e.type === 'SD').length;
     case 'nc': return events.filter((e) => e.type === 'NC').length;
     case 'reclamations': return events.filter((e) => e.type === 'RC').length;
-    case 'cout_non_qualite': return events.filter((e) => e.type === 'NC' || e.type === 'RC').reduce((n, e) => n + (e.ncCost ?? 0), 0);
+    case 'cout_non_qualite': return events.filter((e) => e.type === 'NC' || e.type === 'RC').reduce((n, e) => n + Math.round((e.ncCostKeur ?? 0) * 1000), 0); // k€ saisis, objectif en €
     case 'actions_efficaces': {
       const verified = data.actions.filter((a) => inScope(a.siteId) && a.status === 'verifiee' && a.closedOn && yearOf(a.closedOn) === year);
       return verified.length ? (verified.filter((a) => a.effective).length * 100) / verified.length : null;

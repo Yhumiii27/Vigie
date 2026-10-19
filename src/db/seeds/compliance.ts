@@ -53,9 +53,9 @@ export async function seedCompliance(tx: SeedTx) {
 
   // EVT-17 : traitement des produits non conformes.
   const dispositions: [string, Partial<typeof t.events.$inferInsert>][] = [
-    ['EV-2026-130', { ncDisposition: 'retouche', ncQuantity: 3, ncCost: 1450, ncDispositionNote: 'Reprise des 3 arbres sur CU-2, contrôle à 100 % du lot suivant' }],
-    ['EV-2026-121', { ncDisposition: 'retour', ncQuantity: 40, ncCost: 320, ncDispositionNote: 'Lot retourné à [Fournisseur F], dérogation refusée' }],
-    ['EV-2026-112', { ncDisposition: 'retouche', ncQuantity: 1, ncCost: 680 }],
+    ['EV-2026-130', { ncDisposition: 'retouche', ncQuantity: 3, ncCostKeur: 1.45, ncDispositionNote: 'Reprise des 3 arbres sur CU-2, contrôle à 100 % du lot suivant' }],
+    ['EV-2026-121', { ncDisposition: 'retour', ncQuantity: 40, ncCostKeur: 0.32, ncDispositionNote: 'Lot retourné à [Fournisseur F], dérogation refusée' }],
+    ['EV-2026-112', { ncDisposition: 'retouche', ncQuantity: 1, ncCostKeur: 0.68 }],
   ];
   for (const [id, set] of dispositions) await tx.update(t.events).set(set).where(and(eq(t.events.id, id), isNull(t.events.ncDisposition)));
 

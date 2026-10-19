@@ -46,7 +46,6 @@ ALTER TABLE "events" ADD COLUMN "mp_questionnaire_received_on" date;--> statemen
 ALTER TABLE "events" ADD COLUMN "mp_questionnaire_returned_on" date;--> statement-breakpoint
 ALTER TABLE "events" ADD COLUMN "nc_disposition" text;--> statement-breakpoint
 ALTER TABLE "events" ADD COLUMN "nc_quantity" numeric(12, 2);--> statement-breakpoint
-ALTER TABLE "events" ADD COLUMN "nc_cost" numeric(12, 2);--> statement-breakpoint
 ALTER TABLE "events" ADD COLUMN "nc_disposition_note" text;--> statement-breakpoint
 ALTER TABLE "prevention_plans" ADD COLUMN "signed_eu_name" text;--> statement-breakpoint
 ALTER TABLE "prevention_plans" ADD COLUMN "signed_eu_quality" text;--> statement-breakpoint
@@ -67,4 +66,27 @@ ALTER TABLE "qhse_objectives" ADD CONSTRAINT "qhse_objectives_review_decision_id
 ALTER TABLE "qhse_objectives" ADD CONSTRAINT "qhse_objectives_created_by_id_people_id_fk" FOREIGN KEY ("created_by_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "qhse_objectives" ADD CONSTRAINT "qhse_objectives_archived_by_id_people_id_fk" FOREIGN KEY ("archived_by_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "certifications" ADD CONSTRAINT "certifications_suspended_by_id_people_id_fk" FOREIGN KEY ("suspended_by_id") REFERENCES "public"."people"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "events" ADD CONSTRAINT "events_nc_amounts_check" CHECK (("events"."nc_quantity" is null or "events"."nc_quantity" >= 0) and ("events"."nc_cost" is null or "events"."nc_cost" >= 0));
+ALTER TABLE "events" ADD CONSTRAINT "events_nc_quantity_check" CHECK ("events"."nc_quantity" >= 0);;--> statement-breakpoint
+
+-- EVT-09 : un événement de maladie professionnelle (type MP) est réservé en entier aux rôles habilités aux données de
+-- santé ; son journal sort de pub_journal comme celui d'un accident du travail (vue de 0009, colonnes inchangées).
+CREATE OR REPLACE VIEW "pub_journal" WITH (security_barrier) AS
+SELECT 'change_log:' || l.id::text           AS ref_source,
+       'audit'::text                         AS nature,
+       l.at                                  AS quand,
+       coalesce(p.name, 'Anonyme')           AS qui,
+       l.by_id                               AS qui_ref,
+       p.last_role                           AS qui_role,
+       l.entity_type || '.' || l.action      AS action,
+       l.entity_type || ':' || l.entity_id   AS objet,
+       l.summary                             AS detail,
+       coalesce(ev.keystone_project_code, pp.keystone_project_code, pe.keystone_project_code) AS projet,
+       p.matricule                           AS qui_matricule
+FROM "change_log" l
+LEFT JOIN "people" p ON p.id = l.by_id
+LEFT JOIN "events" ev ON l.entity_type = 'event' AND ev.id = l.entity_id
+LEFT JOIN "prevention_plans" pp ON l.entity_type = 'prevention_plan' AND pp.id = l.entity_id
+LEFT JOIN "permits" pe ON l.entity_type = 'permit' AND pe.id = l.entity_id
+WHERE l.entity_type <> 'benign_accident' AND (ev.type IS NULL OR ev.type NOT IN ('AT', 'MP'));
+--> statement-breakpoint
+COMMENT ON VIEW "pub_journal" IS 'Contrat D18 v1 : journal des modifications de Vigie (change_log) aux colonnes communes, sans motif ni détail des champs, hors accidents du travail, maladies professionnelles et registre des accidents bénins. Lecteur : matrix_app (matrix.journal_unifie).';

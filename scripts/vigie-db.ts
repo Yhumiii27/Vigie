@@ -27,7 +27,10 @@ import { loadEnvConfig } from '@next/env';
 import type { PGlite } from '@electric-sql/pglite';
 import type { Client } from 'pg';
 import { createBackup, extractBackup, listBackups, listUploads, pgReplace, pgRestore, restoreUploads, type DbSource, type ExtractedBackup } from '../src/db/backup';
-import { MIGRATIONS_DIR, compareChecksums, currentChecksums, migrationState, readChecksums, readJournal, recordNewChecksums, type Query } from '../src/db/migrations';
+import {
+  DB_LAYOUT, MIGRATIONS_DIR, SERVER_SCHEMA, compareChecksums, currentChecksums, migrateServer, migrationState, readChecksums, readJournal, recordNewChecksums,
+  toServerSchema, type Query,
+} from '../src/db/migrations';
 import * as schema from '../src/db/schema';
 import { catalogueMismatches, readCatalogue, readDetailedCatalogue, shapeMismatches } from '../src/db/shape';
 import type { Db } from '../src/db/types';
@@ -59,9 +62,10 @@ const stampNow = () => new Date().toISOString().replace(/\.\d+Z$/, 'Z').replace(
 
 // ─── Ouverture des bases ────────────────────────────────────────────────────
 
+/** Client PostgreSQL de l'outil : search_path vigie, comme le serveur (noms non qualifiés des migrations et de Drizzle). */
 async function pgClient(url: string): Promise<Client> {
   const { Client } = await import('pg');
-  const client = new Client({ connectionString: url, application_name: 'vigie-db' });
+  const client = new Client({ connectionString: url, application_name: 'vigie-db', options: `-c search_path=${SERVER_SCHEMA}` });
   await client.connect();
   return client;
 }
@@ -139,6 +143,10 @@ async function extractChecked(file: string, storage: StorageConfig, work: string
 /** Contrôles communs à restore et test-migrate : moteur, version de Vigie. */
 function checkCompatible(extracted: ExtractedBackup, engine: 'postgres' | 'pglite' | null, force: boolean) {
   const m = extracted.manifest;
+  if (m.engine === 'postgres' && m.schema !== SERVER_SCHEMA) {
+    throw new Error(`Sauvegarde PostgreSQL d'une version antérieure de Vigie (schéma public) : cette version travaille dans le schéma ${SERVER_SCHEMA} `
+      + 'et ne la restaure pas (pas de reprise de données, décision du 18/10/2026). La restaurer avec la version qui l\'a faite.');
+  }
   if (engine && m.engine !== engine) {
     throw new Error(`Sauvegarde ${m.engine === 'postgres' ? 'PostgreSQL' : 'PGlite'}, base configurée ${engine === 'postgres' ? 'PostgreSQL (DATABASE_URL)' : 'PGlite (DATABASE_URL absente)'} : `
       + 'une sauvegarde se restaure sur le même moteur.');
@@ -156,7 +164,7 @@ async function restorePostgres(storage: StorageConfig, extracted: ExtractedBacku
   try {
     const [{ n: others }] = (await client.query("select count(*)::int as n from pg_stat_activity where datname = current_database() and application_name = 'vigie' and pid <> pg_backend_pid()")).rows;
     if (others > 0 && !flags.has('--forcer')) throw new Error(`Vigie est encore connecté à la base (${others} connexion${others > 1 ? 's' : ''}) : arrêter le serveur avant la restauration (ou --forcer).`);
-    const [{ n: tables }] = (await client.query("select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')")).rows;
+    const [{ n: tables }] = (await client.query('select count(*)::int as n from pg_tables where schemaname = $1', [SERVER_SCHEMA])).rows;
     if (tables > 0) {
       if (!flags.has('--remplacer')) throw new Error(`La base contient déjà ${tables} tables : --remplacer pour la remplacer (une sauvegarde « avant-restauration » est faite d'abord).`);
       const { file } = await createBackup(storage, { engine: 'postgres', url, query: pgQuery(client) }, { reason: 'avant-restauration', uploads: false });
@@ -289,12 +297,19 @@ const mkdirBackup = (storage: StorageConfig) => mkdir(storage.backupDir, { recur
 // ─── test-migrate ───────────────────────────────────────────────────────────
 
 type Shape = { columns: string[]; constraints: string[]; indexes: string[] };
+const JOURNAL_TABLE = '__drizzle_migrations';
 
-/** Forme du schéma public (colonnes, contraintes, index), comparable d'un moteur à l'autre. */
-async function schemaShape(query: Query): Promise<Shape> {
-  const col = await query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' order by 1, 2");
-  const con = await query("select table_name, constraint_name, constraint_type from information_schema.table_constraints where table_schema = 'public' and constraint_type <> 'CHECK' order by 1, 2");
-  const idx = await query("select tablename, indexname from pg_indexes where schemaname = 'public' order by 1, 2");
+/**
+ * Forme d'un schéma (colonnes des tables et des vues, contraintes, index), comparable d'un moteur à l'autre : public en
+ * PGlite, vigie sur PostgreSQL.
+ */
+async function schemaShape(query: Query, schema: string): Promise<Shape> {
+  // Journal des migrations écarté (dans vigie sur le serveur, dans drizzle en PGlite).
+  const col = await query(`select table_name, column_name, data_type, is_nullable from information_schema.columns
+    where table_schema = $1 and table_name <> '${JOURNAL_TABLE}' order by 1, 2`, [schema]);
+  const con = await query(`select table_name, constraint_name, constraint_type from information_schema.table_constraints
+    where table_schema = $1 and table_name <> '${JOURNAL_TABLE}' and constraint_type <> 'CHECK' order by 1, 2`, [schema]);
+  const idx = await query(`select tablename, indexname from pg_indexes where schemaname = $1 and tablename <> '${JOURNAL_TABLE}' order by 1, 2`, [schema]);
   return {
     columns: col.rows.map((r) => `${r.table_name}.${r.column_name} ${r.data_type}${r.is_nullable === 'NO' ? ' not null' : ''}`),
     constraints: con.rows.map((r) => `${r.table_name} ${r.constraint_type} ${r.constraint_name}`),
@@ -302,8 +317,8 @@ async function schemaShape(query: Query): Promise<Shape> {
   };
 }
 
-async function rowCounts(query: Query): Promise<Record<string, number>> {
-  const tables = (await query("select tablename from pg_tables where schemaname = 'public' order by 1")).rows.map((r) => String(r.tablename));
+async function rowCounts(query: Query, schema: string): Promise<Record<string, number>> {
+  const tables = (await query(`select tablename from pg_tables where schemaname = $1 and tablename <> '${JOURNAL_TABLE}' order by 1`, [schema])).rows.map((r) => String(r.tablename));
   const out: Record<string, number> = {};
   for (const t of tables) out[t] = Number((await query(`select count(*)::int as n from "${t.replace(/"/g, '""')}"`)).rows[0].n);
   return out;
@@ -317,7 +332,7 @@ async function freshShape(): Promise<Shape> {
   const client = new PGlite('memory://');
   try {
     await migrate(drizzle(client), { migrationsFolder: MIGRATIONS_DIR });
-    return await schemaShape(pgliteQuery(client));
+    return await schemaShape(pgliteQuery(client), DB_LAYOUT.pglite.tables);
   } finally {
     await client.close();
   }
@@ -329,18 +344,19 @@ function diffList(label: string, a: string[], b: string[]) {
   return [...a.filter((x) => !sb.has(x)).map((x) => `${label} en trop : ${x}`), ...b.filter((x) => !sa.has(x)).map((x) => `${label} manquant(e) : ${x}`)];
 }
 
-async function migrateAndCompare(query: Query, runMigrate: () => Promise<void>) {
-  const before = await migrationState(query);
-  const countsBefore = await rowCounts(query);
+async function migrateAndCompare(query: Query, engine: 'postgres' | 'pglite', runMigrate: () => Promise<unknown>) {
+  const schema = DB_LAYOUT[engine].tables;
+  const before = await migrationState(query, engine);
+  const countsBefore = await rowCounts(query, schema);
   say(`Copie restaurée : ${before.applied} migrations appliquées (dernière : ${before.last ?? '—'}), ${before.pending.length} en attente${before.pending.length ? ` : ${before.pending.map((m) => m.tag).join(', ')}` : ''}.`);
   const t0 = Date.now();
   await runMigrate();
-  const after = await migrationState(query);
+  const after = await migrationState(query, engine);
   say(`Migrations appliquées en ${((Date.now() - t0) / 1000).toFixed(1)} s ; en attente après : ${after.pending.length}.`);
-  const countsAfter = await rowCounts(query);
+  const countsAfter = await rowCounts(query, schema);
   const changed = Object.keys({ ...countsBefore, ...countsAfter }).filter((t) => countsBefore[t] !== countsAfter[t]);
   for (const t of changed) say(`  lignes ${t} : ${countsBefore[t] ?? '(nouvelle table)'} → ${countsAfter[t] ?? '(table supprimée)'}`);
-  const [got, want] = [await schemaShape(query), await freshShape()];
+  const [got, want] = [await schemaShape(query, schema), await freshShape()];
   const problems = [
     ...(after.pending.length ? [`migrations encore en attente : ${after.pending.map((m) => m.tag).join(', ')}`] : []),
     ...diffList('colonne', got.columns, want.columns), ...diffList('contrainte', got.constraints, want.constraints), ...diffList('index', got.indexes, want.indexes),
@@ -364,7 +380,7 @@ async function testMigrate(storage: StorageConfig, file: string, flags: Set<stri
       const { migrate } = await import('drizzle-orm/pglite/migrator');
       const client = new PGlite('memory://', { loadDataDir: new Blob([new Uint8Array(await readFile(extracted.dbFile))]) });
       try {
-        await migrateAndCompare(pgliteQuery(client), () => migrate(drizzle(client), { migrationsFolder: MIGRATIONS_DIR }));
+        await migrateAndCompare(pgliteQuery(client), 'pglite', () => migrate(drizzle(client), { migrationsFolder: MIGRATIONS_DIR }));
       } finally {
         await client.close();
       }
@@ -377,7 +393,12 @@ async function testMigrate(storage: StorageConfig, file: string, flags: Set<stri
   }
 }
 
-/** Base d'essai PostgreSQL : --base (base vide fournie), sinon base temporaire créée sur le serveur de DATABASE_URL. */
+/**
+ * Base d'essai PostgreSQL : --base (base dont le schéma vigie est vide ou absent), sinon base temporaire créée sur le
+ * serveur de DATABASE_URL (droit CREATEDB : jamais celui de vigie_app sur le serveur commun, où --base est donc requis).
+ * Le schéma vigie y est créé s'il manque (le rôle de --base doit alors avoir le droit CREATE sur la base) ; la copie y
+ * est restaurée, puis migrée par le migrateur du serveur (migrateServer).
+ */
 async function testMigratePostgres(storage: StorageConfig, extracted: ExtractedBackup, base: string | undefined) {
   let target = base;
   let drop: (() => Promise<void>) | null = null;
@@ -406,17 +427,22 @@ async function testMigratePostgres(storage: StorageConfig, extracted: ExtractedB
   try {
     const client = await pgClient(target);
     try {
-      const [{ n }] = (await client.query("select count(*)::int as n from pg_tables where schemaname in ('public', 'drizzle')")).rows;
-      if (n > 0) throw new Error('La base d\'essai n\'est pas vide.');
+      const [{ n }] = (await client.query('select count(*)::int as n from pg_tables where schemaname = $1', [SERVER_SCHEMA])).rows;
+      if (n > 0) throw new Error(`La base d'essai n'est pas vide (schéma ${SERVER_SCHEMA}).`);
+      // Jamais de CREATE SCHEMA quand le schéma existe : sur un serveur commun, le rôle n'a pas le droit CREATE sur la base.
+      const [{ present }] = (await client.query('select exists (select from pg_namespace where nspname = $1) as present', [SERVER_SCHEMA])).rows;
+      if (!present) {
+        await client.query(`create schema ${SERVER_SCHEMA}`).catch((err: Error) => {
+          throw new Error(`Schéma ${SERVER_SCHEMA} absent de la base d'essai et impossible à créer (${err.message}).`);
+        });
+      }
     } finally {
       await client.end();
     }
     await pgRestore(target, extracted.dbFile);
     const client2 = await pgClient(target);
     try {
-      const { drizzle } = await import('drizzle-orm/node-postgres');
-      const { migrate } = await import('drizzle-orm/node-postgres/migrator');
-      await migrateAndCompare(pgQuery(client2), () => migrate(drizzle(client2), { migrationsFolder: MIGRATIONS_DIR }));
+      await migrateAndCompare(pgQuery(client2), 'postgres', () => migrateServer(pgQuery(client2)));
     } finally {
       await client2.end();
     }
@@ -498,6 +524,52 @@ async function check(flags: Set<string>) {
     await client.close();
   }
 
+  // 6. Disposition du serveur (schéma vigie, décision du 18/10/2026) : migrations publiées réécrites au moment de les
+  //    appliquer ("public". → "vigie.", seul motif), sans autre mention de public ; appliquées par migrateServer à une
+  //    base vide dans le schéma vigie (search_path vigie, comme le pool du serveur), à côté des mêmes migrations
+  //    appliquées par Drizzle dans public : mêmes tables, colonnes, contraintes, index et vues dans les deux schémas,
+  //    aucune référence de vigie vers public.
+  let rewrites = 0;
+  for (const e of journal) {
+    const text = await readFile(path.join(MIGRATIONS_DIR, `${e.tag}.sql`), 'utf8');
+    rewrites += text.split('"public".').length - 1;
+    // Commentaires SQL (-- …) écartés : seul le code compte.
+    const left = toServerSchema(text).replace(/--[^\n]*/g, '').match(/.{0,30}\bpublic\b.{0,30}/i);
+    if (left) problems.push(`réécriture pour le schéma ${SERVER_SCHEMA} : ${e.tag} mentionne encore public (« ${left[0].trim()} ») — qualifier par "public". ou ne pas qualifier`);
+  }
+  const server = new PGlite('memory://');
+  try {
+    await migrate(drizzle(server), { migrationsFolder: MIGRATIONS_DIR });
+    await server.exec(`create schema ${SERVER_SCHEMA}; set search_path to ${SERVER_SCHEMA}`);
+    const applied = await migrateServer(pgliteQuery(server));
+    const q = pgliteQuery(server);
+    // Journal des migrations (vigie.__drizzle_migrations, absent de public) écarté ; noms de schéma retirés des définitions.
+    const norm = (c: Awaited<ReturnType<typeof readDetailedCatalogue>>) => {
+      const own = <T extends { table: string }>(rows: T[]) => rows.filter((r) => r.table !== '__drizzle_migrations');
+      const bare = (d: string) => d.replace(/\b(public|vigie)\./g, '');
+      return JSON.stringify({
+        columns: own(c.columns).map((k) => ({ ...k, default: k.default === null ? null : bare(k.default) })),
+        constraints: own(c.constraints).map((k) => ({ ...k, definition: bare(k.definition) })),
+        indexes: own(c.indexes).map((i) => ({ ...i, definition: bare(i.definition) })),
+      });
+    };
+    const views = async (schema: string) => (await q("select table_name from information_schema.views where table_schema = $1 order by 1", [schema])).rows.map((r) => String(r.table_name));
+    const [{ n: tables }] = (await q("select count(*)::int as n from pg_tables where schemaname = $1 and tablename <> '__drizzle_migrations'", [SERVER_SCHEMA])).rows as { n: number }[];
+    const [{ n: crossRefs }] = (await q(`select count(*)::int as n from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
+      join pg_class r on r.oid = k.confrelid join pg_namespace rn on rn.oid = r.relnamespace where n.nspname = $1 and rn.nspname <> $1`, [SERVER_SCHEMA])).rows as { n: number }[];
+    const same = norm(await readDetailedCatalogue(q, 'public')) === norm(await readDetailedCatalogue(q, SERVER_SCHEMA))
+      && JSON.stringify(await views('public')) === JSON.stringify(await views(SERVER_SCHEMA));
+    const state = await migrationState(q, 'postgres');
+    if (applied !== journal.length || state.applied !== journal.length) problems.push(`schéma ${SERVER_SCHEMA} : ${applied} migrations appliquées sur ${journal.length}`);
+    else if (!same) problems.push(`schéma ${SERVER_SCHEMA} : forme différente de celle du schéma public après les mêmes migrations`);
+    else if (crossRefs > 0) problems.push(`schéma ${SERVER_SCHEMA} : ${crossRefs} clé(s) étrangère(s) vers un autre schéma`);
+    else ok(`disposition du serveur : ${journal.length} migrations appliquées dans le schéma ${SERVER_SCHEMA} (${rewrites} "public". réécrits), ${tables} tables et ${(await views(SERVER_SCHEMA)).length} vues identiques à public, journal ${DB_LAYOUT.postgres.journal}`);
+  } catch (err) {
+    problems.push(`schéma ${SERVER_SCHEMA} : ${(err as Error).message.split('\n')[0].slice(0, 300)}`);
+  } finally {
+    await server.close();
+  }
+
   if (problems.length) {
     for (const p of problems) say(`✗ ${p}`);
     throw new Error(`${problems.length} problème(s) de migration.`);
@@ -559,8 +631,8 @@ async function encryptUploads(storage: StorageConfig) {
 async function repriseLiens(storage: StorageConfig, flags: Set<string>) {
   const unknown = [...flags].filter((f) => f !== '--appliquer' && f !== '--forcer');
   if (unknown.length) throw new UsageError(`Option inconnue : ${unknown.join(' ')}`);
-  const run = async (db: Db, query: Query) => {
-    const state = await migrationState(query);
+  const run = async (db: Db, query: Query, engine: 'postgres' | 'pglite') => {
+    const state = await migrationState(query, engine);
     if (state.newer) throw new Error('Base migrée par une version plus récente de Vigie : lancer la reprise avec cette version.');
     if (state.pending.length) {
       throw new Error(`Migrations en attente (${state.pending.map((m) => m.tag).join(', ')}) : démarrer Vigie une fois, qui les applique, avant la reprise.`);
@@ -572,7 +644,7 @@ async function repriseLiens(storage: StorageConfig, flags: Set<string>) {
     const client = await pgClient(storage.databaseUrl);
     try {
       const { drizzle } = await import('drizzle-orm/node-postgres');
-      return await run(drizzle(client, { schema }), pgQuery(client));
+      return await run(drizzle(client, { schema }), pgQuery(client), 'postgres');
     } finally {
       await client.end();
     }
@@ -581,7 +653,7 @@ async function repriseLiens(storage: StorageConfig, flags: Set<string>) {
   const client = await openPgliteDir(storage.dataDir, flags.has('--forcer'));
   try {
     const { drizzle } = await import('drizzle-orm/pglite');
-    return await run(drizzle(client, { schema }), pgliteQuery(client));
+    return await run(drizzle(client, { schema }), pgliteQuery(client), 'pglite');
   } finally {
     await client.close();
   }

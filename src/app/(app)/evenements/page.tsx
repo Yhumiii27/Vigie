@@ -307,11 +307,11 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
   if (e.type === 'AT' && e.commute) fields.push(['Nature', 'Accident de trajet · hors TF1 / TG']);
   if (hasNcDisposition(e.type)) {
     // EVT-17 : traitement du produit non conforme (ISO 9001 §8.7).
-    const eur = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} € HT`;
+    const eur = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} k€ HT`;
     fields.push(
       ['Traitement du produit', e.ncDisposition ? NC_DISPOSITIONS[e.ncDisposition as NcDisposition] ?? e.ncDisposition : 'À décider'],
       ['Quantité concernée', e.ncQuantity != null ? e.ncQuantity.toLocaleString('fr-FR') : '—'],
-      ['Coût de non-qualité', e.ncCost != null ? eur(e.ncCost) : '—'],
+      ['Coût de non-qualité', e.ncCostKeur != null ? eur(e.ncCostKeur) : '—'],
     );
     if (e.ncDispositionNote) fields.push([e.ncDisposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement', e.ncDispositionNote]);
   }
@@ -349,7 +349,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
     injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn, lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven, reservesOn: e.reservesOn,
     controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId,
-    commute: e.commute, ncDisposition: e.ncDisposition, ncQuantity: e.ncQuantity, ncCost: e.ncCost, ncDispositionNote: e.ncDispositionNote,
+    commute: e.commute, ncDisposition: e.ncDisposition, ncQuantity: e.ncQuantity, ncCostKeur: e.ncCostKeur, ncDispositionNote: e.ncDispositionNote,
     mpTable: e.mpTable, mpDisease: e.mpDisease, mpCertificateOn: e.mpCertificateOn, mpInformedOn: e.mpInformedOn,
     mpQuestionnaireReceivedOn: e.mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn: e.mpQuestionnaireReturnedOn,
   };
