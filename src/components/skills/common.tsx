@@ -46,6 +46,7 @@ export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtained
     case 's': return c.expiresOn ? `Expire le ${fmtDate(c.expiresOn)} · dans ${days} j` : 'Expire sous 60 jours';
     case 'v': return c.expiresOn ? `Valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Valide · sans échéance';
     case 'r': return 'Requis, jamais suivi';
+    case 'p': return c.expiresOn ? `Prérequis non valide · titre valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Prérequis non valide';
     default: return c.obtainedOn ? 'Non requis pour ce salarié · formation enregistrée' : 'Non requis pour ce salarié';
   }
 }

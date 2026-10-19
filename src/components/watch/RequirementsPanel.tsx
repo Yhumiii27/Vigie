@@ -18,11 +18,13 @@ import { REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, TONE } from '@/lib/domain';
 import type { FormOptions } from '@/lib/data/options';
 import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
-import { archiveRequirement, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
+import { Attachments } from '@/components/Attachments';
+import { addRequirementFiles, archiveRequirement, evaluateRequirement, removeRequirementFile, restoreRequirement, saveRequirement } from '@/server/watch';
 import { requirementActionDefaults } from './action-defaults';
 import { ArchivedBanner, FILES_HINT, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
-type Opts = Pick<FormOptions, 'people' | 'sites'>;
+/** `applicableSites` (VEI-10) : sites proposés pour l'applicabilité d'une exigence — périmètre complet seulement, sinon vide. */
+type Opts = Pick<FormOptions, 'people' | 'sites'> & { applicableSites?: readonly Option[] };
 /**
  * Plan d'actions (ACT-22, réponses du service QHSE du 15/10/2026) : `actionOptions` (listes du formulaire d'action) et
  * `linkActions` (actions ouvertes à rattacher) ne sont fournis qu'au service QHSE, seul à créer une action et à modifier
@@ -181,6 +183,9 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
           </Link>
         )],
         ['Pilote', r.pilot || '—'],
+        // VEI-10 : applicabilité par site et lien vers le texte.
+        ['Sites concernés', r.siteLabels.length ? r.siteLabels.join(', ') : 'Tous les sites'],
+        !!r.legifranceUrl && ['Texte', <a key="t" href={r.legifranceUrl} target="_blank" rel="noreferrer noopener" className="vg-link" style={{ fontSize: 12.5 }}>Consulter le texte officiel</a>],
         r.projects.count != null && ['Projets Keystone', `${plural(r.projects.count, 'concerné', 'concernés')}${r.projects.manual ? ' · saisie manuelle' : ''}`],
         r.featured && ['Tableau de bord', <span key="f" style={{ color: 'var(--color-accent)' }}><Icon name="ph-push-pin" size={12} /> À la une</span>],
       ]} />
@@ -236,6 +241,15 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
             <>
               <LinkedControls r={r} />
               <KeystoneProjects r={r} />
+              <Attachments title="Texte réglementaire joint" kicker={r.text} files={r.textFiles} canAdd={editable} emptyText="Aucun texte joint."
+                hint="PDF du texte ou extrait applicable · 10 Mo par fichier."
+                onAdd={(picked) => {
+                  const fd = new FormData();
+                  fd.set('requirementId', String(r.id));
+                  picked.forEach((file) => fd.append('files', file));
+                  return addRequirementFiles(fd);
+                }}
+                onRemove={removeRequirementFile} />
               {editable ? (
                 <>
                   <RequirementForm r={r} options={options} featured={featured} onDone={onClose} onCancel={onClose} />
@@ -412,8 +426,10 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
   const computed = r?.projects.computed;
   // Pilote sorti de l'effectif : conservé comme choix tant qu'aucun successeur n'est désigné (VEI-01).
   const pilots = withCurrent(options.people, r?.pilotId, r ? `${r.pilot || r.pilotId}${LEFT_SUFFIX}` : undefined);
+  const applicable = options.applicableSites ?? [];
+  const chosen = new Set(r?.siteIds ?? []);
   return (
-    <ActionForm action={saveRequirement} hidden={{ id: r?.id }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
+    <ActionForm action={saveRequirement} hidden={{ id: r?.id, siteIdsField: applicable.length ? '1' : undefined }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
       <FormRow>
         <Field name="text" label="Texte">
           <Input name="text" defaultValue={r?.text} placeholder="Ex. Code du travail — R. 4512-6" maxLength={120} autoFocus={!r} />
@@ -422,6 +438,16 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
           <Input name="domain" defaultValue={r?.domain} placeholder="Ex. Plans de prévention" maxLength={120} />
         </Field>
       </FormRow>
+      <Field name="legifranceUrl" label="Lien vers le texte" hint="Légifrance ou EUR-Lex (règlements européens). Le texte peut aussi être joint à la fiche.">
+        <Input name="legifranceUrl" type="url" defaultValue={r?.legifranceUrl ?? ''} placeholder="https://www.legifrance.gouv.fr/…" maxLength={500} />
+      </Field>
+      {applicable.length > 0 && (
+        <Field name="siteIds" label="Sites concernés" hint="Aucun site coché : l'exigence s'applique à tous les sites.">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+            {applicable.map(([id, label]) => <Checkbox key={id} name="siteIds" value={id} label={label} defaultChecked={chosen.has(id)} />)}
+          </div>
+        </Field>
+      )}
       <Field name="summary" label="Ce qu'il exige">
         <TextArea name="summary" defaultValue={r?.summary} rows={3} maxLength={1000} placeholder="Obligations concrètes pour l'entreprise." />
       </Field>

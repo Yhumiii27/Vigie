@@ -9,9 +9,11 @@ import type { ArchivedRecord, TrainingTitle } from '@/lib/data/skills';
 import { archiveTitle, restoreTitle, saveTitle } from '@/server/skills';
 import { HistoryTable } from './common';
 
-function TitleForm({ title, onDone }: { title?: TrainingTitle; onDone: () => void }) {
+function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: TrainingTitle[]; onDone: () => void }) {
+  const others = titles.filter((x) => x.id !== title?.id);
+  const prereq = new Set(title?.prerequisiteIds ?? []);
   return (
-    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1' }}>
+    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1' }}>
       <FormRow>
         <Field name="label" label="Intitulé">
           <Input name="label" defaultValue={title?.label} placeholder="Ex. Habilitation soudure" maxLength={60} autoFocus />
@@ -23,6 +25,18 @@ function TitleForm({ title, onDone }: { title?: TrainingTitle; onDone: () => voi
       <Field name="firstAid" label="Secourisme" hint="Titulaires en cours de validité proposés comme donneurs de soins du registre des accidents bénins.">
         <Checkbox name="firstAid" label="Sauveteur secouriste du travail (SST) ou équivalent" defaultChecked={title?.firstAid ?? false} />
       </Field>
+      {/* HAB-10 : catégories ou niveaux obtenus, saisis avec chaque formation. */}
+      <Field name="scopeLabel" label="Catégories ou niveaux" hint="Facultatif : intitulé du champ saisi avec chaque formation (ex. « Catégories CACES », « Indices d'habilitation »).">
+        <Input name="scopeLabel" defaultValue={title?.scopeLabel ?? ''} maxLength={60} />
+      </Field>
+      {others.length > 0 && (
+        <Field name="prerequisiteIds" label="Titres prérequis"
+          hint="Le titre n'est valide qu'avec au moins un de ces titres en cours de validité (ex. autorisation de conduite : CACES de la catégorie, R. 4323-56).">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+            {others.map((x) => <Checkbox key={x.id} name="prerequisiteIds" value={x.id} label={x.label} defaultChecked={prereq.has(x.id)} />)}
+          </div>
+        </Field>
+      )}
     </ActionForm>
   );
 }
@@ -90,7 +104,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
         </thead>
         <tbody>
           {titles.map((t) => editing === t.id ? (
-            <tr key={t.id}><td colSpan={3} style={{ padding: '10px 4px' }}><TitleForm title={t} onDone={close} /></td></tr>
+            <tr key={t.id}><td colSpan={3} style={{ padding: '10px 4px' }}><TitleForm title={t} titles={titles} onDone={close} /></td></tr>
           ) : editing === `archive:${t.id}` ? (
             <tr key={t.id}>
               <td colSpan={3} style={{ padding: '10px 4px' }}>
@@ -121,7 +135,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
       </table>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         {canManage && (editing === 'new' ? (
-          <div className="vg-inset" style={{ padding: 12, flex: 1 }}><TitleForm onDone={close} /></div>
+          <div className="vg-inset" style={{ padding: 12, flex: 1 }}><TitleForm titles={titles} onDone={close} /></div>
         ) : (
           <button type="button" className="btn btn-secondary vg-btn-sm" disabled={editing !== null} onClick={() => setEditing('new')}>
             <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un titre

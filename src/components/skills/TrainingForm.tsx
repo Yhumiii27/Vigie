@@ -18,7 +18,7 @@ type Props = {
   /** Salarié et titre imposés (ouverture depuis une case de la matrice). */
   fixed?: { personId: string; titleId: string };
   /** Valeurs initiales (correction de la formation `qualificationId`, la ligne de l'historique est modifiée). */
-  initial?: { qualificationId: number; obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null };
+  initial?: { qualificationId: number; obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null; scope?: string | null };
   onDone: () => void;
   onCancel?: () => void;
 };
@@ -117,6 +117,12 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
         <Input name="provider" list="vg-training-providers" value={provider} onChange={(e) => { setProvider(e.target.value); setProviderTyped(true); }} maxLength={120} />
         <datalist id="vg-training-providers">{providers.map((p) => <option key={p} value={p} />)}</datalist>
       </Field>
+      {title?.scopeLabel && (
+        // HAB-10 : catégories CACES, indices d'habilitation électrique… obtenus.
+        <Field key={title.id} name="scope" label={title.scopeLabel} hint="Catégories ou niveaux figurant sur l'attestation, séparés par des virgules.">
+          <Input name="scope" defaultValue={initial?.scope ?? cell?.scope ?? ''} maxLength={120} />
+        </Field>
+      )}
       <Field name="files" label="Attestation (facultatif)" hint={FILES_HINT}>
         <Input name="files" type="file" multiple accept={ATTACH_ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
       </Field>

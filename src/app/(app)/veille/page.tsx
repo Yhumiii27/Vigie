@@ -25,7 +25,9 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
   const canApprove = canApproveRole(session.role);
   const [{ requirements, controls }, allOptions] = await Promise.all([loadWatch(), loadFormOptions()]);
   const now = today();
-  const options = { people: allOptions.people, sites: allOptions.sites };
+  // VEI-10 : sites où une exigence s'applique, fixés par le périmètre complet seulement (liste vide sinon).
+  const applicableSites = session.allowedSiteIds ? [] : session.siteOptions.filter((s) => s.id !== ALL_SITES).map((s) => [s.id, s.label.split(' — ')[0]] as const);
+  const options = { people: allOptions.people, sites: allOptions.sites, applicableSites };
   // Plan d'actions (ACT-22) : création et rattachements réservés au service QHSE ; les autres rôles ne reçoivent ni les
   // listes du formulaire d'action ni la liste des actions ouvertes.
   const qhse = canCreateAction(session.role);

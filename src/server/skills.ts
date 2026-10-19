@@ -12,6 +12,7 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { checkUpload, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { prerequisiteCycle } from '@/components/skills/rules';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
 // Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
@@ -107,6 +108,8 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
   const obtainedOn = f.date('obtainedOn', { required: true });
   let expiresOn = f.date('expiresOn');
   const provider = f.str('provider', { max: 120 }) || null;
+  // HAB-10 : catégories ou niveaux obtenus (lus si le titre en porte, voir plus bas).
+  const scopeRaw = f.str('scope', { max: 120 }) || null;
   const files = f.files('files');
   const now = today();
   if (obtainedOn && obtainedOn > now) f.fail('obtainedOn', "La date d'obtention ne peut pas être postérieure à aujourd'hui.");
@@ -128,8 +131,8 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
   if (blocked) return { error: blocked };
   if (!expiresOn && title.validityMonths > 0) expiresOn = addMonths(obtainedOn!, title.validityMonths);
 
-  const values = { obtainedOn: obtainedOn!, expiresOn, provider };
-  const summary = `Formation du ${fmtDate(values.obtainedOn)}${expiresOn ? ` (échéance ${fmtDate(expiresOn)})` : ''}`;
+  const values = { obtainedOn: obtainedOn!, expiresOn, provider, scope: title.scopeLabel ? scopeRaw : null };
+  const summary = `Formation du ${fmtDate(values.obtainedOn)}${expiresOn ? ` (échéance ${fmtDate(expiresOn)})` : ''}${values.scope ? ` · ${values.scope}` : ''}`;
   const result = await db.transaction(async (tx): Promise<{ error: string } | { id: number }> => {
     let id: number;
     if (qualificationId) {
@@ -427,6 +430,19 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const label = f.str('label', { required: true, max: 60 });
   const validityMonths = f.int('validityMonths', { required: true, min: 0, max: 240 });
   const firstAidField = fd.has('firstAidField');
+  // HAB-10 : titres prérequis (actifs, sans cycle) et libellé des catégories ou niveaux ; lus si le formulaire les porte.
+  const prerequisitesField = fd.has('prerequisitesField');
+  const prerequisiteIds = [...new Set(f.list('prerequisiteIds'))];
+  const scopeLabel = f.str('scopeLabel', { max: 60 }) || null;
+  if (prerequisitesField) {
+    const active = new Map(titles.filter((x) => !x.archivedAt).map((x) => [x.id, x]));
+    if (prerequisiteIds.some((p) => p === id)) f.fail('prerequisiteIds', 'Un titre ne peut pas être son propre prérequis.');
+    else if (prerequisiteIds.some((p) => !active.has(p))) f.fail('prerequisiteIds', 'Titre prérequis inconnu ou archivé.');
+    else if (id) {
+      const cycle = prerequisiteCycle(id, prerequisiteIds, new Map(titles.map((x) => [x.id, x.prerequisiteIds ?? []])));
+      if (cycle) f.fail('prerequisiteIds', `« ${active.get(cycle)?.label ?? cycle} » exige déjà ce titre (prérequis circulaire).`);
+    }
+  }
   // Les titres archivés comptent : restaurer plutôt que recréer (historique des formations conservé).
   const twin = label ? titles.find((x) => x.id !== id && clean(x.label) === clean(label)) : undefined;
   if (twin) f.fail('label', twin.archivedAt ? 'Ce titre existe déjà (archivé) : restaurez-le.' : 'Ce titre est déjà suivi.');
@@ -437,13 +453,18 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
     if (!prev) return { error: 'Titre introuvable.' };
     if (prev.archivedAt) return { error: 'Titre archivé : restaurez-le pour le modifier.' };
     const firstAid = firstAidField ? f.bool('firstAid') : prev.firstAid;
+    const prereq = prerequisitesField ? prerequisiteIds : prev.prerequisiteIds ?? [];
+    const scope = prerequisitesField ? scopeLabel : prev.scopeLabel;
+    const labelOf = (ids: readonly string[]) => ids.map((x) => titles.find((ti) => ti.id === x)?.label ?? x).join(', ') || null;
     const details = [
       ...(prev.label !== label ? [{ field: 'Intitulé', from: prev.label, to: label }] : []),
       ...(prev.validityMonths !== validityMonths ? [{ field: 'Validité (mois)', from: String(prev.validityMonths), to: String(validityMonths) }] : []),
       ...(prev.firstAid !== firstAid ? [{ field: 'Secourisme', from: prev.firstAid ? 'oui' : 'non', to: firstAid ? 'oui' : 'non' }] : []),
+      ...(labelOf(prev.prerequisiteIds ?? []) !== labelOf(prereq) ? [{ field: 'Prérequis', from: labelOf(prev.prerequisiteIds ?? []), to: labelOf(prereq) }] : []),
+      ...((prev.scopeLabel ?? null) !== scope ? [{ field: 'Catégories ou niveaux', from: prev.scopeLabel, to: scope }] : []),
     ];
     await db.transaction(async (tx) => {
-      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid }).where(eq(t.trainingTitles.id, id));
+      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope }).where(eq(t.trainingTitles.id, id));
       await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
     });
     done();
@@ -453,7 +474,7 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const sort = Math.max(-1, ...titles.map((x) => x.sort)) + 1;
   const firstAid = firstAidField && f.bool('firstAid');
   await db.transaction(async (tx) => {
-    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid });
+    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid, prerequisiteIds: prerequisitesField ? prerequisiteIds : [], scopeLabel: prerequisitesField ? scopeLabel : null });
     await logChange(tx, { entityType: 'training_title', entityId: newId, action: 'create', summary: `Titre « ${label} » ajouté${firstAid ? ' (secourisme)' : ''}` });
   });
   done();

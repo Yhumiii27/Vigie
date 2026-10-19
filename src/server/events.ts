@@ -9,6 +9,7 @@ import {
   MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
   advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
+  MP_DENIED, MP_TITLE, hasNcDisposition,
 } from '@/components/events/shared';
 import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
@@ -20,6 +21,7 @@ import { today } from '@/lib/today';
 import {
   BENIGN_CAREGIVER_KEYS, D8_STEPS, ENV_ASPECTS, ENV_MEDIA, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, METHODS, NC_ORIGINS, SEVERITY, STEP_ACTIONS, STEP_CLOSED,
   STEP_QUALIFIED, VICTIM_KINDS, VICTIM_KIND_KEYS, canSeeHealth, type AnalysisMethod, type EventType, type VictimKind,
+  HEALTH_EVENT_TYPES, NC_DISPOSITIONS, NC_DISPOSITION_KEYS, REPORT_TYPE_KEYS, canSeeEventType, type NcDisposition,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
@@ -37,8 +39,16 @@ const CONCURRENT = "L'événement vient d'être modifié par ailleurs : recharge
 
 type EventRow = typeof t.events.$inferSelect;
 
+/**
+ * Événement d'après son identifiant ; une maladie professionnelle (donnée de santé, EVT-09) n'existe pas pour une personne
+ * non habilitée (canSeeEventType) : « Événement introuvable » dans toutes les server actions.
+ */
 async function findEvent(db: DbOrTx, id: string): Promise<EventRow | undefined> {
   const [ev] = await db.select().from(t.events).where(eq(t.events.id, id));
+  if (ev && (HEALTH_EVENT_TYPES as readonly string[]).includes(ev.type)) {
+    const session = await getOptionalSession();
+    if (!session || !canSeeEventType(session.role, ev.type)) return undefined;
+  }
   return ev;
 }
 
@@ -250,7 +260,9 @@ type Reader = ReturnType<typeof formReader>;
  */
 function readEventForm(f: Reader, health: boolean) {
   const type = f.oneOf('type', EVENT_TYPE_KEYS, { required: true });
-  const title = f.str('title', { required: true, max: 200 });
+  const mp = type === 'MP';
+  // Maladie professionnelle : intitulé imposé, sans la victime ni la maladie (EVT-09).
+  const title = mp ? MP_TITLE : f.str('title', { required: true, max: 200 });
   const occurredOn = f.date('occurredOn', { required: true });
   const time = f.str('occurredTime');
   if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) f.fail('occurredTime', 'Heure invalide (HH:MM).');
@@ -267,10 +279,13 @@ function readEventForm(f: Reader, health: boolean) {
   const at = type === 'AT';
   const text = (name: string, max: number) => (f.str(name, { max }) || null);
   // Déclaration d'accident du travail : victime (de l'effectif, ou intérimaire / personne extérieure déclarée), horaire,
-  // connaissance par l'employeur (départ du délai de 48 h), activité, circonstances, témoins, tiers.
-  const victimKind = at ? f.oneOf('victimKind', VICTIM_KIND_KEYS) : null;
-  const victimId = at ? f.opt('victimId') : null;
-  const declared = at && victimKind !== 'salarie';
+  // connaissance par l'employeur (départ du délai de 48 h), activité, circonstances, témoins, tiers. Maladie
+  // professionnelle : victime seulement (EVT-09).
+  const victimKind = at || mp ? f.oneOf('victimKind', VICTIM_KIND_KEYS) : null;
+  const victimId = at || mp ? f.opt('victimId') : null;
+  const declared = (at || mp) && victimKind !== 'salarie';
+  // Accident de trajet (L. 411-2 CSS, EVT-09) : exclu des taux de fréquence et de gravité.
+  const commute = at ? f.bool('commute') : false;
   const victimName = declared ? text('victimName', 120) : null;
   const victimCompany = declared ? text('victimCompany', 120) : null;
   const workSchedule = at ? text('workSchedule', 80) : null;
@@ -293,12 +308,34 @@ function readEventForm(f: Reader, health: boolean) {
   const lesionSite = health && at ? text('lesionSite', 200) : null;
   const careGiven = health && at ? text('careGiven', 1000) : null;
   const reservesOn = health && at ? f.date('reservesOn') : null;
-  const controlId = f.int('controlId', { min: 1 });
-  const riskId = f.int('riskId', { min: 1 });
-  const documentId = f.opt('documentId');
-  const preventionPlanId = f.opt('preventionPlanId');
-  const permitId = f.opt('permitId');
+  // Maladie professionnelle (données de santé, EVT-09) : tableau, maladie, certificat médical initial, information de
+  // l'employeur par la caisse et questionnaire employeur (R. 461-9 CSS).
+  const mpHealth = health && mp;
+  const mpTable = mpHealth ? text('mpTable', 40) : null;
+  const mpDisease = mpHealth ? text('mpDisease', 200) : null;
+  const mpCertificateOn = mpHealth ? f.date('mpCertificateOn') : null;
+  const mpInformedOn = mpHealth ? f.date('mpInformedOn') : null;
+  const mpQuestionnaireReceivedOn = mpHealth ? f.date('mpQuestionnaireReceivedOn') : null;
+  const mpQuestionnaireReturnedOn = mpHealth ? f.date('mpQuestionnaireReturnedOn') : null;
+  // Traitement du produit non conforme (EVT-17, ISO 9001 §8.7) : NC et réclamation client.
+  const nc = !!type && hasNcDisposition(type);
+  const ncDisposition = nc ? f.oneOf('ncDisposition', NC_DISPOSITION_KEYS) : null;
+  const ncQuantity = nc ? f.decimal('ncQuantity', { min: 0, max: 9_999_999_999 }) : null;
+  const ncCostKeur = nc ? f.decimal('ncCostKeur', { min: 0, max: 9_999_999_999 }) : null; // k€ HT, lu par la vue pub_non_conformites
+  const ncDispositionNote = nc ? text('ncDispositionNote', 500) : null;
+  if (ncDisposition === 'derogation' && !ncDispositionNote) f.fail('ncDispositionNote', 'Indiquez qui a accordé la dérogation (client, donneur d’ordre) et ses conditions.');
+  // Maladie professionnelle : aucun rattachement (le risque, le document ou l'équipement révéleraient la maladie).
+  const controlId = mp ? null : f.int('controlId', { min: 1 });
+  const riskId = mp ? null : f.int('riskId', { min: 1 });
+  const documentId = mp ? null : f.opt('documentId');
+  const preventionPlanId = mp ? null : f.opt('preventionPlanId');
+  const permitId = mp ? null : f.opt('permitId');
   const now = today();
+  for (const [name, v] of [['mpCertificateOn', mpCertificateOn], ['mpInformedOn', mpInformedOn], ['mpQuestionnaireReceivedOn', mpQuestionnaireReceivedOn], ['mpQuestionnaireReturnedOn', mpQuestionnaireReturnedOn]] as const) {
+    if (v && v > now) f.fail(name, "La date ne peut pas être postérieure à aujourd'hui.");
+  }
+  if (mpQuestionnaireReturnedOn && !mpQuestionnaireReceivedOn) f.fail('mpQuestionnaireReceivedOn', 'Indiquez quand le questionnaire a été reçu.');
+  if (mpQuestionnaireReturnedOn && mpQuestionnaireReceivedOn && mpQuestionnaireReturnedOn < mpQuestionnaireReceivedOn) f.fail('mpQuestionnaireReturnedOn', 'Le retour ne peut pas précéder la réception.');
   if (occurredOn && occurredOn > now) f.fail('occurredOn', "La date ne peut pas être postérieure à aujourd'hui.");
   if (cpamDeclaredOn && cpamDeclaredOn > now) f.fail('cpamDeclaredOn', "La date ne peut pas être postérieure à aujourd'hui.");
   if (cpamDeclaredOn && occurredOn && cpamDeclaredOn < occurredOn) f.fail('cpamDeclaredOn', "La déclaration ne peut pas précéder l'accident.");
@@ -310,6 +347,8 @@ function readEventForm(f: Reader, health: boolean) {
     victimKind, victimId, victimName, victimCompany, workSchedule, knownAt, activity, circumstances, witnesses, thirdParty,
     customer, customerRef, envAspect, envMedium,
     injury, lostDays, cpamDeclaredOn, lesionNature, lesionSite, careGiven, reservesOn,
+    commute, mpTable, mpDisease, mpCertificateOn, mpInformedOn, mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn,
+    ncDisposition, ncQuantity, ncCostKeur, ncDispositionNote,
     controlId, riskId, documentId, preventionPlanId, permitId,
   };
 }
@@ -388,6 +427,8 @@ const LABELS: Partial<Record<keyof EventValues, string>> = {
   workSchedule: 'Horaire de travail', knownAt: "Connu de l'employeur le", activity: 'Activité de la victime', circumstances: 'Circonstances',
   witnesses: 'Témoins', thirdParty: 'Tiers impliqué', customer: 'Client', customerRef: 'Référence client',
   envAspect: 'Aspect environnemental', envMedium: 'Milieu',
+  commute: 'Accident de trajet', ncDisposition: 'Traitement du produit', ncQuantity: 'Quantité concernée', ncCostKeur: 'Coût de non-qualité (k€ HT)',
+  ncDispositionNote: 'Dérogation, conditions du traitement',
   // Données de santé saisies dans le formulaire (jamais les colonnes de l'absence de déclaration motivée : pas de faux écart).
   ...Object.fromEntries(HEALTH_FORM_FIELDS.map((k) => [k, HEALTH_LABELS[k]])),
   controlId: 'Équipement contrôlé', riskId: 'Risque du DUER', documentId: 'Document', preventionPlanId: 'Plan de prévention', permitId: 'Permis',
@@ -409,6 +450,7 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   const f = formReader(fd);
   const id = f.str('id', { required: true });
   const read = readEventForm(f, health);
+  if (read.type === 'MP' && !health) return { error: MP_DENIED };
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -419,7 +461,18 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   // Rôle non habilité : données de santé enregistrées conservées ; un AT garde son type (le requalifier effacerait
   // ses données de santé et le retirerait des taux de fréquence et de gravité).
   if (!health && ev.type === 'AT' && read.type !== 'AT') f.fail('type', "Seuls l'animateur QHSE et la direction requalifient un accident du travail.");
+  // Maladie professionnelle (EVT-09) : un événement ne devient pas MP, ni l'inverse, par une simple modification (sa visibilité
+  // changerait) ; ses pièces et son journal relèvent des données de santé.
+  if ((ev.type === 'MP') !== (read.type === 'MP')) f.fail('type', ev.type === 'MP' ? 'Une maladie professionnelle garde son type.' : 'Créez la maladie professionnelle par « Nouvel événement ».');
   const v: EventValues = health ? read : { ...read, ...Object.fromEntries(HEALTH_FORM_FIELDS.map((k) => [k, ev[k]])) };
+  // Champs ajoutés au paquet 5 (trajet, traitement d'une NC) absents du formulaire reçu (appel direct, ancien formulaire) :
+  // valeurs enregistrées conservées tant que le type ne change pas.
+  if (v.type === ev.type) {
+    for (const k of ['commute', 'ncDisposition', 'ncQuantity', 'ncCostKeur', 'ncDispositionNote'] as const) {
+      // Case à cocher décochée : jamais envoyée, d'où le marqueur `commuteField` du formulaire.
+      if (!fd.has(k === 'commute' ? 'commuteField' : k)) (v as Record<string, unknown>)[k] = ev[k];
+    }
+  }
   if (ev.step >= STEP_QUALIFIED) {
     if (!v.pilotId) f.fail('pilotId', 'Un événement qualifié garde un pilote désigné.');
     for (const k of missingQualification(v)) f.fail(qualificationInput(k, v), 'Requis pour un événement qualifié.');
@@ -443,7 +496,10 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
     if (k === 'injury') return injuryLabel(String(x));
     if (k === 'victimKind') return VICTIM_KINDS[x as VictimKind] ?? String(x);
     if (k === 'knownAt') return x instanceof Date ? toParisLocal(x).replace(/^(\d{4})-(\d{2})-(\d{2})T/, '$3/$2/$1 ') : String(x);
-    if (k === 'occurredOn' || k === 'cpamDeclaredOn' || k === 'reservesOn') return fmtDate(String(x));
+    if (k === 'occurredOn' || k === 'cpamDeclaredOn' || k === 'reservesOn' || k === 'mpCertificateOn' || k === 'mpInformedOn'
+      || k === 'mpQuestionnaireReceivedOn' || k === 'mpQuestionnaireReturnedOn') return fmtDate(String(x));
+    if (k === 'commute') return x ? 'Oui' : null;
+    if (k === 'ncDisposition') return NC_DISPOSITIONS[x as NcDisposition] ?? String(x);
     return String(x);
   };
   // Textes longs : comparés en entier, journalisés sans leur contenu.
@@ -492,6 +548,7 @@ export async function createEvent(_prev: FormState, fd: FormData): Promise<FormS
   if (!health && submitsHealth(fd)) return { error: HEALTH_DENIED };
   const f = formReader(fd);
   const v = readEventForm(f, health);
+  if (v.type === 'MP' && !health) return { error: MP_DENIED };
   const declarantId = f.opt('declarantId');
   const declarant = f.str('declarant', { max: 120 });
   if (!declarantId && !declarant) f.fail('declarant', 'Indiquez le déclarant externe, ou choisissez une personne.');
@@ -868,7 +925,7 @@ export async function addEventFiles(fd: FormData): Promise<{ error?: string; cou
   if (!ev) return { error: 'Événement introuvable.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
-  if (health && ev.type !== 'AT') return { error: "Pièces médicales : réservées aux accidents du travail." };
+  if (health && ev.type !== 'AT' && ev.type !== 'MP') return { error: 'Pièces médicales : réservées aux accidents du travail et aux maladies professionnelles.' };
   for (const file of files) await saveUpload(file, 'event', eventId, session.user.id, { health });
   const n = files.length, s = n > 1 ? 's' : '';
   await logChange(null, {
@@ -917,7 +974,7 @@ export async function classifyEventFileAsMedical(attachmentId: string): Promise<
   if (row.health) return { error: 'Pièce déjà classée en pièce médicale.' };
   const ev = await findEvent(db, row.entityId);
   if (!ev) return { error: 'Événement introuvable.' };
-  if (ev.type !== 'AT') return { error: "Pièces médicales : réservées aux accidents du travail." };
+  if (ev.type !== 'AT' && ev.type !== 'MP') return { error: 'Pièces médicales : réservées aux accidents du travail et aux maladies professionnelles.' };
   const blocked = eventLockReason(ev) ?? (await requireInSite(ev.siteId));
   if (blocked) return { error: blocked };
   await db.transaction(async (tx) => {
@@ -961,7 +1018,7 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
   // Champ piège rempli : un robot. Réponse neutre, rien n'est enregistré.
   if (!session && f.str(REPORT_TRAP_FIELD)) return {};
   const type = f.str('type');
-  if (!(EVENT_TYPE_KEYS as string[]).includes(type)) return { error: 'Choisissez le type de signalement.' };
+  if (!(REPORT_TYPE_KEYS as string[]).includes(type)) return { error: 'Choisissez le type de signalement.' };
   const description = f.str('description');
   if (!description) return { error: "Décrivez ce qui s'est passé." };
   if (description.length > 4000) return { error: 'La description est limitée à 4 000 caractères.' };

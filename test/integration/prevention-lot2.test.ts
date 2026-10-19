@@ -6,6 +6,10 @@ import { getDb, schema as t } from '@/db';
 import { loadPrevention, loadPreventionCompliance, loadPreventionSignals } from '@/lib/data/prevention';
 import { cancelPermit, closePlan, deliverPermit, recordPlanEeSignature, savePlan, setPermitCheck, signPlanEu } from '@/server/prevention';
 
+/** Signature EU (PRV-07) : date, nom et qualité du signataire. */
+const signEu = (id: string, extra: Record<string, string> = {}) =>
+  signPlanEu({}, form({ id, signedEuOn: '2026-10-09', signedEuName: '[H. Marchand]', signedEuQuality: 'Directeur de site', ...extra }));
+
 // Lot 2, plans de prévention et permis (src/db/seeds/prevention.ts, jeu de démonstration au 09/10/2026, sites Seveso seuil
 // haut « dès la première minute ») :
 // - PRV-01 : écarts R. 4512-6 passés (plan signé après le début, intervention réalisée sans plan signé) dans les
@@ -86,22 +90,22 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
     actAs('Chef de service');
     await setPlan('PP-2026-016', { emergencyOrganisation: '' });
     const before = await changeLog('prevention_plan', 'PP-2026-016');
-    expect(await signPlanEu('PP-2026-016')).toEqual({
+    expect(await signEu('PP-2026-016')).toEqual({
       error: 'Complétez le contenu du plan (R. 4512-8 et R. 4512-9) avant de signer le plan : premiers secours et évacuation.',
     });
     expect(await changeLog('prevention_plan', 'PP-2026-016')).toEqual(before);
     expect((await plan('PP-2026-016')).signedEuOn).toBeNull();
     expect((await planView('PP-2026-016'))?.contentMissing).toEqual(['premiers secours et évacuation']);
     await setPlan('PP-2026-016', { emergencyOrganisation: "SST de l'atelier montage, défibrillateur à l'accueil" });
-    expect(await signPlanEu('PP-2026-016')).toEqual({});
-    expect(await lastLog('prevention_plan', 'PP-2026-016')).toMatchObject({ action: 'sign', summary: "Signé pour l'entreprise utilisatrice", byId: 'sbenali' });
+    expect(await signEu('PP-2026-016')).toEqual({ ok: true, id: 'PP-2026-016' });
+    expect(await lastLog('prevention_plan', 'PP-2026-016')).toMatchObject({ action: 'sign', summary: "Signé pour l'entreprise utilisatrice par [H. Marchand] (Directeur de site), le 09/10/2026", byId: 'sbenali' });
   });
 
   it('recordPlanEeSignature refusée sans coordination et commandement', async () => {
     actAs('Chef de service');
     const { coordination } = await plan('PP-2026-013');
     await setPlan('PP-2026-013', { coordination: ' ' });
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '2026-10-03' }))).toEqual({
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03' }))).toEqual({
       error: 'Complétez le contenu du plan (R. 4512-8 et R. 4512-9) avant de recueillir les signatures : coordination et commandement.',
     });
     expect((await plan('PP-2026-013')).signedEeOn).toBeNull();
@@ -119,8 +123,8 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
       }));
       expect(created).toEqual({ ok: true, id: 'PP-2026-019' });
       expect((await planView('PP-2026-019'))).toMatchObject({ mandatory: false, contentMissing: [], contentStats: { filled: 0, total: 9 } });
-      expect(await signPlanEu('PP-2026-019')).toEqual({});
-      expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-019', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-019' });
+      expect(await signEu('PP-2026-019')).toEqual({ ok: true, id: 'PP-2026-019' });
+      expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-019', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-019' });
       expect(await plan('PP-2026-019')).toMatchObject({ status: 'signe', firstSignedOn: '2026-10-09' });
     } finally {
       await db.update(t.sites).set({ ppFromFirstMinute: true }).where(eq(t.sites.id, 'ville-b'));
@@ -187,16 +191,16 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
       dangerousPhases: 'Soudage de platines en hauteur', equipment: "Postes de soudage de l'entreprise extérieure", workerInstructions: 'Permis de feu journalier',
       emergencyOrganisation: 'SST du magasin ; évacuation selon le plan affiché', coordination: 'Point quotidien avec [C. Lefèvre]', sirPosts: 'Aucun poste',
     });
-    expect(await signPlanEu('PP-2026-015')).toEqual({});
+    expect(await signEu('PP-2026-015')).toEqual({ ok: true, id: 'PP-2026-015' });
     expect(await lastLog('prevention_plan', 'PP-2026-015')).toMatchObject({
-      action: 'sign', byId: 'clefevre', summary: "Signé pour l'entreprise utilisatrice après le début de l'intervention (06/10/2026) : écart R. 4512-6",
+      action: 'sign', byId: 'clefevre', summary: "Signé pour l'entreprise utilisatrice par [H. Marchand] (Directeur de site), le 09/10/2026, après le début de l'intervention (06/10/2026) : écart R. 4512-6",
     });
     expect((await plan('PP-2026-015')).firstSignedOn).toBeNull();
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-015', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-015' });
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-015', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-015' });
     expect(await lastLog('prevention_plan', 'PP-2026-015')).toMatchObject({
-      action: 'sign', summary: "Signature de l'entreprise extérieure enregistrée (09/10/2026), après le début de l'intervention : écart R. 4512-6",
+      action: 'sign', summary: "Signature de l'entreprise extérieure enregistrée : [Représentant EE] (Chef de chantier), le 09/10/2026, après le début de l'intervention : écart R. 4512-6",
     });
-    expect(await plan('PP-2026-015')).toMatchObject({ status: 'signe', signedEuOn: '2026-10-09', signedEeOn: '2026-10-09', firstSignedOn: '2026-10-09' });
+    expect(await plan('PP-2026-015')).toMatchObject({ status: 'signe', signedEuOn: '2026-10-09', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09', firstSignedOn: '2026-10-09' });
     const view = await planView('PP-2026-015');
     expect(view).toMatchObject({ missingSignature: false, startGap: { kind: 'signe_apres', past: true, signedOn: '2026-10-09' } });
     expect(view?.closeBlock).toBe('Permis rattachés encore actifs (PF-2026-032) : clôturez-les ou annulez-les avant de clore le plan.');
@@ -217,10 +221,10 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect(await lastLog('prevention_plan', 'PP-2025-041')).toMatchObject({ summary: 'Plan modifié, signatures effacées', reason: null });
     expect((await planView('PP-2025-041'))?.startGap).toBeNull();
 
-    expect(await signPlanEu('PP-2025-041')).toEqual({});
-    expect(await lastLog('prevention_plan', 'PP-2025-041')).toMatchObject({ summary: "Signé pour l'entreprise utilisatrice" });
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2025-041', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2025-041' });
-    expect(await lastLog('prevention_plan', 'PP-2025-041')).toMatchObject({ summary: "Signature de l'entreprise extérieure enregistrée (09/10/2026)" });
+    expect(await signEu('PP-2025-041')).toEqual({ ok: true, id: 'PP-2025-041' });
+    expect(await lastLog('prevention_plan', 'PP-2025-041')).toMatchObject({ summary: "Signé pour l'entreprise utilisatrice par [H. Marchand] (Directeur de site), le 09/10/2026" });
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2025-041', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2025-041' });
+    expect(await lastLog('prevention_plan', 'PP-2025-041')).toMatchObject({ summary: "Signature de l'entreprise extérieure enregistrée : [Représentant EE] (Chef de chantier), le 09/10/2026" });
     expect(await plan('PP-2025-041')).toMatchObject({ status: 'signe', firstSignedOn: '2025-12-12' });
     const d = await loadPrevention();
     expect(d.plans.find((p) => p.id === 'PP-2025-041')?.startGap).toBeNull();

@@ -393,14 +393,19 @@ async function readVersionFields(fd: FormData) {
   const f = formReader(fd);
   const validatedById = f.str('validatedById', { required: true });
   const cseConsultedOn = f.date('cseConsultedOn');
+  // DUE-03 : transmission au SPST et dépôt sur le portail numérique.
+  const spstSentOn = f.date('spstSentOn');
+  const portalDepositedOn = f.date('portalDepositedOn');
   const comment = f.str('comment', { max: 1000 }) || null;
   if (cseConsultedOn && cseConsultedOn > today()) f.fail('cseConsultedOn', "Date postérieure à aujourd'hui.");
+  if (spstSentOn && spstSentOn > today()) f.fail('spstSentOn', "Date postérieure à aujourd'hui.");
+  if (portalDepositedOn && portalDepositedOn > today()) f.fail('portalDepositedOn', "Date postérieure à aujourd'hui.");
   if (validatedById) {
     const db = await getDb();
     const [p] = await db.select({ id: t.people.id }).from(t.people).where(eq(t.people.id, validatedById));
     if (!p) f.fail('validatedById', 'Personne inconnue.');
   }
-  return { f, validatedById, cseConsultedOn, comment };
+  return { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment };
 }
 
 /**
@@ -410,8 +415,12 @@ async function readVersionFields(fd: FormData) {
 export async function createDuerpVersion(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireRiskApprover();
   if (error) return { error };
-  const { f, validatedById, cseConsultedOn, comment } = await readVersionFields(fd);
+  const { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment } = await readVersionFields(fd);
   const version = f.str('version', { required: true, max: 20 });
+  // La nouvelle version prend effet aujourd'hui : sa transmission ne peut pas la précéder.
+  for (const [name, v] of [['spstSentOn', spstSentOn], ['portalDepositedOn', portalDepositedOn]] as const) {
+    if (v && v < today()) f.fail(name, "La nouvelle version prend effet aujourd'hui : date au plus tôt aujourd'hui.");
+  }
 
   const db = await getDb();
   if (version) {
@@ -437,7 +446,7 @@ export async function createDuerpVersion(_prev: FormState, fd: FormData): Promis
       }
       await tx.insert(t.duerpVersions).values({
         version, current: true, updatedOn: now, nextUpdateOn: addMonths(now, 12), retention: DUERP_RETENTION,
-        validatedById, cseConsultedOn, archivedOn: null, comment, snapshot: null,
+        validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, archivedOn: null, comment, snapshot: null,
       });
       const previous = existing.find((v) => v.current)?.version;
       await logChange(tx, {
@@ -459,7 +468,7 @@ export async function createDuerpVersion(_prev: FormState, fd: FormData): Promis
 export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireRiskApprover();
   if (error) return { error };
-  const { f, validatedById, cseConsultedOn, comment } = await readVersionFields(fd);
+  const { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment } = await readVersionFields(fd);
   const version = f.str('version', { required: true });
   if (!f.ok) return f.state();
 
@@ -467,21 +476,31 @@ export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData):
   const [row] = await db.select().from(t.duerpVersions).where(eq(t.duerpVersions.version, version));
   if (!row) return { error: 'Version introuvable.' };
   if (!row.current) return { error: 'Une version archivée ne peut plus être modifiée.' };
+  // Champ absent du formulaire (ancien formulaire, appel direct) : valeur enregistrée conservée.
+  const spst = fd.has('spstSentOn') ? spstSentOn : row.spstSentOn;
+  const portal = fd.has('portalDepositedOn') ? portalDepositedOn : row.portalDepositedOn;
+  for (const [name, v] of [['spstSentOn', fd.has('spstSentOn') ? spstSentOn : null], ['portalDepositedOn', fd.has('portalDepositedOn') ? portalDepositedOn : null]] as const) {
+    if (v && v < row.updatedOn) f.fail(name, `Au plus tôt le ${fmtDate(row.updatedOn)} (mise à jour de la version).`);
+  }
+  if (!f.ok) return f.state();
   const people = await loadPeople();
   // La version en vigueur n'a pas d'instantané (il est pris à l'archivage) : snapshot remis à null,
   // ce qui efface aussi un commentaire hérité de l'ancien format.
   await db.transaction(async (tx) => {
     await tx.update(t.duerpVersions)
-      .set({ validatedById, cseConsultedOn, comment, snapshot: null })
+      .set({ validatedById, cseConsultedOn, spstSentOn: spst, portalDepositedOn: portal, comment, snapshot: null })
       .where(eq(t.duerpVersions.version, version));
     const fmt = (v: unknown) => (v == null || v === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtDate(String(v)) : String(v));
     const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : null);
     await logChange(tx, {
       entityType: 'duerp_version', entityId: version, action: 'update', summary: `Version ${version} complétée`,
       details: diffFields(
-        { validatedBy: name(row.validatedById), cseConsultedOn: row.cseConsultedOn, comment: versionComment(row) },
-        { validatedBy: name(validatedById), cseConsultedOn, comment },
-        { validatedBy: 'Validation', cseConsultedOn: 'Consultation du CSE', comment: 'Commentaire' }, fmt,
+        { validatedBy: name(row.validatedById), cseConsultedOn: row.cseConsultedOn, spstSentOn: row.spstSentOn, portalDepositedOn: row.portalDepositedOn, comment: versionComment(row) },
+        { validatedBy: name(validatedById), cseConsultedOn, spstSentOn: spst, portalDepositedOn: portal, comment },
+        {
+          validatedBy: 'Validation', cseConsultedOn: 'Consultation du CSE', spstSentOn: 'Transmission au SPST', portalDepositedOn: 'Dépôt sur le portail numérique',
+          comment: 'Commentaire',
+        }, fmt,
       ),
     });
   });

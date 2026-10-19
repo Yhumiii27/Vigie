@@ -32,7 +32,7 @@ describe('TF1 / TG du tableau de bord (TDB-04)', () => {
     const kpi = await tf1Kpi();
     expect(kpi).toMatchObject({
       label: 'TF1 · 12 mois glissants', value: fr(want.tf1, 1), sub: `TG ${fr(want.tg, 2)}`,
-      note: 'Objectif 2026 : TF1 < 4 · oct. 2025 – sept. 2026', tone: 'neutral',
+      note: 'Objectif 2026 : TF1 ≤ 4,0 · oct. 2025 – sept. 2026', tone: 'neutral',
     });
     const { safety } = await loadDashboard();
     expect(safety).toMatchObject({ target: 4, period: 'oct. 2025 – sept. 2026', missing: null, complete: true });

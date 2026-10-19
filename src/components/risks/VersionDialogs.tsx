@@ -96,7 +96,7 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 720 }}>
-          <thead><tr><th>Version</th><th>Mise à jour</th><th>Archivée le</th><th>Validée par</th><th>CSE consulté le</th><th>Instantané</th></tr></thead>
+          <thead><tr><th>Version</th><th>Mise à jour</th><th>Archivée le</th><th>Validée par</th><th>CSE consulté le</th><th>Transmise au SPST</th><th>Instantané</th></tr></thead>
           <tbody>
             {versions.map((v) => (
               <tr key={v.version}>
@@ -112,6 +112,10 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
                 <td style={{ verticalAlign: 'top' }}>{v.validatedBy || '—'}</td>
                 <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', color: v.current && !v.cseConsultedOn ? TONE.warn.fg : undefined }}>
                   {v.cseConsultedOn ? fmtDate(v.cseConsultedOn) : v.current ? 'À renseigner' : '—'}
+                </td>
+                <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', color: v.current && !v.spstSentOn ? TONE.warn.fg : undefined }}>
+                  {v.spstSentOn ? fmtDate(v.spstSentOn) : v.current ? 'À renseigner' : '—'}
+                  {v.portalDepositedOn && <div style={{ fontSize: 11.5, color: 'var(--color-neutral-400)' }}>Portail : {fmtDate(v.portalDepositedOn)}</div>}
                 </td>
                 <td style={{ verticalAlign: 'top' }}>
                   {v.current ? (
@@ -200,7 +204,9 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
   );
 }
 
-type VersionDefaults = { version: string; validatedById?: string | null; cseConsultedOn?: string | null; comment?: string | null };
+type VersionDefaults = {
+  version: string; validatedById?: string | null; cseConsultedOn?: string | null; spstSentOn?: string | null; portalDepositedOn?: string | null; comment?: string | null;
+};
 
 /** Champs d'une version : création (numéro proposé) ou complément de la version en vigueur. */
 function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
@@ -227,6 +233,14 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
         </Field>
         <Field name="cseConsultedOn" label="Consultation du CSE" hint={create ? undefined : 'Date de la réunion où le CSE a été consulté.'}>
           <Input name="cseConsultedOn" type="date" defaultValue={defaults.cseConsultedOn ?? ''} />
+        </Field>
+      </FormRow>
+      <FormRow>
+        <Field name="spstSentOn" label="Transmise au SPST le" hint="Chaque mise à jour est transmise au service de prévention et de santé au travail (R. 4121-4).">
+          <Input name="spstSentOn" type="date" defaultValue={defaults.spstSentOn ?? ''} />
+        </Field>
+        <Field name="portalDepositedOn" label="Déposée sur le portail numérique le" hint="Dépôt dématérialisé (L. 4121-3-1) : dès l'ouverture du portail.">
+          <Input name="portalDepositedOn" type="date" defaultValue={defaults.portalDepositedOn ?? ''} />
         </Field>
       </FormRow>
       <Field name="comment" label="Commentaire" hint="Objet de la mise à jour : nouvelles unités, risques réévalués, suite d'accident…">

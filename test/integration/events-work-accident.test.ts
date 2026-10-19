@@ -248,7 +248,7 @@ describe('pièces médicales (SEC-06)', () => {
     expect(await lastLog('event', EV)).toMatchObject({ action: 'attach', summary: '1 pièce médicale ajoutée', details: [{ field: 'Pièce médicale', from: null, to: 'certificat-medical.pdf' }] });
     const other = await created({ type: 'PA' });
     const f = new FormData(); f.set('eventId', other); f.set('health', '1'); f.append('files', certificate());
-    expect(await addEventFiles(f)).toEqual({ error: 'Pièces médicales : réservées aux accidents du travail.' });
+    expect(await addEventFiles(f)).toEqual({ error: 'Pièces médicales : réservées aux accidents du travail et aux maladies professionnelles.' });
   });
 
   it('lecture : /fichiers refuse la pièce médicale aux autres rôles (déclarant compris) ; absente de leur fiche', async () => {

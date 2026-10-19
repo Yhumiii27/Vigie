@@ -6,7 +6,7 @@ import {
   DECLARANT_MAX, MAX_BATCH_BYTES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, REPORT_TRAP_FIELD,
 } from '@/components/events/shared';
 import { createReport } from '@/server/events';
-import { EVENT_TYPES, EVENT_TYPE_KEYS } from '@/lib/domain';
+import { EVENT_TYPES, REPORT_TYPE_KEYS } from '@/lib/domain';
 
 type Props = {
   siteLabel: string;
@@ -269,7 +269,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       </div>
 
       <div role="radiogroup" aria-label="Type de signalement" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        {EVENT_TYPE_KEYS.map((k) => (
+        {REPORT_TYPE_KEYS.map((k) => (
           <button key={k} type="button" role="radio" aria-checked={type === k} className={`vg-choice${type === k ? ' is-on' : ''}`} onClick={() => setType(k)}>
             <i className={`ph ${EVENT_TYPES[k].icon}`} />{EVENT_TYPES[k].label}
           </button>

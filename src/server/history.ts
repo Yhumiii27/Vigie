@@ -18,7 +18,9 @@ import { getSession, siteFilter } from '@/lib/session';
 export type HistoryEntity =
   | 'requirement' | 'control' | 'prevention_plan' | 'contractor'
   // Paquet 3 (traçabilité et journal) :
-  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption';
+  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption'
+  // Paquet 5 (conformité réglementaire) : objectifs QHSE (AUD-13), contexte du système de management (CNF-05).
+  | 'qhse_objective' | 'context_item';
 
 type Rule = {
   screen: ScreenKey;
@@ -158,6 +160,27 @@ const RULES: Record<HistoryEntity, Rule> = {
       if (!siteId || !month || extra !== undefined || !ISO_MONTH.test(month)) return undefined;
       const [s] = await (await db()).select({ id: t.sites.id }).from(t.sites).where(eq(t.sites.id, siteId));
       return s && { siteId: s.id };
+    },
+  },
+  // Objectifs QHSE (AUD-13) : écran Audits ; objectif d'un site ou de tous les sites, sur tout le périmètre.
+  qhse_objective: {
+    screen: 'audits',
+    scope: 'perimeter',
+    async siteOf(id) {
+      const n = num(id);
+      if (n === null) return undefined;
+      const [o] = await (await db()).select({ siteId: t.qhseObjectives.siteId }).from(t.qhseObjectives).where(eq(t.qhseObjectives.id, n));
+      return o;
+    },
+  },
+  // Contexte du système de management (CNF-05) : commun à l'entreprise.
+  context_item: {
+    screen: 'audits',
+    async siteOf(id) {
+      const n = num(id);
+      if (n === null) return undefined;
+      const [c] = await (await db()).select({ id: t.contextItems.id }).from(t.contextItems).where(eq(t.contextItems.id, n));
+      return c && { siteId: null };
     },
   },
 };

@@ -10,6 +10,10 @@ import {
 } from '@/server/prevention';
 import { loadPrevention } from '@/lib/data/prevention';
 
+/** Signature EU (PRV-07) : date, nom et qualité du signataire. */
+const signEu = (id: string, extra: Record<string, string> = {}) =>
+  signPlanEu({}, form({ id, signedEuOn: '2026-10-09', signedEuName: '[H. Marchand]', signedEuQuality: 'Directeur de site', ...extra }));
+
 // Recette des server actions des plans de prévention jamais exécutées jusqu'ici (QUA-05) : signatures EU et EE,
 // clôture, annulation, suppression d'un brouillon, pièces jointes ; droits, site sélectionné, journal, motifs.
 // Jeu de démonstration au 09/10/2026 (src/db/seeds/prevention.ts) : sites Seveso seuil haut « dès la première minute ».
@@ -26,41 +30,41 @@ describe('droits et site sélectionné', () => {
   it('Salarié : aucune action sur les plans', async () => {
     actAs('Salarié');
     const denied = { error: 'Votre rôle ne permet pas cette modification.' };
-    expect(await signPlanEu('PP-2026-016')).toEqual(denied);
+    expect(await signEu('PP-2026-016')).toEqual(denied);
     expect(await closePlan('PP-2026-011')).toEqual(denied);
     expect(await deletePlan('PP-2026-018')).toEqual(denied);
     expect(await cancelPlan({}, form({ id: 'PP-2026-017', reason: 'Test' }))).toEqual(denied);
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '2026-10-03' }))).toEqual(denied);
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03' }))).toEqual(denied);
     expect(await addPlanAttachments({}, formWith({ id: 'PP-2026-016' }, { files: [file()] }))).toEqual(denied);
     expect((await plan('PP-2026-016')).signedEuOn).toBeNull();
   });
 
   it('plan d’un autre site que celui sélectionné : refusé', async () => {
     actAs('Chef de service', 'ville-b');
-    expect(await signPlanEu('PP-2026-016')).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
+    expect(await signEu('PP-2026-016')).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
     actAs('Chef de service', 'ville-a');
     expect(await closePlan('PP-2026-011')).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
-    expect(await signPlanEu('PP-inconnu')).toEqual({ error: 'Plan de prévention introuvable.' });
+    expect(await signEu('PP-inconnu')).toEqual({ error: 'Plan de prévention introuvable.' });
   });
 });
 
 describe('signPlanEu : signature de l’entreprise utilisatrice', () => {
   it('signe à la date du jour après l’inspection commune, journalisé avec son auteur', async () => {
     actAs('Chef de projet', 'all');
-    expect(await signPlanEu('PP-2026-016')).toEqual({});
+    expect(await signEu('PP-2026-016')).toEqual({ ok: true, id: 'PP-2026-016' });
     expect(await plan('PP-2026-016')).toMatchObject({ signedEuOn: '2026-10-09', signedEeOn: null, status: 'a_signer' });
-    expect(await lastLog('prevention_plan', 'PP-2026-016')).toMatchObject({ action: 'sign', summary: "Signé pour l'entreprise utilisatrice", byId: 'edubois' });
-    expect(await signPlanEu('PP-2026-016')).toEqual({ error: "Le plan est déjà signé par l'entreprise utilisatrice." });
+    expect(await lastLog('prevention_plan', 'PP-2026-016')).toMatchObject({ action: 'sign', summary: "Signé pour l'entreprise utilisatrice par [H. Marchand] (Directeur de site), le 09/10/2026", byId: 'edubois' });
+    expect(await signEu('PP-2026-016')).toEqual({ error: "Le plan est déjà signé par l'entreprise utilisatrice." });
   });
   it('refusée sans inspection commune réalisée, sans mesures de prévention, sur un plan annulé', async () => {
     actAs('Animateur QHSE', 'all');
-    expect(await signPlanEu('PP-2026-015')).toEqual({ error: "Réalisez l'inspection commune préalable avant de signer le plan." });
-    expect(await signPlanEu('PP-2026-018')).toEqual({ error: "Réalisez l'inspection commune préalable avant de signer le plan." }); // prévue le 15/10
+    expect(await signEu('PP-2026-015')).toEqual({ error: "Réalisez l'inspection commune préalable avant de signer le plan." });
+    expect(await signEu('PP-2026-018')).toEqual({ error: "Réalisez l'inspection commune préalable avant de signer le plan." }); // prévue le 15/10
     const db = await getDb();
     await db.update(t.preventionPlans).set({ inspectionOn: '2026-10-08' }).where(eq(t.preventionPlans.id, 'PP-2026-015'));
-    expect(await signPlanEu('PP-2026-015')).toEqual({ error: 'Complétez les mesures de prévention avant de signer le plan.' });
+    expect(await signEu('PP-2026-015')).toEqual({ error: 'Complétez les mesures de prévention avant de signer le plan.' });
     await db.update(t.preventionPlans).set({ inspectionOn: null }).where(eq(t.preventionPlans.id, 'PP-2026-015'));
-    expect(await signPlanEu('PP-2026-010')).toEqual({ error: 'Ce plan est annulé.' });
+    expect(await signEu('PP-2026-010')).toEqual({ error: 'Ce plan est annulé.' });
     expect(await changeLog('prevention_plan', 'PP-2026-015')).toEqual([]);
   });
 });
@@ -68,27 +72,27 @@ describe('signPlanEu : signature de l’entreprise utilisatrice', () => {
 describe('recordPlanEeSignature : signature de l’entreprise extérieure', () => {
   it('contrôles de la date : obligatoire, jamais future, jamais avant l’inspection commune', async () => {
     actAs('Chef de service');
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '' }))).toMatchObject({ fieldErrors: { signedEeOn: 'Date obligatoire.' } });
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '2026-10-10' }))).toMatchObject({ fieldErrors: { signedEeOn: 'La date de signature ne peut pas être future.' } });
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '2026-10-01' }))).toMatchObject({
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '' }))).toMatchObject({ fieldErrors: { signedEeOn: 'Date obligatoire.' } });
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-10' }))).toMatchObject({ fieldErrors: { signedEeOn: 'La date de signature ne peut pas être future.' } });
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-01' }))).toMatchObject({
       error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEeOn: expect.any(String) },
     });
-    expect(await recordPlanEeSignature({}, formWith({ id: 'PP-2026-013', signedEeOn: '2026-10-03' }, { file: [file('scan.zip', 'application/zip')] })))
+    expect(await recordPlanEeSignature({}, formWith({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03' }, { file: [file('scan.zip', 'application/zip')] })))
       .toMatchObject({ fieldErrors: { file: expect.stringContaining('Format non accepté') } });
     expect((await plan('PP-2026-013')).signedEeOn).toBeNull();
   });
   it('enregistre la date et l’exemplaire signé : plan signé, journal, pièce jointe chiffrée ou non sur disque', async () => {
     actAs('Chef de service');
-    const r = await recordPlanEeSignature({}, formWith({ id: 'PP-2026-013', signedEeOn: '2026-10-03' }, { file: [file()] }));
+    const r = await recordPlanEeSignature({}, formWith({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03' }, { file: [file()] }));
     expect(r).toEqual({ ok: true, id: 'PP-2026-013' });
-    expect(await plan('PP-2026-013')).toMatchObject({ signedEuOn: '2026-10-02', signedEeOn: '2026-10-03', status: 'signe' });
+    expect(await plan('PP-2026-013')).toMatchObject({ signedEuOn: '2026-10-02', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03', status: 'signe' });
     expect(await lastLog('prevention_plan', 'PP-2026-013')).toMatchObject({
-      action: 'sign', byId: 'sbenali', summary: "Signature de l'entreprise extérieure enregistrée (03/10/2026), exemplaire signé joint",
+      action: 'sign', byId: 'sbenali', summary: "Signature de l'entreprise extérieure enregistrée : [Représentant EE] (Chef de chantier), le 03/10/2026, exemplaire signé joint",
     });
     const [att] = await planFiles('PP-2026-013');
     expect(att).toMatchObject({ entityType: 'prevention_plan', fileName: 'exemplaire-signe.pdf', uploadedBy: 'sbenali' });
     expect(existsSync(path.join(uploads, att.storagePath))).toBe(true);
-    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeOn: '2026-10-03' }))).toEqual({ error: "La signature de l'entreprise extérieure est déjà enregistrée." });
+    expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-013', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-03' }))).toEqual({ error: "La signature de l'entreprise extérieure est déjà enregistrée." });
   });
 });
 
@@ -159,14 +163,14 @@ describe('closePlan et cancelPlan', () => {
     expect(p).toMatchObject({ status: 'annule', cancelledById: 'hmarchand', cancelReason: 'Vérification reportée au mois prochain' });
     expect(p.cancelledAt).toBeInstanceOf(Date);
     expect(await lastLog('prevention_plan', 'PP-2026-017')).toMatchObject({ action: 'cancel', reason: 'Vérification reportée au mois prochain', byId: 'hmarchand' });
-    expect(await signPlanEu('PP-2026-017')).toEqual({ error: 'Ce plan est annulé.' });
+    expect(await signEu('PP-2026-017')).toEqual({ error: 'Ce plan est annulé.' });
   });
 
   it('annulation refusée tant que des activités de la carte en cours ou à venir y sont rattachées', async () => {
     actAs('Animateur QHSE');
     const db = await getDb();
     // Plan signé pour l'exercice, permis annulé : seule reste l'activité de la carte rattachée (du 06 au 16/10).
-    await db.update(t.preventionPlans).set({ status: 'signe', inspectionOn: '2026-10-05', signedEuOn: '2026-10-05', signedEeOn: '2026-10-05' })
+    await db.update(t.preventionPlans).set({ status: 'signe', inspectionOn: '2026-10-05', signedEuOn: '2026-10-05', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-05' })
       .where(eq(t.preventionPlans.id, 'PP-2026-015'));
     await db.update(t.permits).set({ status: 'annule', cancelReason: 'Test' }).where(eq(t.permits.preventionPlanId, 'PP-2026-015'));
     expect((await cancelPlan({}, form({ id: 'PP-2026-015', reason: 'Intervention interrompue' }))).error).toMatch(/^Activités de la carte en cours ou à venir rattachées au plan/);

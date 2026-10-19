@@ -4,11 +4,15 @@ import { useState, type ReactNode } from 'react';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import type { Option } from '@/lib/data/options';
-import { ENV_ASPECTS, ENV_MEDIA, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, QUALIFICATION_FIELDS, SEVERITY, type EventType, type QualificationField } from '@/lib/domain';
+import {
+  ENV_ASPECTS, ENV_MEDIA, EVENT_TYPES, EVENT_TYPE_KEYS, HEALTH_EVENT_TYPES, NC_DISPOSITIONS, NC_DISPOSITION_KEYS, NC_ORIGINS, QUALIFICATION_FIELDS, SEVERITY,
+  type EventType, type QualificationField,
+} from '@/lib/domain';
 import type { FormState } from '@/lib/forms';
 import { createEvent, saveEvent } from '@/server/events';
 import { AccidentFields, requiredHint, type AccidentValues } from './AccidentFields';
-import { hasNcOrigin, mentionsInjury } from './shared';
+import { MpFields, type MpValues } from './MpFields';
+import { MP_TITLE, hasNcDisposition, hasNcOrigin, mentionsInjury } from './shared';
 
 /** Champs modifiables d'un événement (données simples transmises par la page serveur ; `knownAt` à l'heure de Paris). */
 export type EditableEvent = {
@@ -17,7 +21,8 @@ export type EditableEvent = {
   description: string; immediateMeasures: string; ncOrigin: string | null;
   customer: string | null; customerRef: string | null; envAspect: string | null; envMedium: string | null;
   controlId: number | null; riskId: number | null; documentId: string | null; preventionPlanId: string | null; permitId: string | null;
-} & AccidentValues;
+  ncDisposition?: string | null; ncQuantity?: number | null; ncCostKeur?: number | null; ncDispositionNote?: string | null;
+} & AccidentValues & MpValues;
 
 /** Valeurs proposées à la création (site, lieu, plan ou permis d'origine, déclarant = utilisateur courant). */
 export type EventDefaults = Partial<Omit<EditableEvent, 'id'>> & { declarantId?: string | null };
@@ -34,6 +39,33 @@ const SEVERITY_OPTIONS = [1, 2, 3, 4].map((g) => [String(g), SEVERITY[g]] as con
 const NC_OPTIONS = NC_ORIGINS.map((o) => [o, o] as const);
 const ASPECT_OPTIONS = ENV_ASPECTS.map((o) => [o, o] as const);
 const MEDIUM_OPTIONS = ENV_MEDIA.map((o) => [o, o] as const);
+const DISPOSITION_OPTIONS = NC_DISPOSITION_KEYS.map((k) => [k, NC_DISPOSITIONS[k]] as const);
+
+/** Traitement d'un produit non conforme (EVT-17, ISO 9001 §8.7) : décision, quantité, coût de non-qualité, dérogation. */
+function NcDispositionFields({ e }: { e: EventDefaults }) {
+  const [disposition, setDisposition] = useState(e.ncDisposition ?? '');
+  const num = (v: number | null | undefined) => (v == null ? '' : String(v).replace('.', ','));
+  return (
+    <>
+      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Traitement du produit non conforme</h6>
+      <FormRow cols={3}>
+        <Field name="ncDisposition" label="Décision">
+          <Select name="ncDisposition" options={DISPOSITION_OPTIONS} value={disposition} onChange={(ev) => setDisposition(ev.target.value)} placeholder="À décider" />
+        </Field>
+        <Field name="ncQuantity" label="Quantité concernée" hint="Pièces, lots ou unités.">
+          <Input name="ncQuantity" inputMode="decimal" defaultValue={num(e.ncQuantity)} />
+        </Field>
+        <Field name="ncCostKeur" label="Coût de non-qualité (k€ HT)" hint="Retouche, rebut, transport, temps passé ; 1,45 pour 1 450 €.">
+          <Input name="ncCostKeur" inputMode="decimal" defaultValue={num(e.ncCostKeur)} />
+        </Field>
+      </FormRow>
+      <Field name="ncDispositionNote" label={disposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement'}
+        hint={disposition === 'derogation' ? 'Obligatoire : client ou donneur d’ordre, référence et conditions de la dérogation.' : undefined}>
+        <Input name="ncDispositionNote" defaultValue={e.ncDispositionNote ?? ''} maxLength={500} />
+      </Field>
+    </>
+  );
+}
 
 /**
  * Bouton « Modifier » de la fiche événement. `health` : rôle habilité aux données de santé d'un AT (SEC-06) ; sinon
@@ -78,10 +110,11 @@ export function EventFields(props: FieldsProps) {
   const [description, setDescription] = useState(e.description ?? '');
   const [declarantId, setDeclarantId] = useState(create ? (props.defaults?.declarantId ?? '') : '');
   const at = type === 'AT';
+  const mp = type === 'MP';
   // Données exigées à la qualification pour le type choisi (EVT-05) : signalées dans l'aide du champ.
   const required = (k: QualificationField) => (QUALIFICATION_FIELDS[type as EventType] ?? []).includes(k);
   const hint = (k: QualificationField, base?: ReactNode) => (required(k) ? requiredHint(base) : base);
-  const textHint = (text: string) => (at ? <>Sans détail médical : visible de l&apos;encadrement et dans les échéances.<InjuryWarning text={text} health={health} /></> : undefined);
+  const textHint = (text: string) => (at || mp ? <>Sans détail médical : visible de l&apos;encadrement et dans les échéances.<InjuryWarning text={text} health={health} /></> : undefined);
   // Un projet saisi avant la synchronisation Keystone reste proposé tel quel.
   // Origine NC : celle de la fiche tant que le type n'a pas changé ; sinon repartir de la valeur par défaut du nouveau type.
   const ncDefault = type === e.type && e.ncOrigin ? e.ncOrigin : type === 'RC' ? 'Réclamation client' : '';
@@ -90,7 +123,10 @@ export function EventFields(props: FieldsProps) {
     : options.projects;
   const str = (v: string | number | null | undefined) => (v == null ? '' : String(v));
   // Rôle non habilité : un accident du travail enregistré garde son type (requalification par l'animateur QHSE ou la direction).
-  const typeOptions = !health && !create && e.type === 'AT' ? TYPE_OPTIONS.filter(([k]) => k === 'AT') : TYPE_OPTIONS;
+  // Maladie professionnelle (EVT-09) : proposée aux rôles habilités à la création seulement ; elle garde ensuite son type.
+  const typeOptions = !health && !create && e.type === 'AT' ? TYPE_OPTIONS.filter(([k]) => k === 'AT')
+    : !create && e.type === 'MP' ? TYPE_OPTIONS.filter(([k]) => k === 'MP')
+      : TYPE_OPTIONS.filter(([k]) => (create && health) || !(HEALTH_EVENT_TYPES as readonly string[]).includes(k));
 
   return (
     <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id } : undefined}
@@ -106,9 +142,15 @@ export function EventFields(props: FieldsProps) {
           <Input name="occurredTime" type="time" defaultValue={e.occurredTime ?? ''} />
         </Field>
       </FormRow>
-      <Field name="title" label="Intitulé" hint={textHint(title)}>
-        <Input name="title" value={title} onChange={(ev) => setTitle(ev.target.value)} maxLength={200} autoFocus />
-      </Field>
+      {mp ? (
+        <Field name="title" label="Intitulé" hint="Imposé : ni la victime ni la maladie (l'intitulé paraît dans les actions liées).">
+          <Input name="title" value={MP_TITLE} readOnly />
+        </Field>
+      ) : (
+        <Field name="title" label="Intitulé" hint={textHint(title)}>
+          <Input name="title" value={title} onChange={(ev) => setTitle(ev.target.value)} maxLength={200} autoFocus />
+        </Field>
+      )}
       {create && (
         <FormRow>
           <Field name="declarantId" label="Déclarant">
@@ -177,8 +219,11 @@ export function EventFields(props: FieldsProps) {
       <Field name="immediateMeasures" label="Mesures immédiates">
         <TextArea name="immediateMeasures" defaultValue={e.immediateMeasures} rows={2} maxLength={4000} />
       </Field>
+      {hasNcDisposition(type) && <NcDispositionFields key={type} e={e} />}
       {at && <AccidentFields event={e} people={options.victims ?? options.people} health={health} benign={benign} />}
+      {mp && health && <MpFields event={e} people={options.victims ?? options.people} />}
 
+      {!mp && <>
       <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Rattachements</h6>
       <FormRow>
         <Field name="controlId" label="Équipement contrôlé (contrôle périodique)">
@@ -199,6 +244,7 @@ export function EventFields(props: FieldsProps) {
       <Field name="permitId" label="Permis" hint="Le plan de prévention du permis est repris s'il n'est pas renseigné.">
         <Select name="permitId" options={options.permits} defaultValue={e.permitId ?? ''} placeholder="Aucun" />
       </Field>
+      </>}
     </ActionForm>
   );
 }

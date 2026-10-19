@@ -71,6 +71,13 @@
       "when": 1792315355975,
       "tag": "0009_partage",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792401175419,
+      "tag": "0010_regulatory_compliance",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,7 @@
 // Jours fériés : liste légale de l'art. L. 3133-1 du code du travail ; droit local d'Alsace-Moselle en plus (Vendredi saint,
 // 26 décembre), option du site (sites.alsace_moselle).
 
-import { CPAM_DELAY_HOURS, ETT_DELAY_HOURS, RESERVES_DELAY_DAYS } from '@/lib/domain';
+import { CPAM_DELAY_HOURS, ETT_DELAY_HOURS, MP_QUESTIONNAIRE_DAYS, RESERVES_DELAY_DAYS } from '@/lib/domain';
 import { addDays, fmtDate, toParisLocal } from '@/lib/dates';
 
 export type DeadlineOptions = { alsaceMoselle?: boolean };
@@ -102,12 +102,28 @@ export function ettDeadline(knownLocal: string): Deadline {
   return countHours(knownLocal, ETT_DELAY_HOURS, () => false);
 }
 
-/** Dernier jour des réserves motivées : déclaration + 10 jours, reporté au premier jour ni samedi, ni dimanche, ni férié. */
-export function reservesDeadline(declaredOn: string, opts: DeadlineOptions = {}): string {
+/**
+ * Dernier jour d'un délai de `days` jours francs à compter de `fromOn` (jour de départ non compté), reporté au premier jour
+ * ni samedi, ni dimanche, ni férié (art. 642 du code de procédure civile).
+ */
+export function francDaysDeadline(fromOn: string, days: number, opts: DeadlineOptions = {}): string {
   const am = !!opts.alsaceMoselle;
-  let d = addDays(declaredOn, RESERVES_DELAY_DAYS);
+  let d = addDays(fromOn, days);
   while (weekday(d) === 0 || weekday(d) === 6 || isHoliday(d, am)) d = addDays(d, 1);
   return d;
+}
+
+/** Dernier jour des réserves motivées : déclaration + 10 jours, reporté au premier jour ni samedi, ni dimanche, ni férié. */
+export function reservesDeadline(declaredOn: string, opts: DeadlineOptions = {}): string {
+  return francDaysDeadline(declaredOn, RESERVES_DELAY_DAYS, opts);
+}
+
+/**
+ * Maladie professionnelle (EVT-09) : retour du questionnaire de la caisse par l'employeur sous 30 jours francs à compter de
+ * sa réception (art. R. 461-9 CSS).
+ */
+export function mpQuestionnaireDeadline(receivedOn: string, opts: DeadlineOptions = {}): string {
+  return francDaysDeadline(receivedOn, MP_QUESTIONNAIRE_DAYS, opts);
 }
 
 /** « avant le 12/10/2026 à 15 h 00 », ou « avant la fin du 13/10/2026 » pour une échéance à minuit. */

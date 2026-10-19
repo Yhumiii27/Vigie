@@ -55,6 +55,37 @@ export function renewalDue(state: SkillState, expiresOn: string | null, upcoming
   return due < now ? now : due;
 }
 
+/**
+ * Prérequis non satisfaits (HAB-10) : un titre qui porte des prérequis (titres actifs seulement) n'est valide que si la
+ * personne détient au moins l'un d'eux en cours de validité à `now` (requis ou non pour elle) — par exemple une
+ * autorisation de conduite avec un CACES valide de la catégorie (R. 4323-56). Renvoie les prérequis (tous) quand aucun
+ * n'est valide, [] sinon ou sans prérequis.
+ */
+export function missingPrerequisites(prerequisiteIds: readonly string[], held: ReadonlyMap<string, { expiresOn: string | null } | undefined>, activeIds: ReadonlySet<string>, now: string): string[] {
+  const active = prerequisiteIds.filter((id) => activeIds.has(id));
+  const valid = (id: string) => {
+    const q = held.get(id);
+    return !!q && (!q.expiresOn || q.expiresOn >= now);
+  };
+  return active.length && !active.some(valid) ? active : [];
+}
+
+/** Prérequis qui créeraient un cycle (A exige B qui exige A…) si `titleId` exigeait `prerequisiteIds`. */
+export function prerequisiteCycle(titleId: string, prerequisiteIds: readonly string[], graph: ReadonlyMap<string, readonly string[]>): string | null {
+  for (const start of prerequisiteIds) {
+    const seen = new Set<string>();
+    const stack = [start];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (id === titleId) return start;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      stack.push(...(graph.get(id) ?? []));
+    }
+  }
+  return null;
+}
+
 /** Une formation d'échéance `expiresOn` règle-t-elle le besoin (titre valide au-delà de 60 jours et couvrant les affectations) ? */
 export function coversNeed(expiresOn: string | null, upcoming: readonly Span[], now: string) {
   return renewalDue(heldState(expiresOn, now), expiresOn, upcoming, now) === null;

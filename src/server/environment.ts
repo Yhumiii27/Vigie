@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { and, count, eq, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
-  BSD_NUMBER, BSD_STATUS_KEYS, CONSUMPTION_KINDS, QUALIFICATION_KEYS, TREATMENT_KEYS, WASTE_UNIT_KEYS, defaultQualification, isHazardousCode, isTransitCode,
+  BSD_NUMBER, BSD_REFUSALS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, bsdRefusalErrors, QUALIFICATION_KEYS, TREATMENT_KEYS, WASTE_UNIT_KEYS, defaultQualification, isHazardousCode, isTransitCode,
   normalizeEwc, qualificationError, qualificationLabel, resolveMentions,
 } from '@/components/environment/model';
 import { fmtDate } from '@/lib/dates';
@@ -32,6 +32,7 @@ const ENTRY_LABELS = {
   transporterSiret: 'SIRET du transporteur', transporterAddress: 'Adresse du transporteur', transporterReceipt: 'N° de récépissé',
   pickupAddress: 'Adresse de prise en charge', qualification: 'Qualification du traitement final',
   bsdNumber: 'N° de bordereau', bsdStatus: 'Statut du bordereau', notes: 'Observations', eventId: 'Événement lié',
+  bsdRefusedQuantity: 'Quantité refusée', bsdRefusalReason: 'Motif du refus',
 } as const;
 
 const STREAM_LABELS = {
@@ -101,6 +102,10 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   const qualificationInput = f.oneOf('qualification', QUALIFICATION_KEYS);
   const bsdNumber = f.str('bsdNumber', { max: 40 }).replace(/\s+/g, '').toUpperCase() || null;
   let bsdStatus = f.oneOf('bsdStatus', BSD_STATUS_KEYS);
+  // DOC-12 : refus total ou partiel du déchet par l'installation (motif, quantité refusée).
+  const rawRefused = f.num('bsdRefusedQuantity', { min: 0 });
+  const refusedInput = rawRefused == null ? null : Math.round(rawRefused * 100) / 100;
+  const refusalInput = f.str('bsdRefusalReason', { max: 300 }) || null;
   const notes = f.str('notes', { max: 1000 }) || null;
   const eventId = f.opt('eventId');
 
@@ -111,6 +116,10 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   if (bsdNumber && !BSD_NUMBER.test(bsdNumber)) f.fail('bsdNumber', 'Lettres, chiffres et tirets (ex. BSD-20260312-7KQ4P2XR).');
   if (bsdStatus && !bsdNumber) f.fail('bsdNumber', 'Numéro du bordereau requis pour indiquer son statut.');
   if (bsdNumber && !bsdStatus) bsdStatus = 'emis';
+  for (const [k, msg] of Object.entries(bsdRefusalErrors(bsdNumber ? bsdStatus : null, quantity, refusedInput, refusalInput))) f.fail(k, msg);
+  const refused = bsdNumber && bsdStatus && BSD_REFUSALS.includes(bsdStatus);
+  const bsdRefusedQuantity = refused ? (bsdStatus === 'refuse' ? quantity : refusedInput) : null;
+  const bsdRefusalReason = refused ? refusalInput : null;
 
   const [current] = id ? await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.id, id)) : [];
   if (id && !current) return { error: 'Enlèvement introuvable.' };
@@ -168,7 +177,7 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   const values = {
     siteId: stream!.siteId, streamId: stream!.id, removedOn: removedOn!, quantity: quantity!,
     transporter, transporterSiret, transporterAddress, transporterReceipt, pickupAddress, qualification,
-    bsdNumber, bsdStatus: bsdNumber ? bsdStatus : null, notes, eventId, ...copies,
+    bsdNumber, bsdStatus: bsdNumber ? bsdStatus : null, bsdRefusedQuantity, bsdRefusalReason, notes, eventId, ...copies,
   };
   const label = `${stream!.label} du ${fmtDate(removedOn!)}`;
   const savedId = await db.transaction(async (tx) => {

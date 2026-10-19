@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { CertificationCards } from '@/components/audits/CertificationCards';
+import { ContextCard } from '@/components/audits/ContextCard';
+import { ObjectivesCard } from '@/components/audits/ObjectivesCard';
 import { FindingsCard } from '@/components/audits/FindingsCard';
 import { ProgramTimeline } from '@/components/audits/ProgramTimeline';
 import { PageHeader } from '@/components/PageHeader';
@@ -11,6 +13,8 @@ import type { ActionFormOptions } from '@/lib/action-view';
 import { SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadAudits } from '@/lib/data/audits';
+import { loadContext } from '@/lib/data/context';
+import { loadObjectives } from '@/lib/data/objectives';
 import { loadFormOptions } from '@/lib/data/options';
 
 export const metadata: Metadata = { title: SCREENS.audits.title };
@@ -23,6 +27,8 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     loadFormOptions(),
   ]);
   const { now, certs, year, yearOptions, tracks, allTracks, plan, cancelledPlan, planFindings, auditGroups, cancelledFindings, auditOptions, openElement, openFinding } = data;
+  // AUD-13, CNF-05 : objectifs mesurables de l'année du programme, contexte du système de management.
+  const [objectives, context] = await Promise.all([loadObjectives(year), loadContext()]);
   // Saisie : animateur QHSE et direction ; consultation pour le chef de service et le chef de projet (AUD-02), qui ouvrent
   // en lecture les éléments dont ils sont responsables (?element=).
   const edit = canEdit(session.role, 'audits');
@@ -48,6 +54,10 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
       <PageHeader title={SCREENS.audits.title} sub={`Programme ${year} et revue de direction`} />
       <div className="vg-page">
         <CertificationCards certs={certs} canApprove={approve} />
+
+        <ObjectivesCard data={objectives} canEdit={edit}
+          options={edit ? { people: options.people, sites: options.sites, allSites: options.allSites } : { people: [], sites: [], allSites: false }} />
+        <ContextCard data={context} canEdit={edit} />
 
         <ProgramTimeline key={openElement ?? 'prog'} year={year} curMonth={curMonth} tracks={tracks} allTracks={allTracks} items={plan} cancelled={cancelledPlan}
           findings={planFindings} certs={certOptions} auditOptions={auditOptions} yearOptions={yearOptions} canEdit={edit} canCreate={canCreate} options={actionOptions}

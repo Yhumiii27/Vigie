@@ -207,6 +207,9 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
     <>
       {f.clause && <span className="tag tag-outline" style={{ fontSize: 10, fontFamily: 'ui-monospace, monospace', marginRight: 6, verticalAlign: '1px' }}>{f.clause}</span>}
       {f.text}
+      {f.responseDueOn && !f.actionId && (
+        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>Réponse attendue le {fmtDate(f.responseDueOn)}</span>
+      )}
     </>
   );
   return (
@@ -278,6 +281,10 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
       </Field>
       <Field name="text" label="Constat">
         <TextArea name="text" defaultValue={finding?.text} rows={3} autoFocus />
+      </Field>
+      {/* AUD-09 : délai de réponse fixé par l'organisme ou l'auditeur (écarts seulement). */}
+      <Field name="responseDueOn" label="Réponse attendue le" hint="Écart majeur ou mineur : date limite de réponse (plan d'actions) fixée par l'organisme ou l'auditeur. Ignorée pour les autres constats.">
+        <Input name="responseDueOn" type="date" defaultValue={finding?.responseDueOn ?? ''} />
       </Field>
     </ActionForm>
   );

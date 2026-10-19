@@ -7,10 +7,10 @@ import { daysBetween, fmtDate, fmtDayMonth } from './dates';
 import { today } from '@/lib/today';
 import {
   ACTION_SOURCES, AVANCEMENT, CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SAFETY_WINDOW_MONTHS,
-  SKILL_SOON_DAYS, STEP_CLOSED, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
+  SKILL_SOON_DAYS, STEP_CLOSED, canSeeEventType, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
 } from './domain';
 import { PERSON_COLUMNS, type Person } from './people';
-import { siteFilter, type SiteScope } from './session';
+import { getSession, siteFilter, type SiteScope } from './session';
 
 export type { Person, SiteScope };
 export type EventRow = typeof t.events.$inferSelect;
@@ -32,10 +32,14 @@ export const loadPeople = cache(async () => {
 // consolide), ou sur tout le périmètre de la personne (scope 'perimeter' : échéances, TDB-05). cache() distingue les
 // appels par leurs arguments : f() et f('site') sont deux entrées, sans conséquence.
 
-/** Tous les événements du site, classés sans suite compris (liste « Classés sans suite », fiche). */
+/**
+ * Tous les événements du site, classés sans suite compris (liste « Classés sans suite », fiche). Les maladies
+ * professionnelles (données de santé, EVT-09) ne sont chargées que pour les rôles habilités (canSeeEventType) : absentes
+ * de tous les écrans, indicateurs et échéances des autres rôles.
+ */
 export const loadSiteEvents = cache(async (scope: SiteScope = 'site') => {
-  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
-  const rows = (await db.select().from(t.events)).filter((e) => keep(e.siteId));
+  const [db, keep, { role }] = await Promise.all([getDb(), siteFilter(scope), getSession()]);
+  const rows = (await db.select().from(t.events)).filter((e) => keep(e.siteId) && canSeeEventType(role, e.type));
   return rows.sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.id.localeCompare(a.id, 'fr', { numeric: true }));
 });
 
@@ -113,9 +117,10 @@ export type SafetyRates = {
  * Accident du travail de l'effectif (salarié, ou victime non précisée) : seul compté dans TF1 / TG, les jours sans accident
  * avec arrêt et la pyramide des accidents — les heures travaillées (hours_worked, source RH) sont celles de l'effectif ;
  * l'accident d'un intérimaire relève de l'entreprise de travail temporaire, celui d'une personne extérieure de son employeur.
+ * Un accident de trajet (L. 411-2 CSS, `commute`, EVT-09) n'est pas un accident du travail au sens des taux : exclu aussi.
  */
-export const workforceAccident = (e: { type: string; victimKind: string | null }) =>
-  e.type === 'AT' && e.victimKind !== 'interimaire' && e.victimKind !== 'externe';
+export const workforceAccident = (e: { type: string; victimKind: string | null; commute?: boolean | null }) =>
+  e.type === 'AT' && !e.commute && e.victimKind !== 'interimaire' && e.victimKind !== 'externe';
 
 /**
  * TF1 / TG sur les mois donnés (lastFullMonths), sites de l'entrée seulement :
@@ -134,7 +139,7 @@ export function safetyRates(input: {
   months: string[];
   sites: { id: string; archivedOn: string | null }[];
   hours: { month: string; siteId: string; hours: number }[];
-  events: { type: string; injury: string | null; lostDays: number | null; occurredOn: string; siteId: string | null; victimKind: string | null }[];
+  events: { type: string; injury: string | null; lostDays: number | null; occurredOn: string; siteId: string | null; victimKind: string | null; commute?: boolean | null }[];
 }): SafetyRates {
   const ym = (v: string) => v.slice(0, 7);
   const window = new Set(input.months);
@@ -288,10 +293,12 @@ export const concernedCount = (req: ConcernReq, projects: { deliveryOn: string |
 // ─── Audits : statut calculé d'une certification ────────────────────────────
 
 /** Statut affiché d'un référentiel : engagement, validité du certificat et prochain audit au programme. */
-export function certificationStatus(c: { tone: string; status: string; validUntil: string | null }, nextAuditOn: string | null, now: string): { label: string; tone: Tone } {
+export function certificationStatus(c: { tone: string; status: string; validUntil: string | null; suspendedOn?: string | null }, nextAuditOn: string | null, now: string): { label: string; tone: Tone } {
   const audit = nextAuditOn && (nextAuditOn < now ? `audit du ${fmtDate(nextAuditOn)} à confirmer` : `${c.tone === 'ok' ? 'suivi' : 'audit'} le ${fmtDate(nextAuditOn)}`);
   if (c.tone === 'off') return { label: c.status || 'Non engagé', tone: 'neutral' };
   if (c.tone === 'warn') return { label: [c.status || 'Certification en cours', audit].filter(Boolean).join(' · '), tone: 'warn' };
+  // AUD-08 : certificat suspendu par l'organisme, jusqu'à la levée de la suspension.
+  if (c.suspendedOn) return { label: `Certificat suspendu depuis le ${fmtDate(c.suspendedOn)}`, tone: 'danger' };
   if (c.validUntil && c.validUntil < now) return { label: `Certificat expiré depuis le ${fmtDate(c.validUntil)}`, tone: 'danger' };
   if (c.validUntil && daysBetween(now, c.validUntil) <= CERT_SOON_DAYS) return { label: `Certifié · valable jusqu'au ${fmtDate(c.validUntil)}`, tone: 'warn' };
   if (!nextAuditOn) return { label: 'Certifié · prochain audit à programmer', tone: 'warn' };

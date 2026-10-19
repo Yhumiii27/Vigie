@@ -13,15 +13,16 @@ import { EventEditButton, type EditableEvent, type EventFieldOptions } from '@/c
 import { EventHistory } from '@/components/events/EventHistory';
 import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { NewEventButton } from '@/components/events/NewEventButton';
-import { BENIGN_REGISTER_PATH, addActionBlocker, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
+import { OccupationalSection } from '@/components/events/OccupationalSection';
+import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { admissibleSources, canCreateAction } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { fmtDate, fmtDayMonth, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
-  ACTION_PRIORITIES, ALL_SITES, AVANCEMENT, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
-  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod,
+  ACTION_PRIORITIES, ALL_SITES, AVANCEMENT, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_DISPOSITIONS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
+  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod, type NcDisposition,
 } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
@@ -40,7 +41,9 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
   // ?type=AT, ou plusieurs types séparés par des virgules (?type=NC,RC depuis le tableau de bord).
   const askedTypes = typeof sp.type === 'string' ? sp.type.split(',') : [];
-  const types = EVENT_TYPE_KEYS.filter((k) => askedTypes.includes(k));
+  // Maladie professionnelle (EVT-09) : filtre proposé aux seuls rôles habilités aux données de santé.
+  const typeKeys = EVENT_TYPE_KEYS.filter((k) => canSeeEventType(role, k));
+  const types = typeKeys.filter((k) => askedTypes.includes(k));
   const type = types.length ? types.join(',') : undefined;
   // ?origine=Fournisseurs : origine de la non-conformité (barres « Non-conformités par origine » du tableau de bord).
   const origin = NC_ORIGINS.find((o) => o === sp.origine);
@@ -70,11 +73,11 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
   const params = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, sel: selParam };
 
-  const counts = Object.fromEntries(EVENT_TYPE_KEYS.map((k) => [k, searched.filter((e) => e.type === k).length]));
+  const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
     { key: undefined, label: 'Tous', n: searched.length },
     ...(types.length > 1 ? [{ key: type, label: types.map((k) => EVENT_TYPES[k].label).join(' + '), n: types.reduce((n, k) => n + counts[k], 0) }] : []),
-    ...EVENT_TYPE_KEYS.map((k) => ({ key: k, label: EVENT_TYPES[k].label, n: counts[k] })),
+    ...typeKeys.map((k) => ({ key: k, label: EVENT_TYPES[k].label, n: counts[k] })),
   ];
   const openCount = events.filter(isOpen).length;
   const fieldOptions: EventFieldOptions = {
@@ -301,6 +304,17 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     ['Pilote', e.pilot], ['Gravité potentielle', SEVERITY[e.severity]],
   ];
   if (hasNcOrigin(e.type)) fields.push(['Origine', e.ncOrigin ?? (e.type === 'RC' ? 'Réclamation client' : '—')]);
+  if (e.type === 'AT' && e.commute) fields.push(['Nature', 'Accident de trajet · hors TF1 / TG']);
+  if (hasNcDisposition(e.type)) {
+    // EVT-17 : traitement du produit non conforme (ISO 9001 §8.7).
+    const eur = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} k€ HT`;
+    fields.push(
+      ['Traitement du produit', e.ncDisposition ? NC_DISPOSITIONS[e.ncDisposition as NcDisposition] ?? e.ncDisposition : 'À décider'],
+      ['Quantité concernée', e.ncQuantity != null ? e.ncQuantity.toLocaleString('fr-FR') : '—'],
+      ['Coût de non-qualité', e.ncCostKeur != null ? eur(e.ncCostKeur) : '—'],
+    );
+    if (e.ncDispositionNote) fields.push([e.ncDisposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement', e.ncDispositionNote]);
+  }
   if (e.type === 'RC') fields.push(['Client', e.customer ?? '—'], ['Référence client', e.customerRef ?? '—']);
   if (e.type === 'ENV') fields.push(['Aspect environnemental', e.envAspect ?? '—'], ['Milieu concerné', e.envMedium ?? '—']);
   if (links.risk) {
@@ -335,6 +349,9 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
     injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn, lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven, reservesOn: e.reservesOn,
     controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId,
+    commute: e.commute, ncDisposition: e.ncDisposition, ncQuantity: e.ncQuantity, ncCostKeur: e.ncCostKeur, ncDispositionNote: e.ncDispositionNote,
+    mpTable: e.mpTable, mpDisease: e.mpDisease, mpCertificateOn: e.mpCertificateOn, mpInformedOn: e.mpInformedOn,
+    mpQuestionnaireReceivedOn: e.mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn: e.mpQuestionnaireReturnedOn,
   };
   // Valeurs déjà enregistrées gardées dans les listes (pilote sorti, site archivé, rattachement hors du site sélectionné).
   const editOptions: EventFieldOptions = {
@@ -379,9 +396,16 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
+        {e.type === 'AT' && e.commute && <ToneTag tone="neutral">Trajet</ToneTag>}
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+          {/* EVT-10 : synthèse imprimable de la DAT et feuille d'accident (données de santé) ; lien HTML simple (print.css). */}
+          {health && e.type === 'AT' && (
+            <a href={`${DAT_PRINT_PATH}/${encodeURIComponent(e.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+              <i className="ph ph-printer" style={{ fontSize: 13 }} />Synthèse DAT
+            </a>
+          )}
           {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} benign={register?.entry ? (register.entry.escalatedAt ? 'escalated' : 'active') : null} />}
           {canRevert && !e.dismissed && !closed && (
             <DismissButton id={e.id} disabled={openLinked > 0}
@@ -413,6 +437,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
       <Fields fields={fields} />
       <Narrative description={e.description} immediateMeasures={e.immediateMeasures} />
       {accident && <AccidentSection detail={detail} canEdit={canEdit} today={today} />}
+      {detail.occupational && <OccupationalSection detail={detail} canEdit={canEdit} />}
 
       <EventAttachments eventId={e.id} files={attachments} canManage={canEdit && !locked} />
 

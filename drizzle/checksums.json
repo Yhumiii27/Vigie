@@ -50,6 +50,11 @@
       "when": 1792315355975,
       "sql": "966a4019e547738427e17990c99df9c88dc3636334419a29eca01a8b4a121222",
       "snapshot": "569325f4bfe4551f2ecf00b8c43976e8289c089426a6690b845d1a7eb2deec1c"
+    },
+    "0010_regulatory_compliance": {
+      "when": 1792401175419,
+      "sql": "59105f8137d158087a52732f6e34a864b187d6a6421f399b12763baabe610dfc",
+      "snapshot": "df6e9fa043eb78cb9eb109ac28faca588eaf143ac5d87c8fef0e40daa28b4c2d"
     }
   }
 }

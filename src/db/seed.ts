@@ -7,6 +7,7 @@ import { backfillActionLinks } from '../lib/origin-links';
 import * as t from './schema';
 import type { Db, Tx } from './types';
 import { seedActions, upgradeDemoActions } from './seeds/actions';
+import { seedCompliance } from './seeds/compliance';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { seedPrevention } from './seeds/prevention';
@@ -370,6 +371,8 @@ async function upgradeDemo(db: Db) {
   // Lot 2 (migration 0004) : rubriques des AT, registre des accidents bénins, mentions du registre des déchets.
   await upgradeDemoAccidents(db);
   await upgradeDemoWasteMentions(db);
+  // Paquet 5 (migration 0008) : données de conformité réglementaire, une seule fois (src/db/seeds/compliance.ts).
+  await db.transaction((tx) => seedCompliance(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -686,6 +689,9 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
       ['EV-2026-133', { permitId: 'PF-2026-031' }],
     ];
     for (const [id, set] of EVENT_LINKS) await tx.update(t.events).set(set).where(eq(t.events.id, id));
+
+    // Paquet 5 (conformité réglementaire) : après tous les modules dont il complète les données.
+    await seedCompliance(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

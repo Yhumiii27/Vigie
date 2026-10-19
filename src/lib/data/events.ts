@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fmtQty } from '@/components/environment/model';
 import type { ChangeEntry } from '@/components/ChangeLog';
-import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, reservesDeadline } from '@/components/events/deadlines';
+import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/components/events/deadlines';
 import {
   BENIGN_REGISTER_PATH, FIRST_AID_TITLE_FALLBACK, HEALTH_FILE_FIELD, HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending,
   declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
@@ -253,6 +253,14 @@ function cpamState(e: EventRow, entry: { number: number; escalatedOn: Date | nul
   return { ...base, dueOn: due.date, tone, label: `À déclarer ${fmtDeadline(due)}` };
 }
 
+/** Questionnaire employeur d'une maladie professionnelle (R. 461-9 CSS) : retourné, à retourner (30 jours francs) ou non reçu. */
+export function mpQuestionnaireState(e: Pick<EventRow, 'mpQuestionnaireReceivedOn' | 'mpQuestionnaireReturnedOn'>, site: { alsaceMoselle: boolean } | undefined, now: string) {
+  if (e.mpQuestionnaireReturnedOn) return { dueOn: null, tone: 'ok' as Tone, label: `Retourné le ${fmtDate(e.mpQuestionnaireReturnedOn)}` };
+  if (!e.mpQuestionnaireReceivedOn) return { dueOn: null, tone: 'neutral' as Tone, label: 'Non reçu' };
+  const dueOn = mpQuestionnaireDeadline(e.mpQuestionnaireReceivedOn, { alsaceMoselle: !!site?.alsaceMoselle });
+  return { dueOn, tone: (dueOn < now ? 'danger' : 'warn') as Tone, label: `Reçu le ${fmtDate(e.mpQuestionnaireReceivedOn)} · à retourner au plus tard le ${fmtDate(dueOn)}` };
+}
+
 /**
  * Événements consultables sur /evenements (site sélectionné, classés sans suite compris), du plus récent au plus ancien :
  * le Salarié ne voit que ses propres signalements nominatifs (rapprochement par identifiant, jamais les anonymes).
@@ -276,8 +284,9 @@ export async function loadEventDetail(id: string) {
   if (!row) return null;
   const health = canSeeHealth(role);
   const at = row.type === 'AT';
-  // SEC-11 : fiche d'un accident du travail ouverte avec ses données de santé — consultation tracée.
-  if (health && at) await logAccess({ kind: 'sante', entityType: 'event', entityId: row.id, personId: user.id });
+  const mp = row.type === 'MP';
+  // SEC-11 : fiche d'un accident du travail ou d'une maladie professionnelle ouverte avec ses données de santé — consultation tracée.
+  if (health && (at || mp)) await logAccess({ kind: 'sante', entityType: 'event', entityId: row.id, personId: user.id });
   const e = health ? row : withoutHealth(row);
   // Les actions liées sont lues sans filtre de site : elles suivent l'événement.
   const [actions, analyses, files, steps, links, wasteEntries, entry, [site], firstAiders] = await Promise.all([
@@ -352,6 +361,15 @@ export async function loadEventDetail(id: string) {
       href: `${BENIGN_REGISTER_PATH}?site=${encodeURIComponent(row.siteId)}`,
     } : null,
     cpam: health ? cpamState(row, entry, site, now, name) : null,
+    /**
+     * Maladie professionnelle (EVT-09, rôles habilités : le type n'est chargé que pour eux) : victime, tableau, maladie,
+     * certificat médical initial, information par la caisse et questionnaire employeur (30 jours francs, R. 461-9 CSS).
+     */
+    occupational: mp && health ? {
+      victim: victimLabel(row, (pid) => name(pid)), victimKind: victimKindLabel(row.victimKind),
+      table: row.mpTable, disease: row.mpDisease, certificateOn: row.mpCertificateOn, informedOn: row.mpInformedOn,
+      questionnaire: mpQuestionnaireState(row, site, now),
+    } : null,
     /** Données de santé transmises (rôle habilité) ; sinon « Données restreintes ». */
     health,
     dismissal: e.dismissedAt
@@ -547,6 +565,16 @@ export const loadEventSignals = cache(async (): Promise<{ badge?: number; todo: 
         });
       }
     }
+    // Maladie professionnelle (EVT-09) : questionnaire employeur reçu, à retourner sous 30 jours francs (R. 461-9 CSS) ;
+    // donnée de santé (`health`) — l'événement n'est d'ailleurs chargé que pour les rôles habilités.
+    if (e.type === 'MP' && e.mpQuestionnaireReceivedOn && !e.mpQuestionnaireReturnedOn) {
+      const due = mpQuestionnaireDeadline(e.mpQuestionnaireReceivedOn, { alsaceMoselle: alsaceMoselle.get(e.siteId) });
+      const pilot = e.pilotId && healthOwner(e.pilotId) ? e.pilotId : null;
+      todo.push({
+        date: due, dueOn: due, kind: 'Questionnaire maladie professionnelle', tone: due < now ? 'danger' : 'warn', title: `${e.id} · ${e.title}`,
+        siteId: e.siteId, who: pilot ? who(pilot) : lead.who, href, ownerIds: [...new Set([...lead.ownerIds, ...(pilot ? [pilot] : [])])], overdue: due < now, health: true,
+      });
+    }
   }
   return { todo };
 });
@@ -613,3 +641,40 @@ export async function loadNewEventDefaults(planId: string | undefined, permitId:
     preventionPlanId: pp?.id ?? p?.preventionPlanId ?? null,
   };
 }
+
+// ─── Synthèse imprimable de la DAT et feuille d'accident (EVT-10) ───────────
+
+/**
+ * Rubriques de la déclaration d'accident du travail (Cerfa 14463, saisie sur net-entreprises.fr) et de la feuille
+ * d'accident remise à la victime (Cerfa 11383, art. L. 441-5 CSS), pour la page imprimable /evenements/imprimer/<id> :
+ * animateur QHSE et direction seulement (données de santé), accident du travail consultable (site sélectionné) ; null sinon.
+ * Consultation tracée (SEC-11).
+ */
+export async function loadDatPrint(id: string) {
+  const { role, user } = await getSession();
+  if (!canSeeHealth(role)) return null;
+  const events = await loadVisibleEvents();
+  const e = events.find((x) => x.id === id);
+  if (!e || e.type !== 'AT') return null;
+  const db = await getDb();
+  const [people, [site], entry] = await Promise.all([
+    loadPeople(),
+    db.select({ label: t.sites.label, siret: t.sites.siret, alsaceMoselle: t.sites.alsaceMoselle }).from(t.sites).where(eq(t.sites.id, e.siteId)),
+    activeBenignEntry(e.id),
+  ]);
+  await logAccess({ kind: 'sante', entityType: 'event', entityId: e.id, personId: user.id });
+  const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : '—');
+  const victim = e.victimId ? people.get(e.victimId) : undefined;
+  return {
+    id: e.id, title: e.title, occurredOn: e.occurredOn, occurredTime: e.occurredTime, location: e.location, equipment: e.equipment,
+    commute: e.commute, duty: declarationDuty(e),
+    site: { label: site?.label ?? e.siteId, siret: site?.siret ?? null },
+    victim: { label: victimLabel(e, name), kind: victimKindLabel(e.victimKind), job: victim?.job || null, company: e.victimCompany },
+    workSchedule: e.workSchedule, knownAt: toParisLocal(e.knownAt ?? e.createdAt), knownIsDefault: !e.knownAt,
+    activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
+    injury: injuryLabel(e.injury), lostDays: e.injury === 'arret' ? e.lostDays : null,
+    lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven,
+    cpam: cpamState(e, entry, site, today(), name),
+  };
+}
+export type DatPrint = NonNullable<Awaited<ReturnType<typeof loadDatPrint>>>;

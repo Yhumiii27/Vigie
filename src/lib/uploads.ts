@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { canReadPlan, isQhse } from './action-rules';
 import { config } from './config';
-import { canEdit, canManage, canSee, canSeeHealth, isEmployee, type Role } from './domain';
+import { canEdit, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, type Role } from './domain';
 import { decryptBuffer, encryptBuffer, fileKeys, isEncrypted } from './encryption';
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -158,11 +158,16 @@ async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boo
   switch (row.entityType) {
     case 'event': {
       if (!canSee(role, 'events')) return false;
+      const [ev] = await db.select({ declarantId: t.events.declarantId, type: t.events.type }).from(t.events).where(eq(t.events.id, row.entityId));
+      // Maladie professionnelle (EVT-09) : toutes ses pièces relèvent des données de santé.
+      if (ev && !canSeeEventType(role, ev.type)) return false;
       if (!isEmployee(role)) return true;
       // Salarié : ses propres signalements (déclarant) ou les fichiers qu'il a lui-même joints.
-      const [ev] = await db.select({ declarantId: t.events.declarantId }).from(t.events).where(eq(t.events.id, row.entityId));
       return !!ev && (ev.declarantId === user.id || row.uploadedBy === user.id);
     }
+    case 'requirement':
+      // Texte d'une exigence de veille (VEI-10).
+      return canSee(role, 'watch');
     case 'action': {
       // Plan de son périmètre (QHSE, encadrement en lecture) ou ses propres actions (responsable, Salarié compris).
       if (!canSee(role, 'actions')) return false;

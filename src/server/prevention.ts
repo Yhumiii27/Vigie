@@ -247,7 +247,7 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       || CONTENT_FIELDS.some((k) => existing[k] != null && existing[k] !== '' && existing[k] !== values[k]);
     // Signatures effacées : la date de la première signature complète reste (écart R. 4512-6 jugé sur celle-ci).
     const signatures = changed
-      ? { signedEuOn: null, signedEeOn: null, firstSignedOn: existing.firstSignedOn ?? fullSignatureOn(existing) }
+      ? { signedEuOn: null, signedEeOn: null, signedEuName: null, signedEuQuality: null, signedEeName: null, signedEeQuality: null, firstSignedOn: existing.firstSignedOn ?? fullSignatureOn(existing) }
       : { signedEuOn: existing.signedEuOn, signedEeOn: existing.signedEeOn };
     // Signatures conservées : l'inspection commune préalable doit rester antérieure (ou du même jour) à la première signature.
     const firstSignature = [signatures.signedEuOn, signatures.signedEeOn].filter((d): d is string => !!d).sort()[0];
@@ -325,27 +325,50 @@ const firstSignedUpdate = (plan: typeof t.preventionPlans.$inferSelect, next: { 
   return full && !plan.firstSignedOn ? { firstSignedOn: full } : {};
 };
 
-/** Signature du plan par l'entreprise utilisatrice (date du jour) ; une signature après le début de l'intervention est tracée comme écart. */
-export async function signPlanEu(id: string): Promise<Result> {
+/** Nom et qualité du signataire d'une entreprise (PRV-07), obligatoires. */
+function readSigner(f: ReturnType<typeof formReader>, prefix: 'signedEu' | 'signedEe') {
+  const name = f.str(`${prefix}Name`, { required: true, max: 120 });
+  const quality = f.str(`${prefix}Quality`, { required: true, max: 120 });
+  return { name, quality };
+}
+
+/**
+ * Signature du plan par l'entreprise utilisatrice (PRV-07) : date de signature (au plus tard aujourd'hui, au plus tôt le
+ * jour de l'inspection commune), nom et qualité du signataire ; une signature après le début de l'intervention est
+ * tracée comme écart.
+ */
+export async function signPlanEu(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireManager();
   if (error) return { error };
-  const { db, plan } = await loadPlan(id);
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const signedOn = f.date('signedEuOn', { required: true });
+  const signer = readSigner(f, 'signedEu');
   const now = today();
+  if (signedOn && signedOn > now) f.fail('signedEuOn', 'La date de signature ne peut pas être future.');
+  if (!f.ok || !signedOn) return f.state();
+  const { db, plan } = await loadPlan(id);
   const blocked = await editablePlanError(plan);
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   if (plan.signedEuOn) return { error: "Le plan est déjà signé par l'entreprise utilisatrice." };
   const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
   const issue = planSignIssue(plan, { now, mandatory, verb: 'signer' });
   if (issue) return { error: issue };
-  const next = { ...plan, signedEuOn: now };
-  const summary = lateSignature(plan, now, mandatory)
-    ? `Signé pour l'entreprise utilisatrice après le début de l'intervention (${fmtDate(plan.startOn)}) : écart R. 4512-6`
-    : "Signé pour l'entreprise utilisatrice";
+  if (plan.inspectionOn && signedOn < plan.inspectionOn) {
+    return { error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEuOn: `Au plus tôt le jour de l'inspection commune.` } };
+  }
+  const next = { ...plan, signedEuOn: signedOn };
+  const by = `${signer.name} (${signer.quality}), le ${fmtDate(signedOn)}`;
+  const summary = lateSignature(plan, signedOn, mandatory)
+    ? `Signé pour l'entreprise utilisatrice par ${by}, après le début de l'intervention (${fmtDate(plan.startOn)}) : écart R. 4512-6`
+    : `Signé pour l'entreprise utilisatrice par ${by}`;
   await db.transaction(async (tx) => {
-    await tx.update(t.preventionPlans).set({ signedEuOn: now, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, plan.id));
+    await tx.update(t.preventionPlans).set({
+      signedEuOn: signedOn, signedEuName: signer.name, signedEuQuality: signer.quality, status: planStatus(next, now), ...firstSignedUpdate(plan, next),
+    }).where(eq(t.preventionPlans.id, plan.id));
     await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'sign', summary, byId: session.user.id });
   });
-  return ok();
+  return done(plan.id);
 }
 
 /** Enregistre la signature de l'entreprise extérieure (date) et, le cas échéant, l'exemplaire signé. */
@@ -355,6 +378,7 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   const f = formReader(fd);
   const id = f.str('id', { required: true });
   const signedOn = f.date('signedEeOn', { required: true });
+  const signer = readSigner(f, 'signedEe');
   const files = f.files('file');
   const now = today();
   if (signedOn && signedOn > now) f.fail('signedEeOn', 'La date de signature ne peut pas être future.');
@@ -374,10 +398,12 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   const next = { ...plan, signedEeOn: signedOn };
   const late = lateSignature(plan, signedOn!, mandatory) ? ", après le début de l'intervention : écart R. 4512-6" : '';
   await db.transaction(async (tx) => {
-    await tx.update(t.preventionPlans).set({ signedEeOn: signedOn, status: planStatus(next, now), ...firstSignedUpdate(plan, next) }).where(eq(t.preventionPlans.id, id));
+    await tx.update(t.preventionPlans).set({
+      signedEeOn: signedOn, signedEeName: signer.name, signedEeQuality: signer.quality, status: planStatus(next, now), ...firstSignedUpdate(plan, next),
+    }).where(eq(t.preventionPlans.id, id));
     await logChange(tx, {
       entityType: 'prevention_plan', entityId: id, action: 'sign',
-      summary: `Signature de l'entreprise extérieure enregistrée (${fmtDate(signedOn!)})${late}${files.length ? ', exemplaire signé joint' : ''}`, byId: session.user.id,
+      summary: `Signature de l'entreprise extérieure enregistrée : ${signer.name} (${signer.quality}), le ${fmtDate(signedOn!)}${late}${files.length ? ', exemplaire signé joint' : ''}`, byId: session.user.id,
     });
   });
   for (const file of files) await saveUpload(file, PLAN_ATTACHMENT, id, session.user.id);

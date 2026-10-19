@@ -6,12 +6,13 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { REQUIREMENT_EVAL, canSee } from '@/lib/domain';
+import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, canSee } from '@/lib/domain';
+import { legalTextUrlError } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
-import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
+import { checkUpload, deleteAttachment, listAttachments, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
 const EVALUATIONS = Object.keys(REQUIREMENT_EVAL);
@@ -61,7 +62,7 @@ async function withNames<T extends Record<string, unknown>>(row: T, keys: (keyof
 const REQ_LABELS = {
   text: 'Texte', domain: 'Domaine', summary: "Ce qu'il exige", dueOn: 'Échéance', dueNote: "Note d'échéance", evaluation: 'Évaluation',
   evaluationNote: 'Précision', pilotId: 'Pilote', impact: 'Impact', keystoneProjects: 'Projets Keystone (surcharge)',
-  affectsProjects: 'Concerne les projets Keystone', featured: 'À la une',
+  affectsProjects: 'Concerne les projets Keystone', featured: 'À la une', siteIds: 'Sites concernés', legifranceUrl: 'Lien vers le texte',
 } as const;
 
 /**
@@ -86,6 +87,13 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
   const affectsProjects = f.bool('affectsProjects');
   const keystoneProjects = f.int('keystoneProjects', { min: 0, max: 999 });
   const featured = f.bool('featured');
+  // VEI-10 : sites où l'exigence s'applique (aucun coché : tous les sites) et lien vers le texte (Légifrance, EUR-Lex).
+  const siteIdsField = fd.has('siteIdsField');
+  const siteIds = [...new Set(f.list('siteIds'))].sort();
+  const legifranceInput = f.str('legifranceUrl', { max: 500 }) || null;
+  const legifranceUrl = legifranceInput;
+  const urlError = legifranceUrl ? legalTextUrlError(legifranceUrl) : null;
+  if (urlError) f.fail('legifranceUrl', urlError);
   if (!dueOn && !dueNote) f.fail('dueNote', "Indiquez une date d'échéance ou une note (ex. Permanent).");
   if (featured && !dueOn) f.fail('dueOn', 'Date requise pour la mise en avant sur le tableau de bord.');
   if (affectsProjects && !dueOn) f.fail('dueOn', "Date d'application requise pour calculer les projets concernés.");
@@ -97,17 +105,35 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
   const pilot = pilotId ? await findPerson(pilotId) : undefined;
   if (pilotId && !pilot) f.fail('pilotId', 'Pilote inconnu.');
   else if (pilot && hasLeft(pilot, now) && pilotId !== current?.pilotId) f.fail('pilotId', "Pilote sorti de l'effectif : choisissez une personne présente.");
+  const sitesOf = siteIdsField ? siteIds : current?.siteIds ?? [];
+  // Lien absent du formulaire (appel direct, ancien formulaire) : valeur enregistrée conservée.
+  const linkOf = fd.has('legifranceUrl') ? legifranceUrl : current?.legifranceUrl ?? null;
+  if (siteIdsField) {
+    const known = new Set((await db.select({ id: t.sites.id, archivedAt: t.sites.archivedAt }).from(t.sites)).filter((s) => !s.archivedAt || current?.siteIds?.includes(s.id)).map((s) => s.id));
+    const before = [...(current?.siteIds ?? [])].sort().join(',');
+    if (siteIds.some((s) => !known.has(s))) f.fail('siteIds', 'Site inconnu ou archivé.');
+    // Applicabilité d'une exigence commune à l'entreprise : fixée par une personne qui voit tous les sites (SEC-02).
+    else if (siteIds.join(',') !== before && session.allowedSiteIds) f.fail('siteIds', 'Sites concernés : réservés à la direction et à l’animateur QHSE (périmètre complet).');
+  }
   if (!f.ok) return f.state();
   if (id && !current) return { error: 'Exigence introuvable.' };
 
-  const values = { text, domain, summary, dueOn, dueNote, evaluation: evaluation!, evaluationNote, pilotId, impact, affectsProjects, keystoneProjects, featured };
+  const values = {
+    text, domain, summary, dueOn, dueNote, evaluation: evaluation!, evaluationNote, pilotId, impact, affectsProjects, keystoneProjects, featured,
+    siteIds: sitesOf, legifranceUrl: linkOf,
+  };
   const evalRow = (requirementId: number) => ({ requirementId, evaluatedOn: now, evaluation: values.evaluation, note: evaluationNote, evaluatedById: session.user.id });
 
   let savedId = id;
   if (current) {
     if (current.archivedAt) return { error: ARCHIVED_REQ };
     const reevaluated = current.evaluation !== values.evaluation || (current.evaluationNote ?? null) !== values.evaluationNote;
-    const details = diffFields(await withNames(current, ['pilotId']), await withNames({ ...current, ...values }, ['pilotId']), REQ_LABELS, fmtLog);
+    const siteNames = new Map((await db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label.split(' — ')[0]]));
+    const showSites = (ids: string[] | null | undefined) => (ids?.length ? ids.map((x) => siteNames.get(x) ?? x).join(', ') : 'Tous les sites');
+    const details = diffFields(
+      { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds) },
+      { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds) }, REQ_LABELS, fmtLog,
+    );
     await db.transaction(async (tx) => {
       if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, current.id)));
       await tx.update(t.requirements).set({ ...values, lastEvaluatedOn: reevaluated ? now : current.lastEvaluatedOn }).where(eq(t.requirements.id, current.id));
@@ -183,6 +209,54 @@ export async function evaluateRequirement(_prev: FormState, fd: FormData): Promi
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: String(current.id) };
+}
+
+/**
+ * Joint le texte réglementaire (PDF, extrait) à une exigence en vigueur (VEI-10) : pièces jointes 'requirement', lisibles
+ * par les rôles qui ouvrent la veille ; ajout journalisé.
+ */
+export async function addRequirementFiles(fd: FormData): Promise<{ error?: string; count?: number }> {
+  const { session, error } = await requireWatchManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('requirementId', { required: true, min: 1 });
+  const files = f.files('files');
+  if (!files.length) return { error: 'Choisissez au moins un fichier.' };
+  checkFiles(f, 'files', files);
+  if (!f.ok || id == null) return { error: Object.values(f.fieldErrors)[0] ?? 'Certains champs sont à corriger.' };
+  const db = await getDb();
+  const [current] = await db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.id, id));
+  if (!current) return { error: 'Exigence introuvable.' };
+  if (current.archivedAt) return { error: ARCHIVED_REQ };
+  for (const file of files) await saveUpload(file, 'requirement', String(id), session.user.id);
+  await logChange(null, {
+    entityType: 'requirement', entityId: id, action: 'attach', byId: session.user.id,
+    summary: `Texte joint (${files.length} fichier${files.length > 1 ? 's' : ''})`, details: files.map((file) => ({ field: 'Texte joint', from: null, to: file.name })),
+  });
+  revalidatePath('/', 'layout');
+  return { count: files.length };
+}
+
+/** Retire un texte joint par erreur à une exigence en vigueur (VEI-10), journalisé. */
+export async function removeRequirementFile(attachmentId: string): Promise<{ error?: string }> {
+  const { session, error } = await requireWatchManager();
+  if (error) return { error };
+  const db = await getDb();
+  const [file] = await db.select().from(t.attachments).where(and(eq(t.attachments.id, attachmentId), eq(t.attachments.entityType, 'requirement')));
+  if (!file) return { error: 'Pièce jointe introuvable.' };
+  const [current] = await db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.id, Number(file.entityId)));
+  if (!current) return { error: 'Exigence introuvable.' };
+  if (current.archivedAt) return { error: ARCHIVED_REQ };
+  await db.transaction(async (tx) => {
+    await deleteAttachment(file.id, { db: tx });
+    await logChange(tx, {
+      entityType: 'requirement', entityId: current.id, action: 'detach', byId: session.user.id,
+      summary: 'Texte joint retiré', details: [{ field: 'Texte joint', from: file.fileName, to: null }],
+    });
+  });
+  await removeStoredFile(file);
+  revalidatePath('/', 'layout');
+  return {};
 }
 
 /** Archive une exigence (texte abrogé) : motif obligatoire, historique et action liée conservés, retirée de la une. */
@@ -346,6 +420,10 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
   const organization = f.str('organization', { required: true, max: 120 });
   const reserves = f.str('reserves', { max: 160 }) || null;
   const notes = f.str('notes', { max: 2000 }) || null;
+  // VEI-11 : résultat du contrôle (avis de l'organisme) ; « avec réserves » exige les réserves, « favorable » n'en porte pas.
+  const result = f.oneOf('result', CONTROL_RESULT_KEYS, { required: true });
+  if (result === 'reserves' && !reserves) f.fail('reserves', 'Précisez les réserves émises.');
+  if (result === 'favorable' && reserves) f.fail('result', 'Réserves saisies : choisissez « Favorable avec réserves », ou retirez les réserves.');
   const files = f.files('report');
   if (performedOn && performedOn > today()) f.fail('performedOn', 'Enregistrez le contrôle une fois réalisé (date future).');
   checkFiles(f, 'report', files);
@@ -360,7 +438,7 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
 
   const recordId = await db.transaction(async (tx) => {
     const [rec] = await tx.insert(t.controlRecords).values({
-      controlId: control.id, performedOn: performedOn!, organization, reserves, notes, recordedById: session.user.id,
+      controlId: control.id, performedOn: performedOn!, organization, reserves, notes, result, recordedById: session.user.id,
       ...(latest ? { prevLastOn: control.lastOn, prevNextOn: control.nextOn, prevReserves: control.reserves } : {}),
     }).returning({ id: t.controlRecords.id });
     if (latest) {
@@ -387,7 +465,7 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
 
   await logChange(null, {
     entityType: 'control', entityId: control.id, action: 'record',
-    summary: `Contrôle du ${fmtDate(performedOn!)} enregistré${latest ? '' : " dans l'historique (antérieur au dernier)"}`,
+    summary: `Contrôle du ${fmtDate(performedOn!)} enregistré · ${result ? CONTROL_RESULTS[result].label.toLowerCase() : ''}${latest ? '' : " dans l'historique (antérieur au dernier)"}`,
     details: latest ? diffFields(control, { lastOn: performedOn!, reserves }, { lastOn: 'Dernier contrôle', reserves: 'Réserves' }, fmtLog) : [],
   });
   // Nouvelles réserves : l'action de levée des précédentes est détachée du contrôle (elle reste au plan) ; son historique

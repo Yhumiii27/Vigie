@@ -6,13 +6,32 @@ import type { Tone } from '@/lib/domain';
 
 // ─── Bordereaux de suivi (BSD) ──────────────────────────────────────────────
 
-export type BsdStatus = 'brouillon' | 'emis' | 'collecte' | 'traite';
+export type BsdStatus = 'brouillon' | 'emis' | 'collecte' | 'traite' | 'refuse' | 'accepte_partiel';
 export const BSD_STATUS: Record<BsdStatus, { label: string; tone: Tone }> = {
   brouillon: { label: 'Brouillon', tone: 'warn' },
   emis: { label: 'Émis', tone: 'accent' },
   collecte: { label: 'Collecté', tone: 'neutral' },
   traite: { label: 'Traité', tone: 'ok' },
+  // DOC-12 : refus du déchet par l'installation de destination, total ou partiel (motif et quantité refusée).
+  refuse: { label: 'Refusé', tone: 'danger' },
+  accepte_partiel: { label: 'Accepté partiellement', tone: 'warn' },
 };
+/** Statuts de refus (DOC-12) : motif obligatoire ; quantité refusée = tout l'enlèvement, ou la part saisie. */
+export const BSD_REFUSALS: readonly BsdStatus[] = ['refuse', 'accepte_partiel'];
+/**
+ * Contrôle d'un refus de bordereau (DOC-12) : motif obligatoire, quantité refusée d'une acceptation partielle strictement
+ * comprise entre 0 et la quantité enlevée. Erreurs par champ ; refus total : la quantité refusée est celle de l'enlèvement.
+ */
+export function bsdRefusalErrors(status: BsdStatus | null, quantity: number | null, refused: number | null, reason: string | null): Partial<Record<'bsdRefusedQuantity' | 'bsdRefusalReason', string>> {
+  const errors: Partial<Record<'bsdRefusedQuantity' | 'bsdRefusalReason', string>> = {};
+  if (!status || !BSD_REFUSALS.includes(status)) return errors;
+  if (!reason) errors.bsdRefusalReason = "Motif du refus indiqué par l'installation de destination : obligatoire.";
+  if (status === 'accepte_partiel') {
+    if (refused == null) errors.bsdRefusedQuantity = 'Quantité refusée obligatoire pour une acceptation partielle.';
+    else if (refused <= 0 || (quantity != null && refused >= quantity)) errors.bsdRefusedQuantity = 'Quantité refusée comprise entre 0 et la quantité enlevée (refus total : statut « Refusé »).';
+  }
+  return errors;
+}
 export const BSD_STATUS_KEYS = Object.keys(BSD_STATUS) as BsdStatus[];
 export const isBsdStatus = (s: string | null | undefined): s is BsdStatus => !!s && s in BSD_STATUS;
 

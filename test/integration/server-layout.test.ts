@@ -9,6 +9,7 @@ import {
 } from '@/db/migrations';
 import * as schema from '@/db/schema';
 import { HEALTH_FIELDS } from '@/components/events/shared';
+import { HEALTH_EVENT_TYPES } from '@/lib/domain';
 import { closeDb, getDb } from '@/db';
 import { resetConfig } from '@/lib/env';
 import { introspectPostgres } from '@/lib/matrix';
@@ -73,6 +74,9 @@ describe('réécriture des migrations pour le serveur', () => {
     // Ni registre des accidents bénins, ni journal des consultations, ni pièces jointes ; du journal, ni motif ni détail.
     expect(used.filter((u) => ['benign_accidents', 'access_log', 'attachments'].includes(u.table_name))).toEqual([]);
     expect(used.filter((u) => u.table_name === 'change_log' && ['reason', 'details'].includes(u.column_name))).toEqual([]);
+    // Journal : ni accident du travail ni événement réservé aux données de santé (maladie professionnelle, 0010).
+    const journalDef = (await pg.query<{ d: string }>(`select pg_get_viewdef('${SERVER_SCHEMA}.pub_journal'::regclass) as d`)).rows[0].d;
+    for (const type of ['AT', ...HEALTH_EVENT_TYPES]) expect(journalDef).toContain(`'${type}'`);
     // Vues créées par le propriétaire du schéma, avec security_barrier.
     const opts = (await pg.query<{ relname: string; reloptions: string[] }>(`select c.relname, c.reloptions from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = $1 and c.relkind = 'v' order by 1`, [SERVER_SCHEMA])).rows;

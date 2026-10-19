@@ -46,7 +46,7 @@ describe('références sûres (PRD-08)', () => {
     expect(r).toMatchObject({ ok: true, id: 'EE-025' });
     expect(await lastLog('contractor', 'EE-025')).toMatchObject({ action: 'create' });
     const e = await createEvent({}, form({ type: 'PA', title: 'Test', occurredOn: '2026-10-08', location: 'Atelier', severity: '1', siteId: 'ville-a', declarantId: 'tnguyen' }));
-    expect(e).toMatchObject({ ok: true, id: 'EV-2026-134' });
+    expect(e).toMatchObject({ ok: true, id: 'EV-2026-136' });
   });
 });
 
