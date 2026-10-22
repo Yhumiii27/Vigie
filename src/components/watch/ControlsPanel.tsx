@@ -98,8 +98,8 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
               <tr key={c.id} {...rowOpener(() => open(c.id, firstView(c)))} style={c.archived ? { opacity: 0.75 } : undefined}>
                 <td style={{ fontWeight: 500, minWidth: 180 }}>
                   {c.equipment}
-                  {(showSite || c.responsible) && (
-                    <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{[showSite && c.siteLabel, c.responsible].filter(Boolean).join(' · ')}</div>
+                  {(showSite || c.responsible || c.equipmentCode) && (
+                    <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{[c.equipmentCode, showSite && c.siteLabel, c.responsible].filter(Boolean).join(' · ')}</div>
                   )}
                   {c.archivedLabel && <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{c.archivedLabel}</div>}
                 </td>
@@ -190,6 +190,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
         ['Dernier', c.last],
         ['Périodicité', `Tous les ${months(c.periodMonths)}`],
         ['Organisme', c.organization],
+        !!c.equipmentCode && ['Code équipement', c.equipmentCode],
         ['Responsable', c.responsible || '—'],
         ['Réserves', c.reserves ?? 'Aucune'],
         c.requirement && ['Exigence', (
@@ -410,6 +411,10 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
     <ActionForm action={saveControl} hidden={{ id: c?.id }} onDone={onDone} onCancel={onCancel} submitLabel={c ? 'Enregistrer' : 'Ajouter le contrôle'}>
       <Field name="equipment" label="Équipement">
         <Input name="equipment" defaultValue={c?.equipment} placeholder="Ex. Pont roulant 10 t — atelier montage" maxLength={160} autoFocus={!c} />
+      </Field>
+      <Field name="equipmentCode" label="Code équipement" hint="Facultatif · code commun avec le moyen d'essais de Crucible (majuscules, chiffres, tirets), publié avec le contrôle.">
+        <Input name="equipmentCode" defaultValue={c?.equipmentCode ?? ''} placeholder="Ex. PDE-PIL" maxLength={32} autoCapitalize="characters" spellCheck={false}
+          style={{ textTransform: 'uppercase' }} />
       </Field>
       <FormRow>
         <Field name="controlType" label="Type de contrôle">

@@ -65,7 +65,8 @@ describe('réécriture des migrations pour le serveur', () => {
 
   it('vues pub_ : dans vigie, jamais une donnée de santé', async () => {
     const views = (await pg.query<{ v: string }>('select table_name as v from information_schema.views where table_schema = $1 order by 1', [SERVER_SCHEMA])).rows.map((r) => r.v);
-    expect(views).toEqual(['pub_hse_projet', 'pub_journal', 'pub_non_conformites']);
+    // pub_controles : contrôles périodiques publiés pour Crucible (migration 0014, contrat Crucible v1).
+    expect(views).toEqual(['pub_controles', 'pub_hse_projet', 'pub_journal', 'pub_non_conformites']);
     const used = (await pg.query<{ view_name: string; table_name: string; column_name: string }>(`select view_name, table_name, column_name
       from information_schema.view_column_usage where view_schema = $1 and view_name like 'pub\\_%'`, [SERVER_SCHEMA])).rows;
     const health = new Set(HEALTH_FIELDS.map((f) => schema.events[f].name));

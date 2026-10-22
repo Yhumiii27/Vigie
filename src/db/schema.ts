@@ -538,6 +538,9 @@ export const controls = pgTable('controls', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
+  // Code commun de l'équipement avec les moyens d'essais de Crucible (ex. PDE-PIL), publié par la vue pub_controles
+  // (migration 0014) ; facultatif, plusieurs contrôles d'un même équipement portent le même code (equipmentCodeError).
+  equipmentCode: text('equipment_code'),
 });
 
 // Historique des contrôles réalisés (le dernier met à jour controls.lastOn / nextOn / reserves).

@@ -7,7 +7,7 @@ import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS, canSee } from '@/lib/domain';
-import { legalTextUrlError } from '@/lib/watch-rules';
+import { equipmentCodeError, legalTextUrlError, normalizeEquipmentCode } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
@@ -269,7 +269,7 @@ export async function restoreRequirement(_prev: FormState, fd: FormData): Promis
 const CTRL_LABELS = {
   equipment: 'Équipement', controlType: 'Type de contrôle', periodMonths: 'Périodicité (mois)', organization: 'Organisme',
   responsibleId: 'Responsable', siteId: 'Site', lastOn: 'Dernier contrôle', nextOn: 'Prochain contrôle', reserves: 'Réserves',
-  requirementId: 'Exigence',
+  requirementId: 'Exigence', equipmentCode: 'Code équipement',
 } as const;
 
 const RECORD_TO_CHANGE = 'Modifié par « Enregistrer un contrôle » (ou l’annulation d’un enregistrement) : le changement est alors tracé dans l’historique.';
@@ -294,6 +294,7 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   const f = formReader(fd);
   const id = f.int('id');
   const equipment = f.str('equipment', { required: true, max: 160 });
+  // Code commun avec les moyens d'essais de Crucible (vue pub_controles) : facultatif, non unique (un équipement, plusieurs contrôles).
   const controlType = f.str('controlType', { required: true, max: 120 });
   const periodMonths = f.int('periodMonths', { required: true, min: 1, max: 120 });
   const organization = f.str('organization', { required: true, max: 120 });
@@ -305,6 +306,11 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   const current = id ? await loadControlForEdit(id) : null;
   if (current?.error) return { error: current.error };
   const before = current?.control ?? null;
+  // Code commun avec les moyens d'essais de Crucible (vue pub_controles) : facultatif, non unique (un équipement porte
+  // plusieurs contrôles) ; champ absent du formulaire à la modification : code conservé.
+  const equipmentCode = before && !fd.has('equipmentCode') ? before.equipmentCode : normalizeEquipmentCode(f.opt('equipmentCode'));
+  const codeError = equipmentCodeError(equipmentCode);
+  if (codeError) f.fail('equipmentCode', codeError);
   const lastOn = before && !fd.has('lastOn') ? before.lastOn : f.date('lastOn', { required: true });
   let nextOn = f.date('nextOn');
   const reserves = before && !fd.has('reserves') ? before.reserves : f.str('reserves', { max: 160 }) || null;
@@ -332,7 +338,7 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
     if (!f.ok) return f.state();
   }
 
-  const values = { equipment, controlType, periodMonths: periodMonths!, organization, responsibleId, siteId, requirementId, lastOn: lastOn!, nextOn: nextOn!, reserves };
+  const values = { equipment, equipmentCode, controlType, periodMonths: periodMonths!, organization, responsibleId, siteId, requirementId, lastOn: lastOn!, nextOn: nextOn!, reserves };
   let savedId = id;
   if (before) {
     const details = diffFields(await withNames(before, ['responsibleId']), await withNames({ ...before, ...values }, ['responsibleId']), CTRL_LABELS, fmtLog);
