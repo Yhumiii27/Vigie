@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { LOGIN_PATH } from '@/lib/auth/paths';
 import { AuthNotice, NoticeBody } from '@/components/AuthNotice';
 
-export const metadata: Metadata = { title: 'Déconnexion' };
+// Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
+export const metadata: Metadata = { title: 'Déconnexion', manifest: null };
 
 /** Retour de la déconnexion Microsoft (post_logout_redirect_uri), hors session. */
 export default function SignedOutPage() {

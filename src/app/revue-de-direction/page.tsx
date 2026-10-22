@@ -8,7 +8,8 @@ import { guard } from '@/lib/guard';
 import { loadReviewDossierPage } from '@/lib/data/review';
 import './dossier.css';
 
-export const metadata: Metadata = { title: 'Dossier de revue de direction' };
+// Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
+export const metadata: Metadata = { title: 'Dossier de revue de direction', manifest: null };
 
 // Dossier de la revue de direction (ISO 9001 §9.3), ouvert dans un nouvel onglet depuis /audits (?revue=<id>) :
 // préparatoire tant que la revue n'est pas clôturée, figé ensuite.

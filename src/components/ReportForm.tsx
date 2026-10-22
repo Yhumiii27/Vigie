@@ -27,6 +27,14 @@ type Props = {
   publicMode?: boolean;
   /** Lien « Se connecter » du formulaire sans compte (signaler en son nom et suivre ses signalements). */
   loginHref?: string;
+  /**
+   * Zones en service du site (EVT-19), proposées comme lieu quand il n'est pas pré-rempli par le QR code du poste ;
+   * `defaultZoneId` : zone d'un ancien QR code.
+   */
+  zones?: readonly { id: number; name: string }[];
+  defaultZoneId?: number;
+  /** Message du QR code d'une zone archivée (« ce poste n'existe plus, choisissez le lieu »). */
+  notice?: string;
 };
 
 type Recognition = { lang: string; interimResults: boolean; onresult: (e: { results: { 0: { transcript: string } }[] }) => void; onend: () => void; start: () => void; stop: () => void };
@@ -83,12 +91,20 @@ async function shrinkPhoto(file: File): Promise<Shrunk> {
 }
 
 /** Formulaire de signalement terrain (mobile) — crée l'événement à l'étape « Déclaré ». */
-export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType, token, publicMode = false, loginHref }: Props) {
+export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType, token, publicMode = false, loginHref, zones = [], defaultZoneId, notice }: Props) {
   const maxPhotos = publicMode ? MAX_PUBLIC_PHOTOS : MAX_PHOTOS;
   const maxFileBytes = publicMode ? MAX_PUBLIC_PHOTO_BYTES : MAX_FILE_BYTES;
   const [type, setType] = useState<string | null>(defaultType ?? null);
   const [location, setLocation] = useState(defaultLocation);
   const [editLocation, setEditLocation] = useState(!defaultLocation);
+  const [zoneId, setZoneId] = useState(defaultZoneId && zones.some((z) => z.id === defaultZoneId) ? String(defaultZoneId) : '');
+  // Lieu choisi dans les zones du site (EVT-19) : le texte reprend le nom de la zone tant qu'il n'est pas saisi.
+  const pickZone = (value: string) => {
+    const previous = zones.find((z) => String(z.id) === zoneId)?.name ?? '';
+    setZoneId(value);
+    const z = zones.find((x) => String(x.id) === value);
+    if (!location.trim() || location === previous) setLocation(z?.name ?? '');
+  };
   const [description, setDescription] = useState('');
   const [grave, setGrave] = useState<string | null>(null);
   const [anonymous, setAnonymous] = useState(false);
@@ -194,6 +210,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
     const fd = new FormData();
     fd.set('type', type ?? '');
     fd.set('location', location);
+    if (zoneId) fd.set('zoneId', zoneId);
     if (siteId) fd.set('siteId', siteId);
     fd.set('description', description);
     if (grave) fd.set('gravity', grave);
@@ -276,8 +293,22 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
         ))}
       </div>
 
+      {notice && (
+        <div role="status" className="vg-warn-note"><i className="ph ph-qr-code" aria-hidden /><span>{notice}</span></div>
+      )}
+
+      {editLocation && zones.length > 0 && (
+        <div className="field">
+          <label htmlFor="report-zone">Zone du site</label>
+          <select id="report-zone" className="input" value={zoneId} onChange={(e) => pickZone(e.target.value)} style={{ fontSize: FIELD_FONT, minHeight: TOUCH }}>
+            <option value="">Choisir une zone…</option>
+            {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+        </div>
+      )}
+
       <div className="field">
-        <label htmlFor="report-location">Lieu</label>
+        <label htmlFor="report-location">{editLocation && zones.length > 0 ? 'Lieu précis' : 'Lieu'}</label>
         {editLocation ? (
           <input id="report-location" className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Atelier, poste, zone…" style={{ fontSize: FIELD_FONT }} />
         ) : (

@@ -19,7 +19,8 @@ import { diffFields, logChange } from './changelog';
 // Traçabilité (PRV-12) : chaque écriture est journalisée dans sa transaction — activités sur leur fiche
 // (`site_activity`), zones, voies, plan de fond et échelle dans l'historique de la carte du site (`site_map`, identifiant
 // du site). Une activité ne se supprime plus : elle s'annule avec un motif (retirée de la carte et de la coactivité).
-// Zones et voies (dessin du plan) restent supprimables ; leur suppression est journalisée sur la carte. Site : contrôlé
+// Une zone s'archive avec un motif (EVT-19 : ses événements et son QR code de poste la désignent) ; les voies (dessin du
+// plan) restent supprimables, leur suppression est journalisée sur la carte. Site : contrôlé
 // par requireInSite après chargement (création sur un site actif du périmètre seulement).
 
 type Result = { error?: string };
@@ -111,8 +112,9 @@ export async function saveZone(_prev: FormState, fd: FormData): Promise<FormStat
 
   const db = await getDb();
   if (id) {
-    const [current] = await db.select().from(t.mapZones).where(eq(t.mapZones.id, id));
+    const current = await findZone(id);
     if (!current) return { error: 'Zone introuvable.' };
+    if (current.archivedAt) return { error: 'Zone archivée : elle ne se modifie plus.' };
     if (current.siteId !== siteId) return { error: 'Une zone ne change pas de site.' };
     const blocked = await requireInSite(current.siteId);
     if (blocked) return { error: blocked };
@@ -135,31 +137,52 @@ export async function saveZone(_prev: FormState, fd: FormData): Promise<FormStat
   return done(row.id);
 }
 
-/** Supprime une zone ; les activités qui y étaient rattachées gardent leur position. */
-export async function deleteZone(id: number): Promise<Result> {
-  const { error } = await requireManager();
+/**
+ * Archive une zone (EVT-19 : jamais supprimée) : retirée de la carte, des postes de signalement et de la coactivité, motif
+ * obligatoire, journal de la carte du site. Les activités rattachées gardent leur position (sans zone, journal de
+ * l'activité) ; les événements gardent leur zone. Son QR code de poste imprimé ouvre ensuite le formulaire terrain sur le
+ * site du poste, sans lieu (« ce poste n'existe plus, choisissez le lieu »).
+ */
+export async function archiveZone(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
   if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok || id == null) return f.state();
   const db = await getDb();
-  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id));
+  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt, qrVersion: t.mapZones.qrVersion })
+    .from(t.mapZones).where(eq(t.mapZones.id, id));
   if (!zone) return { error: 'Zone introuvable.' };
+  if (zone.archivedAt) return { error: 'Cette zone est déjà archivée.' };
   const blocked = await requireInSite(zone.siteId);
   if (blocked) return { error: blocked };
-  const deleted = await db.transaction(async (tx) => {
+  const archived = await db.transaction(async (tx) => {
+    const [row] = await tx.update(t.mapZones).set({ archivedAt: new Date(), archivedById: session.user.id, archiveReason: reason })
+      .where(and(eq(t.mapZones.id, id), isNull(t.mapZones.archivedAt))).returning({ id: t.mapZones.id });
+    if (!row) return false;
     const moved = await tx.update(t.siteActivities).set({ zoneId: null }).where(eq(t.siteActivities.zoneId, id)).returning({ id: t.siteActivities.id });
     for (const a of moved) {
-      await logChange(tx, { entityType: ACTIVITY, entityId: a.id, action: 'update', summary: `Zone « ${zone.name} » supprimée de la carte : l'activité garde sa position` });
-    }
-    const rows = await tx.delete(t.mapZones).where(eq(t.mapZones.id, id)).returning({ id: t.mapZones.id });
-    if (rows.length) {
       await logChange(tx, {
-        entityType: MAP, entityId: zone.siteId, action: 'delete',
-        summary: `Zone « ${zone.name} » supprimée de la carte${moved.length ? ` (${moved.length} activité${moved.length > 1 ? 's' : ''} sans zone)` : ''} ; son QR code de poste n'ouvre plus le signalement`,
+        entityType: ACTIVITY, entityId: a.id, action: 'update', byId: session.user.id,
+        summary: `Zone « ${zone.name} » archivée : l'activité garde sa position`, details: [{ field: 'Zone', from: zone.name, to: null }],
       });
     }
-    return rows;
+    await logChange(tx, {
+      entityType: MAP, entityId: zone.siteId, action: 'archive', byId: session.user.id, reason,
+      summary: `Zone « ${zone.name} » archivée${moved.length ? ` (${moved.length} activité${moved.length > 1 ? 's' : ''} sans zone)` : ''} ; son QR code de poste (étiquette n° ${zone.qrVersion}) ne pré-remplit plus le lieu`,
+    });
+    return true;
   });
-  if (!deleted.length) return { error: 'Zone introuvable.' };
-  return ok();
+  if (!archived) return { error: 'Cette zone est déjà archivée.' };
+  return done(id);
+}
+
+/** Zone de la carte (archivée comprise), pour une écriture. */
+async function findZone(id: number) {
+  const db = await getDb();
+  const [row] = await db.select().from(t.mapZones).where(eq(t.mapZones.id, id));
+  return row;
 }
 
 // ─── Voies de circulation ───────────────────────────────────────────────────
@@ -241,7 +264,7 @@ export async function saveShape(kind: 'zone' | 'route', id: number, points: Pt[]
   if (!clean) return { error: kind === 'zone' ? 'Contour de zone invalide.' : 'Tracé de voie invalide.' };
   const db = await getDb();
   const [current] = kind === 'zone'
-    ? await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id))
+    ? await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(and(eq(t.mapZones.id, id), isNull(t.mapZones.archivedAt)))
     : await db.select({ siteId: t.mapRoutes.siteId, name: t.mapRoutes.name }).from(t.mapRoutes).where(eq(t.mapRoutes.id, id));
   if (!current) return { error: kind === 'zone' ? 'Zone introuvable.' : 'Voie introuvable.' };
   const blocked = await requireInSite(current.siteId);
@@ -291,7 +314,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   const db = await getDb();
   const [sites, zones, routes, contractors, people, projects, plan, permit, existing] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
-    db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones),
+    db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt }).from(t.mapZones),
     db.select({ id: t.mapRoutes.id, siteId: t.mapRoutes.siteId, name: t.mapRoutes.name }).from(t.mapRoutes),
     db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.people.id }).from(t.people),
@@ -312,6 +335,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
   if (keystoneProject && keystoneProject !== existing?.keystoneProject && !projects.some((p) => `${p.id} · ${p.client}` === keystoneProject)) f.fail('keystoneProject', 'Projet Keystone inconnu.');
   if (zoneId && !zones.some((z) => z.id === zoneId && z.siteId === siteId)) f.fail('zoneId', "Zone inconnue sur ce site.");
+  else if (zoneId && zoneId !== existing?.zoneId && zones.some((z) => z.id === zoneId && z.archivedAt)) f.fail('zoneId', 'Zone archivée : choisissez une zone de la carte.');
   if (routeIds.some((r) => !routes.some((x) => x.id === r && x.siteId === siteId))) f.fail('routeIds', 'Voie inconnue sur ce site.');
   if (preventionPlanId) {
     if (!plan || plan.siteId !== siteId) f.fail('preventionPlanId', 'Plan de prévention introuvable sur ce site.');

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
-import { and, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
@@ -15,7 +15,7 @@ import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';
 import { loadFirstAiders } from '@/lib/data/events';
-import { resolveReportToken } from '@/lib/data/report-posts';
+import { ARCHIVED_POST_NOTICE, loadSiteZones, resolveReportToken } from '@/lib/data/report-posts';
 import { fmtDate, fromParisLocal, parisDay, referenceNow, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
@@ -267,7 +267,10 @@ function readEventForm(f: Reader, health: boolean) {
   const time = f.str('occurredTime');
   if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) f.fail('occurredTime', 'Heure invalide (HH:MM).');
   const occurredTime = time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : null;
-  const location = f.str('location', { required: true, max: 120 });
+  // EVT-19 : zone de la carte du site (facultative ; jamais pour une maladie professionnelle, sans rattachement). Lieu en
+  // texte obligatoire sans zone ; avec une zone, il en reprend le nom s'il est laissé vide.
+  const zoneId = type === 'MP' ? null : f.int('zoneId', { min: 1 });
+  const location = f.str('location', { required: zoneId == null, max: 120 });
   const equipment = f.str('equipment', { max: 120 }) || null;
   const keystoneProject = f.opt('keystoneProject');
   const pilotId = f.opt('pilotId');
@@ -349,7 +352,7 @@ function readEventForm(f: Reader, health: boolean) {
     injury, lostDays, cpamDeclaredOn, lesionNature, lesionSite, careGiven, reservesOn,
     commute, mpTable, mpDisease, mpCertificateOn, mpInformedOn, mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn,
     ncDisposition, ncQuantity, ncCostKeur, ncDispositionNote,
-    controlId, riskId, documentId, preventionPlanId, permitId,
+    controlId, riskId, documentId, preventionPlanId, permitId, zoneId,
   };
 }
 type EventValues = ReturnType<typeof readEventForm>;
@@ -366,7 +369,7 @@ const submitsHealth = (fd: FormData) => HEALTH_FORM_FIELDS.some((k) => {
  * (projet saisi avant la synchronisation Keystone, équipement réformé depuis).
  */
 async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?: EventRow) {
-  const [people, projects, [control], [risk], [doc], [plan], [permit]] = await Promise.all([
+  const [people, projects, [control], [risk], [doc], [plan], [permit], [zone]] = await Promise.all([
     db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people),
     db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
     v.controlId != null ? db.select({ siteId: t.controls.siteId, archivedAt: t.controls.archivedAt }).from(t.controls).where(eq(t.controls.id, v.controlId)) : [],
@@ -376,6 +379,7 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
     v.documentId ? db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, v.documentId)) : [],
     v.preventionPlanId ? db.select({ siteId: t.preventionPlans.siteId }).from(t.preventionPlans).where(eq(t.preventionPlans.id, v.preventionPlanId)) : [],
     v.permitId ? db.select({ siteId: t.permits.siteId, planId: t.permits.preventionPlanId }).from(t.permits).where(eq(t.permits.id, v.permitId)) : [],
+    v.zoneId != null ? db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt }).from(t.mapZones).where(eq(t.mapZones.id, v.zoneId)) : [],
   ]);
   // Site actif exigé pour une création ou un changement de site.
   if (!current || v.siteId !== current.siteId) {
@@ -417,6 +421,13 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
     else if (permit.planId && v.preventionPlanId && permit.planId !== v.preventionPlanId) f.fail('permitId', `Ce permis relève du plan ${permit.planId}.`);
     else if (permit.planId && !v.preventionPlanId) v.preventionPlanId = permit.planId;
   }
+  // EVT-19 : zone de la carte du même site ; une zone archivée n'est plus proposée, sauf celle déjà enregistrée.
+  if (v.zoneId != null) {
+    if (!zone) f.fail('zoneId', 'Zone inconnue.');
+    else if (zone.siteId !== v.siteId) f.fail('zoneId', "Cette zone appartient à la carte d'un autre site.");
+    else if (zone.archivedAt && v.zoneId !== current?.zoneId) f.fail('zoneId', 'Zone archivée : choisissez une zone de la carte.');
+    else if (!v.location) v.location = zone.name;
+  }
 }
 
 const LABELS: Partial<Record<keyof EventValues, string>> = {
@@ -432,6 +443,7 @@ const LABELS: Partial<Record<keyof EventValues, string>> = {
   // Données de santé saisies dans le formulaire (jamais les colonnes de l'absence de déclaration motivée : pas de faux écart).
   ...Object.fromEntries(HEALTH_FORM_FIELDS.map((k) => [k, HEALTH_LABELS[k]])),
   controlId: 'Équipement contrôlé', riskId: 'Risque du DUER', documentId: 'Document', preventionPlanId: 'Plan de prévention', permitId: 'Permis',
+  zoneId: 'Zone de la carte',
 };
 // Les textes longs sont signalés comme modifiés sans recopier leur contenu dans le journal.
 const LONG: (keyof EventValues)[] = ['description', 'immediateMeasures', 'circumstances', 'activity', 'witnesses', 'careGiven'];
@@ -473,6 +485,8 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
       if (!fd.has(k === 'commute' ? 'commuteField' : k)) (v as Record<string, unknown>)[k] = ev[k];
     }
   }
+  // Zone (EVT-19, paquet 7) absente du formulaire reçu : zone enregistrée conservée, sauf changement de site ou maladie professionnelle.
+  if (!fd.has('zoneId') && v.type !== 'MP') v.zoneId = v.siteId === ev.siteId ? ev.zoneId : null;
   if (ev.step >= STEP_QUALIFIED) {
     if (!v.pilotId) f.fail('pilotId', 'Un événement qualifié garde un pilote désigné.');
     for (const k of missingQualification(v)) f.fail(qualificationInput(k, v), 'Requis pour un événement qualifié.');
@@ -488,9 +502,12 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
   if (!f.ok) return f.state();
 
   const people = new Map((await db.select({ id: t.people.id, name: t.people.name }).from(t.people)).map((p) => [p.id, p.name]));
+  const zoneIds = [ev.zoneId, v.zoneId].filter((z): z is number => z != null);
+  const zoneNames = new Map(zoneIds.length ? (await db.select({ id: t.mapZones.id, name: t.mapZones.name }).from(t.mapZones).where(inArray(t.mapZones.id, zoneIds))).map((z) => [z.id, z.name]) : []);
   const fmt = (k: keyof EventValues) => (x: unknown): string | null => {
     if (x == null || x === '') return null;
     if (k === 'pilotId' || k === 'victimId') return people.get(String(x)) ?? String(x);
+    if (k === 'zoneId') return zoneNames.get(Number(x)) ?? String(x);
     if (k === 'type') return EVENT_TYPES[x as EventType]?.label ?? String(x);
     if (k === 'severity') return SEVERITY[Number(x)] ?? String(x);
     if (k === 'injury') return injuryLabel(String(x));
@@ -998,6 +1015,19 @@ const REPORT_TOKEN_ERRORS = {
   revoked: "Ce QR code a été remplacé : scannez l'étiquette actuelle du poste, ou prévenez l'animateur QHSE.",
   invalid: "Ce QR code n'est pas reconnu : scannez l'étiquette du poste, ou prévenez l'animateur QHSE.",
 } as const;
+const REPORT_ZONE_UNKNOWN = 'Lieu inconnu sur ce site : choisissez-le dans la liste, ou décrivez-le.';
+
+/**
+ * Zone choisie dans le formulaire terrain (EVT-19, champ `zoneId`) : zone en service du site du signalement, `null` sans
+ * choix, `false` si elle n'en est pas une (autre site, archivée, inconnue).
+ */
+async function chosenReportZone(f: Reader, siteId: string): Promise<{ id: number; name: string } | null | false> {
+  const raw = f.opt('zoneId');
+  if (!raw) return null;
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id < 1) return false;
+  return (await loadSiteZones(siteId)).find((z) => z.id === id) ?? false;
+}
 
 /**
  * Signalement terrain (formulaire /signaler) : crée l'événement à l'étape « Déclaré » et enregistre les photos jointes
@@ -1036,22 +1066,31 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
     if (err) return { error: err };
   }
 
-  let report: { siteId: string; location: string; declarant: string | null; declarantId: string | null; declarantCompany: string | null; reportedVia: ReportedVia };
+  let report: { siteId: string; zoneId: number | null; location: string; declarant: string | null; declarantId: string | null; declarantCompany: string | null; reportedVia: ReportedVia };
   let files = photos;
   /** Signalement sans compte : poste (version du QR code) et client, comptés à l'enregistrement. */
   let publicPost: { zoneId: number; name: string; version: number; client: string; secret: string } | null = null;
   if (session) {
     const { user, site, siteOptions } = session;
     const post = token ? await resolveReportToken(token) : null;
+    // QR code d'un poste en service : zone et lieu du poste ; d'une zone archivée (EVT-19) : site du poste, lieu à choisir.
+    const live = post?.status === 'ok' ? post.post : null;
+    const gone = post?.status === 'archived' ? post.post : null;
     // Site du QR code de poste (même hors du périmètre : la personne est au poste), sinon celui d'un ancien QR code
     // s'il est dans ses sites, sinon le site sélectionné (ou le premier site pour « Tous les sites »).
     const requestedSite = f.opt('siteId');
-    const qrSite = post?.status === 'ok' ? post.post.siteId
-      : requestedSite && siteOptions.some((s) => s.id === requestedSite && s.id !== ALL_SITES) ? requestedSite : null;
+    const qrSite = (live ?? gone)?.siteId
+      ?? (requestedSite && siteOptions.some((s) => s.id === requestedSite && s.id !== ALL_SITES) ? requestedSite : null);
     const siteId = qrSite ?? (site.id === ALL_SITES ? siteOptions.find((s) => s.id !== ALL_SITES)?.id : site.id);
     if (!siteId) return { error: "Aucun site n'est encore configuré dans Vigie : le signalement ne peut pas être enregistré." };
+    // Zone : celle du QR code du poste, sinon celle choisie dans le formulaire (zone en service du site) ; une zone d'un
+    // autre site (ancien QR code hors du périmètre, site ramené au site sélectionné) est ignorée, le lieu en texte reste.
+    const chosen = live ? { id: live.zoneId, name: live.name } : await chosenReportZone(f, siteId);
+    const zone = chosen === false ? null : chosen;
+    const location = f.str('location').slice(0, 120) || zone?.name || '';
+    if (gone && !location) return { error: ARCHIVED_POST_NOTICE };
     report = {
-      siteId, location: f.str('location').slice(0, 120) || (post?.status === 'ok' ? post.post.name : LOCATION_UNSPECIFIED),
+      siteId, zoneId: zone?.id ?? null, location: location || LOCATION_UNSPECIFIED,
       declarant: anonymous ? null : user.name, declarantId: anonymous ? null : user.id, declarantCompany: null,
       reportedVia: anonymous ? REPORTED_VIA.anonymous : REPORTED_VIA.session,
     };
@@ -1071,10 +1110,16 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
     const client = clientIp(await headers());
     if (!(await hitReportLimit('ip', client, secret))) return { error: REPORT_LIMITED };
     const post = await resolveReportToken(token);
-    if (post.status !== 'ok') return { error: REPORT_TOKEN_ERRORS[post.status] };
+    if (!('post' in post)) return { error: REPORT_TOKEN_ERRORS[post.status] };
+    // Zone : celle du jeton ; QR code d'une zone archivée (EVT-19) : lieu choisi parmi les zones en service du site du
+    // poste, ou décrit. Limites de débit inchangées (comptées sur le poste du jeton).
+    const zone = post.status === 'ok' ? { id: post.post.zoneId, name: post.post.name } : await chosenReportZone(f, post.post.siteId);
+    if (zone === false) return { error: REPORT_ZONE_UNKNOWN };
+    const location = f.str('location').slice(0, 120) || zone?.name || '';
+    if (!location) return { error: ARCHIVED_POST_NOTICE };
     publicPost = { zoneId: post.post.zoneId, name: post.post.name, version: readReportToken(token)!.version, client, secret };
     report = {
-      siteId: post.post.siteId, location: f.str('location').slice(0, 120) || post.post.name,
+      siteId: post.post.siteId, zoneId: zone?.id ?? null, location,
       declarant: name || null, declarantId: null, declarantCompany: company || null,
       reportedVia: anonymous ? REPORTED_VIA.anonymous : REPORTED_VIA.post,
     };
@@ -1153,8 +1198,9 @@ export async function regenerateReportPost(_prev: FormState, fd: FormData): Prom
   const reason = f.reason();
   if (!f.ok || id == null) return f.state();
   const db = await getDb();
-  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name }).from(t.mapZones).where(eq(t.mapZones.id, id));
+  const [zone] = await db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt }).from(t.mapZones).where(eq(t.mapZones.id, id));
   if (!zone) return { error: 'Poste introuvable : la zone a peut-être été supprimée du plan de site.' };
+  if (zone.archivedAt) return { error: 'Zone archivée de la carte : son QR code ne se régénère plus.' };
   const siteError = await requireInSite(zone.siteId);
   if (siteError) return { error: siteError };
   await db.transaction(async (tx) => {

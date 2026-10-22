@@ -60,6 +60,11 @@
       "when": 1792653179174,
       "sql": "5ac35a21805955a17cdd28d17fa2daa4c4ce8f0c486fae931bd721ecaee8cdb8",
       "snapshot": "79e3a0c37c92cb771221590c92a676348d43c1856ba759c25f04a57155bbc4ce"
+    },
+    "0012_field_mobile": {
+      "when": 1792681530539,
+      "sql": "622bf113bc60dd6aae196638343f95a2b555d2d61b17a33e69c86abcaa0ee46a",
+      "snapshot": "32338980c4f6e3589487cba2a00b5f4a6c6cf3de2944479d7f3e507c3aab71df"
     }
   }
 }

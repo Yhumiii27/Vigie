@@ -1,16 +1,20 @@
 'use client';
 
 import {
-  useEffect, useEffectEvent, useId, useImperativeHandle, useRef, useState,
+  useEffect, useEffectEvent, useId, useImperativeHandle, useRef, useState, useSyncExternalStore,
   type PointerEvent as ReactPointerEvent, type ReactNode, type Ref,
 } from 'react';
 import { TONE } from '@/lib/domain';
 import { centroid, dist, polylineSegments, type Conflict, type Pt } from './coactivity';
+import { pinchView, tapSlop, type ScreenPt } from './gestures';
 import { ROUTE_KINDS, TEAMS, ZONE_KINDS, type ActivityView, type MapConfig, type RouteView, type ZoneView } from './model';
 import styles from './sitemap.module.css';
 
 // Carte : plan de fond + surcouche SVG en coordonnées normalisées (viewBox 0 0 1 aspect),
 // déplacement (glisser), zoom (molette, boutons), dessin des zones et voies, placement des activités.
+// Tactile (UX-08) : déplacement à un doigt, pincement à deux doigts (zoom et déplacement, gestures.ts), sélection d'une
+// zone, d'une voie ou d'une activité au toucher (seuil de déplacement plus large qu'à la souris, fiche ouverte comme au
+// clic), cibles agrandies sur écran tactile, pas d'infobulle de survol au doigt ; souris inchangée.
 
 export type Layers = { plan: boolean; zones: boolean; routes: boolean; activities: boolean; conflicts: boolean };
 export type Tool = 'select' | 'zone' | 'route' | 'activity' | 'measure';
@@ -31,7 +35,14 @@ type Drag = { kind: 'zone' | 'route' | 'activity'; id: number; points: Pt[] };
 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 16;
-const CLICK_SLOP = 4;
+/** Pointeur principal grossier (écran tactile) : cibles de sélection agrandies. */
+const COARSE = '(pointer: coarse)';
+const subscribeCoarse = (cb: () => void) => {
+  const mq = window.matchMedia(COARSE);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+};
+type Pinch = { ids: [number, number]; view: View; from: [ScreenPt, ScreenPt] };
 const fmtPts = (pts: Pt[]) => pts.map(([x, y]) => `${x},${y}`).join(' ');
 const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 const parseTarget = (raw: string | null): Target | null => {
@@ -76,6 +87,10 @@ export function MapCanvas(props: Props) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const box = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  // Doigts posés sur la carte (position relative au cadre) et pincement en cours (UX-08).
+  const touches = useRef(new Map<number, ScreenPt>());
+  const pinch = useRef<Pinch | null>(null);
+  const coarse = useSyncExternalStore(subscribeCoarse, () => window.matchMedia(COARSE).matches, () => false);
   const [size, setSize] = useState<Size | null>(null);
   const [view, setView] = useState<View | null>(null);
   const [draft, setDraft] = useState<{ tool: Tool; pts: Pt[] }>({ tool: 'select', pts: [] });
@@ -185,10 +200,32 @@ export function MapCanvas(props: Props) {
 
   // ─── Pointeur ───────────────────────────────────────────────────────────
 
+  const local = (e: ReactPointerEvent<HTMLDivElement>): ScreenPt => {
+    const r = box.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const endPinch = () => { pinch.current = null; };
+
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || !size) return;
     const el = e.target as Element;
     if (el.closest('button, a, input, select, textarea, [data-overlay]')) return;
+    if (e.pointerType !== 'mouse') {
+      touches.current.set(e.pointerId, local(e));
+      // Deuxième doigt : pincement ; le geste du premier (déplacement, poignée, activité) est abandonné sans rien enregistrer.
+      if (touches.current.size >= 2) {
+        if (!pinch.current) {
+          const [a, b] = [...touches.current.entries()];
+          pinch.current = { ids: [a[0], b[0]], view: v, from: [a[1], b[1]] };
+          gesture.current = null;
+          setDrag(null);
+          setPanning(false);
+          setHover(null);
+        }
+        box.current?.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
     const hit = parseTarget(el.closest('[data-hit]')?.getAttribute('data-hit') ?? null);
     const raw = editable && tool === 'select' ? el.closest('[data-handle]')?.getAttribute('data-handle') : null;
     const [hk, hid, hi] = raw?.split(':') ?? [];
@@ -198,8 +235,19 @@ export function MapCanvas(props: Props) {
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (touches.current.has(e.pointerId)) touches.current.set(e.pointerId, local(e));
+    const p2 = pinch.current;
+    if (p2) {
+      if (!p2.ids.includes(e.pointerId) || !size) return;
+      const [a, b] = p2.ids.map((id) => touches.current.get(id));
+      if (!a || !b) return;
+      setView(clampView(pinchView(p2.view, { w, h }, p2.from, [a, b], { minS: fitScale * MIN_ZOOM, maxS: fitScale * MAX_ZOOM })));
+      return;
+    }
     const g = gesture.current;
     if (!g || g.id !== e.pointerId) {
+      // Survol : souris (et stylet en survol) seulement ; au doigt, la fiche résumée s'ouvre au toucher (onPointerUp).
+      if (e.pointerType === 'touch') return;
       if ((tool === 'zone' || tool === 'route' || tool === 'measure') && pts.length) setCursor(toUnit(e.clientX, e.clientY));
       const el = e.target as Element;
       const target = el.closest('[data-overlay]') ? null : parseTarget(el.closest('[data-hit]')?.getAttribute('data-hit') ?? null);
@@ -209,7 +257,7 @@ export function MapCanvas(props: Props) {
     }
     const dx = e.clientX - g.x, dy = e.clientY - g.y;
     if (!g.moved) {
-      if (Math.hypot(dx, dy) < CLICK_SLOP) return;
+      if (Math.hypot(dx, dy) < tapSlop(e.pointerType)) return;
       g.moved = true;
       g.mode = g.handle ? 'vertex'
         : g.hit?.kind === 'activity' && editable && tool === 'select' && sameTarget(g.hit, selection) ? 'move' : 'pan';
@@ -241,18 +289,30 @@ export function MapCanvas(props: Props) {
   };
 
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    touches.current.delete(e.pointerId);
+    if (pinch.current) {
+      // Fin du pincement dès qu'un des deux doigts se lève ; le doigt restant ne déplace ni ne sélectionne rien.
+      if (box.current?.hasPointerCapture(e.pointerId)) box.current.releasePointerCapture(e.pointerId);
+      if (pinch.current.ids.includes(e.pointerId)) endPinch();
+      return;
+    }
     const g = gesture.current;
     if (!g || g.id !== e.pointerId) return;
     gesture.current = null;
     setPanning(false);
     if (box.current?.hasPointerCapture(e.pointerId)) box.current.releasePointerCapture(e.pointerId);
+    // Toucher (doigt, stylet : seuil tapSlop) comme clic : sélection et fiche de l'élément touché, point de tracé.
     if (!g.moved) { click(e, g.hit); return; }
     if (g.mode === 'vertex' && g.handle && g.points) props.onShapeEdited(g.handle.kind, g.handle.id, g.points);
     if (g.mode === 'move' && g.hit && g.points) props.onActivityMoved(g.hit.id, g.points[0]);
     setDrag(null);
   };
 
-  const onPointerCancel = () => { gesture.current = null; setPanning(false); setDrag(null); };
+  const onPointerCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
+    touches.current.delete(e.pointerId);
+    if (pinch.current?.ids.includes(e.pointerId)) endPinch();
+    gesture.current = null; setPanning(false); setDrag(null);
+  };
 
   // ─── Rendu ──────────────────────────────────────────────────────────────
 
@@ -371,7 +431,7 @@ export function MapCanvas(props: Props) {
     <div ref={box} className={styles.map} tabIndex={0} role="application" aria-label={`${label}. Flèches pour se déplacer, + et − pour zoomer, 0 pour ajuster.`} aria-roledescription="carte"
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
-      onPointerLeave={() => setHover(null)}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHover(null); }}
       onDoubleClick={() => { if (tool === 'zone' || tool === 'route') finish(pts); }}>
       {size && (
         <svg width={w} height={h} viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} preserveAspectRatio="none" aria-hidden>
@@ -427,7 +487,7 @@ export function MapCanvas(props: Props) {
                   ...base, stroke: spec.color, strokeOpacity: 0.85, strokeWidth: px(spec.width),
                   strokeDasharray: spec.dash ? spec.dash.map(px).join(' ') : undefined, strokeLinecap: spec.dash ? 'butt' : 'round',
                 }} />
-                <polyline points={line} data-hit={`route:${r.id}`} pointerEvents="stroke" style={{ ...base, stroke: 'transparent', strokeWidth: px(Math.max(16, spec.width + 10)) }} />
+                <polyline points={line} data-hit={`route:${r.id}`} pointerEvents="stroke" style={{ ...base, stroke: 'transparent', strokeWidth: px(Math.max(coarse ? 28 : 16, spec.width + 10)) }} />
               </g>
             );
           })}
@@ -449,7 +509,7 @@ export function MapCanvas(props: Props) {
             const mark = { stroke: 'var(--color-bg)', strokeWidth: px(2), fill, opacity: a.approx ? 0.6 : 1, strokeDasharray: a.approx ? `${px(2)} ${px(2)}` : undefined };
             return (
               <g key={a.id} data-hit={`activity:${a.id}`} transform={`translate(${p[0]} ${p[1]})`}>
-                <circle r={px(15)} style={{ fill: 'transparent' }} />
+                <circle r={px(coarse ? 22 : 15)} style={{ fill: 'transparent' }} />
                 {a.tone && layers.conflicts && (
                   <circle r={px(inActive ? 16 : 13)} className={inActive ? styles.pulse : undefined}
                     style={{ fill: `color-mix(in srgb, ${TONE[a.tone].dot} 22%, transparent)`, stroke: TONE[a.tone].dot, strokeWidth: px(2.5) }} />
@@ -498,7 +558,8 @@ export function MapCanvas(props: Props) {
               ? zones.find((z) => z.id === selection.id) && zoneShape(zones.find((z) => z.id === selection.id)!)
               : routes.find((r) => r.id === selection.id) && routeShape(routes.find((r) => r.id === selection.id)!);
             return (shape || []).map((p, i) => (
-              <rect key={i} data-handle={`${selection.kind}:${selection.id}:${i}`} x={p[0] - px(5)} y={p[1] - px(5)} width={px(10)} height={px(10)} rx={px(2)}
+              <rect key={i} data-handle={`${selection.kind}:${selection.id}:${i}`} x={p[0] - px(coarse ? 9 : 5)} y={p[1] - px(coarse ? 9 : 5)}
+                width={px(coarse ? 18 : 10)} height={px(coarse ? 18 : 10)} rx={px(2)}
                 style={{ fill: 'var(--color-bg)', stroke: 'var(--color-accent)', strokeWidth: px(1.6), cursor: 'move' }} />
             ));
           })()}

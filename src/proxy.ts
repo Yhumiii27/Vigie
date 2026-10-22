@@ -3,6 +3,7 @@ import { cookieAttributes, openSession, sealSession, sessionCookieName, sessionM
 import { AUTH_PREFIX, HEALTH_PATH, LOGIN_PATH, REPORT_PATH, REPORT_TOKEN_PARAM, accessHref, looksLikeReportToken } from './lib/auth/paths';
 import { NOT_FOUND_PATH, demoRoleOf, routeDecision } from './lib/auth/route-access';
 import { DEMO_ROLE_COOKIE } from './lib/demo';
+import { isPwaAsset } from './lib/pwa';
 import { ROLE_KEYS, type Role } from './lib/domain';
 import { entraMissing, isDevServer, readConfig, secureCookies, type VigieConfig } from './lib/env';
 import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHost, originHost, requestHosts } from './lib/security';
@@ -21,10 +22,14 @@ import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHos
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-/** Routes ouvertes sans session : authentification, santé, signalement terrain avec jeton de poste. */
+/**
+ * Routes ouvertes sans session : authentification, santé, signalement terrain avec jeton de poste, ressources statiques
+ * du signalement installable (EVT-20 : manifeste, icônes, service worker — aucune donnée).
+ */
 function isPublic(req: NextRequest): boolean {
   const { pathname, searchParams } = req.nextUrl;
   if (pathname.startsWith(AUTH_PREFIX) || pathname === HEALTH_PATH) return true;
+  if ((req.method === 'GET' || req.method === 'HEAD') && isPwaAsset(pathname)) return true;
   // Point d'extension du signalement sans compte (EVT-07) : la page /signaler et sa server action vérifient le jeton
   // (HMAC, version du QR code) et la limite de débit ; le proxy ne contrôle que sa présence et sa forme.
   return pathname === REPORT_PATH && looksLikeReportToken(searchParams.get(REPORT_TOKEN_PARAM));

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
 import { EventAccessLog } from '@/components/events/AccessLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
+import { BackToList, DetailFocus } from '@/components/ListDetail';
 import { PageHeader } from '@/components/PageHeader';
 import { AccidentSection } from '@/components/events/AccidentSection';
 import { AnalysisEditButton } from '@/components/events/AnalysisEditButton';
@@ -25,6 +26,7 @@ import {
   ACTION_PRIORITIES, ALL_SITES, AVANCEMENT, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_DISPOSITIONS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
   canApprove, canEdit as canEditScreen, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod, type NcDisposition,
 } from '@/lib/domain';
+import { reportPostHref } from '@/lib/auth/paths';
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
@@ -90,6 +92,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const fieldOptions: EventFieldOptions = {
     people: options.people, sites: options.sites, projects: options.projects,
     controls: linkOptions.controls, risks: linkOptions.risks, documents: linkOptions.documents, plans: linkOptions.plans, permits: linkOptions.permits,
+    zones: linkOptions.zones,
   };
   // Formulaire d'action : service QHSE seulement (ACT-22) ; listes vides pour les autres rôles (convention isReadOnly), qui
   // lisent les actions liées et ouvrent leur fiche dans le plan. `today` : date du jour du serveur, jamais celle du navigateur.
@@ -119,8 +122,10 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
               defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
           </>
         )} />
-      <div style={{ padding: '0 28px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, maxWidth: 420 }}>
+      {/* UX-07 : sur téléphone, la fiche demandée (?sel=) remplace la liste, avec « Retour à la liste ». */}
+      <div className="vg-page vg-md" data-focus={selParam ? 'detail' : 'list'}
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14, alignItems: 'start' }}>
+        <div className="vg-md-list" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, maxWidth: 420 }}>
           <form action="/evenements" style={{ position: 'relative' }}>
             <i className="ph ph-magnifying-glass" style={{ position: 'absolute', left: 10, top: 10, fontSize: 15, color: 'var(--color-neutral-500)' }} />
             {tab !== 'ouverts' && <input type="hidden" name="etat" value={tab} />}
@@ -172,7 +177,9 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
+        <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
+          <BackToList href={hrefWith('/evenements', params, { sel: undefined })} />
+          {selParam && <DetailFocus key={selParam} />}
           {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
@@ -291,7 +298,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
   canSeeEnv: boolean;
   today: string;
 }) {
-  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, health, dismissal, accident, register } = detail;
+  const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, health, dismissal, accident, register, zone } = detail;
   const sev = TONE[severityTone(e.severity)];
   const closed = e.step >= STEP_CLOSED;
   const locked = !!lock;
@@ -312,6 +319,19 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     )],
     ['Pilote', e.pilot], ['Gravité potentielle', SEVERITY[e.severity]],
   ];
+  // EVT-19 : zone de la carte, avec le QR code de son poste (encadrement) ; zone archivée : QR code sans lieu pré-rempli.
+  if (zone) {
+    fields.splice(2, 0, ['Zone de la carte', (
+      <span key="zone" style={{ display: 'grid', gap: 3 }}>
+        <span>{zone.name}{zone.archived && <span className="vg-muted"> · zone archivée</span>}</span>
+        {canEdit && !zone.archived && (
+          <Link href={reportPostHref(zone.siteId, zone.id)} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <i className="ph ph-qr-code" aria-hidden />QR code du poste
+          </Link>
+        )}
+      </span>
+    )]);
+  }
   if (hasNcOrigin(e.type)) fields.push(['Origine', e.ncOrigin ?? (e.type === 'RC' ? 'Réclamation client' : '—')]);
   if (e.type === 'AT' && e.commute) fields.push(['Nature', 'Accident de trajet · hors TF1 / TG']);
   if (hasNcDisposition(e.type)) {
@@ -357,7 +377,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     victimKind: e.victimKind, victimId: e.victimId, victimName: e.victimName, victimCompany: e.victimCompany, workSchedule: e.workSchedule,
     knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
     injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn, lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven, reservesOn: e.reservesOn,
-    controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId,
+    controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId, zoneId: e.zoneId,
     commute: e.commute, ncDisposition: e.ncDisposition, ncQuantity: e.ncQuantity, ncCostKeur: e.ncCostKeur, ncDispositionNote: e.ncDispositionNote,
     mpTable: e.mpTable, mpDisease: e.mpDisease, mpCertificateOn: e.mpCertificateOn, mpInformedOn: e.mpInformedOn,
     mpQuestionnaireReceivedOn: e.mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn: e.mpQuestionnaireReturnedOn,
@@ -373,6 +393,10 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     documents: withCurrent(options.documents, e.documentId, links.document?.label),
     plans: withCurrent(options.plans, e.preventionPlanId, links.plan?.label),
     permits: withCurrent(options.permits, e.permitId, links.permit?.label),
+    // Zone enregistrée gardée comme choix (archivée, ou hors du site sélectionné), jamais proposée pour un nouveau choix.
+    zones: zone && !(options.zones ?? []).some((z) => z.id === zone.id)
+      ? [{ id: zone.id, name: zone.archived ? `${zone.name} (archivée)` : zone.name, siteId: zone.siteId }, ...(options.zones ?? [])]
+      : options.zones,
   };
   // Avertissement « aucune donnée de santé » du formulaire d'action (§ 4) : événement de type AT.
   const at = e.type === 'AT';

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
 import { readConfig, standaloneBuild } from './src/lib/env';
+import { REPORT_SW_HEADERS, REPORT_SW_PATH } from './src/lib/pwa';
 import { STATIC_SECURITY_HEADERS } from './src/lib/security';
 
 /**
@@ -34,9 +35,13 @@ const nextConfig: NextConfig = {
     // Pièces jointes (photos, documents) jusqu'à 10 Mo, plus la marge multipart.
     serverActions: { bodySizeLimit: '11mb', allowedOrigins: serverActionOrigins() },
   },
-  // En-têtes de sécurité fixes (SEC-05) ; CSP à nonce et HSTS : src/proxy.ts.
+  // En-têtes de sécurité fixes (SEC-05) ; CSP à nonce et HSTS : src/proxy.ts. Service worker du signalement (EVT-20) :
+  // jamais mis en cache, portée maximale /signaler.
   async headers() {
-    return [{ source: '/:path*', headers: STATIC_SECURITY_HEADERS }];
+    return [
+      { source: '/:path*', headers: STATIC_SECURITY_HEADERS },
+      { source: REPORT_SW_PATH, headers: REPORT_SW_HEADERS },
+    ];
   },
 };
 

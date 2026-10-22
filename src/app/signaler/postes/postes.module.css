@@ -30,7 +30,11 @@
   align-content: start;
   justify-items: center;
   break-inside: avoid;
+  scroll-margin-top: 16px;
 }
+/* Poste ouvert depuis la fiche d'un événement ou la carte (#poste-<zone>, EVT-19). */
+.cell:target .label { box-shadow: 0 0 0 3px var(--color-accent); }
+@media print { .cell:target .label { box-shadow: none; } }
 
 .notice { max-width: 720px; font-size: 12.5px; color: var(--tone-warn-fg); text-wrap: pretty; }
 

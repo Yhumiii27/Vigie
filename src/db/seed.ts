@@ -8,6 +8,7 @@ import * as t from './schema';
 import type { Db, Tx } from './types';
 import { seedActions, upgradeDemoActions } from './seeds/actions';
 import { seedCompliance } from './seeds/compliance';
+import { seedFieldMobile } from './seeds/field';
 import { seedModuleFunctions } from './seeds/modules';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
@@ -376,6 +377,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedCompliance(tx));
   // Paquet 6 (migration 0011) : coactivité maîtrisée et pièces jointes de démonstration, une seule fois (src/db/seeds/modules.ts).
   await db.transaction((tx) => seedModuleFunctions(tx, opts));
+  // Paquet 7 (migration 0012) : zones des événements et zone archivée, une seule fois (src/db/seeds/field.ts).
+  await db.transaction((tx) => seedFieldMobile(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -698,6 +701,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedCompliance(tx);
     // Paquet 6 (fonctions des modules) : coactivité maîtrisée, pièces jointes ajoutées après la saisie.
     await seedModuleFunctions(tx, opts);
+    // Paquet 7 (terrain et mobile) : zones des événements, zone archivée (après la carte et les événements).
+    await seedFieldMobile(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.
