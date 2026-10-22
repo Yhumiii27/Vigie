@@ -8,6 +8,7 @@ import * as t from './schema';
 import type { Db, Tx } from './types';
 import { seedActions, upgradeDemoActions } from './seeds/actions';
 import { seedCompliance } from './seeds/compliance';
+import { seedControlCodes } from './seeds/controls-share';
 import { seedFieldMobile } from './seeds/field';
 import { seedModuleFunctions } from './seeds/modules';
 import { seedDocuments } from './seeds/documents';
@@ -379,6 +380,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedModuleFunctions(tx, opts));
   // Paquet 7 (migration 0012) : zones des événements et zone archivée, une seule fois (src/db/seeds/field.ts).
   await db.transaction((tx) => seedFieldMobile(tx));
+  // Vue pub_controles (migration 0014) : code commun d'équipement du banc BE-1, une seule fois (src/db/seeds/controls-share.ts).
+  await db.transaction((tx) => seedControlCodes(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -703,6 +706,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedModuleFunctions(tx, opts);
     // Paquet 7 (terrain et mobile) : zones des événements, zone archivée (après la carte et les événements).
     await seedFieldMobile(tx);
+    // Vue pub_controles (demande de Crucible) : code commun d'équipement du banc BE-1.
+    await seedControlCodes(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.
