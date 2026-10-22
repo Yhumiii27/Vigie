@@ -46,3 +46,19 @@ export function reportTokenMatches(secret: string, token: string, ref: ReportPos
 
 /** Chemin encodé dans le QR code d'un poste. */
 export const reportTokenPath = (token: string) => `${REPORT_PATH}?${REPORT_TOKEN_PARAM}=${encodeURIComponent(token)}`;
+
+/**
+ * État d'un QR code de poste d'après la zone qu'il désigne (EVT-19) : `invalid` (zone inconnue, site archivé, signature
+ * fausse), `revoked` (étiquette remplacée par « Régénérer le QR » : version antérieure), `archived` (zone archivée de la
+ * carte : le formulaire s'ouvre sur le site du poste, sans lieu, avec « ce poste n'existe plus, choisissez le lieu »),
+ * sinon `ok`. La signature est contrôlée avant tout : un jeton falsifié n'apprend rien de la zone.
+ */
+export type ReportPostStatus = 'ok' | 'revoked' | 'archived' | 'invalid';
+export function reportPostStatus(
+  zone: { qrVersion: number; archived: boolean; siteArchived: boolean } | null,
+  token: { version: number; signatureValid: boolean },
+): ReportPostStatus {
+  if (!zone || zone.siteArchived || !token.signatureValid) return 'invalid';
+  if (token.version !== zone.qrVersion) return 'revoked';
+  return zone.archived ? 'archived' : 'ok';
+}

@@ -48,3 +48,7 @@ export function safeReturnPath(raw: string | null | undefined): string {
 
 /** Contrôle de forme du jeton de poste dans le proxy (base64url, points admis) ; la vérification réelle est dans la page. */
 export const looksLikeReportToken = (v: string | null) => !!v && /^[A-Za-z0-9._~-]{16,512}$/.test(v);
+
+/** Planche des QR codes des postes (encadrement) ; ancre d'un poste : `#poste-<zone>` (EVT-19, lien depuis la fiche). */
+export const REPORT_POSTS_PATH = '/signaler/postes';
+export const reportPostHref = (siteId: string, zoneId: number) => `${REPORT_POSTS_PATH}?site=${encodeURIComponent(siteId)}#poste-${zoneId}`;

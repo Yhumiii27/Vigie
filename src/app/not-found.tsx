@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Page introuvable' };
+// Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
+export const metadata = { title: 'Page introuvable', manifest: null };
 
 /** Adresse inconnue : page autonome, hors du shell. */
 export default function NotFound() {

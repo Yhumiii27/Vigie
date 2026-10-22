@@ -21,6 +21,8 @@ export type EditableEvent = {
   description: string; immediateMeasures: string; ncOrigin: string | null;
   customer: string | null; customerRef: string | null; envAspect: string | null; envMedium: string | null;
   controlId: number | null; riskId: number | null; documentId: string | null; preventionPlanId: string | null; permitId: string | null;
+  /** Zone de la carte du site (EVT-19). */
+  zoneId?: number | null;
   ncDisposition?: string | null; ncQuantity?: number | null; ncCostKeur?: number | null; ncDispositionNote?: string | null;
 } & AccidentValues & MpValues;
 
@@ -32,7 +34,10 @@ export type EventFieldOptions = {
   controls: readonly Option[]; risks: readonly Option[]; documents: readonly Option[]; plans: readonly Option[]; permits: readonly Option[];
   /** Victime d'un AT (personnes de l'effectif, victime enregistrée comprise) ; par défaut `people`. */
   victims?: readonly Option[];
+  /** Zones de la carte des sites (EVT-19), filtrées sur le site choisi ; zone archivée de l'événement comprise à la modification. */
+  zones?: readonly ZoneOption[];
 };
+export type ZoneOption = { id: number; name: string; siteId: string };
 
 const TYPE_OPTIONS = EVENT_TYPE_KEYS.map((k) => [k, EVENT_TYPES[k].label] as const);
 const SEVERITY_OPTIONS = [1, 2, 3, 4].map((g) => [String(g), SEVERITY[g]] as const);
@@ -109,6 +114,17 @@ export function EventFields(props: FieldsProps) {
   const [title, setTitle] = useState(e.title ?? '');
   const [description, setDescription] = useState(e.description ?? '');
   const [declarantId, setDeclarantId] = useState(create ? (props.defaults?.declarantId ?? '') : '');
+  // EVT-19 : zone de la carte du site choisi ; le lieu en texte reprend son nom s'il est vide.
+  const [siteId, setSiteId] = useState(e.siteId ?? '');
+  const [zoneId, setZoneId] = useState(e.zoneId == null ? '' : String(e.zoneId));
+  const [location, setLocation] = useState(e.location ?? '');
+  const siteZones = (options.zones ?? []).filter((z) => z.siteId === siteId);
+  const zoneChoices = siteZones.map((z) => [String(z.id), z.name] as const);
+  const pickZone = (value: string) => {
+    setZoneId(value);
+    const z = siteZones.find((x) => String(x.id) === value);
+    if (z && !location.trim()) setLocation(z.name.replace(/ \(archivée\)$/, ''));
+  };
   const at = type === 'AT';
   const mp = type === 'MP';
   // Données exigées à la qualification pour le type choisi (EVT-05) : signalées dans l'aide du champ.
@@ -164,8 +180,19 @@ export function EventFields(props: FieldsProps) {
         </FormRow>
       )}
       <FormRow>
-        <Field name="location" label="Lieu" hint={hint('location')}>
-          <Input name="location" defaultValue={e.location} maxLength={120} placeholder="Atelier, poste, zone…" />
+        <Field name="siteId" label="Site">
+          <Select name="siteId" options={options.sites} value={siteId}
+            onChange={(ev) => { setSiteId(ev.target.value); if (!(options.zones ?? []).some((z) => String(z.id) === zoneId && z.siteId === ev.target.value)) setZoneId(''); }} />
+        </Field>
+        {!mp && (
+          <Field name="zoneId" label="Zone de la carte" hint={siteZones.length ? 'Zone du plan de site (QR code du poste) ; facultative.' : 'Aucune zone dessinée sur la carte de ce site.'}>
+            <Select name="zoneId" options={zoneChoices} value={zoneId} onChange={(ev) => pickZone(ev.target.value)} placeholder="Aucune" />
+          </Field>
+        )}
+      </FormRow>
+      <FormRow>
+        <Field name="location" label="Lieu" hint={hint('location', zoneId ? 'Laissé vide : nom de la zone.' : undefined)}>
+          <Input name="location" value={location} onChange={(ev) => setLocation(ev.target.value)} maxLength={120} placeholder="Atelier, poste, zone…" />
         </Field>
         <Field name="equipment" label={at ? 'Objet ou matériel en cause' : 'Équipement'}>
           <Input name="equipment" defaultValue={e.equipment ?? ''} maxLength={120} placeholder="Machine, outillage, lot…" />
@@ -174,9 +201,6 @@ export function EventFields(props: FieldsProps) {
       <FormRow>
         <Field name="keystoneProject" label="Projet Keystone lié">
           <Select name="keystoneProject" options={projects} defaultValue={e.keystoneProject ?? ''} placeholder="Aucun projet" />
-        </Field>
-        <Field name="siteId" label="Site">
-          <Select name="siteId" options={options.sites} defaultValue={e.siteId} />
         </Field>
       </FormRow>
       <FormRow>

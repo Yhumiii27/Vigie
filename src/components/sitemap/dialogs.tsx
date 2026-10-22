@@ -11,7 +11,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import {
-  cancelActivity, deleteRoute, deleteZone, replaceSitePlan, resetSitePlan, saveActivity, saveMapSettings, saveRoute, saveZone,
+  archiveZone, cancelActivity, deleteRoute, replaceSitePlan, resetSitePlan, saveActivity, saveMapSettings, saveRoute, saveZone,
 } from '@/server/sitemap';
 import { activeOn, containingZone, lacksSignedPlan, type Conflict, type Pt } from './coactivity';
 import {
@@ -36,10 +36,35 @@ function DeleteRow({ label, question, onConfirm, pending, error }: { label: stri
 
 // ─── Zones ──────────────────────────────────────────────────────────────────
 
-export function ZoneForm({ siteId, zone, points, activityCount, onDone, onCancel }: {
-  siteId: string; zone?: ZoneView; points?: Pt[]; activityCount: number; onDone: (id?: number) => void; onCancel: () => void;
+/**
+ * Avertissement avant l'archivage d'une zone (EVT-19) : son QR code de poste, s'il est imprimé et collé, ne pré-remplit
+ * plus le lieu ; activités et événements rattachés.
+ */
+export function zoneArchiveMessage(zone: ZoneView, activityCount: number): string {
+  const label = zone.qrVersion && zone.qrVersion > 1 ? ` (étiquette n° ${zone.qrVersion})` : '';
+  const parts = [
+    `La zone est retirée de la carte, des QR codes des postes et de la coactivité ; elle reste tracée avec son motif. Son QR code de poste${label}, s'il est imprimé et collé au poste, ne pré-remplira plus le lieu : un signalement depuis cette étiquette demandera de choisir le lieu. Retirez l'étiquette du poste.`,
+  ];
+  if (activityCount) parts.push(`${activityCount} activité${activityCount > 1 ? 's' : ''} y ${activityCount > 1 ? 'sont rattachées et gardent' : 'est rattachée et garde'} leur position, sans zone.`);
+  if (zone.eventCount) parts.push(`${zone.eventCount} événement${zone.eventCount > 1 ? 's' : ''} ${zone.eventCount > 1 ? 'gardent' : 'garde'} cette zone dans ${zone.eventCount > 1 ? 'leur' : 'sa'} fiche.`);
+  return parts.join(' ');
+}
+
+export function ZoneForm({ siteId, zone, points, activityCount, qrHref, onDone, onCancel }: {
+  siteId: string; zone?: ZoneView; points?: Pt[]; activityCount: number;
+  /** QR code du poste de la zone (planche des postes, encadrement). */
+  qrHref?: string;
+  onDone: (id?: number) => void; onCancel: () => void;
 }) {
-  const { pending, error, run } = useRun();
+  const [archiving, setArchiving] = useState(false);
+  if (zone && archiving) {
+    // EVT-19 : une zone ne se supprime plus (QR code imprimé, événements rattachés) ; elle s'archive avec un motif.
+    return (
+      <ReasonForm action={archiveZone} hidden={{ id: zone.id }} submitLabel="Archiver la zone" submitIcon="ph-archive"
+        message={<span className="vg-warn-text" style={{ display: 'block' }}><i className="ph ph-qr-code" style={{ marginRight: 6 }} aria-hidden />{zoneArchiveMessage(zone, activityCount)}</span>}
+        placeholder="Ex. zone redessinée, local démoli, atelier réaménagé" onCancel={() => setArchiving(false)} onDone={() => onDone()} />
+    );
+  }
   return (
     <>
       <ActionForm action={saveZone} onDone={(s) => onDone(Number(s.id) || undefined)} onCancel={onCancel} submitLabel={zone ? 'Enregistrer' : 'Créer la zone'}
@@ -58,23 +83,30 @@ export function ZoneForm({ siteId, zone, points, activityCount, onDone, onCancel
         {!zone && <span style={muted}>Contour de {points?.length ?? 0} sommets ; vous pourrez déplacer les sommets après l&apos;enregistrement (sélectionnez la zone, puis faites glisser les poignées).</span>}
       </ActionForm>
       {zone && (
-        <DeleteRow label="Supprimer la zone" pending={pending} error={error}
-          question={activityCount > 1
-            ? `Supprimer la zone ? ${activityCount} activités y sont rattachées et gardent leur position.`
-            : activityCount === 1 ? 'Supprimer la zone ? 1 activité y est rattachée et garde sa position.' : 'Supprimer définitivement cette zone ?'}
-          onConfirm={() => run(() => deleteZone(zone.id), () => onDone())} />
+        <div style={{ display: 'grid', gap: 6, paddingTop: 10, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setArchiving(true)}>
+              <Icon name="ph-archive" size={13} />Archiver la zone
+            </button>
+            {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />QR code du poste</Link>}
+          </div>
+        </div>
       )}
     </>
   );
 }
 
-export function ZoneSheet({ zone, activityCount }: { zone: ZoneView; activityCount: number }) {
+export function ZoneSheet({ zone, activityCount, qrHref }: { zone: ZoneView; activityCount: number; qrHref?: string }) {
   return (
-    <Facts items={[
-      ['Type', ZONE_KINDS[zone.kind].label],
-      ['Activités rattachées', String(activityCount)],
-      zone.notes ? ['Notes', zone.notes] : null,
-    ]} />
+    <div style={{ display: 'grid', gap: 10 }}>
+      <Facts items={[
+        ['Type', ZONE_KINDS[zone.kind].label],
+        ['Activités rattachées', String(activityCount)],
+        zone.eventCount ? ['Événements rattachés', String(zone.eventCount)] : null,
+        zone.notes ? ['Notes', zone.notes] : null,
+      ]} />
+      {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />QR code du poste</Link>}
+    </div>
   );
 }
 

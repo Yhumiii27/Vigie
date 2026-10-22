@@ -289,7 +289,7 @@ export async function loadEventDetail(id: string) {
   if (health && (at || mp)) await logAccess({ kind: 'sante', entityType: 'event', entityId: row.id, personId: user.id });
   const e = health ? row : withoutHealth(row);
   // Les actions liées sont lues sans filtre de site : elles suivent l'événement.
-  const [actions, analyses, files, steps, links, wasteEntries, entry, [site], firstAiders] = await Promise.all([
+  const [actions, analyses, files, steps, links, wasteEntries, entry, [site], firstAiders, [zone]] = await Promise.all([
     db.select().from(t.actions).where(eq(t.actions.eventId, e.id)),
     db.select().from(t.eventAnalyses).where(eq(t.eventAnalyses.eventId, e.id)),
     loadEventAttachments(e.id, health),
@@ -300,6 +300,8 @@ export async function loadEventDetail(id: string) {
     health && at ? activeBenignEntry(e.id, people) : null,
     db.select({ label: t.sites.label, alsaceMoselle: t.sites.alsaceMoselle }).from(t.sites).where(eq(t.sites.id, e.siteId)),
     health && at && row.injury === 'soins' ? loadFirstAiders(e.siteId, now) : [],
+    // EVT-19 : zone de la carte (archivée comprise : l'événement la garde).
+    e.zoneId != null ? db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, archivedAt: t.mapZones.archivedAt }).from(t.mapZones).where(eq(t.mapZones.id, e.zoneId)) : [],
   ]);
   const content = Object.fromEntries(analyses.map((a) => [a.method, a.content])) as Record<string, unknown>;
   const methodLabel = METHODS.find(([k]) => k === e.analysisMethod)?.[1] ?? e.analysisMethod;
@@ -338,6 +340,8 @@ export async function loadEventDetail(id: string) {
     stepDates: stepDatesOf(steps, e.createdAt, e.step),
     links,
     wasteEntries,
+    /** Zone de la carte du site (EVT-19) ; archivée : son QR code de poste ne pré-remplit plus le lieu. */
+    zone: zone ? { id: zone.id, name: zone.name, siteId: zone.siteId, archived: !!zone.archivedAt } : null,
     /**
      * Rubriques de la déclaration d'un AT (EVT-01), hors données de santé : victime, heure, horaire, connaissance par
      * l'employeur (départ du délai de 48 h ; à défaut, l'enregistrement dans Vigie), activité, circonstances, témoins, tiers.
@@ -411,7 +415,7 @@ export async function loadEventClosures(ids: string[]): Promise<Map<string, stri
 export const loadEventLinkOptions = cache(async () => {
   const db = await getDb();
   const site = await currentSiteId();
-  const [controls, risks, docs, plans, permits] = await Promise.all([
+  const [controls, risks, docs, plans, permits, zones] = await Promise.all([
     loadControls(),
     // Risques en vigueur du DUERP (unités et risques archivés exclus).
     db.select({ id: t.risks.id, hazard: t.risks.hazard, situation: t.risks.situation, unit: t.workUnits.label, siteId: t.workUnits.siteId })
@@ -420,8 +424,12 @@ export const loadEventLinkOptions = cache(async () => {
     db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
     db.select({ id: t.preventionPlans.id, title: t.preventionPlans.title, siteId: t.preventionPlans.siteId, status: t.preventionPlans.status }).from(t.preventionPlans).orderBy(desc(t.preventionPlans.id)),
     db.select({ id: t.permits.id, description: t.permits.description, siteId: t.permits.siteId, status: t.permits.status }).from(t.permits).orderBy(desc(t.permits.id)),
+    // EVT-19 : zones en service de la carte des sites actifs (le formulaire filtre sur le site choisi).
+    db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId }).from(t.mapZones).innerJoin(t.sites, eq(t.mapZones.siteId, t.sites.id))
+      .where(and(isNull(t.mapZones.archivedAt), isNull(t.sites.archivedAt))).orderBy(asc(t.mapZones.name)),
   ]);
   return {
+    zones: zones.filter((z) => inSite(site, z.siteId)),
     controls: controls.map((c) => [String(c.id), clip(`${c.controlType} · ${c.equipment}`)] as Option),
     risks: risks.filter((r) => inSite(site, r.siteId)).map((r) => [String(r.id), clip(`${r.unit} · ${r.hazard} — ${r.situation}`)] as Option),
     documents: docs.filter((d) => inSite(site, d.siteId)).map((d) => [d.id, clip(`${d.id} · ${d.title}`)] as Option),

@@ -20,6 +20,11 @@
 }
 .ctrl:hover { color: var(--color-accent); border-color: color-mix(in srgb, var(--color-accent) 60%, transparent); }
 .ctrl:disabled { opacity: .45; cursor: not-allowed; }
+/* Écran tactile (UX-08) : boutons de zoom à 44 px ; le pincement et le glisser à un doigt sont gérés par MapCanvas. */
+@media (pointer: coarse) {
+  .controls { gap: 6px; }
+  .ctrl { width: 44px; height: 44px; }
+}
 
 .scale {
   position: absolute; left: 10px; bottom: 10px; z-index: 2; display: grid; gap: 3px; padding: 5px 8px; pointer-events: none;

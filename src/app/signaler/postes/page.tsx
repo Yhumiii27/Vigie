@@ -51,7 +51,7 @@ export default async function ReportPostsPage({ searchParams }: PageProps<'/sign
       ) : (
         <div className={styles.grid}>
           {posts.map((p) => (
-            <div key={p.zoneId} className={styles.cell}>
+            <div key={p.zoneId} id={`poste-${p.zoneId}`} className={styles.cell}>
               <div className={styles.label}>
                 <QrCode value={`${origin}${p.path}`} size={160} label={`QR code du poste ${p.name}`} />
                 <span className={styles.name}>{p.name}</span>

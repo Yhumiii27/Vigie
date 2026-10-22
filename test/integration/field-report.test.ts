@@ -247,6 +247,44 @@ describe('signalement sans compte (jeton de poste)', () => {
     const keys = (await db.select({ key: t.reportRateLimits.key }).from(t.reportRateLimits)).map((r) => r.key);
     expect(keys.every((k) => /^(ip|post|postTotal):[0-9a-f]{32}$/.test(k))).toBe(true);
   });
+
+  it('QR code d’une zone archivée (EVT-19) : formulaire ouvert sur le site du poste, lieu à choisir ; protections inchangées', async () => {
+    const { createReport } = await import('@/server/events');
+    const { archiveZone } = await import('@/server/sitemap');
+    const { resolveReportToken } = await import('@/lib/data/report-posts');
+    const { postTotalValue, reportLimitKey } = await import('@/lib/report-guard');
+    const db = await getDb();
+    const [zoneC] = await db.insert(t.mapZones).values({ siteId: 'ville-a', name: 'Ancien local de charge', kind: 'autre', polygon: [[0, 0], [1, 0], [1, 1]] })
+      .returning({ id: t.mapZones.id });
+    const jeton = await tokenOf(zoneC.id);
+    auth.state = { status: 'authenticated', identity: { personId: 'qhse', role: 'Animateur QHSE', siteIds: null } };
+    expect(await archiveZone({}, fd({ id: String(zoneC.id), reason: 'Local démoli' }))).toEqual({ ok: true, id: String(zoneC.id) });
+    auth.state = { status: 'anonymous' };
+    expect(await resolveReportToken(jeton)).toMatchObject({ status: 'archived', post: { zoneId: zoneC.id, siteId: 'ville-a' } });
+    // Signature fausse sur la zone archivée : « non reconnu », rien n'est révélé.
+    expect(await resolveReportToken(`${zoneC.id}.1.AAAAAAAAAAAAAAAAAAAAAA`)).toEqual({ status: 'invalid' });
+
+    req.headers = new Headers({ host: 'vigie.exemple.fr', 'x-forwarded-for': '203.0.113.77' });
+    const before = (await db.select().from(t.events)).length;
+    expect(await createReport(fd({ type: 'SD', description: 'Câble au sol.', anonymous: '1', jeton }))).toEqual({ error: "Ce poste n'existe plus : choisissez le lieu." });
+    // Zone d'un autre site que celui du poste, ou archivée : refusée.
+    expect((await createReport(fd({ type: 'SD', description: 'Câble au sol.', anonymous: '1', jeton, zoneId: String(zoneB) }))).error).toMatch(/Lieu inconnu/);
+    expect((await createReport(fd({ type: 'SD', description: 'Câble au sol.', anonymous: '1', jeton, zoneId: String(zoneC.id) }))).error).toMatch(/Lieu inconnu/);
+    expect((await db.select().from(t.events)).length).toBe(before);
+    // Champ piège : réponse neutre, comme pour un poste en service.
+    expect(await createReport(fd({ type: 'SD', description: 'Robot.', anonymous: '1', jeton, location: 'X', site_web: 'http://spam.example' }))).toEqual({});
+
+    const r = await createReport(fd({ type: 'SD', description: 'Câble au sol.', anonymous: '1', jeton, zoneId: String(zoneA) }));
+    const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
+    expect(ev).toMatchObject({ siteId: 'ville-a', zoneId: zoneA, location: 'Atelier montage', anonymous: true, reportedVia: 'terrain', declarant: null });
+    const free = await createReport(fd({ type: 'SD', description: 'Flaque.', declarant: 'Paul Durand', jeton, location: 'Cour arrière' }));
+    const [ev2] = await db.select().from(t.events).where(eq(t.events.id, free.id!));
+    expect(ev2).toMatchObject({ siteId: 'ville-a', zoneId: null, location: 'Cour arrière', reportedVia: 'poste' });
+    // Limite de débit comptée sur le poste du jeton (zone archivée), comme avant l'archivage.
+    const [counter] = await db.select().from(t.reportRateLimits)
+      .where(eq(t.reportRateLimits.key, reportLimitKey('postTotal', postTotalValue(zoneC.id, 1), REPORT_SECRET)));
+    expect(counter.hits).toBe(2);
+  });
 });
 
 describe('signalement d’une personne connectée', () => {
