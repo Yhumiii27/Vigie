@@ -280,7 +280,7 @@ export const REMINDER_KIND = 'Rappel du mercredi';
 /** Longueur maximale d'un motif (abandon, archivage, classement sans suite, réouverture). */
 export const REASON_MAX = 1000;
 
-/** Domaine d'exigence de veille relié aux écarts calculés des plans de prévention (R. 4512-6). */
+/** Domaine d'exigence de veille des plans de prévention (R. 4512-6) ; rattachement à l'indicateur : linkedTo 'prevention' (VEI-07). */
 export const PREVENTION_REQUIREMENT_DOMAIN = 'Plans de prévention';
 
 // Cotation des risques : gravité 1–4 × probabilité 1–4.
@@ -304,6 +304,22 @@ export const RISK_FLAGS: Record<RiskFlag, { label: string; tone: Tone; hint: str
 export const RISK_TODO_KIND = 'DUERP';
 /** Valeur de requirements.linkedTo pour l'exigence « Document unique » (R. 4121-1). */
 export const DUERP_REQUIREMENT_LINK = 'duerp';
+
+/**
+ * Indicateurs calculés auxquels une exigence de veille se rattache explicitement (requirements.linkedTo, VEI-07) : échéance
+ * et état de l'exigence lus dans le module (DUERP, plans de prévention), exigences reprises par l'écran Environnement
+ * (registre, bordereaux). Une seule exigence en vigueur par indicateur (contrôle de saveRequirement) ; reprise des anciens
+ * rapprochements par le texte dans la migration 0011.
+ */
+export const REQUIREMENT_LINKS = {
+  duerp: { label: 'Document unique (DUERP) — version en vigueur', hint: 'Échéance et état repris de la version en vigueur du DUERP (écran Risques).' },
+  prevention: { label: 'Plans de prévention (R. 4512-6) — interventions sans plan signé', hint: 'Écarts calculés des plans de prévention, sur tout le périmètre.' },
+  waste_register: { label: 'Registre des déchets (R. 541-43)', hint: 'Exigence affichée sur l’écran Environnement (registre chronologique).' },
+  waste_bsd: { label: 'Bordereaux de déchets dangereux (R. 541-45, Trackdéchets)', hint: 'Exigence de l’action « BSD manquants » et pilote des échéances du registre.' },
+} as const satisfies Record<string, { label: string; hint: string }>;
+export type RequirementLink = keyof typeof REQUIREMENT_LINKS;
+export const REQUIREMENT_LINK_KEYS = Object.keys(REQUIREMENT_LINKS) as RequirementLink[];
+export const isRequirementLink = (v: unknown): v is RequirementLink => typeof v === 'string' && v in REQUIREMENT_LINKS;
 
 // ─── DUERP : mise à disposition et programme annuel ─────────────────────────
 

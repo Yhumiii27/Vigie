@@ -8,6 +8,7 @@ import * as t from './schema';
 import type { Db, Tx } from './types';
 import { seedActions, upgradeDemoActions } from './seeds/actions';
 import { seedCompliance } from './seeds/compliance';
+import { seedModuleFunctions } from './seeds/modules';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { seedPrevention } from './seeds/prevention';
@@ -362,7 +363,7 @@ const demoEmail = (name: string) =>
  * jeu de démonstration (fiche de l'animatrice QHSE présente) et tant que rien n'est renseigné — un choix fait
  * ensuite dans « Gérer les sites » n'est jamais écrasé.
  */
-async function upgradeDemo(db: Db) {
+async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   // Liens réels des actions (ACT-01) : reprise idempotente des références d'origine textuelles (src/lib/origin-links.ts,
   // depuis l'ancienne origine conservée par la migration 0005 : actions.legacy_origin).
   await backfillActionLinks(db, { apply: true });
@@ -373,6 +374,8 @@ async function upgradeDemo(db: Db) {
   await upgradeDemoWasteMentions(db);
   // Paquet 5 (migration 0008) : données de conformité réglementaire, une seule fois (src/db/seeds/compliance.ts).
   await db.transaction((tx) => seedCompliance(tx));
+  // Paquet 6 (migration 0011) : coactivité maîtrisée et pièces jointes de démonstration, une seule fois (src/db/seeds/modules.ts).
+  await db.transaction((tx) => seedModuleFunctions(tx, opts));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -470,7 +473,7 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     const [[sites], [people]] = await Promise.all([q.select({ n: count() }).from(t.sites), q.select({ n: count() }).from(t.people)]);
     return sites.n === 0 && people.n === 0;
   };
-  if (!(await empty(db))) return upgradeDemo(db);
+  if (!(await empty(db))) return upgradeDemo(db, opts);
 
   await db.transaction(async (tx) => {
     // Recompté en première instruction de la transaction : sur PostgreSQL, deux instances qui démarrent ensemble ont pu
@@ -569,8 +572,9 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     const reqIds = (await tx.insert(t.requirements).values(REQUIREMENTS.map((r, sort) => ({
       text: r[0], domain: r[1], summary: r[2], dueOn: r[3], dueNote: r[4], evaluation: r[5], evaluationNote: r[6], pilotId: pid(r[7]), sort,
       lastEvaluatedOn: LAST_EVALUATED[sort],
-      // DUERP : échéance et état calculés depuis la version en vigueur (écran /risques).
-      linkedTo: r[0].includes('R. 4121-1') ? 'duerp' : null,
+      // Indicateur rattaché (VEI-07) : DUERP (version en vigueur, écran /risques), plans de prévention (R. 4512-6),
+      // bordereaux de déchets dangereux (R. 541-45, écran Environnement).
+      linkedTo: r[0].includes('R. 4121-1') ? 'duerp' : r[0].includes('R. 4512-6') ? 'prevention' : r[0].includes('R. 541-45') ? 'waste_bsd' : null,
       // Projets Keystone concernés calculés (livrés après le 20/01/2027) : plus de surcharge manuelle.
       ...(sort === 0 ? { featured: true, affectsProjects: true, keystoneProjects: null, actionId: 'A-196', impact: 'toute machine mise sur le marché après cette date doit y être conforme.' } : {}),
     }))).returning({ id: t.requirements.id })).map((r) => r.id);
@@ -692,6 +696,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
 
     // Paquet 5 (conformité réglementaire) : après tous les modules dont il complète les données.
     await seedCompliance(tx);
+    // Paquet 6 (fonctions des modules) : coactivité maîtrisée, pièces jointes ajoutées après la saisie.
+    await seedModuleFunctions(tx, opts);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

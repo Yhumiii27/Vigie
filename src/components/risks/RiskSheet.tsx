@@ -4,6 +4,7 @@ import { useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
+import { EntityFiles } from '@/components/EntityFiles';
 import { LinkActionButton, LinkActionForm } from '@/components/LinkActionButton';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ToneTag } from '@/components/ui';
@@ -234,6 +235,10 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
           <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucun événement rattaché. Le rattachement se fait depuis la fiche de l&apos;événement.</div>
         )}
       </section>}
+
+      {/* DUE-09 : justificatifs du risque (mesures, mesurages, rapports) ; figés une fois le risque archivé. */}
+      <EntityFiles kind="risk" entityId={risk.id} title="Justificatifs" kicker={`${unit.label} · ${risk.hazard}`} files={risk.files}
+        canAdd={canManage && !risk.archived && !unitArchived} emptyText="Aucun justificatif joint." />
 
       {showHistory && <ChangeLogList entries={risk.history} />}
 

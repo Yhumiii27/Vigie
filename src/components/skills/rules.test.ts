@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coversNeed, heldState, isBlocking, lapseFor, period, renewalDue } from './rules';
+import { coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast } from './rules';
 
 // Règles des habilitations (QUA-03) : manque au regard d'une affectation Keystone, recyclage à planifier.
 
@@ -69,5 +69,37 @@ describe('coversNeed : la formation règle-t-elle le besoin ?', () => {
     expect(coversNeed('2026-11-30', [], NOW)).toBe(false); // expire sous 60 jours
     expect(coversNeed('2027-06-01', [span('2027-05-25', '2027-07-01')], NOW)).toBe(false);
     expect(coversNeed('2027-06-01', [span('2027-05-01', '2027-05-10')], NOW)).toBe(true);
+  });
+});
+
+describe('renewalForecast (HAB-09)', () => {
+  const title = (id: string) => ({ id, label: `Titre ${id}` });
+  const rows = [
+    { person: { id: 'p1', name: 'Alice' }, cells: [
+      { title: title('A'), state: 's' as const, expiresOn: '2026-11-20', required: true },
+      { title: title('B'), state: 'x' as const, expiresOn: '2026-09-01', required: true },
+      { title: title('C'), state: 'v' as const, expiresOn: '2028-01-01', required: true },
+    ] },
+    { person: { id: 'p2', name: 'Bruno' }, cells: [
+      { title: title('A'), state: 'v' as const, expiresOn: '2027-09-30', required: true },
+      { title: title('B'), state: 'r' as const, expiresOn: null, required: true },
+      { title: title('C'), state: 'n' as const, expiresOn: '2026-12-01', required: false },
+    ] },
+  ];
+  it('rattrapage, mois d’échéance sur 12 mois, titres requis seulement', () => {
+    const f = renewalForecast(rows, '2026-10-22');
+    expect(f.months).toHaveLength(12);
+    expect(f.months[0].month).toBe('2026-10');
+    expect(f.months[11].month).toBe('2027-09');
+    expect(f.overdue.map((i) => `${i.personId}:${i.titleId}`)).toEqual(['p2:B', 'p1:B']);
+    expect(f.months.find((m) => m.month === '2026-11')?.items.map((i) => i.personId)).toEqual(['p1']);
+    expect(f.months.find((m) => m.month === '2027-09')?.items.map((i) => i.personId)).toEqual(['p2']);
+    // Titre valide au-delà de l'horizon, ou non requis : hors prévision.
+    expect(f.months.flatMap((m) => m.items).some((i) => i.titleId === 'C')).toBe(false);
+    expect(f.titles.map((t) => t.id)).toEqual(['A', 'B']);
+  });
+  it('passage d’année', () => {
+    const f = renewalForecast([], '2026-12-05', 3);
+    expect(f.months.map((m) => m.month)).toEqual(['2026-12', '2027-01', '2027-02']);
   });
 });

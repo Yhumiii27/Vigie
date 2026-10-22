@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useState, useTransition } from 'react';
+import { useId, useState } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
+import { EntityFiles } from '@/components/EntityFiles';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
+import { LinkedEvents } from '@/components/LinkedEvents';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
@@ -18,10 +20,10 @@ import type { FormOptions, Option } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
 import {
-  archiveControl, cancelControlRecord, recordControl, removeControlRecordFile, restoreControl, saveControl, type CancelRecordState,
+  archiveControl, cancelControlRecord, recordControl, restoreControl, saveControl, type CancelRecordState,
 } from '@/server/watch';
 import { controlOverdueDefaults, controlReserveDefaults } from './action-defaults';
-import { ArchivedBanner, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
+import { ArchivedBanner, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
 type Opts = Pick<FormOptions, 'people' | 'sites'>;
 /**
@@ -214,6 +216,9 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
         creating={creating} setCreating={setCreating}
         onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
 
+      {/* EVT-14 : événements rattachés à l'équipement (pannes, presque-accidents, non-conformités). */}
+      {!creating && <LinkedEvents events={c.events} />}
+
       {!creating && (
         <>
           {views.length > 0 && <ViewSwitch name={`control-view-${c.id}`} value={current} onChange={show} options={views} />}
@@ -233,7 +238,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
           )}
           {current === 'historique' && (
             <>
-              <History c={c} canApprove={canApprove && !c.archived} canRemoveFiles={editable} onNotice={setNotice} />
+              <History c={c} canApprove={canApprove && !c.archived} canEditFiles={editable} onNotice={setNotice} />
               <LazyChangeLog entity="control" id={c.id} title="Journal des modifications" />
             </>
           )}
@@ -323,26 +328,9 @@ function FollowUp({ c, today, actionOptions, linkActions, editable, creating, se
   );
 }
 
-function History({ c, canApprove, canRemoveFiles, onNotice }: {
-  c: ControlView; canApprove: boolean; canRemoveFiles: boolean; onNotice: (msg: string) => void;
+function History({ c, canApprove, canEditFiles, onNotice }: {
+  c: ControlView; canApprove: boolean; canEditFiles: boolean; onNotice: (msg: string) => void;
 }) {
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [, start] = useTransition();
-  const remove = (id: string) => {
-    if (!window.confirm('Retirer cette pièce jointe ajoutée par erreur ? Le fichier est supprimé.')) return;
-    setRemoving(id);
-    start(async () => {
-      try {
-        const r = await removeControlRecordFile(id);
-        setError(r.error ?? null);
-      } catch {
-        setError("Le retrait a échoué. Réessayez.");
-      }
-      setRemoving(null);
-    });
-  };
-
   if (!c.records.length) {
     return (
       <div className="vg-inset" style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
@@ -352,7 +340,6 @@ function History({ c, canApprove, canRemoveFiles, onNotice }: {
   }
   return (
     <div style={{ display: 'grid' }}>
-      {error && <div role="alert" className="vg-form-error">{error}</div>}
       {c.records.map((r, i) => (
         <div key={r.id} className={i < c.records.length - 1 ? 'vg-rule-bottom' : undefined}
           style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 12, padding: '10px 0', opacity: r.cancelled ? 0.6 : undefined }}>
@@ -369,8 +356,9 @@ function History({ c, canApprove, canRemoveFiles, onNotice }: {
             </div>
             {r.cancelLabel && <span style={{ ...muted, fontSize: 11.5, color: 'var(--color-neutral-300)' }}>{r.cancelLabel}</span>}
             {r.notes && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{r.notes}</p>}
-            <FileChips files={r.files} empty="Pas de rapport joint." removing={removing}
-              onRemove={canRemoveFiles && !r.cancelled ? remove : undefined} />
+            {/* VEI-08 : rapport complété ou retiré (motif) après la saisie ; figé sur un enregistrement annulé. */}
+            <EntityFiles kind="control_record" entityId={r.id} title="Rapport et pièces jointes" kicker={`${c.equipment} · contrôle du ${r.date}`} files={r.files}
+              canAdd={canEditFiles && !r.cancelled} emptyText="Pas de rapport joint." />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               {r.recordedBy && <span style={muted}>Saisi par {r.recordedBy}</span>}
               {canApprove && !r.cancelled && (

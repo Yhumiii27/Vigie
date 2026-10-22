@@ -371,7 +371,7 @@ const PROOFS: { actionId: string; uploadedBy: string; uploaderRole: Role | null;
 ];
 
 /** PDF d'une page (texte ASCII) : preuve de démonstration lisible par un navigateur. */
-function demoPdf(text: string): string {
+export function demoPdf(text: string): string {
   const safe = text.normalize('NFD').replace(/[^\x20-\x7e]/g, '').replace(/[()\\]/g, '');
   const stream = `BT /F1 14 Tf 72 760 Td (${safe}) Tj ET`;
   const objects = [

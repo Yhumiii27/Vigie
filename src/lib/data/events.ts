@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { fmtQty } from '@/components/environment/model';
+import { fmtQty, wasteEntryHref } from '@/components/environment/model';
 import type { ChangeEntry } from '@/components/ChangeLog';
 import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/components/events/deadlines';
 import {
@@ -192,7 +192,7 @@ async function loadWasteEntries(eventId: string): Promise<EventLink[]> {
   return rows.map((r) => ({
     id: String(r.id),
     label: `${fmtDate(r.removedOn)} · ${r.stream} · ${fmtQty(r.quantity, r.unit)}`,
-    href: `/environnement?annee=${r.removedOn.slice(0, 4)}&filiere=${encodeURIComponent(r.streamId)}${r.cancelledAt ? '&vue=annules' : ''}`,
+    href: wasteEntryHref({ id: r.id, removedOn: r.removedOn, streamId: r.streamId, cancelled: !!r.cancelledAt }),
     status: r.cancelledAt ? { label: 'Annulé', tone: 'neutral' } : undefined,
   }));
 }

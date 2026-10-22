@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { PageHeader } from '@/components/PageHeader';
-import { Aside, CardHead, Dot, Icon, SegLinks, ToneTag, hrefWith } from '@/components/ui';
+import { Aside, CardHead, Dot, Icon, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { ConsumptionMonthButton, ConsumptionPanel } from '@/components/environment/ConsumptionPanel';
 import { FilterMenu } from '@/components/environment/FilterMenu';
 import { NewStreamButton, StreamsPanel, type StreamSuggestions } from '@/components/environment/StreamsPanel';
@@ -17,7 +17,7 @@ import { BSD_STALE_DAYS } from '@/components/environment/model';
 import { SCREENS, TONE, canApprove, canEdit, canSee, type Tone } from '@/lib/domain';
 import { fmtSiret } from '@/lib/siret';
 import { guard } from '@/lib/guard';
-import { loadEnvironment } from '@/lib/data/environment';
+import { loadEnvironment, wasteEntryYear } from '@/lib/data/environment';
 import { loadFormOptions } from '@/lib/data/options';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref, canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
@@ -41,7 +41,9 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const session = await guard('env');
   const sp = await searchParams;
   const manage = canEdit(session.role, 'env');
-  const yearParam = Number(str(sp.annee));
+  // DOC-08 : ?enlevement=<id> ouvre la fiche d'un enlèvement (année du registre retrouvée si l'URL ne la porte pas).
+  const entryParam = /^\d{1,9}$/.test(str(sp.enlevement) ?? '') ? Number(sp.enlevement) : null;
+  const yearParam = Number(str(sp.annee) ?? (entryParam != null ? await wasteEntryYear(entryParam) : undefined));
   const [d, allOptions] = await Promise.all([loadEnvironment(Number.isInteger(yearParam) ? yearParam : undefined), loadFormOptions()]);
   // Création d'action : service QHSE seulement (ACT-22, réponses du 15/10/2026) ; les autres rôles ne reçoivent ni les
   // listes du formulaire d'action ni ses valeurs proposées.
@@ -57,6 +59,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const annee = d.year === d.currentYear ? undefined : String(d.year);
   const params = { onglet: tab === 'registre' ? undefined : tab, annee, filiere, vue };
   const regParams = { ...params, onglet: undefined };
+  // Liens profonds (DOC-08) : fiche d'un enlèvement (registre) ou d'une filière (onglet « Filières »).
+  const deepEntry = tab === 'registre' && entryParam != null && manage ? d.entries.find((e) => e.id === entryParam) : undefined;
+  const deepStream = tab === 'filieres' && manage ? filiere : undefined;
+  const missingDeep = (tab === 'registre' && entryParam != null && !deepEntry) || (tab === 'filieres' && !!rawStream && !filiere);
 
   // ── Registre filtré (les enlèvements annulés n'apparaissent que sous « Annulés »)
   const live = d.entries.filter((e) => !e.cancelled);
@@ -171,6 +177,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
     <>
       <PageHeader title={SCREENS.env.title} sub={sub} />
       <div className="vg-page">
+        {missingDeep && (
+          <MissingNotice text={tab === 'filieres' ? 'Filière introuvable ou hors du site sélectionné.' : 'Enlèvement introuvable, hors du site sélectionné ou non accessible.'}
+            closeHref={hrefWith(PATH, params, { filiere: tab === 'filieres' ? undefined : filiere })} />
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(176px, 1fr))', gap: 12 }}>
           {tiles.map(({ key, ...t }) => <div key={key} className="card" style={{ gap: 5, padding: '12px 14px', minWidth: 0 }}>{tile(t)}</div>)}
 
@@ -296,7 +306,8 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                     {approver && <SiteSiretButton sites={d.registrySites} defaultSiteId={siretSite} label="Modifier" className="vg-text-btn" />}
                   </div>
                 )}
-                <WasteRegister entries={shown} streams={streamOptions} canManage={manage} showSite={d.showSite} today={d.now} transporters={transporters} carriers={carriers}
+                <WasteRegister key={`reg-${deepEntry?.id ?? ''}`} entries={shown} lookup={d.entries} initialId={deepEntry?.id} closeHref={hrefWith(PATH, params, {})}
+                  streams={streamOptions} canManage={manage} showSite={d.showSite} today={d.now} transporters={transporters} carriers={carriers}
                   events={d.eventOptions} actionOptions={entryActionOptions} canSeeEvents={canSee(session.role, 'events')}
                   emptyText={
                     !d.streams.length ? `Aucune filière déchets pour ce site${manage ? ' : créez-en une dans l’onglet « Filières », puis inscrivez les enlèvements.' : '.'}`
@@ -314,7 +325,8 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                     {plural(activeStreams.filter((s) => s.hazardous).length, 'filière dangereuse', 'filières dangereuses')} · cumuls {d.year} {d.periodNote} et {d.year - 1}
                   </span>
                 </div>
-                <StreamsPanel streams={d.streams} year={d.year} annee={annee} isCurrent={d.isCurrent} canManage={manage} showSite={d.showSite} sites={allOptions.sites}
+                <StreamsPanel key={`str-${deepStream ?? ''}`} initialId={deepStream} closeHref={hrefWith(PATH, params, { filiere: undefined })}
+                  streams={d.streams} year={d.year} annee={annee} isCurrent={d.isCurrent} canManage={manage} showSite={d.showSite} sites={allOptions.sites}
                   suggestions={suggestions} actionOptions={entryActionOptions} />
               </>
             )}

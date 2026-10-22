@@ -2,18 +2,18 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { fileIcon, fmtSize, toAttachmentItem } from '../attachments';
+import { toAttachmentItem } from '../attachments';
 import { appliesToSite } from '../watch-rules';
 import { addDays, addMonths, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
-  CONTROL_HORIZON_DAYS, CONTROL_RESULTS, PREVENTION_REQUIREMENT_DOMAIN, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
+  CONTROL_HORIZON_DAYS, CONTROL_RESULTS, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   isBlockingControlResult, type ControlResult, type TodoItem, type Tone,
 } from '../domain';
 import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
-import { attachmentUrl } from '../uploads';
+import { loadLinkedEvents } from './linked-events';
 import { loadPreventionCompliance } from './prevention';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
 
@@ -40,9 +40,6 @@ const dayOf = parisDay;
 const traceLabel = (verb: string, at: Date | null, by: string, reason: string | null) =>
   at ? [`${verb} le ${fmtDate(dayOf(at))}${by ? ` par ${by}` : ''}`, reason].filter(Boolean).join(' · ') : null;
 
-type FileRow = { id: string; fileName: string; mimeType: string; size: number };
-const fileView = (f: FileRow) => ({ id: f.id, name: f.fileName, url: attachmentUrl(f.id), size: fmtSize(f.size), icon: fileIcon(f.mimeType) });
-export type FileChip = ReturnType<typeof fileView>;
 
 // ─── Indicateurs calculés par d'autres écrans ───────────────────────────────
 
@@ -98,11 +95,11 @@ export async function loadWatch() {
     loadDuerpStatus(),
     loadPreventionCompliance(),
   ]);
-  // Exigence DUERP (linkedTo = 'duerp') : échéance et état repris de la version en vigueur (/risques) ;
-  // plans de prévention (R. 4512-6) : interventions sans plan signé sur le site sélectionné (/prevention).
+  // Indicateur rattaché explicitement (linkedTo, VEI-07) — DUERP : échéance et état repris de la version en vigueur
+  // (/risques) ; plans de prévention (R. 4512-6) : interventions sans plan signé (/prevention).
   const indicatorOf = (r: (typeof reqs)[number]): RequirementIndicator | null =>
     r.linkedTo === 'duerp' ? duerpIndicator(duerp, TODO_HORIZON_DAYS)
-      : r.domain === PREVENTION_REQUIREMENT_DOMAIN ? { ...prevention, gap: prevention.gapCount > 0 }
+      : r.linkedTo === 'prevention' ? { ...prevention, gap: prevention.gapCount > 0 }
         : null;
   const controls = allControls.filter((c) => inSite(site, c.siteId));
   // VEI-06 : une exigence vaut pour toute l'entreprise — ses contrôles rattachés sont lus sur tout le périmètre de la
@@ -137,7 +134,9 @@ export async function loadWatch() {
       .where(and(inArray(t.attachments.entityType, ['control_record', 'requirement_evaluation', 'requirement']), inArray(t.attachments.entityId, [...new Set(fileKeys.map(([, id]) => id))])))
       .orderBy(asc(t.attachments.createdAt))
     : [];
-  const filesOf = (type: string, id: number) => files.filter((f) => f.entityType === type && f.entityId === String(id)).map(fileView);
+  // Pièces jointes (VEI-08 : complétées ou retirées après la saisie, src/server/entity-files.ts), avec l'auteur de l'envoi.
+  const filesOf = (type: string, id: number) => files.filter((f) => f.entityType === type && f.entityId === String(id))
+    .map((f) => toAttachmentItem(f, f.uploadedBy ? people.get(f.uploadedBy)?.name : undefined));
   // Action liée : libellé court (actionLabel), avancement affiché (« En retard » le cas échéant), date cible — seulement
   // pour une action que la personne peut lire (canReadAction : plan de son périmètre, ou ses propres actions) ; une
   // exigence vaut pour toute l'entreprise, son action peut appartenir à un site hors du périmètre : numéro seul.
@@ -173,7 +172,7 @@ export async function loadWatch() {
       ...r,
       archived,
       siteLabels: r.siteIds?.length ? r.siteIds.map((x) => (siteLabel.get(x) ?? x).split(' — ')[0]) : [],
-      textFiles: files.filter((f) => f.entityType === 'requirement' && f.entityId === String(r.id)).map((f) => toAttachmentItem(f, f.uploadedBy ? people.get(f.uploadedBy)?.name : undefined)),
+      textFiles: filesOf('requirement', r.id),
       archivedLabel: traceLabel('Archivée', r.archivedAt, name(r.archivedById), r.archiveReason),
       due: duerpDue ?? (due.control
         ? `${fmtDate(due.on!)} · prochain contrôle (${lcfirst(due.control.controlType)}, ${lcfirst(equipShort(due.control.equipment))})`
@@ -226,6 +225,8 @@ export async function loadWatch() {
     };
   }
   records.forEach((r) => recordsByControl.set(r.controlId, [...(recordsByControl.get(r.controlId) ?? []), recordView(r)]));
+  // EVT-14 : événements rattachés aux équipements (périmètre, jamais une maladie professionnelle hors rôles habilités).
+  const linkedEvents = await loadLinkedEvents('control', controls.map((c) => c.id));
 
   return {
     requirements,
@@ -255,6 +256,7 @@ export async function loadWatch() {
         requirement: c.requirementId ? reqBrief.get(c.requirementId) ?? null : null,
         action: actionOf(c.actionId),
         records: recs,
+        events: linkedEvents.get(String(c.id)) ?? [],
       };
     }),
   };

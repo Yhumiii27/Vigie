@@ -559,3 +559,88 @@ export async function addConflictToPlan(siteId: string, date: string, key: strin
   });
   return ok();
 }
+
+// ─── Situations de coactivité maîtrisées (PRV-10) ───────────────────────────
+
+const MEASURE_MAX = 1000;
+const PAIR_KEY = /^(\d{1,9})-(\d{1,9})$/;
+
+/** Violation de clé unique (maîtrise déjà enregistrée pour la paire, par une autre soumission). */
+const isUniqueViolation = (err: unknown): boolean => {
+  const e = err as { code?: string; cause?: unknown } | null;
+  return !!e && (e.code === '23505' || (e.cause != null && isUniqueViolation(e.cause)));
+};
+
+/**
+ * Marque une situation de coactivité détectée comme maîtrisée (champs `siteId`, `date`, `key`, `measure`) : mesure prise
+ * obligatoire ; la paire d'activités n'est plus signalée (badge, échéances), une seule maîtrise en cours par paire.
+ * Journal de la carte du site. Aucune action QSE (prévention : actions immédiates, réponses du 15/10/2026).
+ */
+export async function controlConflict(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const siteId = f.str('siteId', { required: true });
+  const date = f.str('date', { required: true });
+  const key = f.str('key', { required: true });
+  const measure = f.str('measure', { required: true, max: MEASURE_MAX });
+  if (!f.ok) return f.state();
+  const pair = PAIR_KEY.exec(key);
+  if (!isRealDate(date) || !pair) return { error: 'Situation de coactivité introuvable.' };
+  if (!(await siteExists(siteId))) return { error: 'Site inconnu.' };
+  const blocked = await requireInSite(siteId);
+  if (blocked) return { error: blocked };
+  const found = await findConflict(siteId, date, key);
+  if (!found) return { error: "Cette situation de coactivité n'est plus détectée : rechargez la carte." };
+  const [a, b] = [Number(pair[1]), Number(pair[2])];
+  const title = (id: number) => found.activities.find((x) => x.id === id)?.title ?? `activité ${id}`;
+  const db = await getDb();
+  try {
+    await db.transaction(async (tx) => {
+      const [row] = await tx.insert(t.coactivityControls).values({ siteId, pairKey: key, activityA: a, activityB: b, measure, controlledById: session.user.id })
+        .returning({ id: t.coactivityControls.id });
+      await logChange(tx, {
+        entityType: MAP, entityId: siteId, action: 'control', byId: session.user.id,
+        summary: `Coactivité maîtrisée : « ${title(a)} » et « ${title(b)} » (${found.conflict.title.toLowerCase()}, situation du ${fmtDate(date)})`,
+        details: [{ field: 'Mesure prise', from: null, to: measure }, { field: 'Maîtrise', from: null, to: `n° ${row.id}` }],
+      });
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) return { error: 'Cette situation est déjà marquée maîtrisée.' };
+    throw err;
+  }
+  return done(key);
+}
+
+/**
+ * Lève la maîtrise d'une situation de coactivité (mesure levée, situation à reprendre) : motif obligatoire, jamais de
+ * suppression ; la situation est de nouveau signalée si elle est toujours détectée.
+ */
+export async function releaseConflictControl(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select().from(t.coactivityControls).where(eq(t.coactivityControls.id, id!));
+  if (!row) return { error: 'Maîtrise introuvable.' };
+  if (row.cancelledAt) return { error: 'Cette maîtrise est déjà levée.' };
+  const blocked = await requireInSite(row.siteId);
+  if (blocked) return { error: blocked };
+  const released = await db.transaction(async (tx) => {
+    const [r] = await tx.update(t.coactivityControls).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason })
+      .where(and(eq(t.coactivityControls.id, row.id), isNull(t.coactivityControls.cancelledAt))).returning({ id: t.coactivityControls.id });
+    if (r) {
+      await logChange(tx, {
+        entityType: MAP, entityId: row.siteId, action: 'release', byId: session.user.id, reason,
+        summary: `Maîtrise de coactivité levée (activités ${row.activityA} et ${row.activityB}) : situation de nouveau signalée`,
+        details: [{ field: 'Mesure prise', from: row.measure, to: null }],
+      });
+    }
+    return !!r;
+  });
+  if (!released) return { error: 'Cette maîtrise est déjà levée.' };
+  return done(row.id);
+}

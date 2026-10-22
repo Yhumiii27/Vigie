@@ -14,6 +14,7 @@ import { actionLabel } from '../action-rules';
 import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
+import { loadLinkedEvents, type LinkedEvent } from './linked-events';
 
 // ─── Documents maîtrisés (ISO 9001 §7.5) ────────────────────────────────────
 // Le statut d'un document, sa version en vigueur et sa prochaine revue sont déduits des versions.
@@ -84,6 +85,10 @@ export type DocumentRow = {
    * document_id, D15). Sans doublon, la plus récente d'abord.
    */
   reviewActions: LinkedAction[];
+  /** Actions closes (Vérifiées) rattachées au document ou à ses versions, la plus récente d'abord (EVT-14). */
+  closedActions: LinkedAction[];
+  /** Événements rattachés au document (events.document_id, EVT-14) : rédacteurs et approbateurs seulement. */
+  events: LinkedEvent[];
   /** Détail proposé pour une action de revue périodique. */
   actionTitle: string;
 };
@@ -106,10 +111,12 @@ type RawDocumentData = {
   sites: { id: string; label: string }[];
   /** Dernier retrait tracé par document (change_log, action « archive »). */
   retirements?: Map<string, Retirement>;
+  /** Événements rattachés par document (loadLinkedEvents). */
+  events?: Map<string, LinkedEvent[]>;
 };
 
 /** Construit les lignes du registre à partir des tables (règles de statut, version en vigueur, prochaine revue). */
-export function buildDocumentRows({ people, docs, versions, files, actions, sites, retirements }: RawDocumentData, site: string | null, now: string): DocumentRow[] {
+export function buildDocumentRows({ people, docs, versions, files, actions, sites, retirements, events }: RawDocumentData, site: string | null, now: string): DocumentRow[] {
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '—' : '—');
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const fileOf = new Map(files.map((f) => [f.entityId, { id: f.id, name: f.fileName, size: f.size }])); // le dernier dépôt l'emporte
@@ -134,6 +141,10 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
     };
   };
 
+  const docActions = (id: string) => actions
+    .filter((a) => a.documentId === id || versionLinks.has(`${a.id}|${id}`))
+    .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
+    .map(linked);
   const rows: DocumentRow[] = docs.filter((d) => inSite(site, d.siteId)).map((d) => {
     const vs = versions.filter((v) => v.documentId === d.id).sort((a, b) => compareVersions(b.version, a.version)).map(versionView);
     const current = vs.find((v) => v.status === 'approuve') ?? null;
@@ -169,10 +180,9 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
       reviewDays,
       overdue: reviewDays != null && reviewDays < 0,
       dueSoon: reviewDays != null && reviewDays >= 0 && reviewDays <= DOC_SOON_DAYS,
-      reviewActions: actions
-        .filter((a) => a.documentId === d.id || versionLinks.has(`${a.id}|${d.id}`))
-        .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))
-        .map(linked).filter((a) => a.open),
+      reviewActions: docActions(d.id).filter((a) => a.open),
+      closedActions: docActions(d.id).filter((a) => !a.open),
+      events: events?.get(d.id) ?? [],
       actionTitle: `Revue périodique de ${d.id} — ${lcfirst(d.title)}`,
     };
   });
@@ -205,7 +215,10 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
     const e = entries.find((x) => x.action === 'archive');
     return e ? [[id, { on: dayOf(e.at), by: e.who, reason: e.reason }] as const] : [];
   }));
-  const rows = buildDocumentRows({ people, docs: docs.filter((d) => keep(d.siteId)), versions, files, actions, sites, retirements }, null, now);
+  const kept = docs.filter((d) => keep(d.siteId));
+  // EVT-14 : événements rattachés (périmètre, jamais une maladie professionnelle hors rôles habilités ; rien pour le Salarié).
+  const events = await loadLinkedEvents('document', kept.map((d) => d.id));
+  const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events }, null, now);
   // Documents rattachés à un autre site : la fiche ouverte par ?doc= (après création ou changement de site) l'explique.
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const elsewhere: Record<string, string> = Object.fromEntries(docs
@@ -224,7 +237,7 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
  */
 const readerView = (r: DocumentRow): DocumentRow => {
   const current = { ...r.current!, action: null };
-  return { ...r, pending: null, versions: [current], current, reviewActions: [], overdue: false, dueSoon: false };
+  return { ...r, pending: null, versions: [current], current, reviewActions: [], closedActions: [], events: [], overdue: false, dueSoon: false };
 };
 
 /** Document demandé par lien (?doc=) mais absent de la consultation : jamais approuvé, ou retiré de la diffusion. */

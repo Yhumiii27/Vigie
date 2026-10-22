@@ -16,10 +16,11 @@ import {
 } from '../queries';
 import { SOURCE_TO_COMPLETE, actionHref, actionLabel, canCreateAction, isLate } from '../action-rules';
 import type { ActionFormOptions } from '../action-view';
-import { reviewCloseBlockers } from '../review-rules';
+import { clipText, decisionFollowUpGap, reviewCloseBlockers } from '../review-rules';
 import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { planItemAuditLabel, planItemState } from './audits';
+import { loadEntityFiles } from './entity-files';
 import { loadChangeLog } from './changelog';
 import { loadContext } from './context';
 import { loadObjectives, tf1Target } from './objectives';
@@ -322,11 +323,15 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   };
   const history = reviews.map(historyRow);
   if (!current) {
-    return { now, review: null, reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
+    return { now, review: null, reviewFiles: [], reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
       defaults: { nextOn: addMonths(now, 1), holdNext: { on: addMonths(now, 1), kind: 'ordinaire' as ReviewKind }, originRef: '', copyFrom: null },
       flags: { ...flags, editable: false, mine: false, closeBlockers: [] as string[] } };
   }
-  const [rec, changes, programme] = await Promise.all([readReviewRecord(current, reviews), loadChangeLog('review', current.id), reviewProgramme(current.id, now)]);
+  const [rec, changes, programme, reviewFiles] = await Promise.all([
+    readReviewRecord(current, reviews), loadChangeLog('review', current.id), reviewProgramme(current.id, now), loadEntityFiles('review', [current.id]),
+  ]);
+  // AUD-17 : pièces des éléments d'entrée (figées avec la revue clôturée ou annulée).
+  const itemFiles = await loadEntityFiles('review_item', rec.checklist.map((i) => i.id));
   const previous = rec.prior[0] ?? null;
   const editable = isEditableReview(current);
   // Compte rendu : la prochaine revue proposée est celle déjà enregistrée, sinon celle qui suit (pas de doublon).
@@ -334,10 +339,17 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   const next = linkedNext ?? followingReview(reviews, current);
   const fallbackNext = current.nextReviewOn ?? addMonths(current.reviewOn, 6);
   // Case « fourni » : rôles qui saisissent sur l'écran Audits, ou le contributeur lui-même (AUD-04), tant que la revue est modifiable.
-  const items = rec.checklist.map((i) => ({ ...i, canToggle: editable && !i.auto && (edit || i.ownerId === session.user.id) }));
+  const items = rec.checklist.map((i) => ({
+    ...i, canToggle: editable && !i.auto && (edit || i.ownerId === session.user.id),
+    files: itemFiles.get(String(i.id)) ?? [],
+    /** Pièces jointes : rôles qui saisissent, ou le contributeur, tant que la revue est modifiable (AUD-17). */
+    canAttach: editable && !i.auto && (edit || i.ownerId === session.user.id),
+  }));
   return {
     now,
     review: rec.view,
+    /** Pièces jointes de la revue (AUD-17). */
+    reviewFiles: reviewFiles.get(String(current.id)) ?? [],
     reviews: history,
     items,
     decisions: rec.decisions,
@@ -873,7 +885,11 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [reviews, items, people, leads] = await Promise.all([loadReviews(), db.select().from(t.reviewItems), loadPeople(), loadQhseLeads()]);
+  const [reviews, items, people, leads, decisions, actions] = await Promise.all([
+    loadReviews(), db.select().from(t.reviewItems), loadPeople(), loadQhseLeads(),
+    db.select().from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort), asc(t.reviewDecisions.id)),
+    db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
+  ]);
   // Compte rendu et visa : la direction (dernier rôle connu) et les responsables QHSE ; contributions sans contributeur
   // de l'annuaire : les responsables QHSE.
   const qhse = leads.forSite(null);
@@ -902,6 +918,36 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
       todo.push({ date: now, dueOn: addDays(r.reviewOn, REVIEW_CLOSE_DAYS), kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
     }
   });
+
+  // AUD-16 : décision d'une revue tenue ou clôturée restée sans suite à son échéance — sans action au plan, action
+  // abandonnée, ou action encore ouverte (une action Terminée attend sa vérification : pas d'alerte ici).
+  const actionById = new Map(actions.map((a) => [a.id, a]));
+  reviews.filter((r) => r.status === 'tenue' || r.status === 'cloturee').forEach((r) => {
+    const href = `/audits?annee=${yearOf(r.reviewOn)}&revue=${r.id}#revue`;
+    decisions.filter((d) => d.reviewId === r.id && !!d.dueOn && d.dueOn < now).forEach((d) => {
+      const a = d.actionId ? actionById.get(d.actionId) : undefined;
+      const state = decisionFollowUpGap(a?.status ?? null, !!d.actionId);
+      if (!state) return;
+      const label = REVIEW_DECISION_KINDS[d.kind as ReviewDecisionKind]?.label ?? 'Décision';
+      todo.push({
+        date: now, dueOn: d.dueOn!, kind, tone: 'danger', overdue: true, siteId: null, key: `revue-decision|${d.id}`,
+        title: `${label} de la revue du ${fmtDayMonth(r.reviewOn)} sans suite — ${state === 'none' ? 'aucune action au plan' : state === 'abandoned' ? `action ${d.actionId} abandonnée` : `action ${d.actionId} non close`} (échéance ${fmtDayMonth(d.dueOn!)}) · ${clipText(d.text, 70)}`,
+        who: name(d.pilotId) || qhse.who, href, ...(d.pilotId ? { readHref: `/audits/contributions?revue=${r.id}` } : {}),
+        ownerIds: d.pilotId ? [...new Set([d.pilotId, ...qhse.ownerIds])] : qhse.ownerIds,
+      });
+    });
+  });
+
+  // AUD-16 : prochaine revue non planifiée (ISO 9001 §9.3.1, revue à intervalles planifiés) — aucune revue planifiée après
+  // la dernière revue tenue ou clôturée.
+  const last = reviews.filter((r) => r.status === 'tenue' || r.status === 'cloturee').sort((a, b) => b.reviewOn.localeCompare(a.reviewOn) || b.id - a.id)[0];
+  if (last && !reviews.some((r) => r.status === 'planifiee' && r.reviewOn > last.reviewOn)) {
+    todo.push({
+      date: now, dueOn: last.reviewOn, kind, tone: 'warn', siteId: null, key: `revue-prochaine|${last.id}`,
+      title: `Prochaine revue de direction à planifier (dernière revue le ${fmtDate(last.reviewOn)})`,
+      who: director?.name ?? qhse.who, href: `/audits?annee=${yearOf(last.reviewOn)}&revue=${last.id}#revue`, ownerIds: closers,
+    });
+  }
   return { todo };
 });
 
@@ -953,6 +999,8 @@ export async function loadMyContributions({ revue }: { revue?: string | string[]
     .filter((x): x is { r: Review; as: Involvement } => !!x.as)
     .sort((a, b) => Number(isEditableReview(b.r)) - Number(isEditableReview(a.r)) || b.r.reviewOn.localeCompare(a.r.reviewOn) || b.r.id - a.r.id);
 
+  // AUD-17 : pièces jointes des éléments de la personne.
+  const myItemFiles = await loadEntityFiles('review_item', items.filter((i) => i.ownerId === user.id).map((i) => i.id));
   const entries = await Promise.all(mine.map(async ({ r, as }) => {
     const ready = await autoReady(priorReviews(reviews, r).length > 0);
     const list = items.filter((i) => i.reviewId === r.id).map((i) => itemView(i, ready, people, now));
@@ -986,7 +1034,7 @@ export async function loadMyContributions({ revue }: { revue?: string | string[]
     return {
       id: r.id, reviewOn: r.reviewOn, kind: view.kindLabel, kindShort: view.kindShort, status: view.status, statusLabel: view.statusLabel,
       statusTone: view.statusTone, editable, involvement: as, involvementLabel: INVOLVEMENT_LABELS[as],
-      myItems: list.filter((i) => !i.auto && i.ownerId === user.id).map((i) => ({ ...i, canToggle: editable })),
+      myItems: list.filter((i) => !i.auto && i.ownerId === user.id).map((i) => ({ ...i, canToggle: editable, files: myItemFiles.get(String(i.id)) ?? [] })),
       progress: { provided: list.filter((i) => i.done).length, total: list.length },
       record,
       openHref: canSee(role, 'audits') ? `/audits?annee=${yearOf(r.reviewOn)}&revue=${r.id}#revue` : null,
@@ -994,7 +1042,7 @@ export async function loadMyContributions({ revue }: { revue?: string | string[]
     };
   }));
   const asked = typeof revue === 'string' && /^\d+$/.test(revue) ? +revue : null;
-  return { now, reviews: entries, focus: entries.some((e) => e.id === asked) ? asked : null };
+  return { now, userId: user.id, reviews: entries, focus: entries.some((e) => e.id === asked) ? asked : null };
 }
 export type MyContributions = Awaited<ReturnType<typeof loadMyContributions>>;
 export type MyContribution = MyContributions['reviews'][number];

@@ -3,13 +3,15 @@
 import { useRef, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Dialog } from '@/components/Dialog';
+import { Dialog, DialogButton } from '@/components/Dialog';
+import { ReasonButton } from '@/components/ReasonDialog';
+import { ActionForm, Field, TextArea } from '@/components/form';
 import { ConfirmButton, ErrorLine, Notice, muted, useRun } from '@/components/prevention/parts';
 import { Icon, ToneTag } from '@/components/ui';
 import { addDays, fmtDate, fmtLong } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { SitemapData } from '@/lib/data/sitemap';
-import { addConflictToPlan, moveActivity, saveShape } from '@/server/sitemap';
+import { addConflictToPlan, controlConflict, moveActivity, releaseConflictControl, saveShape } from '@/server/sitemap';
 import { activeOn, centroid, detectConflicts, dist, interferenceLine, type CoInput, type Conflict, type Pt } from './coactivity';
 import { ActivityForm, ActivitySheet, PanelTitle, PlanBackgroundForm, RouteForm, RouteSheet, ScaleForm, ZoneForm, ZoneSheet, periodLabel, planGap } from './dialogs';
 import { MapCanvas, activityPosition, type DrawState, type Layers, type MapActivity, type MapHandle, type Target, type Tool } from './MapCanvas';
@@ -122,7 +124,11 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   const activities: ActivityView[] = data.activities.map((a) => (moves[a.id] ? { ...a, geometry: { type: 'point', at: moves[a.id] } } : a));
   const byId = new Map(activities.map((a) => [a.id, a]));
   const input: CoInput = { zones, routes, activities, metersPerUnit: map.metersPerUnit, proximityMeters: map.proximityMeters, firstMinuteBasis: site.firstMinuteBasis };
-  const conflicts = detectConflicts(input, date);
+  // PRV-10 : situations maîtrisées (mesure prise) retirées des situations signalées (carte, liste, badge, échéances).
+  const controlByKey = new Map(data.controls.map((c) => [c.key, c]));
+  const detected = detectConflicts(input, date);
+  const conflicts = detected.filter((c) => !controlByKey.has(c.key));
+  const mastered = detected.filter((c) => controlByKey.has(c.key));
   const toneOf = new Map<number, 'danger' | 'warn'>();
   conflicts.forEach((c) => [c.a, c.b].forEach((id) => { if (toneOf.get(id) !== 'danger') toneOf.set(id, c.tone); }));
   const dayActivities = activities.filter((a) => activeOn(a, date))
@@ -482,18 +488,51 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                       <summary className={styles.summary}><i className="ph ph-caret-right" aria-hidden />Mesures recommandées ({c.measures.length})</summary>
                       <ul className={styles.measures} style={{ marginTop: 4 }}>{c.measures.map((m) => <li key={m}>{m}</li>)}</ul>
                     </details>
-                    {canManage && c.planIds.length > 0 && (
+                    {canManage && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                         {c.planIds.map((planId) => (
                           <AddToPlan key={planId} siteId={site.id} conflict={c} planId={planId} single={c.planIds.length === 1}
                             linked={[byId.get(c.a), byId.get(c.b)].find((x) => x?.preventionPlanId === planId)} />
                         ))}
+                        <ControlConflictButton siteId={site.id} conflict={c} names={[byId.get(c.a)?.title, byId.get(c.b)?.title]} />
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
+            {mastered.length > 0 && (
+              <div style={{ display: 'grid', gap: 6 }}>
+                <span style={{ ...muted, fontSize: 11.5 }}>Situations maîtrisées · {mastered.length}</span>
+                {mastered.map((c) => {
+                  const ctl = controlByKey.get(c.key)!;
+                  return (
+                    <div key={c.key} className={styles.conflict} style={{ opacity: 0.85 }}>
+                      <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <ToneTag tone="ok"><Icon name="ph-shield-check" size={11} style={{ marginRight: 4 }} />Maîtrisée</ToneTag>
+                        <span className="tag tag-neutral">{c.pairLabel}</span>
+                      </span>
+                      <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>
+                        {c.title}{c.place && <span style={{ color: 'var(--color-neutral-400)' }}> · {c.place}</span>}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>
+                        {[c.a, c.b].map((id) => byId.get(id)?.title).filter(Boolean).join(' · ')}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>
+                        <span style={muted}>Mesure prise · </span>{ctl.measure}
+                      </span>
+                      <span style={muted}>Maîtrisée le {fmtDate(ctl.on)} par {ctl.by}</span>
+                      {canManage && (
+                        <ReasonButton label="Lever la maîtrise" icon="ph-arrow-counter-clockwise" className="vg-text-btn" style={{ justifySelf: 'start', fontSize: 11.5 }}
+                          title="Lever la maîtrise de la situation" kicker={c.title} action={releaseConflictControl} hidden={{ id: ctl.id }}
+                          submitLabel="Lever la maîtrise" message="La situation est de nouveau signalée tant qu'elle est détectée. La mesure prise et le motif restent à l'historique de la carte."
+                          placeholder="Ex. balisage retiré, horaires modifiés" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Activités du jour */}
@@ -609,6 +648,31 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
         {dialogBody}
       </Dialog>
     </>
+  );
+}
+
+/**
+ * « Marquer maîtrisée » (PRV-10) : mesure prise obligatoire ; la situation n'est plus signalée tant que la maîtrise n'est
+ * pas levée. Aucune action QSE (prévention : actions immédiates).
+ */
+function ControlConflictButton({ siteId, conflict, names }: { siteId: string; conflict: Conflict; names: (string | undefined)[] }) {
+  return (
+    <DialogButton label="Marquer maîtrisée" icon="ph-shield-check" className="btn btn-secondary vg-btn-sm" title="Situation de coactivité maîtrisée"
+      kicker={`${conflict.title} · ${fmtDate(conflict.date)}`} width={500}>
+      {(close) => (
+        <ActionForm action={controlConflict} hidden={{ siteId, date: conflict.date, key: conflict.key }} onDone={close} onCancel={close}
+          submitLabel="Marquer maîtrisée" submitIcon="ph-shield-check">
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+            {names.filter(Boolean).join(' et ')} : la situation n&apos;est plus signalée (badge, échéances) tant que la maîtrise n&apos;est pas levée.
+            La mesure prise, son auteur et sa date sont conservés à l&apos;historique de la carte.
+          </p>
+          <Field name="measure" label="Mesure prise">
+            <TextArea name="measure" rows={3} maxLength={1000} required autoFocus
+              placeholder="Ex. zone balisée, interventions décalées l'après-midi, consignes communes passées aux deux équipes" />
+          </Field>
+        </ActionForm>
+      )}
+    </DialogButton>
   );
 }
 

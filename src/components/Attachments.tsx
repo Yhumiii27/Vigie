@@ -1,12 +1,12 @@
 'use client';
 
-import { useRef, useState, useTransition, type ReactNode } from 'react';
+import { useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { Dialog } from '@/components/Dialog';
 import {
   ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES,
   fileIcon, fmtSize, type AttachmentItem,
 } from '@/lib/attachments';
-import { TONE } from '@/lib/domain';
+import { REASON_MAX, TONE } from '@/lib/domain';
 
 type Result = { error?: string };
 
@@ -18,7 +18,10 @@ type AttachmentsProps = {
   canRemove?: (f: AttachmentItem) => boolean;
   /** Envoi : les fichiers déjà contrôlés côté client ; la server action reconstruit un FormData. */
   onAdd: (files: File[]) => Promise<Result>;
-  onRemove: (id: string) => Promise<Result>;
+  /** Retrait ; `reason` : motif saisi quand `reasonRequired` (pièces jointes génériques, paquet 6). */
+  onRemove: (id: string, reason?: string) => Promise<Result>;
+  /** Motif obligatoire au retrait, conservé dans l'historique de la fiche (src/server/entity-files.ts). */
+  reasonRequired?: boolean;
   title?: string;
   /** Référence affichée dans la fenêtre de confirmation (ex. A-214). */
   kicker?: string;
@@ -32,12 +35,14 @@ type AttachmentsProps = {
  * Pièces jointes d'une fiche (photos, PV, attestations, rapports) : vignettes, ajout et retrait.
  * Composant transverse ; le stockage passe par src/lib/uploads.ts et la lecture par /fichiers/[id] (droit sur l'entité).
  */
-export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, title = 'Pièces jointes', kicker, hint = `Photos, PDF, Word, Excel · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier`, emptyText = 'Aucune pièce jointe.', caption }: AttachmentsProps) {
+export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, reasonRequired = false, title = 'Pièces jointes', kicker, hint = `Photos, PDF, Word, Excel · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier`, emptyText = 'Aucune pièce jointe.', caption }: AttachmentsProps) {
   const canManage = canAdd;
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<AttachmentItem | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const reasonId = useId();
   // Images que le navigateur ne sait pas afficher (HEIC hors Safari…) : vignette fichier à la place.
   const [broken, setBroken] = useState<string[]>([]);
   const [uploading, startUpload] = useTransition();
@@ -61,15 +66,16 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
     });
   };
 
-  const askRemove = (f: AttachmentItem | null) => { setRemoveError(null); setRemoving(f); };
+  const askRemove = (f: AttachmentItem | null) => { setRemoveError(null); setReason(''); setRemoving(f); };
 
   // La boîte de dialogue reste ouverte en cas d'échec et affiche l'erreur ; elle se ferme une fois la pièce retirée.
   const confirmRemove = () => {
     const target = removing;
     if (!target) return;
+    if (reasonRequired && !reason.trim()) { setRemoveError('Motif obligatoire.'); return; }
     startDelete(async () => {
       try {
-        const r = await onRemove(target.id);
+        const r = await onRemove(target.id, reasonRequired ? reason.trim() : undefined);
         if (r.error) { setRemoveError(r.error); return; }
         setRemoving(null);
       } catch {
@@ -129,11 +135,20 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
           <>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
               « {removing.name} » sera définitivement retiré de la fiche. Cette suppression est irréversible.
+              {reasonRequired && ' Le retrait est inscrit à l’historique de la fiche avec son motif.'}
             </p>
+            {reasonRequired && (
+              <div className="field">
+                <label htmlFor={reasonId}>Motif du retrait</label>
+                <textarea id={reasonId} className="input" rows={3} maxLength={REASON_MAX} required value={reason} onChange={(e) => setReason(e.target.value)}
+                  placeholder="Ex. fichier joint par erreur, mauvaise version du rapport" />
+                <span className="vg-field-hint">Obligatoire, conservé dans l’historique de la fiche.</span>
+              </div>
+            )}
             {removeError && <div role="alert" className="vg-form-error">{removeError}</div>}
             <div className="dialog-actions">
               <button type="button" className="btn btn-secondary" onClick={() => askRemove(null)} disabled={deleting}>Annuler</button>
-              <button type="button" className="btn" onClick={confirmRemove} disabled={deleting}
+              <button type="button" className="btn" onClick={confirmRemove} disabled={deleting || (reasonRequired && !reason.trim())}
                 style={{ color: TONE.danger.fg, borderColor: TONE.danger.dot }}>
                 <i className="ph ph-trash" style={{ fontSize: 14 }} />{deleting ? 'Suppression…' : 'Supprimer'}
               </button>

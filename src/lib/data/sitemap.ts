@@ -9,9 +9,9 @@ import {
 } from '@/components/sitemap/coactivity';
 import {
   COACTIVITY_HORIZON_DAYS, DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
-  type ActivityView, type Choice, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
+  type ActivityView, type Choice, type CoactivityControlView, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
 } from '@/components/sitemap/model';
-import { addDays } from '../dates';
+import { addDays, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';
 import { lcfirst, loadPeople } from '../queries';
@@ -25,7 +25,7 @@ type Rows = Awaited<ReturnType<typeof fetchRows>>;
 type Person = { name: string };
 
 async function fetchRows(db: Db) {
-  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles] = await Promise.all([
+  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls] = await Promise.all([
     // Sites actifs uniquement (un site archivé n'a plus de carte ni de coactivité).
     db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select().from(t.siteMaps),
@@ -37,9 +37,14 @@ async function fetchRows(db: Db) {
     db.select().from(t.preventionPlans),
     db.select().from(t.permits),
     db.select({ id: t.attachments.id, fileName: t.attachments.fileName }).from(t.attachments).where(eq(t.attachments.entityType, SITE_MAP_ATTACHMENT)),
+    // PRV-10 : situations de coactivité maîtrisées en cours (une levée de maîtrise est conservée, hors de la lecture).
+    db.select().from(t.coactivityControls).where(isNull(t.coactivityControls.cancelledAt)).orderBy(asc(t.coactivityControls.id)),
   ]);
-  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles };
+  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls };
 }
+
+/** Paires d'activités maîtrisées d'un site (clés de detectConflicts, PRV-10). */
+const controlledKeys = (rows: Rows, siteId: string) => new Set(rows.controls.filter((c) => c.siteId === siteId).map((c) => c.pairKey));
 
 /** Lignes de toutes les cartes (mémorisées par requête). */
 const loadRows = cache(async () => fetchRows(await getDb()));
@@ -257,10 +262,16 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
     permits: sitePermits.map((p): Choice => [p.id, `${p.id} · ${PERMIT_TYPES[p.type === 'essai' ? 'essai' : 'feu'].label} — ${p.location}`]),
   };
 
+  // Onglets : situations signalées (non maîtrisées, PRV-10) du jour.
   const tabs = selected ? null : rows.sites.map((s) => {
     const { input: si } = siteInput(rows, s.id, people, now);
-    return { id: s.id, label: s.label, conflicts: detectConflicts(si, now).length };
+    const done = controlledKeys(rows, s.id);
+    return { id: s.id, label: s.label, conflicts: detectConflicts(si, now).filter((c) => !done.has(c.key)).length };
   });
+  // PRV-10 : maîtrises en cours du site (qui, quand, mesure prise).
+  const controls: CoactivityControlView[] = rows.controls.filter((c) => c.siteId === siteId).map((c) => ({
+    id: c.id, key: c.pairKey, measure: c.measure, by: c.controlledById ? people.get(c.controlledById)?.name ?? c.controlledById : '—', at: c.controlledAt.toISOString(), on: parisDay(c.controlledAt),
+  }));
 
   return {
     now,
@@ -277,6 +288,7 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
     toPosition: candidates(rows, siteId, activities, now, addDays(now, COACTIVITY_HORIZON_DAYS)),
     choices,
     conflictsToday: detectConflicts(input, now),
+    controls,
     focus: { activityId: focusActivity?.id ?? null, candidate: focusCandidate, date: focusDate, notice },
   };
 }
@@ -309,10 +321,13 @@ export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; to
       ]).filter((n): n is string => !!n))];
       return names.length > 3 ? `${names.slice(0, 3).join(', ')}…` : names.join(', ');
     };
-    let previous = new Set(detectConflicts(input, addDays(now, -1)).map((c) => c.key));
+    // PRV-10 : une situation maîtrisée n'est plus signalée (ni badge, ni échéance), tant que la maîtrise n'est pas levée.
+    const done = controlledKeys(rows, site.id);
+    const signaled = (date: string) => detectConflicts(input, date).filter((c) => !done.has(c.key));
+    let previous = new Set(signaled(addDays(now, -1)).map((c) => c.key));
     for (let i = 0; i <= COACTIVITY_HORIZON_DAYS; i++) {
       const date = addDays(now, i);
-      const list = detectConflicts(input, date);
+      const list = signaled(date);
       if (i === 0) badge += list.length;
       const fresh = list.filter((c) => !previous.has(c.key));
       previous = new Set(list.map((c) => c.key));

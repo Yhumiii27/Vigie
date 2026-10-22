@@ -123,6 +123,12 @@ async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
     case 'qualification':
       return Number.isInteger(num) ? one(db.select({ siteId: t.people.siteId }).from(t.qualifications)
         .innerJoin(t.people, eq(t.people.id, t.qualifications.personId)).where(eq(t.qualifications.id, num))) : null;
+    // Paquet 6 : justificatif d'un risque (site de son unité de travail), pièce d'un enlèvement de déchets.
+    case 'risk':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.workUnits.siteId }).from(t.risks)
+        .innerJoin(t.workUnits, eq(t.workUnits.id, t.risks.unitId)).where(eq(t.risks.id, num))) : null;
+    case 'waste_entry':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.wasteEntries.siteId }).from(t.wasteEntries).where(eq(t.wasteEntries.id, num))) : null;
     default: return null;
   }
 }
@@ -199,7 +205,20 @@ async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boo
     }
     case 'audit_plan_item':
     case 'certification':
+    case 'review':
       return canSee(role, 'audits');
+    case 'review_item': {
+      // Pièce d'un élément d'entrée de la revue (AUD-17) : lecteurs de l'écran Audits, ou son contributeur (« Mes contributions »).
+      if (canSee(role, 'audits')) return true;
+      const [i] = await db.select({ ownerId: t.reviewItems.ownerId }).from(t.reviewItems).where(eq(t.reviewItems.id, Number(row.entityId)));
+      return !!i?.ownerId && i.ownerId === user.id;
+    }
+    case 'duerp_version':
+    case 'risk':
+      // DUERP signé et justificatifs (DUE-09) : mêmes lecteurs que l'écran Risques, Salarié compris (consultation du DUERP).
+      return canSee(role, 'risks');
+    case 'waste_entry':
+      return canSee(role, 'env');
     default:
       return canManage(role);
   }

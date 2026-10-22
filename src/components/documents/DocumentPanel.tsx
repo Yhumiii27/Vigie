@@ -6,6 +6,7 @@ import { ActionFields } from '@/components/ActionFormDialog';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
+import { LinkedEvents } from '@/components/LinkedEvents';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
@@ -204,6 +205,14 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               {doc.reviewActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
             </div>
           )}
+          {/* EVT-14 : actions closes (Vérifiées) et événements rattachés au document — rédacteurs et approbateurs. */}
+          {canManage && doc.closedActions.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--color-neutral-400)' }}>
+              <H6>Actions clôturées</H6>
+              {doc.closedActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
+            </div>
+          )}
+          {canManage && <LinkedEvents events={doc.events} />}
 
           <section style={{ display: 'grid', gap: 8 }}>
             {/* Consultation seule : la version en vigueur, sans l'historique ni les actions liées. */}
