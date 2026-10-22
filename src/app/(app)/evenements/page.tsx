@@ -12,6 +12,7 @@ import { EventAttachments } from '@/components/events/EventAttachments';
 import { EventEditButton, type EditableEvent, type EventFieldOptions } from '@/components/events/EventEditButton';
 import { EventHistory } from '@/components/events/EventHistory';
 import { FieldGrid as Fields } from '@/components/events/FieldGrid';
+import { EventFilterBar } from '@/components/events/EventFilters';
 import { NewEventButton } from '@/components/events/NewEventButton';
 import { OccupationalSection } from '@/components/events/OccupationalSection';
 import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
@@ -27,6 +28,7 @@ import {
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
+import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
 
 export const metadata: Metadata = { title: SCREENS.events.title };
@@ -55,8 +57,12 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   // Salarié : ses propres signalements uniquement (filtre dans loadVisibleEvents).
   const [events, people, options, linkOptions] = await Promise.all([loadVisibleEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
 
+  // EVT-13 : filtres d'URL (étape, pilote, période, gravité, ancienneté ; blessure pour les seuls rôles habilités aux
+  // données de santé — ailleurs le paramètre est ignoré, jamais appliqué).
+  const health = canSeeHealth(role);
+  const urlFilters = parseEventFilters(sp, { health, pilots: new Set(people.keys()) });
   const needle = q.toLocaleLowerCase('fr');
-  const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin)
+  const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin) && matchesEventFilters(e, urlFilters, now)
     && (!needle || [e.id, e.title, e.location, e.equipment, e.keystoneProject, e.customer, e.customerRef].some((v) => v?.toLocaleLowerCase('fr').includes(needle)));
   const found = events.filter(matches);
   const inTab = { ouverts: found.filter(isOpen), tous: found.filter((e) => !e.dismissedAt), classes: found.filter((e) => !!e.dismissedAt) };
@@ -71,7 +77,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     manager && sp.nouveau === '1' ? loadNewEventDefaults(str(sp.plan), str(sp.permis)) : null,
   ]);
   const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
-  const params = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, sel: selParam };
+  const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined };
+  const params = { ...baseParams, ...eventFilterParams(urlFilters), sel: selParam };
 
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
@@ -89,8 +96,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const qhse = canCreateAction(role);
   const actionOptions: ActionFormOptions = qhse ? { people: options.people, sites: options.sites, today: now } : { people: [], sites: [], today: now };
   const defaultSite = site.id !== ALL_SITES ? site.id : siteOptions[0]?.id;
-  const health = canSeeHealth(role);
-  const emptyText = tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' || q || type || origin ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
+  const emptyText = hasEventFilters(urlFilters) || q || type || origin ? 'Aucun événement ne correspond.'
+    : tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
   const tabLink = (etat: Tab, label: string, n: number) => ({
     href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, sel: undefined }),
     label: <>{label}<span style={{ opacity: 0.6 }}>{n}</span></>, on: tab === etat,
@@ -119,6 +126,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {tab !== 'ouverts' && <input type="hidden" name="etat" value={tab} />}
             {type && <input type="hidden" name="type" value={type} />}
             {origin && <input type="hidden" name="origine" value={origin} />}
+            {Object.entries(eventFilterParams(urlFilters)).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
             <input className="input" name="q" defaultValue={q} placeholder="Référence, lieu, équipement…" style={{ fontSize: 12.5, paddingLeft: 32 }} />
           </form>
           <div>
@@ -128,6 +136,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
               tabLink('classes', 'Classés sans suite', inTab.classes.length),
             ]} />
           </div>
+          <EventFilterBar filters={urlFilters} base={baseParams} people={employee ? [] : options.people} health={health} pilots={!employee} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {origin && (
               <Link href={hrefWith('/evenements', params, { origine: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">

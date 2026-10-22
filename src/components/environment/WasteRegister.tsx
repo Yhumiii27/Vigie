@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useId, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { EntityFiles } from '@/components/EntityFiles';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
@@ -44,8 +46,14 @@ function gapHelp(e: EntryView): string[] {
 
 // ─── Tableau du registre ────────────────────────────────────────────────────
 
-export function WasteRegister({ entries, streams, canManage, showSite, today, emptyText, transporters, carriers, events, actionOptions, canSeeEvents }: {
+export function WasteRegister({ entries, lookup = entries, streams, canManage, showSite, today, emptyText, transporters, carriers, events, actionOptions, canSeeEvents, initialId, closeHref }: {
   entries: EntryDetail[];
+  /** Enlèvements où chercher la fiche ouverte (année entière, annulés compris) ; par défaut les lignes affichées. */
+  lookup?: EntryDetail[];
+  /** Fiche ouverte d'emblée (lien profond `?enlevement=<id>`, DOC-08). */
+  initialId?: number;
+  /** URL sans le lien profond, rétablie à la fermeture. */
+  closeHref?: string;
   streams: StreamOption[];
   canManage: boolean;
   /** « Tous les sites » : rappelle le site de chaque enlèvement. */
@@ -61,9 +69,13 @@ export function WasteRegister({ entries, streams, canManage, showSite, today, em
   actionOptions: ActionOptions | null;
   canSeeEvents: boolean;
 }) {
-  const [selId, setSelId] = useState<number | null>(null);
-  const entry = selId != null ? entries.find((e) => e.id === selId) ?? null : null;
-  const close = () => setSelId(null);
+  const router = useRouter();
+  const [selId, setSelId] = useState<number | null>(initialId ?? null);
+  const entry = selId != null ? lookup.find((e) => e.id === selId) ?? null : null;
+  const close = () => {
+    setSelId(null);
+    if (initialId != null && closeHref) router.replace(closeHref, { scroll: false });
+  };
   const cols = 9;
 
   return (
@@ -179,6 +191,10 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
       )}
       <LinkedActions actions={entry.actions} options={entry.cancelled ? null : actionOptions} canAct={!entry.cancelled}
         defaults={entryActionDefaults(entry, today)} />
+      {/* DOC-11 : bordereau, certificat d'acceptation ou de traitement ; figés sur un enlèvement annulé. */}
+      <EntityFiles kind="waste_entry" entityId={entry.id} title="Bordereau et certificats" kicker={`${entry.stream} · ${fmtDate(entry.removedOn)}`}
+        files={entry.files} canAdd={!entry.cancelled} emptyText="Aucune pièce jointe."
+        hint="BSD, certificat d'acceptation préalable, attestation de traitement · 10 Mo par fichier." />
       {!entry.cancelled && (
         <section style={{ display: 'grid', gap: 8 }}>
           <h6 className="vg-h6">Enlèvement</h6>

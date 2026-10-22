@@ -23,7 +23,8 @@ import { archiveObjective, saveObjective } from '@/server/objectives';
 import { recordPlanEeSignature, signPlanEu } from '@/server/prevention';
 import { updateCurrentDuerpVersion } from '@/server/risks';
 import { saveQualification, saveTitle } from '@/server/skills';
-import { addRequirementFiles, recordControl, removeRequirementFile, saveRequirement } from '@/server/watch';
+import { recordControl, saveRequirement } from '@/server/watch';
+import { addEntityFiles, removeEntityFile } from '@/server/entity-files';
 
 // Paquet 5 — conformité réglementaire : droits, site, motif, journal et données de santé des server actions et des
 // chargements ajoutés ou modifiés (EVT-09, EVT-10, EVT-17, PRV-07, DUE-03, HAB-10, VEI-10, VEI-11, AUD-08, AUD-09,
@@ -239,15 +240,17 @@ describe('VEI-10 et VEI-11 : applicabilité par site, texte, résultat des contr
   it('texte joint : ajout et retrait journalisés, lisible par les rôles de la veille', async () => {
     const id = await atexId();
     actAs('Salarié');
-    expect(await addRequirementFiles(formWith({ requirementId: String(id) }, { files: [file('directive.pdf')] }))).toEqual({ error: DENIED });
+    expect(await addEntityFiles(formWith({ kind: 'requirement', entityId: String(id) }, { files: [file('directive.pdf')] }))).toEqual({ error: DENIED });
     actAs('Chef de service', 'all');
-    expect(await addRequirementFiles(formWith({ requirementId: String(id) }, { files: [file('directive.pdf')] }))).toEqual({ count: 1 });
+    expect(await addEntityFiles(formWith({ kind: 'requirement', entityId: String(id) }, { files: [file('directive.pdf')] }))).toEqual({ count: 1 });
     const [att] = await (await db()).select().from(t.attachments).where(and(eq(t.attachments.entityType, 'requirement'), eq(t.attachments.entityId, String(id))));
     expect(await canReadAttachment(att, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(true);
     expect(await canReadAttachment(att, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: null })).toBe(false);
     expect(await lastLog('requirement', id)).toMatchObject({ action: 'attach', details: [{ field: 'Texte joint', from: null, to: 'directive.pdf' }] });
-    expect(await removeRequirementFile(att.id)).toEqual({});
-    expect(await lastLog('requirement', id)).toMatchObject({ action: 'detach', details: [{ field: 'Texte joint', from: 'directive.pdf', to: null }] });
+    // VEI-08 : retrait avec un motif obligatoire, conservé au journal.
+    expect(await removeEntityFile(att.id, '')).toEqual({ error: 'Motif obligatoire.' });
+    expect(await removeEntityFile(att.id, 'Mauvaise version du texte')).toEqual({});
+    expect(await lastLog('requirement', id)).toMatchObject({ action: 'detach', reason: 'Mauvaise version du texte', details: [{ field: 'Texte joint', from: 'directive.pdf', to: null }] });
   });
   it('résultat obligatoire et cohérent avec les réserves ; défavorable signalé jusqu’au prochain contrôle favorable', async () => {
     actAs('Chef de service', 'ville-a');

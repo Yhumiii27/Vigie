@@ -4,6 +4,17 @@
 
 import type { Tone } from '@/lib/domain';
 
+// ─── Liens profonds (DOC-08) ────────────────────────────────────────────────
+
+/**
+ * Fiche d'un enlèvement ouverte par l'URL : registre de son année, filtré sur sa filière (vue « Annulés » pour un
+ * enlèvement annulé), `enlevement=<id>` ouvre la fiche. Liens d'origine des actions, fiche événement, échéances.
+ */
+export const wasteEntryHref = (e: { id: number; removedOn: string; streamId: string; cancelled?: boolean }) =>
+  `/environnement?annee=${e.removedOn.slice(0, 4)}&filiere=${encodeURIComponent(e.streamId)}&enlevement=${e.id}${e.cancelled ? '&vue=annules' : ''}`;
+/** Fiche d'une filière ouverte par l'URL (onglet « Filières », `filiere=<id>`). */
+export const wasteStreamHref = (id: string) => `/environnement?onglet=filieres&filiere=${encodeURIComponent(id)}`;
+
 // ─── Bordereaux de suivi (BSD) ──────────────────────────────────────────────
 
 export type BsdStatus = 'brouillon' | 'emis' | 'collecte' | 'traite' | 'refuse' | 'accepte_partiel';

@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/components/events/shared';
-import { entryRef } from '@/components/environment/model';
+import { entryRef, wasteEntryHref, wasteStreamHref } from '@/components/environment/model';
 import { NON_QSE_LINK_MESSAGE, type LinkFacts } from './action-rules';
 import { ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
 import { requireInSite } from './guard';
@@ -181,7 +181,7 @@ const ORIGIN_KINDS: Record<string, LinkKind> = {
     async sources(db, ids) {
       const rows = await db.select({ actionId: t.actions.id, id: t.wasteStreams.id, label: t.wasteStreams.label })
         .from(t.actions).innerJoin(t.wasteStreams, eq(t.actions.wasteStreamId, t.wasteStreams.id));
-      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `wastestream:${r.id}`, kind: 'wastestream', label: r.id, detail: r.label, href: `/environnement?filiere=${enc(r.id)}` }));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `wastestream:${r.id}`, kind: 'wastestream', label: r.id, detail: r.label, href: wasteStreamHref(r.id) }));
     },
   }),
 
@@ -197,10 +197,10 @@ const ORIGIN_KINDS: Record<string, LinkKind> = {
       const rows = await db.select({
         actionId: t.actions.id, id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, cancelledAt: t.wasteEntries.cancelledAt, stream: t.wasteStreams.label,
       }).from(t.actions).innerJoin(t.wasteEntries, eq(t.actions.wasteEntryId, t.wasteEntries.id)).innerJoin(t.wasteStreams, eq(t.wasteEntries.streamId, t.wasteStreams.id));
-      // Registre de l'année de l'enlèvement, filtré sur sa filière (vue « Annulés » pour un enlèvement annulé).
+      // Fiche de l'enlèvement (DOC-08) : registre de son année, filtré sur sa filière (vue « Annulés » s'il est annulé).
       return only(ids)(rows).map((r) => ({
         actionId: r.actionId, link: `wasteentry:${r.id}`, kind: 'wasteentry', label: entryRef(r.streamId, r.removedOn), detail: `${r.stream}${r.cancelledAt ? ' · enlèvement annulé' : ''}`,
-        href: `/environnement?annee=${r.removedOn.slice(0, 4)}&filiere=${enc(r.streamId)}${r.cancelledAt ? '&vue=annules' : ''}`,
+        href: wasteEntryHref({ id: r.id, removedOn: r.removedOn, streamId: r.streamId, cancelled: !!r.cancelledAt }),
       }));
     },
   }),

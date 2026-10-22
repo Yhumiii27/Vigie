@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import { ActionLink } from '@/components/audits/parts';
+import { EntityFiles } from '@/components/EntityFiles';
 import { Aside, CardHead, Icon, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
@@ -28,12 +29,12 @@ export function ContributionsView({ data }: { data: MyContributions }) {
   }
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      {data.reviews.map((r) => <ReviewEntry key={r.id} review={r} now={data.now} focused={r.id === focus} />)}
+      {data.reviews.map((r) => <ReviewEntry key={r.id} review={r} now={data.now} userId={data.userId} focused={r.id === focus} />)}
     </div>
   );
 }
 
-function ReviewEntry({ review: r, now, focused }: { review: MyContribution; now: string; focused: boolean }) {
+function ReviewEntry({ review: r, now, userId, focused }: { review: MyContribution; now: string; userId: string; focused: boolean }) {
   const [items, setDone] = useOptimistic(r.myItems, (state, { id, done }: { id: number; done: boolean }) => state.map((i) => (i.id === id ? { ...i, done } : i)));
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +63,8 @@ function ReviewEntry({ review: r, now, focused }: { review: MyContribution; now:
           const icon = <Icon name={i.done ? 'ph-check-circle' : 'ph-circle'} size={15} style={{ color: i.done ? TONE.ok.dot : 'var(--color-neutral-600)' }} />;
           const late = !i.done && !!i.dueOn && i.dueOn < now;
           return (
-            <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 0', fontSize: 12.5 }}>
+            <div key={i.id} style={{ display: 'grid', gap: 6, padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5 }}>
               {i.canToggle ? (
                 <button type="button" className={styles.check} aria-pressed={i.done} aria-label={i.label}
                   title={i.done ? 'Marquer comme non fourni' : 'Marquer comme fourni'} onClick={() => toggle(i)}>{icon}</button>
@@ -73,6 +75,14 @@ function ReviewEntry({ review: r, now, focused }: { review: MyContribution; now:
                   {i.done ? 'Fourni' : `attendu le ${fmtDayMonth(i.dueOn)}`}
                 </span>
               )}
+            </div>
+            {/* AUD-17 : le contributeur joint sa contribution tant que la revue est modifiable ; il ne retire que ses envois. */}
+            {(i.files.length > 0 || i.canToggle) && (
+              <div style={{ paddingLeft: 24 }}>
+                <EntityFiles kind="review_item" entityId={i.id} title="Pièces jointes" kicker={i.label} files={i.files}
+                  canAdd={i.canToggle} canRemove={(f) => i.canToggle && f.uploadedById === userId} emptyText="Aucune pièce jointe." />
+              </div>
+            )}
             </div>
           );
         })}

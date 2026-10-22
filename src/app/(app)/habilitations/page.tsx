@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { PageHeader } from '@/components/PageHeader';
 import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
-import { MissingNotice } from '@/components/ui';
+import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
+import { ForecastView } from '@/components/skills/ForecastView';
+import { renewalForecast } from '@/components/skills/rules';
 import { today } from '@/lib/today';
 import { SCREENS, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -42,6 +44,13 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
     : undefined;
 
   const sub = self ? `Mes habilitations · ${titles.length} titres suivis` : `${rows.length} salariés · ${titles.length} titres suivis`;
+  // HAB-09 : vue « À prévoir » (?vue=a-prevoir) — recyclages et formations des 12 prochains mois, calculés à l'affichage.
+  const forecastOn = str(sp.vue) === 'a-prevoir';
+  const forecast = forecastOn ? renewalForecast(rows, now) : null;
+  const views = [
+    { href: '/habilitations', label: 'Matrice', on: !forecastOn, icon: 'ph-grid-four' },
+    { href: '/habilitations?vue=a-prevoir', label: 'À prévoir · 12 mois', on: forecastOn, icon: 'ph-calendar-dots' },
+  ];
 
   return (
     <>
@@ -49,10 +58,29 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
       <div className="vg-page">
         {personId && !target && <MissingNotice text={self ? 'Fiche non accessible : seules vos habilitations sont affichées.' : 'Salarié introuvable, sorti des effectifs ou hors du site sélectionné.'} closeHref="/habilitations" />}
         <SkillAlerts alerts={lapses} today={now} />
-        <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
-          archivedSites={archivedSites} self={self}
-          canManage={manage} options={options} today={now} defaultSiteId={defaultSiteId}
-          initialSel={initialSel} closeHref="/habilitations" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <SegLinks options={views} />
+        </div>
+        {forecast ? (
+          <div className="card" style={{ gap: 12 }}>
+            <CardHead title="Recyclages et formations à prévoir" aside={(
+              // Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application.
+              <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+                <i className="ph ph-printer" style={{ fontSize: 13 }} />Plan de formation
+              </a>
+            )} />
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+              Titres requis expirés, jamais suivis ou expirant d&apos;ici 12 mois, par mois d&apos;échéance. Plan de formation géré par le service RH :
+              aucune action QSE n&apos;est créée.
+            </p>
+            <ForecastView forecast={forecast} />
+          </div>
+        ) : (
+          <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
+            archivedSites={archivedSites} self={self}
+            canManage={manage} options={options} today={now} defaultSiteId={defaultSiteId}
+            initialSel={initialSel} closeHref="/habilitations" />
+        )}
       </div>
     </>
   );

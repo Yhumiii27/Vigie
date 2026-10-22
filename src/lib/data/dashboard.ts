@@ -3,7 +3,7 @@ import { getDb, schema as t } from '@/db';
 import { addDays, daysBetween, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import { isLate } from '../action-rules';
-import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, isMine, isOpenAvancement, type ScreenKey, type Tone } from '../domain';
+import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, canSeeHealth, isMine, isOpenAvancement, type ScreenKey, type Tone } from '../domain';
 import {
   controlStatus, eventView, isOpen, lastFullMonths, lcfirst, loadActions, loadControls, loadEvents, loadPeople, safetyRates, workforceAccident,
   type EventRow, type SafetyRates,
@@ -128,11 +128,20 @@ export async function loadDashboard() {
   });
   const ncTop = [...ncBy.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, n]) => `${k} ${n}`).join(' · ');
 
-  const atHref = link('/evenements?etat=tous&type=AT');
-  const kpis: { label: string; value: string; sub: string; note: string; tone: Tone; href: string | null }[] = [
-    { label: 'Jours sans accident avec arrêt', value: lastArret ? String(daysBetween(lastArret.occurredOn, now)) : '—', sub: '', note: lastArret ? `Dernier AT avec arrêt le ${fmtLongDate(lastArret.occurredOn)}` : 'Aucun accident avec arrêt enregistré', tone: 'ok', href: atHref },
+  // TDB-12 : listes filtrées (EVT-13). Accidents de l'effectif hors trajet (effectif=1, comme les taux et la pyramide) ;
+  // filtre par blessure (donnée de santé) dans les liens des seuls rôles habilités, sinon liste des AT de l'effectif.
+  const health = canSeeHealth(role);
+  const atHref = link('/evenements?etat=tous&type=AT&effectif=1');
+  const injuryHref = (blessure: string, du?: string) =>
+    link(`/evenements?etat=tous&type=AT&effectif=1${health ? `&blessure=${blessure}` : ''}${du ? `&du=${du}` : ''}`);
+  const since = addDays(yearAgo, 1);
+  const kpis: { label: string; value: string; sub: string; note: string; tone: Tone; href: string | null; subHref?: string | null }[] = [
+    { label: 'Jours sans accident avec arrêt', value: lastArret ? String(daysBetween(lastArret.occurredOn, now)) : '—', sub: '', note: lastArret ? `Dernier AT avec arrêt le ${fmtLongDate(lastArret.occurredOn)}` : 'Aucun accident avec arrêt enregistré', tone: 'ok', href: injuryHref('arret') },
     { label: 'TF1 · 12 mois glissants', ...tfKpi, href: atHref },
-    { label: 'Événements ouverts', value: String(open.length), sub: `dont ${old} > 30 j`, note: `${recent} déclaré${recent > 1 ? 's' : ''} sur les 7 derniers jours`, tone: 'warn', href: link('/evenements') },
+    {
+      label: 'Événements ouverts', value: String(open.length), sub: `dont ${old} > 30 j`, note: `${recent} déclaré${recent > 1 ? 's' : ''} sur les 7 derniers jours`, tone: 'warn',
+      href: link('/evenements'), subHref: link('/evenements?anciennete=30'),
+    },
     { label: 'Actions en retard', value: String(late.length), sub: `sur ${openActions} ouvertes`, note: `${late.filter((a) => a.eventId).length} liées à des événements`, tone: 'danger', href: link('/actions?retard=1') },
     { label: `Contrôles réglementaires < ${CONTROL_HORIZON_DAYS} j`, value: String(soon.length), sub: `dont ${overdue.length} dépassé${overdue.length > 1 ? 's' : ''}`, note: overdue[0] ? `${overdue[0].c.controlType.split(' ')[0]} ${lcfirst(equipShort(overdue[0].c.equipment))} · +${-overdue[0].s.days} j` : 'Aucun contrôle dépassé', tone: overdue.length ? 'danger' : 'warn', href: link(`/veille?onglet=controles&statut=${overdue.length ? 'depasses' : 'sous-30-j'}`) },
     { label: 'Non-conformités', value: String(ncOpen.length), sub: 'ouvertes', note: ncTop || '—', tone: 'neutral', href: link('/evenements?type=NC,RC') },
@@ -141,11 +150,11 @@ export async function loadDashboard() {
   // Pyramide des événements sécurité (12 mois glissants)
   const y = events.filter(last12);
   const pyramid = [
-    { label: 'Accidents avec arrêt', n: y.filter((e) => workforceAccident(e) && e.injury === 'arret').length, color: 'var(--tone-danger-dot)', href: atHref },
-    { label: 'Accidents sans arrêt', n: y.filter((e) => workforceAccident(e) && (e.injury === 'sans_arret' || !e.injury)).length, color: 'var(--tone-warn-dot)', href: atHref },
-    { label: 'Soins', n: y.filter((e) => workforceAccident(e) && e.injury === 'soins').length, color: 'var(--color-accent-500)', href: atHref },
-    { label: 'Presque-accidents', n: y.filter((e) => e.type === 'PA').length, color: 'var(--color-accent-700)', href: link('/evenements?etat=tous&type=PA') },
-    { label: 'Situations dangereuses', n: y.filter((e) => e.type === 'SD').length, color: 'var(--color-accent-800)', href: link('/evenements?etat=tous&type=SD') },
+    { label: 'Accidents avec arrêt', n: y.filter((e) => workforceAccident(e) && e.injury === 'arret').length, color: 'var(--tone-danger-dot)', href: injuryHref('arret', since) },
+    { label: 'Accidents sans arrêt', n: y.filter((e) => workforceAccident(e) && (e.injury === 'sans_arret' || !e.injury)).length, color: 'var(--tone-warn-dot)', href: injuryHref('sans_arret', since) },
+    { label: 'Soins', n: y.filter((e) => workforceAccident(e) && e.injury === 'soins').length, color: 'var(--color-accent-500)', href: injuryHref('soins', since) },
+    { label: 'Presque-accidents', n: y.filter((e) => e.type === 'PA').length, color: 'var(--color-accent-700)', href: link(`/evenements?etat=tous&type=PA&du=${since}`) },
+    { label: 'Situations dangereuses', n: y.filter((e) => e.type === 'SD').length, color: 'var(--color-accent-800)', href: link(`/evenements?etat=tous&type=SD&du=${since}`) },
   ];
   const pyrMax = Math.max(1, ...pyramid.map((p) => p.n));
 

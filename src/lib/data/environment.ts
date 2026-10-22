@@ -7,6 +7,7 @@ import {
   BSD_PENDING, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, READING_DUE_DAY, REGISTER_MENTIONS_FROM, entryRef, fmtQty, isBsdStatus,
   isHazardousCode, isRecovery, monthLong, monthShort, qualificationLabel, registerGaps, resolveMentions, shiftMonth, streamGaps, toRegisterQuantity, toTonnes,
   treatmentLabel, type BsdStatus, type ConsumptionKind,
+  wasteEntryHref,
 } from '@/components/environment/model';
 import { hrefWith } from '@/components/ui';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
@@ -16,6 +17,8 @@ import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, se
 import { actionView, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
+import { loadEntityFiles } from './entity-files';
+import type { AttachmentItem } from '../attachments';
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
 // Registre chronologique des déchets sortants (C. env. R. 541-43, arrêté du 31 mai 2021),
@@ -137,7 +140,8 @@ export type EntryView = {
 };
 
 /** Enlèvement de l'écran, avec ses actions, son événement d'origine et son historique. */
-export type EntryDetail = EntryView & { actions: EnvAction[]; event: { id: string; title: string } | null; history: ChangeEntry[] };
+/** Fiche d'un enlèvement ; `files` : bordereau, certificat d'acceptation ou de traitement (DOC-11, pièces jointes 'waste_entry'). */
+export type EntryDetail = EntryView & { actions: EnvAction[]; event: { id: string; title: string } | null; history: ChangeEntry[]; files: AttachmentItem[] };
 
 /** Événement proposé dans le champ « Événement lié » d'un enlèvement. */
 export type EventOption = { id: string; label: string; siteId: string };
@@ -145,7 +149,6 @@ export type EventOption = { id: string; label: string; siteId: string };
 export type ConsumptionRecord = { siteId: string; month: string; kind: ConsumptionKind; value: number };
 
 const KIND_KEYS = new Set<string>(CONSUMPTION_KINDS.map((k) => k.key));
-const WASTE_REQUIREMENT = /R\.\s?541-4|déchet/i;
 
 /**
  * Filières, registre et relevés du site sélectionné (scope 'site' ; « Tous les sites » consolide) ou de tout le périmètre
@@ -255,17 +258,30 @@ const loadEnvironmentBase = cache(async (scope: SiteScope = 'site') => {
   return { now, site, sites: scopeSites, consumptionSites, registrySites, siteLabel, streams, entries, cancelled, consumptions, people };
 });
 
-/** Exigences en vigueur de la veille relatives aux déchets (R. 541-43 / R. 541-45…), toute l'entreprise ; un texte abrogé (archivé) est écarté. */
+/**
+ * Exigences en vigueur de la veille rattachées aux indicateurs des déchets (linkedTo 'waste_bsd' puis 'waste_register',
+ * VEI-07), toute l'entreprise ; un texte abrogé (archivé) est écarté.
+ */
 const loadWasteRequirements = cache(async () => {
   const db = await getDb();
   const rows = await db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id));
-  return rows.filter((r) => !r.archivedAt && (WASTE_REQUIREMENT.test(r.text) || WASTE_REQUIREMENT.test(r.domain)));
+  const live = rows.filter((r) => !r.archivedAt);
+  return [...live.filter((r) => r.linkedTo === 'waste_bsd'), ...live.filter((r) => r.linkedTo === 'waste_register')];
 });
 
 const sum = (values: number[]) => values.reduce((n, v) => n + v, 0);
 const tonnesOf = (rows: EntryView[]) => sum(rows.map((e) => e.tonnes ?? 0));
 
 // ─── Écran « Environnement et déchets » ─────────────────────────────────────
+
+/**
+ * Année du registre d'un enlèvement du site sélectionné (lien profond `?enlevement=<id>` sans année, DOC-08) ; null si
+ * l'enlèvement n'est pas consultable (autre site, inconnu).
+ */
+export async function wasteEntryYear(id: number): Promise<number | null> {
+  const { entries, cancelled } = await loadEnvironmentBase();
+  return [...entries, ...cancelled].find((e) => e.id === id)?.year ?? null;
+}
 
 export async function loadEnvironment(requestedYear?: number) {
   const now = today();
@@ -389,7 +405,10 @@ export async function loadEnvironment(requestedYear?: number) {
   // ── Enlèvements de l'année (annulés compris, pour le filtre « Annulés ») avec actions, événement et historique
   const eventById = new Map(events.map((e) => [e.id, e]));
   const shownEntries = [...yearEntries, ...cancelled.filter((e) => e.year === year)];
-  const history = await loadChangeLogs('waste_entry', shownEntries.map((e) => e.id));
+  const [history, entryFiles] = await Promise.all([
+    loadChangeLogs('waste_entry', shownEntries.map((e) => e.id)),
+    loadEntityFiles('waste_entry', shownEntries.map((e) => e.id)),
+  ]);
   const details: EntryDetail[] = shownEntries.map((e) => {
     const ev = e.eventId ? eventById.get(e.eventId) : undefined;
     return {
@@ -397,6 +416,7 @@ export async function loadEnvironment(requestedYear?: number) {
       actions: envActions.filter((a) => a.wasteEntryId === e.id),
       event: e.eventId ? { id: e.eventId, title: ev?.title ?? '' } : null,
       history: history.get(String(e.id)) ?? [],
+      files: entryFiles.get(String(e.id)) ?? [],
     };
   });
   // Événement lié (formulaire d'enlèvement) : événements environnementaux ouverts, proposés pour les filières de leur site.
@@ -408,7 +428,7 @@ export async function loadEnvironment(requestedYear?: number) {
     const ev = REQUIREMENT_EVAL[r.evaluation] ?? { label: r.evaluation, tone: 'neutral' as Tone };
     return { id: r.id, text: r.text, label: ev.label, tone: ev.tone, note: r.evaluationNote };
   });
-  const bsdRequirement = requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0];
+  const bsdRequirement = requirements.find((r) => r.linkedTo === 'waste_bsd') ?? requirements[0];
   // Action « BSD manquants » : retrouvée par le rattachement de l'exigence de la veille (requirements.action_id), tant
   // qu'elle n'est pas close ; plus par son origine ni par sa référence d'origine (paquet 1 Actions QSE).
   const reqAction = bsdRequirement?.actionId ? actionById.get(bsdRequirement.actionId) : undefined;
@@ -495,17 +515,19 @@ const bySiteYear = (rows: EntryView[], siteOrder: string[]) => {
 export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
   const [{ now, sites, siteLabel, entries, consumptions, people }, requirements] = await Promise.all([loadEnvironmentBase('perimeter'), loadWasteRequirements()]);
   const currentYear = +now.slice(0, 4);
-  const pilotId = (requirements.find((r) => /R\.\s?541-45/.test(r.text)) ?? requirements[0])?.pilotId ?? null;
+  const pilotId = (requirements.find((r) => r.linkedTo === 'waste_bsd') ?? requirements[0])?.pilotId ?? null;
   const owner = { who: pilotId ? people.get(pilotId)?.name ?? '' : '', ownerIds: pilotId ? [pilotId] : undefined };
   const todo: TodoItem[] = [];
 
   const siteOrder = [...siteLabel.keys()];
   const short = (label: string) => label.split(' — ')[0];
+  // DOC-08 : un seul enlèvement concerné : l'échéance ouvre sa fiche ; sinon le registre filtré.
+  const one = (rows: EntryView[]) => (rows.length === 1 ? wasteEntryHref({ id: rows[0].id, removedOn: rows[0].removedOn, streamId: rows[0].streamId }) : null);
   for (const { siteId, site, year, rows } of bySiteYear(entries.filter((e) => e.missingBsd), siteOrder)) {
     todo.push({
       date: now, kind: 'Déchets', tone: 'danger', overdue: true, count: rows.length, ...owner, siteId,
       title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD manquant', 'BSD manquants')} · ${short(site)}`,
-      href: registerHref(year, currentYear, 'bsd-manquants'),
+      href: one(rows) ?? registerHref(year, currentYear, 'bsd-manquants'),
     });
   }
 
@@ -514,7 +536,7 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     todo.push({
       date: addDays(oldest.removedOn, BSD_STALE_DAYS), dueOn: addDays(oldest.removedOn, BSD_STALE_DAYS), kind: 'Déchets', tone: 'warn', overdue: true, count: rows.length, ...owner, siteId,
       title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD non finalisé', 'BSD non finalisés')} plus de ${BSD_STALE_DAYS} j après l'enlèvement · ${short(site)}`,
-      href: registerHref(year, currentYear, 'bsd-en-attente'),
+      href: one(rows) ?? registerHref(year, currentYear, 'bsd-en-attente'),
     });
   }
 
@@ -524,7 +546,7 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     todo.push({
       date: now, kind: 'Déchets', tone: 'warn', count: 0, ...owner, siteId,
       title: `Registre des déchets ${year} · ${plural(rows.length, 'enlèvement aux mentions incomplètes', 'enlèvements aux mentions incomplètes')} · ${short(site)}`,
-      href: registerHref(year, currentYear, 'mentions-incompletes'),
+      href: one(rows) ?? registerHref(year, currentYear, 'mentions-incompletes'),
     });
   }
 

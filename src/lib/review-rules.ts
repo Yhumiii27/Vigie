@@ -21,3 +21,18 @@ export function reviewCloseBlockers(review: ReviewToClose, decisions: DecisionTo
 }
 
 const clip = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+
+/**
+ * Suite d'une décision de revue à son échéance (AUD-16) : `none` sans action au plan, `abandoned` action abandonnée,
+ * `open` action encore ouverte (À faire → 80 %, Reportée) ; null : suite donnée (Vérifiée) ou en attente de vérification
+ * (Terminée, déjà rappelée par le plan d'actions). Une action rattachée mais introuvable compte comme sans action.
+ */
+export function decisionFollowUpGap(actionStatus: string | null, hasAction: boolean): 'none' | 'abandoned' | 'open' | null {
+  if (!hasAction || !actionStatus) return 'none';
+  if (actionStatus === 'abandonnee') return 'abandoned';
+  if (actionStatus === 'verifiee' || actionStatus === 'terminee') return null;
+  return 'open';
+}
+
+/** Texte abrégé pour un intitulé d'échéance. */
+export const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);

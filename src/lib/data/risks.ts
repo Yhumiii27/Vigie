@@ -17,6 +17,8 @@ import { lcfirst, loadPeople, type ActionRow } from '../queries';
 import { loadQhseLeads, type Recipients } from './leads';
 import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLog, loadChangeLogs } from './changelog';
+import { loadEntityFiles } from './entity-files';
+import type { AttachmentItem } from '../attachments';
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
 
@@ -92,6 +94,8 @@ export type RiskView = {
   /** Risque archivé (retiré du document unique en vigueur, filtre « Archivés ») ; null = en vigueur. */
   archived: ArchiveInfo | null;
   history: ChangeEntry[];
+  /** Justificatifs du risque (DUE-09, pièces jointes 'risk'). */
+  files: AttachmentItem[];
 };
 
 export type WorkUnitView = {
@@ -130,6 +134,8 @@ export type DuerpVersionView = {
   /** Instantané des risques disponible dans Vigie (faux pour les versions archivées hors Vigie). */
   hasSnapshot: boolean;
   riskCount: number | null;
+  /** DUERP signé de la version (DUE-09, pièces jointes 'duerp_version') ; rempli par loadRisks. */
+  files: AttachmentItem[];
 };
 
 /** Lecture défensive du JSON stocké dans duerp_versions.snapshot. */
@@ -291,7 +297,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
   const siteUnits = allUnits.filter((u) => keep(u.siteId));
   const units = siteUnits.filter((u) => !u.archivedAt);
   const unitIds = new Set(siteUnits.map((u) => u.id));
-  const views: Omit<RiskView, 'history'>[] = allRisks.filter((r) => unitIds.has(r.unitId)).map((r) => {
+  const views: Omit<RiskView, 'history' | 'files'>[] = allRisks.filter((r) => unitIds.has(r.unitId)).map((r) => {
     const actions = linked(r.id);
     return {
       id: r.id, unitId: r.unitId, hazard: r.hazard, situation: r.situation,
@@ -323,7 +329,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
         validatedById: v.validatedById, validatedBy: v.validatedById ? people.get(v.validatedById)?.name ?? '' : '',
         cseConsultedOn: v.cseConsultedOn, spstSentOn: v.spstSentOn, portalDepositedOn: v.portalDepositedOn,
         archivedOn: v.archivedOn, comment: v.comment ?? snap.comment ?? null,
-        hasSnapshot: !v.current && !!snap.risks, riskCount: snap.risks ? snap.risks.length : null,
+        hasSnapshot: !v.current && !!snap.risks, riskCount: snap.risks ? snap.risks.length : null, files: [],
       };
     })
     .sort((a, b) => Number(b.current) - Number(a.current) || compareVersionsDesc(a.version, b.version));
@@ -370,10 +376,16 @@ export async function loadRisks() {
       loadChangeLogs('work_unit', base.archivedUnits.map((u) => u.id)),
     ])
     : [new Map<string, ChangeEntry[]>(), new Map<string, ChangeEntry[]>()];
-  const view = (r: Omit<RiskView, 'history'>): RiskView => ({
+  // DUE-09 : DUERP signé par version et justificatifs des risques, lisibles par tous les rôles de l'écran (Salarié compris).
+  const [versionFiles, riskFiles] = await Promise.all([
+    loadEntityFiles('duerp_version', versionViews.map((v) => v.version)),
+    loadEntityFiles('risk', [...base.risks, ...(edit ? base.archivedRisks : [])].map((r) => r.id)),
+  ]);
+  const view = (r: Omit<RiskView, 'history' | 'files'>): RiskView => ({
     ...r,
     ...(employee ? { events: [], actions: r.actions.map((a) => ({ ...a, pilot: '' })) } : {}),
     history: history.get(String(r.id)) ?? [],
+    files: riskFiles.get(String(r.id)) ?? [],
   });
   const archived = versionViews.filter((v) => !v.current);
   const since = archived.length ? Math.min(...archived.map((v) => yearOf(v.updatedOn))) : null;
@@ -389,7 +401,7 @@ export async function loadRisks() {
       daysToUpdate,
       updateTone,
     },
-    versions: versionViews,
+    versions: versionViews.map((v) => ({ ...v, files: versionFiles.get(v.version) ?? [] })),
     nextVersion: suggestNextVersion(versions.map((v) => v.version), now),
     nextUpdateOn: addMonths(now, 12),
     totals: base.totals,

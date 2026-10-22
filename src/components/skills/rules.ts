@@ -90,3 +90,69 @@ export function prerequisiteCycle(titleId: string, prerequisiteIds: readonly str
 export function coversNeed(expiresOn: string | null, upcoming: readonly Span[], now: string) {
   return renewalDue(heldState(expiresOn, now), expiresOn, upcoming, now) === null;
 }
+
+// ─── Prévision des recyclages (HAB-09) ──────────────────────────────────────
+
+/** Horizon de la vue « À prévoir » (mois, le mois en cours compris). */
+export const FORECAST_MONTHS = 12;
+
+export type ForecastItem = {
+  personId: string; person: string; titleId: string; title: string;
+  /** Échéance du titre (dernier jour de validité) ; null : jamais suivi. */
+  expiresOn: string | null;
+  /** État actuel du titre requis (r jamais suivi, x expiré, p prérequis non valide, s expire sous 60 j, v valide). */
+  state: SkillState;
+};
+export type ForecastMonth = { month: string; items: ForecastItem[] };
+export type RenewalForecast = {
+  /** À rattraper : titre requis jamais suivi, expiré, ou inopérant faute de prérequis valide. */
+  overdue: ForecastItem[];
+  /** Les FORECAST_MONTHS mois à venir (« AAAA-MM »), mois en cours d'abord, avec les titres requis qui y expirent. */
+  months: ForecastMonth[];
+  /** Titres concernés (colonnes du tableau), dans l'ordre des titres suivis. */
+  titles: { id: string; label: string }[];
+};
+
+/** « AAAA-MM » décalé de `n` mois. */
+const shiftYm = (ym: string, n: number) => {
+  const [y, m] = ym.split('-').map(Number);
+  const i = y * 12 + (m - 1) + n;
+  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`;
+};
+
+/**
+ * Prévision des recyclages et formations à planifier sur 12 mois, par mois et par titre (HAB-09) : calculée à l'affichage,
+ * jamais stockée ; titres requis seulement (cases « n » ignorées). Base du plan de formation imprimable, géré par le
+ * service RH (aucune action QSE). Un titre expiré ou jamais suivi est « à rattraper » ; un titre valide entre dans le mois
+ * de son échéance s'il expire dans l'horizon.
+ */
+export function renewalForecast(
+  rows: readonly { person: { id: string; name: string }; cells: readonly { title: { id: string; label: string }; state: SkillState; expiresOn: string | null; required: boolean }[] }[],
+  now: string,
+  months = FORECAST_MONTHS,
+): RenewalForecast {
+  const first = now.slice(0, 7);
+  const keys = Array.from({ length: months }, (_, i) => shiftYm(first, i));
+  const last = keys[keys.length - 1];
+  const overdue: ForecastItem[] = [];
+  const byMonth = new Map(keys.map((k) => [k, [] as ForecastItem[]]));
+  const used = new Map<string, string>();
+  for (const row of rows) {
+    for (const c of row.cells) {
+      if (!c.required || c.state === 'n') continue;
+      const item: ForecastItem = { personId: row.person.id, person: row.person.name, titleId: c.title.id, title: c.title.label, expiresOn: c.expiresOn, state: c.state };
+      if (c.state === 'r' || c.state === 'x' || c.state === 'p' || (c.expiresOn && c.expiresOn < now)) {
+        overdue.push(item);
+        used.set(c.title.id, c.title.label);
+      } else if (c.expiresOn && c.expiresOn.slice(0, 7) <= last) {
+        byMonth.get(c.expiresOn.slice(0, 7))?.push(item);
+        used.set(c.title.id, c.title.label);
+      }
+    }
+  }
+  const order = (a: ForecastItem, b: ForecastItem) => (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') || a.person.localeCompare(b.person, 'fr');
+  const titleOrder = rows[0]?.cells.map((c) => c.title.id) ?? [];
+  const titles = [...used.entries()].map(([id, label]) => ({ id, label }))
+    .sort((a, b) => titleOrder.indexOf(a.id) - titleOrder.indexOf(b.id));
+  return { overdue: overdue.sort(order), months: keys.map((month) => ({ month, items: byMonth.get(month)!.sort(order) })), titles };
+}

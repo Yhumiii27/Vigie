@@ -26,12 +26,26 @@ export default async function DashboardPage() {
                 <div className="vg-eyebrow" style={{ color: 'var(--color-neutral-500)' }}>{k.label}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-.02em', lineHeight: 1.1 }}>{k.value}</span>
-                  <span style={{ fontSize: 12, color: k.tone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.tone].dot }}>{k.sub}</span>
+                  {k.subHref ? (
+                    // TDB-12 : « dont n > 30 j » ouvre la liste filtrée par ancienneté (lien distinct de la carte).
+                    <Link href={k.subHref} className="vg-kcard-sub" style={{ fontSize: 12, color: k.tone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.tone].dot }}>{k.sub}</Link>
+                  ) : (
+                    <span style={{ fontSize: 12, color: k.tone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.tone].dot }}>{k.sub}</span>
+                  )}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
               </>
             );
             const style = { gap: 5, padding: '12px 14px' } as const;
+            // Carte cliquable avec un second lien (« > 30 j ») : lien principal étendu à la carte, sans liens imbriqués.
+            if (k.href && k.subHref) {
+              return (
+                <div key={k.label} className="card vg-kcard vg-kcard-split" style={style}>
+                  <Link href={k.href} className="vg-kcard-main" aria-label={`${k.label} : ${k.value}`} />
+                  {body}
+                </div>
+              );
+            }
             return k.href
               ? <Link key={k.label} href={k.href} className="card vg-kcard" style={style}>{body}</Link>
               : <div key={k.label} className="card" style={style}>{body}</div>;

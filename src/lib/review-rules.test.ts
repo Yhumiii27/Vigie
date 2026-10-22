@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canApprove, canSignReview } from './domain';
-import { reviewCloseBlockers } from './review-rules';
+import { decisionFollowUpGap, reviewCloseBlockers } from './review-rules';
 
 // Contrôles avant le visa de la revue de direction (AUD-14) et visa réservé à la direction (AUD-15).
 
@@ -31,5 +31,17 @@ describe('canSignReview (AUD-15)', () => {
     expect(canSignReview('Animateur QHSE')).toBe(false);
     expect(canApprove('Animateur QHSE')).toBe(true);
     expect(canSignReview('Chef de service')).toBe(false);
+  });
+});
+
+describe('decisionFollowUpGap (AUD-16)', () => {
+  it('sans action, abandonnée, ouverte ; Vérifiée ou Terminée : suite donnée', () => {
+    expect(decisionFollowUpGap(null, false)).toBe('none');
+    expect(decisionFollowUpGap(null, true)).toBe('none');
+    expect(decisionFollowUpGap('abandonnee', true)).toBe('abandoned');
+    expect(decisionFollowUpGap('a_faire', true)).toBe('open');
+    expect(decisionFollowUpGap('reportee', true)).toBe('open');
+    expect(decisionFollowUpGap('terminee', true)).toBeNull();
+    expect(decisionFollowUpGap('verifiee', true)).toBeNull();
   });
 });

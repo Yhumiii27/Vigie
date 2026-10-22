@@ -77,36 +77,6 @@ export function rowOpener(open: () => void) {
 
 export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as const;
 
-/** Pièces jointes d'un enregistrement (rapport de contrôle, preuve d'évaluation), avec retrait facultatif. */
-export function FileChips({ files, empty, onRemove, removing }: {
-  files: { id: string; name: string; url: string; size: string; icon: string }[];
-  empty?: string;
-  /** Retrait d'une pièce jointe ajoutée par erreur. */
-  onRemove?: (id: string) => void;
-  removing?: string | null;
-}) {
-  if (!files.length) return empty ? <span style={muted}>{empty}</span> : null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-      {files.map((f) => (
-        <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, maxWidth: '100%' }}>
-          <a href={f.url} target="_blank" rel="noopener noreferrer" className="vg-chip" title={`Ouvrir ${f.name}`} style={{ maxWidth: '100%' }}>
-            <i className={`ph ${f.icon}`} style={{ fontSize: 13 }} aria-hidden />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{f.name}</span>
-            <span style={{ opacity: 0.6, whiteSpace: 'nowrap' }}>{f.size}</span>
-          </a>
-          {onRemove && (
-            <button type="button" className="vg-text-btn" title={`Retirer ${f.name} (ajouté par erreur)`} aria-label={`Retirer ${f.name}`}
-              disabled={removing === f.id} onClick={() => onRemove(f.id)} style={{ padding: '0 4px' }}>
-              <i className="ph ph-x" style={{ fontSize: 12 }} aria-hidden />
-            </button>
-          )}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 /** Bandeau d'une fiche archivée (texte abrogé, équipement réformé) : motif, et restauration pour l'animateur QHSE / la direction. */
 export function ArchivedBanner({ title, label, children }: { title: string; label: string | null; children?: ReactNode }) {
   return (

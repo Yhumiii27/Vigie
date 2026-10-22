@@ -1,6 +1,6 @@
 import '../next-mocks';
 import { readdirSync } from 'node:fs';
-import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, ne } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { getDb, schema as t } from '@/db';
 import { actionDateOrderErrors, isLate, missingFields } from '@/lib/action-rules';
@@ -149,7 +149,10 @@ describe('jeu de démonstration du plan d’actions QSE (base neuve)', () => {
       const file = await readAttachment(p.id);
       expect(file?.data.subarray(0, 8).toString()).toBe('%PDF-1.4');
     }
-    expect(readdirSync(uploads)).toHaveLength(proofs.length);
+    // Fichiers écrits : les preuves, plus les pièces de démonstration du paquet 6 (src/db/seeds/modules.ts).
+    const others = await db.select().from(t.attachments).where(ne(t.attachments.entityType, 'action'));
+    expect(others.map((a) => a.entityType).sort()).toEqual(['duerp_version', 'review', 'review_item', 'risk', 'waste_entry']);
+    expect(readdirSync(uploads)).toHaveLength(proofs.length + others.length);
     const attach = await db.select().from(t.changeLog).where(and(eq(t.changeLog.entityType, 'action'), eq(t.changeLog.action, 'attach')));
     expect(attach).toHaveLength(4);
   });

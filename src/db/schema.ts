@@ -81,7 +81,8 @@ export const keystoneProjects = pgTable('keystone_projects', {
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(), // uuid
   // event | event (health) | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
-  // | qualification | audit_plan_item | certification — droit de lecture : canReadAttachment (src/lib/uploads.ts). Preuve
+  // | qualification | audit_plan_item | certification | requirement | duerp_version | risk | review | review_item | waste_entry
+  // (paquet 6 : ajout et retrait motivé par src/server/entity-files.ts) — droit de lecture : canReadAttachment (src/lib/uploads.ts). Preuve
   // d'une action (ACT-25) : entity_type « action », déposée seule ou avec un commentaire (comment_id, D10).
   entityType: text('entity_type').notNull(),
   entityId: text('entity_id').notNull(),
@@ -1045,6 +1046,27 @@ export const siteActivities = pgTable('site_activities', {
   // D02 (Matrix partage/50-vigie.sql) : code projet Keystone ; sans saisie dans Vigie à ce jour.
   keystoneProjectCode: text('keystone_project_code'),
 }, (t) => [index('site_activities_keystone_project_code_idx').on(t.keystoneProjectCode)]);
+
+// Situation de coactivité maîtrisée (PRV-10) : paire d'activités de la carte (clé « a-b » de detectConflicts, la plus
+// petite d'abord) dont les mesures sont prises ; elle n'est plus signalée (badge, échéances) tant que la maîtrise n'est pas
+// levée. Jamais supprimée : levée avec un motif (cancelled_*), une seule maîtrise en cours par paire. Journal : carte du
+// site (`site_map`, identifiant du site). Aucune action QSE (prévention : actions immédiates, réponses du 15/10/2026).
+export const coactivityControls = pgTable('coactivity_controls', {
+  id: serial('id').primaryKey(),
+  siteId: text('site_id').notNull().references(() => sites.id),
+  pairKey: text('pair_key').notNull(),
+  activityA: integer('activity_a').notNull().references(() => siteActivities.id),
+  activityB: integer('activity_b').notNull().references(() => siteActivities.id),
+  measure: text('measure').notNull(), // mesure prise (balisage, décalage horaire, consignes communes…)
+  controlledById: text('controlled_by_id').references(() => people.id),
+  controlledAt: timestamp('controlled_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  uniqueIndex('coactivity_controls_active_pair').on(t.siteId, t.pairKey).where(sql`${t.cancelledAt} is null`),
+  check('coactivity_controls_pair_check', sql`${t.activityA} < ${t.activityB}`),
+]);
 
 // ─── Traçabilité et notifications ───────────────────────────────────────────
 

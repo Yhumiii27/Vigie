@@ -120,7 +120,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)('ouverture sur PostgreSQL', () =
       await closeDb();
       await expect(getDb()).rejects.toThrow(/version antérieure de Vigie.*schéma vigie/);
       expect((await client.query('select count(*)::int as n from pg_tables where schemaname = $1', [SERVER_SCHEMA])).rows[0].n).toBe(0);
-      expect((await client.query("select count(*)::int as n from pg_locks where locktype = 'advisory' and granted")).rows[0].n).toBe(0);
+      // Verrous de cette base seulement : les autres fichiers de test, en parallèle sur leur propre base, en prennent aussi.
+      expect((await client.query(`select count(*)::int as n from pg_locks where locktype = 'advisory' and granted
+        and database = (select oid from pg_database where datname = current_database())`)).rows[0].n).toBe(0);
     } finally {
       if (demo === undefined) delete process.env.VIGIE_DEMO;
       else process.env.VIGIE_DEMO = demo;

@@ -515,6 +515,10 @@ export async function deleteReviewItem(id: number): Promise<Result> {
   const row = await itemWithReview(db, id);
   if (!row) return { error: 'Élément introuvable.' };
   if (row.review.status !== 'planifiee') return { error: 'Revue tenue : la check-list est conservée telle quelle.' };
+  // AUD-17 : un élément qui porte des pièces jointes n'est pas supprimé (pièces à retirer d'abord, avec leur motif).
+  const [file] = await db.select({ id: t.attachments.id }).from(t.attachments)
+    .where(and(eq(t.attachments.entityType, 'review_item'), eq(t.attachments.entityId, String(id))));
+  if (file) return { error: "Cet élément porte des pièces jointes : retirez-les d'abord (motif conservé à l'historique)." };
   await db.transaction(async (tx) => {
     await tx.delete(t.reviewItems).where(eq(t.reviewItems.id, id));
     await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: row.review.id, action: 'update', summary: `Élément « ${row.item.label} » retiré de la check-list` });

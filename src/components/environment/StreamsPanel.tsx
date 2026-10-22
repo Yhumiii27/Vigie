@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useId, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
@@ -35,8 +36,12 @@ const TREATMENT_OPTIONS = TREATMENT_CODES.map(([c, l]) => [c, `${c} — ${l}`] a
 
 // ─── Catalogue des filières ─────────────────────────────────────────────────
 
-export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showSite, sites, suggestions, actionOptions }: {
+export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showSite, sites, suggestions, actionOptions, initialId, closeHref }: {
   streams: StreamView[];
+  /** Fiche ouverte d'emblée (lien profond `?onglet=filieres&filiere=<id>`, DOC-08). */
+  initialId?: string;
+  /** URL sans le lien profond, rétablie à la fermeture. */
+  closeHref?: string;
   year: number;
   /** Paramètre `annee` de l'URL (absent pour l'année en cours) : liens vers le registre filtré. */
   annee?: string;
@@ -50,10 +55,15 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
   actionOptions: ActionOptions | null;
 }) {
   const registerHref = (id: string) => hrefWith('/environnement', { annee }, { filiere: id });
-  const [selId, setSelId] = useState<string | null>(null);
+  const router = useRouter();
+  const [selId, setSelId] = useState<string | null>(initialId ?? null);
   const [archiving, setArchiving] = useState(false);
   const stream = selId ? streams.find((s) => s.id === selId) ?? null : null;
-  const close = () => { setSelId(null); setArchiving(false); };
+  const close = () => {
+    setSelId(null);
+    setArchiving(false);
+    if (initialId && closeHref) router.replace(closeHref, { scroll: false });
+  };
 
   return (
     <div className="card" style={{ padding: '6px 14px 10px' }}>

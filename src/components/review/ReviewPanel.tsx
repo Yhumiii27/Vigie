@@ -5,6 +5,7 @@ import { useOptimistic, useState, useTransition } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
+import { EntityFiles } from '@/components/EntityFiles';
 import { LinkActionButton } from '@/components/LinkActionButton';
 import { ActionLink } from '@/components/audits/parts';
 import { Aside, CardHead, Icon, ToneTag, hrefWith } from '@/components/ui';
@@ -52,7 +53,7 @@ export function reviewActionDefaults(reviewId: number, originRef: string): Actio
 export function ReviewPanel({ data, params, showCancelled, allSites }: {
   data: ReviewCardData; params: Record<string, string | undefined>; showCancelled: boolean; allSites: boolean;
 }) {
-  const { now, review, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
+  const { now, review, reviewFiles, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
   const [list, setDone] = useOptimistic(items, (state, { id, done }: { id: number; done: boolean }) => state.map((r) => (r.id === id ? { ...r, done } : r)));
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +121,11 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                   style={{ flex: 1, color: r.done ? 'var(--color-neutral-400)' : 'var(--color-text)' }}>{r.label}</button>
               ) : (
                 <span style={{ flex: 1, color: r.done ? 'var(--color-neutral-400)' : 'var(--color-text)' }}>{r.label}</span>
+              )}
+              {r.files.length > 0 && (
+                <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }} title={r.files.map((f) => f.name).join(', ')}>
+                  <Icon name="ph-paperclip" size={12} /> {r.files.length}
+                </span>
               )}
               <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: r.late ? TONE.danger.fg : 'var(--color-neutral-500)' }}
                 title={r.late && r.dueOn ? `Attendu le ${fmtDate(r.dueOn)}` : r.sourceLabel}>{r.ownerLabel}</span>
@@ -232,6 +238,12 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           </div>
         )}
 
+        {/* AUD-17 : pièces de la revue (présentation, liste d'émargement…), figées au visa de la direction. */}
+        {review && review.status !== 'annulee' && (reviewFiles.length > 0 || (edit && flags.editable)) && (
+          <EntityFiles kind="review" entityId={review.id} title="Pièces de la revue" kicker={`Revue du ${fmtDate(review.reviewOn)}`} files={reviewFiles}
+            canAdd={edit && flags.editable} emptyText="Aucune pièce jointe." hint="Présentation, liste d'émargement, compte rendu signé · 10 Mo par fichier." />
+        )}
+
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
           {edit && review && (
             <button type="button" className={`btn ${review.status === 'tenue' ? 'btn-secondary' : 'btn-primary'} vg-btn-sm`} disabled={notYet}
@@ -290,7 +302,14 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
 
       <Dialog open={!!editing} onClose={close} kicker={kicker} width={editing?.kind === 'hold' ? 620 : 500} title={title}>
         {editing?.kind === 'item' && review && (
-          <ItemForm reviewId={review.id} item={item} people={people} canDelete={review.status === 'planifiee'} onClose={close} />
+          <>
+            <ItemForm reviewId={review.id} item={item} people={people} canDelete={review.status === 'planifiee' && !item?.files.length} onClose={close} />
+            {/* AUD-17 : pièces de l'élément d'entrée (rapport, tableau de bord fourni par le contributeur). */}
+            {item && !item.auto && (
+              <EntityFiles kind="review_item" entityId={item.id} title="Pièces de l'élément" kicker={item.label} files={item.files}
+                canAdd={item.canAttach} emptyText="Aucune pièce jointe." />
+            )}
+          </>
         )}
         {editing?.kind === 'decision' && review && (
           <DecisionForm reviewId={review.id} decision={decision} people={people} canDelete={review.status === 'planifiee'} onClose={close} />

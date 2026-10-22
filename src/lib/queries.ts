@@ -2,6 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { workforceAccident } from './event-filters';
 import { actionLabel, isLate, isVerificationLate, kanbanColumn, lateDays, missingFields } from './action-rules';
 import { daysBetween, fmtDate, fmtDayMonth } from './dates';
 import { today } from '@/lib/today';
@@ -119,8 +120,7 @@ export type SafetyRates = {
  * l'accident d'un intérimaire relève de l'entreprise de travail temporaire, celui d'une personne extérieure de son employeur.
  * Un accident de trajet (L. 411-2 CSS, `commute`, EVT-09) n'est pas un accident du travail au sens des taux : exclu aussi.
  */
-export const workforceAccident = (e: { type: string; victimKind: string | null; commute?: boolean | null }) =>
-  e.type === 'AT' && !e.commute && e.victimKind !== 'interimaire' && e.victimKind !== 'externe';
+export { workforceAccident };
 
 /**
  * TF1 / TG sur les mois donnés (lastFullMonths), sites de l'entrée seulement :

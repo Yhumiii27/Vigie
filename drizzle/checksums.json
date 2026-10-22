@@ -55,6 +55,11 @@
       "when": 1792401175419,
       "sql": "59105f8137d158087a52732f6e34a864b187d6a6421f399b12763baabe610dfc",
       "snapshot": "df6e9fa043eb78cb9eb109ac28faca588eaf143ac5d87c8fef0e40daa28b4c2d"
+    },
+    "0011_module_functions": {
+      "when": 1792653179174,
+      "sql": "5ac35a21805955a17cdd28d17fa2daa4c4ce8f0c486fae931bd721ecaee8cdb8",
+      "snapshot": "79e3a0c37c92cb771221590c92a676348d43c1856ba759c25f04a57155bbc4ce"
     }
   }
 }

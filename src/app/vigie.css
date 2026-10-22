@@ -301,3 +301,20 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
   /* Vues du plan d'actions (Liste, Kanban, Par responsable, Statistiques) : sur deux lignes plutôt qu'au-delà de l'écran. */
   .vg-plan-views .seg { flex-wrap: wrap; max-width: 100%; }
 }
+/* Filtres de la liste des événements (EVT-13) : formulaire GET replié sous « Filtres ». */
+.vg-filters > summary { list-style: none; }
+.vg-filters > summary::-webkit-details-marker { display: none; }
+.vg-filters-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; color: var(--color-neutral-400); }
+.vg-filters-summary:hover { color: var(--color-neutral-300); }
+.vg-filters-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; margin-top: 8px; }
+.vg-filter-field { display: grid; gap: 3px; min-width: 0; font-size: 11px; color: var(--color-neutral-500); }
+.vg-filter-field > .input { font-size: 12px; padding-top: 5px; padding-bottom: 5px; min-width: 0; }
+.vg-filters-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
+/* Prévision des recyclages (HAB-09) : tableau mois × titres. */
+.vg-forecast td.vg-forecast-cell { text-align: center; font-variant-numeric: tabular-nums; }
+.vg-forecast td.vg-forecast-cell.is-empty { color: var(--color-neutral-700); }
+/* Carte KPI à deux liens (TDB-12) : lien principal étendu à toute la carte, second lien au-dessus. */
+.vg-kcard-split { position: relative; }
+.vg-kcard-main { position: absolute; inset: 0; border-radius: inherit; }
+.vg-kcard-sub { position: relative; z-index: 1; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px; }
+.vg-kcard-sub:hover { text-decoration-color: currentColor; }

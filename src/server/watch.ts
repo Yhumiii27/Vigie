@@ -6,13 +6,13 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, canSee } from '@/lib/domain';
+import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS, canSee } from '@/lib/domain';
 import { legalTextUrlError } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
-import { checkUpload, deleteAttachment, listAttachments, removeStoredFile, saveUpload } from '@/lib/uploads';
+import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
 const EVALUATIONS = Object.keys(REQUIREMENT_EVAL);
@@ -63,6 +63,7 @@ const REQ_LABELS = {
   text: 'Texte', domain: 'Domaine', summary: "Ce qu'il exige", dueOn: 'Échéance', dueNote: "Note d'échéance", evaluation: 'Évaluation',
   evaluationNote: 'Précision', pilotId: 'Pilote', impact: 'Impact', keystoneProjects: 'Projets Keystone (surcharge)',
   affectsProjects: 'Concerne les projets Keystone', featured: 'À la une', siteIds: 'Sites concernés', legifranceUrl: 'Lien vers le texte',
+  linkedTo: 'Indicateur rattaché',
 } as const;
 
 /**
@@ -108,6 +109,14 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
   const sitesOf = siteIdsField ? siteIds : current?.siteIds ?? [];
   // Lien absent du formulaire (appel direct, ancien formulaire) : valeur enregistrée conservée.
   const linkOf = fd.has('legifranceUrl') ? legifranceUrl : current?.legifranceUrl ?? null;
+  // VEI-07 : indicateur calculé rattaché explicitement (liste fermée, vide = aucun) ; absent du formulaire : conservé.
+  const linkedToField = fd.has('linkedToField');
+  const linkedTo = linkedToField ? f.oneOf('linkedTo', REQUIREMENT_LINK_KEYS) ?? null : current?.linkedTo ?? null;
+  if (linkedToField && linkedTo && linkedTo !== current?.linkedTo) {
+    const [taken] = await db.select({ id: t.requirements.id, text: t.requirements.text }).from(t.requirements)
+      .where(and(eq(t.requirements.linkedTo, linkedTo), isNull(t.requirements.archivedAt), id ? ne(t.requirements.id, id) : undefined));
+    if (taken) f.fail('linkedTo', `Indicateur déjà rattaché à l'exigence « ${taken.text} » : détachez-le d'abord.`);
+  }
   if (siteIdsField) {
     const known = new Set((await db.select({ id: t.sites.id, archivedAt: t.sites.archivedAt }).from(t.sites)).filter((s) => !s.archivedAt || current?.siteIds?.includes(s.id)).map((s) => s.id));
     const before = [...(current?.siteIds ?? [])].sort().join(',');
@@ -120,7 +129,7 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
 
   const values = {
     text, domain, summary, dueOn, dueNote, evaluation: evaluation!, evaluationNote, pilotId, impact, affectsProjects, keystoneProjects, featured,
-    siteIds: sitesOf, legifranceUrl: linkOf,
+    siteIds: sitesOf, legifranceUrl: linkOf, linkedTo,
   };
   const evalRow = (requirementId: number) => ({ requirementId, evaluatedOn: now, evaluation: values.evaluation, note: evaluationNote, evaluatedById: session.user.id });
 
@@ -130,9 +139,10 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
     const reevaluated = current.evaluation !== values.evaluation || (current.evaluationNote ?? null) !== values.evaluationNote;
     const siteNames = new Map((await db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label.split(' — ')[0]]));
     const showSites = (ids: string[] | null | undefined) => (ids?.length ? ids.map((x) => siteNames.get(x) ?? x).join(', ') : 'Tous les sites');
+    const linkLabel = (k: string | null) => (k ? REQUIREMENT_LINKS[k as keyof typeof REQUIREMENT_LINKS]?.label ?? k : null);
     const details = diffFields(
-      { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds) },
-      { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds) }, REQ_LABELS, fmtLog,
+      { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds), linkedTo: linkLabel(current.linkedTo) },
+      { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds), linkedTo: linkLabel(values.linkedTo) }, REQ_LABELS, fmtLog,
     );
     await db.transaction(async (tx) => {
       if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, current.id)));
@@ -209,54 +219,6 @@ export async function evaluateRequirement(_prev: FormState, fd: FormData): Promi
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: String(current.id) };
-}
-
-/**
- * Joint le texte réglementaire (PDF, extrait) à une exigence en vigueur (VEI-10) : pièces jointes 'requirement', lisibles
- * par les rôles qui ouvrent la veille ; ajout journalisé.
- */
-export async function addRequirementFiles(fd: FormData): Promise<{ error?: string; count?: number }> {
-  const { session, error } = await requireWatchManager();
-  if (error) return { error };
-  const f = formReader(fd);
-  const id = f.int('requirementId', { required: true, min: 1 });
-  const files = f.files('files');
-  if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  checkFiles(f, 'files', files);
-  if (!f.ok || id == null) return { error: Object.values(f.fieldErrors)[0] ?? 'Certains champs sont à corriger.' };
-  const db = await getDb();
-  const [current] = await db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.id, id));
-  if (!current) return { error: 'Exigence introuvable.' };
-  if (current.archivedAt) return { error: ARCHIVED_REQ };
-  for (const file of files) await saveUpload(file, 'requirement', String(id), session.user.id);
-  await logChange(null, {
-    entityType: 'requirement', entityId: id, action: 'attach', byId: session.user.id,
-    summary: `Texte joint (${files.length} fichier${files.length > 1 ? 's' : ''})`, details: files.map((file) => ({ field: 'Texte joint', from: null, to: file.name })),
-  });
-  revalidatePath('/', 'layout');
-  return { count: files.length };
-}
-
-/** Retire un texte joint par erreur à une exigence en vigueur (VEI-10), journalisé. */
-export async function removeRequirementFile(attachmentId: string): Promise<{ error?: string }> {
-  const { session, error } = await requireWatchManager();
-  if (error) return { error };
-  const db = await getDb();
-  const [file] = await db.select().from(t.attachments).where(and(eq(t.attachments.id, attachmentId), eq(t.attachments.entityType, 'requirement')));
-  if (!file) return { error: 'Pièce jointe introuvable.' };
-  const [current] = await db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.id, Number(file.entityId)));
-  if (!current) return { error: 'Exigence introuvable.' };
-  if (current.archivedAt) return { error: ARCHIVED_REQ };
-  await db.transaction(async (tx) => {
-    await deleteAttachment(file.id, { db: tx });
-    await logChange(tx, {
-      entityType: 'requirement', entityId: current.id, action: 'detach', byId: session.user.id,
-      summary: 'Texte joint retiré', details: [{ field: 'Texte joint', from: file.fileName, to: null }],
-    });
-  });
-  await removeStoredFile(file);
-  revalidatePath('/', 'layout');
-  return {};
 }
 
 /** Archive une exigence (texte abrogé) : motif obligatoire, historique et action liée conservés, retirée de la une. */
@@ -571,25 +533,4 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   revalidatePath('/', 'layout');
   const res: CancelRecordState = { ok: true, id: String(record.id), notice: fixesState && !next ? 'Aucun autre enregistrement : état du contrôle à corriger dans la fiche.' : undefined };
   return res;
-}
-
-/** Retire une pièce jointe ajoutée par erreur à un enregistrement de contrôle non annulé (suppression réelle du fichier). */
-export async function removeControlRecordFile(id: string): Promise<{ error?: string }> {
-  const { error } = await requireWatchManager();
-  if (error) return { error };
-  const db = await getDb();
-  const [file] = await db.select().from(t.attachments).where(and(eq(t.attachments.id, id), eq(t.attachments.entityType, 'control_record')));
-  if (!file) return { error: 'Pièce jointe introuvable.' };
-  const [record] = await db.select().from(t.controlRecords).where(eq(t.controlRecords.id, Number(file.entityId)));
-  if (!record) return { error: 'Enregistrement introuvable.' };
-  if (record.cancelledAt) return { error: 'Enregistrement annulé : ses pièces jointes sont conservées pour la trace.' };
-  const { control, error: ctrlError } = await loadControlForEdit(record.controlId);
-  if (!control) return { error: ctrlError ?? undefined };
-  await deleteAttachment(file.id);
-  await logChange(null, {
-    entityType: 'control', entityId: control.id, action: 'remove_file',
-    summary: `Pièce jointe « ${file.fileName} » retirée de l'enregistrement du ${fmtDate(record.performedOn)}`,
-  });
-  revalidatePath('/', 'layout');
-  return {};
 }

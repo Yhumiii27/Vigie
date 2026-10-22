@@ -14,14 +14,14 @@ import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { fmtDate } from '@/lib/dates';
-import { REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, TONE } from '@/lib/domain';
+import { REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_NEEDS_ACTION, TONE, isRequirementLink } from '@/lib/domain';
 import type { FormOptions } from '@/lib/data/options';
 import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
-import { Attachments } from '@/components/Attachments';
-import { addRequirementFiles, archiveRequirement, evaluateRequirement, removeRequirementFile, restoreRequirement, saveRequirement } from '@/server/watch';
+import { EntityFiles } from '@/components/EntityFiles';
+import { archiveRequirement, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
 import { requirementActionDefaults } from './action-defaults';
-import { ArchivedBanner, FILES_HINT, Facts, FileChips, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
+import { ArchivedBanner, FILES_HINT, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
 /** `applicableSites` (VEI-10) : sites proposés pour l'applicabilité d'une exigence — périmètre complet seulement, sinon vide. */
 type Opts = Pick<FormOptions, 'people' | 'sites'> & { applicableSites?: readonly Option[] };
@@ -37,6 +37,8 @@ type EvalInitial = { evaluation: string; note: string | null };
 
 const EVALS = Object.entries(REQUIREMENT_EVAL);
 const EVAL_OPTIONS = EVALS.map(([k, v]) => [k, v.label] as const);
+/** VEI-07 : indicateurs calculés auxquels rattacher l'exigence (liste fermée). */
+const LINK_OPTIONS = Object.entries(REQUIREMENT_LINKS).map(([k, v]) => [k, v.label] as const);
 const NEEDS_ACTION = new Set<string>(REQUIREMENT_NEEDS_ACTION);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
@@ -182,6 +184,10 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
             {r.indicator.label}
           </Link>
         )],
+        // VEI-07 : indicateur rattaché sans état calculé ici (registre et bordereaux des déchets : écran Environnement).
+        !r.indicator && isRequirementLink(r.linkedTo) && ['Indicateur rattaché', r.linkedTo.startsWith('waste')
+          ? <Link key="l" href="/environnement" className="vg-link" style={{ fontSize: 12.5 }}>{REQUIREMENT_LINKS[r.linkedTo].label}</Link>
+          : REQUIREMENT_LINKS[r.linkedTo].label],
         ['Pilote', r.pilot || '—'],
         // VEI-10 : applicabilité par site et lien vers le texte.
         ['Sites concernés', r.siteLabels.length ? r.siteLabels.join(', ') : 'Tous les sites'],
@@ -241,15 +247,8 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
             <>
               <LinkedControls r={r} />
               <KeystoneProjects r={r} />
-              <Attachments title="Texte réglementaire joint" kicker={r.text} files={r.textFiles} canAdd={editable} emptyText="Aucun texte joint."
-                hint="PDF du texte ou extrait applicable · 10 Mo par fichier."
-                onAdd={(picked) => {
-                  const fd = new FormData();
-                  fd.set('requirementId', String(r.id));
-                  picked.forEach((file) => fd.append('files', file));
-                  return addRequirementFiles(fd);
-                }}
-                onRemove={removeRequirementFile} />
+              <EntityFiles kind="requirement" entityId={r.id} title="Texte réglementaire joint" kicker={r.text} files={r.textFiles} canAdd={editable}
+                emptyText="Aucun texte joint." hint="PDF du texte ou extrait applicable · 10 Mo par fichier." />
               {editable ? (
                 <>
                   <RequirementForm r={r} options={options} featured={featured} onDone={onClose} onCancel={onClose} />
@@ -275,7 +274,7 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
           )}
           {view === 'historique' && (
             <>
-              <EvaluationHistory r={r} />
+              <EvaluationHistory r={r} editable={editable} />
               <LazyChangeLog entity="requirement" id={r.id} title="Journal des modifications" />
             </>
           )}
@@ -345,7 +344,7 @@ function KeystoneProjects({ r }: { r: RequirementView }) {
 }
 
 /** Historique des évaluations de conformité : la plus récente d'abord. */
-function EvaluationHistory({ r }: { r: RequirementView }) {
+function EvaluationHistory({ r, editable }: { r: RequirementView; editable: boolean }) {
   if (!r.evaluations.length) {
     return (
       <div className="vg-inset" style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--color-neutral-400)' }}>
@@ -365,7 +364,11 @@ function EvaluationHistory({ r }: { r: RequirementView }) {
           <div style={{ display: 'grid', gap: 5, minWidth: 0 }}>
             <div><ToneTag tone={e.tone}>{e.label}</ToneTag></div>
             {e.note && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{e.note}</p>}
-            <FileChips files={e.files} />
+            {/* VEI-08 : preuves complétées ou retirées (motif) après l'évaluation. */}
+            {(e.files.length > 0 || editable) && (
+              <EntityFiles kind="requirement_evaluation" entityId={e.id} title="Preuves" kicker={`${r.text} · évaluation du ${e.date}`} files={e.files}
+                canAdd={editable} emptyText="Aucune preuve jointe." />
+            )}
             {e.by && <span style={muted}>Évaluée par {e.by}</span>}
           </div>
         </div>
@@ -429,7 +432,7 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
   const applicable = options.applicableSites ?? [];
   const chosen = new Set(r?.siteIds ?? []);
   return (
-    <ActionForm action={saveRequirement} hidden={{ id: r?.id, siteIdsField: applicable.length ? '1' : undefined }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
+    <ActionForm action={saveRequirement} hidden={{ id: r?.id, siteIdsField: applicable.length ? '1' : undefined, linkedToField: '1' }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
       <FormRow>
         <Field name="text" label="Texte">
           <Input name="text" defaultValue={r?.text} placeholder="Ex. Code du travail — R. 4512-6" maxLength={120} autoFocus={!r} />
@@ -440,6 +443,10 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
       </FormRow>
       <Field name="legifranceUrl" label="Lien vers le texte" hint="Légifrance ou EUR-Lex (règlements européens). Le texte peut aussi être joint à la fiche.">
         <Input name="legifranceUrl" type="url" defaultValue={r?.legifranceUrl ?? ''} placeholder="https://www.legifrance.gouv.fr/…" maxLength={500} />
+      </Field>
+      <Field name="linkedTo" label="Indicateur rattaché"
+        hint={isRequirementLink(r?.linkedTo) ? REQUIREMENT_LINKS[r.linkedTo].hint : "Facultatif : l'état de l'exigence est alors repris d'un indicateur calculé de Vigie (un indicateur par exigence en vigueur)."}>
+        <Select name="linkedTo" options={LINK_OPTIONS} defaultValue={r?.linkedTo ?? ''} placeholder="Aucun indicateur" />
       </Field>
       {applicable.length > 0 && (
         <Field name="siteIds" label="Sites concernés" hint="Aucun site coché : l'exigence s'applique à tous les sites.">

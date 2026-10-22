@@ -67,6 +67,12 @@ export type MapConfig = {
 export type ZoneView = { id: number; name: string; kind: ZoneKind; polygon: Pt[]; notes: string | null };
 export type RouteView = { id: number; name: string; kind: RouteKind; polyline: Pt[]; shared: boolean; notes: string | null };
 
+/**
+ * Situation de coactivité maîtrisée (PRV-10) : paire d'activités (`key` de detectConflicts), mesure prise, par qui et
+ * quand ; plus signalée (badge, échéances) tant que la maîtrise n'est pas levée (motif).
+ */
+export type CoactivityControlView = { id: number; key: string; measure: string; by: string; at: string; /** Jour de Paris de la maîtrise. */ on: string };
+
 export type ActivityView = {
   id: number;
   title: string;

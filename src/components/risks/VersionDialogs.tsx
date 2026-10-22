@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import { Dialog, DialogButton } from '@/components/Dialog';
+import { EntityFiles } from '@/components/EntityFiles';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { ToneTag } from '@/components/ui';
@@ -74,6 +75,12 @@ export function VersionsButton({ versions, canApprove, people, history = false }
           </button>
         )}
         {view.kind === 'list' && <VersionList versions={versions} canApprove={canApprove} onShow={showSnapshot} onEdit={(version) => setView({ kind: 'edit', version })} />}
+        {/* DUE-09 : DUERP signé, joint à la version en vigueur ; figé une fois la version archivée. */}
+        {view.kind === 'list' && versions.filter((v) => (v.current && canApprove) || v.files.length > 0).map((v) => (
+          <EntityFiles key={`files-${v.version}`} kind="duerp_version" entityId={v.version} title={`DUERP signé · version ${v.version}${v.current ? ' (en vigueur)' : ''}`}
+            kicker={`DUERP · version ${v.version}`} files={v.files} canAdd={v.current && canApprove} emptyText="Aucun document signé joint."
+            hint="Document unique daté et signé (PDF, scan) · 10 Mo par fichier." />
+        ))}
         {/* Historique des versions (DUE-06) : ouverture, compléments, archivage — à la saisie seulement. */}
         {view.kind === 'list' && history && versions.map((v) => (
           <LazyChangeLog key={v.version} entity="duerp_version" id={v.version} title={`Historique de la version ${v.version}`} />
