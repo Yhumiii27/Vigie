@@ -3,7 +3,8 @@ import { LOGIN_PATH, LOGOUT_PATH, type AccessMotif } from '@/lib/auth/paths';
 import { entraMissing, isDemo } from '@/lib/config';
 import { AuthNotice, NoticeBody } from '@/components/AuthNotice';
 
-export const metadata: Metadata = { title: 'Accès' };
+// Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
+export const metadata: Metadata = { title: 'Accès', manifest: null };
 
 const TEXTS: Record<AccessMotif, { title: string; body: string }> = {
   configuration: {

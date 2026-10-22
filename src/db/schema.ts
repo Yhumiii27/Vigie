@@ -162,6 +162,9 @@ export const events = pgTable('events', {
   documentId: text('document_id').references((): AnyPgColumn => documents.id), // document maîtrisé concerné
   preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
   permitId: text('permit_id').references((): AnyPgColumn => permits.id),
+  // EVT-19 : zone de la carte du site où l'événement s'est produit (QR code du poste ou choix du formulaire) ; le lieu en
+  // texte (`location`) reste affiché. Une zone archivée reste portée par ses événements.
+  zoneId: integer('zone_id').references((): AnyPgColumn => mapZones.id),
   // « Classé sans suite » (doublon, faux signalement…) : jamais supprimé, motif obligatoire, exclu des indicateurs.
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
   dismissedById: text('dismissed_by_id').references(() => people.id),
@@ -201,6 +204,7 @@ export const events = pgTable('events', {
   check('events_nc_number_check', sql`${t.ncNumber} is null or (${t.ncNumber} ~ '^NCR-[0-9]{3,}$' and ${t.type} = 'NC' and ${t.keystoneProjectCode} is not null)`),
   check('events_nc_cost_keur_check', sql`${t.ncCostKeur} >= 0`),
   index('events_keystone_project_code_idx').on(t.keystoneProjectCode),
+  index('events_zone_idx').on(t.zoneId),
   uniqueIndex('events_nc_number_par_projet').on(t.keystoneProjectCode, t.ncNumber).where(sql`${t.ncNumber} is not null`),
 ]);
 
@@ -1006,6 +1010,12 @@ export const mapZones = pgTable('map_zones', {
   notes: text('notes'),
   // Version du QR code de poste (signée dans le jeton) : l'incrémenter révoque les QR codes déjà imprimés.
   qrVersion: integer('qr_version').notNull().default(1),
+  // EVT-19 : zone archivée (jamais supprimée : ses événements la gardent, son QR code imprimé ouvre le formulaire terrain
+  // avec « ce poste n'existe plus, choisissez le lieu »). Retirée de la carte, des postes et de la coactivité ; journal
+  // de la carte du site (`site_map`).
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
 });
 
 // Voies de circulation (accès) ; « shared » = voie commune à plusieurs équipes.

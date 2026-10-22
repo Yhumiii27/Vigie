@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ReportForm } from '@/components/ReportForm';
 import { reportQuery } from '@/components/events/shared';
 import { LOGIN_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
-import { resolveReportPost, resolveReportToken, type ReportTokenCheck } from '@/lib/data/report-posts';
+import { ARCHIVED_POST_NOTICE, loadSiteZones, resolveReportPost, resolveReportToken } from '@/lib/data/report-posts';
 import { REPORT_TYPE_KEYS } from '@/lib/domain';
 import { ALL_SITES, getOptionalSession } from '@/lib/session';
 
@@ -30,27 +30,39 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
   const loginHref = `${LOGIN_PATH}?retour=${encodeURIComponent(`/signaler${qs}`)}`;
 
   if (!session) {
-    if (check?.status !== 'ok') return <Frame><Unavailable status={check?.status ?? 'invalid'} loginHref={loginHref} /></Frame>;
+    if (!check || !('post' in check)) return <Frame><Unavailable status={check?.status === 'revoked' ? 'revoked' : 'invalid'} loginHref={loginHref} /></Frame>;
+    // QR code d'une zone archivée (EVT-19) : formulaire ouvert sur le site du poste, lieu à choisir parmi ses zones.
+    const archived = check.status === 'archived';
     return (
       <Frame>
-        <ReportForm publicMode token={token} siteLabel={check.post.siteLabel} defaultLocation={check.post.name} topPadding={24}
-          defaultType={type} loginHref={loginHref} />
+        <ReportForm publicMode token={token} siteLabel={check.post.siteLabel} defaultLocation={archived ? '' : check.post.name} topPadding={24}
+          defaultType={type} loginHref={loginHref}
+          zones={archived ? await loadSiteZones(check.post.siteId) : undefined} notice={archived ? ARCHIVED_POST_NOTICE : undefined} />
       </Frame>
     );
   }
 
   const { site, siteOptions } = session;
-  // Le poste du QR code fixe le lieu et le site, quel que soit le site de la session.
-  const post = check?.status === 'ok' ? check.post : await resolveReportPost(str(sp.poste), str(sp.site));
-  const siteLabel = post?.siteLabel ?? (site.id === ALL_SITES ? siteOptions[0] : site).label.split(' — ')[0];
-  const lieu = post?.name ?? str(sp.lieu) ?? '';
+  // Le poste du QR code fixe le lieu et le site, quel que soit le site de la session ; zone archivée (EVT-19) : le site
+  // seulement, le lieu est à choisir.
+  const live = check?.status === 'ok' ? check.post : null;
+  const gone = check?.status === 'archived' ? check.post : null;
+  const legacy = check ? null : await resolveReportPost(str(sp.poste), str(sp.site));
+  const post = live ?? (legacy && !legacy.archived ? legacy : null);
+  const archivedPost = gone ?? (legacy?.archived ? legacy : null);
+  const fallbackSite = site.id === ALL_SITES ? siteOptions.find((s) => s.id !== ALL_SITES) : site;
+  const siteLabel = (post ?? archivedPost)?.siteLabel ?? (fallbackSite ?? site).label.split(' — ')[0];
+  const lieu = post?.name ?? (archivedPost ? '' : str(sp.lieu) ?? '');
+  // Lieux proposés (zones en service) quand le QR code ne fixe pas le poste.
+  const zones = live ? [] : await loadSiteZones((post ?? archivedPost)?.siteId ?? fallbackSite?.id);
+  const notice = archivedPost ? ARCHIVED_POST_NOTICE : undefined;
   return (
     <Frame>
       <div style={{ padding: '14px 18px 0', display: 'grid', gap: 10 }}>
         <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5, justifySelf: 'start' }}>
           <i className="ph ph-caret-left" />Retour à Vigie
         </Link>
-        {check && check.status !== 'ok' && (
+        {check && !('post' in check) && (
           <div role="status" className="card" style={{ gap: 4, fontSize: 12.5 }}>
             <span style={{ color: 'var(--tone-warn-fg)' }}>{check.status === 'revoked' ? 'QR code remplacé' : 'QR code non reconnu'}</span>
             <span style={{ color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
@@ -59,14 +71,15 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
           </div>
         )}
       </div>
-      <ReportForm token={check?.status === 'ok' ? token : undefined} siteLabel={siteLabel} siteId={post?.siteId} defaultLocation={lieu}
-        topPadding={14} myReportsHref={`/signaler/mes-signalements${qs}`} defaultType={type} />
+      <ReportForm token={check && 'post' in check ? token : undefined} siteLabel={siteLabel} siteId={(post ?? archivedPost)?.siteId} defaultLocation={lieu}
+        topPadding={14} myReportsHref={`/signaler/mes-signalements${qs}`} defaultType={type}
+        zones={zones} defaultZoneId={legacy && !legacy.archived ? legacy.zoneId : undefined} notice={notice} />
     </Frame>
   );
 }
 
 /** Sans session, QR code révoqué ou inconnu : pas de formulaire ; proposer la connexion. */
-function Unavailable({ status, loginHref }: { status: Exclude<ReportTokenCheck['status'], 'ok'>; loginHref: string }) {
+function Unavailable({ status, loginHref }: { status: 'revoked' | 'invalid'; loginHref: string }) {
   return (
     <div style={{ padding: '72px 18px 40px', display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center', fontFamily: 'var(--font-body)' }}>
       <span style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid var(--tone-warn-fg)', color: 'var(--tone-warn-fg)', display: 'grid', placeItems: 'center' }}>

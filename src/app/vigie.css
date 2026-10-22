@@ -318,3 +318,18 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-kcard-main { position: absolute; inset: 0; border-radius: inherit; }
 .vg-kcard-sub { position: relative; z-index: 1; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px; }
 .vg-kcard-sub:hover { text-decoration-color: currentColor; }
+/* ─── Signalement terrain installable (EVT-20) ──────────────────────────── */
+/* Zones sûres (encoche, barre d'accueil iOS) : viewport-fit=cover sur les pages /signaler, application installée comprise. */
+.vg-report-shell {
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  background: var(--color-bg);
+}
+/* ─── Liste puis fiche sur petit écran (UX-07, src/components/ListDetail.tsx) ─ */
+.vg-md-back { display: none; }
+@media (max-width: 760px) {
+  /* !important : les colonnes portent leur display en style (grille). */
+  .vg-md[data-focus='detail'] > .vg-md-list { display: none !important; }
+  .vg-md:not([data-focus='detail']) > .vg-md-detail { display: none !important; }
+  .vg-md-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; justify-self: start; font-size: 13px; }
+}

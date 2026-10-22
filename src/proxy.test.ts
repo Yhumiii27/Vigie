@@ -98,4 +98,16 @@ describe('production sans Entra ID configuré', () => {
     const demoCookie = await proxy(req('https://vigie.exemple.fr/', { headers: { cookie: 'vigie_role=Direction' } }));
     expect(demoCookie.status).toBe(307);
   });
+
+  it('signalement installable (EVT-20) : manifeste, icônes et service worker sans session ; rien d’autre', async () => {
+    useEnv(prod);
+    for (const path of ['/manifest.webmanifest', '/signaler-sw.js', '/pwa/icon-192.png', '/pwa/icon.svg']) {
+      expect(passes(await proxy(req(`https://vigie.exemple.fr${path}`)))).toBe(true);
+    }
+    // Pages et fichiers voisins : connexion exigée (redirection, ou 401/503 pour une écriture).
+    for (const path of ['/signaler', '/signaler/mes-signalements', '/plans/ville-a.svg', '/pwa/../evenements']) {
+      expect(passes(await proxy(req(`https://vigie.exemple.fr${path}`)))).toBe(false);
+    }
+    expect(passes(await proxy(req('https://vigie.exemple.fr/signaler-sw.js', { method: 'POST' })))).toBe(false);
+  });
 });

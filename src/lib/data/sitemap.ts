@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
 import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/components/prevention/model';
 import {
@@ -25,11 +25,12 @@ type Rows = Awaited<ReturnType<typeof fetchRows>>;
 type Person = { name: string };
 
 async function fetchRows(db: Db) {
-  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls] = await Promise.all([
+  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents] = await Promise.all([
     // Sites actifs uniquement (un site archivé n'a plus de carte ni de coactivité).
     db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select().from(t.siteMaps),
-    db.select().from(t.mapZones).orderBy(asc(t.mapZones.id)),
+    // Zones archivées (EVT-19) : hors de la carte, des postes et de la coactivité ; leurs événements les gardent.
+    db.select().from(t.mapZones).where(isNull(t.mapZones.archivedAt)).orderBy(asc(t.mapZones.id)),
     db.select().from(t.mapRoutes).orderBy(asc(t.mapRoutes.id)),
     // Activités annulées (PRV-12) : hors de la carte et de la coactivité, leur historique reste en base.
     db.select().from(t.siteActivities).where(isNull(t.siteActivities.cancelledAt)).orderBy(asc(t.siteActivities.startOn), asc(t.siteActivities.id)),
@@ -39,8 +40,10 @@ async function fetchRows(db: Db) {
     db.select({ id: t.attachments.id, fileName: t.attachments.fileName }).from(t.attachments).where(eq(t.attachments.entityType, SITE_MAP_ATTACHMENT)),
     // PRV-10 : situations de coactivité maîtrisées en cours (une levée de maîtrise est conservée, hors de la lecture).
     db.select().from(t.coactivityControls).where(isNull(t.coactivityControls.cancelledAt)).orderBy(asc(t.coactivityControls.id)),
+    // EVT-19 : événements rattachés à chaque zone (avertissement avant l'archivage ; maladies professionnelles jamais rattachées).
+    db.select({ zoneId: t.events.zoneId, n: count() }).from(t.events).where(and(isNotNull(t.events.zoneId), ne(t.events.type, 'MP'))).groupBy(t.events.zoneId),
   ]);
-  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls };
+  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents };
 }
 
 /** Paires d'activités maîtrisées d'un site (clés de detectConflicts, PRV-10). */
@@ -74,7 +77,10 @@ function mapConfig(rows: Rows, siteId: string): MapConfig {
 
 function siteGeometry(rows: Rows, siteId: string) {
   const zones: ZoneView[] = rows.zones.filter((z) => z.siteId === siteId)
-    .map((z) => ({ id: z.id, name: z.name, kind: asZoneKind(z.kind), polygon: parsePoints(z.polygon), notes: z.notes }))
+    .map((z) => ({
+      id: z.id, name: z.name, kind: asZoneKind(z.kind), polygon: parsePoints(z.polygon), notes: z.notes,
+      qrVersion: z.qrVersion, eventCount: rows.zoneEvents.find((e) => e.zoneId === z.id)?.n ?? 0,
+    }))
     .filter((z) => z.polygon.length >= 3);
   const routes: RouteView[] = rows.routes.filter((r) => r.siteId === siteId)
     .map((r) => ({ id: r.id, name: r.name, kind: asRouteKind(r.kind), polyline: parsePoints(r.polyline), shared: r.shared, notes: r.notes }))
@@ -159,7 +165,7 @@ export async function findConflict(siteId: string, date: string, key: string): P
 /** Zone contenant un point du site (zone la plus petite), pour l'enregistrement d'une activité. */
 export async function zoneAt(siteId: string, at: [number, number]) {
   const db = await getDb();
-  const zones = (await db.select().from(t.mapZones)).filter((z) => z.siteId === siteId).map((z) => ({ id: z.id, polygon: parsePoints(z.polygon) }));
+  const zones = (await db.select().from(t.mapZones).where(isNull(t.mapZones.archivedAt))).filter((z) => z.siteId === siteId).map((z) => ({ id: z.id, polygon: parsePoints(z.polygon) }));
   return containingZone(zones, at)?.id ?? null;
 }
 

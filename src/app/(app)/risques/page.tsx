@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BackToList, DetailFocus } from '@/components/ListDetail';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon, MissingNotice, SegLinks, hrefWith } from '@/components/ui';
 import { ArchivePanel } from '@/components/risks/ArchivePanel';
@@ -50,10 +51,14 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const deepArchived = riskParam == null || deepRisk ? undefined : archivedRisks.find((r) => r.id === riskParam);
   const archives = edit && !program && !registerOn && (sp.archives === '1' || !!deepArchived);
   const archivedCount = archivedRisks.length + archivedUnits.length;
-  const unitId = deepRisk?.unitId ?? (typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : units[0]?.id);
+  const askedUnit = typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : undefined;
+  const unitId = deepRisk?.unitId ?? askedUnit ?? units[0]?.id;
   const residual = sp.mode === 'residuel';
+  // UX-07 : unité choisie explicitement (lien de la liste ou lien profond) — gardée dans l'URL, la fiche remplace alors la
+  // liste sur téléphone ; sans choix, la première unité (grand écran) et la liste des unités (téléphone).
+  const explicitUnit = !!askedUnit || !!deepRisk;
   const params = {
-    unite: unitId === units[0]?.id ? undefined : unitId, mode: residual ? 'residuel' : undefined, archives: archives ? '1' : undefined,
+    unite: explicitUnit ? unitId : undefined, mode: residual ? 'residuel' : undefined, archives: archives ? '1' : undefined,
     programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined,
   };
   // Panneau de droite : une unité, ou « Archivés », le programme annuel, le registre (les autres paramètres sont remis à zéro).
@@ -145,11 +150,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
         {typeof sp.risque === 'string' && !deepRisk && !deepArchived && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
 
-        <div className="vg-split" style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
-          <div style={{ display: 'grid', gap: 2 }}>
+        <div className="vg-split vg-md" data-focus={explicitUnit || !unitPanel ? 'detail' : 'list'} style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
+          <div className="vg-md-list" style={{ display: 'grid', gap: 2 }}>
             <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>Unités de travail</div>
             {units.map((u) => (
-              <Link key={u.id} href={hrefWith('/risques', params, { ...panel, unite: u.id === units[0].id ? undefined : u.id })} scroll={false} className={`vg-item${u.id === unitId && unitPanel ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
+              <Link key={u.id} href={hrefWith('/risques', params, { ...panel, unite: u.id })} scroll={false} className={`vg-item${u.id === unitId && unitPanel ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
                 <span style={{ flex: 1, fontSize: 12.5 }}>{u.label}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{u.count}</span>
                 {u.alerts > 0 && (
@@ -193,6 +198,9 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
             {edit && <AddUnitButton sites={options.sites} defaultSiteId={defaultSiteId} viewSite={viewSite} residual={residual} />}
           </div>
 
+          <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
+          <BackToList href={hrefWith('/risques', { mode: params.mode }, {})} label="Retour aux unités de travail" />
+          {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}`} />}
           {program ? (
             <ProgramPanel key={program.year} data={program} canApprove={approve} showPilot={!employee} showHistory={edit}
               yearLinks={program.years.map((y) => ({ year: y, href: hrefWith('/risques', params, { programme: String(y) }) }))} />
@@ -270,6 +278,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               </p>
             </div>
           )}
+          </div>
         </div>
       </div>
     </>

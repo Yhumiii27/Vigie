@@ -64,7 +64,11 @@ export type MapConfig = {
   fileName: string | null;
 };
 
-export type ZoneView = { id: number; name: string; kind: ZoneKind; polygon: Pt[]; notes: string | null };
+export type ZoneView = {
+  id: number; name: string; kind: ZoneKind; polygon: Pt[]; notes: string | null;
+  /** Version du QR code de poste (étiquette n°) et événements rattachés (EVT-19 : avertissement avant l'archivage). */
+  qrVersion?: number; eventCount?: number;
+};
 export type RouteView = { id: number; name: string; kind: RouteKind; polyline: Pt[]; shared: boolean; notes: string | null };
 
 /**

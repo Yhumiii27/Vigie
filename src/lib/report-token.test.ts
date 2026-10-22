@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { looksLikeReportToken } from './auth/paths';
 import { sniffImage } from './report-guard';
-import { readReportToken, reportTokenMatches, reportTokenPath, signReportToken } from './report-token';
+import { readReportToken, reportPostStatus, reportTokenMatches, reportTokenPath, signReportToken } from './report-token';
 
 // Jetons des QR codes de poste et protections du formulaire sans compte (EVT-07) ; adresse du client et photos
 // anonymes : src/lib/report-guard.test.ts.
@@ -53,5 +53,23 @@ describe('formulaire sans compte', () => {
     expect(sniffImage(bytes('<html><script>'))).toBeNull();
     expect(sniffImage(bytes('%PDF-1.7'))).toBeNull();
     expect(sniffImage(new Uint8Array())).toBeNull();
+  });
+});
+
+describe('état du QR code d’un poste (EVT-19)', () => {
+  const zone = { qrVersion: 2, archived: false, siteArchived: false };
+  const valid = { version: 2, signatureValid: true };
+  it('valide, remplacé, zone archivée, inconnu', () => {
+    expect(reportPostStatus(zone, valid)).toBe('ok');
+    expect(reportPostStatus(zone, { ...valid, version: 1 })).toBe('revoked');
+    expect(reportPostStatus({ ...zone, archived: true }, valid)).toBe('archived');
+    // Étiquette déjà remplacée avant l'archivage : « remplacée », pas « archivée ».
+    expect(reportPostStatus({ ...zone, archived: true }, { ...valid, version: 1 })).toBe('revoked');
+    expect(reportPostStatus(null, valid)).toBe('invalid');
+    expect(reportPostStatus({ ...zone, siteArchived: true }, valid)).toBe('invalid');
+  });
+  it('signature fausse : rien n’est révélé de la zone (archivée ou non)', () => {
+    expect(reportPostStatus({ ...zone, archived: true }, { ...valid, signatureValid: false })).toBe('invalid');
+    expect(reportPostStatus(zone, { version: 1, signatureValid: false })).toBe('invalid');
   });
 });

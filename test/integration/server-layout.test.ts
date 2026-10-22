@@ -77,6 +77,9 @@ describe('réécriture des migrations pour le serveur', () => {
     // Journal : ni accident du travail ni événement réservé aux données de santé (maladie professionnelle, 0010).
     const journalDef = (await pg.query<{ d: string }>(`select pg_get_viewdef('${SERVER_SCHEMA}.pub_journal'::regclass) as d`)).rows[0].d;
     for (const type of ['AT', ...HEALTH_EVENT_TYPES]) expect(journalDef).toContain(`'${type}'`);
+    // Registre HSE de projet : un AT ou une MP ne fait pas apparaître un projet (É13, migration 0013).
+    const hseDef = (await pg.query<{ d: string }>(`select pg_get_viewdef('${SERVER_SCHEMA}.pub_hse_projet'::regclass) as d`)).rows[0].d;
+    for (const type of ['AT', ...HEALTH_EVENT_TYPES]) expect(hseDef).toContain(`'${type}'`);
     // Vues créées par le propriétaire du schéma, avec security_barrier.
     const opts = (await pg.query<{ relname: string; reloptions: string[] }>(`select c.relname, c.reloptions from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = $1 and c.relkind = 'v' order by 1`, [SERVER_SCHEMA])).rows;

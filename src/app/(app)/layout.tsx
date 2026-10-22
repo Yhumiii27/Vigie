@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { AppShell } from '@/components/AppShell';
 import { Bootstrap } from '@/components/Bootstrap';
 import type { NavSection } from '@/components/Sidebar';
@@ -5,6 +6,9 @@ import { NAV, ROLE_KEYS, SCREENS, canApprove, canSee, initials } from '@/lib/dom
 import { loadCounters } from '@/lib/data/counters';
 import { loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
 import { getSession } from '@/lib/session';
+
+// Manifeste du signalement installable (EVT-20) lié aux seules pages /signaler : l'application ne s'installe pas d'ici.
+export const metadata: Metadata = { manifest: null };
 
 export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const session = await getSession();

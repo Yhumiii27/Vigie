@@ -9,6 +9,7 @@ import { ActionForm, Field, TextArea } from '@/components/form';
 import { ConfirmButton, ErrorLine, Notice, muted, useRun } from '@/components/prevention/parts';
 import { Icon, ToneTag } from '@/components/ui';
 import { addDays, fmtDate, fmtLong } from '@/lib/dates';
+import { reportPostHref } from '@/lib/auth/paths';
 import { TONE } from '@/lib/domain';
 import type { SitemapData } from '@/lib/data/sitemap';
 import { addConflictToPlan, controlConflict, moveActivity, releaseConflictControl, saveShape } from '@/server/sitemap';
@@ -239,7 +240,8 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
     dialogKicker = zone ? `Zone · ${ZONE_KINDS[zone.kind].label}` : 'Carte du site · zone';
     const done = (id?: number) => { setDialog(null); setTool('select'); setSelection(id ? { kind: 'zone', id } : null); };
     dialogBody = canManage
-      ? <ZoneForm siteId={site.id} zone={zone} points={dialog.type === 'zone-new' ? dialog.points : undefined} activityCount={zone ? countIn(zone.id) : 0} onDone={done} onCancel={closeDialog} />
+      ? <ZoneForm siteId={site.id} zone={zone} points={dialog.type === 'zone-new' ? dialog.points : undefined} activityCount={zone ? countIn(zone.id) : 0}
+        qrHref={zone ? reportPostHref(site.id, zone.id) : undefined} onDone={done} onCancel={closeDialog} />
       : zone && <ZoneSheet zone={zone} activityCount={countIn(zone.id)} />;
   } else if (dialog?.type === 'route' || dialog?.type === 'route-new') {
     const route = dialog.type === 'route' ? routes.find((r) => r.id === dialog.id) : undefined;

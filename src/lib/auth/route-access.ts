@@ -4,6 +4,7 @@
 // ci-dessous doit lui correspondre — src/lib/auth/route-access.test.ts compare ROLE_ROUTES aux appels guard() des pages.
 
 import { DEMO_DEFAULT_ROLE } from '../demo';
+import { REPORT_POSTS_PATH } from './paths';
 import { ROLE_KEYS, SCREENS, canManage, canSee, canSeeHealth, homeOf, type Role, type ScreenKey } from '../domain';
 
 /**
@@ -33,8 +34,7 @@ export const ROLE_ROUTES: readonly { path: string; screen: ScreenKey; subpaths: 
  */
 export const NOT_FOUND_PATH = '/_introuvable';
 
-/** Gestion des QR codes de poste : encadrement seulement (la page renvoie aussi vers /signaler). */
-const REPORT_POSTS_PATH = '/signaler/postes';
+/** Gestion des QR codes de poste (REPORT_POSTS_PATH) : encadrement seulement, sinon vers le signalement. */
 const REPORT_PATH = '/signaler';
 /**
  * Pages d'un écran ouvert réservées aux rôles habilités aux données de santé (canSeeHealth) : vers la page de l'écran.
