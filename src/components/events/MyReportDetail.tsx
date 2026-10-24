@@ -26,16 +26,16 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
     <div style={shell}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Link href={backHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 32, fontSize: 13.5, color: 'var(--color-accent)', textDecoration: 'none' }}>
-          <i className="ph ph-caret-left" style={{ fontSize: 15 }} />Mes signalements
+          <i className="ph ph-caret-left" style={{ fontSize: 15 }} aria-hidden />Mes signalements
         </Link>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" />{r.siteLabel}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" aria-hidden />{r.siteLabel}</span>
       </div>
 
       <div style={{ display: 'grid', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}>
           <span>{r.id}</span><span>·</span><span>{fmtDate(r.occurredOn)}</span>
           <span className="tag" style={{ marginLeft: 'auto', background: tone.bg, color: tone.fg, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <i className={`ph ${r.typeIcon}`} style={{ fontSize: 12 }} />{r.typeLabel}
+            <i className={`ph ${r.typeIcon}`} style={{ fontSize: 12 }} aria-hidden />{r.typeLabel}
           </span>
         </div>
         <span style={{ fontSize: 19, fontWeight: 500, lineHeight: 1.3, letterSpacing: '-.01em', textWrap: 'pretty' }}>{r.title}</span>
@@ -45,7 +45,7 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
       {r.dismissed && (
         <div className="vg-inset" style={{ display: 'grid', gap: 4, padding: 12, fontSize: 13 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <i className="ph ph-archive" style={{ fontSize: 15, color: 'var(--color-neutral-400)' }} />{EVENT_DISMISSED} le {fmtDate(r.dismissed.on)}
+            <i className="ph ph-archive" style={{ fontSize: 15, color: 'var(--color-neutral-400)' }} aria-hidden />{EVENT_DISMISSED} le {fmtDate(r.dismissed.on)}
           </span>
           {r.dismissed.reason && <span style={{ color: 'var(--color-neutral-400)', fontStyle: 'italic', textWrap: 'pretty' }}>{r.dismissed.reason}</span>}
         </div>
@@ -55,12 +55,12 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
         <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid' }}>
           {EVENT_STEPS.map((label, i) => {
             const passed = i < r.step || (closed && i === r.step), cur = i === r.step && !closed && !r.dismissed;
-            const color = r.dismissed ? 'var(--color-neutral-500)' : passed ? 'var(--color-neutral-300)' : cur ? 'var(--color-accent)' : 'var(--color-neutral-600)';
+            const color = r.dismissed ? 'var(--color-neutral-500)' : passed ? 'var(--color-neutral-300)' : cur ? 'var(--color-accent)' : 'var(--vg-text-muted)';
             const date = r.stepDates[i];
             return (
               <li key={label} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) auto', gap: 10, alignItems: 'start', paddingBottom: i < EVENT_STEPS.length - 1 ? 10 : 0, position: 'relative' }}>
                 {i < EVENT_STEPS.length - 1 && <span aria-hidden style={{ position: 'absolute', left: 8, top: 18, bottom: 0, width: 1, background: i < r.step ? 'var(--color-accent-600)' : 'var(--color-neutral-800)' }} />}
-                <i className={`ph ${passed ? 'ph-check-circle' : cur ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 17, color, background: 'var(--color-bg)', position: 'relative' }} />
+                <i className={`ph ${passed ? 'ph-check-circle' : cur ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 17, color, background: 'var(--color-bg)', position: 'relative' }} aria-hidden />
                 <span style={{ fontSize: 13.5, color }}>{label}</span>
                 <span style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{date && i <= r.step ? fmtDate(date) : ''}</span>
               </li>
@@ -91,7 +91,7 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
 
       {r.photoCount > 0 && (
         <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--color-neutral-500)' }}>
-          <i className="ph ph-camera" style={{ fontSize: 15 }} />
+          <i className="ph ph-camera" style={{ fontSize: 15 }} aria-hidden />
           {r.photoCount} photo{r.photoCount > 1 ? 's' : ''} jointe{r.photoCount > 1 ? 's' : ''} au signalement, transmise{r.photoCount > 1 ? 's' : ''} à l&apos;animateur QHSE.
         </p>
       )}

@@ -80,7 +80,7 @@ function ArchivedRow({ title, records, canManage }: { title: TrainingTitle; reco
             <div style={{ display: 'grid', gap: 14 }}>
               {records.map((r) => (
                 <HistoryTable key={r.person.id} entries={r.entries}
-                  title={<>{r.person.name}{r.person.leftOn && <span style={{ color: 'var(--color-neutral-600)', fontWeight: 400 }}> · sortie le {fmtDate(r.person.leftOn)}</span>}</>} />
+                  title={<>{r.person.name}{r.person.leftOn && <span style={{ color: 'var(--vg-text-muted)', fontWeight: 400 }}> · sortie le {fmtDate(r.person.leftOn)}</span>}</>} />
               ))}
             </div>
           </td>
@@ -117,7 +117,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
             <tr key={t.id}>
               <td>
                 {t.label}
-                {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 10, marginLeft: 8 }} title="Donneurs de soins du registre des accidents bénins">Secourisme</span>}
+                {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }} title="Donneurs de soins du registre des accidents bénins">Secourisme</span>}
               </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t.validityMonths ? `${t.validityMonths} mois` : 'Sans échéance'}</td>
               {canManage && (
@@ -138,12 +138,12 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
           <div className="vg-inset" style={{ padding: 12, flex: 1 }}><TitleForm titles={titles} onDone={close} /></div>
         ) : (
           <button type="button" className="btn btn-secondary vg-btn-sm" disabled={editing !== null} onClick={() => setEditing('new')}>
-            <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un titre
+            <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter un titre
           </button>
         ))}
         {archivedTitles.length > 0 && editing !== 'new' && (
           <button type="button" className={`vg-chip${showArchived ? ' is-on' : ''}`} aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
-            <i className="ph ph-archive" style={{ fontSize: 13 }} />Afficher les titres archivés ({archivedTitles.length})
+            <i className="ph ph-archive" style={{ fontSize: 13 }} aria-hidden />Afficher les titres archivés ({archivedTitles.length})
           </button>
         )}
       </div>

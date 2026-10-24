@@ -107,14 +107,14 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
                     <SiretLine siret={s.destinationSiret} />
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                    {s.yearQty ? fmtQty(s.yearQty, s.unit) : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+                    {s.yearQty ? fmtQty(s.yearQty, s.unit) : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                     {delta != null && s.yearQty > 0 && <div style={muted}>{fmtDelta(delta)} vs {year - 1}{isCurrent ? ' même période' : ''}</div>}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-400)' }}>
                     {s.prevQty ? fmtQty(s.prevQty, s.unit) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={`Registre ${year} filtré sur cette filière`}>{s.yearCount}</Link> : 0}
+                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={`Registre ${year} filtré sur cette filière`}>{s.yearCount}<span className="vg-sr-only">{` enlèvement${s.yearCount > 1 ? 's' : ''} : registre ${year} filtré sur cette filière`}</span></Link> : 0}
                     {s.lastRemovedOn && <div style={muted}>dernier {fmtDate(s.lastRemovedOn)}</div>}
                   </td>
                 </tr>

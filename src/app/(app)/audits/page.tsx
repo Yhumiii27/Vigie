@@ -6,7 +6,7 @@ import { FindingsCard } from '@/components/audits/FindingsCard';
 import { ProgramTimeline } from '@/components/audits/ProgramTimeline';
 import { PageHeader } from '@/components/PageHeader';
 import { ReviewCard } from '@/components/review/ReviewCard';
-import { Aside, SegLinks } from '@/components/ui';
+import { Aside, MissingNotice, SegLinks } from '@/components/ui';
 import { isoWeek, monthName, monthOf, yearOf } from '@/lib/dates';
 import { canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
@@ -26,7 +26,7 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     loadAudits({ year: sp.annee, element: sp.element, constat: sp.constat }),
     loadFormOptions(),
   ]);
-  const { now, certs, year, yearOptions, tracks, allTracks, plan, cancelledPlan, planFindings, auditGroups, cancelledFindings, auditOptions, openElement, openFinding } = data;
+  const { now, certs, year, yearOptions, tracks, allTracks, plan, cancelledPlan, planFindings, auditGroups, cancelledFindings, auditOptions, openElement, openFinding, missingElement, missingFinding } = data;
   // AUD-13, CNF-05 : objectifs mesurables de l'année du programme, contexte du système de management.
   const [objectives, context] = await Promise.all([loadObjectives(year), loadContext()]);
   // Saisie : animateur QHSE et direction ; consultation pour le chef de service et le chef de projet (AUD-02), qui ouvrent
@@ -53,6 +53,8 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     <>
       <PageHeader title={SCREENS.audits.title} sub={`Programme ${year} et revue de direction`} />
       <div className="vg-page">
+        {missingElement && <MissingNotice text="Élément du programme d'audit introuvable pour l'année affichée." closeHref={closeHref} />}
+        {missingFinding && <MissingNotice text="Constat d'audit introuvable." closeHref={closeHref} />}
         <CertificationCards certs={certs} canApprove={approve} />
 
         <ObjectivesCard data={objectives} canEdit={edit}

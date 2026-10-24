@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useOptimistic, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useOptimistic, useRef, useState, useTransition, type KeyboardEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Attachments } from '@/components/Attachments';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { Input, Select } from '@/components/form';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { Icon } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
+import { legacySkillFilters, parseSkillFilters, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
 import { SKILL_FILTERS, SKILL_STATES, type SkillFilter, type SkillState } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
@@ -19,6 +20,7 @@ import { PersonForm } from './PersonForm';
 import { lapseFor } from './rules';
 import { TitlesButton } from './TitlesManager';
 import { TrainingForm } from './TrainingForm';
+import { TipButton } from '@/components/Tip';
 
 /** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
 type Opts = Pick<FormOptions, 'sites'>;
@@ -49,35 +51,18 @@ type Props = {
 };
 
 type Chip = 'tous' | SkillFilter;
-type Saved = { chip: Chip; service: string };
 
 const clean = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
-// Filtres mémorisés par navigateur (puce et service) : préférence d'affichage, la page fonctionne sans.
-const FILTER_KEY = 'vigie.skills.filter';
-const DEFAULT_FILTER = JSON.stringify({ chip: 'tous', service: '' } satisfies Saved);
-let savedFilter: string | null = null;
-const filterListeners = new Set<() => void>();
-const filterSnapshot = () => {
-  if (savedFilter === null) {
-    try { savedFilter = localStorage.getItem(FILTER_KEY) ?? DEFAULT_FILTER; } catch { savedFilter = DEFAULT_FILTER; }
-  }
-  return savedFilter;
-};
-const subscribeFilter = (fn: () => void) => { filterListeners.add(fn); return () => { filterListeners.delete(fn); }; };
-function writeFilter(next: Saved) {
-  savedFilter = JSON.stringify(next);
-  try { localStorage.setItem(FILTER_KEY, savedFilter); } catch { /* stockage indisponible : filtre conservé pour la page */ }
-  filterListeners.forEach((fn) => fn());
-}
-function parseFilter(raw: string): Saved {
-  try {
-    const v = JSON.parse(raw) as Partial<Saved>;
-    const chip = v.chip === 'a_traiter' || v.chip === 'sortis' ? v.chip : 'tous';
-    return { chip, service: typeof v.service === 'string' ? v.service : '' };
-  } catch {
-    return { chip: 'tous', service: '' };
-  }
+// Filtres de la matrice portés par l'URL (UX-12) : ?etat=a-traiter|sortis, ?service=, ?q= (src/lib/url-state.ts), appliqués
+// côté navigateur et écrits par history.replaceState (pas d'entrée d'historique ni d'aller-retour serveur par frappe).
+// Ancien filtre mémorisé dans le navigateur (clé vigie.skills.filter) : repris une fois dans l'URL, puis effacé.
+const LEGACY_FILTER_KEY = 'vigie.skills.filter';
+const CHIP_OF: Record<SkillScope, Chip> = { tous: 'tous', 'a-traiter': 'a_traiter', sortis: 'sortis' };
+const SCOPE_OF: Record<Chip, SkillScope> = { tous: 'tous', a_traiter: 'a-traiter', sortis: 'sortis' };
+function replaceFilters(patch: Partial<SkillFilters>) {
+  const search = searchWith(window.location.search, skillFiltersParams({ ...parseSkillFilters(new URLSearchParams(window.location.search)), ...patch }));
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
 }
 
 /** Ligne « à traiter » : titre requis à échéance proche, expiré ou jamais suivi, ou manque pendant une affectation. */
@@ -103,9 +88,7 @@ function cellTip(c: SkillCell) {
 /** Bouton désactivé d'une fonction à venir (l'infobulle reste lisible sur le bouton inactif). */
 function Soon({ label, icon, tip }: { label: string; icon: string; tip: string }) {
   return (
-    <span title={tip} style={{ display: 'inline-flex' }}>
-      <button type="button" className="btn btn-secondary vg-btn-sm" disabled title={tip}><Icon name={icon} size={13} />{label}</button>
-    </span>
+    <TipButton className="btn btn-secondary vg-btn-sm" disabled tip={tip}><Icon name={icon} size={13} />{label}</TipButton>
   );
 }
 
@@ -231,7 +214,7 @@ function DepartedHistory({ records }: { records: ArchivedRecord[] }) {
     <div style={{ display: 'grid', gap: 16 }}>
       {records.map((r) => (
         <HistoryTable key={r.title.id} entries={r.entries}
-          title={<>{r.title.label}{r.title.archivedAt && <span style={{ color: 'var(--color-neutral-600)', fontWeight: 400 }}> · titre archivé</span>}</>} />
+          title={<>{r.title.label}{r.title.archivedAt && <span style={{ color: 'var(--vg-text-muted)', fontWeight: 400 }}> · titre archivé</span>}</>} />
       ))}
     </div>
   );
@@ -291,10 +274,20 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   // Lien profond en cours : l'URL est rétablie à la fermeture de la case ; sans titre, la ligne est mise en évidence.
   const [linked, setLinked] = useState(!!initialSel);
   const [highlight, setHighlight] = useState(initialSel && !initialSel.titleId ? initialSel.personId : null);
-  const [query, setQuery] = useState('');
-  const saved = parseFilter(useSyncExternalStore(subscribeFilter, filterSnapshot, () => DEFAULT_FILTER));
+  const filters = parseSkillFilters(useSearchParams());
+  // Recherche : saisie locale (pas de rendu à chaque frappe depuis l'URL), recopiée dans l'URL.
+  const [query, setQueryState] = useState(filters.q);
+  const setQuery = (q: string) => { setQueryState(q); replaceFilters({ q: q.trim() }); };
   // Vue Salarié : pas de filtres ; « Sortis » réservé à l'encadrement.
-  const chip: Chip = self || (saved.chip === 'sortis' && !canManage) ? 'tous' : saved.chip;
+  const chip: Chip = self || (filters.etat === 'sortis' && !canManage) ? 'tous' : CHIP_OF[filters.etat];
+  // Reprise unique de l'ancien filtre mémorisé (sans filtre dans l'URL ni lien profond).
+  useEffect(() => {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem(LEGACY_FILTER_KEY); localStorage.removeItem(LEGACY_FILTER_KEY); } catch { /* stockage indisponible */ }
+    const legacy = legacySkillFilters(raw);
+    const params = new URLSearchParams(window.location.search);
+    if (legacy && !self && !params.has('etat') && !params.has('service') && !params.has('q') && !params.has('salarie')) replaceFilters(legacy);
+  }, [self]);
 
   // Nouveau lien profond pendant que l'écran est ouvert (notification, « À faire ») : on ouvre la case visée.
   const linkKey = initialSel ? `${initialSel.personId}:${initialSel.titleId ?? ''}` : '';
@@ -306,12 +299,12 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
       setSel(initialSel.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
       setMode('view');
       setHighlight(initialSel.titleId ? null : initialSel.personId);
-      setQuery('');
+      setQueryState('');
     }
   }
   // Un lien profond remet les filtres à zéro pour que la ligne visée soit visible.
   useEffect(() => {
-    if (linkKey) writeFilter({ chip: 'tous', service: '' });
+    if (linkKey) replaceFilters({ etat: 'tous', service: '', q: '' });
   }, [linkKey]);
   const hlRef = useRef<HTMLTableRowElement>(null);
   useEffect(() => { if (highlight) hlRef.current?.scrollIntoView({ block: 'center' }); }, [highlight]);
@@ -334,14 +327,14 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   // Filtres (côté client) : recherche nom / poste / service, service, « À traiter », « Sortis ».
   const services = [...new Set([...rows.map((r) => r.person.service), ...others.map((p) => p.service), ...departed.map((p) => p.service)].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr'));
-  const service = !self && services.includes(saved.service) ? saved.service : '';
+  const service = !self && services.includes(filters.service) ? filters.service : '';
   const q = clean(query.trim());
   const matches = (p: Person) => (!service || p.service === service) && (!q || clean(`${p.name} ${p.job} ${p.service}`).includes(q));
   const treat = rows.filter((r) => toTreat(r, today));
   const shown = (chip === 'a_traiter' ? treat : rows).filter((r) => matches(r.person));
   const shownDeparted = departed.filter(matches);
-  const setChip = (c: Chip) => writeFilter({ chip: c, service });
-  const setService = (v: string) => writeFilter({ chip, service: v });
+  const setChip = (c: Chip) => replaceFilters({ etat: SCOPE_OF[c] });
+  const setService = (v: string) => replaceFilters({ service: v });
   const chipCount: Record<Chip, number | null> = { tous: null, a_traiter: treat.length, sortis: departed.length };
   const chips: { key: Chip; label: string }[] = [{ key: 'tous', label: 'Tous' }, ...SKILL_FILTERS.filter((f) => f.key !== 'sortis' || canManage)];
 
@@ -431,7 +424,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
                   const meta = (
                     <>
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.person.job}</span>
-                      {r.person.service && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-600)' }}>{r.person.service}</span>}
+                      {r.person.service && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{r.person.service}</span>}
                       {r.leavingOn && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>Sortie le {fmtDate(r.leavingOn)}</span>}
                     </>
                   );

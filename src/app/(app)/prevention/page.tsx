@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { ContractorsTable, NewContractorButton } from '@/components/prevention/ContractorDialogs';
 import {
@@ -16,6 +17,7 @@ import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { loadPrevention, type PlanView, type SiteRuleView } from '@/lib/data/prevention';
 import { lcfirst } from '@/lib/queries';
+import { ARCHIVES, canonicalHref, wantsArchives } from '@/lib/url-state';
 
 export const metadata: Metadata = { title: SCREENS.prevention.title };
 
@@ -44,6 +46,9 @@ function missingLabel(p: PlanView) {
 export default async function PreventionPage({ searchParams }: PageProps<'/prevention'>) {
   const { role } = await guard('prevention');
   const sp = await searchParams;
+  // UX-12 : ancien ?filtre=archivees (entreprises) lu puis réécrit en ?etat=archives.
+  const canonical = canonicalHref('/prevention', sp);
+  if (canonical) redirect(canonical);
   const [d, formOptions] = await Promise.all([loadPrevention(), loadFormOptions()]);
   const manage = canManage(role);
   const approve = canApprove(role);
@@ -73,7 +78,8 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   const registerHref = hrefWith('/prevention/imprimer/permis', {}, permitParams);
 
   // Entreprises : actives (par défaut) ou archivées.
-  const showArchived = tab === 'entreprises' && str(sp.filtre) === 'archivees';
+  // Entreprises archivées : ?etat=archives (UX-12 ; l'ancien ?filtre=archivees est réécrit par le proxy et ci-dessus).
+  const showArchived = tab === 'entreprises' && wantsArchives(sp);
   const contractors = d.contractors.filter((c) => c.archived === showArchived);
   const archivedCount = d.contractors.filter((c) => c.archived).length;
 
@@ -263,7 +269,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={[
                 { href: '/prevention?onglet=entreprises', label: <>Actives<span style={{ marginLeft: 6, opacity: 0.6 }}>{d.counts.contractors}</span></>, on: !showArchived },
-                { href: '/prevention?onglet=entreprises&filtre=archivees', label: <>Archivées<span style={{ marginLeft: 6, opacity: 0.6 }}>{archivedCount}</span></>, on: showArchived },
+                { href: `/prevention?onglet=entreprises&etat=${ARCHIVES}`, label: <>Archivées<span style={{ marginLeft: 6, opacity: 0.6 }}>{archivedCount}</span></>, on: showArchived },
               ]} />
               <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Plans et permis comptés sur le site sélectionné</span>
             </div>

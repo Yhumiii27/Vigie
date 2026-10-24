@@ -40,7 +40,7 @@ describe.skipIf(!base)('Salarié : DUERP en consultation (serveur construit)', (
   describe.each([['HTML', false], ['RSC', true]] as const)('%s', (_mode, rsc) => {
     it('écran, programme annuel et impressions : ni pilotes, ni événements liés, ni liste du personnel', async () => {
       const paths = [
-        '/risques', '/risques?unite=essais', '/risques?unite=magasin', '/risques?archives=1', '/risques?registre=1', '/risques?programme=2026',
+        '/risques', '/risques?unite=essais', '/risques?unite=magasin', '/risques?etat=archives', '/risques?registre=1', '/risques?programme=2026',
         '/risques/imprimer', '/risques/imprimer?version=2025.1', '/risques/imprimer/programme?annee=2026',
       ];
       for (const path of paths) {
@@ -61,5 +61,11 @@ describe.skipIf(!base)('Salarié : DUERP en consultation (serveur construit)', (
       expect(body).toContain('A-214');
       expect(body).toContain('R. 4121-4');
     });
+  });
+
+  it('ancien lien ?archives=1 réécrit en ?etat=archives avant le rendu (UX-12, page chargée par le navigateur)', async () => {
+    const res = await fetch(new URL('/risques?archives=1', base), { headers: { cookie: COOKIE }, redirect: 'manual' });
+    expect([303, 307, 308]).toContain(res.status);
+    expect(new URL(res.headers.get('location')!, base).search).toBe('?etat=archives');
   });
 });

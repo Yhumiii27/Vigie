@@ -5,9 +5,10 @@ import { REASON_MAX } from './domain';
 /**
  * État renvoyé par une server action de formulaire (utilisé avec useActionState). `ids` : enregistrements créés en plus de
  * `id` (actions de suite d'une vérification, ACT-23) ; `warnings` : avertissements qui n'empêchent pas l'enregistrement
- * (vérification planifiée avant la date cible…).
+ * (vérification planifiée avant la date cible…) ; `message` : confirmation annoncée après l'enregistrement (UX-14, sinon celle
+ * du formulaire).
  */
-export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string; ids?: string[]; warnings?: string[] };
+export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string; ids?: string[]; warnings?: string[]; message?: string };
 
 export const initialFormState: FormState = {};
 

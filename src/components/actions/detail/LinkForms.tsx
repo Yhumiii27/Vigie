@@ -11,6 +11,7 @@ import { Icon } from '@/components/ui';
 import { COMPLEMENTARY_LINK_KINDS, COMPLEMENTARY_LINK_LABELS, type ComplementaryLinkKind } from '@/lib/action-rules';
 import type { LinkTargetOption } from '@/lib/action-view';
 import { linkAction, unlinkAction } from '@/server/links';
+import { TipButton } from '@/components/Tip';
 
 const FAILED = "L'opération a échoué. Réessayez.";
 
@@ -79,10 +80,10 @@ export function DetachLinkButton({ actionId, link, label, disabled, onDone }: {
           <button type="button" className="vg-text-btn" disabled={pending} onClick={() => { setConfirm(false); setError(null); }}>Annuler</button>
         </>
       ) : (
-        <button type="button" className="vg-text-btn" disabled={disabled} title={`Détacher ${actionId} de cet élément (l’action reste dans le plan)`}
+        <TipButton className="vg-text-btn" disabled={disabled} tip={`Détacher ${actionId} de cet élément (l’action reste dans le plan)`}
           onClick={() => setConfirm(true)}>
           <Icon name="ph-link-break" size={12} />Détacher
-        </button>
+        </TipButton>
       )}
       {error && <span role="alert" style={{ color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </span>

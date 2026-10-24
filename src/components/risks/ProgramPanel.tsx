@@ -208,7 +208,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
           )}
           {program && (
             <a href={printHref} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-              <i className="ph ph-printer" style={{ fontSize: 13 }} />Imprimer
+              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer
             </a>
           )}
         </div>
@@ -226,7 +226,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
               </thead>
               <tbody>
                 {lines.map((l) => (
-                  <tr key={l.actionId} style={l.cancelled ? { opacity: 0.6 } : undefined}>
+                  <tr key={l.actionId} data-obsolete={l.cancelled || undefined}>
                     <td style={{ verticalAlign: 'top', minWidth: 200 }}>
                       <Link href={`/actions?action=${encodeURIComponent(l.actionId)}`} className="vg-link"
                         style={{ fontSize: 12.5, color: lineTone(l), textDecoration: l.cancelled ? 'line-through' : undefined }}>{l.actionId}</Link>
@@ -250,7 +250,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
                       {l.frozenStatus != null && l.frozenStatus !== l.status && <div style={muted}>à l&apos;arrêt : {l.frozenStatus}</div>}
                     </td>
                     {showPilot && <td style={{ verticalAlign: 'top', color: 'var(--color-neutral-300)' }}>{l.pilot || '—'}</td>}
-                    <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', textAlign: 'right' }}>{l.estimatedCost != null ? fmtEuro(l.estimatedCost) : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}</td>
+                    <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', textAlign: 'right' }}>{l.estimatedCost != null ? fmtEuro(l.estimatedCost) : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}</td>
                     <td style={{ verticalAlign: 'top', color: 'var(--color-neutral-300)', maxWidth: 220, textWrap: 'pretty' }}>{l.resources || '—'}</td>
                     <td style={{ verticalAlign: 'top', color: 'var(--color-neutral-300)', maxWidth: 220, textWrap: 'pretty' }}>{l.indicator || '—'}</td>
                     {editLines && (

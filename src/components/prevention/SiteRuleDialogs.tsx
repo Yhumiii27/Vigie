@@ -22,7 +22,7 @@ function SiteRuleForm({ site, onDone, onCancel }: { site: SiteRuleView; onDone: 
       <div style={{ display: 'grid', gap: 4 }}>
         <label className="vg-check">
           <input type="checkbox" name="ppFromFirstMinute" checked={firstMinute} onChange={(e) => setFirstMinute(e.target.checked)} />
-          <span className="vg-check-box"><i className="ph ph-check" /></span>
+          <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
           <span>Exiger un plan de prévention écrit dès la première minute d&apos;intervention</span>
         </label>
         <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>

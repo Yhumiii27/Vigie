@@ -22,7 +22,7 @@ const printHref = (version?: string) => (version ? `/risques/imprimer?version=${
 function PrintLink({ version, className = 'vg-link', label = 'Imprimer' }: { version?: string; className?: string; label?: string }) {
   return (
     <a href={printHref(version)} target="_blank" rel="noreferrer" className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <i className="ph ph-printer" style={{ fontSize: 12 }} />{label}
+      <i className="ph ph-printer" style={{ fontSize: 12 }} aria-hidden />{label}
     </a>
   );
 }
@@ -66,12 +66,12 @@ export function VersionsButton({ versions, canApprove, people, history = false }
   return (
     <>
       <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}>
-        <i className="ph ph-clock-counter-clockwise" style={{ fontSize: 13 }} />Versions archivées
+        <i className="ph ph-clock-counter-clockwise" style={{ fontSize: 13 }} aria-hidden />Versions archivées
       </button>
       <Dialog open={open} onClose={close} title={title} kicker={kicker} width={view.kind === 'snapshot' ? 1080 : 820}>
         {view.kind !== 'list' && (
           <button type="button" className="vg-text-btn" style={{ justifySelf: 'start', alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => setView({ kind: 'list' })}>
-            <i className="ph ph-arrow-left" style={{ fontSize: 12 }} />Toutes les versions
+            <i className="ph ph-arrow-left" style={{ fontSize: 12 }} aria-hidden />Toutes les versions
           </button>
         )}
         {view.kind === 'list' && <VersionList versions={versions} canApprove={canApprove} onShow={showSnapshot} onEdit={(version) => setView({ kind: 'edit', version })} />}
@@ -110,7 +110,7 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
                 <td style={{ verticalAlign: 'top' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 500 }}>{v.version}</span>
-                    {v.current && <ToneTag tone="accent" style={{ fontSize: 10.5, padding: '1px 7px' }}>En vigueur</ToneTag>}
+                    {v.current && <ToneTag tone="accent" style={{ fontSize: 11, padding: '1px 7px' }}>En vigueur</ToneTag>}
                   </div>
                   {v.comment && <div style={{ fontSize: 11.5, color: 'var(--color-neutral-400)', marginTop: 2, maxWidth: 260, textWrap: 'pretty' }}>{v.comment}</div>}
                 </td>
@@ -135,7 +135,7 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
                       <span style={{ color: TONE.ok.fg }}>Oui{v.riskCount != null && <span style={{ color: 'var(--color-neutral-500)' }}> · {v.riskCount} risque{v.riskCount > 1 ? 's' : ''}</span>}</span>
                       <button type="button" className="vg-text-btn" onClick={() => onShow(v.version)}>Consulter</button>
-                      <a href={csvHref(v.version)} download className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><i className="ph ph-download-simple" style={{ fontSize: 12 }} />CSV</a>
+                      <a href={csvHref(v.version)} download className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><i className="ph ph-download-simple" style={{ fontSize: 12 }} aria-hidden />CSV</a>
                       <PrintLink version={v.version} />
                     </span>
                   ) : (
@@ -184,7 +184,7 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <PrintLink version={detail.version} className="btn btn-ghost vg-btn-sm" />
           <a href={csvHref(detail.version)} download className="btn btn-secondary vg-btn-sm">
-            <i className="ph ph-download-simple" style={{ fontSize: 13 }} />Télécharger le CSV
+            <i className="ph ph-download-simple" style={{ fontSize: 13 }} aria-hidden />Télécharger le CSV
           </a>
         </span>
       </div>
@@ -200,7 +200,7 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
                 <td><Cotation g={r.gravity} p={r.probability} /></td>
                 <td style={{ color: 'var(--color-neutral-300)' }}>{r.existingMeasures || '—'}</td>
                 <td><Cotation g={r.residualGravity} p={r.residualProbability} /></td>
-                <td style={{ whiteSpace: 'nowrap', color: r.actions.length ? 'var(--color-neutral-300)' : 'var(--color-neutral-600)' }}>{r.actions.length ? r.actions.join(', ') : '—'}</td>
+                <td style={{ whiteSpace: 'nowrap', color: r.actions.length ? 'var(--color-neutral-300)' : 'var(--vg-text-muted)' }}>{r.actions.length ? r.actions.join(', ') : '—'}</td>
               </tr>
             ))}
             {!rows.length && <tr><td colSpan={7} style={{ color: 'var(--color-neutral-500)' }}>Aucun risque dans cette unité à la date d&apos;archivage.</td></tr>}

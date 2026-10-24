@@ -26,7 +26,7 @@ type Props = {
 
 const note = (icon: string, text: string) => (
   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-500)' }}>
-    <i className={`ph ${icon}`} style={{ fontSize: 14, marginTop: 1 }} />
+    <i className={`ph ${icon}`} style={{ fontSize: 14, marginTop: 1 }} aria-hidden />
     <span style={{ textWrap: 'pretty' }}>{text}</span>
   </div>
 );
@@ -63,7 +63,7 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
         </ActionForm>
       ) : (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={() => setOpen(true)}>
-          <i className="ph ph-sign-out" style={{ fontSize: 13 }} />Déclarer la sortie
+          <i className="ph ph-sign-out" style={{ fontSize: 13 }} aria-hidden />Déclarer la sortie
         </button>
       )}
       {error && <div role="alert" className="vg-form-error">{error}</div>}

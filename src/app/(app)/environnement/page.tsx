@@ -378,7 +378,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                     <Dot color={TONE[s.tone].dot} size={7} />
                     <span style={{ flex: 1, color: s.key === 'manquant' && s.n ? TONE.danger.fg : 'var(--color-neutral-300)' }}>{s.label}</span>
-                    <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: s.n ? undefined : 'var(--color-neutral-600)' }}>{s.n}</span>
+                    <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: s.n ? undefined : 'var(--vg-text-muted)' }}>{s.n}</span>
                   </div>
                 ))}
               </div>

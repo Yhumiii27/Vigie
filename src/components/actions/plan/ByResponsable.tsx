@@ -15,7 +15,7 @@ export function ByResponsable({ items }: { items: ActionListItem[] }) {
         return (
           <div key={list[0].pilotId} className="card" style={{ gap: 6, padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, paddingBottom: 4 }}>
-              <span className="vg-avatar" style={{ width: 26, height: 26, fontSize: 10 }}>{list[0].pilotInitials}</span>
+              <span className="vg-avatar" style={{ width: 26, height: 26, fontSize: 11 }}>{list[0].pilotInitials}</span>
               <span style={{ fontWeight: 500 }}>{list[0].pilot}</span>
               <span style={{ fontSize: 11.5, color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>
                 {list.length} action{list.length > 1 ? 's' : ''}{late ? ` · ${late} en retard` : ''}

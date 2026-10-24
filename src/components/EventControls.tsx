@@ -1,9 +1,11 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
+import { useOptimistic, useState, useTransition, type ReactNode } from 'react';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { advanceEvent, dismissEvent, restoreEvent, revertEvent, setAnalysisMethod } from '@/server/events';
 import { METHODS } from '@/lib/domain';
+import { SaveStatus } from '@/components/feedback';
+import { TipButton, TipText } from '@/components/Tip';
 
 function useStepAction(run: () => Promise<{ error?: string }>) {
   const [pending, start] = useTransition();
@@ -25,12 +27,10 @@ export function AdvanceButton({ id, label, disabled, hint }: { id: string; label
   const { pending, trigger, errorNote } = useStepAction(() => advanceEvent(id));
   return (
     <>
-      {/* Le bouton désactivé ne reçoit pas le survol : l'infobulle est portée par son conteneur. */}
-      <span title={hint} style={{ display: 'inline-flex' }}>
-        <button type="button" className="btn btn-primary vg-btn-sm" disabled={disabled || pending} onClick={trigger} title={hint}>
-          {label}
-        </button>
-      </span>
+      {/* Infobulle accessible au clavier, aussi sur le bouton désactivé (UX-10). */}
+      <TipButton className="btn btn-primary vg-btn-sm" disabled={disabled || pending} aria-busy={pending || undefined} onClick={trigger} tip={hint}>
+        {pending ? 'Enregistrement…' : label}
+      </TipButton>
       {errorNote}
     </>
   );
@@ -66,9 +66,11 @@ export function RestoreButton({ id }: { id: string }) {
   );
 }
 
+const Wrap = ({ tip, children }: { tip?: string; children: ReactNode }) => (tip ? <TipText tip={tip}>{children}</TipText> : <>{children}</>);
+
 export function MethodSeg({ id, method, disabled, hint }: { id: string; method: string; disabled?: boolean; hint?: string }) {
   const [current, setCurrent] = useOptimistic(method);
-  const [, start] = useTransition();
+  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const choose = (key: string) => start(async () => {
     setCurrent(key);
@@ -81,7 +83,9 @@ export function MethodSeg({ id, method, disabled, hint }: { id: string; method: 
   });
   return (
     <>
-      <div className="seg" title={disabled ? hint ?? "Réservé à l'animateur QHSE et à l'encadrement." : undefined}>
+      {/* Choix désactivé : la raison est lue par les lecteurs d'écran et affichée au survol (UX-10). */}
+      <Wrap tip={disabled ? hint ?? "Réservé à l'animateur QHSE et à l'encadrement." : undefined}>
+      <div className="seg">
         {METHODS.map(([key, label]) => (
           <label key={key} className="seg-opt" style={{ fontSize: 12, padding: '5px 10px', cursor: disabled ? 'default' : undefined, opacity: disabled && current !== key ? 0.6 : undefined }}>
             <input type="radio" name={`method-${id}`} checked={current === key} disabled={disabled} onChange={() => choose(key)} />
@@ -89,6 +93,8 @@ export function MethodSeg({ id, method, disabled, hint }: { id: string; method: 
           </label>
         ))}
       </div>
+      </Wrap>
+      <SaveStatus pending={pending} />
       {error && <span role="alert" style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--tone-danger-fg)', textAlign: 'right' }}>{error}</span>}
     </>
   );

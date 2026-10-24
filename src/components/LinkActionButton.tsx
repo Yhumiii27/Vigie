@@ -4,6 +4,7 @@ import { useState, useTransition, type CSSProperties } from 'react';
 import { Dialog } from '@/components/Dialog';
 import { Field, Select } from '@/components/form';
 import { linkAction, unlinkAction } from '@/server/links';
+import { TipButton } from '@/components/Tip';
 
 type Option = readonly [value: string, label: string];
 
@@ -56,9 +57,9 @@ export function LinkActionButton({ link, actions = [], current, label = 'Rattach
             <button type="button" className="vg-text-btn" disabled={pending} onClick={() => { setConfirm(false); setError(null); }}>Annuler</button>
           </>
         ) : (
-          <button type="button" className={className} disabled={disabled} title={tooltip ?? `Détacher ${current} (l'action reste dans le plan)`} onClick={() => setConfirm(true)}>
-            <i className="ph ph-link-break" style={{ fontSize: 13 }} />Détacher
-          </button>
+          <TipButton className={className} disabled={disabled} tip={tooltip ?? `Détacher ${current} (l'action reste dans le plan)`} onClick={() => setConfirm(true)}>
+            <i className="ph ph-link-break" style={{ fontSize: 13 }} aria-hidden />Détacher
+          </TipButton>
         )}
         {error && <span role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{error}</span>}
       </span>
@@ -68,9 +69,9 @@ export function LinkActionButton({ link, actions = [], current, label = 'Rattach
   const close = () => setOpen(false);
   return (
     <>
-      <button type="button" className={className} style={style} disabled={disabled || !actions.length} title={tooltip ?? (actions.length ? undefined : 'Aucune action en cours à rattacher')} onClick={() => setOpen(true)}>
-        {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} />}{label}
-      </button>
+      <TipButton className={className} style={style} disabled={disabled || !actions.length} tip={tooltip ?? (actions.length ? undefined : 'Aucune action en cours à rattacher')} onClick={() => setOpen(true)}>
+        {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{label}
+      </TipButton>
       <Dialog open={open} onClose={close} title="Rattacher une action existante" kicker="Plan d'actions unique" width={520}>
         {open && <LinkActionForm link={link} actions={actions} onDone={close} onCancel={close} />}
       </Dialog>
@@ -104,7 +105,7 @@ export function LinkActionForm({ link, actions, onDone, onCancel }: { link: stri
       <div className="dialog-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>Annuler</button>
         <button type="button" className="btn btn-primary" disabled={!picked || pending} onClick={submit}>
-          <i className="ph ph-link" style={{ fontSize: 14 }} />{pending ? 'Rattachement…' : 'Rattacher'}
+          <i className="ph ph-link" style={{ fontSize: 14 }} aria-hidden />{pending ? 'Rattachement…' : 'Rattacher'}
         </button>
       </div>
     </div>

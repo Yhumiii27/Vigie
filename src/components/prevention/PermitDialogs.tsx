@@ -11,6 +11,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import { actionHref } from '@/lib/action-rules';
 import type { PermitView, PlanChoice } from '@/lib/data/prevention';
 import { cancelPermit, closePermit, deliverPermit, linkPermitPlan, savePermit, setPermitCheck } from '@/server/prevention';
+import { SaveStatus, safeCall } from '@/components/feedback';
 import {
   FIRE_WATCH_HOURS, PERMIT_TYPES, PERMIT_TYPE_KEYS, addHoursLocal, fmtLocalLong, lcfirst, missingPresets, permitNeedsSignedPlan, planCovers, ruleBasis,
   type ChecklistItem, type PermitType,
@@ -198,7 +199,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
             <div key={`${i}-${item.label}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <label className="vg-check" style={{ flex: 1 }}>
                 <input type="checkbox" checked={item.checked} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, checked: e.target.checked } : x)))} />
-                <span className="vg-check-box"><i className="ph ph-check" /></span>
+                <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
                 <span>{item.label}</span>
               </label>
               {!presets.includes(item.label) && (
@@ -225,19 +226,19 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
 
 function PermitChecklist({ permit, editable }: { permit: PermitView; editable: boolean }) {
   const [items, setItem] = useOptimistic(permit.checklist, (cur: ChecklistItem[], [i, v]: [number, boolean]) => cur.map((c, j) => (j === i ? { ...c, checked: v } : c)));
-  const [, start] = useTransition();
+  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const done = items.filter((i) => i.checked).length;
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      <SectionTitle aside={<span style={muted}>{done}/{items.length} vérifiés</span>}>Vérifications préalables</SectionTitle>
+      <SectionTitle aside={<span style={{ ...muted, display: 'inline-flex', gap: 8, alignItems: 'center' }}><SaveStatus pending={pending} />{done}/{items.length} vérifiés</span>}>Vérifications préalables</SectionTitle>
       <div className="vg-inset" style={{ display: 'grid', gap: 7, padding: '10px 12px' }}>
         {items.length === 0 && <span style={muted}>Aucun point de contrôle.</span>}
         {items.map((item, i) => editable ? (
           <label key={`${i}-${item.label}`} className="vg-check">
             <input type="checkbox" checked={item.checked}
-              onChange={(e) => { const v = e.target.checked; start(async () => { setItem([i, v]); const r = await setPermitCheck(permit.id, i, v); setError(r.error ?? null); }); }} />
-            <span className="vg-check-box"><i className="ph ph-check" /></span>
+              onChange={(e) => { const v = e.target.checked; start(async () => { setItem([i, v]); const r = await safeCall(() => setPermitCheck(permit.id, i, v)); setError(r.error ?? null); }); }} />
+            <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
             <span>{item.label}</span>
           </label>
         ) : (

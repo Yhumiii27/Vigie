@@ -128,7 +128,7 @@ export function HoldForm({ review, people, now, next, allSites, onClose }: {
           {list.map(([id, label]) => (
             <label key={id} className="vg-check">
               <input type="checkbox" name="participantIds" value={id} defaultChecked={chosen.has(id)} />
-              <span className="vg-check-box"><i className="ph ph-check" /></span>
+              <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
               <span>{label}</span>
             </label>
           ))}
@@ -202,7 +202,7 @@ export function CloseReviewButton({ id, allSites }: { id: number; allSites: bool
     return (
       <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setAsking(true)}
         title="Visa de la direction : le dossier de revue est figé et n'est plus recalculé.">
-        <i className="ph ph-seal-check" style={{ fontSize: 13 }} />Clôturer et figer le dossier
+        <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />Clôturer et figer le dossier
       </button>
     );
   }
@@ -220,7 +220,7 @@ export function CloseReviewButton({ id, allSites }: { id: number; allSites: bool
             if (r.error) setError(r.error);
             else setAsking(false);
           })}>
-          <i className="ph ph-seal-check" style={{ fontSize: 13 }} />{pending ? 'Clôture…' : 'Confirmer la clôture'}
+          <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />{pending ? 'Clôture…' : 'Confirmer la clôture'}
         </button>
       </span>
       {error && <span role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}

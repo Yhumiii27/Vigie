@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { setRole, setSite } from '@/app/actions';
 import { LOGOUT_PATH } from '@/lib/auth/paths';
+import { SaveStatus, useActionRunner } from './feedback';
+import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
 import { Icon } from './ui';
 
@@ -36,80 +38,79 @@ type Props = SidebarProps & {
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
-    // Phase de capture et preventDefault : Échap ferme le menu seulement, pas le tiroir de navigation (AppShell).
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey, true);
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true); };
-  }, [open, close]);
-  return ref;
-}
-
 export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, open = false, onNavigate, onClose }: Props) {
   const pathname = usePathname();
-  const [siteOpen, setSiteOpen] = useState(false);
   const [manageSites, setManageSites] = useState(false);
-  const [roleOpen, setRoleOpen] = useState(false);
-  const [, start] = useTransition();
-  const siteRef = useDismiss(siteOpen, () => setSiteOpen(false));
-  const roleRef = useDismiss(roleOpen, () => setRoleOpen(false));
+  const siteMenu = useMenu();
+  const roleMenu = useMenu();
+  // Choix du site ou du rôle (UX-14) : attente affichée, refus ou échec annoncés, confirmation du site choisi.
+  const { pending, error, run } = useActionRunner();
+  const chooseSite = (s: { id: string; label: string }) => {
+    siteMenu.close(true);
+    if (s.id === site.id) return;
+    onNavigate?.();
+    run(() => setSite(s.id), { success: `Site sélectionné : ${s.label}.` });
+  };
+  const chooseRole = (r: string) => {
+    roleMenu.close(true);
+    if (r === role) return;
+    onNavigate?.();
+    run(() => setRole(r));
+  };
 
   return (
     <>
-      <aside id="vg-side" aria-label="Navigation" className={`vg-side${open ? ' is-open' : ''}`}>
+      <aside id="vg-side" aria-label="Barre latérale" className={`vg-side${open ? ' is-open' : ''}`} aria-busy={pending || undefined}>
         <div className="vg-brand">
           <span className="vg-brand-mark" aria-hidden>V</span>
           <span className="vg-brand-name">Vigie</span>
-          <span className="tag tag-outline" style={{ fontSize: 10, padding: '1px 7px' }}>QHSE</span>
+          <span className="tag tag-outline" style={{ fontSize: 11, padding: '1px 7px' }}>QHSE</span>
           {/* Tiroir de navigation (téléphone) : fermeture explicite, en plus d'Échap et du fond. */}
           <button type="button" className="btn btn-ghost btn-icon vg-narrow-only vg-side-close" aria-label="Fermer le menu" onClick={onClose}>
             <Icon name="ph-x" size={16} />
           </button>
         </div>
 
-        <div ref={siteRef} style={{ position: 'relative', padding: '0 2px' }}>
-          <button type="button" className="vg-site-btn" aria-expanded={siteOpen} aria-label={`Site : ${site.label}`} onClick={() => setSiteOpen((o) => !o)}>
+        <div {...siteMenu.rootProps} style={{ position: 'relative', padding: '0 2px' }}>
+          <button type="button" className="vg-site-btn" aria-label={`Site : ${site.label}`} disabled={pending} {...siteMenu.buttonProps}>
             <Icon name="ph-factory" size={15} style={{ color: 'var(--color-neutral-500)' }} />
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{site.label}</span>
             <Icon name="ph-caret-down" size={12} style={{ color: 'var(--color-neutral-500)' }} />
           </button>
-          {siteOpen && (
-            <div className="vg-menu elev-md" style={{ left: 2, right: 2, top: 'calc(100% + 4px)' }}>
+          {siteMenu.open && (
+            <div className="vg-menu elev-md" style={{ left: 2, right: 2, top: 'calc(100% + 4px)' }} {...siteMenu.menuProps}>
               {sites.map((s) => (
-                <button key={s.id} type="button" className={`vg-menu-item${s.id === site.id ? ' is-on' : ''}`}
-                  onClick={() => { setSiteOpen(false); onNavigate?.(); start(() => setSite(s.id)); }}>
+                <button key={s.id} type="button" className={`vg-menu-item${s.id === site.id ? ' is-on' : ''}`} {...menuItemProps(s.id === site.id)}
+                  onClick={() => chooseSite(s)}>
                   {s.label}
                 </button>
               ))}
               {siteAdmin && (
                 <>
-                  <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
-                  <button type="button" className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }}
-                    onClick={() => { setSiteOpen(false); onNavigate?.(); setManageSites(true); }}>
+                  <div role="separator" style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
+                  <button type="button" className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }} {...menuItemProps()}
+                    onClick={() => { siteMenu.close(false); onNavigate?.(); setManageSites(true); }}>
                     <Icon name="ph-gear-six" style={{ color: 'var(--color-neutral-500)' }} />Gérer les sites…
                   </button>
                 </>
               )}
             </div>
           )}
+          <div style={{ padding: '4px 2px 0' }}><SaveStatus pending={pending} label="Changement en cours…" /></div>
+          {error && !pending && <div role="alert" className="vg-form-error" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>}
         </div>
 
-        <nav className="vg-nav">
+        <nav className="vg-nav" aria-label="Navigation principale">
           {nav.map((sec) => (
-            <div key={sec.label} className="vg-nav-sec">
-              <div className="vg-eyebrow">{sec.label}</div>
+            <div key={sec.label} className="vg-nav-sec" role="group" aria-labelledby={`vg-nav-${sec.label}`}>
+              <div className="vg-eyebrow" id={`vg-nav-${sec.label}`}>{sec.label}</div>
               {sec.items.map((it) => {
                 const on = isActive(pathname, it.href);
                 return (
                   <Link key={it.key} href={it.href} className={`vg-item${on ? ' is-on' : ''}`} aria-current={on ? 'page' : undefined} onClick={onNavigate}>
                     <Icon name={it.icon} size={16} />
                     <span className="vg-item-label">{it.label}</span>
-                    {!!it.badge && <span className="vg-badge">{it.badge}</span>}
+                    {!!it.badge && <span className="vg-badge"><span aria-hidden>{it.badge}</span><span className="vg-sr-only">{` (${it.badge} à traiter)`}</span></span>}
                   </Link>
                 );
               })}
@@ -127,36 +128,38 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
 
         {demo ? (
           <>
-            <div ref={roleRef} style={{ position: 'relative' }}>
-              <button type="button" className="vg-user" aria-expanded={roleOpen} onClick={() => setRoleOpen((o) => !o)} title="Changer de rôle (démonstration)">
+            <div {...roleMenu.rootProps} style={{ position: 'relative' }}>
+              <button type="button" className="vg-user" disabled={pending} {...roleMenu.buttonProps}>
+                <span className="vg-sr-only">Changer de rôle (démonstration) : </span>
                 <UserBadge user={user} role={role} />
               </button>
-              {roleOpen && (
-                <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }}>
-                  <div className="vg-eyebrow" style={{ padding: '4px 8px 2px' }}>Voir en tant que</div>
+              {roleMenu.open && (
+                <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }} {...roleMenu.menuProps} aria-label="Voir en tant que" aria-labelledby={undefined}>
+                  <div className="vg-eyebrow" aria-hidden style={{ padding: '4px 8px 2px' }}>Voir en tant que</div>
                   {roles.map((r) => (
-                    <button key={r} type="button" className={`vg-menu-item${r === role ? ' is-on' : ''}`}
-                      onClick={() => { setRoleOpen(false); onNavigate?.(); start(() => setRole(r)); }}>
+                    <button key={r} type="button" className={`vg-menu-item${r === role ? ' is-on' : ''}`} {...menuItemProps(r === role)}
+                      onClick={() => chooseRole(r)}>
                       {r}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div title="Mode démonstration (VIGIE_DEMO=1) : le rôle se choisit ici ; en production, il vient de Microsoft Entra ID"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 0', fontSize: 10.5, color: 'var(--color-neutral-600)' }}>
-              <Icon name="ph-flask" size={12} />Mode démonstration · sélecteur de rôle
-            </div>
+            <p style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: 0, padding: '6px 10px 0', fontSize: 11, color: 'var(--vg-text-muted)' }}>
+              <Icon name="ph-flask" size={12} style={{ marginTop: 2 }} />
+              <span>Mode démonstration · sélecteur de rôle<span className="vg-sr-only"> (en production, le rôle vient de Microsoft Entra ID)</span></span>
+            </p>
           </>
         ) : (
-          <div ref={roleRef} style={{ position: 'relative' }}>
-            <button type="button" className="vg-user" aria-expanded={roleOpen} onClick={() => setRoleOpen((o) => !o)} title="Compte Microsoft">
+          <div {...roleMenu.rootProps} style={{ position: 'relative' }}>
+            <button type="button" className="vg-user" {...roleMenu.buttonProps}>
+              <span className="vg-sr-only">Compte Microsoft : </span>
               <UserBadge user={user} role={role} />
             </button>
-            {roleOpen && (
-              <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }}>
+            {roleMenu.open && (
+              <div className="vg-menu elev-md" style={{ left: 2, right: 2, bottom: 'calc(100% + 4px)' }} {...roleMenu.menuProps}>
                 {/* Lien simple (pas de préchargement) : la déconnexion termine aussi la session Microsoft. */}
-                <a href={LOGOUT_PATH} className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <a href={LOGOUT_PATH} className="vg-menu-item" style={{ display: 'flex', alignItems: 'center', gap: 7 }} {...menuItemProps()}>
                   <Icon name="ph-sign-out" style={{ color: 'var(--color-neutral-500)' }} />Se déconnecter
                 </a>
               </div>
@@ -173,9 +176,9 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
 function UserBadge({ user, role }: { user: { name: string; initials: string }; role: string }) {
   return (
     <>
-      <span className="vg-avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{user.initials}</span>
+      <span className="vg-avatar" style={{ width: 30, height: 30, fontSize: 11 }} aria-hidden>{user.initials}</span>
       <span style={{ minWidth: 0, display: 'grid', gap: 1 }}>
-        <span style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</span>
+        <span style={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}<span className="vg-sr-only">, </span></span>
         <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{role}</span>
       </span>
     </>

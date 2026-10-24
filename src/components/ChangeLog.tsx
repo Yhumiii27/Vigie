@@ -29,7 +29,7 @@ export function ChangeLogSummary({ title, count }: { title: string; count?: numb
   return (
     <summary className="vg-h6" style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
       <i className="ph ph-clock-counter-clockwise" style={{ fontSize: 13 }} aria-hidden />
-      {title}{!!count && <span style={{ color: 'var(--color-neutral-600)' }}> · {count}</span>}
+      {title}{!!count && <span style={{ color: 'var(--vg-text-muted)' }}> · {count}</span>}
     </summary>
   );
 }

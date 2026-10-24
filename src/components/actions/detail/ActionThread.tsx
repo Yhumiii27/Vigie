@@ -23,7 +23,7 @@ export function ActionThread({ actionId, comments, rights, currentUserId, writab
   const [formKey, setFormKey] = useState(0);
   return (
     <section className="vg-action-block" aria-label="Fil de commentaires">
-      <h6 className="vg-h6">Fil{comments.length > 0 && <span style={{ color: 'var(--color-neutral-600)' }}> · {comments.length}</span>}</h6>
+      <h6 className="vg-h6">Fil{comments.length > 0 && <span style={{ color: 'var(--vg-text-muted)' }}> · {comments.length}</span>}</h6>
       {comments.length === 0 ? (
         <div className="vg-muted" style={{ fontSize: 12 }}>Aucun commentaire.</div>
       ) : (

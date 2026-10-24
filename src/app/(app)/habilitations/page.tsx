@@ -66,7 +66,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
             <CardHead title="Recyclages et formations à prévoir" aside={(
               // Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application.
               <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-                <i className="ph ph-printer" style={{ fontSize: 13 }} />Plan de formation
+                <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
               </a>
             )} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>

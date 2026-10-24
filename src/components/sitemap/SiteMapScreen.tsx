@@ -18,6 +18,8 @@ import { ActivityForm, ActivitySheet, PanelTitle, PlanBackgroundForm, RouteForm,
 import { MapCanvas, activityPosition, type DrawState, type Layers, type MapActivity, type MapHandle, type Target, type Tool } from './MapCanvas';
 import { ROUTE_KINDS, TEAMS, ZONE_KINDS, isRealDate, type ActivityDraft, type ActivityView, type PositionCandidate, type Team } from './model';
 import styles from './sitemap.module.css';
+import { SaveStatus, safeCall } from '@/components/feedback';
+import { TipButton } from '@/components/Tip';
 
 type DialogState =
   | { type: 'zone' | 'route'; id: number }
@@ -111,7 +113,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   const [shapes, setShapes] = useState<Record<string, Pt[]>>({});
   const [moves, setMoves] = useState<Record<number, Pt>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [, startSaving] = useTransition();
+  const [saving, startSaving] = useTransition();
   const [initialFocus] = useState<Pt | null>(() => {
     const a = focus.activityId ? data.activities.find((x) => x.id === focus.activityId) : undefined;
     if (a) return activityPosition(a, data.zones).pos;
@@ -202,7 +204,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   const persistMove = (id: number, at: Pt) => {
     setMoves((m) => ({ ...m, [id]: at }));
     startSaving(async () => {
-      const r = await moveActivity(id, at);
+      const r = await safeCall(() => moveActivity(id, at));
       setMoves((m) => { const { [id]: _drop, ...rest } = m; void _drop; return rest; });
       setSaveError(r.error ?? null);
     });
@@ -211,7 +213,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
     const key = `${kind}:${id}`;
     setShapes((s) => ({ ...s, [key]: points }));
     startSaving(async () => {
-      const r = await saveShape(kind, id, points);
+      const r = await safeCall(() => saveShape(kind, id, points));
       setShapes((s) => { const { [key]: _drop, ...rest } = s; void _drop; return rest; });
       setSaveError(r.error ?? null);
     });
@@ -324,8 +326,8 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
               : <><strong>Nouvelle activité</strong> : cliquez sur la carte à son emplacement.</>}
         </span>
         {placing?.mode !== 'move' && (
-          <button type="button" className="btn btn-secondary vg-btn-sm" title="Saisir l'activité sans point sur la carte (la zone sert de position approximative)"
-            onClick={() => setDialog({ type: 'activity-new', draft: draftWithDates(placing?.draft ?? {}) })}>Sans position</button>
+          <TipButton className="btn btn-secondary vg-btn-sm" tip="Saisir l'activité sans point sur la carte (la zone sert de position approximative)"
+            onClick={() => setDialog({ type: 'activity-new', draft: draftWithDates(placing?.draft ?? {}) })}>Sans position</TipButton>
         )}
         <button type="button" className="btn btn-ghost vg-btn-sm" onClick={cancelTool}>Annuler</button>
       </>
@@ -366,7 +368,8 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
               </span>
             )}
           </div>
-          {saveError && <div style={{ padding: '8px 10px 0' }}><ErrorLine error={saveError} /></div>}
+          {/* UX-14 : enregistrement d'un tracé ou d'un déplacement en cours, puis erreur éventuelle. */}
+          {(saving || saveError) && <div style={{ padding: '8px 10px 0' }}><SaveStatus pending={saving} label="Enregistrement de la carte…" />{!saving && <ErrorLine error={saveError} />}</div>}
           <MapCanvas ref={mapRef} map={map} zones={zones} routes={routes} activities={mapActivities} conflicts={conflicts} layers={layers} dimPlan={dimPlan}
             tool={tool} editable={canManage} selection={selection} activeConflict={activeConflict} initialFocus={initialFocus}
             label={`Carte du ${lcfirst(site.label)} au ${fmtDate(date)} : ${plural(dayActivities.length, 'activité', 'activités')}, ${plural(conflicts.length, 'situation de coactivité', 'situations de coactivité')}`}
@@ -418,9 +421,9 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                 </button>
               ))}
               {map.custom && (
-                <button type="button" className={`vg-chip${dimPlan ? ' is-on' : ''}`} aria-pressed={dimPlan} title="Inverse les couleurs d'un plan à fond clair" onClick={() => setDimPlan((d) => !d)}>
+                <TipButton className={`vg-chip${dimPlan ? ' is-on' : ''}`} aria-pressed={dimPlan} tip="Inverse les couleurs d'un plan à fond clair" onClick={() => setDimPlan((d) => !d)}>
                   <Icon name="ph-circle-half" size={12} />Assombrir
-                </button>
+                </TipButton>
               )}
             </div>
             <div className={styles.legend}>
@@ -457,8 +460,8 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                 const details = c.reasons.filter((r) => r.detail && r.detail !== r.subject);
                 return (
                   <div key={c.key} className={`${styles.conflict}${on ? ` ${styles.isOn}` : ''}`}>
-                    <button type="button" className={styles.conflictHead} aria-pressed={on}
-                      aria-label={`${c.title}${c.place ? `, ${c.place}` : ''} : centrer la carte`} onClick={() => focusConflict(c)}>
+                    {/* Nom = texte visible de la situation, suivi de l'action (UX-10 : pas d'aria-label qui le masquerait). */}
+                    <button type="button" className={styles.conflictHead} aria-pressed={on} onClick={() => focusConflict(c)}>
                       <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                         <ToneTag tone={c.tone}>{c.tone === 'danger' ? 'Danger' : 'Vigilance'}</ToneTag>
                         <span className="tag tag-neutral">{c.pairLabel}</span>
@@ -485,6 +488,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                           ))}
                         </span>
                       )}
+                      <span className="vg-sr-only"> : centrer la carte</span>
                     </button>
                     <details>
                       <summary className={styles.summary}><i className="ph ph-caret-right" aria-hidden />Mesures recommandées ({c.measures.length})</summary>
@@ -509,7 +513,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                 {mastered.map((c) => {
                   const ctl = controlByKey.get(c.key)!;
                   return (
-                    <div key={c.key} className={styles.conflict} style={{ opacity: 0.85 }}>
+                    <div key={c.key} className={styles.conflict}>
                       <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                         <ToneTag tone="ok"><Icon name="ph-shield-check" size={11} style={{ marginRight: 4 }} />Maîtrisée</ToneTag>
                         <span className="tag tag-neutral">{c.pairLabel}</span>
@@ -555,12 +559,12 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                 const gap = planGap(a, date);
                 return (
                   <div key={a.id} className={styles.itemRow}>
-                    <button type="button" className={`vg-row ${styles.rowBtn}${on ? ' is-on' : ''}`} aria-pressed={on} aria-label={`${a.title} : centrer la carte`}
+                    <button type="button" className={`vg-row ${styles.rowBtn}${on ? ' is-on' : ''}`} aria-pressed={on}
                       onClick={() => focusActivity(a)}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                         <TeamMark team={a.team} />
                         <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.title}>{a.title}</span>
-                        {tone && <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[tone].dot }} title="Situation de coactivité ce jour" />}
+                        {tone && <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[tone].dot }} title="Situation de coactivité ce jour"><span className="vg-sr-only">Situation de coactivité ce jour</span></span>}
                       </span>
                       <span style={{ ...muted, paddingLeft: 17 }}>
                         {a.team === 'externe' ? a.contractor : 'Équipe interne'}
@@ -569,16 +573,17 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                       </span>
                       {(noPlan || gap || !placed.pos || placed.approx) && (
                         <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', paddingLeft: 17 }}>
-                          {noPlan && <ToneTag tone={site.ppFromFirstMinute ? 'danger' : 'warn'} style={{ fontSize: 10.5, padding: '1px 7px' }}>Sans plan de prévention</ToneTag>}
+                          {noPlan && <ToneTag tone={site.ppFromFirstMinute ? 'danger' : 'warn'} style={{ fontSize: 11, padding: '1px 7px' }}>Sans plan de prévention</ToneTag>}
                           {gap && (
                             <span title={gap === 'Plan clos ou annulé' ? `${a.preventionPlanId} est clos ou annulé` : `${a.preventionPlanId} · ${a.planStatusLabel ?? ''} : signatures EU et EE exigées avant toute intervention`}>
-                              <ToneTag tone="danger" style={{ fontSize: 10.5, padding: '1px 7px' }}>{gap} · {a.preventionPlanId}</ToneTag>
+                              <ToneTag tone="danger" style={{ fontSize: 11, padding: '1px 7px' }}>{gap} · {a.preventionPlanId}</ToneTag>
                             </span>
                           )}
-                          {!placed.pos && <ToneTag tone="warn" style={{ fontSize: 10.5, padding: '1px 7px' }}>Sans position</ToneTag>}
-                          {placed.approx && <span className="tag tag-neutral" style={{ fontSize: 10.5, padding: '1px 7px' }}>Position approximative</span>}
+                          {!placed.pos && <ToneTag tone="warn" style={{ fontSize: 11, padding: '1px 7px' }}>Sans position</ToneTag>}
+                          {placed.approx && <span className="tag tag-neutral" style={{ fontSize: 11, padding: '1px 7px' }}>Position approximative</span>}
                         </span>
                       )}
+                      <span className="vg-sr-only"> : centrer la carte</span>
                     </button>
                     <button type="button" className={styles.iconBtn} aria-label={`Ouvrir la fiche « ${a.title} »`} title="Ouvrir la fiche"
                       onClick={() => { setSelection({ kind: 'activity', id: a.id }); setDialog({ type: 'activity', id: a.id, mode: 'view' }); }}>

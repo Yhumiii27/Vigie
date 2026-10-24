@@ -24,6 +24,7 @@ import {
 } from '@/server/watch';
 import { controlOverdueDefaults, controlReserveDefaults } from './action-defaults';
 import { ArchivedBanner, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
+import { TipButton } from '@/components/Tip';
 
 type Opts = Pick<FormOptions, 'people' | 'sites'>;
 /**
@@ -95,7 +96,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
               </td></tr>
             )}
             {shown.map((c) => (
-              <tr key={c.id} {...rowOpener(() => open(c.id, firstView(c)))} style={c.archived ? { opacity: 0.75 } : undefined}>
+              <tr key={c.id} {...rowOpener(() => open(c.id, firstView(c)))} data-obsolete={c.archived || undefined}>
                 <td style={{ fontWeight: 500, minWidth: 180 }}>
                   {c.equipment}
                   {(showSite || c.responsible || c.equipmentCode) && (
@@ -129,10 +130,10 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
                 {canManage && (
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
                     {!c.archived && (
-                      <button type="button" className="vg-text-btn" title="Enregistrer un contrôle réalisé" onClick={() => open(c.id, 'realise')}
+                      <TipButton className="vg-text-btn" tip="Enregistrer un contrôle réalisé" onClick={() => open(c.id, 'realise')}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="ph-check-square-offset" size={13} />Réalisé
-                      </button>
+                      </TipButton>
                     )}
                   </td>
                 )}

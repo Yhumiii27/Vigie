@@ -129,25 +129,25 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
       <FileError error={fileError} />
       {cell?.obtainedOn && !initial && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} aria-hidden />
           <span>La formation du {fmtDate(cell.obtainedOn)}{cell.expiresOn ? ` (échéance ${fmtDate(cell.expiresOn)})` : ''}{cell.provider ? ` · ${cell.provider}` : ''} reste consultable dans l&apos;historique.</span>
         </div>
       )}
       {cell && !cell.required && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} aria-hidden />
           <span>Ce titre deviendra requis pour ce salarié.</span>
         </div>
       )}
       {effectiveExpiry && !covers && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <i className="ph ph-calendar-x" style={{ fontSize: 14, marginTop: 1 }} />
+          <i className="ph ph-calendar-x" style={{ fontSize: 14, marginTop: 1 }} aria-hidden />
           <span style={{ textWrap: 'pretty' }}>{gapReason(effectiveExpiry, assignments, today)} : le recyclage reste à réaliser.</span>
         </div>
       )}
       {renewal && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} />
+          <i className="ph ph-info" style={{ fontSize: 14, marginTop: 1 }} aria-hidden />
           <span style={{ textWrap: 'pretty' }}>
             L&apos;action reprise {renewal.id} n&apos;est pas modifiée par cet enregistrement : le service QHSE la clôt ou l&apos;abandonne dans le plan d&apos;actions.
           </span>

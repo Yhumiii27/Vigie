@@ -5,7 +5,7 @@ import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT } from './shared';
 // utilisable par les composants serveur et client.
 
 export const FieldLabel = ({ children }: { children: ReactNode }) => (
-  <span style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{children}</span>
+  <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{children}</span>
 );
 
 export function FieldGrid({ fields, min = 150 }: { fields: [string, ReactNode][]; min?: number }) {

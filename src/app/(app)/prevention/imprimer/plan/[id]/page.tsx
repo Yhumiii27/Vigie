@@ -98,7 +98,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
     <article className="pp-doc pp-doc-narrow">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href={`/prevention?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Plan {plan.id}</a>
+        <a href={`/prevention?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Plan {plan.id}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
           <PrintButton />

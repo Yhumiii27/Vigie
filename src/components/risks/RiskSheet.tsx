@@ -206,12 +206,12 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         {actionable && (
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => onView('newAction')}>
-              <i className="ph ph-plus" style={{ fontSize: 13 }} />Nouvelle action
+              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Nouvelle action
             </button>
             {/* Vue de la même fenêtre, pas une seconde fenêtre (Échap fermerait aussi la fiche). */}
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} disabled={!linkOptions.length}
               title={linkOptions.length ? undefined : 'Aucune action non close à rattacher'} onClick={() => onView('link')}>
-              <i className="ph ph-link" style={{ fontSize: 13 }} />Rattacher une action existante
+              <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />Rattacher une action existante
             </button>
           </div>
         )}
@@ -247,7 +247,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         <div className="dialog-actions">
           <button type="button" className="btn btn-secondary" disabled={unitArchived}
             title={unitArchived ? `L'unité « ${unit.label} » est archivée : restaurez-la d'abord.` : undefined} onClick={() => onView('restore')}>
-            <i className="ph ph-arrow-counter-clockwise" style={{ fontSize: 14 }} />Restaurer le risque
+            <i className="ph ph-arrow-counter-clockwise" style={{ fontSize: 14 }} aria-hidden />Restaurer le risque
           </button>
         </div>
       )}
@@ -257,28 +257,28 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
             <button type="button" className="btn btn-ghost" style={{ color: 'var(--color-neutral-400)' }} disabled={pending}
               title="Retirer le risque du document unique en vigueur (motif obligatoire, historique conservé)"
               onClick={() => { setError(null); onView('archive'); }}>
-              <i className="ph ph-archive" style={{ fontSize: 14 }} />Archiver
+              <i className="ph ph-archive" style={{ fontSize: 14 }} aria-hidden />Archiver
             </button>
             <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans l'unité" disabled={isFirst || pending}
               onClick={() => run(() => moveRisk(risk.id, 'up'))}>
-              <i className="ph ph-arrow-up" style={{ fontSize: 14 }} />
+              <i className="ph ph-arrow-up" style={{ fontSize: 14 }} aria-hidden />
             </button>
             <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans l'unité" disabled={isLast || pending}
               onClick={() => run(() => moveRisk(risk.id, 'down'))}>
-              <i className="ph ph-arrow-down" style={{ fontSize: 14 }} />
+              <i className="ph ph-arrow-down" style={{ fontSize: 14 }} aria-hidden />
             </button>
           </span>
           <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {risk.flag === 'toReview' && (
               <>
                 <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => run(() => confirmResidual(risk.id))}>
-                  <i className="ph ph-check" style={{ fontSize: 14 }} />{pending ? 'Enregistrement…' : 'Confirmer le résiduel actuel'}
+                  <i className="ph ph-check" style={{ fontSize: 14 }} aria-hidden />{pending ? 'Enregistrement…' : 'Confirmer le résiduel actuel'}
                 </button>
                 <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => onView('edit')}>Recoter le résiduel</button>
               </>
             )}
             <button type="button" className="btn btn-primary" disabled={pending} onClick={() => onView('edit')}>
-              <i className="ph ph-pencil-simple" style={{ fontSize: 14 }} />Modifier
+              <i className="ph ph-pencil-simple" style={{ fontSize: 14 }} aria-hidden />Modifier
             </button>
           </span>
         </div>

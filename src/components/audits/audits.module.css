@@ -17,7 +17,7 @@
 .clickCard:hover { box-shadow: 0 0 0 1px var(--color-neutral-600); }
 .clickCard:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .hoverIcon { opacity: 0; color: var(--color-neutral-500); font-size: 13px; transition: opacity .12s; }
-.clickCard:hover .hoverIcon, .clickCard:focus-visible .hoverIcon { opacity: 1; }
+.clickCard:hover .hoverIcon, .clickCard:focus-visible .hoverIcon, .clickCard :focus-visible > .hoverIcon { opacity: 1; }
 
 .addCard {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 104px;

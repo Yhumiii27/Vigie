@@ -40,7 +40,7 @@ export default async function SsctReportPage({ searchParams }: PageProps<'/risqu
     <article className="pp-doc pp-doc-narrow">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href="/risques" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Évaluation des risques</a>
+        <a href="/risques" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Évaluation des risques</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
           {r.years.map((y) => (
             <a key={y} href={`/risques/bilan-ssct?annee=${y}`} className={`btn vg-btn-sm ${y === r.year ? 'btn-secondary' : 'btn-ghost'}`} aria-current={y === r.year ? 'page' : undefined}>{y}</a>

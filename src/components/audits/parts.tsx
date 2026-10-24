@@ -7,6 +7,7 @@ import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { ActionBrief, AttachmentBrief } from '@/lib/data/audits';
 import styles from './audits.module.css';
+import { Tip } from '@/components/Tip';
 
 /** Choix exclusif en contrôle segmenté, utilisable dans un ActionForm (champ radio `name`). */
 export function RadioSeg({ name, options, defaultValue, onChange }: {
@@ -35,11 +36,15 @@ export function ActionLink({ action, id, compact }: { action: ActionBrief | null
   // Libellé court, avancement (« En retard » calculé), responsable, date cible.
   const tip = `${action.title} — ${action.status} · ${action.pilot} · date cible ${fmtDate(action.dueOn)}`;
   return (
-    <Link href={`/actions?action=${encodeURIComponent(action.id)}`} className="vg-link" title={tip}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-      <Dot color={TONE[action.tone].dot} size={6} />
-      {compact ? action.id : <span>{action.id} · <span style={{ color: 'var(--color-neutral-300)' }}>{action.status}</span></span>}
-    </Link>
+    <Tip tip={tip}>
+      {(described) => (
+        <Link href={`/actions?action=${encodeURIComponent(action.id)}`} className="vg-link" {...described}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+          <Dot color={TONE[action.tone].dot} size={6} />
+          {compact ? action.id : <span>{action.id} · <span style={{ color: 'var(--color-neutral-300)' }}>{action.status}</span></span>}
+        </Link>
+      )}
+    </Tip>
   );
 }
 
@@ -51,7 +56,7 @@ export function DeleteButton({ run, onDone, label = 'Supprimer', note }: { run: 
   if (!asking) {
     return (
       <button type="button" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)', marginLeft: 'auto' }} onClick={() => setAsking(true)}>
-        <i className="ph ph-trash" style={{ fontSize: 13 }} />{label}
+        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{label}
       </button>
     );
   }
@@ -66,7 +71,7 @@ export function DeleteButton({ run, onDone, label = 'Supprimer', note }: { run: 
           if (r.error) setError(r.error);
           else onDone();
         })}>
-        <i className="ph ph-trash" style={{ fontSize: 13 }} />{pending ? 'Suppression…' : 'Confirmer la suppression'}
+        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{pending ? 'Suppression…' : 'Confirmer la suppression'}
       </button>
       {error && <span role="alert" style={{ flexBasis: '100%', textAlign: 'right', fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </span>

@@ -4,7 +4,7 @@
 export function PrintButton({ label = 'Imprimer / PDF', className = 'btn btn-primary vg-btn-sm' }: { label?: string; className?: string }) {
   return (
     <button type="button" className={className} onClick={() => window.print()}>
-      <i className="ph ph-printer" style={{ fontSize: 13 }} />{label}
+      <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{label}
     </button>
   );
 }

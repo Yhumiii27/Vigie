@@ -119,7 +119,7 @@ export function TemplatesPanel({ templates, canManage, onEditMapping, onImport }
       </div>
       {templates.length > 0 && (
         <span style={muted}>
-          <ToneTag tone="neutral" style={{ fontSize: 10, padding: '1px 6px', marginRight: 6 }}>Clés</ToneTag>
+          <ToneTag tone="neutral" style={{ fontSize: 11, padding: '1px 6px', marginRight: 6 }}>Clés</ToneTag>
           Chaque champ est identifié par sa clé : nom du champ PDF, étiquette du contrôle Word, ou section et libellé.
         </span>
       )}

@@ -198,9 +198,10 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
 const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [site, keep, people, docs, versions, files, actions, sites] = await Promise.all([
+  const [site, keep, perimeter, people, docs, versions, files, actions, sites] = await Promise.all([
     currentSiteId(),
     siteFilter(scope),
+    siteFilter('perimeter'),
     loadPeople(),
     db.select().from(t.documents),
     db.select().from(t.documentVersions).orderBy(asc(t.documentVersions.id)),
@@ -219,15 +220,17 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   // EVT-14 : événements rattachés (périmètre, jamais une maladie professionnelle hors rôles habilités ; rien pour le Salarié).
   const events = await loadLinkedEvents('document', kept.map((d) => d.id));
   const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events }, null, now);
-  // Documents rattachés à un autre site : la fiche ouverte par ?doc= (après création ou changement de site) l'explique.
+  // Documents rattachés à un autre site du périmètre : la fiche ouverte par ?doc= (après création ou changement de site)
+  // l'explique. Hors du périmètre : rien n'est révélé (bandeau « introuvable », UX-13).
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
+  const inPerimeterIds = docs.filter((d) => perimeter(d.siteId)).map((d) => d.id);
   const elsewhere: Record<string, string> = Object.fromEntries(docs
-    .filter((d) => d.siteId && !inSite(site, d.siteId))
+    .filter((d) => d.siteId && !inSite(site, d.siteId) && perimeter(d.siteId))
     .map((d) => [d.id, siteLabel.get(d.siteId!) ?? d.siteId!]));
   // Documents ayant une version en vigueur (tous sites) : seuls signalés « ailleurs » en consultation seule.
   const inForceIds = new Set(versions.filter((v) => v.status === 'approuve').map((v) => v.documentId));
   const approvedIds = new Set(versions.filter((v) => v.approvedOn).map((v) => v.documentId));
-  return { rows, allIds: docs.map((d) => d.id), elsewhere, inForceIds, approvedIds, now };
+  return { rows, allIds: docs.map((d) => d.id), inPerimeterIds, elsewhere, inForceIds, approvedIds, now };
 });
 
 /**
@@ -254,7 +257,7 @@ export async function loadDocuments({ readOnly = false }: { readOnly?: boolean }
       { key: 'vigueur', label: 'Documents en vigueur', value: rows.length, sub: '', subTone: 'neutral', note: 'Dernière version approuvée et diffusée' },
     ];
     // Lien vers un document sans version en vigueur (origine d'une action, procédure citée ailleurs) : la fiche l'explique.
-    const unavailable: Record<string, UnavailableDoc> = Object.fromEntries(base.allIds
+    const unavailable: Record<string, UnavailableDoc> = Object.fromEntries(base.inPerimeterIds
       .filter((id) => !base.inForceIds.has(id))
       .map((id) => [id, base.approvedIds.has(id) ? 'retired' : 'draft']));
     return {

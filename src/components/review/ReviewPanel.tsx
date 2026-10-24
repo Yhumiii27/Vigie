@@ -17,6 +17,7 @@ import type { ReviewCardData } from '@/lib/data/review';
 import { setReviewItemDone } from '@/server/review';
 import { CancelReviewButton, CloseReviewButton, CreateReviewForm, DecisionForm, HoldForm, ItemForm, RescheduleForm } from './ReviewDialogs';
 import styles from './review.module.css';
+import { SaveStatus, safeCall } from '@/components/feedback';
 
 type Editing =
   | { kind: 'item'; id: number | null }
@@ -55,7 +56,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
 }) {
   const { now, review, reviewFiles, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
   const [list, setDone] = useOptimistic(items, (state, { id, done }: { id: number; done: boolean }) => state.map((r) => (r.id === id ? { ...r, done } : r)));
-  const [, start] = useTransition();
+  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const close = () => setEditing(null);
@@ -72,7 +73,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
   const toggle = (r: (typeof items)[number]) => start(async () => {
     setError(null);
     setDone({ id: r.id, done: !r.done });
-    const res = await setReviewItemDone(r.id, !r.done);
+    const res = await safeCall(() => setReviewItemDone(r.id, !r.done));
     if (res.error) setError(res.error);
   });
 
@@ -118,7 +119,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
               ) : <span className={styles.auto}>{icon}</span>}
               {edit ? (
                 <button type="button" className={styles.textBtn} title="Modifier l'élément" onClick={() => setEditing({ kind: 'item', id: r.id })}
-                  style={{ flex: 1, color: r.done ? 'var(--color-neutral-400)' : 'var(--color-text)' }}>{r.label}</button>
+                  style={{ flex: 1, color: r.done ? 'var(--color-neutral-400)' : 'var(--color-text)' }}>{r.label}<span className="vg-sr-only"> : modifier l&apos;élément</span></button>
               ) : (
                 <span style={{ flex: 1, color: r.done ? 'var(--color-neutral-400)' : 'var(--color-text)' }}>{r.label}</span>
               )}
@@ -134,6 +135,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
         })}
         {review && !list.length && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun élément à préparer pour l&apos;instant.</div>}
         {!review && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Planifiez la prochaine revue pour préparer sa check-list.</div>}
+        <SaveStatus pending={pending} />
         {error && <div role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</div>}
         {review && review.status !== 'annulee' && (
           // Échéance de la revue au programme annuel (AUD-01).
@@ -147,17 +149,17 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           {review && review.status !== 'annulee' && flags.canDossier && (
             // Lien HTML simple : la feuille globale du dossier ne doit pas rester chargée dans l'application.
             <a href={`/revue-de-direction?revue=${review.id}`} target="_blank" rel="noopener" className="btn btn-primary vg-btn-sm">
-              <i className="ph ph-file-text" style={{ fontSize: 13 }} />{review.status === 'cloturee' ? 'Consulter le dossier' : 'Générer le dossier de revue'}
+              <i className="ph ph-file-text" style={{ fontSize: 13 }} aria-hidden />{review.status === 'cloturee' ? 'Consulter le dossier' : 'Générer le dossier de revue'}
             </a>
           )}
           {edit && (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing({ kind: 'item', id: null })}>
-              <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un élément
+              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter un élément
             </button>
           )}
           {flags.canEdit && review?.status === 'planifiee' && (
             <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setEditing({ kind: 'reschedule' })}>
-              <i className="ph ph-calendar-blank" style={{ fontSize: 13 }} />Reporter
+              <i className="ph ph-calendar-blank" style={{ fontSize: 13 }} aria-hidden />Reporter
             </button>
           )}
           {flags.canApprove && review?.status === 'planifiee' && <CancelReviewButton review={review} />}
@@ -187,7 +189,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             <div className="vg-h6">Décisions et objectifs</div>
             {decisions.map((d) => (
               <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline', fontSize: 12.5 }}>
-                <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 10.5 }}>{d.kindLabel}</ToneTag>
+                <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
                 {edit ? (
                   <button type="button" className={styles.textBtn} onClick={() => setEditing({ kind: 'decision', id: d.id })} title="Modifier">{d.text}</button>
                 ) : <span>{d.text}</span>}
@@ -225,7 +227,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             {edit && (
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
                 <button type="button" className="vg-text-btn" onClick={() => setEditing({ kind: 'decision', id: null })}>
-                  <i className="ph ph-plus" style={{ fontSize: 13 }} /> Ajouter une décision
+                  <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden /> Ajouter une décision
                 </button>
                 {actionEdit && (
                   <>
@@ -249,7 +251,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             <button type="button" className={`btn ${review.status === 'tenue' ? 'btn-secondary' : 'btn-primary'} vg-btn-sm`} disabled={notYet}
               title={notYet ? `La revue n'a pas encore eu lieu (prévue le ${fmtDate(review.reviewOn)}).` : undefined}
               onClick={() => setEditing({ kind: 'hold' })}>
-              <i className="ph ph-note-pencil" style={{ fontSize: 13 }} />{review.status === 'tenue' ? 'Modifier le compte rendu' : 'Saisir le compte rendu'}
+              <i className="ph ph-note-pencil" style={{ fontSize: 13 }} aria-hidden />{review.status === 'tenue' ? 'Modifier le compte rendu' : 'Saisir le compte rendu'}
             </button>
           )}
           {flags.canSign && review?.status === 'tenue' && !flags.closeBlockers.length && <CloseReviewButton id={review.id} allSites={allSites} />}
@@ -264,7 +266,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           )}
           {flags.canEdit && (
             <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setEditing({ kind: 'create' })}>
-              <i className="ph ph-calendar-plus" style={{ fontSize: 13 }} />Préparer la prochaine revue
+              <i className="ph ph-calendar-plus" style={{ fontSize: 13 }} aria-hidden />Préparer la prochaine revue
             </button>
           )}
         </div>
@@ -286,10 +288,10 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                   {fmtDate(r.reviewOn)}
                 </Link>
                 <span style={{ color: 'var(--color-neutral-400)', minWidth: 64 }}>{r.kindShort}</span>
-                <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap', fontSize: 10.5 }}>{r.statusLabel}</ToneTag>
+                <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{r.statusLabel}</ToneTag>
                 {!r.cancelled && flags.canDossier && (
                   <a href={`/revue-de-direction?revue=${r.id}`} target="_blank" rel="noopener" className="vg-link" style={{ marginLeft: 'auto' }}>
-                    <i className="ph ph-file-text" style={{ fontSize: 12 }} /> Dossier
+                    <i className="ph ph-file-text" style={{ fontSize: 12 }} aria-hidden /> Dossier
                   </a>
                 )}
               </div>

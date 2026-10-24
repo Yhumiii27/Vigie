@@ -84,7 +84,7 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
         <a href={`/prevention?onglet=permis&permis=${encodeURIComponent(permit.id)}`} className="btn btn-ghost vg-btn-sm">
-          <i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Permis {permit.id}
+          <i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Permis {permit.id}
         </a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>

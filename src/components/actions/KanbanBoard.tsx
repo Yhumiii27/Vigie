@@ -57,15 +57,15 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
 function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
   return (
     <ActionLink id={a.id} className="card elev-sm vg-kcard" style={{ gap: 7, padding: '10px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--color-neutral-500)', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-neutral-500)', minWidth: 0 }}>
         <Icon name={a.sourceIcon} size={12} style={{ flex: 'none' }} />
         <span style={{ whiteSpace: 'nowrap' }}>{a.sourceLabel}</span>
-        {a.originRef && <span style={{ flex: 1, minWidth: 0, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {a.originRef}</span>}
-        <span style={{ marginLeft: 'auto', flex: 'none', color: 'var(--color-neutral-600)' }}>{a.id}</span>
+        {a.originRef && <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {a.originRef}</span>}
+        <span style={{ marginLeft: 'auto', flex: 'none', color: 'var(--vg-text-muted)' }}>{a.id}</span>
       </div>
       <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{a.label}</div>
       {(step || a.toComplete || a.priorityLabel) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 10.5, color: 'var(--color-neutral-400)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11, color: 'var(--color-neutral-400)' }}>
           {step && <span title="Avancement">{a.avancement}</span>}
           {a.priorityLabel && <span>{step ? '· ' : ''}{a.priorityLabel}</span>}
           {a.toComplete && <span style={{ color: TONE.warn.dot }}>{step || a.priorityLabel ? '· ' : ''}À compléter</span>}
@@ -74,7 +74,7 @@ function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 6px', fontSize: 11, color: 'var(--color-neutral-400)' }}>
         {/* Responsable : jamais plus étroit que ses initiales ; deux dates d'une Terminée : les dates passent à la ligne. */}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 18, overflow: 'hidden' }} title={a.pilot}>
-          <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--color-neutral-800)', display: 'grid', placeItems: 'center', fontSize: 9, color: 'var(--color-neutral-200)', flex: 'none' }}>{a.pilotInitials}</span>
+          <span style={{ width: 18, height: 18, borderRadius: '50%', background: 'var(--color-neutral-800)', display: 'grid', placeItems: 'center', fontSize: 11, color: 'var(--color-neutral-200)', flex: 'none' }}>{a.pilotInitials}</span>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.pilot}</span>
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>

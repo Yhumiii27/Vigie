@@ -67,7 +67,7 @@ export default async function DashboardPage() {
                         <span style={{ textAlign: 'right', fontWeight: 500 }}>{p.n}</span>
                       </>
                     );
-                    const style = { display: 'grid', gridTemplateColumns: '150px 1fr 32px', alignItems: 'center', gap: 10, fontSize: 12, padding: '2px 4px', textDecoration: 'none' } as const;
+                    const style = { display: 'grid', gridTemplateColumns: '150px 1fr 32px', alignItems: 'center', gap: 10, fontSize: 12, padding: '2px 4px', minHeight: 24, textDecoration: 'none' } as const;
                     return p.href
                       ? <Link key={p.label} href={p.href} className="vg-row" style={style}>{body}</Link>
                       : <div key={p.label} style={style}>{body}</div>;
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
                 <div key={t.key} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 10, alignItems: 'start' }}>
                   <div style={{ textAlign: 'center', lineHeight: 1.1, color: t.overdue ? TONE.danger.dot : undefined }}>
                     <div style={{ fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</div>
-                    <div style={{ fontSize: 10, color: t.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
+                    <div style={{ fontSize: 11, color: t.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
                     <TodoLink item={{ key: t.key, href: t.href, elsewhere: t.elsewhere }} style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{t.title}</TodoLink>

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { CERT_TONE_LABELS, certDot, type CertTone } from '@/components/audits/shared';
 import { Dot, ToneTag } from '@/components/ui';
@@ -18,7 +19,11 @@ type DossierData = ReviewRecordOnly & Partial<Omit<StoredDossier, keyof ReviewRe
 
 const BLANK_DECISIONS = 3;
 
-export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, { mode: 'none' | 'cancelled' }>; role: Role }) {
+export function DossierView({ page, role, notice }: {
+  page: Exclude<ReviewDossierPage, { mode: 'none' | 'cancelled' }>; role: Role;
+  /** Bandeau sous la barre d'outils (lien ?revue= vers une revue inconnue, UX-13). */
+  notice?: ReactNode;
+}) {
   const d: DossierData = page.mode === 'record' ? page.record : page.dossier;
   const h = d.header;
   const r = d.record;
@@ -48,14 +53,15 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
     <main className="rd-doc">
       <div className="rd-toolbar rd-noprint">
         {/* Liens HTML simples (navigation complète) : la feuille globale dossier.css, et sa règle @page, ne doit pas rester chargée dans l'application. */}
-        <a href={`/audits?annee=${yearOf(h.reviewOn)}&revue=${page.review.id}#revue`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Audits et certifications</a>
+        <a href={`/audits?annee=${yearOf(h.reviewOn)}&revue=${page.review.id}#revue`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Audits et certifications</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <span className="rd-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
           <PrintButton />
         </span>
       </div>
+      {notice && <div className="rd-noprint">{notice}</div>}
       <div className="rd-toolbar rd-noprint">
-        <ToneTag tone={banner.tone} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i className={`ph ${banner.icon}`} style={{ fontSize: 12 }} />{banner.text}</ToneTag>
+        <ToneTag tone={banner.tone} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i className={`ph ${banner.icon}`} style={{ fontSize: 12 }} aria-hidden />{banner.text}</ToneTag>
         {others.length > 0 && (
           <nav aria-label="Autres revues" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: 12 }}>
             <span className="rd-muted">Autres revues :</span>
@@ -621,7 +627,7 @@ export function DossierView({ page, role }: { page: Exclude<ReviewDossierPage, {
           <div>
             {d.checklist.map((c) => (
               <div key={c.id} className="rd-check">
-                <i className={`ph ${c.done ? 'ph-check-square' : 'ph-square'}`} style={{ fontSize: 15, color: c.done ? TONE.ok.dot : 'var(--color-neutral-500)' }} aria-label={c.done ? 'Fourni' : 'À fournir'} />
+                <i className={`ph ${c.done ? 'ph-check-square' : 'ph-square'}`} style={{ fontSize: 15, color: c.done ? TONE.ok.dot : 'var(--color-neutral-500)' }} aria-hidden />
                 <span>{c.label}</span>
                 <span className="rd-muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap', color: c.late ? TONE.danger.fg : undefined }}>{c.done ? 'Fourni' : 'À fournir'} · {c.ownerLabel}</span>
               </div>

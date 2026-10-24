@@ -27,9 +27,12 @@ export type { ActionDefaults } from '@/lib/action-view';
 
 const NO_ELEMENT = '— Aucun : référence d’origine —';
 
-/** Champ en lecture seule (date d'ouverture, avancement, source verrouillée, élément imposé). */
+/**
+ * Champ en lecture seule (date d'ouverture, avancement, source verrouillée, élément imposé) : <output>, que le libellé du
+ * champ nomme (UX-04 ; aria-readonly n'est pas admis sur un simple bloc).
+ */
 function ReadOnly({ id, value }: { id: string; value: ReactNode }) {
-  return <div id={id} className="input vg-readonly" aria-readonly>{value}</div>;
+  return <output id={id} className="input vg-readonly" aria-live="off">{value}</output>;
 }
 
 /** Avertissement « aucune donnée de santé » : élément AT (§ 4), plus le texte qui semble décrire une lésion. */

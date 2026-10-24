@@ -18,6 +18,7 @@ import {
   DANGEROUS_WORK_HINT, EE_HEADCOUNT, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS,
   lcfirst, ruleBasis, type PlanContentField, type PlanContentGroup,
 } from './model';
+import { TipButton } from '@/components/Tip';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
   contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
@@ -124,7 +125,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
       <div style={{ display: 'grid', gap: 4 }}>
         <label className="vg-check">
           <input type="checkbox" name="dangerousWork" checked={dangerous} onChange={(e) => setDangerous(e.target.checked)} />
-          <span className="vg-check-box"><i className="ph ph-check" /></span>
+          <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
           <span>Travaux dangereux (arrêté du 19 mars 1993)</span>
         </label>
         <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>{DANGEROUS_WORK_HINT}</span>
@@ -274,7 +275,7 @@ function ImportedForm({ form }: { form: PlanFormView }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px 18px' }}>
               {form.sections.map((sec, i) => (
                 <div key={`${i}-${sec.title}`} style={{ display: 'grid', gap: 5, alignContent: 'start' }}>
-                  {sec.title && <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-500)' }}>{sec.title}</span>}
+                  {sec.title && <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-500)' }}>{sec.title}</span>}
                   {sec.items.map((item, j) => <FormItem key={`${j}-${item.label}`} item={item} />)}
                 </div>
               ))}
@@ -307,7 +308,7 @@ function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean
                 {a.isImage
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={a.url} alt={a.name} />
-                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 10, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
+                  : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 11, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
               </a>
               {editable && (
                 <ConfirmButton label="Retirer" confirmLabel="Retirer" question="Retirer ?" icon="ph-x" pending={pending} className="vg-text-btn"
@@ -555,9 +556,9 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
             ? <ConfirmButton label="Supprimer le brouillon" confirmLabel="Supprimer" icon="ph-trash" pending={pending}
               question="Supprimer ce brouillon saisi par erreur ? Ses pièces jointes sont supprimées."
               onConfirm={() => run(() => deletePlan(plan.id), onDeleted)} />
-            : <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} title={plan.cancelBlock ?? undefined} onClick={onCancelPlan}>
+            : <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} tip={plan.cancelBlock} onClick={onCancelPlan}>
               <Icon name="ph-prohibit" size={13} />Annuler le plan
-            </button>}
+            </TipButton>}
           <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
             question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé dans les indicateurs et l'historique du plan."
               : signedLate ? "Clore ce plan signé après le début de l'intervention ? L'écart R. 4512-6 reste tracé dans les indicateurs et l'historique du plan."

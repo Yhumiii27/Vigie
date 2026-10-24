@@ -57,7 +57,7 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
                   <div style={{ width: 'min(14px, 100%)', height: 2, background: 'var(--color-neutral-800)' }} title="Non saisi" />
                 )}
               </div>
-              <span style={{ fontSize: 10, color: i === shown ? 'var(--color-text)' : 'var(--color-neutral-600)' }}>{monthInitial(b.month)}</span>
+              <span style={{ fontSize: 11, color: i === shown ? 'var(--color-text)' : 'var(--vg-text-muted)' }}>{monthInitial(b.month)}</span>
             </div>
           ))}
         </div>
@@ -71,7 +71,7 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
             {k.period} : <span style={{ color: 'var(--color-text)' }}>{fmtTotal(k.current, k.unit)}</span>
             {k.delta != null
               ? <span style={{ color: deltaTone ?? undefined, marginLeft: 6 }}>{fmtDelta(k.delta)} vs {year - 1}</span>
-              : <span style={{ marginLeft: 6, color: 'var(--color-neutral-600)' }}>N-1 incomplet</span>}
+              : <span style={{ marginLeft: 6, color: 'var(--vg-text-muted)' }}>N-1 incomplet</span>}
           </span>
         )}
       </div>
@@ -117,14 +117,14 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
                       <tr key={r.month} {...(editable ? rowOpener(() => setEdit({ siteId: tb.siteId, month: r.month })) : {})}>
                         <td style={{ whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{monthLong(r.month)}</td>
                         {empty && tb.archived ? (
-                          <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: 'var(--color-neutral-600)' }}>—</td>
+                          <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: 'var(--vg-text-muted)' }}>—</td>
                         ) : empty ? (
                           <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: TONE.warn.fg }}>
                             {canManage ? 'Non saisi · cliquer pour saisir' : 'Non saisi'}
                           </td>
                         ) : CONSUMPTION_KINDS.map((k) => (
                           <td key={k.key} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                            {r.values[k.key] != null ? fmtNum(r.values[k.key]!) : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+                            {r.values[k.key] != null ? fmtNum(r.values[k.key]!) : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                           </td>
                         ))}
                       </tr>

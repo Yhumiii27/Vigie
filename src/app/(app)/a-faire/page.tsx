@@ -72,7 +72,7 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
                     style={{ gridTemplateColumns: '36px 1fr', gap: 12, alignItems: 'center', padding: '7px 10px' }}>
                     <span style={{ textAlign: 'center', lineHeight: 1.1, color: late ? TONE.danger.dot : undefined }}>
                       <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</span>
-                      <span style={{ display: 'block', fontSize: 10, textTransform: 'uppercase', color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>{fmtMonthAbbr(t.date)}</span>
+                      <span style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>{fmtMonthAbbr(t.date)}</span>
                     </span>
                     <span style={{ display: 'grid', gap: 3, minWidth: 0 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: t.read ? 400 : 500 }}>

@@ -88,7 +88,7 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
           const file = c.files.at(-1);
           const validity = [c.organization, c.validUntil && `valable jusqu'au ${fmtDate(c.validUntil)}`].filter(Boolean).join(' · ');
           const links = (file || c.nextAudit || c.lastAudit) && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11.5, marginTop: 2 }}>
+            <div className="vg-target-links" style={{ display: 'flex', flexWrap: 'wrap', gap: '0 12px', fontSize: 11.5, marginTop: 2 }}>
               {file && (
                 <a href={fileUrl(file.id)} target="_blank" rel="noopener" className="vg-link" onClick={stop} onKeyDown={stop}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title={file.fileName}>
@@ -111,7 +111,13 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                 <span className="card-kicker">{c.domain}</span>
-                {canApprove && <i className={`ph ph-pencil-simple ${styles.hoverIcon}`} aria-hidden />}
+                {/* Bouton nommé (clavier, lecteurs d'écran) ; la carte entière reste cliquable à la souris (UX-10). */}
+                {canApprove && (
+                  <button type="button" className="btn btn-ghost btn-icon" aria-label={`Modifier ${c.standard}`} style={{ width: 28, height: 28, margin: '-6px -6px -6px 0' }}
+                    onClick={(e) => { e.stopPropagation(); setEditing({ id: c.id }); }}>
+                    <i className={`ph ph-pencil-simple ${styles.hoverIcon}`} aria-hidden />
+                  </button>
+                )}
               </div>
               <div className="card-title" style={{ fontSize: 16 }}>{c.standard}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}><Dot color={TONE[c.state.tone].dot} />{c.state.label}</div>
@@ -122,16 +128,15 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
           );
           if (!canApprove) return <div key={c.id} className="card" style={{ gap: 6 }}>{body}</div>;
           return (
-            <div key={c.id} role="button" tabIndex={0} aria-label={`Modifier ${c.standard}`} className={`card ${styles.clickCard}`} style={{ gap: 6 }}
-              onClick={() => setEditing({ id: c.id })}
-              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setEditing({ id: c.id }); } }}>
+            // Carte cliquable à la souris ; au clavier, le bouton « Modifier » de la carte (pas d'élément interactif imbriqué).
+            <div key={c.id} className={`card ${styles.clickCard}`} style={{ gap: 6 }} onClick={() => setEditing({ id: c.id })}>
               {body}
             </div>
           );
         })}
         {canApprove && (
           <button type="button" className={styles.addCard} onClick={() => setEditing({ id: null })}>
-            <i className="ph ph-plus" style={{ fontSize: 16 }} />Ajouter un référentiel
+            <i className="ph ph-plus" style={{ fontSize: 16 }} aria-hidden />Ajouter un référentiel
           </button>
         )}
         {!certs.length && !canApprove && (

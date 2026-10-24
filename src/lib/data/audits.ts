@@ -14,6 +14,7 @@ import { actionBrief, certificationStatus, loadAllActions, loadPeople, type Acti
 import { loadQhseLeads } from './leads';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
+import { missingDetail } from '@/lib/url-state';
 
 // ─── Audits et certifications ───────────────────────────────────────────────
 
@@ -311,6 +312,9 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
     // Lien profond : élément en vigueur (fenêtre de l'élément) ou annulé (fiche en lecture, liste « Éléments annulés »).
     openElement: target && target.year === year ? target.id : undefined,
     openFinding,
+    // UX-13 : lien profond vers un élément ou un constat inconnu (ou d'une autre année que celle demandée) : bandeau commun.
+    missingElement: missingDetail(element, !!target && target.year === year),
+    missingFinding: missingDetail(constat, openFinding !== undefined),
   };
 }
 
