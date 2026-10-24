@@ -41,7 +41,11 @@ const fd = (fields: Record<string, string>, photos: File[] = []) => {
   photos.forEach((p) => f.append('photos', p, p.name));
   return f;
 };
-const jpeg = (name = 'photo.jpg') => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46])], name, { type: 'image/jpeg' });
+/** JPEG minimal bien formé (en-tête JFIF, début et fin des données) : ses métadonnées sont retirées côté serveur (SEC-09). */
+const jpeg = (name = 'photo.jpg') => new File([new Uint8Array([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+  0xff, 0xda, 0x00, 0x03, 0x00, 0x11, 0xff, 0xd9,
+])], name, { type: 'image/jpeg' });
 /** Jeton actuel du QR code d'une zone (celui de la planche imprimée). */
 const tokenOf = async (zoneId: number) => {
   const { signReportToken } = await import('@/lib/report-token');

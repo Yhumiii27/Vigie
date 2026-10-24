@@ -12,7 +12,7 @@ import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
-import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
 // Carte du site et coactivité : zones, voies, activités, plan de fond et échelle.
@@ -503,7 +503,7 @@ export async function replaceSitePlan(_prev: FormState, fd: FormData): Promise<F
   if (!file) f.fail('file', 'Choisissez une image ou un PDF.');
   else if (!PLAN_IMAGE.test(file.type)) f.fail('file', 'Image PNG, JPEG ou WebP attendue (un PDF est converti automatiquement).');
   else {
-    const err = checkUpload(file);
+    const err = await checkUploadBatch([file], session.user.id);
     if (err) f.fail('file', err);
   }
   if (!f.ok) return f.state();

@@ -8,12 +8,11 @@ import {
   ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, ACTION_TEXT_MAX, DOMAIN_KEYS, PRIORITY_KEYS, VERIFY_METHODS,
   type ActionDomain, type ActionPriority, type FollowReason, type SourceKey, type VerifyMethod,
 } from '@/lib/domain';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { fmtDecimal, type formReader } from '@/lib/forms';
 import { requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import type { ActionRow } from '@/lib/queries';
-import { checkUpload } from '@/lib/uploads';
+import { checkUploadBatch } from '@/lib/uploads';
 import { logChange, type ChangeDetail } from './changelog';
 import { actionConfieeTitle, notify } from './notify';
 import { nextActionNumber } from './action-core';
@@ -226,9 +225,5 @@ export async function ownOrInSite(a: Pick<ActionRow, 'siteId'>, responsible: boo
   return responsible ? null : requireInSite(a.siteId);
 }
 
-/** Contrôle des fichiers d'un envoi (nombre, volume, types) ; message ou null. */
-export function filesProblem(files: File[]): string | null {
-  if (files.length > MAX_FILES_PER_BATCH) return `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`;
-  if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) return `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.`;
-  return files.map(checkUpload).find(Boolean) ?? null;
-}
+/** Contrôle des fichiers d'un envoi (nombre, volume, contenu, limites de la personne : checkUploadBatch) ; message ou null. */
+export const filesProblem = (files: File[], by: string): Promise<string | null> => checkUploadBatch(files, by);

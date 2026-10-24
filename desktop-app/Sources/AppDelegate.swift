@@ -214,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ServerControllerDelega
             serverLine = "Serveur lancé par l'application, accessible depuis le réseau local"
         case .owned: serverLine = "Serveur local lancé par l'application (accessible depuis ce Mac seulement)"
         case .attached: serverLine = "Serveur déjà actif réutilisé"
+        case .remote: serverLine = "Client du serveur central"
         case .none: serverLine = "Serveur non démarré"
         }
         let credits = NSAttributedString(

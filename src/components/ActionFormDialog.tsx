@@ -114,6 +114,7 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
       hidden={{
         id: defaults.id,
         from: editing ? status : undefined,
+        version: editing ? defaults.version : undefined,
         link: imposedLink ?? undefined,
         source: locked ?? undefined,
         // Référence d'origine fixée à la création : renvoyée telle quelle (affichée en lecture seule).

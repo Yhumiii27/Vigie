@@ -34,7 +34,10 @@ import {
   ACCEPTED_TYPES, AI_DISABLED_MESSAGE, AI_NO_CREDENTIALS_MESSAGE, ImportError, importMimeOf,
   type DetectResponse, type ImportField, type ParseResult,
 } from '@/lib/pp-import/types';
-import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { UploadRefusedError, checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { UserLimitError, consumeUserLimit } from '@/lib/rate-limit';
+import { aiQuotaProblem, cachedScan, finishAiCall, loadAiUsage, recordAiCacheHit, rememberScan, startAiCall } from './ai-usage';
+import { log } from '@/lib/log';
 import { logChange } from './changelog';
 import { nextEntityReference } from './references';
 
@@ -91,11 +94,46 @@ function apiError(e: unknown): ImportError {
   return fail("Clé d'API Anthropic absente : définir ANTHROPIC_API_KEY sur le serveur.");
 }
 
-/** Lit un scan (PDF ou image) avec Claude ; `expected` = champs d'un modèle choisi, pour réutiliser ses clés. */
-async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField[]): Promise<{ fields: ImportField[]; warnings: string[] }> {
+type ScanResult = { fields: ImportField[]; warnings: string[] };
+
+/** Jetons d'une réponse (usage) : entrée, sortie, écriture et lecture du cache de requête (INT-06). */
+const usageOf = (u: Anthropic.Beta.BetaUsage | undefined) => ({
+  input: u?.input_tokens ?? 0, output: u?.output_tokens ?? 0,
+  cacheCreation: u?.cache_creation_input_tokens ?? 0, cacheRead: u?.cache_read_input_tokens ?? 0,
+});
+
+/**
+ * Lit un scan (PDF ou image) avec Claude ; `expected` = champs d'un modèle choisi, pour réutiliser ses clés.
+ * Coût (INT-06) : même fichier relu dans l'heure → résultat du cache, sans appel ; sinon plafonds vérifiés (lectures de la
+ * personne sur 24 h, jetons du mois), appel journalisé dans ai_usage avec la consommation lue dans la réponse.
+ */
+async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField[], personId: string): Promise<ScanResult> {
   if (mime !== ACCEPTED_TYPES.pdf && bytes.length > MAX_AI_IMAGE_BYTES) {
     throw new ImportError('Image trop lourde pour la lecture automatique (5 Mo au maximum) : réduisez sa résolution ou numérisez-la en PDF.');
   }
+  const fileHash = createHash('sha256').update(bytes).digest('hex');
+  const cacheKey = `${SCAN_MODEL}|${fileHash}|${JSON.stringify(expected)}`;
+  const cached = cachedScan<ScanResult>(cacheKey);
+  if (cached) {
+    await recordAiCacheHit(personId, SCAN_MODEL, fileHash);
+    return { fields: cached.fields.map((f) => ({ ...f })), warnings: [...cached.warnings] };
+  }
+  const quota = aiQuotaProblem(await loadAiUsage(personId), config().aiLimits);
+  if (quota) throw new ImportError(quota);
+  const usageId = await startAiCall(personId, SCAN_MODEL, fileHash);
+  const started = Date.now();
+  const result = await callScan(bytes, mime, expected, async (outcome, response) => {
+    await finishAiCall(usageId, { outcome, usage: usageOf(response?.usage), servedModel: response?.model ?? null, durationMs: Date.now() - started });
+  });
+  rememberScan(cacheKey, result);
+  return result;
+}
+
+/** Appel de l'API Claude ; `settle` journalise le résultat de l'appel (une fois). */
+async function callScan(
+  bytes: Uint8Array, mime: string, expected: ExpectedField[],
+  settle: (outcome: 'ok' | 'refus' | 'erreur', response?: Anthropic.Beta.BetaMessage) => Promise<void>,
+): Promise<ScanResult> {
   const data = Buffer.from(bytes).toString('base64');
   const media: Anthropic.Beta.BetaContentBlockParam = mime === ACCEPTED_TYPES.pdf
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
@@ -118,15 +156,20 @@ async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField
       messages: [{ role: 'user', content: [media, { type: 'text', text: scanPrompt(expected) }] }],
     });
   } catch (e) {
-    console.error('[pp-import] lecture du scan', e);
+    log.error('pp-import.error', 'lecture du scan', { error: e });
+    await settle('erreur');
     throw apiError(e);
   }
   // Raison d'arrêt vérifiée avant de lire le contenu.
   if (response.stop_reason === 'refusal') {
-    console.error('[pp-import] lecture du scan refusée', response.stop_details);
+    await settle('refus', response);
+    log.warn('pp-import.refusal', 'Lecture du scan refusée par le service', { category: response.stop_details?.category ?? null });
     throw new ImportError('Lecture automatique refusée par le service pour ce document.');
   }
-  if (response.stop_reason === 'max_tokens') throw new ImportError('Formulaire trop long pour être lu en une fois : importez-le en plusieurs fichiers de quelques pages.');
+  if (response.stop_reason === 'max_tokens') {
+    await settle('erreur', response);
+    throw new ImportError('Formulaire trop long pour être lu en une fois : importez-le en plusieurs fichiers de quelques pages.');
+  }
   // Après un repli sur un autre modèle, la réponse retenue est le dernier bloc de texte.
   const text = response.content.filter((b) => b.type === 'text').at(-1)?.text;
   let out: ScanOutput | null = null;
@@ -137,11 +180,13 @@ async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField
     out = null;
   }
   if (!out) {
-    console.error('[pp-import] réponse de lecture non conforme', response.stop_reason, text?.slice(0, 500));
+    await settle('erreur', response);
+    log.error('pp-import.invalid-response', 'Réponse de lecture non conforme', { stopReason: response.stop_reason, length: text?.length ?? 0 });
     throw new ImportError('Réponse illisible du service de lecture : réessayez.', { retryable: true });
   }
   const warnings = [...new Set(out.warnings.map((w) => cleanLabel(w, 300)).filter(Boolean))].slice(0, 12);
   if (!out.isPreventionPlan) warnings.unshift('Ce document ne ressemble pas à un plan de prévention : vérifiez le fichier importé.');
+  await settle('ok', response);
   const fields = scanFields(out, expected);
   if (!fields.length) warnings.push('Aucune case ni aucun champ lu dans ce scan : saisissez le plan à partir du fichier.');
   return { fields, warnings };
@@ -188,7 +233,7 @@ async function readEncryptedPdf(bytes: Uint8Array, pdf: PdfParseResult): Promise
     // Aucun champ : PDF protégé mais aplati ou numérisé, traité comme un scan sans autre avertissement.
     return read.fields.length ? read : { ...pdf, warnings: [] };
   } catch (e) {
-    console.error('[pp-import] PDF protégé', e);
+    log.error('pp-import.error', 'PDF protégé', { error: e });
     return pdf;
   }
 }
@@ -230,7 +275,7 @@ async function enrichPdfLabels(bytes: Uint8Array, pdf: PdfParseResult) {
     // Libellé imprimé « Date de … » : zone de date, comme pour un champ à infobulle.
     for (const f of needs) if (f.kind === 'text' && prefer.has(f.key) && /\bdate\b/.test(normalize(f.label))) f.kind = 'date';
   } catch (e) {
-    console.error('[pp-import] texte du PDF', e);
+    log.error('pp-import.error', 'texte du PDF', { error: e });
   }
   const unnamed = pdf.fields.filter((f) => isGenericLabel(f.label)).length;
   if (unnamed) {
@@ -244,8 +289,15 @@ async function enrichPdfLabels(bytes: Uint8Array, pdf: PdfParseResult) {
 
 /** Étape 2 : lit le fichier déposé et rapproche ses champs des modèles enregistrés. */
 export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
-  const { error } = await requireManager();
+  const { session, error } = await requireManager();
   if (error) return { ok: false, error };
+  // SEC-07 : analyses de fichiers limitées par personne et par heure.
+  try {
+    await consumeUserLimit('ppDetect', session.user.id);
+  } catch (e) {
+    if (e instanceof UserLimitError) return { ok: false, error: e.message };
+    throw e;
+  }
   const received = receivedFile(fd.get('file'));
   if ('error' in received) return { ok: false, error: received.error };
   const { file, mime } = received;
@@ -273,7 +325,7 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
     else result = { format: 'scan', fields: [], warnings: [] };
   } catch (e) {
     if (e instanceof ImportError) return { ok: false, error: e.message };
-    console.error('[pp-import] lecture du fichier', e);
+    log.error('pp-import.error', 'lecture du fichier', { error: e });
     return { ok: false, error: 'Lecture du fichier impossible : fichier endommagé ou format non reconnu.' };
   }
 
@@ -288,12 +340,12 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
         }))
         : [];
       try {
-        const scan = await readScan(bytes, mime, expected);
+        const scan = await readScan(bytes, mime, expected, session.user.id);
         result = { ...result, fields: scan.fields, warnings: [...result.warnings, ...scan.warnings] };
         used = true;
       } catch (e) {
         // Échec de la lecture (refus, panne, réponse illisible) : le plan reste saisissable à partir du fichier.
-        if (!(e instanceof ImportError)) console.error('[pp-import] lecture du scan', e);
+        if (!(e instanceof ImportError)) log.error('pp-import.error', 'lecture du scan', { error: e });
         aiError = e instanceof ImportError
           ? { error: e.message, retryable: e.retryable }
           : { error: 'Lecture du scan impossible : réessayez.', retryable: true };
@@ -527,7 +579,8 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   try {
     attachmentId = (await saveUpload(received.file, PLAN_ATTACHMENT, planId, session.user.id)).id;
   } catch (e) {
-    console.error('[pp-import] enregistrement du fichier', e);
+    if (e instanceof UploadRefusedError) return { error: e.message };
+    log.error('pp-import.error', 'enregistrement du fichier', { error: e });
     return { error: "Le fichier importé n'a pas pu être enregistré : réessayez." };
   }
   try {
@@ -542,7 +595,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
       await logChange(tx, { entityType: 'prevention_plan', entityId: planId, action: 'create', summary: `Plan de prévention créé par import (${formData.source.fileName})`, byId: session.user.id });
     });
   } catch (e) {
-    console.error('[pp-import] création du plan', e);
+    log.error('pp-import.error', 'création du plan', { error: e });
     await deleteAttachment(attachmentId);
     return { error: "Le plan n'a pas pu être créé (enregistrement concurrent ?) : réessayez." };
   }

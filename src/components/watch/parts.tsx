@@ -1,7 +1,7 @@
 'use client';
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES } from '@/lib/attachments';
+import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, fileBatchError } from '@/lib/attachments';
 
 const MB = 1024 * 1024;
 
@@ -13,11 +13,7 @@ export const FILES_HINT = `PDF, image ou document Office · ${MAX_FILES_PER_BATC
  * que le serveur (checkUpload, MAX_FILES_PER_BATCH, MAX_BATCH_BYTES). Règle pure, testée dans parts.test.ts.
  */
 export function pickedFilesError(files: readonly { name: string; size: number }[]): string | null {
-  const tooBig = files.find((f) => f.size > MAX_FILE_BYTES);
-  return tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
-    : files.length > MAX_FILES_PER_BATCH ? `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`
-      : files.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : joignez-en moins ou réduisez leur taille.`
-        : null;
+  return fileBatchError(files);
 }
 
 /**

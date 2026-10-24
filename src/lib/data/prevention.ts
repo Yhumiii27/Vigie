@@ -21,6 +21,7 @@ import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { attachmentUrl } from '../uploads';
+import { entityVersions } from '@/server/versions';
 
 // ─── Plans de prévention et permis ──────────────────────────────────────────
 
@@ -67,6 +68,8 @@ export type PlanFormView = {
 
 export type PlanView = {
   id: string;
+  /** Version de la fiche (QUA-12), renvoyée par le formulaire de modification. */
+  version: string;
   siteId: string;
   site: string;
   contractorId: string;
@@ -504,6 +507,7 @@ export async function loadPrevention() {
   const PERMIT_ORDER: PermitState[] = ['en_cours', 'expire', 'delivre', 'demande', 'clos', 'annule'];
   permitViews.sort((a, b) => PERMIT_ORDER.indexOf(a.state) - PERMIT_ORDER.indexOf(b.state) || b.validFrom.localeCompare(a.validFrom));
 
+  const planVersions = await entityVersions(db, 'prevention_plan', planIds);
   const planViews: PlanView[] = plans.map((p) => {
     const status = planStatus(p, now);
     const ended = isPlanEnded(p);
@@ -518,7 +522,7 @@ export async function loadPrevention() {
     const form = parseFormData(p.formData);
     const gapKind = startGap(p, now, rule);
     return {
-      id: p.id,
+      id: p.id, version: planVersions.get(p.id) ?? '0',
       siteId: p.siteId,
       site: siteOf.get(p.siteId) ?? p.siteId,
       contractorId: p.contractorId,

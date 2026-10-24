@@ -54,6 +54,16 @@ services:
       - uploads:/data/uploads
       - backups:/data/backups
 
+  # Antivirus des pièces jointes (SEC-08, optionnel) : docker compose --profile antivirus up -d, puis VIGIE_CLAMAV=clamav:3310
+  # dans .env et redémarrer vigie. Tant que clamd charge ses signatures (quelques minutes au premier démarrage), les envois de
+  # fichiers sont refusés (analyse fermée par défaut). Réglage StreamMaxLength de clamd : 25 Mo par défaut (≥ 12 Mo requis).
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: ["antivirus"]
+    restart: unless-stopped
+    volumes:
+      - clamav:/var/lib/clamav
+
   # HTTPS par Caddy (optionnel) : certificat automatique pour VIGIE_DOMAIN (DNS public pointant sur ce serveur,
   # ports 80 et 443 ouverts). Avec un autre reverse proxy, ne pas activer ce profil.
   caddy:
@@ -79,3 +89,4 @@ volumes:
   backups:
   caddy_data:
   caddy_config:
+  clamav:

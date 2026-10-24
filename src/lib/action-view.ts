@@ -71,6 +71,8 @@ export type ActionDetailView = ActionListItem & {
   cancelledBy: string | null;
   legacyOriginLabel: string | null; // indication pour une source « à compléter » (reprise, legacy_origin, D9)
   eventId: string | null; sources: PlanSource[];
+  /** Version de la fiche à son ouverture (QUA-12, src/server/versions.ts), renvoyée par le formulaire de modification. */
+  version?: string;
   follows: { id: string; label: string; reason: FollowReason } | null;
   followUps: { id: string; label: string; reason: FollowReason; statusLabel: string; tone: Tone }[]; // « Suivie par A-n »
   comments: ActionCommentView[]; files: AttachmentItem[]; // preuves visibles du lecteur (celles d'un commentaire ont commentId ; D23)
@@ -104,6 +106,7 @@ export type ActionTargetOption = {
 /** Valeurs proposées par un écran (création, QHSE seulement) ou valeurs actuelles (modification). */
 export type ActionDefaults = {
   id?: string; status?: Avancement; // modification : avancement affiché (envoyé en « from »)
+  version?: string; // modification : version de la fiche à son ouverture (QUA-12)
   source?: SourceKey | null; lockSource?: boolean; sourceChoices?: readonly SourceKey[]; // conformes à admissibleSources (D20 révisée)
   link?: string; linkLabel?: string; // élément imposé par l'écran (création seulement)
   originRef?: string;

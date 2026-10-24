@@ -100,6 +100,22 @@ L'inspecteur web de Safari peut s'attacher à la fenêtre (Safari › Développe
 - **Variables d'environnement du Terminal** (`~/.zshrc`, comme `ANTHROPIC_API_KEY` ou `VIGIE_TODAY`) : une application ouverte depuis le Finder ne les voit pas. Il faut les mettre dans `.env.local` à la racine du projet. Next.js les lit, et une modification déclenche une recompilation.
 - **Un seul serveur, un seul projet** : l'application pilote le projet dont le chemin figure dans `Info.plist`. Pendant que Vigie fait tourner son serveur, `npm run dev` échoue (port 3200 pris), et c'est voulu. Ne pas le lancer sur un autre port (`--port 3201`), sinon deux serveurs ouvriraient la même base PGlite. Si Vigie plante, la réservation du port disparaît avec lui, et son serveur s'arrête de lui-même environ 2 secondes plus tard : attendre ces quelques secondes avant de lancer `npm run dev`.
 
+## Client du serveur central (PRD-14)
+
+L'application peut ouvrir le **serveur central** de Vigie (production, Microsoft Entra ID) au lieu de lancer son serveur local de démonstration :
+
+```bash
+defaults write com.epc2i.vigie VigieServerURL "https://vigie.epc2i.fr"   # puis quitter (⌘Q) et rouvrir Vigie
+defaults delete com.epc2i.vigie VigieServerURL                          # retour au serveur local de démonstration
+VIGIE_SERVER_URL=https://vigie.epc2i.fr bash desktop-app/build.sh      # ou : adresse inscrite dans Info.plist à la construction
+```
+
+- Adresse acceptée : `https://` (ou `http://localhost:…` pour un essai) ; chemin, paramètres et identifiants sont retirés ; toute autre valeur est ignorée (serveur local).
+- Rien n'est lancé sur ce Mac : ni compilation, ni Node.js, ni base PGlite (le dossier du projet n'est pas nécessaire). La route de santé du serveur (`/api/sante`) est sondée au lancement (trois essais) ; injoignable : « Serveur Vigie injoignable », avec « Réessayer ».
+- Les pages du serveur central restent dans la fenêtre (même origine) ; la connexion Microsoft se fait dans la fenêtre (redirections internes) ; un lien externe cliqué s'ouvre dans le navigateur par défaut.
+- Côté serveur, rien à configurer : l'application est un navigateur WebKit comme un autre (cookies de session `Secure`, CSP et hôtes admis inchangés). La fenêtre « À propos de Vigie » indique « Client du serveur central ».
+- Non éprouvé : la construction (macOS seulement) et la recette sur le serveur central (hôte HTTPS cible et tenant Entra réel, docs/RESTE-A-FAIRE.md § 19).
+
 ## Fichiers
 
 ```

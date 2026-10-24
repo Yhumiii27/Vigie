@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { canSee } from '@/lib/domain';
 import { fileSlug, loadDuerpVersion, loadRiskExport, risksCsv } from '@/lib/data/risks';
 import { getSession } from '@/lib/session';
+import { csvResponse } from '@/lib/csv';
 
 // Exports du DUERP, ouverts à tous les rôles (consultation du document unique, R. 4121-4, DUE-01 : contenu déjà affiché à
 // l'écran, sans pilote ni événement ; site sélectionné, instantanés réduits au périmètre) :
@@ -9,17 +10,6 @@ import { getSession } from '@/lib/session';
 //   ?portee=tout                → CSV de toutes les unités du site sélectionné (ou de tous les sites)
 //   ?version=<n>                → CSV de l'instantané d'une version archivée
 //   ?version=<n>&format=json    → instantané en JSON (consultation dans la fenêtre « Versions archivées »)
-
-function csvResponse(body: string, name: string) {
-  return new Response(body, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
-}
 
 const notFound = (msg: string) => new Response(msg, { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 

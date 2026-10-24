@@ -8,6 +8,7 @@ import { signInPerson } from '@/lib/auth/person';
 import { clearAuthCookie, redirectTo, setAuthCookie } from '@/lib/auth/responses';
 import { config, entraMissing, secureCookies } from '@/lib/config';
 import { today } from '@/lib/today';
+import { log } from '@/lib/log';
 
 // URI de retour OIDC (SEC-01, SEC-02) : <VIGIE_PUBLIC_URL>/auth/retour?code=…&state=…
 // Code → jetons (PKCE), rôle Vigie (rôles applicatifs, le plus élevé), sites (groupes Entra), fiche rapprochée ou créée,
@@ -21,8 +22,8 @@ export async function GET(req: NextRequest) {
   const secure = secureCookies(c);
   const sp = req.nextUrl.searchParams;
   const txCookie = oidcCookieName(secure, sp.get('state') ?? '');
-  const fail = (motif: AccessMotif, log: string) => {
-    console.warn(`[vigie] Connexion refusée : ${log}`);
+  const fail = (motif: AccessMotif, detail: string) => {
+    log.warn('auth.refused', 'Connexion refusée', { motif, detail });
     const res = redirectTo(accessHref(motif), req);
     clearAuthCookie(res, txCookie);
     return res;
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
   const role = roleFromEntra(profile.roles, c.entraRoles);
   if (!role) return fail('non-autorise', `aucun rôle applicatif Vigie pour ${profile.oid} (rôles reçus : ${profile.roles.join(', ') || 'aucun'})`);
   if (profile.groupsOverage && !hasAllSites(role)) {
-    console.warn(`[vigie] Jeton de ${profile.oid} sans groupes (trop nombreux) : sites accordés par VIGIE_SITE_GROUPS ignorés. Limiter la revendication aux groupes affectés à l'application.`);
+    log.warn('auth.groups-overage', "Jeton sans groupes (trop nombreux) : sites accordés par VIGIE_SITE_GROUPS ignorés. Limiter la revendication aux groupes affectés à l'application.", { oid: profile.oid });
   }
 
   let outcome;
@@ -72,6 +73,6 @@ export async function GET(req: NextRequest) {
   const res = redirectTo(tx.retour, req);
   setAuthCookie(res, sessionCookieName(secure), await sealSession(session, c.sessionSecret!), sessionMaxAge(session, now));
   clearAuthCookie(res, txCookie);
-  console.info(`[vigie] Connexion : ${outcome.personId} (${role})${outcome.created ? ', fiche créée' : ''}`);
+  log.info('auth.login', 'Connexion', { personId: outcome.personId, role, created: outcome.created });
   return res;
 }

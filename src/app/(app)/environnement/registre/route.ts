@@ -3,6 +3,7 @@ import { today } from '@/lib/today';
 import { canSee } from '@/lib/domain';
 import { loadWasteRegisterCsv } from '@/lib/data/environment';
 import { getSession } from '@/lib/session';
+import { csvResponse } from '@/lib/csv';
 
 // Export du registre chronologique des déchets sortants (site sélectionné) :
 //   ?annee=<AAAA>   → CSV de l'année (année en cours par défaut)
@@ -19,12 +20,5 @@ export async function GET(req: NextRequest) {
   }
 
   const { csv, fileName } = await loadWasteRegisterCsv(year);
-  return new Response(csv, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      'Cache-Control': 'private, no-store',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
+  return csvResponse(csv, fileName);
 }

@@ -6,7 +6,7 @@ import { Notice } from '@/components/prevention/parts';
 import { Icon } from '@/components/ui';
 import {
   ACCEPT_ATTR, ACCEPTED_TYPES, AI_DISABLED_MESSAGE, AI_NO_CREDENTIALS_MESSAGE, FORMAT_LABELS, MAX_IMPORT_BYTES, importMimeOf,
-  type AiStatus, type DetectResponse, type TemplateView,
+  type AiStatus, type AiUsageView, type DetectResponse, type TemplateView,
 } from '@/lib/pp-import/types';
 import { detectPpImport } from '@/server/pp-import';
 import s from './pp-import.module.css';
@@ -57,9 +57,17 @@ export async function detectFile(file: File, templateId: number | string | null,
 }
 
 /** Étape 1 : dépôt du fichier (glisser-déposer ou sélection), puis détection des champs par le serveur. */
-export function DropStep({ templates, aiStatus, onDetected }: {
+/** Consommation de la lecture des scans (INT-06), affichée sous l'avis « Lecture des scans activée ». */
+export function aiUsageText(u: AiUsageView): string {
+  const n = (x: number) => x.toLocaleString('fr-FR');
+  const month = `Ce mois-ci : ${n(u.monthCalls)} lecture${u.monthCalls > 1 ? 's' : ''}, ${n(u.monthTokens)} jetons${u.monthlyTokens > 0 ? ` sur un plafond de ${n(u.monthlyTokens)}` : ''}`;
+  return `${month} ; vous : ${n(u.personDay)} sur ${n(u.dailyScans)} lectures par 24 h. Un même fichier relu dans l'heure n'est pas renvoyé.`;
+}
+
+export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
   templates: TemplateView[];
   aiStatus: AiStatus;
+  aiUsage?: AiUsageView | null;
   onDetected: (file: File, det: DetectOk) => void;
 }) {
   const aiEnabled = aiStatus === 'ready';
@@ -150,6 +158,7 @@ export function DropStep({ templates, aiStatus, onDetected }: {
         <Notice tone="accent" icon="ph-sparkle">
           Lecture des scans activée : un scan ou une photo est envoyé à l&apos;API Claude (Anthropic) pour en lire les cases cochées et les champs remplis.
           Les PDF remplissables et les fichiers Word sont lus sur le serveur Vigie, sans envoi extérieur.
+          {aiUsage && <> {aiUsageText(aiUsage)}</>}
         </Notice>
       ) : aiStatus === 'no_credentials' ? (
         <Notice tone="warn" icon="ph-key">

@@ -27,6 +27,7 @@ import { today } from '@/lib/today';
 import { loadChangeLogs } from './changelog';
 import { loadQhseLeads } from './leads';
 import { loadFormOptions } from './options';
+import { entityVersion } from '@/server/versions';
 
 // Plan d'actions QSE (docs/specs/actions-qse.md § 8, § 12, § 15.3, § 16 ; plan du paquet 1, flux C) :
 //   - loadActionPlan(filters) : lignes de la vue générale (Liste, Kanban, Par responsable), jamais de fil, de preuves ni
@@ -405,6 +406,7 @@ export const loadActionDetail = cache(async (id: string): Promise<{ payload: Act
   const readable = (r: ActionRow) => canReadAction(role, user.id, r, allowedSiteIds);
   const detail: ActionDetailView = {
     ...listItem(a, ctx),
+    version: await entityVersion(await getDb(), 'action', a.id),
     problem: a.problem, detail: a.detail,
     riskLevel: a.riskLevel, riskLevelLabel: a.riskLevel != null ? ACTION_RISK_LEVELS[a.riskLevel] ?? null : null,
     verifyMethod: verified ? a.verifyMethod : null, verifyMethodLabel: verified && a.verifyMethod ? VERIFY_METHODS[a.verifyMethod] ?? null : null,

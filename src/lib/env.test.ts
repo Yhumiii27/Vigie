@@ -182,3 +182,32 @@ describe('parseConfig', () => {
     expect(() => parseConfig({ VIGIE_DEMO: '1', MATRIX_URL: 'matrix.exemple.fr' })).toThrow(/MATRIX_URL : URL http\(s\) attendue/);
   });
 });
+
+describe('paquet 8 : journal, antivirus, plafonds de la lecture des scans', () => {
+  it('valeurs par défaut', () => {
+    const demo = parseConfig({ VIGIE_DEMO: '1' });
+    expect(demo.log).toEqual({ level: 'info', format: 'texte' });
+    expect(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr' }).log).toEqual({ level: 'info', format: 'json' });
+    expect(demo.clamav).toBeNull();
+    expect(demo.aiLimits).toEqual({ dailyScansPerPerson: 20, monthlyTokens: 2_000_000 });
+  });
+  it('valeurs saisies', () => {
+    const c = parseConfig({
+      VIGIE_DEMO: '1', VIGIE_LOG_LEVEL: 'warn', VIGIE_LOG_FORMAT: 'json', VIGIE_CLAMAV: 'clamav:3310',
+      VIGIE_AI_DAILY_SCANS: '5', VIGIE_AI_MONTHLY_TOKENS: '0',
+    });
+    expect(c.log).toEqual({ level: 'warn', format: 'json' });
+    expect(c.clamav).toEqual({ host: 'clamav', port: 3310 });
+    expect(c.aiLimits).toEqual({ dailyScansPerPerson: 5, monthlyTokens: 0 });
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_CLAMAV: 'unix:/run/clamav/clamd.ctl' }).clamav).toEqual({ socket: '/run/clamav/clamd.ctl' });
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_CLAMAV: '[::1]:3310' }).clamav).toEqual({ host: '::1', port: 3310 });
+  });
+  it('valeurs invalides : une ligne par variable', () => {
+    try {
+      parseConfig({ VIGIE_DEMO: '1', VIGIE_LOG_LEVEL: 'bavard', VIGIE_LOG_FORMAT: 'xml', VIGIE_CLAMAV: 'clamav', VIGIE_AI_DAILY_SCANS: '-1', VIGIE_AI_MONTHLY_TOKENS: 'beaucoup' });
+      expect.unreachable();
+    } catch (e) {
+      expect((e as ConfigError).problems.map((p) => p.split(' :')[0])).toEqual(['VIGIE_LOG_LEVEL', 'VIGIE_LOG_FORMAT', 'VIGIE_CLAMAV', 'VIGIE_AI_DAILY_SCANS', 'VIGIE_AI_MONTHLY_TOKENS']);
+    }
+  });
+});

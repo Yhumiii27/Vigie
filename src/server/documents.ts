@@ -11,7 +11,7 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { inSite } from '@/lib/session';
-import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
 
@@ -111,11 +111,11 @@ const logDoc = (db: DbOrTx | null, documentId: string, entry: { action: string; 
 const NO_FILE = 'Joignez le fichier de la version (brouillon) avant de la soumettre ou de l’approuver.';
 const hasFile = async (versionId: number) => (await listAttachments(ENTITY, String(versionId))).length > 0;
 
-/** Fichier facultatif (un seul par version). */
-function readFile(f: Reader) {
+/** Fichier facultatif (un seul par version), contrôlé sur son contenu et les limites de la personne (checkUploadBatch). */
+async function readFile(f: Reader, by: string) {
   const [file] = f.files('file');
   if (!file) return null;
-  const err = checkUpload(file);
+  const err = await checkUploadBatch([file], by);
   if (err) f.fail('file', err);
   return file;
 }
@@ -166,7 +166,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   const rawRef = f.str('ref', { max: 30 }).toUpperCase().replace(/\s+/g, '');
   const summary = f.str('summary', { max: 300 }) || 'Création du document';
   const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: meta.siteId });
-  const file = readFile(f);
+  const file = await readFile(f, session.user.id);
   if (rawRef && !REF_PATTERN.test(rawRef)) f.fail('ref', 'Format attendu : lettres et chiffres séparés par des tirets (ex. PR-QHSE-006).');
   if (!f.ok) return f.state();
   const siteError = await requireInSite(meta.siteId, { create: true });
@@ -283,7 +283,7 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
   const summary = f.str('summary', { required: true, max: 300 });
   const [doc] = documentId ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, documentId)) : [];
   const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: doc?.siteId ?? null });
-  const file = readFile(f);
+  const file = await readFile(f, session.user.id);
   if (!f.ok) return f.state();
   const siteError = await documentSiteError(documentId);
   if (siteError) return { error: siteError };
@@ -350,7 +350,7 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
   const summary = f.str('summary', { required: true, max: 300 });
   const [doc] = v ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, v.documentId)) : [];
   const actionId = await readAction(f, fd, db, session.role, { actionId: v?.actionId ?? null, docSiteId: doc?.siteId ?? null });
-  const file = readFile(f);
+  const file = await readFile(f, session.user.id);
   const removeFile = f.bool('removeFile');
   if (!f.ok) return f.state();
   if (!v) return { error: 'Version introuvable.' };

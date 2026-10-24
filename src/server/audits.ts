@@ -5,14 +5,13 @@ import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/components/audits/shared';
 import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS, canEdit } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
-import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
 
@@ -45,11 +44,10 @@ async function attachmentOf(id: unknown, entityType: string) {
   return row ?? null;
 }
 
-/** Fichiers d'un même envoi : au-delà, la requête dépasserait la limite des server actions (next.config). */
-function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[]) {
-  files.forEach((file) => { const err = checkUpload(file); if (err) f.fail(name, err); });
-  if (files.length > MAX_FILES_PER_BATCH) f.fail(name, `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`);
-  else if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) f.fail(name, `Les fichiers dépassent ${MAX_BATCH_BYTES / 1024 / 1024} Mo au total : joignez-en moins ou réduisez leur taille.`);
+/** Contrôle d'un envoi de pièces jointes (nombre, volume, contenu, limites de la personne : checkUploadBatch) ; erreur portée par le champ `name`. */
+async function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[], by: string) {
+  const err = await checkUploadBatch(files, by);
+  if (err) f.fail(name, err);
 }
 
 // ─── Certifications (animateur QHSE, direction) ─────────────────────────────
@@ -81,7 +79,7 @@ export async function saveCertification(_prev: FormState, fd: FormData): Promise
   if (tone === 'ok' && !validUntil && !f.fieldErrors.validUntil) f.fail('validUntil', 'Indiquez la fin de validité du certificat');
   // AUD-08 : un certificat vaut un cycle de 3 ans au plus (ISO/IEC 17021-1).
   if (issuedOn && validUntil && validUntil > addMonths(issuedOn, CERT_CYCLE_MONTHS)) f.fail('validUntil', CYCLE_TOO_LONG);
-  checkFiles(f, 'certificate', files);
+  await checkFiles(f, 'certificate', files, session.user.id);
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -305,7 +303,7 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
     f.fail('doneOn', "Cochez « Réalisé » pour enregistrer cette date, ou effacez-la.");
   }
   if (review && files.length) f.fail('report', "Une revue de direction ne porte pas de rapport d'audit.");
-  checkFiles(f, 'report', files);
+  await checkFiles(f, 'report', files, session.user.id);
   if (!f.ok) return f.state();
 
   const byId = session.user.id;

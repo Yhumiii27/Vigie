@@ -39,13 +39,13 @@ describe('startScheduler', () => {
   });
 
   it('erreur d’une tâche : journalisée, jamais levée ; les autres tâches passent', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const ok = vi.fn(async () => {});
     const stop = startScheduler(db, [{ name: 'cassée', run: async () => { throw new Error('boum'); } }, { name: 'saine', run: ok }], 60_000);
     await flush();
     await stop();
     expect(ok).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith('[vigie] Tâche planifiée « cassée » en erreur (boum).');
+    expect(error).toHaveBeenCalledWith(expect.stringMatching(/Tâche planifiée « cassée » en erreur[\s\S]*boum/));
     error.mockRestore();
   });
 

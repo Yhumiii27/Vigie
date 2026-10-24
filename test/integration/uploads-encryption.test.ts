@@ -46,7 +46,7 @@ describe('pièces jointes chiffrées au repos', () => {
 
     const key = randomBytes(32).toString('base64');
     env(key);
-    const content = randomBytes(5000);
+    const content = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), randomBytes(5000)]);
     const row = await saveUpload(new File([content], 'photo.jpg', { type: 'image/jpeg' }), 'event', 'EV-TEST', null);
     const stored = await readFile(path.join(dir, row.storagePath));
     expect(isEncrypted(stored)).toBe(true);
@@ -55,7 +55,7 @@ describe('pièces jointes chiffrées au repos', () => {
     expect((await readAttachment(before.id))?.data.toString()).toBe('avant la clé');
 
     // Clé retirée (ou remplacée sans VIGIE_UPLOAD_KEY_PREVIOUS) : pièce indisponible, avertissement dans le journal.
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const log = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     env();
     expect(await readAttachment(row.id)).toBeNull();
     env(randomBytes(32).toString('hex'));
@@ -65,7 +65,7 @@ describe('pièces jointes chiffrées au repos', () => {
     env(key);
     await writeFile(path.join(dir, row.storagePath), Buffer.concat([stored.subarray(0, 40), Buffer.from([stored[40] ^ 1]), stored.subarray(41)]));
     expect(await readAttachment(row.id)).toBeNull();
-    expect(log).toHaveBeenCalledWith(expect.stringMatching(/illisible : fichier chiffré altéré/));
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/illisible[\s\S]*fichier chiffré altéré/));
     log.mockRestore();
     const db = await getDb();
     // Les deux pièces de ce test (le jeu de démonstration porte aussi des preuves d'action, paquet 1 Actions QSE).
@@ -91,7 +91,7 @@ describe('pièces jointes chiffrées au repos', () => {
     const { saveUpload } = await import('@/lib/uploads');
     const { GET } = await import('@/app/fichiers/[id]/route');
     env(randomBytes(32).toString('base64'));
-    const content = randomBytes(2000);
+    const content = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), randomBytes(2000)]);
     // Photo du signalement EV-2026-131, déclaré par [T. Nguyen] (Salarié du jeu de démonstration).
     const own = await saveUpload(new File([content], 'photo.jpg', { type: 'image/jpeg' }), 'event', 'EV-2026-131', null);
     const other = await saveUpload(new File([content], 'autre.jpg', { type: 'image/jpeg' }), 'event', 'EV-2026-130', null);

@@ -70,8 +70,16 @@ export async function lastLog(entityType: string, entityId: string | number) {
   return (await changeLog(entityType, entityId)).at(-1);
 }
 
-/** Fichier joint (PDF par défaut). */
-export const file = (name = 'exemplaire-signe.pdf', type = 'application/pdf', content = '%PDF-1.4 test') => new File([content], name, { type });
+/** Signature des formats d'image (SEC-08 : contenu contrôlé à l'enregistrement), placée devant le contenu d'un fichier de test. */
+const MAGIC: Record<string, Uint8Array<ArrayBuffer>> = {
+  'image/jpeg': Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]),
+  'image/png': Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  'image/gif': new TextEncoder().encode('GIF89a'),
+};
+
+/** Fichier joint (PDF par défaut) ; une image reçoit la signature de son format devant `content`. */
+export const file = (name = 'exemplaire-signe.pdf', type = 'application/pdf', content = '%PDF-1.4 test') =>
+  new File(MAGIC[type] ? [MAGIC[type], content] : [content], name, { type });
 
 /** FormData à partir de champs texte et de fichiers (même nom de champ répété). */
 export function formWith(fields: Record<string, string>, files: Record<string, File[]> = {}) {

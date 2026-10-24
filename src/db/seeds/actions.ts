@@ -587,13 +587,13 @@ export async function seedActions(tx: SeedTx, opts: { files?: boolean } = {}) {
     }).returning({ id: t.actionComments.id });
     commentIds.set(c, row.id);
     if (c.file && saveUpload) {
-      const a = await saveUpload(demoFile(c.file, c.actionId), 'action', c.actionId, c.authorId, { db: tx, commentId: row.id });
+      const a = await saveUpload(demoFile(c.file, c.actionId), 'action', c.actionId, c.authorId, { db: tx, commentId: row.id, quota: false });
       await tx.update(t.attachments).set({ createdAt: c.at }).where(eq(t.attachments.id, a.id));
     }
   }
   if (saveUpload) {
     for (const p of PROOFS) {
-      const a = await saveUpload(demoFile(p.fileName, p.actionId), 'action', p.actionId, p.uploadedBy, { db: tx });
+      const a = await saveUpload(demoFile(p.fileName, p.actionId), 'action', p.actionId, p.uploadedBy, { db: tx, quota: false });
       await tx.update(t.attachments).set({ createdAt: p.at }).where(eq(t.attachments.id, a.id));
     }
   }

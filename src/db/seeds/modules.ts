@@ -45,7 +45,7 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
   if (!opts.files) return;
   const { saveUpload } = await import('../../lib/uploads');
   const attach = async (kind: string, entityId: string, journal: { entityType: string; entityId: string }, field: string, fileName: string, byId: string, at: Date, ref: string) => {
-    const file = await saveUpload(demoFile(fileName, ref), kind, entityId, byId, { db: tx });
+    const file = await saveUpload(demoFile(fileName, ref), kind, entityId, byId, { db: tx, quota: false });
     await tx.update(t.attachments).set({ createdAt: at }).where(eq(t.attachments.id, file.id));
     await tx.insert(t.changeLog).values({
       entityType: journal.entityType, entityId: journal.entityId, action: 'attach', byId, at,

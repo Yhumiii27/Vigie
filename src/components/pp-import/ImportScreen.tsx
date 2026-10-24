@@ -102,7 +102,7 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
       {tab === 'import' && canManage && (
         <>
           <Stepper stage={flow.stage} reachable={reachable} onGo={go} />
-          {flow.stage === 'drop' && <DropStep templates={data.templates} aiStatus={data.aiStatus} onDetected={onDetected} />}
+          {flow.stage === 'drop' && <DropStep templates={data.templates} aiStatus={data.aiStatus} aiUsage={data.aiUsage} onDetected={onDetected} />}
           {flow.stage === 'detect' && flow.file && flow.det && (
             <DetectStep file={flow.file} det={flow.det} templates={data.templates} appliedTemplateId={flow.templateId}
               onApplyTemplate={applyTemplate} onRedetected={(det) => onDetected(flow.file!, det)} onBack={() => go('drop')}

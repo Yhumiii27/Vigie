@@ -5,6 +5,7 @@ import { loadFormOptions } from '@/lib/data/options';
 import { today } from '@/lib/today';
 import { config } from '@/lib/config';
 import { aiStatus } from '@/lib/pp-import/ai';
+import { loadAiUsage } from '@/server/ai-usage';
 import { IMPORT_FORMATS, readMapping } from '@/lib/pp-import/schemas';
 import type { ImportScreenData } from '@/lib/pp-import/types';
 import { currentSiteId, getSession } from '@/lib/session';
@@ -21,6 +22,7 @@ export async function loadImportScreen(): Promise<ImportScreenData> {
     db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select({ id: t.people.id, name: t.people.name }).from(t.people),
   ]);
+  const status = aiStatus(config());
   const personName = new Map(people.map((p) => [p.id, p.name]));
   return {
     templates: templates.map((tpl) => ({
@@ -42,6 +44,9 @@ export async function loadImportScreen(): Promise<ImportScreenData> {
     projects: options.projects,
     today: today(),
     currentUserId: session.user.id,
-    aiStatus: aiStatus(config()),
+    aiStatus: status,
+    aiUsage: status === 'ready'
+      ? { ...(await loadAiUsage(session.user.id)), monthlyTokens: config().aiLimits.monthlyTokens, dailyScans: config().aiLimits.dailyScansPerPerson }
+      : null,
   };
 }

@@ -19,6 +19,7 @@ import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
+import { fileSlug, toCsv } from '@/lib/csv';
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
 // Registre chronologique des déchets sortants (C. env. R. 541-43, arrêté du 31 mai 2021),
@@ -583,16 +584,6 @@ const CSV_HEADERS = [
   'Mentions manquantes', 'Observations',
 ];
 
-function csvCell(v: string | number) {
-  if (typeof v === 'number') return String(v).replace('.', ',');
-  // Neutralise les formules à l'ouverture dans un tableur (=, +, @, -x).
-  const s = /^[=+@\t\r]|^-(?=\S)/.test(v) ? `'${v}` : v;
-  return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-const fileSlug = (s: string) =>
-  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'tous-sites';
-
 /** Registre chronologique de l'année (site sélectionné) : CSV UTF-8 avec BOM, séparateur « ; ». */
 export async function loadWasteRegisterCsv(year: number) {
   const { site, siteLabel, entries } = await loadEnvironmentBase();
@@ -609,9 +600,9 @@ export async function loadWasteRegisterCsv(year: number) {
       e.gaps.join(' · '), e.notes ?? '',
     ];
   })];
-  const scope = site ? fileSlug((siteLabel.get(site) ?? site).split(' — ')[0]) : 'tous-sites';
+  const scope = site ? fileSlug((siteLabel.get(site) ?? site).split(' — ')[0], 'tous-sites') : 'tous-sites';
   return {
-    csv: `﻿${lines.map((l) => l.map(csvCell).join(';')).join('\r\n')}\r\n`,
+    csv: toCsv(lines),
     fileName: `registre-dechets_${year}_${scope}.csv`,
   };
 }

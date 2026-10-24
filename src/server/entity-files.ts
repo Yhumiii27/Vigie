@@ -145,7 +145,7 @@ export async function addEntityFiles(fd: FormData): Promise<Result> {
   const owner = await checkOwner(db, kind, entityId, session);
   if (typeof owner === 'string') return { error: owner };
   if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  const invalid = filesProblem(files);
+  const invalid = await filesProblem(files, session.user.id);
   if (invalid) return { error: invalid };
   const label = ENTITY_FILE_KINDS[kind].label;
   await db.transaction(async (tx) => {

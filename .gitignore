@@ -89,3 +89,8 @@ Thumbs.db
 # outils Claude Code : seule la configuration de prévisualisation est partagée
 /.claude/*
 !/.claude/launch.json
+
+# Parcours Playwright (QUA-08) : rapport HTML et résultats
+/playwright-report/
+/test-results/
+/blob-report/

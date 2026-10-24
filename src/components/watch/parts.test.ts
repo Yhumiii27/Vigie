@@ -17,7 +17,7 @@ describe('pickedFilesError', () => {
   });
 
   it('volume total au-delà de 10 Mo', () => {
-    expect(pickedFilesError(files(2, 6 * MB))).toBe('Ces fichiers dépassent 10 Mo au total : joignez-en moins ou réduisez leur taille.');
+    expect(pickedFilesError(files(2, 6 * MB))).toBe('Ces fichiers dépassent 10 Mo au total : envoyez-les en plusieurs fois.');
   });
 
   it('choix admis : rien, ou quelques petits fichiers', () => {
