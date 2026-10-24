@@ -45,7 +45,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@next/env": "16.4.0",
+    "@next/env": "16.4.2",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
