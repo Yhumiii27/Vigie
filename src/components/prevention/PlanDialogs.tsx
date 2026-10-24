@@ -9,7 +9,7 @@ import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
 import { actionHref } from '@/lib/action-rules';
-import { MAX_BATCH_BYTES, MAX_FILE_BYTES } from '@/lib/attachments';
+import { MAX_BATCH_BYTES, fileBatchError } from '@/lib/attachments';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
 import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
@@ -33,11 +33,7 @@ const MB = 1024 * 1024;
  */
 function checkPicked(input: HTMLInputElement, maxFiles: number): string | null {
   const picked = Array.from(input.files ?? []);
-  const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
-  const issue = tooBig ? `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / MB} Mo.`
-    : picked.length > maxFiles ? `${maxFiles} fichiers au maximum par envoi.`
-      : picked.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES ? `Ces fichiers dépassent ${MAX_BATCH_BYTES / MB} Mo au total : ajoutez-les en plusieurs fois.`
-        : null;
+  const issue = fileBatchError(picked, { maxFiles });
   if (issue) input.value = '';
   return issue;
 }
@@ -88,7 +84,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
     : options.projects;
 
   return (
-    <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id }}>
+    <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id, version: plan?.version }}>
       {signed && (
         <Notice tone="warn" icon="ph-pen-nib">
           Modifier l&apos;entreprise, la nature des travaux, le lieu, la période, les heures, les mesures ou une section déjà renseignée du contenu réglementaire d&apos;un plan signé efface les signatures : le plan mis à jour doit être signé à nouveau.

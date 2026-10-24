@@ -1,6 +1,7 @@
 import 'server-only';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { log } from '@/lib/log';
 
 // Journal des consultations (SEC-11) : qui a consulté une pièce jointe ou une donnée de santé, et quand. Distinct du
 // journal des modifications (change_log). Pas de 'use server' : aucune action appelable depuis le navigateur.
@@ -43,6 +44,6 @@ export async function logAccess(entry: AccessInput): Promise<void> {
       attachmentId: entry.attachmentId ?? null, health: entry.health ?? false,
     });
   } catch (err) {
-    console.error('Journal des consultations : écriture impossible', err);
+    log.error('access-log.write', 'Journal des consultations : écriture impossible', { error: err });
   }
 }

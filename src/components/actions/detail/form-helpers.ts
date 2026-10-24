@@ -10,7 +10,7 @@ import {
   type MissingField, type TransitionKind,
 } from '@/lib/action-rules';
 import type { ActionDefaults, ActionDetailView, ActionFormOptions, ActionTargetOption } from '@/lib/action-view';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES } from '@/lib/attachments';
+import { fileBatchError } from '@/lib/attachments';
 import {
   ACTION_AVANCEMENTS, ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, EVENT_AUDIT_LINK_KINDS, FOLLOW_REASONS,
   SOURCE_KEYS, VERIFY_METHODS, isOpenAvancement, type Avancement, type FollowReason, type SourceKey,
@@ -113,7 +113,7 @@ export const targetSiteId = (targets: readonly ActionTargetOption[] | undefined,
 /** Valeurs actuelles d'une action pour le formulaire de modification (ActionFields en mode modification). */
 export function editDefaults(d: ActionDetailView): ActionDefaults {
   return {
-    id: d.id, status: d.status, source: d.source, sourceChoices: editSourceChoices(d), originRef: d.originRef,
+    id: d.id, version: d.version, status: d.status, source: d.source, sourceChoices: editSourceChoices(d), originRef: d.originRef,
     domain: d.domain, priority: d.priority, riskLevel: d.riskLevel, problem: d.problem ?? '', detail: d.detail,
     siteId: d.siteId, pilotId: d.pilotId, pilotName: d.pilot,
     dueOn: d.dueOn, verifyDueOn: d.verifyDueOn, openedOn: d.openedOn,
@@ -265,11 +265,7 @@ export function commentMeta(c: { atLabel: string; author: string; authorRole: st
 export const commentAnchor = (id: number) => `commentaire-${id}`;
 /** Fichiers choisis avant l'envoi : mêmes limites que le serveur (taille, nombre, volume d'un envoi). */
 export function pickedFilesError(files: readonly { name: string; size: number }[]): string | null {
-  const tooBig = files.find((f) => f.size > MAX_FILE_BYTES);
-  if (tooBig) return `« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / 1024 / 1024} Mo.`;
-  if (files.length > MAX_FILES_PER_BATCH) return `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`;
-  if (files.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES) return `Ces fichiers dépassent ${MAX_BATCH_BYTES / 1024 / 1024} Mo au total : envoyez-les en plusieurs fois.`;
-  return null;
+  return fileBatchError(files);
 }
 
 // ─── Pointage et coûts (§ 11) ──────────────────────────────────────────────

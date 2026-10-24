@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { RATE_LIMIT_RETENTION_MS, purgeExpiredRateLimits } from '@/db/maintenance';
 import { config } from './config';
+import { sniffImage, stripImageMetadata } from './file-type';
 
 // Protections du signalement sans compte (EVT-07, formulaire public /signaler?jeton=…) : limite de débit en base
 // (table report_rate_limits, partagée par toutes les instances), adresse du client, contrôle du contenu des photos.
@@ -134,23 +135,7 @@ export async function countPostReport(tx: DbOrTx, post: { zoneId: number; versio
   return { ceilingReached: total.hits === total.max };
 }
 
-/**
- * Type d'image d'après les premiers octets du fichier (le type annoncé par le navigateur n'est pas fiable) :
- * JPEG, PNG, GIF, WebP, HEIC/HEIF ; null pour tout autre contenu.
- */
-export function sniffImage(bytes: Uint8Array): string | null {
-  const ascii = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-  if (ascii(0, 8) === '\x89PNG\r\n\x1a\n') return 'image/png';
-  if (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a') return 'image/gif';
-  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
-  if (ascii(4, 8) === 'ftyp') {
-    const brand = ascii(8, 12);
-    if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'].includes(brand)) return 'image/heic';
-    if (['mif1', 'msf1'].includes(brand)) return 'image/heif';
-  }
-  return null;
-}
+export { sniffImage };
 
 const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif',
@@ -162,6 +147,21 @@ const PHOTO_EXTENSIONS: Record<string, string> = {
  */
 export function anonymousPhoto(file: File, index: number): File {
   return new File([file], `photo-${index + 1}.${PHOTO_EXTENSIONS[file.type] ?? 'bin'}`, { type: file.type });
+}
+
+/**
+ * Photo d'un signalement anonyme ou sans compte (SEC-09), côté serveur : type tiré du contenu, métadonnées retirées (EXIF :
+ * position GPS, appareil, date ; XMP, IPTC, commentaires, textes PNG), nom remplacé si anonyme (anonymousPhoto). Le
+ * navigateur réencode déjà la photo quand il le peut ; le serveur ne s'y fie pas. null : ce n'est pas une image, ou ses
+ * métadonnées ne peuvent pas être retirées (fichier mal formé) — la photo est refusée.
+ */
+export async function cleanReportPhoto(file: File, index: number, anonymous: boolean): Promise<File | null> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const type = sniffImage(bytes);
+  const clean = type ? stripImageMetadata(bytes, type) : null;
+  if (!type || !clean) return null;
+  const out = new File([clean as Uint8Array<ArrayBuffer>], file.name, { type });
+  return anonymous ? anonymousPhoto(out, index) : out;
 }
 
 /** Photo du formulaire public : contenu contrôlé, type enregistré d'après le contenu ; null si ce n'est pas une image. */

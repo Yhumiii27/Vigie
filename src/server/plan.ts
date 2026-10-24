@@ -24,6 +24,7 @@ import {
 } from './action-create';
 import { logChange } from './changelog';
 import { actionProofTitle, notify, qhseAnimatorIds } from './notify';
+import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
 
 // Création et modification d'une action du plan d'actions QSE (ACT-20), preuves (ACT-25). Champs postés : plan du
 // paquet 1 § 2.14. Ordre des contrôles (CLAUDE.md) : droits → validation → chargement → requireInSite → une transaction
@@ -226,6 +227,8 @@ async function updateAction(id: string, fd: FormData): Promise<FormState> {
   } satisfies Partial<ActionInsert>;
   const before = Object.fromEntries((Object.keys(ACTION_FIELD_LABELS) as ActionField[]).map((k) => [k, cur[k]]));
   const result = await db.transaction(async (tx) => {
+    // QUA-12 : fiche modifiée depuis l'ouverture du formulaire (autre modification, commentaire, preuve) : rien n'est écrasé.
+    if (await staleEditError(tx, 'action', cur.id, fd.get(VERSION_FIELD))) return 'changed' as const;
     const details = actionFieldDetails(before, patch, await nameBook(tx));
     if (!details.length) return 'unchanged' as const;
     const done = await tx.update(t.actions).set(patch).where(and(eq(t.actions.id, cur.id), eq(t.actions.status, cur.status))).returning({ id: t.actions.id });
@@ -238,9 +241,9 @@ async function updateAction(id: string, fd: FormData): Promise<FormState> {
     if (pilotId !== cur.pilotId) await notifyReassigned(tx, { id: cur.id, detail }, pilotId, { id: session.user.id, name: session.user.name });
     return 'saved' as const;
   });
-  if (result === 'stale') {
+  if (result === 'stale' || result === 'changed') {
     revalidatePath('/', 'layout');
-    return { error: STALE };
+    return { error: result === 'changed' ? STALE_EDIT : STALE };
   }
   if (result === 'saved') revalidatePath('/', 'layout');
   return { ok: true, id: cur.id, ...(dates.warnings.length ? { warnings: dates.warnings } : {}) };
@@ -264,7 +267,7 @@ export async function addActionFiles(fd: FormData): Promise<{ error?: string; co
   if (blocked) return { error: blocked };
   if (!rights.canAttach) return { error: ABANDONED };
   if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  const invalid = filesProblem(files);
+  const invalid = await filesProblem(files, session.user.id);
   if (invalid) return { error: invalid };
 
   await db.transaction(async (tx) => {

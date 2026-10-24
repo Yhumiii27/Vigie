@@ -24,6 +24,7 @@ import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import { logAccess } from '@/server/access-log';
 import type { Option } from './options';
+import { entityVersion } from '@/server/versions';
 
 // ─── Signalements et événements ─────────────────────────────────────────────
 
@@ -327,6 +328,8 @@ export async function loadEventDetail(id: string) {
   const registerBlocker = at && health && !entry && !lock ? benignRegisterBlocker(row) : null;
   return {
     event: eventView(e, people, now),
+    /** Version de la fiche à son ouverture (QUA-12), renvoyée par le formulaire de modification. */
+    version: await entityVersion(db, 'event', e.id),
     actions: actions.sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true })).map((a) => actionView(a, people, now)),
     analyses: content,
     attachments: files.files,

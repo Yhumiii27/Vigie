@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { and, desc, eq, isNull, max, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS, canSee } from '@/lib/domain';
@@ -12,7 +11,7 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
-import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 
 const EVALUATIONS = Object.keys(REQUIREMENT_EVAL);
@@ -41,11 +40,10 @@ function readReason(f: ReturnType<typeof formReader>) {
   return reason;
 }
 
-/** Contrôle d'un envoi de pièces jointes (nombre, volume total, format) ; l'erreur est portée par le champ `name`. */
-function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[]) {
-  if (files.length > MAX_FILES_PER_BATCH) f.fail(name, `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`);
-  else if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) f.fail(name, `Les fichiers dépassent ${MAX_BATCH_BYTES / 1024 / 1024} Mo au total : joignez-en moins ou réduisez leur taille.`);
-  files.forEach((file) => { const err = checkUpload(file); if (err) f.fail(name, err); });
+/** Contrôle d'un envoi de pièces jointes (nombre, volume, contenu, limites de la personne : checkUploadBatch) ; erreur portée par le champ `name`. */
+async function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[], by: string) {
+  const err = await checkUploadBatch(files, by);
+  if (err) f.fail(name, err);
 }
 
 /** Valeurs affichées dans le journal (dates en jj/mm/aaaa, cases à cocher en Oui / Non). */
@@ -178,7 +176,7 @@ export async function evaluateRequirement(_prev: FormState, fd: FormData): Promi
   const evaluation = f.oneOf('evaluation', EVALUATIONS, { required: true });
   const evaluationNote = f.str('evaluationNote', { max: 160 }) || null;
   const files = f.files('proof');
-  checkFiles(f, 'proof', files);
+  await checkFiles(f, 'proof', files, session.user.id);
   // Le groupe de boutons radio n'a pas de message de champ : l'erreur est remontée en tête de formulaire.
   if (f.fieldErrors.evaluation) return { ...f.state(), error: 'Choisissez une évaluation de conformité.' };
   if (!f.ok) return f.state();
@@ -394,7 +392,7 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
   if (result === 'favorable' && reserves) f.fail('result', 'Réserves saisies : choisissez « Favorable avec réserves », ou retirez les réserves.');
   const files = f.files('report');
   if (performedOn && performedOn > today()) f.fail('performedOn', 'Enregistrez le contrôle une fois réalisé (date future).');
-  checkFiles(f, 'report', files);
+  await checkFiles(f, 'report', files, session.user.id);
   if (!f.ok) return f.state();
 
   const { control, error: ctrlError } = await loadControlForEdit(controlId!);

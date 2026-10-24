@@ -31,7 +31,7 @@ describe('saveQualification : attestations', () => {
     actAs('Animateur QHSE', 'ville-a');
     const before = await counts();
     const result = await saveQualification({}, formWith(fields, { files: [big('recto.pdf', 6 * MB), big('verso.pdf', 6 * MB)] }));
-    expect(result.fieldErrors?.files).toBe("L'envoi dépasse 10 Mo : ajoutez les fichiers en plusieurs fois.");
+    expect(result.fieldErrors?.files).toBe('Ces fichiers dépassent 10 Mo au total : envoyez-les en plusieurs fois.');
     expect(await counts()).toEqual(before);
   });
 });

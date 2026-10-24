@@ -8,7 +8,9 @@ import { startMaintenance } from './maintenance';
 import { scheduledTasks, startScheduler } from './scheduler';
 import { MIGRATION_LOCK_SQL, MIGRATION_UNLOCK_SQL, MIGRATIONS_DIR, SERVER_SCHEMA, hasLegacyServerLayout, migrateServer, refuseNewerDatabase, type Query } from './migrations';
 import * as schema from './schema';
-import type { Db, DbEngine } from './types';
+import { withTransactionFiles } from './pending-files';
+import type { Db, DbEngine, Tx } from './types';
+import { log } from '@/lib/log';
 
 export type { Db, DbEngine, DbOrTx, Tx } from './types';
 
@@ -23,6 +25,9 @@ export type { Db, DbEngine, DbOrTx, Tx } from './types';
 // est retentée à la requête suivante.
 
 export { MIGRATIONS_DIR };
+
+/** Messages de la déclaration à Matrix, dans le journal du serveur (PRD-10). */
+const MATRIX_LOG = { info: (m: string) => log.info('matrix.declare', m), warn: (m: string) => log.warn('matrix.declare', m) };
 
 type Opened = { db: Db; engine: DbEngine; close: () => Promise<void>; query: RowQuery };
 
@@ -55,7 +60,7 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
   // rôle vigie_app par le socle).
   const pool = new Pool({ connectionString: url, max: 10, application_name: 'vigie', options: `-c search_path=${SERVER_SCHEMA}` });
   // Connexion inactive coupée par le serveur : le pool la remplace, sans arrêter le processus.
-  pool.on('error', (err) => console.error('[vigie] PostgreSQL :', err.message));
+  pool.on('error', (err) => log.error('db.pool', 'PostgreSQL : connexion du pool en erreur', { error: err }));
   const client = await pool.connect();
   const query: Query = (q, p) => client.query(q, p);
   try {
@@ -83,12 +88,20 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
   }
   client.release();
   const db: Db = drizzle(pool, { schema });
-  const transaction = db.transaction.bind(db);
-  db.transaction = ((fn, config) => transaction(async (tx) => {
-    await tx.execute(WRITE_LOCK);
-    return fn(tx);
-  }, config)) as Db['transaction'];
+  wrapTransactions(db, (tx) => tx.execute(WRITE_LOCK));
   return { db, engine: 'postgres', close: () => pool.end(), query: (q) => pool.query(q).then((r) => r.rows) };
+}
+
+/**
+ * Chaque db.transaction() : verrou d'écriture du serveur (`before`), et fichiers de pièces jointes écrits pendant la
+ * transaction effacés si elle est annulée (PRD-13, src/db/pending-files.ts).
+ */
+function wrapTransactions(db: Db, before?: (tx: Tx) => Promise<unknown>) {
+  const transaction = db.transaction.bind(db);
+  db.transaction = ((fn, config) => withTransactionFiles(() => transaction(async (tx) => {
+    if (before) await before(tx);
+    return fn(tx);
+  }, config))) as Db['transaction'];
 }
 
 /**
@@ -113,6 +126,7 @@ async function openPglite(dir: string, storage: StorageConfig): Promise<Opened> 
   if (!dir.startsWith('memory://')) mkdirSync(dir, { recursive: true });
   const client = new PGlite(dir);
   const db = drizzle(client, { schema });
+  wrapTransactions(db as unknown as Db);
   try {
     await refuseNewerDatabase((q, p) => client.query(q, p));
     const { backupBeforeMigrate } = await import('./backup');
@@ -135,13 +149,15 @@ async function open(): Promise<Opened> {
   // Schéma migré déclaré à Matrix (src/lib/matrix.ts) : appel non attendu, jamais bloquant (échec : avertissement) ;
   // rien sans MATRIX_URL ni MATRIX_DECLARATIONS_DIR, ni pendant la construction (next build). current_schema() : vigie
   // sur le serveur (search_path du pool), public en PGlite.
-  if (!building) void declareDatabaseSchema('vigie', opened.query, c.matrix);
+  if (!building) void declareDatabaseSchema('vigie', opened.query, c.matrix, MATRIX_LOG);
   if (c.demo) {
     const { seed } = await import('./seed');
     await seed(opened.db, { files: true });
   }
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
-  const stop = startMaintenance(opened.db);
+  // Pièces jointes orphelines (PRD-13) : serveur avec tâches planifiées et base persistante seulement (jamais les tests).
+  const sweepUploads = c.scheduler && !building && !(opened.engine === 'pglite' && c.dataDir.startsWith('memory://'));
+  const stop = startMaintenance(opened.db, { uploadDir: sweepUploads ? c.uploadDir : null });
   // Tâches planifiées (PRD-12, src/db/scheduler.ts) : registre de la configuration (rappel du mercredi par e-mail quand un
   // transport existe) ; aucune avec VIGIE_SCHEDULER=0, un registre vide, ni pendant la construction (next build).
   // Démarrage à l'ouverture de la base, donc à la première requête ou sonde de santé : pas de rattrapage (D13).

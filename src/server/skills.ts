@@ -4,13 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH } from '@/lib/attachments';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { canEdit, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
-import { checkUpload, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { prerequisiteCycle } from '@/components/skills/rules';
 
@@ -49,12 +48,8 @@ async function requireSkillsEditor() {
 /** Salarié sorti de l'effectif à la date du jour (archivé : plus de saisie sur sa fiche ni ses formations). */
 const hasLeft = (p: { leftOn: string | null }) => !!p.leftOn && p.leftOn <= today();
 
-/** Contrôle d'un envoi d'attestations (nombre, volume, format) ; message d'erreur ou null. */
-function checkFiles(files: File[]) {
-  if (files.length > MAX_FILES_PER_BATCH) return `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`;
-  if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) return `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.`;
-  return files.map(checkUpload).find(Boolean) ?? null;
-}
+/** Contrôle d'un envoi d'attestations (nombre, volume, contenu, limites de la personne) ; message d'erreur ou null. */
+const checkFiles = (files: File[], by: string) => checkUploadBatch(files, by);
 
 /**
  * Actions de recyclage reprises encore non closes (ni Vérifiée ni Abandonnée, Terminée comprise) rattachées aux exigences
@@ -114,7 +109,7 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
   const now = today();
   if (obtainedOn && obtainedOn > now) f.fail('obtainedOn', "La date d'obtention ne peut pas être postérieure à aujourd'hui.");
   if (obtainedOn && expiresOn && expiresOn <= obtainedOn) f.fail('expiresOn', "L'échéance doit suivre la date d'obtention.");
-  const invalidFiles = checkFiles(files);
+  const invalidFiles = await checkFiles(files, session.user.id);
   if (invalidFiles) f.fail('files', invalidFiles);
   if (!f.ok) return f.state();
 
@@ -195,7 +190,7 @@ export async function addQualificationFiles(fd: FormData): Promise<{ error?: str
   const files = f.files('files');
   if (!f.ok || !id) return { error: 'Formation introuvable.' };
   if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  const invalid = checkFiles(files);
+  const invalid = await checkFiles(files, session.user.id);
   if (invalid) return { error: invalid };
   const db = await getDb();
   const row = await findQualification(db, id);

@@ -95,6 +95,11 @@ PLIST="$APP/Contents/Info.plist"
 cp "$SCRIPT_DIR/Resources/Info.plist" "$PLIST"
 plutil -replace VigieProjectPath -string "$PROJECT_DIR" "$PLIST"
 plutil -replace VigieNodeDir -string "$NODE_DIR" "$PLIST"
+# Client du serveur central (PRD-14) : VIGIE_SERVER_URL=https://vigie.exemple.fr bash desktop-app/build.sh ;
+# sans elle, serveur local de démonstration (remplaçable ensuite par « defaults write com.epc2i.vigie VigieServerURL … »).
+if [ -n "${VIGIE_SERVER_URL:-}" ]; then
+  plutil -replace VigieServerURL -string "$VIGIE_SERVER_URL" "$PLIST"
+fi
 plutil -lint "$PLIST"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 

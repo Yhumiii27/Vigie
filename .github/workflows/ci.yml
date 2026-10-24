@@ -1,6 +1,6 @@
 # Intégration continue de Vigie (QUA-01) : à chaque push et pull request.
 # - verification : types, lint, tests (PGlite en mémoire puis PostgreSQL), migrations, construction, cloisonnement
-#   du rôle Salarié sur le serveur construit ;
+#   du rôle Salarié sur le serveur construit, parcours de bout en bout dans Chromium (Playwright, QUA-08) ;
 # - image : construction de l'image Docker et sonde de santé du conteneur.
 # Version de Node : .nvmrc (champ « engines » de package.json).
 
@@ -75,18 +75,34 @@ jobs:
         env:
           VIGIE_DEMO: '1'
 
-      - name: Cloisonnement Salarié (serveur construit)
+      # Chromium de Playwright (QUA-08), version fixée par @playwright/test (package-lock.json).
+      - name: Navigateur des parcours (Playwright)
+        run: npx playwright install --with-deps chromium
+
+      - name: Cloisonnement Salarié et parcours dans le navigateur (serveur construit)
         env:
           VIGIE_TODAY: '2026-10-09'
           VIGIE_DATA_DIR: ${{ runner.temp }}/vigie-demo
           VIGIE_UPLOAD_DIR: ${{ runner.temp }}/vigie-uploads
+          VIGIE_SCHEDULER: '0'
         run: |
           npm run start:demo > "$RUNNER_TEMP/vigie-server.log" 2>&1 &
           for i in $(seq 1 60); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3200/api/sante)" = 200 ] && break
             sleep 2
           done
+          # Charge des pages du Salarié d'abord, sur le jeu intact ; les parcours Playwright écrivent ensuite dans la base.
           VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e
+          VIGIE_E2E_URL=http://localhost:3200 npm run test:pw
+
+      - name: Rapport des parcours
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Journal du serveur
         if: failure()

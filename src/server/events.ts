@@ -6,7 +6,7 @@ import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
-  MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
+  MAX_BATCH_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
   advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
   MP_DENIED, MP_TITLE, hasNcDisposition,
@@ -25,13 +25,16 @@ import {
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
-import { REPORT_LIMITS, ReportLimitError, anonymousPhoto, checkedPhoto, clientIp, countPostReport, hitReportLimit } from '@/lib/report-guard';
+import { REPORT_LIMITS, ReportLimitError, checkedPhoto, cleanReportPhoto, clientIp, countPostReport, hitReportLimit } from '@/lib/report-guard';
+import { UserLimitError, consumeUserLimit, userLimitError } from '@/lib/rate-limit';
+import { log } from '@/lib/log';
 import { readReportToken } from '@/lib/report-token';
 import { ALL_SITES, getOptionalSession, inSite, type Session } from '@/lib/session';
-import { checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { checkUpload, checkUploadBatch, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { notifyReportOutcome } from './notify';
 import { nextEntityReference } from './references';
+import { StaleEditError, VERSION_FIELD, assertFresh } from './versions';
 
 const METHOD_KEYS = METHODS.map(([k]) => k);
 const done = () => revalidatePath('/', 'layout');
@@ -526,7 +529,10 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
     return before === after ? [] : [{ field: LABELS[k]!, from: before ? '(texte précédent)' : null, to: after ? '(texte modifié)' : null }];
   });
 
-  await db.transaction(async (tx) => {
+  try {
+    await db.transaction(async (tx) => {
+    // QUA-12 : fiche modifiée depuis l'ouverture du formulaire (autre modification, étape, analyse) : rien n'est écrasé.
+    await assertFresh(tx, 'event', id, fd.get(VERSION_FIELD));
     await tx.update(t.events).set(v).where(eq(t.events.id, id));
     // Les actions rattachées au site de l'événement le suivent s'il change de site ; chacune trace le changement dans son
     // historique (ACT-03), dans la même transaction.
@@ -545,7 +551,11 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
       }
     }
     if (details.length) await logChange(tx, { entityType: 'event', entityId: id, action: 'update', summary: 'Fiche modifiée', details });
-  });
+    });
+  } catch (err) {
+    if (err instanceof StaleEditError) return { error: err.message };
+    throw err;
+  }
   done();
   return { ok: true, id };
 }
@@ -933,9 +943,7 @@ export async function addEventFiles(fd: FormData): Promise<{ error?: string; cou
   const eventId = f.str('eventId', { required: true });
   const files = f.files('files');
   if (!files.length) return { error: 'Choisissez au moins un fichier.' };
-  if (files.length > MAX_FILES_PER_BATCH) return { error: `${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.` };
-  if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) return { error: `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.` };
-  const invalid = files.map(checkUpload).find(Boolean);
+  const invalid = await checkUploadBatch(files, session.user.id);
   if (invalid) return { error: invalid };
   const db = await getDb();
   const ev = await findEvent(db, eventId);
@@ -1072,6 +1080,14 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
   let publicPost: { zoneId: number; name: string; version: number; client: string; secret: string } | null = null;
   if (session) {
     const { user, site, siteOptions } = session;
+    // SEC-07 : signalements nominatifs d'une personne connectée limités par heure (comptés dans la transaction de création).
+    // Jamais pour un signalement anonyme (SEC-09) : un compteur par personne, daté de l'heure de l'événement, permettrait de
+    // rapprocher l'événement de son auteur.
+    const limited = anonymous ? null : await userLimitError('report', user.id);
+    if (limited) return { error: limited };
+    // Photos : contenu contrôlé (type réel, antivirus) ; nominatif : limites de fichiers de la personne.
+    const fileError = await checkUploadBatch(photos, anonymous ? null : user.id, { maxFiles: MAX_PHOTOS });
+    if (fileError) return { error: fileError };
     const post = token ? await resolveReportToken(token) : null;
     // QR code d'un poste en service : zone et lieu du poste ; d'une zone archivée (EVT-19) : site du poste, lieu à choisir.
     const live = post?.status === 'ok' ? post.post : null;
@@ -1128,13 +1144,20 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
   // Accident : intitulé neutre (la description peut décrire la lésion ; l'intitulé paraît dans les listes et les échéances, SEC-06).
   const firstSentence = description.split(/(?<=[.!?])\s/)[0];
   const title = type === 'AT' ? neutralAccidentTitle(report.location) : firstSentence.length > 90 ? `${firstSentence.slice(0, 87)}…` : firstSentence;
-  // Signalement anonyme (tout canal, SEC-09) : noms d'origine des photos remplacés (date, nom, appareil…).
-  if (anonymous) files = files.map((p, i) => anonymousPhoto(p, i));
+  // Signalement anonyme (tout canal) ou sans compte (SEC-09) : métadonnées des photos retirées côté serveur (position,
+  // appareil, date…) et, si anonyme, noms d'origine remplacés.
+  if (anonymous || !session) {
+    const cleaned = await Promise.all(files.map((p, i) => cleanReportPhoto(p, i, anonymous)));
+    const refused = files.find((_, i) => !cleaned[i]);
+    if (refused) return { error: `« ${refused.name} » : photo illisible, ses métadonnées ne peuvent pas être retirées. Choisissez une autre photo (JPEG ou PNG).` };
+    files = cleaned as File[];
+  }
   const severity = gravity === 'Oui' ? 3 : gravity === 'Peut-être' ? 2 : 1;
   const db = await getDb();
   let id: string;
   try {
     id = await db.transaction(async (tx) => {
+      if (session && !anonymous) await consumeUserLimit('report', session.user.id, 1, { db: tx });
       // Sans compte : quota du poste compté avec l'événement (ReportLimitError annule la transaction, compteurs compris) ;
       // plafond du poste atteint → journal du site et alerte au responsable QHSE (loadReportPostSignals).
       if (publicPost) {
@@ -1170,6 +1193,7 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
     });
   } catch (err) {
     if (err instanceof ReportLimitError) return { error: err.scope === 'postTotal' ? REPORT_POST_CEILING : REPORT_LIMITED };
+    if (err instanceof UserLimitError) return { error: err.message };
     throw err;
   }
 
@@ -1178,7 +1202,8 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
   for (const p of files) {
     try {
       await saveUpload(p, 'event', id, report.declarantId);
-    } catch {
+    } catch (err) {
+      log.warn('report.photo', "Photo d'un signalement non enregistrée", { eventId: id, reason: err instanceof Error ? err.name : 'inconnue' });
       warning = "Le signalement est enregistré, mais une photo n'a pas pu l'être : transmettez-la à l'animateur QHSE.";
     }
   }

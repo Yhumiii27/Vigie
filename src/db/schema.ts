@@ -859,6 +859,26 @@ export const ppImportTemplates = pgTable('pp_import_templates', {
   updatedById: text('updated_by_id').references(() => people.id),
 });
 
+// Consommation de l'API Claude (INT-06) : une ligne par lecture d'un scan par l'import des plans de prévention, posée avant
+// l'appel (« en_cours ») puis complétée (jetons, modèle qui a répondu, résultat) ; « cache » : même fichier relu sans appel.
+// Plafonds (VIGIE_AI_DAILY_SCANS, VIGIE_AI_MONTHLY_TOKENS) calculés sur cette table. Ni contenu ni nom de fichier : empreinte
+// SHA-256 du document seulement. Journal technique, jamais modifié hors de la ligne de l'appel ni exposé dans une vue pub_.
+export const aiUsage = pgTable('ai_usage', {
+  id: serial('id').primaryKey(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  personId: text('person_id').references(() => people.id),
+  feature: text('feature').notNull(), // pp_scan
+  model: text('model').notNull(), // modèle demandé
+  servedModel: text('served_model'), // modèle qui a répondu (repli côté serveur)
+  outcome: text('outcome').notNull(), // en_cours | ok | refus | erreur | cache
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
+  cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+  durationMs: integer('duration_ms'),
+  fileHash: text('file_hash'),
+}, (t) => [index('ai_usage_at_idx').on(t.at), index('ai_usage_person_idx').on(t.personId, t.at)]);
+
 // Permis de feu, permis d'essai.
 export const permits = pgTable('permits', {
   id: text('id').primaryKey(), // PF-2026-031 / PE-2026-008

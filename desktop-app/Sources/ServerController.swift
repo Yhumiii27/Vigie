@@ -46,6 +46,8 @@ final class ServerController {
         case attached
         /// Serveur lancé par l'application.
         case owned
+        /// Client du serveur central (VigieServerURL) : rien n'est lancé ni arrêté sur ce Mac.
+        case remote
     }
 
     weak var delegate: ServerControllerDelegate?
@@ -103,6 +105,10 @@ final class ServerController {
         guard isCurrent(g) else { return }
         mode = .none
         listensOnNetwork = false
+        if config.isRemote {
+            await connectRemote(g)
+            return
+        }
 
         let projectURL = config.projectURL
         guard FileManager.default.fileExists(atPath: projectURL.appendingPathComponent("package.json").path) else {
@@ -339,6 +345,24 @@ final class ServerController {
         startHealthMonitor(g)
     }
 
+    /// Client du serveur central (PRD-14) : aucune compilation, aucun processus, aucune base locale. La route de santé
+    /// est sondée (trois essais) ; une réponse HTTP suffit, la page affichera elle-même une base indisponible.
+    private func connectRemote(_ g: Int) async {
+        ServerLog.section("Vigie \(config.version) · client du serveur central \(config.baseURL.absoluteString)")
+        for attempt in 1...3 {
+            if await PortProbe.responds(url: config.probeURL, timeout: 10) {
+                guard isCurrent(g) else { return }
+                mode = .remote
+                ServerLog.note("Serveur central joignable : \(config.baseURL.absoluteString)")
+                publish(.ready(config.baseURL), g)
+                return
+            }
+            guard isCurrent(g) else { return }
+            if attempt < 3 { try? await Task.sleep(for: .seconds(2)) }
+        }
+        fail(Failures.remoteUnreachable(config.baseURL.absoluteString), g)
+    }
+
     /// Serveur réutilisé : vérifie toutes les 5 s qu'il écoute toujours (deux échecs de suite = arrêté).
     private func startHealthMonitor(_ g: Int) {
         healthTask?.cancel()
@@ -371,7 +395,8 @@ final class ServerController {
     func reportUnreachable() {
         guard case .ready = state else { return }
         healthTask?.cancel()
-        let failure = mode == .attached ? Failures.attachedServerGone : Failures.ownedServerUnreachable
+        let failure = mode == .remote ? Failures.remoteUnreachable(config.baseURL.absoluteString)
+            : mode == .attached ? Failures.attachedServerGone : Failures.ownedServerUnreachable
         ServerLog.note("Le serveur ne répond plus aux pages.")
         fail(failure, generation)
     }
@@ -586,6 +611,20 @@ enum Texts {
 
 enum Failures {
     private static var logTail: String { ServerLog.tail(maxLines: 20) }
+
+    static func remoteUnreachable(_ url: String) -> ServerFailure {
+        ServerFailure(
+            title: "Serveur Vigie injoignable",
+            message: """
+            Le serveur central de Vigie ne répond pas :
+            \(url)
+
+            Vérifiez la connexion au réseau de l'entreprise (VPN), puis cliquez sur « Réessayer ». \
+            Pour revenir au serveur local de démonstration :
+            defaults delete com.epc2i.vigie VigieServerURL
+            """,
+            log: nil)
+    }
 
     static func projectMissing(_ path: String) -> ServerFailure {
         ServerFailure(

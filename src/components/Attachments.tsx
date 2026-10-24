@@ -3,7 +3,7 @@
 import { useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { Dialog } from '@/components/Dialog';
 import {
-  ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES,
+  ATTACH_ACCEPT, MAX_FILE_BYTES, fileBatchError,
   fileIcon, fmtSize, type AttachmentItem,
 } from '@/lib/attachments';
 import { REASON_MAX, TONE } from '@/lib/domain';
@@ -52,10 +52,8 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
     const picked = Array.from(list ?? []);
     if (input.current) input.current.value = '';
     if (!picked.length) return;
-    const tooBig = picked.find((f) => f.size > MAX_FILE_BYTES);
-    if (tooBig) { setError(`« ${tooBig.name} » dépasse ${MAX_FILE_BYTES / 1024 / 1024} Mo.`); return; }
-    if (picked.length > MAX_FILES_PER_BATCH) { setError(`${MAX_FILES_PER_BATCH} fichiers au maximum par envoi.`); return; }
-    if (picked.reduce((s, f) => s + f.size, 0) > MAX_BATCH_BYTES) { setError(`Ces fichiers dépassent ${MAX_BATCH_BYTES / 1024 / 1024} Mo au total : ajoutez-les en plusieurs fois.`); return; }
+    const issue = fileBatchError(picked);
+    if (issue) { setError(issue); return; }
     startUpload(async () => {
       try {
         const r = await onAdd(picked);

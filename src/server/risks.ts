@@ -17,6 +17,7 @@ import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
 import { currentSiteId, inSite } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
+import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
 
 const SCALE = { required: true, min: 1, max: 4 } as const;
 
@@ -111,6 +112,8 @@ export async function saveRisk(_prev: FormState, fd: FormData): Promise<FormStat
     const rerated = before.residualGravity !== values.residualGravity || before.residualProbability !== values.residualProbability;
     const reviewed = rerated || residualReviewed;
     const ok = await db.transaction(async (tx) => {
+      // QUA-12 : risque modifié depuis l'ouverture du formulaire : rien n'est écrasé.
+      if (await staleEditError(tx, 'risk', id, fd.get(VERSION_FIELD))) return 'changed' as const;
       const [row] = await tx.update(t.risks).set({ ...values, ...(reviewed ? { residualReviewedOn: today() } : {}) })
         .where(eq(t.risks.id, id)).returning({ id: t.risks.id });
       if (!row) return false;
@@ -124,6 +127,10 @@ export async function saveRisk(_prev: FormState, fd: FormData): Promise<FormStat
       });
       return true;
     });
+    if (ok === 'changed') {
+      revalidatePath('/', 'layout');
+      return { error: STALE_EDIT };
+    }
     if (!ok) return { error: 'Risque introuvable.' };
     revalidatePath('/', 'layout');
     return { ok: true, id: String(id) };

@@ -41,7 +41,7 @@ export async function addActionComment(_prev: FormState, fd: FormData): Promise<
   const blocked = await ownOrInSite(a, rights.responsible);
   if (blocked) return { error: blocked };
   if (files.length && !rights.canAttach) return { error: 'Action abandonnée : les preuves ne peuvent plus être jointes.', fieldErrors: { files: 'Action abandonnée.' } };
-  const invalid = filesProblem(files);
+  const invalid = await filesProblem(files, session.user.id);
   if (invalid) return { error: invalid, fieldErrors: { files: invalid } };
 
   await db.transaction(async (tx) => {

@@ -101,7 +101,29 @@ export type VigieConfig = {
    * MATRIX_URL (null : rien n'est envoyé), MATRIX_TOKEN, MATRIX_DECLARATIONS_DIR (copie locale), APP_VERSION.
    */
   matrix: { url: string | null; token: string | null; declarationsDir: string | null; version: string | null };
+  /**
+   * Journal du serveur (PRD-10, src/lib/log.ts) : niveau minimal (VIGIE_LOG_LEVEL, info par défaut) et format
+   * (VIGIE_LOG_FORMAT : json, une ligne par entrée sur la sortie standard, défaut hors démonstration ; texte en démonstration).
+   */
+  log: { level: LogLevel; format: LogFormat };
+  /**
+   * Analyse antivirus des pièces jointes par un service clamd (SEC-08, src/lib/antivirus.ts) : VIGIE_CLAMAV=hôte:port ou
+   * unix:/chemin/clamd.sock ; null = aucune analyse. Service injoignable : envoi refusé (fermé par défaut).
+   */
+  clamav: { host: string; port: number } | { socket: string } | null;
+  /**
+   * Plafonds de la lecture des scans par l'API Claude (INT-06) : lectures par personne sur 24 h (VIGIE_AI_DAILY_SCANS,
+   * 20 par défaut) et jetons consommés par l'instance dans le mois civil (VIGIE_AI_MONTHLY_TOKENS, 2 000 000 par défaut ;
+   * 0 = sans plafond).
+   */
+  aiLimits: { dailyScansPerPerson: number; monthlyTokens: number };
 };
+
+/** Niveaux du journal du serveur, du plus bavard au plus sobre. */
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+export const LOG_FORMATS = ['json', 'texte'] as const;
+export type LogFormat = (typeof LOG_FORMATS)[number];
 
 /** Transports d'e-mail disponibles (VIGIE_MAIL_TRANSPORT) ; SMTP ou Microsoft Graph : ACT-34. */
 export const MAIL_TRANSPORTS = ['fichier', 'aucun'] as const;
@@ -285,9 +307,34 @@ export function parseConfig(env: Env): VigieConfig {
     version: blank(env.APP_VERSION) ?? null,
   };
 
+  // Journal du serveur (PRD-10).
+  const log = {
+    level: read('VIGIE_LOG_LEVEL', z.enum(LOG_LEVELS, { error: `valeur attendue : ${LOG_LEVELS.join(', ')}` })) ?? 'info',
+    format: read('VIGIE_LOG_FORMAT', z.enum(LOG_FORMATS, { error: `valeur attendue : ${LOG_FORMATS.join(' ou ')}` })) ?? (demo ? 'texte' : 'json'),
+  } as const;
+  // Antivirus (SEC-08) : clamd en TCP (hôte:port) ou par socket unix.
+  const clamav = read('VIGIE_CLAMAV', z.string().transform((v, ctx) => {
+    if (v.startsWith('unix:')) {
+      const socket = v.slice(5);
+      if (path.isAbsolute(socket)) return { socket };
+    } else {
+      const m = /^(\[[0-9a-f:.]+\]|[a-z0-9.-]+):(\d{1,5})$/i.exec(v);
+      if (m && +m[2] >= 1 && +m[2] <= 65535) return { host: m[1].replace(/^\[|\]$/g, ''), port: +m[2] };
+    }
+    ctx.addIssue({ code: 'custom', message: 'adresse de clamd attendue : hôte:port (ex. clamav:3310) ou unix:/chemin/clamd.sock' });
+    return z.NEVER;
+  })) ?? null;
+  // Plafonds de la lecture des scans (INT-06).
+  const count = (max: number) => z.string().regex(/^\d+$/, { error: 'nombre entier attendu' }).transform(Number)
+    .refine((n) => n <= max, { error: `au plus ${max.toLocaleString('fr-FR')}` });
+  const aiLimits = {
+    dailyScansPerPerson: read('VIGIE_AI_DAILY_SCANS', count(1000)) ?? 20,
+    monthlyTokens: read('VIGIE_AI_MONTHLY_TOKENS', count(1_000_000_000)) ?? 2_000_000,
+  };
+
   if (problems.length) throw new ConfigError(problems);
   return {
-    demo, today, ...storage,
+    demo, today, ...storage, log, clamav, aiLimits,
     publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
     scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };

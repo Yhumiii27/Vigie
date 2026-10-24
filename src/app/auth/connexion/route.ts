@@ -4,6 +4,7 @@ import { startLogin } from '@/lib/auth/oidc';
 import { accessHref, safeReturnPath } from '@/lib/auth/paths';
 import { clearAuthCookie, redirectTo, setAuthCookie } from '@/lib/auth/responses';
 import { config, entraMissing, secureCookies } from '@/lib/config';
+import { log } from '@/lib/log';
 
 // Connexion Microsoft Entra ID (SEC-01) : /auth/connexion?retour=<chemin> → page de connexion Microsoft.
 // Les contrôles (state, nonce, code_verifier PKCE) et la page à rouvrir voyagent dans un cookie chiffré de 10 min.
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     login = await startLogin();
   } catch (err) {
-    console.error('[vigie] Connexion Entra ID impossible (découverte OIDC) :', err instanceof Error ? err.message : err);
+    log.error('auth.discovery', 'Connexion Entra ID impossible (découverte OIDC)', { error: err });
     return redirectTo(accessHref('echec'), req);
   }
   const res = redirectTo(login.url, req);

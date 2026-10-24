@@ -5,6 +5,24 @@ export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 /** Volume maximal d'un envoi (les server actions acceptent 11 Mo, marge multipart comprise). */
 export const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 export const MAX_FILES_PER_BATCH = 10;
+/** Limites d'un envoi (par défaut : MAX_FILES_PER_BATCH fichiers, MAX_BATCH_BYTES au total, MAX_FILE_BYTES par fichier). */
+export type BatchLimits = { maxFiles?: number; maxBytes?: number; maxFileBytes?: number };
+
+/**
+ * Contrôle commun d'un envoi de fichiers, côté serveur (checkUploadBatch, src/lib/uploads.ts) et côté navigateur (QUA-19) :
+ * nombre de fichiers, taille de chacun, volume total ; renvoie le premier message d'erreur, ou null.
+ */
+export function fileBatchError(files: readonly { name: string; size: number }[], limits: BatchLimits = {}): string | null {
+  const maxFiles = limits.maxFiles ?? MAX_FILES_PER_BATCH;
+  const maxBytes = limits.maxBytes ?? MAX_BATCH_BYTES;
+  const maxFileBytes = limits.maxFileBytes ?? MAX_FILE_BYTES;
+  const big = files.find((f) => f.size > maxFileBytes);
+  if (big) return `« ${big.name} » dépasse ${maxFileBytes / 1024 / 1024} Mo.`;
+  if (files.length > maxFiles) return `${maxFiles} fichiers au maximum par envoi.`;
+  if (files.reduce((s, f) => s + f.size, 0) > maxBytes) return `Ces fichiers dépassent ${maxBytes / 1024 / 1024} Mo au total : envoyez-les en plusieurs fois.`;
+  return null;
+}
+
 export const ATTACH_ACCEPT = 'image/*,application/pdf,.doc,.docx,.xls,.xlsx,.pptx,.txt,.csv';
 
 export const fmtSize = (n: number) =>

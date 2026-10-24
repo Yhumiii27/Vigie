@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { connection } from 'next/server';
 import { getDb, getDbEngine } from '@/db';
+import { log } from '@/lib/log';
 
 // Route de santé (PRD-11) : sonde du conteneur (HEALTHCHECK du Dockerfile), du reverse proxy ou de la supervision.
 // Ouverte sans session et depuis localhost (src/proxy.ts). 200 si la base répond, 503 sinon ; aucun détail interne.
@@ -26,7 +27,7 @@ export async function GET() {
     const engine = await Promise.race([check, timeout]);
     return json({ statut: 'ok', base: engine, dureeMs: Date.now() - started }, 200);
   } catch (err) {
-    console.error('[vigie] Route de santé : base indisponible :', err instanceof Error ? err.message : err);
+    log.error('health.database', 'Route de santé : base indisponible', { error: err });
     return json({ statut: 'erreur', base: 'indisponible' }, 503);
   } finally {
     clearTimeout(timer);

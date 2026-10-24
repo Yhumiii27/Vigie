@@ -378,6 +378,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
     knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,
     injury: e.injury, lostDays: e.lostDays, cpamDeclaredOn: e.cpamDeclaredOn, lesionNature: e.lesionNature, lesionSite: e.lesionSite, careGiven: e.careGiven, reservesOn: e.reservesOn,
     controlId: e.controlId, riskId: e.riskId, documentId: e.documentId, preventionPlanId: e.preventionPlanId, permitId: e.permitId, zoneId: e.zoneId,
+    version: detail.version,
     commute: e.commute, ncDisposition: e.ncDisposition, ncQuantity: e.ncQuantity, ncCostKeur: e.ncCostKeur, ncDispositionNote: e.ncDispositionNote,
     mpTable: e.mpTable, mpDisease: e.mpDisease, mpCertificateOn: e.mpCertificateOn, mpInformedOn: e.mpInformedOn,
     mpQuestionnaireReceivedOn: e.mpQuestionnaireReceivedOn, mpQuestionnaireReturnedOn: e.mpQuestionnaireReturnedOn,

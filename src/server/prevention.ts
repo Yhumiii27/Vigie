@@ -12,12 +12,12 @@ import {
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
-import { MAX_BATCH_BYTES } from '@/lib/attachments';
 import { requireInSite, requireManager } from '@/lib/guard';
-import { checkUpload, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
+import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
 import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
+import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
 
 type Result = { error?: string };
 
@@ -258,12 +258,19 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
     const status = planStatus({ ...values, ...signatures, status: existing.status }, now);
     const details = diffFields(existing, values, PLAN_LABELS, fmtValue);
     const unsigned = changed && !!(existing.signedEuOn || existing.signedEeOn);
-    await db.transaction(async (tx) => {
+    const fresh = await db.transaction(async (tx) => {
+      // QUA-12 : plan modifié (ou signé) depuis l'ouverture du formulaire : rien n'est écrasé.
+      if (await staleEditError(tx, 'prevention_plan', existing.id, fd.get(VERSION_FIELD))) return false;
       await tx.update(t.preventionPlans).set({ ...values, ...signatures, status }).where(eq(t.preventionPlans.id, existing.id));
       if (details.length) {
         await logChange(tx, { entityType: 'prevention_plan', entityId: existing.id, action: 'update', summary: unsigned ? 'Plan modifié, signatures effacées' : 'Plan modifié', details, reason });
       }
+      return true;
     });
+    if (!fresh) {
+      revalidatePath('/', 'layout');
+      return { error: STALE_EDIT };
+    }
     return done(existing.id);
   }
 
@@ -382,7 +389,8 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   const files = f.files('file');
   const now = today();
   if (signedOn && signedOn > now) f.fail('signedEeOn', 'La date de signature ne peut pas être future.');
-  files.forEach((file) => { const err = checkUpload(file); if (err) f.fail('file', err); });
+  const fileError = await checkUploadBatch(files, session.user.id);
+  if (fileError) f.fail('file', fileError);
   if (!f.ok) return f.state();
 
   const { db, plan } = await loadPlan(id);
@@ -510,9 +518,8 @@ export async function addPlanAttachments(_prev: FormState, fd: FormData): Promis
   const id = f.str('id', { required: true });
   const files = f.files('files');
   if (!files.length) f.fail('files', 'Choisissez au moins un fichier.');
-  if (files.length > MAX_PLAN_FILES) f.fail('files', `${MAX_PLAN_FILES} fichiers au maximum par envoi.`);
-  else if (files.reduce((s, x) => s + x.size, 0) > MAX_BATCH_BYTES) f.fail('files', `L'envoi dépasse ${MAX_BATCH_BYTES / 1024 / 1024} Mo : ajoutez les fichiers en plusieurs fois.`);
-  files.forEach((file) => { const err = checkUpload(file); if (err) f.fail('files', err); });
+  const fileError = await checkUploadBatch(files, session.user.id, { maxFiles: MAX_PLAN_FILES });
+  if (fileError) f.fail('files', fileError);
   if (!f.ok) return f.state();
   const { plan } = await loadPlan(id);
   const blocked = await editablePlanError(plan);

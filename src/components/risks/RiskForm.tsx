@@ -37,7 +37,7 @@ function LiveCotation({ label, g, p, hint }: { label: string; g: number; p: numb
 }
 
 /** Valeurs initiales du formulaire (une RiskView convient : ses autres champs, dont residualReviewedOn, sont ignorés). */
-export type RiskFormDefaults = Partial<Pick<RiskView, 'id' | 'unitId' | 'hazard' | 'situation' | 'gravity' | 'probability' | 'existingMeasures' | 'residualGravity' | 'residualProbability'>>;
+export type RiskFormDefaults = Partial<Pick<RiskView, 'id' | 'unitId' | 'hazard' | 'situation' | 'gravity' | 'probability' | 'existingMeasures' | 'residualGravity' | 'residualProbability' | 'version'>>;
 
 /**
  * Formulaire d'ajout / de modification d'un risque, avec cotation brute et résiduelle calculées en direct.
@@ -58,7 +58,7 @@ export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCance
   const unitOptions = units.map((u) => [u.id, sites.size > 1 ? `${u.label} · ${u.site}` : u.label] as const);
   const editing = defaults.id != null;
   return (
-    <ActionForm action={saveRisk} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : 'Ajouter le risque'} hidden={{ id: defaults.id }}>
+    <ActionForm action={saveRisk} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : 'Ajouter le risque'} hidden={{ id: defaults.id, version: defaults.version }}>
       <Field name="unitId" label="Unité de travail">
         <Select name="unitId" options={unitOptions} defaultValue={defaults.unitId} />
       </Field>

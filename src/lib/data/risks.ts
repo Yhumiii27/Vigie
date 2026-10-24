@@ -19,6 +19,8 @@ import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSi
 import { loadChangeLog, loadChangeLogs } from './changelog';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
+import { fileSlug as slug, toCsv } from '@/lib/csv';
+import { entityVersions } from '@/server/versions';
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
 
@@ -96,6 +98,8 @@ export type RiskView = {
   history: ChangeEntry[];
   /** Justificatifs du risque (DUE-09, pièces jointes 'risk'). */
   files: AttachmentItem[];
+  /** Version de la fiche (QUA-12), pour qui la modifie. */
+  version?: string;
 };
 
 export type WorkUnitView = {
@@ -377,15 +381,17 @@ export async function loadRisks() {
     ])
     : [new Map<string, ChangeEntry[]>(), new Map<string, ChangeEntry[]>()];
   // DUE-09 : DUERP signé par version et justificatifs des risques, lisibles par tous les rôles de l'écran (Salarié compris).
-  const [versionFiles, riskFiles] = await Promise.all([
+  const [versionFiles, riskFiles, riskVersions] = await Promise.all([
     loadEntityFiles('duerp_version', versionViews.map((v) => v.version)),
     loadEntityFiles('risk', [...base.risks, ...(edit ? base.archivedRisks : [])].map((r) => r.id)),
+    edit ? entityVersions(await getDb(), 'risk', base.risks.map((r) => r.id)) : new Map<string, string>(),
   ]);
   const view = (r: Omit<RiskView, 'history' | 'files'>): RiskView => ({
     ...r,
     ...(employee ? { events: [], actions: r.actions.map((a) => ({ ...a, pilot: '' })) } : {}),
     history: history.get(String(r.id)) ?? [],
     files: riskFiles.get(String(r.id)) ?? [],
+    ...(edit ? { version: riskVersions.get(String(r.id)) } : {}),
   });
   const archived = versionViews.filter((v) => !v.current);
   const since = archived.length ? Math.min(...archived.map((v) => yearOf(v.updatedOn))) : null;
@@ -869,13 +875,6 @@ export type PreventionProgramData = Awaited<ReturnType<typeof loadPreventionProg
 
 const CSV_HEADERS = ['Unité', 'Danger', 'Situation dangereuse', 'G', 'P', 'Cotation brute', 'Niveau', 'Mesures existantes', 'G résiduelle', 'P résiduelle', 'Risque résiduel', 'Actions'];
 
-function csvCell(v: string | number) {
-  if (typeof v === 'number') return String(v);
-  // Neutralise les formules à l'ouverture dans un tableur (=, +, @, -x).
-  const s = /^[=+@\t\r]|^-(?=\S)/.test(v) ? `'${v}` : v;
-  return /[";\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 /**
  * CSV « tableur français » : UTF-8 avec BOM, séparateur « ; », fins de ligne CRLF.
  * Les libellés d'unité ne sont uniques que par site : sur plusieurs sites, la colonne Unité porte aussi le site.
@@ -889,13 +888,11 @@ export function risksCsv(rows: RiskRecord[]) {
       r.residualGravity, r.residualProbability, r.residualGravity * r.residualProbability, r.actions.join(', '),
     ];
   })];
-  return `﻿${lines.map((l) => l.map(csvCell).join(';')).join('\r\n')}\r\n`;
+  return toCsv(lines);
 }
 
-/** Fragment de nom de fichier sans accents ni espaces. */
-export function fileSlug(s: string) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9.]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'duerp';
-}
+/** Fragment de nom de fichier des exports du DUERP (points gardés : numéros de version). */
+export const fileSlug = (s: string) => slug(s, 'duerp', { dots: true });
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 

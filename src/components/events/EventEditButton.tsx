@@ -23,6 +23,8 @@ export type EditableEvent = {
   controlId: number | null; riskId: number | null; documentId: string | null; preventionPlanId: string | null; permitId: string | null;
   /** Zone de la carte du site (EVT-19). */
   zoneId?: number | null;
+  /** Version de la fiche à son ouverture (QUA-12) : une fiche modifiée entre-temps n'est pas écrasée. */
+  version?: string;
   ncDisposition?: string | null; ncQuantity?: number | null; ncCostKeur?: number | null; ncDispositionNote?: string | null;
 } & AccidentValues & MpValues;
 
@@ -145,7 +147,7 @@ export function EventFields(props: FieldsProps) {
       : TYPE_OPTIONS.filter(([k]) => (create && health) || !(HEALTH_EVENT_TYPES as readonly string[]).includes(k));
 
   return (
-    <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id } : undefined}
+    <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id, version: props.event.version } : undefined}
       submitLabel={create ? 'Créer l’événement' : 'Enregistrer'} submitIcon={create ? 'ph-plus' : undefined}>
       <FormRow cols={3}>
         <Field name="type" label="Type" hint={typeOptions.length === 1 ? "Requalification par l'animateur QHSE ou la direction." : undefined}>

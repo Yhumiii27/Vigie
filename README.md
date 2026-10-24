@@ -39,7 +39,7 @@ TEST_DATABASE_URL=postgres://vigie@127.0.0.1:5432/postgres npm test   # intégra
 npm run db:check    # migrations publiées inchangées, schéma = migrations, application à une base vide (public et schéma vigie du serveur)
 ```
 
-`VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e` contrôle la charge des pages du Salarié contre `npm run start:demo`. Intégration continue : `.github/workflows/ci.yml` (Node de `.nvmrc`). Une migration publiée ne se modifie jamais : voir `CLAUDE.md`.
+`VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e` contrôle la charge des pages du Salarié contre `npm run start:demo`. Parcours dans le navigateur (Playwright, Chromium) : `VIGIE_DEMO=1 npm run build && npm run test:pw` (serveur de démonstration lancé sur des dossiers jetables, ou `VIGIE_E2E_URL` ; navigateur : `npx playwright install chromium`). Intégration continue : `.github/workflows/ci.yml` (Node de `.nvmrc`). Une migration publiée ne se modifie jamais : voir `CLAUDE.md`.
 
 ## Application Mac
 

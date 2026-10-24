@@ -14,6 +14,7 @@ import { runWeeklyReminder, reminderClock } from '@/lib/action-reminder-job';
 import type { VigieConfig } from '@/lib/env';
 import { createTransport } from '@/lib/mail/transport';
 import type { Db } from './types';
+import { log } from '../lib/log';
 
 /** Intervalle des passages du planificateur. */
 export const SCHEDULER_INTERVAL_MS = 10 * 60_000;
@@ -64,7 +65,7 @@ export function startScheduler(db: Db, tasks: readonly ScheduledTask[], interval
         try {
           await task.run(db, new Date());
         } catch (err) {
-          if (!stopped) console.error(`[vigie] Tâche planifiée « ${task.name} » en erreur (${err instanceof Error ? err.message : String(err)}).`);
+          if (!stopped) log.error('scheduler.task', `Tâche planifiée « ${task.name} » en erreur`, { task: task.name, error: err });
         }
       }
     })().finally(() => { running = false; });

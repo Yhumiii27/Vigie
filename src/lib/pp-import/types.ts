@@ -44,6 +44,9 @@ type Option = readonly [value: string, label: string];
  */
 export type AiStatus = 'off' | 'ready' | 'no_credentials';
 
+/** Consommation de la lecture des scans (INT-06) : instance dans le mois civil, personne sur 24 h, et leurs plafonds. */
+export type AiUsageView = { monthCalls: number; monthTokens: number; monthlyTokens: number; personDay: number; dailyScans: number };
+
 /** Données sérialisables de l'écran d'import (référentiels des formulaires, modèles enregistrés). */
 export type ImportScreenData = {
   templates: TemplateView[];
@@ -58,6 +61,8 @@ export type ImportScreenData = {
   currentUserId: string;
   /** Lecture des scans par l'API Claude. */
   aiStatus: AiStatus;
+  /** Consommation et plafonds de la lecture des scans (INT-06), quand elle est prête. */
+  aiUsage: AiUsageView | null;
 };
 
 /** Réponse de la détection (étape 2). */

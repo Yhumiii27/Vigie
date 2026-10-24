@@ -23,6 +23,7 @@ import { decryptFileStream, encryptStream, fileIsEncrypted, fileKeys } from '../
 import { readTar, tarStream, type TarEntry } from './archive';
 import { DB_LAYOUT, SERVER_SCHEMA, migrationState, type Query } from './migrations';
 import type { DbEngine } from './types';
+import { log } from '../lib/log';
 
 export type BackupReason = 'manuelle' | 'avant-migration' | 'avant-restauration';
 
@@ -428,7 +429,7 @@ export async function backupBeforeMigrate(storage: StorageConfig, source: DbSour
   if (previous && (await exists(previous))) return previous;
   try {
     const { file } = await createBackup(storage, source, { reason: 'avant-migration', uploads: false });
-    console.log(`[vigie] Sauvegarde avant migration (${tags}) : ${file}`);
+    log.info('backup.before-migrate', `Sauvegarde avant migration (${tags})`, { file });
     doneBackups().set(key, file);
     return file;
   } catch (err) {

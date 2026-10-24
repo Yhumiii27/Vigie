@@ -75,6 +75,11 @@
       "when": 1792700083970,
       "sql": "bdef99c9694eaca0d1829fdbfa2a591ee82486d2fe6eac0c729c4f318665468f",
       "snapshot": "8e6bf984c976e73f2fd4cd3c9b7156d20e599c959bb291025b1146114d4f088a"
+    },
+    "0015_ops_security": {
+      "when": 1792866527318,
+      "sql": "0bd4378b242359a9c7e5493052dc31722bf91480211bb08edb7b8d7bce9d4c20",
+      "snapshot": "e00b5cc71d9b3126964b0b7eb1e91a537073445727be5468a86e4415d51f68df"
     }
   }
 }

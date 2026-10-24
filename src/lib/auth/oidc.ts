@@ -2,6 +2,7 @@ import 'server-only';
 import * as client from 'openid-client';
 import { config } from '../config';
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from './paths';
+import { log } from '../log';
 
 // Client OpenID Connect de Microsoft Entra ID (openid-client v6) : Authorization Code + PKCE, state et nonce.
 // Émetteur https://login.microsoftonline.com/<tenant>/v2.0, ou ENTRA_ISSUER (cloud souverain, fournisseur de test
@@ -85,7 +86,7 @@ export async function endSessionUrl(loginHint?: string): Promise<URL | null> {
       ...(loginHint ? { logout_hint: loginHint } : {}),
     });
   } catch (err) {
-    console.error('[vigie] Déconnexion Microsoft indisponible :', err instanceof Error ? err.message : err);
+    log.error('auth.logout', 'Déconnexion Microsoft indisponible', { error: err });
     return null;
   }
 }
