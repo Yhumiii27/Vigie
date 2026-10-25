@@ -25,6 +25,7 @@ import { coactivityOriginHref } from '../origin-links';
 import { actionView, loadActions, loadAllActions, loadPeople, type ActionRow } from '../queries';
 import { getSession, inPerimeter, inSite, siteFilter, type Session } from '../session';
 import { today } from '@/lib/today';
+import { planItemState } from './audits';
 import { loadChangeLogs } from './changelog';
 import { loadQhseLeads } from './leads';
 import { loadFormOptions } from './options';
@@ -452,7 +453,9 @@ export const CLOSED_EVENT_KIND = 'Événement clos — action de suite ouverte';
  * Échéances du plan d'actions (§ 15.3), sur tout le périmètre (TDB-05), portant le site de l'action (null : site à
  * compléter) ; Reportée et Abandonnée n'en produisent aucune :
  * - « Action en retard » (isLate) et « Action » à échéance sous 15 jours (avancement ouvert ; actions portées par le
- *   programme d'audit exclues, comme avant) : responsable de l'action ;
+ *   programme d'audit exclues, comme avant) : responsable de l'action ; retard d'une action portée par un élément du
+ *   programme lui-même en retard « à confirmer » : signalé par cet élément seul (AUD-18, loadAuditSignals), qui ajoute le
+ *   responsable de l'action à ses destinataires ;
  * - « Vérification d'efficacité » à venir sous 15 jours et dépassée (Terminée) : responsable QHSE du site seulement
  *   (loadQhseLeads, ACT-14), pas le responsable de l'action, qui ne peut pas la faire ;
  * - « Actions à compléter » (champs obligatoires manquants, D8) : une échéance par site, au responsable QHSE du site, clé
@@ -467,10 +470,18 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const [actions, people, plan, leads, chain] = await Promise.all([
-    loadActions('perimeter'), loadPeople(), db.select({ actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems), loadQhseLeads(),
+    loadActions('perimeter'), loadPeople(),
+    db.select({
+      actionId: t.auditPlanItems.actionId, year: t.auditPlanItems.year, month: t.auditPlanItems.month, label: t.auditPlanItems.label,
+      detail: t.auditPlanItems.detail, plannedOn: t.auditPlanItems.plannedOn, done: t.auditPlanItems.done, doneOn: t.auditPlanItems.doneOn,
+      cancelledAt: t.auditPlanItems.cancelledAt, reviewId: t.auditPlanItems.reviewId,
+    }).from(t.auditPlanItems),
+    loadQhseLeads(),
     db.select({ id: t.actions.id, eventId: t.actions.eventId, followsActionId: t.actions.followsActionId }).from(t.actions),
   ]);
   const planActions = new Set(plan.map((p) => p.actionId).filter(Boolean));
+  // AUD-18 : actions portées par un élément du programme en retard « à confirmer » (ni annulé, ni rattaché à une revue).
+  const lateCarried = new Set(plan.filter((p) => p.actionId && p.reviewId == null && planItemState(p, now) === 'late').map((p) => p.actionId));
   const links = new Map(chain.map((r) => [r.id, r]));
   /** Événement de la première action de la chaîne des précédentes qui en porte un (au plus 20 maillons). */
   const ancestorEvent = (id: string | null): string | null => {
@@ -499,7 +510,7 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
     const pilot = { who: people.get(a.pilotId)?.name ?? '', href, ownerIds: [a.pilotId], siteId: a.siteId };
     const qhse = leads.forSite(a.siteId);
     const lead = { who: qhse.who, href, ownerIds: qhse.ownerIds, siteId: a.siteId };
-    if (isLate(a, now)) {
+    if (isLate(a, now) && !lateCarried.has(a.id)) {
       todo.push({ ...pilot, date: now, dueOn: a.dueOn, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${label} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });
     } else if (isOpenAvancement(a.status) && a.dueOn >= now && a.dueOn <= horizon && !planActions.has(a.id)) {
       todo.push({ ...pilot, date: a.dueOn, dueOn: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${label}` });

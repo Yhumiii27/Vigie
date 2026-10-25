@@ -384,7 +384,8 @@ export const actionCounters = pgTable('action_counters', {
 });
 
 // Notifications d'information (ACT-30, ACT-31 ; réutilisables pour TDB-06) : une ligne par destinataire ; lue au clic ou
-// par « Tout marquer comme lu ». Pas un enregistrement métier tracé (pas de logChange). Purge : TDB-10.
+// par « Tout marquer comme lu ». Pas un enregistrement métier tracé (pas de logChange). Purge (TDB-10,
+// src/db/maintenance.ts) : notification lue depuis plus de 365 jours, jamais une non lue.
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   personId: text('person_id').notNull().references(() => people.id),
@@ -402,7 +403,8 @@ export const notifications = pgTable('notifications', {
 }, (t) => [index('notifications_person_idx').on(t.personId, t.createdAt)]);
 
 // Journal d'envoi du rappel du mercredi par e-mail (ACT-33) : un envoi par personne et par semaine ISO, même après un
-// redémarrage ou avec plusieurs instances (clé primaire réclamée par insert … on conflict do nothing). Purge : TDB-10.
+// redémarrage ou avec plusieurs instances (clé primaire réclamée par insert … on conflict do nothing). Purge (TDB-10,
+// src/db/maintenance.ts) : lignes de plus de 365 jours (seule la semaine en cours est consultée).
 export const actionReminderSends = pgTable('action_reminder_sends', {
   personId: text('person_id').notNull().references(() => people.id),
   week: text('week').notNull(), // « 2026-W42 » (isoWeekKey)
@@ -1237,9 +1239,10 @@ export const accessLog = pgTable('access_log', {
   health: boolean('health').notNull().default(false),
 }, (t) => [index('access_log_entity_idx').on(t.entityType, t.entityId), index('access_log_person_idx').on(t.personId, t.at)]);
 
-// État « lu » des échéances calculées (clé stable todoKey) et des notifications de la cloche, par personne. Les échéances
-// ne sont pas stockées : seules les clés lues le sont (« Tout marquer comme lu » les ajoute) ; les clés qui ne
-// correspondent plus à rien restent (purge : TDB-10).
+// État « lu » des échéances calculées (clé stable todoKey) et du rappel du mercredi, par personne. Les échéances ne sont
+// pas stockées : seules les clés lues le sont (ouverture d'une échéance, « Tout marquer comme lu »). Purge (TDB-10,
+// purgeReadStates de src/db/maintenance.ts, maintenance horaire) : clé lue depuis plus de 365 jours, état lu d'un rappel
+// du mercredi de plus de 14 jours ; une échéance encore présente redevient alors non lue.
 export const notificationReads = pgTable('notification_reads', {
   personId: text('person_id').notNull().references(() => people.id),
   itemKey: text('item_key').notNull(),

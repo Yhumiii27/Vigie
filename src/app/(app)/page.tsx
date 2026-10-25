@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClickRow } from '@/components/ClickRow';
 import { PageHeader } from '@/components/PageHeader';
@@ -9,6 +10,9 @@ import { today } from '@/lib/today';
 import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, severityTone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { MAX_TODO, loadDashboard } from '@/lib/data/dashboard';
+
+// TDB-17 : titre d'onglet de la page.
+export const metadata: Metadata = { title: SCREENS.dashboard.title };
 
 export default async function DashboardPage() {
   await guard('dashboard');
@@ -116,10 +120,10 @@ export default async function DashboardPage() {
                     <div style={{ fontSize: 11, color: t.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(t.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
-                    <TodoLink item={{ key: t.key, href: t.href, elsewhere: t.elsewhere }} style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{t.title}</TodoLink>
+                    <TodoLink item={{ key: t.key, href: t.href, elsewhere: t.elsewhere, read: t.read }} markRead style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{t.title}</TodoLink>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-500)' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Dot color={TONE[t.tone].dot} size={6} />{t.kind}</span>
-                      <span>{t.who}{t.elsewhere && t.siteLabel ? ` · ${t.siteLabel}` : ''}</span>
+                      <span>{[t.who, t.siteLabel].filter(Boolean).join(' · ')}</span>
                     </div>
                   </div>
                 </div>
@@ -135,10 +139,10 @@ export default async function DashboardPage() {
             <CardHead title="Derniers signalements" aside={<Link href="/evenements" className="vg-link">Tout voir →</Link>} />
             <div style={{ overflowX: 'auto' }}>
               <table className="table" style={{ fontSize: 12.5, minWidth: 640 }}>
-                <thead><tr><th>Réf.</th><th>Date</th><th>Type</th><th>Intitulé</th><th>Lieu</th><th>Gravité</th><th>Étape</th><th>Pilote</th></tr></thead>
+                <thead><tr><th>Réf.</th><th>Date</th><th>Type</th><th>Intitulé</th>{!d.scoped && <th>Site</th>}<th>Lieu</th><th>Gravité</th><th>Étape</th><th>Pilote</th></tr></thead>
                 <tbody>
                   {d.latest.length === 0 && (
-                    <tr><td colSpan={8} className="vg-muted">Aucun signalement{d.scoped ? ' sur ce site' : ''}. <Link href={isDemo() ? '/apercu-mobile' : '/signaler'} className="vg-link">Nouveau signalement →</Link></td></tr>
+                    <tr><td colSpan={d.scoped ? 8 : 9} className="vg-muted">Aucun signalement{d.scoped ? ' sur ce site' : ''}. <Link href={isDemo() ? '/apercu-mobile' : '/signaler'} className="vg-link">Nouveau signalement →</Link></td></tr>
                   )}
                   {d.latest.map((e) => {
                     const href = `/evenements?sel=${e.id}`;
@@ -148,6 +152,8 @@ export default async function DashboardPage() {
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDayMonth(e.occurredOn)}</td>
                         <td><ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag></td>
                         <td>{e.title}</td>
+                        {/* TDB-15 : site du signalement en vue « Tous les sites ». */}
+                        {!d.scoped && <td style={{ whiteSpace: 'nowrap' }}>{e.siteLabel}</td>}
                         <td style={{ color: 'var(--color-neutral-400)' }}>{e.location}</td>
                         <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Dot color={TONE[severityTone(e.severity)].dot} />{SEVERITY[e.severity]}</span></td>
                         <td><span className="tag tag-neutral">{e.status}</span></td>
@@ -165,10 +171,16 @@ export default async function DashboardPage() {
               <div className="card-kicker">Veille réglementaire</div>
               <div className="card-title" style={{ fontSize: 15 }}>{d.featured.title}</div>
               <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)' }}>
-                {d.featured.lead} Applicable au <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtLong(d.featured.dueOn)}</strong>
-                {d.featured.daysLeft >= 0 ? `, dans ${d.featured.daysLeft} jours` : ''}
+                {d.featured.lead} {d.featured.prefix} <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{fmtLong(d.featured.dueOn)}</strong>
+                {d.featured.daysLeft > 0 ? `, dans ${d.featured.daysLeft} jour${d.featured.daysLeft > 1 ? 's' : ''}` : ''}
                 {d.featured.impact ? ` : ${d.featured.impact}` : '.'}
               </p>
+              {/* TDB-14 : une fois applicable, l'état de conformité évalué par le pilote. */}
+              {d.featured.state && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <span className="vg-muted">État de conformité :</span><ToneTag tone={d.featured.state.tone}>{d.featured.state.label}</ToneTag>
+                </span>
+              )}
               {d.featured.projects != null && (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-.02em', color: 'var(--color-accent-300)' }}>{d.featured.projects}</span>

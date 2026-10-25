@@ -1,11 +1,12 @@
 import 'server-only';
 import { cache } from 'react';
 import {
-  PERMIT_TYPES, SIGNAL_HORIZON_DAYS, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, permitDays, permitState, toParisLocal,
+  PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, permitDays, permitState, toParisLocal,
   type PermitType,
 } from '@/components/prevention/model';
 import { addDays, fmtDate } from '../dates';
 import { byUrgency, type TodoItem, type Tone } from '../domain';
+import { TODO_HORIZON_DAYS } from '../horizons';
 import { gapSummary, loadRows, plural } from './prevention-rows';
 
 // Échéances de la prévention et indicateur de la veille (R. 4512-6) — QUA-26 : extrait de src/lib/data/prevention.ts.
@@ -49,7 +50,7 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
   const rows = await loadRows('perimeter');
   const { now, nowMs, people, contractors, plans, permits, ruleOf } = rows;
   const { gaps } = gapSummary(rows);
-  const horizon = addDays(now, SIGNAL_HORIZON_DAYS);
+  const horizon = addDays(now, TODO_HORIZON_DAYS);
   const contractorName = (id: string | null) => (id ? contractors.find((c) => c.id === id)?.name ?? id : 'Intervention interne');
   const owner = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
   const todo: TodoItem[] = [];

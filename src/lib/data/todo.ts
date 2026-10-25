@@ -51,13 +51,15 @@ export type { VisibleTodo };
  * donnée de santé pour un rôle non habilité (SEC-06) ; pour un salarié, les siennes seulement.
  * Échéance d'un autre site : libellé court du site (siteLabel) ; sans lien si ce site ne peut pas être sélectionné
  * (site archivé hors « Tous les sites »), puisque l'écran cible, filtré sur le site sélectionné, ne la trouverait pas.
+ * Vue « Tous les sites » (TDB-15) : chaque échéance d'un site porte aussi son libellé court (siteLabel), lien inchangé.
  */
 export const loadVisibleTodo = cache(async (): Promise<VisibleTodo[]> => {
   const [{ role, user, siteOptions }, todo, siteId, sites] = await Promise.all([getSession(), loadTodo(), currentSiteId(), loadSiteDirectory()]);
   const selectable = new Set(siteOptions.map((s) => s.id));
   const labels = new Map(sites.map((s) => [s.id, shortSiteLabel(s.label)]));
   return visibleTodo(todo, { role, user, siteId }).map((x) => {
-    if (!x.elsewhere || !x.siteId) return x;
+    if (!x.siteId) return x;
+    if (!x.elsewhere) return siteId ? x : { ...x, siteLabel: labels.get(x.siteId) ?? x.siteId };
     const reachable = selectable.has(x.siteId) || selectable.has(ALL_SITES);
     return { ...x, siteLabel: labels.get(x.siteId) ?? x.siteId, href: reachable ? x.href : undefined };
   });

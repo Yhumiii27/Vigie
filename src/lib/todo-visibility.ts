@@ -13,7 +13,10 @@ export type VisibleTodo = Omit<TodoItem, 'key' | 'readHref'> & {
   source: ScreenKey;
   /** Élément d'un autre site que le site sélectionné (échéance de la personne sur un autre site de son périmètre). */
   elsewhere: boolean;
-  /** Libellé court du site, pour les échéances d'un autre site (renseigné par loadVisibleTodo). */
+  /**
+   * Libellé court du site (renseigné par loadVisibleTodo) : échéance d'un autre site que le site sélectionné, ou toute
+   * échéance d'un site en vue « Tous les sites » (TDB-15).
+   */
   siteLabel?: string;
 };
 

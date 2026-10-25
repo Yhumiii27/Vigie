@@ -30,6 +30,7 @@ import { reportPostHref } from '@/lib/auth/paths';
 import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
+import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
 import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
 
@@ -49,8 +50,9 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const typeKeys = EVENT_TYPE_KEYS.filter((k) => canSeeEventType(role, k));
   const types = typeKeys.filter((k) => askedTypes.includes(k));
   const type = types.length ? types.join(',') : undefined;
-  // ?origine=Fournisseurs : origine de la non-conformité (barres « Non-conformités par origine » du tableau de bord).
-  const origin = NC_ORIGINS.find((o) => o === sp.origine);
+  // ?origine=Fournisseurs : origine de la non-conformité (barres « Non-conformités par origine » du tableau de bord) ;
+  // ?origine=aucune : origine non renseignée (TDB-13).
+  const origin = sp.origine === NC_ORIGIN_NONE ? NC_ORIGIN_NONE : NC_ORIGINS.find((o) => o === sp.origine);
   const q = typeof sp.q === 'string' ? sp.q.trim() : '';
   const tab: Tab = sp.etat === 'tous' ? 'tous' : sp.etat === 'classes' ? 'classes' : 'ouverts';
   const now = today();
@@ -64,7 +66,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const health = canSeeHealth(role);
   const urlFilters = parseEventFilters(sp, { health, pilots: new Set(people.keys()) });
   const needle = q.toLocaleLowerCase('fr');
-  const matches = (e: (typeof events)[number]) => (!origin || e.ncOrigin === origin) && matchesEventFilters(e, urlFilters, now)
+  const matches = (e: (typeof events)[number]) => (!origin || (origin === NC_ORIGIN_NONE ? e.type === 'NC' && ncOriginOf(e) === null : e.ncOrigin === origin)) && matchesEventFilters(e, urlFilters, now)
     && (!needle || [e.id, e.title, e.location, e.equipment, e.keystoneProject, e.customer, e.customerRef].some((v) => v?.toLocaleLowerCase('fr').includes(needle)));
   const found = events.filter(matches);
   const inTab = { ouverts: found.filter(isOpen), tous: found.filter((e) => !e.dismissedAt), classes: found.filter((e) => !!e.dismissedAt) };
@@ -145,7 +147,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {origin && (
               <Link href={hrefWith('/evenements', params, { origine: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
-                Origine : {origin}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
+                Origine : {origin === NC_ORIGIN_NONE ? 'non renseignée' : origin}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
               </Link>
             )}
             {filters.map((f) => (

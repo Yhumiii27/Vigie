@@ -17,6 +17,7 @@ import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, se
 import { actionView, isOpen, lcfirst, loadActions, loadEvents, loadPeople, loadSiteRows, type ActionRow } from '../queries';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
+import { loadQhseLeads } from './leads';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
 import { fileSlug, toCsv } from '@/lib/csv';
@@ -510,11 +511,15 @@ const bySiteYear = (rows: EntryView[], siteOrder: string[]) => {
  * - BSD non finalisés : bordereau brouillon, émis ou collecté plus de 30 j après l'enlèvement (traitement final non attesté) ;
  * - mentions incomplètes (arrêté du 31 mai 2021, à partir de 2022) : SIRET, adresse, récépissé, qualification… manquants,
  *   dans « À traiter » sans compter dans le badge (count 0) ;
- * - relevés de consommation : mois échu sans aucun relevé, attendu avant le 15 du mois suivant.
+ * - relevés de consommation : mois échu sans aucun relevé, attendu avant le 15 du mois suivant, au responsable QHSE du site
+ *   (DOC-19, loadQhseLeads ; poste vacant : animateurs QHSE) ; un site actif sans aucun relevé est suivi pour le dernier
+ *   mois échu (« aucun relevé saisi »).
  * Tous les sites du périmètre (TDB-05, siteId du site) ; visibilité selon le rôle : visibleTodo.
  */
 export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [{ now, sites, siteLabel, entries, consumptions, people }, requirements] = await Promise.all([loadEnvironmentBase('perimeter'), loadWasteRequirements()]);
+  const [{ now, sites, siteLabel, entries, consumptions, people }, requirements, leads] = await Promise.all([
+    loadEnvironmentBase('perimeter'), loadWasteRequirements(), loadQhseLeads(),
+  ]);
   const currentYear = +now.slice(0, 4);
   const pilotId = (requirements.find((r) => r.linkedTo === 'waste_bsd') ?? requirements[0])?.pilotId ?? null;
   const owner = { who: pilotId ? people.get(pilotId)?.name ?? '' : '', ownerIds: pilotId ? [pilotId] : undefined };
@@ -551,20 +556,24 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     });
   }
 
-  // Relevés : sur les 12 derniers mois échus, à partir du premier relevé du site (un site sans relevé n'est pas suivi).
+  // Relevés : sur les 12 derniers mois échus, à partir du premier relevé du site ; un site actif sans aucun relevé est suivi
+  // pour le dernier mois échu seulement (DOC-19 : il n'était jamais signalé). Responsable QHSE du site (DOC-19).
   const currentMonth = `${now.slice(0, 7)}-01`;
   const recorded = new Set(consumptions.map((c) => `${c.siteId}|${c.month}`));
   for (const s of sites) {
-    const first = consumptions.filter((c) => c.siteId === s.id).map((c) => c.month).sort()[0];
-    if (!first) continue;
+    const first = consumptions.filter((c) => c.siteId === s.id).map((c) => c.month).sort()[0] ?? shiftMonth(currentMonth, -1);
     const missing = Array.from({ length: 12 }, (_, i) => shiftMonth(currentMonth, i - 12))
       .filter((m) => m >= first && !recorded.has(`${s.id}|${m}`));
     if (!missing.length) continue;
+    const none = !consumptions.some((c) => c.siteId === s.id);
     const due = `${shiftMonth(missing[0], 1).slice(0, 8)}${String(READING_DUE_DAY).padStart(2, '0')}`;
     const site = s.label.split(' — ')[0];
+    const lead = leads.forSite(s.id);
     todo.push({
-      date: due, dueOn: due, kind: 'Consommations', tone: due < now ? 'danger' : 'warn', overdue: due < now, count: missing.length, who: '', siteId: s.id,
-      title: missing.length === 1 ? `Relevés de ${monthLong(missing[0])} · ${site}` : `Relevés manquants (${missing.length} mois depuis ${monthLong(missing[0])}) · ${site}`,
+      date: due, dueOn: due, kind: 'Consommations', tone: due < now ? 'danger' : 'warn', overdue: due < now, count: missing.length,
+      who: lead.who, ownerIds: lead.ownerIds, siteId: s.id,
+      title: none ? `Aucun relevé de consommation saisi · relevés de ${monthLong(missing[0])} · ${site}`
+        : missing.length === 1 ? `Relevés de ${monthLong(missing[0])} · ${site}` : `Relevés manquants (${missing.length} mois depuis ${monthLong(missing[0])}) · ${site}`,
       href: '/environnement?onglet=consommations',
     });
   }

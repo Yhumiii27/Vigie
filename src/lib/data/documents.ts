@@ -8,7 +8,7 @@ import {
 } from '@/components/documents/meta';
 import { addDays, addMonths, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
-import { canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
+import { TODO_HORIZON_DAYS, canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
 import { actionView, lcfirst, loadActionRows, loadActions, loadPeople, loadSiteRows, type ActionRow, type Person } from '../queries';
 import { actionLabel } from '../action-rules';
 import { loadQhseLeads } from './leads';
@@ -18,8 +18,6 @@ import { loadLinkedEvents, type LinkedEvent } from './linked-events';
 
 // ─── Documents maîtrisés (ISO 9001 §7.5) ────────────────────────────────────
 // Le statut d'un document, sa version en vigueur et sa prochaine revue sont déduits des versions.
-
-export const DOC_SOON_DAYS = 15;
 
 export type Retirement = { on: string; by: string; reason: string | null };
 
@@ -179,7 +177,7 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
       nextReviewOn,
       reviewDays,
       overdue: reviewDays != null && reviewDays < 0,
-      dueSoon: reviewDays != null && reviewDays >= 0 && reviewDays <= DOC_SOON_DAYS,
+      dueSoon: reviewDays != null && reviewDays >= 0 && reviewDays <= TODO_HORIZON_DAYS,
       reviewActions: docActions(d.id).filter((a) => a.open),
       closedActions: docActions(d.id).filter((a) => !a.open),
       events: events?.get(d.id) ?? [],
@@ -278,7 +276,7 @@ export async function loadDocuments({ readOnly = false }: { readOnly?: boolean }
     { key: 'vigueur', label: 'Documents en vigueur', value: inForce.length, sub: `sur ${rows.length}`, subTone: 'neutral', note: 'Dernière version approuvée et diffusée' },
     { key: 'revue', label: 'En revue · à approuver', value: inReview.length, sub: inReview.length ? 'en attente' : '', subTone: 'warn', note: 'Approbation : animateur QHSE ou direction' },
     {
-      key: 'retard', label: 'Révisions en retard', value: overdue.length, sub: soon.length ? `+ ${soon.length} sous ${DOC_SOON_DAYS} j` : '', subTone: 'warn',
+      key: 'retard', label: 'Révisions en retard', value: overdue.length, sub: soon.length ? `+ ${soon.length} sous ${TODO_HORIZON_DAYS} j` : '', subTone: 'warn',
       note: oldest ? `Plus ancienne : ${oldest.id} · +${-(oldest.reviewDays ?? 0)} j` : 'Aucune revue périodique dépassée',
     },
     { key: 'brouillon', label: 'Brouillons', value: drafts.length, sub: '', subTone: 'neutral', note: 'Créations et révisions en rédaction' },
@@ -295,8 +293,18 @@ export async function loadDocuments({ readOnly = false }: { readOnly?: boolean }
 type KpiTile = { key: 'vigueur' | 'revue' | 'retard' | 'brouillon'; label: string; value: number; sub: string; subTone: Tone; note: string };
 
 /**
+ * Suite déjà donnée à une revue périodique (DOC-14) : révision en cours (« · révision B en revue »), sinon action de revue
+ * ouverte (« · action A-12 en cours ») ; vide sinon. L'échéance reste due jusqu'à l'approbation de la révision.
+ */
+const reviewProgress = (r: Pick<DocumentRow, 'current' | 'pending' | 'reviewActions'>) =>
+  r.current && r.pending ? ` · révision ${r.pending.version} ${r.pending.status === 'en_revue' ? 'en revue' : 'en brouillon'}`
+    : r.reviewActions.length ? ` · action ${r.reviewActions[0].id} en cours` : '';
+
+/**
  * Échéances documentaires, sur tous les sites du périmètre (TDB-05, siteId du document ; null = tous les sites) :
- * - revues périodiques dépassées ou à moins de 15 j (propriétaire du document) ;
+ * - revues périodiques dépassées ou à moins de 15 j (propriétaire du document), y compris pendant une révision en cours
+ *   (DOC-14 : la version en vigueur reste celle à revoir tant que la révision n'est pas approuvée ; l'intitulé indique la
+ *   révision, sinon l'action de revue ouverte) ;
  * - versions en revue à approuver (approbateurs : animateur QHSE et direction).
  * Rôle en consultation seule : visibleTodo ne lui laisse que ses propres échéances (propriétaire du document).
  */
@@ -305,18 +313,23 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
   const href = (id: string) => `/documents?doc=${encodeURIComponent(id)}`;
   const reviews: TodoItem[] = rows
     .filter((r) => r.nextReviewOn && (r.overdue || r.dueSoon))
-    .map((r) => ({
-      date: r.overdue ? now : r.nextReviewOn!,
-      dueOn: r.nextReviewOn!,
-      kind: 'Revue documentaire',
-      tone: r.overdue ? 'danger' : 'warn',
-      overdue: r.overdue,
-      title: r.overdue ? `${r.id} · ${r.title} — revue dépassée depuis le ${fmtDayMonth(r.nextReviewOn!)}` : `${r.id} · revue périodique « ${r.title} »`,
-      who: r.owner,
-      ownerIds: [r.ownerId],
-      siteId: r.siteId,
-      href: href(r.id),
-    } satisfies TodoItem));
+    .map((r) => {
+      const title = r.overdue ? `${r.id} · ${r.title} — revue dépassée depuis le ${fmtDayMonth(r.nextReviewOn!)}` : `${r.id} · revue périodique « ${r.title} »`;
+      return {
+        date: r.overdue ? now : r.nextReviewOn!,
+        dueOn: r.nextReviewOn!,
+        kind: 'Revue documentaire',
+        tone: r.overdue ? 'danger' : 'warn',
+        overdue: r.overdue,
+        title: `${title}${reviewProgress(r)}`,
+        // Clé sans la suite donnée (DOC-14) : l'échéance ne redevient pas non lue quand la révision avance.
+        key: ['Revue documentaire', href(r.id), title].join('|'),
+        who: r.owner,
+        ownerIds: [r.ownerId],
+        siteId: r.siteId,
+        href: href(r.id),
+      } satisfies TodoItem;
+    });
   // Approbateurs : animateurs QHSE et direction (dernier rôle connu).
   const approvers = (await loadQhseLeads()).approvers.map((p) => p.id);
   const approvals: TodoItem[] = canApprove(role)

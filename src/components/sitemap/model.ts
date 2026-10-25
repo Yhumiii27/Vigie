@@ -4,8 +4,6 @@ import type { CoPermit, Geometry, Pt, Team } from './coactivity';
 
 export type { CoPermit, Geometry, Pt, Team };
 
-/** Horizon de la liste « À positionner » et des échéances de coactivité. */
-export const COACTIVITY_HORIZON_DAYS = 15;
 export const DEFAULT_PROXIMITY_METERS = 15;
 /** Entité des pièces jointes « plan du site ». */
 export const SITE_MAP_ATTACHMENT = 'site_map';
