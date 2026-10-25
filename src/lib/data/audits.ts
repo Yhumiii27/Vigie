@@ -4,6 +4,8 @@ import { asc, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { REVIEW_TRACK, isReviewPlanItem } from '@/components/audits/shared';
 import type { ChangeEntry } from '@/components/ChangeLog';
+import { isLate } from '../action-rules';
+import { hasLeft } from '../people';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, monthName, monthOf, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
@@ -275,7 +277,7 @@ const readAudits = cache(async (withLogs: boolean) => {
     };
   });
 
-  return { now, people, certs: certViews, plan, allPlan: allViews, findings: findingViews, active, auditGroups, cancelledFindings };
+  return { now, people, actionsById, certs: certViews, plan, allPlan: allViews, findings: findingViews, active, auditGroups, cancelledFindings };
 });
 
 /** Lignes du programme dans l'ordre de leur première apparition. */
@@ -346,11 +348,12 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /**
- * Échéances du domaine : programme en retard (à confirmer) ou à venir sous 15 jours, constats sans action,
+ * Échéances du domaine : programme en retard (à confirmer), à venir sous 15 jours ou prévu au mois sans date (AUD-18),
+ * constats sans action,
  * certificats expirés, proches de la fin de validité ou sans audit de suivi programmé. Communs à tous les sites (siteId null).
  */
 export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [{ now, people, certs, plan, active }, leads] = await Promise.all([readAudits(false), loadQhseLeads()]);
+  const [{ now, people, actionsById, certs, plan, active }, leads] = await Promise.all([readAudits(false), loadQhseLeads()]);
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
   const planHref = (p: { id: number; year: number }) => `/audits?annee=${p.year}&element=${p.id}`;
@@ -365,9 +368,25 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
       // sa réalisation et son annulation suivent la revue. Une échéance de revue saisie au seul programme reste « à confirmer ».
       if (p.locked) return;
       const when = p.plannedOn ? `prévu le ${fmtDayMonth(p.plannedOn)}` : `prévu en ${monthName(p.month)} ${p.year}`;
-      todo.push({ date: now, dueOn: p.plannedOn ?? `${p.year}-${String(p.month).padStart(2, '0')}-01`, kind: p.kind, tone: 'warn', title: `${p.detail ?? p.label} — ${when}, à confirmer`, overdue: true, ...who });
+      // AUD-18 : action porteuse en retard — son retard n'est plus une échéance distincte (loadActionSignals) : son
+      // responsable, encore dans l'effectif, reçoit l'échéance de l'élément.
+      const carrier = p.actionId ? actionsById.get(p.actionId) : undefined;
+      const pilot = carrier && isLate(carrier, now) ? people.get(carrier.pilotId) : undefined;
+      const extra = pilot && !hasLeft(pilot, now) && pilot.id !== p.ownerId ? pilot : undefined;
+      const owners = extra
+        ? { who: [p.owner, extra.name].filter(Boolean).join(' · '), ownerIds: [...(p.ownerId ? [p.ownerId] : []), extra.id] }
+        : { who: who.who, ownerIds: who.ownerIds };
+      todo.push({ date: now, dueOn: planStart(p), kind: p.kind, tone: 'warn', title: `${p.detail ?? p.label} — ${when}, à confirmer`, overdue: true, ...who, ...owners });
     } else if (!p.done && p.plannedOn && p.plannedOn >= now && p.plannedOn <= horizon) {
       todo.push({ date: p.plannedOn, dueOn: p.plannedOn, kind: p.kind, tone: 'neutral', title: p.detail ?? p.label, ...who });
+    } else if (!p.done && !p.plannedOn && planStart(p) <= horizon) {
+      // AUD-18 : élément prévu au mois, sans date : échéance « date à fixer » dès que son mois entre dans l'horizon (datée
+      // du jour une fois le mois commencé ; clé portant le 1er du mois), jusqu'à la fin du mois (puis « à confirmer »).
+      const start = planStart(p);
+      todo.push({
+        date: start < now ? now : start, dueOn: start, kind: p.kind, tone: 'warn',
+        title: `${p.detail ?? p.label} — prévu en ${monthName(p.month)} ${p.year}, date à fixer`, ...who,
+      });
     }
   });
 

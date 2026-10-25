@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarkAllReadButton } from '@/components/MarkAllReadButton';
 import { PageHeader } from '@/components/PageHeader';
@@ -8,11 +9,14 @@ import { ALL_SITES, CONTROL_HORIZON_DAYS, SCREENS, TODO_HORIZON_DAYS, TONE, isEm
 import { guard } from '@/lib/guard';
 import { loadTodoPage } from '@/lib/data/dashboard';
 
+// TDB-17 : titre d'onglet de la page.
+export const metadata: Metadata = { title: SCREENS.todo.title };
+
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /**
- * Liste complète des échéances visibles (dépassements, horizon 15 jours, contrôles à 30 jours), filtrable : site
+ * Liste complète des échéances visibles (dépassements, horizon 15 jours, contrôles et certificats à 30 jours), filtrable : site
  * sélectionné, plus les échéances de la personne sur les autres sites de son périmètre (TDB-05), qui ouvrent leur site.
  */
 export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) {
@@ -30,7 +34,7 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
   return (
     <>
       <PageHeader title={SCREENS.todo.title}
-        sub={`${plural(n, 'échéance')} · ${d.counts.overdue} en retard${d.counts.elsewhere ? ` · dont ${d.counts.elsewhere} sur d'autres sites` : ''} · horizon ${TODO_HORIZON_DAYS} jours (contrôles ${CONTROL_HORIZON_DAYS} jours)`} />
+        sub={`${plural(n, 'échéance')} · ${d.counts.overdue} en retard${d.counts.elsewhere ? ` · dont ${d.counts.elsewhere} sur d'autres sites` : ''} · horizon ${TODO_HORIZON_DAYS} jours (contrôles et certificats ${CONTROL_HORIZON_DAYS} jours)`} />
       <div className="vg-page" style={{ gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {!employee && (
@@ -68,7 +72,7 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
               {rows.map((t) => {
                 const late = !!t.overdue;
                 return (
-                  <TodoLink key={t.key} item={{ key: t.key, href: t.href, elsewhere: t.elsewhere, read: t.read }} className={`vg-row${t.href ? '' : ' vg-row-static'}`}
+                  <TodoLink key={t.key} item={{ key: t.key, href: t.href, elsewhere: t.elsewhere, read: t.read }} markRead className={`vg-row${t.href ? '' : ' vg-row-static'}`}
                     style={{ gridTemplateColumns: '36px 1fr', gap: 12, alignItems: 'center', padding: '7px 10px' }}>
                     <span style={{ textAlign: 'center', lineHeight: 1.1, color: late ? TONE.danger.dot : undefined }}>
                       <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</span>
@@ -76,10 +80,10 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
                     </span>
                     <span style={{ display: 'grid', gap: 3, minWidth: 0 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: t.read ? 400 : 500 }}>
-                        {!t.read && <span className="vg-unread" title="Non lue" />}{t.title}
+                        {!t.read && <span className="vg-unread"><span className="vg-sr-only">Non lue</span></span>}{t.title}
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', flexWrap: 'wrap' }}>
-                        <Dot color={TONE[t.tone].dot} size={6} />{[t.kind, t.who, SCREENS[t.screen].label, t.elsewhere ? t.siteLabel : ''].filter(Boolean).join(' · ')}
+                        <Dot color={TONE[t.tone].dot} size={6} />{[t.kind, t.who, SCREENS[t.screen].label, t.siteLabel].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                   </TodoLink>

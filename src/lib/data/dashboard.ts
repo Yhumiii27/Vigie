@@ -3,7 +3,9 @@ import { getDb, schema as t } from '@/db';
 import { addDays, daysBetween, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import { isLate } from '../action-rules';
-import { CONTROL_HORIZON_DAYS, NAV, SCREENS, TODO_HORIZON_DAYS, canOpen, canSeeHealth, isMine, isOpenAvancement, type ScreenKey, type Tone } from '../domain';
+import { declaredRecently, featuredApplicability, mostOverdue, ncBars, ncTopNote } from '../dashboard-rules';
+import { groupTodo, inTodoHorizon, isTodoLate } from '../horizons';
+import { CONTROL_HORIZON_DAYS, NAV, SCREENS, canOpen, canSeeHealth, isMine, isOpenAvancement, type ScreenKey, type Tone } from '../domain';
 import {
   controlStatus, eventView, isOpen, lastFullMonths, lcfirst, loadActions, loadControls, loadEvents, loadPeople, safetyRates, workforceAccident,
   type EventRow, type SafetyRates,
@@ -89,12 +91,16 @@ export async function loadDashboard() {
   const db = await getDb();
   const now = today();
   const yearAgo = addDays(now, -365);
-  const [{ role, allowedSiteIds }, people, events, actions, controls, reqs, site, todo] = await Promise.all([
+  const [{ role, allowedSiteIds }, people, events, actions, controls, reqs, site, visible, reads, directory] = await Promise.all([
     getSession(), loadPeople(), loadEvents(), loadActions(), loadControls(),
     db.select().from(t.requirements),
     currentSiteId(),
     loadVisibleTodo(),
+    loadReadKeys(),
+    loadSiteDirectory(),
   ]);
+  // TDB-11 : état lu de chaque échéance (l'ouverture depuis la carte la marque lue).
+  const todo = visible.map((x) => ({ ...x, read: reads.has(x.key) }));
   // Lien d'une carte ou d'une barre, seulement si l'écran visé est ouvert au rôle.
   const link = (href: string) => (canOpen(role, href) ? href : null);
 
@@ -108,7 +114,8 @@ export async function loadDashboard() {
 
   const open = events.filter(isOpen);
   const old = open.filter((e) => daysBetween(e.occurredOn, now) > 30).length;
-  const recent = events.filter((e) => daysBetween(e.occurredOn, now) <= 7).length;
+  // TDB-13 : déclarés (date de saisie), et non survenus, sur les 7 derniers jours.
+  const recent = declaredRecently(events, now);
 
   // Actions en retard (§ 6.3) : ouvertes (À faire → 80 %) dont la date cible est passée, sur les ouvertes du site ; ni les
   // Reportées, ni les Terminées (en attente de vérification), ni les closes ne sont en retard.
@@ -118,15 +125,13 @@ export async function loadDashboard() {
   const ctrl = controls.map((c) => ({ c, s: controlStatus(c, now) }));
   const soon = ctrl.filter((x) => x.s.days <= CONTROL_HORIZON_DAYS);
   const overdue = ctrl.filter((x) => x.s.days < 0);
+  // TDB-13 : la note cite le contrôle le plus en retard, et non le premier de la liste.
+  const worst = mostOverdue(ctrl);
   const equipShort = (e: string) => e.split(' — ')[0];
 
   const ncOpen = open.filter((e) => e.type === 'NC' || e.type === 'RC');
-  const ncBy = new Map<string, number>();
-  ncOpen.forEach((e) => {
-    const k = e.type === 'RC' ? 'Réclamation client' : e.ncOrigin ?? 'Autre';
-    ncBy.set(k, (ncBy.get(k) ?? 0) + 1);
-  });
-  const ncTop = [...ncBy.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, n]) => `${k} ${n}`).join(' · ');
+  // TDB-13 : NC sans origine comptées dans une barre, NC d'origine « Réclamation client » distinctes des réclamations (RC).
+  const bars = ncBars(ncOpen);
 
   // TDB-12 : listes filtrées (EVT-13). Accidents de l'effectif hors trajet (effectif=1, comme les taux et la pyramide) ;
   // filtre par blessure (donnée de santé) dans les liens des seuls rôles habilités, sinon liste des AT de l'effectif.
@@ -143,8 +148,8 @@ export async function loadDashboard() {
       href: link('/evenements'), subHref: link('/evenements?anciennete=30'),
     },
     { label: 'Actions en retard', value: String(late.length), sub: `sur ${openActions} ouvertes`, note: `${late.filter((a) => a.eventId).length} liées à des événements`, tone: 'danger', href: link('/actions?retard=1') },
-    { label: `Contrôles réglementaires < ${CONTROL_HORIZON_DAYS} j`, value: String(soon.length), sub: `dont ${overdue.length} dépassé${overdue.length > 1 ? 's' : ''}`, note: overdue[0] ? `${overdue[0].c.controlType.split(' ')[0]} ${lcfirst(equipShort(overdue[0].c.equipment))} · +${-overdue[0].s.days} j` : 'Aucun contrôle dépassé', tone: overdue.length ? 'danger' : 'warn', href: link(`/veille?onglet=controles&statut=${overdue.length ? 'depasses' : 'sous-30-j'}`) },
-    { label: 'Non-conformités', value: String(ncOpen.length), sub: 'ouvertes', note: ncTop || '—', tone: 'neutral', href: link('/evenements?type=NC,RC') },
+    { label: `Contrôles réglementaires < ${CONTROL_HORIZON_DAYS} j`, value: String(soon.length), sub: `dont ${overdue.length} dépassé${overdue.length > 1 ? 's' : ''}`, note: worst ? `${worst.c.controlType.split(' ')[0]} ${lcfirst(equipShort(worst.c.equipment))} · +${-worst.s.days} j` : 'Aucun contrôle dépassé', tone: overdue.length ? 'danger' : 'warn', href: link(`/veille?onglet=controles&statut=${overdue.length ? 'depasses' : 'sous-30-j'}`) },
+    { label: 'Non-conformités', value: String(ncOpen.length), sub: 'ouvertes', note: ncTopNote(bars), tone: 'neutral', href: link('/evenements?type=NC,RC') },
   ];
 
   // Pyramide des événements sécurité (12 mois glissants)
@@ -158,17 +163,17 @@ export async function loadDashboard() {
   ];
   const pyrMax = Math.max(1, ...pyramid.map((p) => p.n));
 
-  const ncLabels: [string, string][] = [['Fournisseurs', 'Fournisseurs'], ['Fabrication', 'Fabrication'], ['Conception BE', 'Conception BE'], ['Mise en service', 'Mise en service'], ['Réclamation client', 'Réclamations client']];
-  const ncMax = Math.max(1, ...ncBy.values());
+  const ncMax = Math.max(1, ...bars.map((b) => b.n));
 
+  const siteNames = new Map(directory.map((s) => [s.id, s.label]));
   const featured = reqs.find((r) => r.featured && !r.archivedAt);
+  const applicability = featured?.dueOn ? featuredApplicability(featured.dueOn, now, featured.evaluation) : null;
   // Projets Keystone concernés : même calcul que la fiche de l'exigence sur /veille (surcharge manuelle comprise).
   const keystone = featured?.dueOn ? await requirementProjects(featured) : null;
 
-  // Carte « À traiter dans les 15 jours » : dépassements et échéances de l'horizon ; les contrôles à 16-30 jours
-  // restent sur la page À faire (groupe « Contrôles à 30 jours »).
-  const todoHorizon = addDays(now, TODO_HORIZON_DAYS);
-  const todoSoon = todo.filter((x) => x.overdue || x.date <= todoHorizon);
+  // Carte « À traiter dans les 15 jours » : dépassements et échéances de l'horizon commun (inTodoHorizon, TDB-16) ; les
+  // contrôles et les certificats à 16-30 jours restent sur la page À faire (groupe « Au-delà de 15 jours »).
+  const todoSoon = todo.filter((x) => inTodoHorizon(x, now));
 
   return {
     kpis,
@@ -176,22 +181,26 @@ export async function loadDashboard() {
     safety: safety.summary,
     pyramid: pyramid.map((p) => ({ ...p, w: `${Math.max(5, Math.round((p.n / pyrMax) * 100))}%` })),
     pyramidTotal: pyramid.reduce((s, p) => s + p.n, 0),
-    // Barre d'une origine : NC ouvertes de cette origine (?origine=), réclamations client par leur type.
-    ncOrigins: ncLabels.map(([key, label]) => ({ label, n: ncBy.get(key) ?? 0, w: `${Math.round(((ncBy.get(key) ?? 0) / ncMax) * 100)}%`, href: link(key === 'Réclamation client' ? '/evenements?type=RC' : `/evenements?type=NC&origine=${encodeURIComponent(key)}`) })),
+    // Barre d'une origine : NC ouvertes de cette origine (?origine=, « aucune » sans origine), réclamations client par leur type.
+    ncOrigins: bars.map((b) => ({ label: b.label, n: b.n, w: `${Math.round((b.n / ncMax) * 100)}%`, href: link(b.href) })),
     ncOpen: ncOpen.length,
     ncHref: link('/evenements?type=NC,RC'),
     todo: todoSoon,
-    /** Échéances de la page À faire non affichées dans la carte (au-delà de MAX_TODO, ou contrôles à 16-30 jours). */
+    /** Échéances de la page À faire non affichées dans la carte (au-delà de MAX_TODO, ou au-delà de l'horizon commun). */
     todoMore: todo.length - Math.min(todoSoon.length, MAX_TODO),
     /** Un site précis est sélectionné (états vides « sur ce site »). */
     scoped: site !== null,
-    latest: events.slice(0, 6).map((e) => eventView(e, people, now)),
+    // TDB-15 : site du signalement en vue « Tous les sites ».
+    latest: events.slice(0, 6).map((e) => ({ ...eventView(e, people, now), siteLabel: site ? null : shortSiteLabel(siteNames.get(e.siteId) ?? e.siteId) })),
     featured: featured && featured.dueOn ? {
       id: featured.id,
       title: `${featured.text} — ${featured.domain.split(' — ')[0].toLowerCase()}`,
       lead: featured.summary.split(' : ')[0].replace(/\.?$/, '.'),
       dueOn: featured.dueOn,
       daysLeft: daysBetween(now, featured.dueOn),
+      // TDB-14 : « Applicable depuis le … » et état de conformité évalué, une fois la date d'application passée.
+      prefix: applicability!.prefix,
+      state: applicability!.state,
       impact: featured.impact,
       projects: keystone?.count ?? null,
       /** Identifiants des projets calculés ; vide si le nombre est saisi à la main (surcharge). */
@@ -216,7 +225,7 @@ export async function loadTodoPage({ domain: wanted, mine }: { domain?: string; 
   const now = today();
   const [{ user }, todo, reads] = await Promise.all([getSession(), loadVisibleTodo(), loadReadKeys()]);
   // Domaine = écran source de l'échéance, même sans lien (écran fermé au rôle : TDB-02).
-  const all: TodoRow[] = todo.map((x) => ({ ...x, read: reads.has(x.key), screen: x.source, overdue: !!x.overdue || x.date < now }));
+  const all: TodoRow[] = todo.map((x) => ({ ...x, read: reads.has(x.key), screen: x.source, overdue: isTodoLate(x, now) }));
   // « Mes échéances » : consolidées sur tous les sites du périmètre (loadVisibleTodo garde celles des autres sites, TDB-05).
   const mineRows = all.filter((x) => isMine(x, user));
   const scoped = mine ? mineRows : all;
@@ -229,15 +238,6 @@ export async function loadTodoPage({ domain: wanted, mine }: { domain?: string; 
   const items = domain ? scoped.filter((x) => x.screen === domain) : scoped;
 
   const late = (x: TodoRow) => !!x.overdue; // renseigné ci-dessus : signalé par le domaine, ou date passée
-  const week = addDays(now, 7);
-  const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const ahead = items.filter((x) => !late(x));
-  const groups: [string, TodoRow[]][] = [
-    ['En retard', items.filter(late)],
-    ['Cette semaine', ahead.filter((x) => x.date <= week)],
-    [`D'ici ${TODO_HORIZON_DAYS} jours`, ahead.filter((x) => x.date > week && x.date <= horizon)],
-    [`Contrôles à ${CONTROL_HORIZON_DAYS} jours`, ahead.filter((x) => x.date > horizon)],
-  ];
   return {
     domain,
     items,
@@ -247,7 +247,8 @@ export async function loadTodoPage({ domain: wanted, mine }: { domain?: string; 
       /** Échéances de la liste affichée situées sur un autre site que le site sélectionné. */
       elsewhere: items.filter((x) => x.elsewhere).length,
     },
-    groups: groups.filter(([, rows]) => rows.length > 0),
+    // Groupes calculés par src/lib/horizons.ts (TDB-16) : retard, cette semaine, 15 jours, au-delà.
+    groups: groupTodo(items, now),
   };
 }
 

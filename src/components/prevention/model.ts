@@ -11,8 +11,6 @@ export { addHoursLocal, fromParisLocal, referenceNow, toParisLocal } from '@/lib
 export const MANDATORY_HOURS = 400;
 /** Surveillance recommandée après des travaux par points chauds. */
 export const FIRE_WATCH_HOURS = 2;
-/** Horizon des échéances « à traiter » (tableau de bord, notifications). */
-export const SIGNAL_HORIZON_DAYS = 15;
 
 export const DANGEROUS_WORK_HINT =
   'Arrêté du 19 mars 1993 : chute de hauteur de plus de 3 m, pièces nues sous tension (> TBT), soudage avec permis de feu, atmosphère confinée ou explosive, agents CMR, rayonnements ionisants…';

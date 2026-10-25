@@ -83,7 +83,7 @@ export function NotificationBell({ items }: { items: Item[] }) {
               <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>
                 <span style={{ fontSize: 12.5, color: n.read ? 'var(--color-neutral-400)' : 'var(--color-text)', fontWeight: n.read ? 400 : 500 }}>{n.title}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>
-                  {n.kind} · {fmt(n.date)}{n.who ? ` · ${n.who}` : ''}{n.elsewhere && n.siteLabel ? ` · ${n.siteLabel}` : ''}
+                  {n.kind} · {fmt(n.date)}{n.who ? ` · ${n.who}` : ''}{n.siteLabel ? ` · ${n.siteLabel}` : ''}
                 </span>
               </span>
             </TodoLink>

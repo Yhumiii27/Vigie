@@ -441,8 +441,6 @@ export const PLAN_ITEM_STATES = {
 } as const satisfies Record<string, { label: string; tone: Tone }>;
 export type PlanItemState = keyof typeof PLAN_ITEM_STATES;
 
-/** Audit de suivi ou fin de validité du certificat considérés comme proches (jours). */
-export const CERT_SOON_DAYS = 30;
 /** Cycle de certification (ISO/IEC 17021-1) : un certificat vaut 3 ans au plus après son émission (AUD-08). */
 export const CERT_CYCLE_MONTHS = 36;
 /**
@@ -616,12 +614,8 @@ export const SCREEN_PROCEDURES: Partial<Record<ScreenKey, string>> = { preventio
 
 // ─── Échéances (« À traiter », page À faire, notifications, badges) ─────────
 
-/** Horizon des échéances (« À traiter dans les 15 jours », page À faire, badges). */
-export const TODO_HORIZON_DAYS = 15;
-/** Contrôles réglementaires : anticipés à 30 jours (KPI « Contrôles < 30 j », échéances, badge veille). */
-export const CONTROL_HORIZON_DAYS = 30;
-/** Panneau de notifications : dépassements + échéances des 7 prochains jours. */
-export const NOTIFY_HORIZON_DAYS = 7;
+// Horizons (15 jours, contrôles et certificats 30 jours, cloche 7 jours) : module pur src/lib/horizons.ts (TDB-16).
+export { CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, NOTIFY_HORIZON_DAYS, TODO_HORIZON_DAYS } from './horizons';
 /** TF1/TG : les 12 derniers mois complets (mois en cours exclu), base de « 12 mois glissants » (TDB-04). */
 export const SAFETY_WINDOW_MONTHS = 12;
 

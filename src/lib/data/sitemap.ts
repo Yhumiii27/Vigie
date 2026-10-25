@@ -8,15 +8,18 @@ import {
   type CoInput, type Conflict,
 } from '@/components/sitemap/coactivity';
 import {
-  COACTIVITY_HORIZON_DAYS, DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
+  DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
   type ActivityView, type Choice, type CoactivityControlView, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
 } from '@/components/sitemap/model';
 import { addDays, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';
+import { TODO_HORIZON_DAYS } from '../horizons';
+import { hasLeft } from '../people';
 import { lcfirst, loadPeople } from '../queries';
 import { currentSiteId, siteFilter } from '../session';
 import { attachmentUrl } from '../uploads';
+import { loadQhseLeads } from './leads';
 import { loadFormOptions } from './options';
 
 // ─── Carte du site et coactivité ────────────────────────────────────────────
@@ -291,7 +294,7 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
     zones,
     routes,
     activities,
-    toPosition: candidates(rows, siteId, activities, now, addDays(now, COACTIVITY_HORIZON_DAYS)),
+    toPosition: candidates(rows, siteId, activities, now, addDays(now, TODO_HORIZON_DAYS)),
     choices,
     conflictsToday: detectConflicts(input, now),
     controls,
@@ -309,15 +312,24 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
  * badge = situations de coactivité distinctes aujourd'hui ;
  * todo = une échéance par jour (aujourd'hui et les 15 suivants) et par site ayant au moins une situation de coactivité ;
  * le titre signale les situations nouvelles par rapport à la veille.
+ * Personnes concernées (PRV-19) : responsables internes (donneurs d'ordre) des activités en coactivité ce jour-là, encore
+ * dans l'effectif ; sans aucun, le responsable QHSE du site (loadQhseLeads ; poste vacant : animateurs QHSE).
  */
 export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
-  const [rows, people, keep] = await Promise.all([loadRows(), loadPeople(), siteFilter('perimeter')]);
+  const [rows, people, keep, leads] = await Promise.all([loadRows(), loadPeople(), siteFilter('perimeter'), loadQhseLeads()]);
   const now = today();
   let badge = 0;
   const todo: TodoItem[] = [];
   for (const site of rows.sites.filter((s) => keep(s.id))) {
-    const { input, zones, routes } = siteInput(rows, site.id, people, now);
+    const { input, zones, routes, activities } = siteInput(rows, site.id, people, now);
     if (!input.activities.length) continue;
+    const ownerOf = new Map(activities.map((a) => [a.id, a.ownerId]));
+    /** Responsables des activités des situations (ordre de l'annuaire), sinon le responsable QHSE du site. */
+    const concerned = (list: Conflict[]) => {
+      const ids = new Set(list.flatMap((c) => [ownerOf.get(c.a), ownerOf.get(c.b)]).filter((id): id is string => !!id));
+      const owners = [...people.values()].filter((p) => ids.has(p.id) && !hasLeft(p, now));
+      return owners.length ? { who: owners.map((p) => p.name).join(' · '), ownerIds: owners.map((p) => p.id) } : leads.forSite(site.id);
+    };
     const zoneName = new Map(zones.map((z) => [z.id, z.name]));
     const routeName = new Map(routes.map((r) => [r.id, lcfirst(r.name)]));
     const places = (list: Conflict[]) => {
@@ -331,7 +343,7 @@ export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; to
     const done = controlledKeys(rows, site.id);
     const signaled = (date: string) => detectConflicts(input, date).filter((c) => !done.has(c.key));
     let previous = new Set(signaled(addDays(now, -1)).map((c) => c.key));
-    for (let i = 0; i <= COACTIVITY_HORIZON_DAYS; i++) {
+    for (let i = 0; i <= TODO_HORIZON_DAYS; i++) {
       const date = addDays(now, i);
       const list = signaled(date);
       if (i === 0) badge += list.length;
@@ -342,12 +354,14 @@ export const loadCoactivitySignals = cache(async (): Promise<{ badge: number; to
       const count = plural(list.length, 'situation de coactivité', 'situations de coactivité');
       const head = !fresh.length || fresh.length === list.length ? count : `${count}, dont ${plural(fresh.length, 'nouvelle', 'nouvelles')}`;
       const where = places(list);
+      const { who, ownerIds } = concerned(list);
       todo.push({
         date,
         kind: 'Coactivité',
         tone: list.some((c) => c.tone === 'danger') ? 'danger' : 'warn',
         title: `${head}${where ? ` · ${where}` : ''}`,
-        who: '',
+        who,
+        ownerIds,
         siteId: site.id,
         href: `/prevention/carte?date=${date}&site=${site.id}`,
         // Badge : situations distinctes d'aujourd'hui ; les jours suivants n'ajoutent rien au badge.

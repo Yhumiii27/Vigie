@@ -5,6 +5,7 @@ import { getDb, schema as t } from '@/db';
 import { reminderFor } from '../action-reminder-job';
 import { REMINDER_HREF, reminderKey, reminderTitle, reminderWeek } from '../action-reminder';
 import { canReadAction } from '../action-rules';
+import { inNotifyHorizon } from '../horizons';
 import { addDays, fromParisLocal, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
@@ -122,11 +123,11 @@ async function loadReminder(reads: Set<string>): Promise<Notification | null> {
  * lue (read_at), clé présente dans notification_reads pour les échéances.
  */
 export const loadNotifications = cache(async (): Promise<Notification[]> => {
-  const week = addDays(today(), NOTIFY_HORIZON_DAYS);
+  const now = today();
   const [todo, reads, stored] = await Promise.all([loadVisibleTodo(), loadReadKeys(), loadStored()]);
   const reminder = await loadReminder(reads);
   const due = todo
-    .filter((n) => n.overdue || n.date <= week)
+    .filter((n) => inNotifyHorizon(n, now))
     .map((n): Notification => ({ ...n, urgent: n.tone === 'danger' || !!n.overdue, read: reads.has(n.key), family: 'todo', info: false }))
     // Retards du plus ancien au plus récent (date d'échéance réelle, TDB-07), puis par date.
     .sort((a, b) => (a.dueOn ?? a.date).localeCompare(b.dueOn ?? b.date) || a.date.localeCompare(b.date));
