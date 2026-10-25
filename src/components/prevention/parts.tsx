@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useTransition, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useActionRunner } from '@/components/feedback';
+import { TipButton } from '@/components/Tip';
 import { ToneTag } from '@/components/ui';
 import { TONE, type Tone } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
@@ -76,7 +78,7 @@ export function Facts({ items }: { items: (readonly [string, ReactNode] | false 
     <div className="vg-inset" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '10px 18px', padding: '10px 12px' }}>
       {items.filter((i): i is readonly [string, ReactNode] => !!i).map(([k, v]) => (
         <div key={k} style={{ display: 'grid', gap: 2, minWidth: 0, alignContent: 'start' }}>
-          <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{k}</span>
+          <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{k}</span>
           <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{v}</span>
         </div>
       ))}
@@ -88,7 +90,7 @@ export function Facts({ items }: { items: (readonly [string, ReactNode] | false 
 export function SectionTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-      <h6 className="vg-h6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', fontSize: 10 }}>{children}</h6>
+      <h6 className="vg-h6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', fontSize: 11 }}>{children}</h6>
       {aside}
     </div>
   );
@@ -104,16 +106,14 @@ export function Notice({ tone, icon = 'ph-warning', children }: { tone: Tone; ic
   );
 }
 
-/** Exécute une server action sans formulaire et conserve son message d'erreur. */
+/**
+ * Exécute une server action sans formulaire et conserve son message d'erreur ; `onOk` après un succès. Échec réseau ou
+ * serveur rendu comme une erreur (useActionRunner, UX-14) ; l'erreur s'affiche dans l'écran (ErrorLine, région `alert`).
+ */
 export function useRun() {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const run = (fn: () => Promise<{ error?: string }>, onOk?: () => void) => start(async () => {
-    const r = await fn();
-    setError(r.error ?? null);
-    if (!r.error) onOk?.();
-  });
-  return { pending, error, run, clear: () => setError(null) };
+  const { pending, error, run: exec, clear } = useActionRunner();
+  const run = (fn: () => Promise<{ error?: string }>, onOk?: () => void) => exec(fn, { onOk, announceError: false });
+  return { pending, error, run, clear };
 }
 
 /** Bouton d'action irréversible : un premier clic demande confirmation. */
@@ -131,9 +131,9 @@ export function ConfirmButton({ label, confirmLabel, question, icon, onConfirm, 
     );
   }
   return (
-    <button type="button" className={className} disabled={disabled || pending} title={tooltip} onClick={() => setAsking(true)}>
-      {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{label}
-    </button>
+    <TipButton className={className} disabled={disabled || pending} aria-busy={pending || undefined} tip={tooltip} onClick={() => setAsking(true)}>
+      {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{pending ? 'Enregistrement…' : label}
+    </TipButton>
   );
 }
 
@@ -145,7 +145,7 @@ export function ErrorLine({ error }: { error: string | null }) {
 export function SignChip({ label, on, title }: { label: string; on: boolean; title: string }) {
   return (
     <span title={title} aria-label={title} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, padding: '1px 6px', borderRadius: 5,
+      display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, padding: '1px 6px', borderRadius: 5,
       background: on ? TONE.ok.bg : 'transparent', color: on ? TONE.ok.fg : 'var(--color-neutral-500)', border: on ? '1px solid transparent' : '1px dashed var(--color-neutral-700)',
     }}>
       <i className={`ph ${on ? 'ph-check' : 'ph-minus'}`} style={{ fontSize: 10 }} aria-hidden />{label}

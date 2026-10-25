@@ -115,7 +115,7 @@ export function ProgramTimeline({
           {aside}
           {canEdit && (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing({ track: null, month: curMonth >= 1 && curMonth <= 12 ? curMonth : 1 })}>
-              <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter une ligne
+              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter une ligne
             </button>
           )}
         </span>
@@ -228,9 +228,9 @@ function TrackRow({ track, items, curMonth, canEdit, onOpen }: {
           : canEdit ? `Ajouter en ${monthName(m)} · ${track}` : undefined;
         const content = it && (
           <span style={{ display: 'block', width: '100%', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {it.locked && <i className="ph ph-lock-simple" aria-label="Revue de direction" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} />}
-            {it.done && <i className="ph ph-check" aria-label="Réalisé" style={{ fontSize: 11, marginRight: 3, color: TONE.ok.dot, verticalAlign: '-1px' }} />}
-            {it.state === 'late' && <i className="ph ph-warning" aria-label="À confirmer" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} />}
+            {it.locked && <><i className="ph ph-lock-simple" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Revue de direction</span></>}
+            {it.done && <><i className="ph ph-check" style={{ fontSize: 11, marginRight: 3, color: TONE.ok.dot, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Réalisé</span></>}
+            {it.state === 'late' && <><i className="ph ph-warning" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">À confirmer</span></>}
             {it.label}
           </span>
         );
@@ -251,7 +251,7 @@ function CancelledList({ items, open, onToggle, onOpen }: { items: PlanItemView[
   return (
     <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
       <button type="button" className="vg-text-btn" style={{ justifySelf: 'start', color: 'var(--color-neutral-400)' }} aria-expanded={open} onClick={onToggle}>
-        <i className={`ph ${open ? 'ph-caret-down' : 'ph-caret-right'}`} style={{ fontSize: 12 }} /> Éléments annulés ({items.length})
+        <i className={`ph ${open ? 'ph-caret-down' : 'ph-caret-right'}`} style={{ fontSize: 12 }} aria-hidden /> Éléments annulés ({items.length})
       </button>
       {open && items.map((p) => (
         <div key={p.id} style={{ display: 'grid', gap: 2, padding: '4px 0 4px 18px' }}>
@@ -295,7 +295,7 @@ function PlanItemForm({ year, item, track, month, trackOptions, people, certs, o
       hidden={{ id: item?.id, year: item ? undefined : year }} encType="multipart/form-data">
       {review && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-          <i className="ph ph-info" style={{ fontSize: 13, marginRight: 4, verticalAlign: '-2px' }} />
+          <i className="ph ph-info" style={{ fontSize: 13, marginRight: 4, verticalAlign: '-2px' }} aria-hidden />
           Planifiez la revue depuis la carte Revue de direction : elle reprendra cet élément.
         </p>
       )}
@@ -355,7 +355,7 @@ function PlanItemForm({ year, item, track, month, trackOptions, people, certs, o
         </FormRow>
       )}
       <FormRow>
-        <Field label="État">
+        <Field name="done" group label="État">
           <div style={{ minHeight: 34, display: 'flex', alignItems: 'center' }}>
             <Checkbox name="done" label="Réalisé" defaultChecked={item?.done} />
           </div>
@@ -389,7 +389,7 @@ function Planning({ item, onReschedule }: { item: PlanItemView; onReschedule?: (
         {item.postponedFrom && <span style={muted}>initialement prévu {item.postponedFrom.endsWith('-01') ? 'en' : 'le'} {firstPlanned(item.postponedFrom)}</span>}
         {onReschedule && item.reschedulable && (
           <button type="button" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }} onClick={onReschedule}>
-            <i className="ph ph-calendar-blank" style={{ fontSize: 13 }} />Reporter…
+            <i className="ph ph-calendar-blank" style={{ fontSize: 13 }} aria-hidden />Reporter…
           </button>
         )}
       </div>
@@ -438,7 +438,7 @@ function ReportSection({ item, findings, onAddFinding, onLeave }: { item: PlanIt
       {/* AUD-11 : un constat suit la réalisation de l'audit. */}
       {item.done ? (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={onAddFinding}>
-          <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
+          <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter un constat
         </button>
       ) : <span style={muted}>Déclarez l&apos;audit réalisé pour saisir ses constats.</span>}
     </div>
@@ -458,7 +458,7 @@ function FindingList({ findings, year, onLeave }: { findings: FindingView[]; yea
               {f.clause && <span style={{ color: 'var(--color-neutral-400)', marginRight: 6 }}>{f.clause}</span>}
               {f.text}
             </span>
-            <span style={{ whiteSpace: 'nowrap' }}>{f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>{f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}</span>
           </div>
         );
       })}
@@ -505,7 +505,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
       </dl>
       {item.review && (
         <Link href={item.review.href} className="btn btn-primary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={onLeave}>
-          <i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} />Ouvrir la revue
+          <i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} aria-hidden />Ouvrir la revue
         </Link>
       )}
       {!item.isReview && (

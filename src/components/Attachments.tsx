@@ -84,7 +84,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
 
   return (
     <div style={{ display: 'grid', gap: 8 }}>
-      <h6 className="vg-h6">{title}{files.length > 0 && <span style={{ color: 'var(--color-neutral-600)' }}> · {files.length}</span>}</h6>
+      <h6 className="vg-h6">{title}{files.length > 0 && <span style={{ color: 'var(--vg-text-muted)' }}> · {files.length}</span>}</h6>
       {files.length === 0 && !canManage ? (
         <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{emptyText}</div>
       ) : (
@@ -97,15 +97,15 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
                   <img src={f.url} alt={f.name} loading="lazy" onError={() => setBroken((b) => [...b, f.id])} />
                 ) : (
                   <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: '0 6px', maxWidth: '100%' }}>
-                    <i className={`ph ${fileIcon(f.mime)}`} style={{ fontSize: 24, color: 'var(--color-neutral-400)' }} />
-                    <span style={{ fontSize: 10.5, lineHeight: 1.25, color: 'var(--color-neutral-300)', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{f.name}</span>
+                    <i className={`ph ${fileIcon(f.mime)}`} style={{ fontSize: 24, color: 'var(--color-neutral-400)' }} aria-hidden />
+                    <span style={{ fontSize: 11, lineHeight: 1.25, color: 'var(--color-neutral-300)', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{f.name}</span>
                   </span>
                 )}
               </a>
               {canRemove(f) && (
                 <button type="button" aria-label={`Supprimer ${f.name}`} title="Supprimer" onClick={() => askRemove(f)}
-                  style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', color: 'var(--color-neutral-100)', background: 'color-mix(in srgb, var(--color-bg) 75%, transparent)' }}>
-                  <i className="ph ph-x" style={{ fontSize: 12 }} />
+                  style={{ position: 'absolute', top: 3, right: 3, width: 24, height: 24, borderRadius: '50%', display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', color: 'var(--color-neutral-100)', background: 'color-mix(in srgb, var(--color-bg) 75%, transparent)' }}>
+                  <i className="ph ph-x" style={{ fontSize: 12 }} aria-hidden />
                 </button>
               )}
               {caption?.(f) && <div className="vg-thumb-caption">{caption(f)}</div>}
@@ -116,7 +116,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
               <button type="button" className="vg-thumb" onClick={() => input.current?.click()} disabled={uploading}
                 style={{ border: '1px dashed var(--color-divider)', boxShadow: 'none', cursor: uploading ? 'progress' : 'pointer', font: 'inherit', fontSize: 11, color: 'var(--color-neutral-400)' }}>
                 <span style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
-                  <i className={`ph ${uploading ? 'ph-circle-notch' : 'ph-plus'}`} style={{ fontSize: 20 }} />
+                  <i className={`ph ${uploading ? 'ph-circle-notch' : 'ph-plus'}`} style={{ fontSize: 20 }} aria-hidden />
                   {uploading ? 'Envoi…' : 'Ajouter'}
                 </span>
               </button>
@@ -125,7 +125,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
           )}
         </div>
       )}
-      {canManage && hint && <span style={{ fontSize: 11, color: 'var(--color-neutral-600)' }}>{hint}</span>}
+      {canManage && hint && <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{hint}</span>}
       {error && <div role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{error}</div>}
 
       <Dialog open={!!removing} onClose={() => askRemove(null)} title="Supprimer la pièce jointe ?" kicker={kicker} width={420}>
@@ -148,7 +148,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
               <button type="button" className="btn btn-secondary" onClick={() => askRemove(null)} disabled={deleting}>Annuler</button>
               <button type="button" className="btn" onClick={confirmRemove} disabled={deleting || (reasonRequired && !reason.trim())}
                 style={{ color: TONE.danger.fg, borderColor: TONE.danger.dot }}>
-                <i className="ph ph-trash" style={{ fontSize: 14 }} />{deleting ? 'Suppression…' : 'Supprimer'}
+                <i className="ph ph-trash" style={{ fontSize: 14 }} aria-hidden />{deleting ? 'Suppression…' : 'Supprimer'}
               </button>
             </div>
           </>

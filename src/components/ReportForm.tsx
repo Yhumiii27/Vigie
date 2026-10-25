@@ -242,7 +242,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
     return (
       <div style={shell}>
         <div style={{ display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center', paddingTop: 120 }}>
-          <span style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid var(--color-accent)', color: 'var(--color-accent)', display: 'grid', placeItems: 'center' }}><i className="ph ph-check" style={{ fontSize: 30 }} /></span>
+          <span style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid var(--color-accent)', color: 'var(--color-accent)', display: 'grid', placeItems: 'center' }}><i className="ph ph-check" style={{ fontSize: 30 }} aria-hidden /></span>
           <span style={{ fontSize: 20, fontWeight: 500 }}>Signalement envoyé</span>
           <span style={{ fontSize: 13.5, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
             {sent.id ? <>Référence {sent.id}. </> : null}L&apos;animateur QHSE le qualifie sous 48 h.{' '}
@@ -256,7 +256,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
           <button type="button" className="btn btn-secondary" onClick={reset} style={{ minHeight: 44 }}>Nouveau signalement</button>
           {myReportsHref && !publicMode && (
             <Link href={myReportsHref} className="btn btn-ghost" style={{ minHeight: 44, fontSize: 13.5 }}>
-              <i className="ph ph-list-checks" style={{ fontSize: 16 }} />Mes signalements
+              <i className="ph ph-list-checks" style={{ fontSize: 16 }} aria-hidden />Mes signalements
             </Link>
           )}
         </div>
@@ -271,15 +271,15 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 22, fontWeight: 500, letterSpacing: '-.015em' }}>Signaler</span>
         <span style={{ display: 'grid', justifyItems: 'end', gap: 2 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" />{siteLabel}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" aria-hidden />{siteLabel}</span>
           {myReportsHref && !publicMode && (
             <Link href={myReportsHref} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: TOUCH, fontSize: 12, color: 'var(--color-accent)', textDecoration: 'none' }}>
-              <i className="ph ph-list-checks" />Mes signalements
+              <i className="ph ph-list-checks" aria-hidden />Mes signalements
             </Link>
           )}
           {publicMode && loginHref && (
             <a href={loginHref} style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: TOUCH, fontSize: 12, color: 'var(--color-accent)', textDecoration: 'none' }}>
-              <i className="ph ph-sign-in" />Se connecter
+              <i className="ph ph-sign-in" aria-hidden />Se connecter
             </a>
           )}
         </span>
@@ -288,7 +288,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       <div role="radiogroup" aria-label="Type de signalement" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {REPORT_TYPE_KEYS.map((k) => (
           <button key={k} type="button" role="radio" aria-checked={type === k} className={`vg-choice${type === k ? ' is-on' : ''}`} onClick={() => setType(k)}>
-            <i className={`ph ${EVENT_TYPES[k].icon}`} />{EVENT_TYPES[k].label}
+            <i className={`ph ${EVENT_TYPES[k].icon}`} aria-hidden />{EVENT_TYPES[k].label}
           </button>
         ))}
       </div>
@@ -313,7 +313,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
           <input id="report-location" className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Atelier, poste, zone…" style={{ fontSize: FIELD_FONT }} />
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 0 0 10px', background: 'var(--color-surface)', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}>
-            <i className="ph ph-qr-code" style={{ fontSize: 16, color: 'var(--color-accent)' }} />
+            <i className="ph ph-qr-code" style={{ fontSize: 16, color: 'var(--color-accent)' }} aria-hidden />
             <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, padding: '9px 0' }}>{location}</span>
             <button type="button" onClick={() => setEditLocation(true)}
               style={{ minHeight: TOUCH, minWidth: TOUCH, padding: '0 10px', fontSize: 12, color: 'var(--color-accent)', background: 'none', border: 0, cursor: 'pointer' }}>Modifier</button>
@@ -330,7 +330,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
           {canDictate && (
             <button type="button" onClick={dictate} aria-label={listening ? 'Arrêter la dictée' : 'Dicter la description'} aria-pressed={listening}
               style={{ position: 'absolute', right: 6, bottom: 6, width: TOUCH, height: TOUCH, borderRadius: '50%', display: 'grid', placeItems: 'center', border: '1px solid var(--color-accent)', color: 'var(--color-accent)', background: listening ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'transparent', cursor: 'pointer' }}>
-              <i className="ph ph-microphone" style={{ fontSize: 18 }} />
+              <i className="ph ph-microphone" style={{ fontSize: 18 }} aria-hidden />
             </button>
           )}
         </div>
@@ -345,7 +345,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
         <input ref={fileInput} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
         <button type="button" className="btn btn-secondary" onClick={() => fileInput.current?.click()} disabled={preparing || full}
           style={{ justifyContent: 'flex-start', minHeight: 44, fontSize: 13.5 }}>
-          <i className="ph ph-camera" style={{ fontSize: 18 }} />
+          <i className="ph ph-camera" style={{ fontSize: 18 }} aria-hidden />
           {preparing ? 'Préparation de la photo…' : full ? `${maxPhotos} photos au maximum` : photos.length ? 'Ajouter une autre photo' : 'Ajouter une photo'}
           {photos.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-neutral-500)' }}>{photos.length}/{maxPhotos}</span>}
         </button>
@@ -353,21 +353,21 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MAX_PHOTOS}, minmax(0, 1fr))`, gap: 8 }}>
             {photos.map((p, i) => (
               <div key={p.key} style={{ position: 'relative', aspectRatio: '1', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--color-surface)', border: '1px solid var(--color-divider)', display: 'grid', placeItems: 'center' }}>
-                <i className="ph ph-image" style={{ fontSize: 20, color: 'var(--color-neutral-600)' }} />
+                <i className="ph ph-image" style={{ fontSize: 20, color: 'var(--color-neutral-600)' }} aria-hidden />
                 {/* eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob:) avant envoi */}
                 <img src={p.url} alt={`Photo ${i + 1}`} onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 {anonymous && !p.cleaned && (
                   <span role="img" aria-label="Photo non allégée : métadonnées conservées" title="Photo non allégée : métadonnées conservées (position, appareil)"
                     style={{ position: 'absolute', left: 4, bottom: 4, width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--tone-warn-fg)', background: 'rgba(0, 0, 0, .55)' }}>
-                    <i className="ph ph-warning" style={{ fontSize: 13 }} />
+                    <i className="ph ph-warning" style={{ fontSize: 13 }} aria-hidden />
                   </span>
                 )}
                 {/* Zone tactile de 44 px, pastille visible de 26 px dans le coin. */}
                 <button type="button" onClick={() => removePhoto(p.key)} aria-label={`Retirer la photo ${i + 1}`}
                   style={{ position: 'absolute', top: 0, right: 0, width: TOUCH, height: TOUCH, padding: 0, display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', background: 'none' }}>
                   <span aria-hidden style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: '#fff', background: 'rgba(0, 0, 0, .55)' }}>
-                    <i className="ph ph-x" style={{ fontSize: 13 }} />
+                    <i className="ph ph-x" style={{ fontSize: 13 }} aria-hidden />
                   </span>
                 </button>
               </div>
@@ -387,7 +387,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
 
       <button type="button" role="switch" aria-checked={anonymous} onClick={() => setAnonymous((a) => !a)}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, cursor: 'pointer', background: 'none', border: 0, color: 'inherit', padding: 0 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5 }}><i className="ph ph-eye-slash" style={{ fontSize: 17, color: 'var(--color-neutral-500)' }} />Rester anonyme</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5 }}><i className="ph ph-eye-slash" style={{ fontSize: 17, color: 'var(--color-neutral-500)' }} aria-hidden />Rester anonyme</span>
         <span className={`vg-switch${anonymous ? ' is-on' : ''}`}><span /></span>
       </button>
 
@@ -418,7 +418,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       {error && <div role="alert" style={{ fontSize: 12.5, color: 'var(--tone-danger-fg)' }}>{error}</div>}
 
       <button type="button" className="btn btn-primary btn-block" onClick={submit} disabled={pending || preparing} style={{ minHeight: 48, fontSize: 15 }}>
-        <i className="ph ph-paper-plane-right" style={{ fontSize: 17 }} />{pending ? 'Envoi…' : 'Envoyer le signalement'}
+        <i className="ph ph-paper-plane-right" style={{ fontSize: 17 }} aria-hidden />{pending ? 'Envoi…' : 'Envoyer le signalement'}
       </button>
     </div>
   );

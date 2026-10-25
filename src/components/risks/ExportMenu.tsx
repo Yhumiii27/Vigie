@@ -23,7 +23,7 @@ export function ExportMenu({ unit, scopeLabel, unitCount }: { unit?: { id: strin
   return (
     <details ref={ref} className="vg-dropdown">
       <summary className="btn btn-ghost" style={{ fontSize: 12 }}>
-        <i className="ph ph-download-simple" style={{ fontSize: 13 }} />Exporter<i className="ph ph-caret-down" style={{ fontSize: 11 }} />
+        <i className="ph ph-download-simple" style={{ fontSize: 13 }} aria-hidden />Exporter<i className="ph ph-caret-down" style={{ fontSize: 11 }} aria-hidden />
       </summary>
       <div className="vg-menu elev-md" style={{ minWidth: 240 }}>
         {items.map((i) => (

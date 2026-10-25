@@ -10,6 +10,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import type { ContractorView } from '@/lib/data/prevention';
 import { archiveContractor, restoreContractor, saveContractor } from '@/server/prevention';
 import { ErrorLine, Facts, Notice, SectionTitle, muted, rowOpener, useRun } from './parts';
+import { TipButton } from '@/components/Tip';
 
 function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
   return (
@@ -102,9 +103,9 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
           {c.archived
             ? <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => run(() => restoreContractor(c.id))}><Icon name="ph-arrow-counter-clockwise" size={13} />Réactiver</button>
             : (
-              <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!!c.archiveBlock} title={c.archiveBlock ?? undefined} onClick={onArchive}>
+              <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!c.archiveBlock} tip={c.archiveBlock} onClick={onArchive}>
                 <Icon name="ph-archive" size={13} />Archiver
-              </button>
+              </TipButton>
             )}
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
         </div>

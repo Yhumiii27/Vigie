@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { FORM_SAVED_EVENT } from '@/components/form';
+import { TipButton } from '@/components/Tip';
 
 type DialogProps = { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; width?: number; kicker?: ReactNode };
 
@@ -85,20 +86,27 @@ type DialogButtonProps = {
   style?: CSSProperties;
   width?: number;
   disabled?: boolean;
+  /** Infobulle accessible au clavier (UX-10), aussi sur le bouton désactivé (raison de la désactivation). */
   tooltip?: string;
+  /** Nom accessible d'un bouton à icône seule (`label` vide) ; à défaut, l'infobulle. */
+  ariaLabel?: string;
   /** Contenu de la fenêtre ; `close` ferme la fenêtre (à appeler après un enregistrement réussi). */
   children: (close: () => void) => ReactNode;
 };
 
 /** Bouton qui ouvre une fenêtre modale. */
-export function DialogButton({ label, title, kicker, icon, className = 'btn btn-secondary vg-btn-sm', style, width, disabled, tooltip, children }: DialogButtonProps) {
+export function DialogButton({ label, title, kicker, icon, className = 'btn btn-secondary vg-btn-sm', style, width, disabled, tooltip, ariaLabel, children }: DialogButtonProps) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  // Bouton à icône seule : nommé par ariaLabel, sinon par l'infobulle (qui n'est alors pas répétée en description).
+  const iconOnly = label === '' || label == null;
+  const name = ariaLabel ?? (iconOnly ? tooltip : undefined);
   return (
     <>
-      <button type="button" className={className} style={style} disabled={disabled} title={tooltip} onClick={() => setOpen(true)}>
+      <TipButton className={className} style={style} disabled={disabled} tip={iconOnly && !ariaLabel ? null : tooltip} aria-label={name}
+        title={iconOnly && !ariaLabel ? tooltip : undefined} onClick={() => setOpen(true)}>
         {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{label}
-      </button>
+      </TipButton>
       <Dialog open={open} onClose={close} title={title} kicker={kicker} width={width}>{open && children(close)}</Dialog>
     </>
   );

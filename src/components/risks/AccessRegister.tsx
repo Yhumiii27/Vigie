@@ -5,7 +5,7 @@ import { ChangeLogList } from '@/components/ChangeLog';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { ReasonButton } from '@/components/ReasonDialog';
-import { ToneTag } from '@/components/ui';
+import { ToneTag, ScrollX } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { DUERP_ACCESS_CHANNELS, DUERP_REQUESTERS, TONE } from '@/lib/domain';
 import type { Option } from '@/lib/form-options';
@@ -107,7 +107,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
           {cancelledCount > 0 && (
             <label className="vg-check" style={{ fontSize: 12 }}>
               <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
-              <span className="vg-check-box"><i className="ph ph-check" /></span>
+              <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
               <span>Afficher les annulées ({cancelledCount})</span>
             </label>
           )}
@@ -120,14 +120,14 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
         Une ligne par version communiquée. Les consultations courantes dans Vigie ne sont pas enregistrées automatiquement :
         notez ici les mises à disposition formelles (ancien salarié, instances, organismes).
       </p>
-      <div style={{ overflowX: 'auto' }}>
+      <ScrollX label="Registre des mises à disposition">
         <table className="table" style={{ fontSize: 12.5, minWidth: 760 }}>
           <thead>
             <tr><th>Demande le</th><th>Demandeur</th>{showSite && <th>Site</th>}<th>Version</th><th>Communiquée</th><th>Note</th><th /></tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} style={r.cancelled ? { opacity: 0.55 } : undefined}>
+              <tr key={r.id} data-obsolete={r.cancelled || undefined}>
                 <td style={{ whiteSpace: 'nowrap', verticalAlign: 'top' }}>{fmtDate(r.requestedOn)}</td>
                 <td style={{ verticalAlign: 'top' }}>
                   <div style={{ fontWeight: 500, textDecoration: r.cancelled ? 'line-through' : undefined }}>{r.requesterName}</div>
@@ -148,7 +148,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
                   )}
                 </td>
                 <td style={{ verticalAlign: 'top', color: 'var(--color-neutral-300)', maxWidth: 280, textWrap: 'pretty' }}>
-                  {r.note || <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+                  {r.note || <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                   {r.cancelled && <div style={muted}>{archivedLabel(r.cancelled, 'Annulée')}{r.cancelled.reason ? ` · ${r.cancelled.reason}` : ''}</div>}
                 </td>
                 <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
@@ -182,7 +182,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollX>
     </div>
   );
 }

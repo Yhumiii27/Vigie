@@ -8,7 +8,7 @@ import { MyReportDetail } from '@/components/events/MyReportDetail';
 import { MyReports } from '@/components/events/MyReports';
 import { QrCode } from '@/components/events/QrCode';
 import { MAX_PHOTOS } from '@/components/events/shared';
-import { SegLinks } from '@/components/ui';
+import { MissingNotice, SegLinks } from '@/components/ui';
 import { isDemo } from '@/lib/config';
 import { loadMyReport, loadMyReports } from '@/lib/data/events';
 import { loadReportPosts } from '@/lib/data/report-posts';
@@ -48,7 +48,7 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
       <div style={{ padding: '0 28px 40px', display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div className="vg-narrow-only card" style={{ gap: 8, width: '100%' }}>
           <div className="card-title" style={{ fontSize: 15 }}>Sur téléphone</div>
-          <Link href={fieldHref} className="btn btn-primary" style={{ minHeight: 44 }}><i className="ph ph-warning" style={{ fontSize: 16 }} />Ouvrir le formulaire terrain</Link>
+          <Link href={fieldHref} className="btn btn-primary" style={{ minHeight: 44 }}><i className="ph ph-warning" style={{ fontSize: 16 }} aria-hidden />Ouvrir le formulaire terrain</Link>
           <Link href="/signaler/mes-signalements" className="vg-link">Mes signalements →</Link>
         </div>
         <div className="vg-wide-only">
@@ -62,6 +62,8 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
           </IOSDevice>
         </div>
         <div style={{ display: 'grid', gap: 14, maxWidth: 360 }}>
+          {/* UX-13 : signalement inconnu, d'autrui ou anonyme : même bandeau, liste « Mes signalements » affichée. */}
+          {sel && !report && <MissingNotice text="Signalement introuvable ou qui n'est pas le vôtre." closeHref={MINE} />}
           <div>
             <SegLinks options={[
               { href: PATH, label: 'Signaler', on: !mine, icon: 'ph-warning' },
@@ -101,7 +103,7 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
             )}
             {canManage(role) && posts.length > 0 && (
               <Link href={`/signaler/postes${site.id === ALL_SITES ? '' : `?site=${encodeURIComponent(site.id)}`}`} className="vg-link">
-                <i className="ph ph-printer" style={{ marginRight: 4 }} />Imprimer la planche →
+                <i className="ph ph-printer" style={{ marginRight: 4 }} aria-hidden />Imprimer la planche →
               </Link>
             )}
           </div>

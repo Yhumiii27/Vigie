@@ -10,6 +10,7 @@ import { TONE } from '@/lib/domain';
 import type { MyContribution, MyContributions } from '@/lib/data/review';
 import { setReviewItemDone } from '@/server/review';
 import styles from './review.module.css';
+import { SaveStatus, safeCall } from '@/components/feedback';
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 
@@ -36,12 +37,12 @@ export function ContributionsView({ data }: { data: MyContributions }) {
 
 function ReviewEntry({ review: r, now, userId, focused }: { review: MyContribution; now: string; userId: string; focused: boolean }) {
   const [items, setDone] = useOptimistic(r.myItems, (state, { id, done }: { id: number; done: boolean }) => state.map((i) => (i.id === id ? { ...i, done } : i)));
-  const [, start] = useTransition();
+  const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const toggle = (i: MyContribution['myItems'][number]) => start(async () => {
     setError(null);
     setDone({ id: i.id, done: !i.done });
-    const res = await setReviewItemDone(i.id, !i.done);
+    const res = await safeCall(() => setReviewItemDone(i.id, !i.done));
     if (res.error) setError(res.error);
   });
   // Avancement : les éléments de la personne suivent la case cochée (affichage optimiste).
@@ -87,6 +88,7 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
           );
         })}
         {!items.length && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun élément de la check-list ne vous est attribué.</div>}
+        <SaveStatus pending={pending} />
         {error && <div role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</div>}
       </div>
 
@@ -102,7 +104,7 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
               <div className="vg-h6">Décisions et objectifs</div>
               {rec.decisions.map((d) => (
                 <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline' }}>
-                  <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 10.5 }}>{d.kindLabel}</ToneTag>
+                  <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
                   <span>{d.text}</span>
                   <span />
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', ...muted }}>
@@ -122,7 +124,7 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, fontSize: 12 }}>
           {r.openHref && <Link href={r.openHref} className="vg-link">Ouvrir la revue sur l&apos;écran Audits</Link>}
           {/* Lien HTML simple : la feuille globale du dossier ne doit pas rester chargée dans l'application. */}
-          {r.dossierHref && <a href={r.dossierHref} target="_blank" rel="noopener" className="vg-link"><i className="ph ph-file-text" style={{ fontSize: 12 }} /> Dossier</a>}
+          {r.dossierHref && <a href={r.dossierHref} target="_blank" rel="noopener" className="vg-link"><i className="ph ph-file-text" style={{ fontSize: 12 }} aria-hidden /> Dossier</a>}
         </div>
       )}
     </section>

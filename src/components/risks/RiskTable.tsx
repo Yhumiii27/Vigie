@@ -9,6 +9,7 @@ import type { ActionFormOptions } from '@/lib/action-view';
 import type { RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { Cotation } from './RiskForm';
 import { RiskSheet, actionColor, riskSheetHeading, type RiskSheetView } from './RiskSheet';
+import { Tip, TipText } from '@/components/Tip';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
 
@@ -72,17 +73,21 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
               <td>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
                   {r.actions.map((a) => (
-                    <Link key={a.id} href={`/actions?action=${encodeURIComponent(a.id)}`} className="vg-link" title={`${a.title} · ${a.status}`}
-                      style={{ fontSize: 12.5, color: actionColor(a), textDecoration: a.cancelled ? 'line-through' : undefined }}>{a.id}</Link>
+                    <Tip key={a.id} tip={`${a.title} · ${a.status}`}>
+                      {(described) => (
+                        <Link href={`/actions?action=${encodeURIComponent(a.id)}`} className="vg-link" {...described}
+                          style={{ fontSize: 12.5, color: actionColor(a), textDecoration: a.cancelled ? 'line-through' : undefined }}>{a.id}</Link>
+                      )}
+                    </Tip>
                   ))}
-                  {r.flag === 'toDefine' && <span style={{ color: TONE.danger.dot }} title={RISK_FLAGS.toDefine.hint}>À définir</span>}
-                  {r.flag === 'residualHigh' && <span style={{ color: TONE.danger.dot }} title={RISK_FLAGS.residualHigh.hint}>Résiduel ≥ {RISK_ACTION_THRESHOLD}</span>}
-                  {r.flag === 'toReview' && <ToneTag tone="warn" style={{ fontSize: 11 }}><span title={RISK_FLAGS.toReview.hint}>À recoter</span></ToneTag>}
-                  {!r.actions.length && !r.flag && <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+                  {r.flag === 'toDefine' && <TipText tip={RISK_FLAGS.toDefine.hint}><span style={{ color: TONE.danger.dot }}>À définir</span></TipText>}
+                  {r.flag === 'residualHigh' && <TipText tip={RISK_FLAGS.residualHigh.hint}><span style={{ color: TONE.danger.dot }}>Résiduel ≥ {RISK_ACTION_THRESHOLD}</span></TipText>}
+                  {r.flag === 'toReview' && <TipText tip={RISK_FLAGS.toReview.hint}><ToneTag tone="warn" style={{ fontSize: 11 }}>À recoter</ToneTag></TipText>}
+                  {!r.actions.length && !r.flag && <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                   {canManage && actionsQhse && (
                     <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
                       title="Nouvelle action de réduction rattachée au risque" onClick={() => setOpen({ id: r.id, view: 'newAction', direct: true })}>
-                      <i className="ph ph-plus" style={{ fontSize: 13 }} />Action
+                      <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Action
                     </button>
                   )}
                 </span>

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon, MissingNotice, hrefWith } from '@/components/ui';
 import { AddControlButton, ControlsPanel, type ControlSuggestions } from '@/components/watch/ControlsPanel';
@@ -12,6 +13,8 @@ import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { CONTROL_FILTERS, loadWatch, type ControlFilter } from '@/lib/data/watch';
 import { ALL_SITES } from '@/lib/session';
+import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
+import { TipButton } from '@/components/Tip';
 
 export const metadata: Metadata = { title: SCREENS.watch.title };
 
@@ -21,6 +24,9 @@ const uniq = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a,
 export default async function WatchPage({ searchParams }: PageProps<'/veille'>) {
   const session = await guard('watch');
   const sp = await searchParams;
+  // UX-12 : anciens paramètres (?archives=1, ?statut=archives) lus puis réécrits en ?etat=archives.
+  const canonical = canonicalHref('/veille', sp);
+  if (canonical) redirect(canonical);
   const canManage = canManageRole(session.role);
   const canApprove = canApproveRole(session.role);
   const [{ requirements, controls }, allOptions] = await Promise.all([loadWatch(), loadFormOptions()]);
@@ -44,17 +50,21 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
   const openRequirement = requirements.find((r) => r.id === reqParam);
   const openControl = controls.find((c) => c.id === ctrlParam);
   const tab = sp.onglet === 'controles' || (openControl && sp.onglet !== 'exigences') ? 'controles' : 'exigences';
-  const archives = sp.archives === '1' || !!openRequirement?.archived;
-  const reqParams = { archives: archives ? '1' : undefined };
-  const filter = (openControl?.archived && !sp.statut ? 'archives' : CONTROL_FILTERS.find((f) => f.key === sp.statut)?.key) as ControlFilter | undefined;
-  const ctrlParams = { onglet: 'controles', statut: filter };
+  // Portée « archivés » (?etat=archives, UX-12) : exigences archivées, ou filtre « Archivés » des contrôles.
+  const archives = (tab === 'exigences' && wantsArchives(sp)) || !!openRequirement?.archived;
+  const reqParams = { etat: archives ? ARCHIVES : undefined };
+  const askedStatus = CONTROL_FILTERS.find((f) => f.key !== ARCHIVES && f.key === sp.statut)?.key;
+  const filter = ((tab === 'controles' && wantsArchives(sp)) || (openControl?.archived && !askedStatus) ? ARCHIVES : askedStatus) as ControlFilter | undefined;
+  const ctrlParams = { onglet: 'controles', statut: filter === ARCHIVES ? undefined : filter, etat: filter === ARCHIVES ? ARCHIVES : undefined };
+  const ctrlChipHref = (key: ControlFilter | undefined) =>
+    hrefWith('/veille', { onglet: 'controles' }, key === ARCHIVES ? { etat: ARCHIVES } : { statut: key });
 
   const tabs = [['exigences', 'Exigences', activeReqs.length], ['controles', 'Contrôles périodiques', activeCtrls.length]] as const;
   const counts = Object.fromEntries(CONTROL_FILTERS.map((f) => [f.key, controls.filter((c) => c.filter === f.key).length])) as Record<ControlFilter, number>;
   const chips = [{ key: undefined, label: 'Tous', n: activeCtrls.length }, ...CONTROL_FILTERS.map((f) => ({ key: f.key, label: f.label, n: counts[f.key] }))];
   const reqChips = [
     { on: !archives, label: 'Actives', n: activeReqs.length, href: '/veille' },
-    { on: archives, label: 'Archivées', n: requirements.length - activeReqs.length, href: '/veille?archives=1' },
+    { on: archives, label: 'Archivées', n: requirements.length - activeReqs.length, href: `/veille?etat=${ARCHIVES}` },
   ];
 
   const featured = activeReqs.find((r) => r.featured);
@@ -81,17 +91,15 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
             </Link>
           ))}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6 }}>
-            <span title="Import à venir" style={{ display: 'inline-flex' }}>
-              <button type="button" className="btn btn-secondary vg-btn-sm" disabled><Icon name="ph-upload-simple" size={13} />Importer (Excel)</button>
-            </span>
+            <TipButton className="btn btn-secondary vg-btn-sm" disabled tip="Import à venir"><Icon name="ph-upload-simple" size={13} />Importer (Excel)</TipButton>
             {canManage && (tab === 'exigences'
               ? <AddRequirementButton options={options} featured={featured ? { id: featured.id, text: featured.text } : null} />
               : <AddControlButton options={options} requirementOptions={requirementOptions} defaultSite={defaultSite} suggestions={suggestions} today={now} />)}
           </span>
         </div>
 
-        {sp.exigence && !openRequirement && tab === 'exigences' && <MissingNotice text="Exigence introuvable." closeHref={hrefWith('/veille', reqParams, {})} />}
-        {sp.controle && !openControl && tab === 'controles' && <MissingNotice text="Contrôle introuvable ou hors du site sélectionné." closeHref={hrefWith('/veille', ctrlParams, {})} />}
+        {missingDetail(sp.exigence, !!openRequirement) && tab === 'exigences' && <MissingNotice text="Exigence introuvable." closeHref={hrefWith('/veille', reqParams, {})} />}
+        {missingDetail(sp.controle, !!openControl) && tab === 'controles' && <MissingNotice text="Contrôle introuvable ou hors du site sélectionné." closeHref={hrefWith('/veille', ctrlParams, {})} />}
         {tab === 'exigences' ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
@@ -111,7 +119,7 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
               {chips.map((c) => (
-                <Link key={c.label} href={hrefWith('/veille', ctrlParams, { statut: c.key })} scroll={false} className={`vg-chip${filter === c.key ? ' is-on' : ''}`}>
+                <Link key={c.label} href={ctrlChipHref(c.key)} scroll={false} className={`vg-chip${filter === c.key ? ' is-on' : ''}`}>
                   {c.label}<span style={{ opacity: 0.6 }}>{c.n}</span>
                 </Link>
               ))}

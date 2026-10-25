@@ -145,7 +145,7 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
                   <td style={{ minWidth: 220, maxWidth: 360 }}>
                     <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ textWrap: 'pretty' }}>{f.label}</span>
-                      {isNew && <ToneTag tone="warn" style={{ fontSize: 10, padding: '1px 6px' }}>nouveau</ToneTag>}
+                      {isNew && <ToneTag tone="warn" style={{ fontSize: 11, padding: '1px 6px' }}>nouveau</ToneTag>}
                     </span>
                     <span style={{ display: 'block', ...muted, wordBreak: 'break-all' }} title="Clé du champ dans le fichier">
                       {f.section ? `${f.section} · ` : ''}{f.key}

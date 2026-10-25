@@ -55,7 +55,7 @@ export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtained
 export function Fact({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
     <div style={{ display: 'grid', gap: 2, minWidth: 0, gridColumn: wide ? '1 / -1' : undefined }}>
-      <span style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{label}</span>
+      <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{label}</span>
       <span style={{ fontSize: 12.5 }}>{children}</span>
     </div>
   );
@@ -82,7 +82,7 @@ export function RenewalTag({ renewal, state }: { renewal: RenewalInfo; state: Sk
   }
   return (
     <Link href={actionHref(renewal.id)} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={`${renewal.label} — date cible ${fmtDate(renewal.dueOn)}`}>
-      <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}
+      <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}<span className="vg-sr-only">{` (${renewal.label} — date cible ${fmtDate(renewal.dueOn)})`}</span>
     </Link>
   );
 }
@@ -98,7 +98,7 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
 }) {
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      <h6 className="vg-h6">{title}{entries.length > 0 && <span style={{ color: 'var(--color-neutral-600)' }}> · {entries.length}</span>}</h6>
+      <h6 className="vg-h6">{title}{entries.length > 0 && <span style={{ color: 'var(--vg-text-muted)' }}> · {entries.length}</span>}</h6>
       {entries.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune formation enregistrée.</div>
       ) : (

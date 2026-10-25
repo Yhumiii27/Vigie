@@ -26,7 +26,7 @@ function SourceCell({ a }: { a: ActionListItem }) {
   return (
     <td style={{ ...MUTED, maxWidth: 220 }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: a.source ? undefined : TONE.warn.dot }}><Icon name={a.sourceIcon} size={12} />{a.sourceLabel}</span>
-      {a.originRef && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-600)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.originRef}</span>}
+      {a.originRef && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.originRef}</span>}
     </td>
   );
 }

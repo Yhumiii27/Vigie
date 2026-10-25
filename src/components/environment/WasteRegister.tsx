@@ -93,7 +93,7 @@ export function WasteRegister({ entries, lookup = entries, streams, canManage, s
               <tr><td colSpan={cols} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>{emptyText}</td></tr>
             )}
             {entries.map((e) => (
-              <tr key={e.id} {...(canManage ? rowOpener(() => setSelId(e.id)) : {})} style={e.cancelled ? { opacity: 0.55 } : undefined}>
+              <tr key={e.id} {...(canManage ? rowOpener(() => setSelId(e.id)) : {})} data-obsolete={e.cancelled || undefined}>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {fmtDate(e.removedOn)}
                   {showSite && <div style={muted}>{shortSite(e.site)}</div>}
@@ -106,7 +106,7 @@ export function WasteRegister({ entries, lookup = entries, streams, canManage, s
                   )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-300)' }}>{e.ewcCode}</td>
-                <td>{e.hazardous ? <ToneTag tone="warn">Dangereux</ToneTag> : <span style={{ color: 'var(--color-neutral-600)' }}>Non</span>}</td>
+                <td>{e.hazardous ? <ToneTag tone="warn">Dangereux</ToneTag> : <span style={{ color: 'var(--vg-text-muted)' }}>Non</span>}</td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmtQty(e.quantity, e.unit)}</td>
                 <td style={{ color: 'var(--color-neutral-300)' }}>{e.transporter}</td>
                 <td style={{ color: 'var(--color-neutral-400)', minWidth: 160 }}>{e.destination}</td>
@@ -130,7 +130,7 @@ export function WasteRegister({ entries, lookup = entries, streams, canManage, s
                       )}
                     </span>
                   ) : (
-                    <span style={{ color: 'var(--color-neutral-600)' }} title="Bordereau non requis pour un déchet non dangereux">—</span>
+                    <span style={{ color: 'var(--vg-text-muted)' }} title="Bordereau non requis pour un déchet non dangereux">—</span>
                   )}
                 </td>
               </tr>

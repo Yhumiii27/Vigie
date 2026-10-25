@@ -8,6 +8,7 @@ import { SEVESO_LEVELS } from './prevention/model';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
+import { TipButton } from '@/components/Tip';
 
 export type { SiteAdminRow };
 
@@ -52,14 +53,14 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                   {s.label}
                   <span className="vg-muted" style={{ fontSize: 11 }}>ordre {s.sort}</span>
-                  {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 10 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
-                  {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 10 }} title="Droit local d'Alsace-Moselle">Alsace-Moselle</span>}
+                  {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 11 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
+                  {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 11 }} title="Droit local d'Alsace-Moselle">Alsace-Moselle</span>}
                   <span className="vg-muted" style={{ fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     title="Responsable QHSE">{s.qhseLead ?? 'Responsable QHSE à désigner'}</span>
                 </span>
                 <button type="button" className="vg-text-btn" onClick={() => setView({ edit: s })}>Modifier</button>
-                <button type="button" className="vg-text-btn" disabled={active.length <= 1} title={active.length <= 1 ? 'Au moins un site doit rester actif.' : undefined}
-                  onClick={() => setView({ archive: s })}>Archiver</button>
+                <TipButton className="vg-text-btn" disabled={active.length <= 1} tip={active.length <= 1 ? 'Au moins un site doit rester actif.' : undefined}
+                  onClick={() => setView({ archive: s })}>Archiver</TipButton>
               </div>
             ))}
           </div>
@@ -84,7 +85,7 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <span className="vg-muted" style={{ fontSize: 11.5 }}>Le classement Seveso et la règle « plan de prévention dès la première minute » se règlent sur l&apos;écran Prévention.</span>
             <button type="button" className="btn btn-secondary vg-btn-sm" style={{ flex: 'none' }} onClick={() => setView({ edit: null })}>
-              <i className="ph ph-plus" style={{ fontSize: 14 }} />Nouveau site
+              <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />Nouveau site
             </button>
           </div>
         </div>

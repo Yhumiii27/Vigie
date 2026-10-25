@@ -38,13 +38,8 @@ export function SegLinks({ options, size = 12, pad = '5px 10px' }: { options: { 
   );
 }
 
-/** Construit une URL en remplaçant certains paramètres de recherche. */
-export function hrefWith(path: string, current: Record<string, string | undefined>, patch: Record<string, string | undefined>) {
-  const params = new URLSearchParams();
-  Object.entries({ ...current, ...patch }).forEach(([k, v]) => { if (v) params.set(k, v); });
-  const qs = params.toString();
-  return qs ? `${path}?${qs}` : path;
-}
+/** Construit une URL en remplaçant certains paramètres de recherche (convention d'URL : src/lib/url-state.ts, UX-12). */
+export { hrefWith } from '@/lib/url-state';
 
 export function OutOfScope({ title, text }: { title: string; text: string }) {
   return (
@@ -58,13 +53,31 @@ export function OutOfScope({ title, text }: { title: string; text: string }) {
   );
 }
 
-/** Paramètre de sélection (?sel=, ?action=, ?plan=…) qui ne correspond à rien : supprimé, archivé ou hors du site sélectionné. */
-export function MissingNotice({ text = 'Élément introuvable ou hors du site sélectionné.', closeHref }: { text?: string; closeHref: string }) {
+/**
+ * Conteneur à défilement horizontal d'un tableau sans élément interactif : atteignable au clavier (flèches pour défiler) et
+ * nommé (WCAG 2.1.1, règle axe scrollable-region-focusable).
+ */
+export function ScrollX({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="vg-scroll-x" role="region" aria-label={label} tabIndex={0} style={{ overflowX: 'auto' }}>{children}</div>;
+}
+
+/** Message commun d'un lien profond qui ne mène à aucun élément affichable (UX-13). */
+export const MISSING_TEXT = 'Élément introuvable ou hors du site sélectionné.';
+
+/**
+ * Bandeau d'un lien profond (?sel=, ?action=, ?plan=…) qui ne correspond à rien d'affichable : élément supprimé, archivé,
+ * hors du site sélectionné, hors du périmètre ou réservé à d'autres rôles (UX-13). Le même texte vaut pour « inexistant » et
+ * « non autorisé » : il ne révèle jamais l'existence d'un élément hors périmètre ni d'une donnée de santé. Fermeture par un
+ * lien (`closeHref`, page serveur) ou un bouton (`onClose`, fiche ouverte côté navigateur).
+ */
+export function MissingNotice({ text = MISSING_TEXT, closeHref, onClose }: { text?: string; closeHref?: string; onClose?: () => void }) {
   return (
-    <div className="card" role="status" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: '10px 14px', fontSize: 12.5 }}>
+    <div className="card vg-missing" role="status" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: '10px 14px', fontSize: 12.5 }}>
       <i className="ph ph-question" style={{ fontSize: 16, color: 'var(--color-neutral-500)' }} aria-hidden />
       <span style={{ flex: 1 }}>{text}</span>
-      <Link href={closeHref} scroll={false} className="vg-link">Fermer</Link>
+      {onClose
+        ? <button type="button" className="vg-text-btn" onClick={onClose}>Fermer</button>
+        : closeHref && <Link href={closeHref} scroll={false} className="vg-link">Fermer</Link>}
     </div>
   );
 }

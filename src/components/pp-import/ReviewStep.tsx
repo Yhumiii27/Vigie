@@ -135,7 +135,7 @@ export function ReviewStep({ data, draft, sections, file, format, templateId, te
             <div style={{ display: 'grid', gap: 4 }}>
               <label className="vg-check">
                 <input type="checkbox" name="dangerousWork" checked={dangerous} onChange={(e) => setDangerous(e.target.checked)} />
-                <span className="vg-check-box"><i className="ph ph-check" /></span>
+                <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
                 <span>Travaux dangereux (arrêté du 19 mars 1993)</span>
               </label>
               <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>{DANGEROUS_WORK_HINT}</span>

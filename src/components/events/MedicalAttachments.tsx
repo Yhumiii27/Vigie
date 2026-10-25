@@ -54,10 +54,10 @@ function Reclassify({ files }: { files: AttachmentItem[] }) {
           {files.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
         <button type="button" className="btn btn-secondary vg-btn-sm" onClick={submit} disabled={!id || pending}>
-          <i className="ph ph-lock-simple" style={{ fontSize: 13 }} />{pending ? 'Reclassement…' : 'Reclasser'}
+          <i className="ph ph-lock-simple" style={{ fontSize: 13 }} aria-hidden />{pending ? 'Reclassement…' : 'Reclasser'}
         </button>
       </span>
-      <span style={{ fontSize: 11, color: 'var(--color-neutral-600)' }}>Sans retour : la pièce n&apos;est plus visible que de l&apos;animateur QHSE et de la direction ; une erreur se corrige en la retirant.</span>
+      <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>Sans retour : la pièce n&apos;est plus visible que de l&apos;animateur QHSE et de la direction ; une erreur se corrige en la retirant.</span>
       {error && <span role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </div>
   );

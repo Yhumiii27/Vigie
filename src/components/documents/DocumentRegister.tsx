@@ -3,7 +3,8 @@
 import { useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { Dialog } from '@/components/Dialog';
-import { Icon, ToneTag } from '@/components/ui';
+import { Icon, MissingNotice, ToneTag } from '@/components/ui';
+import { searchWith } from '@/lib/url-state';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { DocumentRow, UnavailableDoc } from '@/lib/data/documents';
@@ -35,12 +36,13 @@ const muted = 'var(--color-neutral-400)';
 /** Registre des documents maîtrisés : tableau filtré et fiche du document en fenêtre modale. */
 export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, canApprove, options, existingIds, elsewhere, unavailable = {}, siteId, suggestedDueOn }: Props) {
   // La fiche ouverte est portée par l'URL (?doc=PR-QHSE-003) : lien profond depuis les échéances et notifications.
+  // Convention d'URL (UX-12) : ouverture ajoutée à l'historique (« Précédent » ferme la fiche), fermeture en place.
   const openId = useSearchParams().get('doc');
   const open = (id: string | null) => {
-    const url = new URL(window.location.href);
-    if (id) url.searchParams.set('doc', id);
-    else url.searchParams.delete('doc');
-    window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+    const search = searchWith(window.location.search, { doc: id ?? undefined });
+    const href = `${window.location.pathname}${search}`;
+    if (id) window.history.pushState(null, '', href);
+    else window.history.replaceState(null, '', href);
   };
 
   const byId = new Map(docs.map((d) => [d.id, d]));
@@ -56,6 +58,8 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
       : notInForce === 'draft'
         ? <>{openId} n&apos;est pas encore en vigueur : il sera consultable ici dès l&apos;approbation de sa première version.</>
         : null;
+  // Référence inconnue, hors du périmètre ou sans fiche consultable par le rôle : bandeau commun (UX-13), même message.
+  const missing = !!openId && !doc && !notice;
 
   return (
     <>
@@ -64,6 +68,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
         {canManage && <span style={{ marginLeft: 'auto' }}><NewDocumentButton options={options} existingIds={existingIds} defaultSiteId={siteId} onCreated={open} /></span>}
       </div>
 
+      {missing && <MissingNotice text="Document introuvable ou hors du site sélectionné." onClose={() => open(null)} />}
       {notice && (
         <div className="vg-inset" role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', fontSize: 12.5, boxShadow: `inset 2px 0 0 ${TONE.accent.dot}` }}>
           <Icon name="ph-info" size={15} style={{ color: TONE.accent.dot, flex: 'none' }} />
@@ -86,7 +91,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                 <tr><td colSpan={10} style={{ padding: '14px 8px', color: 'var(--color-neutral-500)', fontSize: 12 }}>{emptyText}</td></tr>
               )}
               {shown.map((d) => (
-                <tr key={d.id} className="is-clickable" onClick={() => open(d.id)} style={d.status === 'obsolete' ? { opacity: 0.55 } : undefined}>
+                <tr key={d.id} onClick={() => open(d.id)} className="is-clickable" data-obsolete={d.status === 'obsolete' || undefined}>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button type="button" className="vg-text-btn" style={{ fontSize: 12.5, color: 'var(--color-neutral-300)' }}
                       onClick={(e) => { e.stopPropagation(); open(d.id); }}>

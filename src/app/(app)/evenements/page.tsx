@@ -114,7 +114,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
             {health && (
               <a href={`${BENIGN_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-wide-only">
-                <i className="ph ph-notebook" style={{ fontSize: 14 }} />Registre des accidents bénins
+                <i className="ph ph-notebook" style={{ fontSize: 14 }} aria-hidden />Registre des accidents bénins
               </a>
             )}
             <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
@@ -127,7 +127,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
         style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 14, alignItems: 'start' }}>
         <div className="vg-md-list" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, maxWidth: 420 }}>
           <form action="/evenements" style={{ position: 'relative' }}>
-            <i className="ph ph-magnifying-glass" style={{ position: 'absolute', left: 10, top: 10, fontSize: 15, color: 'var(--color-neutral-500)' }} />
+            <i className="ph ph-magnifying-glass" style={{ position: 'absolute', left: 10, top: 10, fontSize: 15, color: 'var(--color-neutral-500)' }} aria-hidden />
             {tab !== 'ouverts' && <input type="hidden" name="etat" value={tab} />}
             {type && <input type="hidden" name="type" value={type} />}
             {origin && <input type="hidden" name="origine" value={origin} />}
@@ -209,10 +209,10 @@ function StepTrack({ step, dismissed, stepDates }: { step: number; dismissed: bo
         return (
           <div key={label} style={{ display: 'grid', gap: 6, minWidth: 0, opacity: dismissed ? 0.6 : undefined }}>
             <div style={{ height: 3, borderRadius: 2, background: done ? 'var(--color-accent-600)' : cur ? 'var(--color-accent)' : 'var(--color-neutral-800)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: done ? 'var(--color-neutral-300)' : cur ? 'var(--color-accent)' : 'var(--color-neutral-600)' }}>
-              <i className={`ph ${done ? 'ph-check-circle' : cur ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 12 }} /><span>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: done ? 'var(--color-neutral-300)' : cur ? 'var(--color-accent)' : 'var(--vg-text-muted)' }}>
+              <i className={`ph ${done ? 'ph-check-circle' : cur ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 12 }} aria-hidden /><span>{label}</span>
             </div>
-            {date && i <= step && <span style={{ fontSize: 10.5, color: 'var(--color-neutral-500)', marginTop: -4 }}>{fmtDayMonth(date)}</span>}
+            {date && i <= step && <span style={{ fontSize: 11, color: 'var(--color-neutral-500)', marginTop: -4 }}>{fmtDayMonth(date)}</span>}
           </div>
         );
       })}
@@ -437,7 +437,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
           {/* EVT-10 : synthèse imprimable de la DAT et feuille d'accident (données de santé) ; lien HTML simple (print.css). */}
           {health && e.type === 'AT' && (
             <a href={`${DAT_PRINT_PATH}/${encodeURIComponent(e.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-              <i className="ph ph-printer" style={{ fontSize: 13 }} />Synthèse DAT
+              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Synthèse DAT
             </a>
           )}
           {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} benign={register?.entry ? (register.entry.escalatedAt ? 'escalated' : 'active') : null} />}
@@ -550,8 +550,8 @@ function Analysis({ method, content }: { method: string; content: unknown }) {
     <div className="vg-inset" style={{ display: 'grid', gap: 10, padding: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '6px 12px' }}>
         {D8_STEPS.map((t, i) => (
-          <div key={t} style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: i < current ? 'var(--color-neutral-300)' : i === current ? 'var(--color-accent)' : 'var(--color-neutral-600)' }}>
-            <i className={`ph ${i < current ? 'ph-check-circle' : i === current ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 13 }} /><span>{t}</span>
+          <div key={t} style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: i < current ? 'var(--color-neutral-300)' : i === current ? 'var(--color-accent)' : 'var(--vg-text-muted)' }}>
+            <i className={`ph ${i < current ? 'ph-check-circle' : i === current ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 13 }} aria-hidden /><span>{t}</span>
           </div>
         ))}
       </div>

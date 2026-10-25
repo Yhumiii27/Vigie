@@ -13,6 +13,11 @@
   --tone-ok-dot: oklch(0.74 0.12 152);
   --rule-fade: linear-gradient(to right, transparent, var(--color-divider) 48px, var(--color-divider) calc(100% - 48px), transparent);
   --rule-soft: linear-gradient(to right, transparent, color-mix(in srgb, var(--color-text) 8%, transparent) 48px, color-mix(in srgb, var(--color-text) 8%, transparent) calc(100% - 48px), transparent);
+  /* UX-09 : texte tertiaire au contraste AA (≥ 4,5:1 sur le fond, les surfaces et les encarts ; mesures dans
+     src/lib/contrast.test.ts). Remplace --color-neutral-600 (#75798c, 3,5:1 sur une surface) pour du texte. */
+  --vg-text-muted: #8d91a5;
+  /* UX-09 : accent d'un élément actif sur son fond teinté (puce, entrée de navigation) : 4,8:1 au lieu de 4,1:1. */
+  --vg-accent-text: #9e92e8;
   color-scheme: dark;
 }
 
@@ -47,7 +52,7 @@ button { font: inherit; }
 
 .vg-nav { flex: 1; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 2px; margin-top: 6px; }
 .vg-nav-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin-top: 12px; }
-.vg-eyebrow { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--color-neutral-600); }
+.vg-eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--vg-text-muted); }
 .vg-nav-sec > .vg-eyebrow { padding: 0 10px 4px; }
 .vg-item {
   position: relative; display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: var(--radius-md);
@@ -55,7 +60,7 @@ button { font: inherit; }
 }
 .vg-item:hover { color: var(--color-neutral-300); background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .vg-item::before { content: ''; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 2px; border-radius: 1px; background: transparent; }
-.vg-item.is-on, .vg-item.is-on:hover { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.vg-item.is-on, .vg-item.is-on:hover { color: var(--vg-accent-text); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .vg-item.is-on::before { background: var(--color-accent); }
 .vg-item-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vg-badge { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 6px; background: var(--color-accent-800); color: var(--color-accent-100); }
@@ -80,7 +85,7 @@ button { font: inherit; }
 .vg-dot { display: inline-block; flex: none; border-radius: 50%; }
 .vg-muted { color: var(--color-neutral-500); }
 .vg-link { font-size: 12px; text-decoration: none; }
-.vg-h6 { margin: 0; color: var(--color-neutral-500); font-size: 10.5px; }
+.vg-h6 { margin: 0; color: var(--color-neutral-500); font-size: 11px; }
 .vg-btn-sm { font-size: 12px; padding: 5px 10px; }
 .vg-inset { background: var(--color-bg); border-radius: var(--radius-md); }
 .vg-rule-bottom { background: var(--rule-soft) no-repeat bottom / 100% 1px; }
@@ -103,7 +108,7 @@ button { font: inherit; }
   border: 1px solid var(--color-divider); color: var(--color-neutral-300); background: transparent; text-decoration: none;
 }
 .vg-chip:hover { color: var(--color-neutral-300); background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.vg-chip.is-on, .vg-chip.is-on:hover { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.vg-chip.is-on, .vg-chip.is-on:hover { border-color: var(--color-accent); color: var(--vg-accent-text); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 
 /* Contrôle segmenté en liens (même rendu que .seg-opt:has(input:checked)) */
 a.seg-opt { color: inherit; text-decoration: none; }
@@ -176,8 +181,10 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 
 /* Bouton-texte discret (lien d'action dans une carte ou un tableau) */
 .vg-text-btn { background: none; border: 0; padding: 0; font: inherit; font-size: 12px; color: var(--color-accent); cursor: pointer; }
+/* Cible d'au moins 24 px de haut (WCAG 2.5.8) sans changer la mise en page (marges négatives). */
+.vg-text-btn { display: inline-flex; align-items: center; min-height: 24px; margin-block: -3px; text-align: left; }
 .vg-text-btn:hover { color: var(--color-accent-400); }
-.vg-text-btn:disabled { color: var(--color-neutral-600); cursor: not-allowed; }
+.vg-text-btn:disabled, .vg-text-btn[aria-disabled='true'] { color: var(--vg-text-muted); cursor: not-allowed; }
 
 /* Ligne de tableau ouvrant une fenêtre */
 .table tbody tr.is-clickable { cursor: pointer; }
@@ -262,7 +269,7 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-block-text.vg-muted { color: var(--color-neutral-500); }
 .vg-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px 16px; margin: 0; }
 .vg-facts > div { display: grid; gap: 3px; align-content: start; min-width: 0; }
-.vg-facts dt { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-600); }
+.vg-facts dt { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--vg-text-muted); }
 .vg-facts dd { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; }
 .vg-person { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .vg-source-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
@@ -291,7 +298,7 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-thread-body { margin: 0; font-size: 12.5px; color: var(--color-neutral-300); white-space: pre-line; overflow-wrap: anywhere; text-wrap: pretty; }
 .vg-thread-withdrawn { margin: 0; font-size: 12px; font-style: italic; color: var(--color-neutral-500); overflow-wrap: anywhere; }
 .vg-thread-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; overflow-wrap: anywhere; }
-.vg-thumb-caption { margin-top: 3px; max-width: 100%; font-size: 10.5px; color: var(--color-neutral-500); text-align: center; }
+.vg-thumb-caption { margin-top: 3px; max-width: 100%; font-size: 11px; color: var(--color-neutral-500); text-align: center; }
 /* Liste latérale + contenu (ex. unités de travail du DUERP) ; une seule colonne sur téléphone. */
 .vg-split { grid-template-columns: minmax(200px, 216px) minmax(0, 1fr); }
 @media (max-width: 760px) {
@@ -312,7 +319,7 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-filters-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
 /* Prévision des recyclages (HAB-09) : tableau mois × titres. */
 .vg-forecast td.vg-forecast-cell { text-align: center; font-variant-numeric: tabular-nums; }
-.vg-forecast td.vg-forecast-cell.is-empty { color: var(--color-neutral-700); }
+.vg-forecast td.vg-forecast-cell.is-empty { color: var(--vg-text-muted); }
 /* Carte KPI à deux liens (TDB-12) : lien principal étendu à toute la carte, second lien au-dessus. */
 .vg-kcard-split { position: relative; }
 .vg-kcard-main { position: absolute; inset: 0; border-radius: inherit; }
@@ -333,3 +340,54 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
   .vg-md:not([data-focus='detail']) > .vg-md-detail { display: none !important; }
   .vg-md-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; justify-self: start; font-size: 13px; }
 }
+/* ─── Accessibilité et retours d'état (paquet 9 : UX-04, UX-10, UX-11, UX-14) ─ */
+/* Texte lu par les lecteurs d'écran seulement. */
+.vg-sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Lien d'évitement « Aller au contenu » : visible au focus clavier. */
+.vg-skip { position: fixed; left: 12px; top: -60px; z-index: 60; padding: 8px 14px; border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-md); text-decoration: none; font-size: 13px; }
+.vg-skip:focus { top: 12px; outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.vg-main:focus { outline: none; }
+/* Bouton désactivé qui garde son explication au clavier (aria-disabled, TipButton) : même rendu qu'un bouton désactivé. */
+.btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+/* Infobulles (TipButton, TipText) : survol et focus clavier, Échap pour fermer. */
+.vg-tip { position: relative; display: inline-flex; }
+.vg-tip-bubble {
+  display: none; position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 40;
+  width: max-content; max-width: min(300px, calc(100vw - 32px)); padding: 6px 9px; border-radius: var(--radius-sm);
+  background: var(--color-neutral-900); color: var(--color-text); box-shadow: var(--shadow-md);
+  font-size: 12px; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; text-transform: none; letter-spacing: normal;
+}
+.vg-tip:hover > .vg-tip-bubble, .vg-tip:focus-within > .vg-tip-bubble { display: block; }
+.vg-tip[data-dismissed] > .vg-tip-bubble { display: none; }
+@media (hover: none) { .vg-tip:hover:not(:focus-within) > .vg-tip-bubble { display: none; } }
+/* Retours d'état : toasts de la coque (StatusToaster), indicateur d'enregistrement (SaveStatus). */
+.vg-toasts { position: fixed; right: 16px; bottom: 16px; z-index: 70; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.vg-toast-region { display: grid; gap: 8px; }
+.vg-toast {
+  pointer-events: auto; display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-md); font-size: 12.5px; text-wrap: pretty;
+}
+.vg-toast > i { font-size: 16px; flex: none; margin-top: 1px; }
+.vg-toast.is-ok > i { color: var(--tone-ok-dot); }
+.vg-toast.is-info > i { color: var(--color-accent); }
+.vg-toast.is-error { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone-danger-dot) 60%, transparent), 0 6px 18px rgba(0,0,0,0.55); }
+.vg-toast.is-error > i { color: var(--tone-danger-dot); }
+.vg-toast .vg-text-btn { color: var(--color-neutral-400); font-size: 14px; }
+.vg-save-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--color-neutral-400); }
+.vg-save-status:empty { display: none; }
+.vg-spinner { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: vg-spin .8s linear infinite; flex: none; }
+@keyframes vg-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .vg-spinner { animation: none; border-right-color: currentColor; opacity: .6; } }
+[aria-busy='true'] { cursor: progress; }
+@media print { .vg-toasts, .vg-skip { display: none !important; } }
+@media (max-width: 760px) { .vg-toasts { left: 16px; right: 16px; width: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); } }
+/* Contraste et cibles relevés par axe-core (UX-09, WCAG 2.2 AA). */
+/* Lien dans un texte : souligné discret (le seul changement de couleur ne suffit pas, 1.4.1). */
+.vg-link { text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px; }
+.vg-link:hover { text-decoration-color: currentColor; }
+/* Compteur d'une puce ou d'une option active : pleine couleur (l'opacité de 60 % passait sous 4,5:1 sur le fond teinté). */
+.vg-chip.is-on > span, .seg-opt.is-on > span { opacity: 1 !important; }
+/* Liens isolés d'une carte : cible d'au moins 24 px de haut (2.5.8). */
+.vg-target-links > a, .vg-kcard-sub { display: inline-flex; align-items: center; min-height: 24px; }
+/* Ligne archivée, annulée ou obsolète (data-obsolete) : texte atténué sans opacité (les étiquettes gardent leur contraste). */
+.table tbody tr[data-obsolete] > td { color: var(--vg-text-muted); }

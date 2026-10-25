@@ -32,7 +32,7 @@ export default async function BenignRegisterPage({ searchParams }: PageProps<'/e
     <article className="pp-doc">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href="/evenements" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Événements</a>
+        <a href="/evenements" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Événements</a>
         {register?.site && (
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
@@ -112,7 +112,7 @@ function Register({ register, now }: { register: BenignRegister; now: string }) 
                 </thead>
                 <tbody>
                   {entries.map((r) => (
-                    <tr key={r.id} style={r.cancelled ? { opacity: 0.6 } : undefined}>
+                    <tr key={r.id} data-obsolete={r.cancelled || undefined}>
                       <td className="pp-nowrap" style={r.cancelled ? { textDecoration: 'line-through' } : undefined}>{r.number}</td>
                       <td className="pp-nowrap">
                         {fmtDate(r.occurredOn)}{r.occurredTime ? ` à ${r.occurredTime}` : ''}

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { BackToList, DetailFocus } from '@/components/ListDetail';
 import { PageHeader } from '@/components/PageHeader';
@@ -20,6 +21,7 @@ import { loadDuerpAccessRegister, loadPreventionProgram, loadRisks } from '@/lib
 import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
 import type { ActionFormOptions } from '@/lib/action-view';
+import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 
 export const metadata: Metadata = { title: SCREENS.risks.title };
 
@@ -29,6 +31,9 @@ const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites'> = { people: [], sites: [
 export default async function RisksPage({ searchParams }: PageProps<'/risques'>) {
   const session = await guard('risks');
   const sp = await searchParams;
+  // UX-12 : ancien paramètre ?archives=1 lu puis réécrit en ?etat=archives.
+  const canonical = canonicalHref('/risques', sp);
+  if (canonical) redirect(canonical);
   // Saisie : encadrement autorisé à modifier le DUERP ; consultation pour le chef de projet et le salarié (DUE-01).
   const edit = canEdit(session.role, 'risks');
   const approve = edit && canApprove(session.role);
@@ -49,7 +54,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const riskParam = typeof sp.risque === 'string' ? Number(sp.risque) : null;
   const deepRisk = riskParam == null ? undefined : risks.find((r) => r.id === riskParam);
   const deepArchived = riskParam == null || deepRisk ? undefined : archivedRisks.find((r) => r.id === riskParam);
-  const archives = edit && !program && !registerOn && (sp.archives === '1' || !!deepArchived);
+  const archives = edit && !program && !registerOn && (wantsArchives(sp) || !!deepArchived);
   const archivedCount = archivedRisks.length + archivedUnits.length;
   const askedUnit = typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : undefined;
   const unitId = deepRisk?.unitId ?? askedUnit ?? units[0]?.id;
@@ -58,11 +63,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   // liste sur téléphone ; sans choix, la première unité (grand écran) et la liste des unités (téléphone).
   const explicitUnit = !!askedUnit || !!deepRisk;
   const params = {
-    unite: explicitUnit ? unitId : undefined, mode: residual ? 'residuel' : undefined, archives: archives ? '1' : undefined,
+    unite: explicitUnit ? unitId : undefined, mode: residual ? 'residuel' : undefined, etat: archives ? ARCHIVES : undefined,
     programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined,
   };
   // Panneau de droite : une unité, ou « Archivés », le programme annuel, le registre (les autres paramètres sont remis à zéro).
-  const panel = { archives: undefined, programme: undefined, registre: undefined };
+  const panel = { etat: undefined, programme: undefined, registre: undefined };
   const unitPanel = !archives && !program && !registerOn;
   const rows = risks.filter((r) => r.unitId === unitId);
   const unit = units.find((u) => u.id === unitId);
@@ -127,7 +132,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="ph-file-text" size={18} style={{ color: 'var(--color-accent)' }} /><span style={{ fontWeight: 500 }}>DUERP</span></div>
           {banner.map(({ k, v, color, link }) => (
             <div key={k} style={{ display: 'grid', gap: 1 }}>
-              <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{k}</span>
+              <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{k}</span>
               <span style={{ fontSize: 12.5, color }}>{v}</span>
               {link && <Link href={link.href} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ph-scales" size={12} />{link.label}</Link>}
             </div>
@@ -148,7 +153,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
         </div>
         {!edit && <DuerpAccessNotice style={{ padding: '0 4px' }} />}
 
-        {typeof sp.risque === 'string' && !deepRisk && !deepArchived && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
+        {missingDetail(sp.risque, !!deepRisk || !!deepArchived) && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
 
         <div className="vg-split vg-md" data-focus={explicitUnit || !unitPanel ? 'detail' : 'list'} style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
           <div className="vg-md-list" style={{ display: 'grid', gap: 2 }}>
@@ -159,7 +164,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{u.count}</span>
                 {u.alerts > 0 && (
                   <span title={`${u.alerts} risque${u.alerts > 1 ? 's' : ''} ≥ ${RISK_ACTION_THRESHOLD} sans action de réduction ou au résiduel encore élevé`}
-                    style={{ fontSize: 10.5, fontWeight: 500, color: TONE.danger.fg, background: TONE.danger.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{u.alerts}</span>
+                    style={{ fontSize: 11, fontWeight: 500, color: TONE.danger.fg, background: TONE.danger.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{u.alerts}</span>
                 )}
                 {u.toReview > 0 && (
                   <span title={`${u.toReview} ${u.toReview > 1 ? 'résiduels' : 'résiduel'} à recoter (actions vérifiées)`} style={{ display: 'inline-flex' }}>
@@ -171,7 +176,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
             ))}
             {!units.length && <div style={{ padding: '4px 10px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune unité sur ce site.</div>}
             {edit && (archivedCount > 0 || archives) && (
-              <Link href={hrefWith('/risques', params, { ...panel, archives: archives ? undefined : '1' })} scroll={false} className={`vg-item${archives ? ' is-on' : ''}`}
+              <Link href={hrefWith('/risques', params, { ...panel, etat: archives ? undefined : ARCHIVES })} scroll={false} className={`vg-item${archives ? ' is-on' : ''}`}
                 style={{ gap: 8, padding: '7px 10px', marginTop: 4, color: 'var(--color-neutral-400)' }} title="Unités et risques retirés du document unique, avec leur motif et leur historique">
                 <Icon name="ph-archive" size={13} />
                 <span style={{ flex: 1, fontSize: 12.5 }}>Archivés</span>
@@ -191,7 +196,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 <span style={{ flex: 1, fontSize: 12.5 }}>Mises à disposition</span>
                 {register.pending > 0 && (
                   <span title={`${register.pending} demande${register.pending > 1 ? 's' : ''} en attente`}
-                    style={{ fontSize: 10.5, fontWeight: 500, color: TONE.warn.fg, background: TONE.warn.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{register.pending}</span>
+                    style={{ fontSize: 11, fontWeight: 500, color: TONE.warn.fg, background: TONE.warn.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{register.pending}</span>
                 )}
               </Link>
             )}

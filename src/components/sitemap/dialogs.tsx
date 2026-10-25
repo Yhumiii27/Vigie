@@ -279,7 +279,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
             {routes.map((r) => (
               <label key={r.id} className="vg-check">
                 <input type="checkbox" name="routeIds" value={r.id} defaultChecked={routeIds.has(r.id)} />
-                <span className="vg-check-box"><i className="ph ph-check" /></span>
+                <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
                 <span>{r.name} <span style={muted}>· {ROUTE_KINDS[r.kind].label.toLowerCase()}{r.shared ? ' · voie commune' : ''}</span></span>
               </label>
             ))}

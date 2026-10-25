@@ -21,7 +21,7 @@
 }
 .stepNum {
   width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%;
-  border: 1px solid var(--color-divider); font-size: 10.5px;
+  border: 1px solid var(--color-divider); font-size: 11px;
 }
 .stepOn { color: var(--color-accent); }
 .stepOn .stepNum { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 18%, transparent); }

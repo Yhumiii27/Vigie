@@ -23,7 +23,7 @@ function Radio({ name, value, checked, onChange, children }: { name: string; val
   return (
     <label className="vg-check" style={{ minHeight: 32 }}>
       <input type="radio" name={name} value={value} checked={checked} onChange={() => onChange(value)} />
-      <span className="vg-check-box" style={{ borderRadius: '50%' }}><i className="ph ph-circle" style={{ fontSize: 8 }} /></span>
+      <span className="vg-check-box" style={{ borderRadius: '50%' }}><i className="ph ph-circle" style={{ fontSize: 8 }} aria-hidden /></span>
       <span>{children}</span>
     </label>
   );

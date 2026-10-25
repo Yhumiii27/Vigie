@@ -90,7 +90,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
   const meta = group && [
     group.date && fmtDate(group.date),
     group.auditor,
-    report && <a key="r" href={fileUrl(report.id)} target="_blank" rel="noopener" className="vg-link" title={report.fileName}>Rapport</a>,
+    report && <a key="r" href={fileUrl(report.id)} target="_blank" rel="noopener" className="vg-link" title={report.fileName}>Rapport<span className="vg-sr-only">{` : ${report.fileName}`}</span></a>,
     group.planItemId != null && (
       <Link key="p" href={`/audits?annee=${group.year}&element=${group.planItemId}`} scroll={false} className="vg-link">Voir au programme</Link>
     ),
@@ -130,7 +130,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
       )}
       {canEdit && !showCancelled && (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setEditing({ id: null })}>
-          <i className="ph ph-plus" style={{ fontSize: 13 }} />Ajouter un constat
+          <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter un constat
         </button>
       )}
 
@@ -181,7 +181,7 @@ function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; fl
         <ChangeLogList entries={f.log} />
       </div>
       <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-        {f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--color-neutral-600)' }}>—</span>}
+        {f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
       </div>
     </div>
   );
@@ -205,7 +205,7 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
   const needsAction = f.kind !== 'point_fort';
   const text = (
     <>
-      {f.clause && <span className="tag tag-outline" style={{ fontSize: 10, fontFamily: 'ui-monospace, monospace', marginRight: 6, verticalAlign: '1px' }}>{f.clause}</span>}
+      {f.clause && <span className="tag tag-outline" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', marginRight: 6, verticalAlign: '1px' }}>{f.clause}</span>}
       {f.text}
       {f.responseDueOn && !f.actionId && (
         <span style={{ display: 'block', fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>Réponse attendue le {fmtDate(f.responseDueOn)}</span>
@@ -216,7 +216,7 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
     <div className={`vg-rule-bottom${flash ? ` ${styles.flash}` : ''}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
       <ToneTag tone={k.tone} style={{ whiteSpace: 'nowrap' }}>{k.label}</ToneTag>
       {canEdit ? (
-        <button type="button" className={styles.textBtn} style={{ fontSize: 12.5, textWrap: 'pretty' }} title="Modifier le constat" onClick={onEdit}>{text}</button>
+        <button type="button" className={styles.textBtn} style={{ fontSize: 12.5, textWrap: 'pretty' }} title="Modifier le constat" onClick={onEdit}>{text}<span className="vg-sr-only"> : modifier le constat</span></button>
       ) : (
         <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{text}</span>
       )}
@@ -228,7 +228,7 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
           <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} defaults={findingActionDefaults(f)} />
         ) : (
-          <span style={{ color: 'var(--color-neutral-600)' }}>—</span>
+          <span style={{ color: 'var(--vg-text-muted)' }}>—</span>
         )}
       </div>
     </div>

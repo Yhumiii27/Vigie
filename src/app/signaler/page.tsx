@@ -60,7 +60,7 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
     <Frame>
       <div style={{ padding: '14px 18px 0', display: 'grid', gap: 10 }}>
         <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5, justifySelf: 'start' }}>
-          <i className="ph ph-caret-left" />Retour à Vigie
+          <i className="ph ph-caret-left" aria-hidden />Retour à Vigie
         </Link>
         {check && !('post' in check) && (
           <div role="status" className="card" style={{ gap: 4, fontSize: 12.5 }}>
@@ -83,7 +83,7 @@ function Unavailable({ status, loginHref }: { status: 'revoked' | 'invalid'; log
   return (
     <div style={{ padding: '72px 18px 40px', display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center', fontFamily: 'var(--font-body)' }}>
       <span style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid var(--tone-warn-fg)', color: 'var(--tone-warn-fg)', display: 'grid', placeItems: 'center' }}>
-        <i className="ph ph-qr-code" style={{ fontSize: 30 }} />
+        <i className="ph ph-qr-code" style={{ fontSize: 30 }} aria-hidden />
       </span>
       <h1 style={{ margin: 0, fontSize: 20, fontWeight: 500 }}>{status === 'revoked' ? 'QR code remplacé' : 'QR code non reconnu'}</h1>
       <p style={muted}>
@@ -92,7 +92,7 @@ function Unavailable({ status, loginHref }: { status: 'revoked' | 'invalid'; log
           : 'Ce lien ne correspond à aucun poste de signalement : scannez le QR code affiché au poste de travail.'}
       </p>
       <p style={muted}>En cas d&apos;urgence, prévenez immédiatement votre responsable ou l&apos;animateur QHSE.</p>
-      <a href={loginHref} className="btn btn-secondary" style={{ minHeight: 44 }}><i className="ph ph-sign-in" style={{ fontSize: 16 }} />Se connecter à Vigie</a>
+      <a href={loginHref} className="btn btn-secondary" style={{ minHeight: 44 }}><i className="ph ph-sign-in" style={{ fontSize: 16 }} aria-hidden />Se connecter à Vigie</a>
     </div>
   );
 }

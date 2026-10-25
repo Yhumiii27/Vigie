@@ -117,17 +117,17 @@ function UnitEditor({ unit, sites: activeSites, viewSite, residual, isFirst, isL
         <span style={{ position: 'absolute', left: 0, bottom: 0, display: 'flex', gap: 4, alignItems: 'center' }}>
           <button type="button" className="btn btn-ghost" disabled={unit.count > 0 || pending}
             title={unit.count > 0 ? `Unité non vide : ${unit.count} risque${unit.count > 1 ? 's' : ''} en vigueur à archiver ou déplacer d'abord.` : "Retirer l'unité du document unique (motif obligatoire, historique conservé)"}
-            style={{ color: unit.count > 0 ? 'var(--color-neutral-600)' : 'var(--color-neutral-400)' }}
+            style={{ color: unit.count > 0 ? 'var(--vg-text-muted)' : 'var(--color-neutral-400)' }}
             onClick={() => { setError(null); setConfirming(true); }}>
-            <i className="ph ph-archive" style={{ fontSize: 14 }} />Archiver
+            <i className="ph ph-archive" style={{ fontSize: 14 }} aria-hidden />Archiver
           </button>
           <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans la liste" disabled={isFirst || pending}
             onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'up'); setError(r.error ?? null); })}>
-            <i className="ph ph-arrow-up" style={{ fontSize: 14 }} />
+            <i className="ph ph-arrow-up" style={{ fontSize: 14 }} aria-hidden />
           </button>
           <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans la liste" disabled={isLast || pending}
             onClick={() => start(async () => { const r = await moveWorkUnit(unit.id, 'down'); setError(r.error ?? null); })}>
-            <i className="ph ph-arrow-down" style={{ fontSize: 14 }} />
+            <i className="ph ph-arrow-down" style={{ fontSize: 14 }} aria-hidden />
           </button>
         </span>
       </div>

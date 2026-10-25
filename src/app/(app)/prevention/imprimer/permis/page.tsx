@@ -43,7 +43,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
     <article className="pp-doc">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href={backHref} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} />Permis</a>
+        <a href={backHref} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Permis</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
           <PrintButton />
@@ -77,7 +77,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
             {MONTHS.map((m) => <option key={m} value={String(m)}>{monthName(m)}</option>)}
           </select>
         </label>
-        <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-funnel" style={{ fontSize: 13 }} />Afficher</button>
+        <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-funnel" style={{ fontSize: 13 }} aria-hidden />Afficher</button>
       </form>
 
       <header className="pp-head">

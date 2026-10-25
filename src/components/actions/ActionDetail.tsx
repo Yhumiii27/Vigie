@@ -6,7 +6,7 @@
 // (requireInSite) ; le responsable commente et joint des preuves, de tout site (D19) ; les droits viennent du serveur
 // (ActionRights) et chaque fenêtre renvoie l'avancement affiché (`from`) pour qu'un choix devenu caduc soit refusé.
 
-import { useRef, useState, useTransition, type ReactNode, type Ref } from 'react';
+import { useRef, useState, type ReactNode, type Ref } from 'react';
 import Link from 'next/link';
 import { setSite } from '@/app/actions';
 import { ActionFields } from '@/components/ActionFormDialog';
@@ -31,6 +31,7 @@ import {
 } from './detail/form-helpers';
 import { MoveForm } from './detail/MoveForm';
 import { VerifyForm } from './detail/VerifyForm';
+import { useActionRunner } from '@/components/feedback';
 
 export type ActionDetailProps = {
   detail: ActionDetailView; rights: ActionRights; options: ActionFormOptions; currentUserId: string; today: string; verifyDefault: string;
@@ -164,7 +165,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
       <Block title="Planification">
         <Facts rows={[
           ['Ouverte le', d.opened],
-          ['Responsable', <span key="p" className="vg-person"><span className="vg-avatar" style={{ width: 20, height: 20, fontSize: 9 }}>{d.pilotInitials}</span>{d.pilot}{d.pilotLeft && <span className="vg-muted"> · sorti de l’effectif</span>}</span>],
+          ['Responsable', <span key="p" className="vg-person"><span className="vg-avatar" style={{ width: 20, height: 20, fontSize: 11 }}>{d.pilotInitials}</span>{d.pilot}{d.pilotLeft && <span className="vg-muted"> · sorti de l’effectif</span>}</span>],
           ['Priorité', d.priority ? <ToneTag key="pr" tone={ACTION_PRIORITIES[d.priority].tone}>{d.priorityLabel}</ToneTag> : 'À compléter'],
           ['Domaine', d.domainLabel ?? 'À compléter'],
           ['Niveau de risque', d.riskLevelLabel ?? '—'],
@@ -272,7 +273,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
 
 /** Action d'un autre site que le site sélectionné : écritures du QHSE refusées par requireInSite, d'où le changement de site. */
 function ElsewhereNotice({ site, siteId, qhse }: { site: string; siteId: string | null; qhse: boolean }) {
-  const [pending, start] = useTransition();
+  const { pending, run } = useActionRunner();
   return (
     <Notice icon="ph-map-pin">
       <span>
@@ -280,7 +281,7 @@ function ElsewhereNotice({ site, siteId, qhse }: { site: string; siteId: string 
         {qhse ? 'Sélectionnez ce site pour la modifier.' : 'Vous pouvez la commenter et y joindre des preuves sans changer de site.'}
       </span>
       {qhse && siteId && (
-        <button type="button" className="vg-text-btn" disabled={pending} onClick={() => start(() => setSite(siteId))}>
+        <button type="button" className="vg-text-btn" disabled={pending} onClick={() => run(() => setSite(siteId), { success: `Site sélectionné : ${site}.` })}>
           {pending ? 'Sélection…' : `Sélectionner ${site}`}
         </button>
       )}

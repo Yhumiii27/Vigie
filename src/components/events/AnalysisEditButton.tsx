@@ -34,7 +34,7 @@ function IconBtn({ icon, label, onClick, disabled }: { icon: string; label: stri
   return (
     <button type="button" className="btn btn-ghost btn-icon" aria-label={label} title={label} onClick={onClick} disabled={disabled}
       style={{ width: 26, height: 26, flex: 'none', color: 'var(--color-neutral-400)' }}>
-      <i className={`ph ${icon}`} style={{ fontSize: 14 }} />
+      <i className={`ph ${icon}`} style={{ fontSize: 14 }} aria-hidden />
     </button>
   );
 }
@@ -123,7 +123,7 @@ function TreeFields({ content }: { content: unknown }) {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button type="button" className="vg-text-btn" disabled={lines.length >= MAX_TREE_LINES} onClick={() => insertAfter(lines.length - 1)}>
-          <i className="ph ph-plus" style={{ fontSize: 12, marginRight: 4 }} />Ajouter une ligne
+          <i className="ph ph-plus" style={{ fontSize: 12, marginRight: 4 }} aria-hidden />Ajouter une ligne
         </button>
         <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{lines.length}/{MAX_TREE_LINES} lignes · {MAX_TREE_LEVEL + 1} niveaux au plus</span>
       </div>
@@ -166,7 +166,7 @@ function WhyFields({ content }: { content: unknown }) {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button type="button" className="vg-text-btn" disabled={lines.length >= MAX_WHYS} onClick={() => add(lines.length)}>
-          <i className="ph ph-plus" style={{ fontSize: 12, marginRight: 4 }} />Ajouter un pourquoi
+          <i className="ph ph-plus" style={{ fontSize: 12, marginRight: 4 }} aria-hidden />Ajouter un pourquoi
         </button>
         <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{lines.length}/{MAX_WHYS}</span>
       </div>
@@ -190,9 +190,9 @@ function D8Fields({ content }: { content: unknown }) {
         {D8_STEPS.map((s, i) => {
           const state = i < current ? 'ph-check-circle' : i === current ? 'ph-circle-half' : 'ph-circle';
           return (
-            <Field key={s} label={
+            <Field key={s} htmlFor={`note-${i}`} label={
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: i === current ? 'var(--color-accent)' : undefined }}>
-                <i className={`ph ${state}`} style={{ fontSize: 12 }} />{s}
+                <i className={`ph ${state}`} style={{ fontSize: 12 }} aria-hidden />{s}
               </span>
             }>
               <TextArea name="note" id={`note-${i}`} aria-label={s} defaultValue={init.notes[i] ?? ''} rows={2} maxLength={1000} placeholder="Note facultative" style={{ minHeight: 56 }} />

@@ -53,7 +53,7 @@ export function Facts({ items }: { items: (readonly [string, ReactNode] | false 
     <div className="vg-inset" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 22px', padding: '10px 12px' }}>
       {items.filter((i): i is readonly [string, ReactNode] => !!i).map(([k, v]) => (
         <div key={k} style={{ display: 'grid', gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{k}</span>
+          <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{k}</span>
           <span style={{ fontSize: 12.5 }}>{v}</span>
         </div>
       ))}

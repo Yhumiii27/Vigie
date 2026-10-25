@@ -28,7 +28,7 @@ const H6 = ({ children }: { children: ReactNode }) => <h6 className="vg-h6">{chi
 function Meta({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
     <div style={{ display: 'grid', gap: 2, minWidth: 0, gridColumn: wide ? '1 / -1' : undefined }}>
-      <span style={{ fontSize: 10.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{label}</span>
+      <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{label}</span>
       <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{children}</span>
     </div>
   );

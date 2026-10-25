@@ -17,7 +17,7 @@ export function NewEventButton({ options, defaults, today, health, initialOpen =
   return (
     <>
       <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
-        <i className="ph ph-plus" style={{ fontSize: 14 }} />Nouvel événement
+        <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />Nouvel événement
       </button>
       <Dialog open={open} onClose={close} title="Nouvel événement" kicker="Signalements et événements" width={680}>
         {open && (

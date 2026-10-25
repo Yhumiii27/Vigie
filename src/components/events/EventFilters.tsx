@@ -95,7 +95,7 @@ export function EventFilterBar({ filters, base, people, health, pilots }: {
             <input type="date" name="au" className="input" defaultValue={filters.au ?? ''} />
           </label>
           <div className="vg-filters-actions">
-            <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-check" style={{ fontSize: 13 }} />Filtrer</button>
+            <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-check" style={{ fontSize: 13 }} aria-hidden />Filtrer</button>
             {active && <Link href={hrefWith('/evenements', base, { sel: undefined })} scroll={false} className="vg-link">Réinitialiser</Link>}
           </div>
         </form>
@@ -104,7 +104,7 @@ export function EventFilterBar({ filters, base, people, health, pilots }: {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {chips.map((c) => (
             <Link key={c.key} href={c.href} scroll={false} className="vg-chip is-on" title="Retirer ce filtre">
-              {c.label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
+              {c.label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only"> : retirer ce filtre</span>
             </Link>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { AUTH_PREFIX, HEALTH_PATH, LOGIN_PATH, REPORT_PATH, REPORT_TOKEN_PARAM, 
 import { NOT_FOUND_PATH, demoRoleOf, routeDecision } from './lib/auth/route-access';
 import { DEMO_ROLE_COOKIE } from './lib/demo';
 import { isPwaAsset } from './lib/pwa';
+import { canonicalHref } from './lib/url-state';
 import { ROLE_KEYS, type Role } from './lib/domain';
 import { entraMissing, isDevServer, readConfig, secureCookies, type VigieConfig } from './lib/env';
 import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHost, originHost, requestHosts } from './lib/security';
@@ -16,7 +17,9 @@ import { HSTS_HEADER, REFUSAL_CSP, contentSecurityPolicy, cspNonce, isAllowedHos
 //    de sécurité sont posés par next.config.ts ;
 // 4. SEC-14 — pour une page (GET, HEAD) d'un écran fermé au rôle de la session : redirection vers l'écran d'accueil du
 //    rôle avant tout rendu (src/lib/auth/route-access.ts) ; aperçu mobile hors démonstration : page introuvable (404).
-//    Les server actions (POST) gardent leurs propres contrôles.
+//    Les server actions (POST) gardent leurs propres contrôles ;
+// 5. UX-12 — page demandée avec d'anciens paramètres d'URL (?archives=1…) : redirection vers l'URL canonique
+//    (src/lib/url-state.ts) ; une navigation côté navigateur (requête RSC) est réécrite par la page elle-même.
 // Les pages, routes et server actions vérifient quand même la session (getSession) et le rôle (guard) : le proxy n'est
 // qu'une première barrière.
 
@@ -118,6 +121,16 @@ export async function proxy(req: NextRequest) {
     const res = refusal(NextResponse.redirect(absolute(decision.to, req, c)), https);
     await renew?.(res);
     return res;
+  }
+
+  // Anciens paramètres d'URL (UX-12) : lus puis réécrits, pour une page chargée par le navigateur (pas une requête RSC).
+  if ((req.method === 'GET' || req.method === 'HEAD') && !req.headers.has('rsc')) {
+    const canonical = canonicalHref(req.nextUrl.pathname, Object.fromEntries(req.nextUrl.searchParams));
+    if (canonical) {
+      const res = refusal(NextResponse.redirect(absolute(canonical, req, c)), https);
+      await renew?.(res);
+      return res;
+    }
   }
 
   let res: NextResponse;

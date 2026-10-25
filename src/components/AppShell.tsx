@@ -1,16 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { StatusToaster } from './feedback';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { Icon } from './ui';
 
 const WIDE = '(min-width: 761px)';
+/** Cible du lien d'évitement (UX-11). */
+export const MAIN_ID = 'contenu';
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Coque de l'application : barre latérale, et sur téléphone (≤ 760 px) barre supérieure et tiroir de navigation (UX-01).
  * Tiroir ouvert : barre supérieure et contenu inertes (focus gardé dans le tiroir), Échap ou le fond le ferment et rendent
  * le focus au bouton du menu ; un lien, le choix du site ou du rôle le ferment aussi. Passage en grand écran : fermé.
+ * UX-11 : lien d'évitement « Aller au contenu » (premier élément de la page, vers <main id="contenu">) ; UX-14 : région
+ * d'annonce des enregistrements (StatusToaster).
  */
 export function AppShell({ sidebar, children }: { sidebar: SidebarProps; children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -42,6 +47,7 @@ export function AppShell({ sidebar, children }: { sidebar: SidebarProps; childre
 
   return (
     <div className={`vg-app${open ? ' is-nav-open' : ''}`}>
+      <a href={`#${MAIN_ID}`} className="vg-skip" inert={open || undefined}>Aller au contenu</a>
       <div className="vg-topbar" inert={open || undefined}>
         <button ref={toggleRef} type="button" className="btn btn-ghost btn-icon" aria-label="Ouvrir le menu de navigation"
           aria-expanded={open} aria-controls="vg-side" onClick={() => setOpen(true)}>
@@ -53,7 +59,8 @@ export function AppShell({ sidebar, children }: { sidebar: SidebarProps; childre
       </div>
       <Sidebar {...sidebar} open={open} onNavigate={navigate} onClose={close} />
       {open && <div className="vg-side-backdrop" onClick={close} />}
-      <main className="vg-main" inert={open || undefined}>{children}</main>
+      <main id={MAIN_ID} tabIndex={-1} className="vg-main" inert={open || undefined}>{children}</main>
+      <StatusToaster />
     </div>
   );
 }

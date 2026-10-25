@@ -10,7 +10,7 @@ import type { LinkedEvent } from '@/lib/data/linked-events';
 export function LinkedEvents({ events, empty = 'Aucun événement rattaché. Le rattachement se fait depuis la fiche de l’événement.' }: { events: LinkedEvent[]; empty?: string }) {
   return (
     <section style={{ display: 'grid', gap: 6 }}>
-      <h6 className="vg-h6">Événements liés{events.length ? <span style={{ color: 'var(--color-neutral-600)' }}> · {events.length}</span> : null}</h6>
+      <h6 className="vg-h6">Événements liés{events.length ? <span style={{ color: 'var(--vg-text-muted)' }}> · {events.length}</span> : null}</h6>
       {events.length ? (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
           {events.map((e) => (

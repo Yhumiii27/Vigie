@@ -9,6 +9,7 @@ import { Cotation } from './RiskForm';
 import { RiskSheet, archivedLabel, riskSheetHeading, type RiskSheetView } from './RiskSheet';
 import { rowOpener } from './RiskTable';
 import { RestoreUnitButton } from './UnitDialogs';
+import { ScrollX } from '@/components/ui';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
 
@@ -70,7 +71,7 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
       </div>
 
       <div className="card" style={{ padding: '6px 14px 10px' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <ScrollX label="Risques archivés">
           <table className="table" style={{ fontSize: 12.5, minWidth: 760 }}>
             <thead><tr><th>Unité</th><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Risque résiduel</th><th>Archivage</th></tr></thead>
             <tbody>
@@ -95,7 +96,7 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       </div>
 
       <Dialog open={!!current && !!currentUnit} onClose={close} title={heading?.title ?? ''} kicker={heading?.kicker} width={open?.view === 'restore' ? 520 : 640}>

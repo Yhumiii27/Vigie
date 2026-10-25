@@ -30,7 +30,7 @@ export default async function ReportPostsPage({ searchParams }: PageProps<'/sign
     <div className={styles.page}>
       <div className={styles.toolbar}>
         <div style={{ display: 'grid', gap: 2 }}>
-          <Link href={back.href} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><i className="ph ph-caret-left" />{back.label}</Link>
+          <Link href={back.href} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><i className="ph ph-caret-left" aria-hidden />{back.label}</Link>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 500 }}>QR codes des postes</h1>
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>
             {posts.length} poste{posts.length > 1 ? 's' : ''} · zones du plan de site · à coller au poste de travail

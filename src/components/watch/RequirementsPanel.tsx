@@ -47,7 +47,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 export function RequirementsPanel({ rows, archives = false, canManage, canApprove, options, actionOptions, linkActions, today, initialId, closeHref }: ActionProps & {
   /** Toutes les exigences (archivées comprises) : la fiche ouverte reste affichée après son archivage. */
   rows: RequirementView[];
-  /** Liste des exigences archivées (`?archives=1`) au lieu des exigences en vigueur. */
+  /** Liste des exigences archivées (`?etat=archives`, UX-12) au lieu des exigences en vigueur. */
   archives?: boolean;
   canManage: boolean;
   /** Animateur QHSE, direction : restauration d'une exigence archivée. */
@@ -81,7 +81,7 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
               </td></tr>
             )}
             {shown.map((r) => (
-              <tr key={r.id} {...rowOpener(() => setSelId(r.id))} style={r.archived ? { opacity: 0.75 } : undefined}>
+              <tr key={r.id} {...rowOpener(() => setSelId(r.id))} data-obsolete={r.archived || undefined}>
                 <td style={{ fontWeight: 500, minWidth: 160 }}>
                   {r.text}
                   {r.featured && (
@@ -120,7 +120,7 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
                   ) : r.needsAction ? (
                     <span style={{ color: TONE.danger.dot }}>À définir</span>
                   ) : (
-                    <span style={{ color: 'var(--color-neutral-600)' }}>—</span>
+                    <span style={{ color: 'var(--vg-text-muted)' }}>—</span>
                   )}
                 </td>
               </tr>
@@ -518,8 +518,8 @@ function EvaluateForm({ r, today, initial, onDone, onCancel }: {
         <div className="vg-eyebrow" style={{ marginBottom: 4 }}>Ce qu&apos;il exige</div>
         <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{r.summary}</p>
       </div>
-      {/* Pas de `name` : le libellé ne vise aucun champ unique, le groupe radio porte son propre aria-label. */}
-      <Field label="Évaluation de conformité">
+      {/* Groupe de boutons radio : libellé du groupe, erreur du champ `evaluation` affichée sous le groupe (UX-04). */}
+      <Field name="evaluation" group label="Évaluation de conformité">
         <div role="radiogroup" aria-label="Évaluation de conformité" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {EVALS.map(([k, v]) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12, padding: '5px 10px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}>

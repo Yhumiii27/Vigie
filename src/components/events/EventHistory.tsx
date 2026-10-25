@@ -9,7 +9,7 @@ export function EventHistory({ entries }: { entries: EventHistoryEntry[] }) {
     <details className="vg-history">
       <summary className="vg-h6" style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
         <i className="ph ph-flow-arrow" style={{ fontSize: 13 }} aria-hidden />
-        Historique des étapes<span style={{ color: 'var(--color-neutral-600)' }}> · {entries.length}</span>
+        Historique des étapes<span style={{ color: 'var(--vg-text-muted)' }}> · {entries.length}</span>
       </summary>
       {list.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', paddingTop: 6 }}>Aucune transition enregistrée depuis la déclaration.</div>

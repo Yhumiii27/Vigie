@@ -26,9 +26,9 @@ export function MyReports({ reports, userName, siteLabel, backHref, detailHref, 
     <div style={shell}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Link href={backHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 32, fontSize: 13.5, color: 'var(--color-accent)', textDecoration: 'none' }}>
-          <i className="ph ph-caret-left" style={{ fontSize: 15 }} />Signaler
+          <i className="ph ph-caret-left" style={{ fontSize: 15 }} aria-hidden />Signaler
         </Link>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" />{siteLabel}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-500)' }}><i className="ph ph-factory" aria-hidden />{siteLabel}</span>
       </div>
 
       <div style={{ display: 'grid', gap: 4 }}>
@@ -40,7 +40,7 @@ export function MyReports({ reports, userName, siteLabel, backHref, detailHref, 
 
       {reports.length === 0 ? (
         <div style={{ display: 'grid', gap: 6, justifyItems: 'center', textAlign: 'center', padding: '28px 12px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)' }}>
-          <i className="ph ph-tray" style={{ fontSize: 26, color: 'var(--color-neutral-600)' }} />
+          <i className="ph ph-tray" style={{ fontSize: 26, color: 'var(--color-neutral-600)' }} aria-hidden />
           <span style={{ fontSize: 13.5 }}>Aucun signalement nominatif</span>
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>Les signalements que vous envoyez sous votre nom apparaîtront ici avec leur avancement.</span>
         </div>
@@ -55,7 +55,7 @@ export function MyReports({ reports, userName, siteLabel, backHref, detailHref, 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
                   <span>{r.id}</span><span>·</span><span>{fmtDate(r.occurredOn)}</span>
                   <span className="tag" style={{ marginLeft: 'auto', background: tone.bg, color: tone.fg, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <i className={`ph ${r.typeIcon}`} style={{ fontSize: 12 }} />{r.typeLabel}
+                    <i className={`ph ${r.typeIcon}`} style={{ fontSize: 12 }} aria-hidden />{r.typeLabel}
                   </span>
                 </div>
                 <div style={{ fontSize: 14, lineHeight: 1.35, textWrap: 'pretty' }}>{r.title}</div>
@@ -69,10 +69,10 @@ export function MyReports({ reports, userName, siteLabel, backHref, detailHref, 
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12 }}>
                   {r.dismissed ? (
-                    <ToneTag tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><i className="ph ph-archive" style={{ fontSize: 12 }} />{EVENT_DISMISSED}</ToneTag>
+                    <ToneTag tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><i className="ph ph-archive" style={{ fontSize: 12 }} aria-hidden />{EVENT_DISMISSED}</ToneTag>
                   ) : (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: closed ? 'var(--tone-ok-fg)' : 'var(--color-accent)' }}>
-                      <i className={`ph ${closed ? 'ph-check-circle' : 'ph-circle-half'}`} style={{ fontSize: 13 }} />{EVENT_STEPS[r.step]}
+                      <i className={`ph ${closed ? 'ph-check-circle' : 'ph-circle-half'}`} style={{ fontSize: 13 }} aria-hidden />{EVENT_STEPS[r.step]}
                     </span>
                   )}
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--color-neutral-500)' }}>
@@ -86,12 +86,12 @@ export function MyReports({ reports, userName, siteLabel, backHref, detailHref, 
       )}
 
       <p style={{ margin: 0, display: 'flex', gap: 8, fontSize: 12, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        <i className="ph ph-eye-slash" style={{ fontSize: 15, flex: 'none', marginTop: 1 }} />
+        <i className="ph ph-eye-slash" style={{ fontSize: 15, flex: 'none', marginTop: 1 }} aria-hidden />
         <span>Les signalements anonymes n&apos;apparaissent pas dans cette liste : par conception, rien ne les relie à votre nom. Conservez leur référence pour en parler à l&apos;animateur QHSE.</span>
       </p>
 
       <Link href={backHref} className="btn btn-primary btn-block" style={{ minHeight: 48, fontSize: 15 }}>
-        <i className="ph ph-plus" style={{ fontSize: 17 }} />Nouveau signalement
+        <i className="ph ph-plus" style={{ fontSize: 17 }} aria-hidden />Nouveau signalement
       </Link>
     </div>
   );
