@@ -1,5 +1,5 @@
 import 'server-only';
-import { eq } from 'drizzle-orm';
+
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { currentPersonId } from '@/lib/session';
 
@@ -46,15 +46,6 @@ export async function logChange(db: DbOrTx | null, entry: ChangeInput): Promise<
     details: entry.details?.length ? entry.details : null,
     byId,
   });
-}
-
-/**
- * Identifiants déjà journalisés pour un type d'entité, fiches supprimées comprises (brouillons) : à joindre aux
- * identifiants existants avant nextRef, pour ne jamais réattribuer la référence d'une fiche supprimée (son historique la suit).
- */
-export async function loggedIds(db: DbOrTx, entityType: string): Promise<string[]> {
-  const rows = await db.selectDistinct({ id: t.changeLog.entityId }).from(t.changeLog).where(eq(t.changeLog.entityType, entityType));
-  return rows.map((r) => r.id);
 }
 
 /** Champs modifiés entre deux états (comparaison des valeurs affichées) ; `labels` donne le libellé de chaque champ suivi. */

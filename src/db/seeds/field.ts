@@ -1,6 +1,7 @@
 import { and, count, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import * as t from '../schema';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Jeu de démonstration du paquet 7 (terrain et mobile, migration 0012) : événements rattachés à leur zone de la carte
 // (EVT-19 : lieu commençant par le nom d'une zone du même site) et une zone archivée avec son motif (aire de charge des
@@ -15,7 +16,7 @@ const ARCHIVED_ZONE = {
   siteId: 'ville-a', name: 'Ancienne aire de charge des batteries', kind: 'autre',
   polygon: [[80, 560], [240, 560], [240, 760], [80, 760]].map(([x, y]) => [Math.round((x / W) * 1e5) / 1e5, Math.round((y / W) * 1e5) / 1e5]),
   notes: 'Charge des chariots électriques (bornes au sol).',
-  archivedAt: new Date('2026-09-30T10:00:00+02:00'),
+  archivedAt: new Date(`${rel(-9)}T10:00:00+02:00`),
   archivedById: 'clefevre',
   archiveReason: 'Charge des chariots déplacée au magasin (bornes murales) : aire démontée, étiquette du poste retirée.',
 };
@@ -44,7 +45,7 @@ export async function seedFieldMobile(tx: SeedTx) {
   const [row] = await tx.insert(t.mapZones).values(ARCHIVED_ZONE).returning({ id: t.mapZones.id });
   await tx.insert(t.changeLog).values([
     {
-      entityType: 'site_map', entityId: ARCHIVED_ZONE.siteId, action: 'create', byId: 'clefevre', at: new Date('2025-11-04T09:00:00+01:00'),
+      entityType: 'site_map', entityId: ARCHIVED_ZONE.siteId, action: 'create', byId: 'clefevre', at: new Date(`${rel(-339)}T09:00:00+01:00`),
       summary: `Zone « ${ARCHIVED_ZONE.name} » ajoutée à la carte`,
     },
     {

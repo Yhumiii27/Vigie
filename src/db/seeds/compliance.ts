@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import * as t from '../schema';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Jeu de démonstration du paquet 5 (conformité réglementaire, migration 0008) : maladie professionnelle et accident de
 // trajet (EVT-09), traitement des produits non conformes (EVT-17), signataires des plans de prévention (PRV-07),
@@ -30,25 +31,25 @@ export async function seedCompliance(tx: SeedTx) {
   const existing = new Set((await tx.select({ id: t.events.id }).from(t.events).where(inArray(t.events.id, [MP_ID, COMMUTE_ID]))).map((e) => e.id));
   if (!existing.has(MP_ID)) {
     await tx.insert(t.events).values({
-      id: MP_ID, siteId: 'ville-a', type: 'MP', title: 'Maladie professionnelle', occurredOn: '2026-06-24', location: 'Atelier montage',
+      id: MP_ID, siteId: 'ville-a', type: 'MP', title: 'Maladie professionnelle', occurredOn: rel(-107), location: 'Atelier montage',
       declarant: 'Caisse primaire d’assurance maladie', declarantId: null, pilotId: 'clefevre', severity: 2, step: 1,
       description: 'Déclaration transmise par la caisse. Poste de montage à analyser (manutentions répétées).', immediateMeasures: 'Aménagement du poste demandé au médecin du travail.',
       analysisMethod: '5m', victimKind: 'salarie', victimId: 'tnguyen',
-      mpTable: '57', mpDisease: 'Tendinopathie de l’épaule', mpCertificateOn: '2026-06-24', mpInformedOn: '2026-07-08', mpQuestionnaireReceivedOn: '2026-10-02',
-      createdAt: new Date('2026-07-08T10:00:00+02:00'),
+      mpTable: '57', mpDisease: 'Tendinopathie de l’épaule', mpCertificateOn: rel(-107), mpInformedOn: rel(-93), mpQuestionnaireReceivedOn: rel(-7),
+      createdAt: new Date(`${rel(-93)}T10:00:00+02:00`),
     });
-    await tx.insert(t.eventSteps).values({ eventId: MP_ID, kind: 'advance', fromStep: 0, toStep: 1, byId: 'clefevre', at: new Date('2026-07-09T10:00:00+02:00') });
+    await tx.insert(t.eventSteps).values({ eventId: MP_ID, kind: 'advance', fromStep: 0, toStep: 1, byId: 'clefevre', at: new Date(`${rel(-92)}T10:00:00+02:00`) });
   }
   if (!existing.has(COMMUTE_ID)) {
     await tx.insert(t.events).values({
-      id: COMMUTE_ID, siteId: 'ville-b', type: 'AT', title: 'Accident de trajet · domicile – travail', occurredOn: '2026-09-30', occurredTime: '07:40',
+      id: COMMUTE_ID, siteId: 'ville-b', type: 'AT', title: 'Accident de trajet · domicile – travail', occurredOn: rel(-9), occurredTime: '07:40',
       location: 'Trajet domicile – travail', declarant: '[A. Martin]', declarantId: 'amartin', pilotId: 'clefevre', severity: 2, step: 1,
       description: 'Chute à vélo sur le trajet habituel, avant la prise de poste.', immediateMeasures: '', analysisMethod: '5m',
       commute: true, victimKind: 'salarie', victimId: 'amartin', circumstances: 'Chute à vélo sur une chaussée glissante, sur le trajet habituel domicile – travail.',
-      knownAt: new Date('2026-09-30T09:15:00+02:00'), injury: 'arret', lostDays: 4, cpamDeclaredOn: '2026-10-01',
-      createdAt: new Date('2026-09-30T09:20:00+02:00'),
+      knownAt: new Date(`${rel(-9)}T09:15:00+02:00`), injury: 'arret', lostDays: 4, cpamDeclaredOn: rel(-8),
+      createdAt: new Date(`${rel(-9)}T09:20:00+02:00`),
     });
-    await tx.insert(t.eventSteps).values({ eventId: COMMUTE_ID, kind: 'advance', fromStep: 0, toStep: 1, byId: 'clefevre', at: new Date('2026-10-01T10:00:00+02:00') });
+    await tx.insert(t.eventSteps).values({ eventId: COMMUTE_ID, kind: 'advance', fromStep: 0, toStep: 1, byId: 'clefevre', at: new Date(`${rel(-8)}T10:00:00+02:00`) });
   }
 
   // EVT-17 : traitement des produits non conformes.
@@ -76,7 +77,7 @@ export async function seedCompliance(tx: SeedTx) {
   }
 
   // DUE-03 : version en vigueur transmise au SPST.
-  await tx.update(t.duerpVersions).set({ spstSentOn: '2026-03-27' }).where(and(eq(t.duerpVersions.version, '2026.1'), isNull(t.duerpVersions.spstSentOn)));
+  await tx.update(t.duerpVersions).set({ spstSentOn: rel(-196) }).where(and(eq(t.duerpVersions.version, '2026.1'), isNull(t.duerpVersions.spstSentOn)));
 
   // HAB-10 : autorisation de conduite subordonnée à un CACES valide ; catégories et indices obtenus ; une autorisation
   // délivrée sans CACES (état « prérequis non valide »).
@@ -90,7 +91,7 @@ export async function seedCompliance(tx: SeedTx) {
     await tx.insert(t.qualificationRequirements).values({ personId: 'kbernard', titleId: 'conduite' }).onConflictDoNothing();
     const [held] = await tx.select({ n: count() }).from(t.qualifications).where(and(eq(t.qualifications.personId, 'kbernard'), eq(t.qualifications.titleId, 'conduite')));
     if (held.n === 0) {
-      await tx.insert(t.qualifications).values({ personId: 'kbernard', titleId: 'conduite', obtainedOn: '2026-10-01', expiresOn: '2031-10-01', provider: 'Formation interne', recordedById: 'clefevre' });
+      await tx.insert(t.qualifications).values({ personId: 'kbernard', titleId: 'conduite', obtainedOn: rel(-8), expiresOn: rel(1818), provider: 'Formation interne', recordedById: 'clefevre' });
     }
   }
 
@@ -119,11 +120,11 @@ export async function seedCompliance(tx: SeedTx) {
   }
 
   // AUD-09 : délai de réponse des écarts, et une observation sans action.
-  await tx.update(t.auditFindings).set({ responseDueOn: '2026-07-11' }).where(and(eq(t.auditFindings.kind, 'ecart_mineur'), isNull(t.auditFindings.responseDueOn)));
+  await tx.update(t.auditFindings).set({ responseDueOn: rel(-90) }).where(and(eq(t.auditFindings.kind, 'ecart_mineur'), isNull(t.auditFindings.responseDueOn)));
   const [production] = await tx.select({ id: t.auditFindings.planItemId, audit: t.auditFindings.audit }).from(t.auditFindings).where(eq(t.auditFindings.clause, '§8.2.3'));
   if (production?.id) {
     await tx.insert(t.auditFindings).values({
-      audit: production.audit, planItemId: production.id, foundOn: '2026-06-11', kind: 'observation', clause: '§7.5.3',
+      audit: production.audit, planItemId: production.id, foundOn: rel(-120), kind: 'observation', clause: '§7.5.3',
       text: 'Affichage des consignes au poste de contrôle final : deux versions en circulation', sort: 10,
     });
   }

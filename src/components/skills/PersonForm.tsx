@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
+import { ReasonButton } from '@/components/ReasonDialog';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { addMonths, fmtDate } from '@/lib/dates';
+import { REASON_MAX } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
 import type { Person } from '@/lib/queries';
 import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
@@ -34,20 +36,15 @@ const note = (icon: string, text: string) => (
 /** « Sortie de l'effectif » : déclaration (date + motif) ou, pour une sortie à venir, annulation. */
 function LeaveSection({ person, today, onDone }: { person: Person; today: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const undo = () => start(async () => {
-    const r = await reinstatePerson(person.id);
-    setError(r.error ?? null);
-    if (!r.error) onDone();
-  });
   return (
     <div style={{ display: 'grid', gap: 10, borderTop: '1px solid var(--color-divider)', paddingTop: 14 }}>
       <h6 className="vg-h6">Sortie de l&apos;effectif</h6>
       {person.leftOn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
           <span>Sortie prévue le {fmtDate(person.leftOn)}{person.leftReason ? ` · ${person.leftReason}` : ''}</span>
-          <button type="button" className="vg-text-btn" disabled={pending} onClick={undo}>{pending ? 'Annulation…' : 'Annuler la sortie'}</button>
+          <ReasonButton action={reinstatePerson} hidden={{ id: person.id }} label="Annuler la sortie" className="vg-text-btn" title="Annuler la sortie"
+            kicker={person.name} submitLabel="Annuler la sortie" message="Le salarié reste dans la matrice, les échéances et les listes ; l’annulation est inscrite à son historique."
+            placeholder="Ex. contrat prolongé" onDone={onDone} />
         </div>
       ) : open ? (
         <ActionForm action={setPersonLeft} hidden={{ id: person.id }} onDone={onDone} onCancel={() => setOpen(false)} submitLabel="Déclarer la sortie" submitIcon="ph-sign-out">
@@ -56,7 +53,7 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
               <Input name="leftOn" type="date" min={addMonths(today, -12)} defaultValue={today} required />
             </Field>
             <Field name="leftReason" label="Motif" hint="Obligatoire · ex. fin de contrat, mutation.">
-              <TextArea name="leftReason" rows={1} maxLength={200} required placeholder="Ex. fin de contrat" />
+              <TextArea name="leftReason" rows={1} maxLength={REASON_MAX} required placeholder="Ex. fin de contrat" />
             </Field>
           </FormRow>
           {note('ph-info', "Le salarié quitte la matrice, les échéances et les listes à cette date ; ses formations restent consultables (filtre « Sortis »).")}
@@ -66,7 +63,6 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
           <i className="ph ph-sign-out" style={{ fontSize: 13 }} aria-hidden />Déclarer la sortie
         </button>
       )}
-      {error && <div role="alert" className="vg-form-error">{error}</div>}
       {note('ph-plugs-connected', 'Saisie provisoire, le connecteur Cursus reprendra la date de sortie.')}
     </div>
   );

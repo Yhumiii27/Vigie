@@ -111,7 +111,7 @@ describe('jeu de démonstration du plan d’actions QSE (base neuve)', () => {
     // Lignes à plusieurs éléments conservées (D22).
     expect(byId.get('A-212')!.eventId).toBe('EV-2026-130');
     const db = await getDb();
-    const findings = await db.select({ actionId: t.auditFindings.actionId }).from(t.auditFindings).where(inArray(t.auditFindings.actionId, ['A-212', 'A-205']));
+    const findings = await db.select({ actionId: t.findingActions.actionId }).from(t.findingActions).where(inArray(t.findingActions.actionId, ['A-212', 'A-205']));
     expect(findings.map((f) => f.actionId).sort()).toEqual(['A-205', 'A-212']);
   });
 

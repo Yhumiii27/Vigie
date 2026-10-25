@@ -1,13 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
-import { getDb, schema as t, type DbOrTx } from '@/db';
-import { EVENT_AUDIT_LOCKED, ORIGIN_LOCKED, checkActionLink, parseActionLink } from '@/lib/action-links';
-import { NON_QSE_LINK_MESSAGE, actionRights, isNonQseLinkKind } from '@/lib/action-rules';
-import { EVENT_AUDIT_LINK_KINDS } from '@/lib/domain';
-import { requireApprover, requireInSite } from '@/lib/guard';
-import { inSite } from '@/lib/session';
+import { getDb, type DbOrTx } from '@/db';
+import { checkLinkChange } from '@/lib/action-links';
+import { requireApprover } from '@/lib/guard';
 import { logChange } from './changelog';
 
 // Rattacher / détacher un lien complémentaire d'une action existante (risque, exigence, contrôle, revue, décision de revue,
@@ -24,27 +20,11 @@ type Result = { error?: string };
 async function check(link: string, actionId: string, mode: 'link' | 'unlink') {
   const { session, error } = await requireApprover();
   if (error) return { error };
-  const parsed = parseActionLink(link);
-  if (!parsed) return { error: 'Type de rattachement inconnu.' };
-  if ((EVENT_AUDIT_LINK_KINDS as readonly string[]).includes(parsed.kind)) return { error: EVENT_AUDIT_LOCKED };
-  if (parsed.def.origin) return { error: ORIGIN_LOCKED };
-  if (isNonQseLinkKind(parsed.kind)) return { error: NON_QSE_LINK_MESSAGE };
   const db = await getDb();
-  const [action] = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId, pilotId: t.actions.pilotId })
-    .from(t.actions).where(eq(t.actions.id, actionId));
-  if (!action) return { error: 'Action introuvable.' };
-  // L'action doit relever du site sélectionné (ou valoir pour tous les sites) avant que son avancement soit révélé ; puis
-  // ses droits (avancement), puis la source (écran, site).
-  const siteError = await requireInSite(action.siteId);
-  if (siteError) return { error: siteError };
-  const rights = actionRights(session.role, session.user.id, action);
-  if (mode === 'link' && !rights.canLink) return { error: `L'action ${actionId} est vérifiée ou abandonnée : elle ne peut plus être rattachée.` };
-  if (mode === 'unlink' && !rights.canUnlink) return { error: `L'action ${actionId} est abandonnée : consultation seule.` };
-  const checked = await checkActionLink(db, session.role, link);
+  // Contrôles communs du registre (type, droits de la fiche, écran et site de l'élément, site de l'action) : checkLinkChange.
+  const checked = await checkLinkChange(db, { role: session.role, userId: session.user.id }, link, actionId, mode);
   if ('error' in checked) return { error: checked.error };
-  // Site de la source (null = sans site ou tous sites) : sous « Tous les sites », les deux contrôles ci-dessus passent toujours.
-  const sourceSiteId = (await checked.parsed.def.siteOf?.(db, checked.parsed.args)) ?? null;
-  return { db, parsed: checked.parsed, action, sourceSiteId, byId: session.user.id };
+  return { db, ...checked, byId: session.user.id };
 }
 
 type Checked = Exclude<Awaited<ReturnType<typeof check>>, { error: string }>;
@@ -56,7 +36,6 @@ const labelsOf = async (tx: DbOrTx, c: Checked) => (await c.parsed.def.sources(t
 export async function linkAction(link: string, actionId: string): Promise<Result> {
   const c = await check(link, actionId, 'link');
   if ('error' in c) return { error: c.error };
-  if (!inSite(c.sourceSiteId, c.action.siteId)) return { error: `L'action ${actionId} concerne un autre site que l'élément à rattacher.` };
   const error = await c.db.transaction(async (tx) => {
     const before = await labelsOf(tx, c);
     const err = await c.parsed.def.attach(tx, c.parsed.args, actionId);

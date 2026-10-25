@@ -12,7 +12,8 @@ import { todoKey } from '@/lib/domain';
 import { saveAnalysis, setAnalysisMethod } from '@/server/events';
 import { markNotificationsRead } from '@/server/notifications';
 import { abandonAction } from '@/server/plan-ui';
-import { savePermit, savePlan } from '@/server/prevention';
+import { savePermit } from '@/server/permits';
+import { savePlan } from '@/server/prevention';
 import { restoreWorkUnit, saveWorkUnit } from '@/server/risks';
 import { saveActivity } from '@/server/sitemap';
 

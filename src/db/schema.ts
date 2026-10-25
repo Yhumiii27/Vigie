@@ -5,14 +5,27 @@ import {
   ACTION_AVANCEMENTS, DOMAIN_KEYS, FOLLOW_REASON_KEYS, PRIORITY_KEYS, REMINDER_SEND_STATUSES, SOURCE_KEYS, VERIFY_METHOD_KEYS, sqlList,
   type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type ReminderSendStatus, type SourceKey, type VerifyMethod,
 } from '../lib/action-keys';
+import {
+  BSD_STATUS_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_STATUS_CODES,
+  REQUIREMENT_LINK_CODES, REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, VERSION_STATUS_CODES,
+} from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
 // - archivage : archivedAt / archivedById / archiveReason (élément retiré du suivi, historique conservé) ;
 // - annulation : cancelledAt / cancelledById / cancelReason (saisie annulée, exclue des calculs) ;
+// - contraintes en base (QUA-23, migration 0017) : chaque triplet est vide, ou porte une date et un motif non vide
+//   (archiveState) ; colonnes d'état texte limitées à leurs valeurs connues (src/lib/state-keys.ts) ;
 // - historique des modifications : table change_log (src/server/changelog.ts).
 
 /** Contrainte CHECK « colonne in (liste) » sur des clés constantes (src/lib/action-keys.ts, jamais de saisie). */
 const inList = (col: AnyPgColumn, keys: readonly string[]) => sql`${col} in (${sql.raw(sqlList(keys))})`;
+
+/**
+ * QUA-23 (migration 0017) : triplet d'archivage, d'annulation ou de classement cohérent — tous vides, ou date et motif non
+ * vide (auteur facultatif : reprise, tâche du serveur, auteur anonymisé).
+ */
+const archiveState = (name: string, at: AnyPgColumn, by: AnyPgColumn, reason: AnyPgColumn) =>
+  check(name, sql`(${at} is null and ${by} is null and ${reason} is null) or (${at} is not null and ${reason} is not null and btrim(${reason}) <> '')`);
 
 // ─── Référentiels ────────────────────────────────────────────────────────────
 
@@ -35,7 +48,9 @@ export const sites = pgTable('sites', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('sites_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
 // Identifiant généré (jamais dérivé du nom) ; rapprochement Entra ID par objectId, puis par e-mail.
@@ -97,7 +112,11 @@ export const attachments = pgTable('attachments', {
   health: boolean('health').notNull().default(false),
   // Preuve déposée avec un commentaire du fil d'une action (ACT-25, D10) ; null : déposée seule ou autre entité.
   commentId: integer('comment_id').references((): AnyPgColumn => actionComments.id),
-}, (t) => [index('attachments_comment_idx').on(t.commentId)]);
+}, (t) => [
+  index('attachments_comment_idx').on(t.commentId),
+  // QUA-17 (migration 0018) : pièces d'une fiche (/fichiers, listes de pièces, échéances documentaires).
+  index('attachments_entity_idx').on(t.entityType, t.entityId),
+]);
 
 // ─── Signalements et événements ─────────────────────────────────────────────
 
@@ -205,7 +224,11 @@ export const events = pgTable('events', {
   check('events_nc_cost_keur_check', sql`${t.ncCostKeur} >= 0`),
   index('events_keystone_project_code_idx').on(t.keystoneProjectCode),
   index('events_zone_idx').on(t.zoneId),
+  // QUA-17 (migration 0018) : chargements filtrés par site (loadSiteEvents, siteWhere).
+  index('events_site_idx').on(t.siteId, t.occurredOn),
   uniqueIndex('events_nc_number_par_projet').on(t.keystoneProjectCode, t.ncNumber).where(sql`${t.ncNumber} is not null`),
+  archiveState('events_dismiss_check', t.dismissedAt, t.dismissedById, t.dismissReason),
+  check('events_type_check', inList(t.type, EVENT_TYPE_CODES)),
 ]);
 
 // Contenu de l'analyse des causes, une ligne par méthode et par événement.
@@ -226,7 +249,9 @@ export const eventSteps = pgTable('event_steps', {
   reason: text('reason'), // obligatoire pour revert, reopen, dismiss, restore
   byId: text('by_id').references(() => people.id),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  check('event_steps_kind_check', inList(t.kind, EVENT_STEP_KINDS)),
+]);
 
 // Registre des accidents du travail bénins (EVT-04, art. L. 441-4 et D. 441-1 à D. 441-4 CSS) : un registre par site
 // (établissement), une inscription par AT sans arrêt ni soins médicaux (events.injury = 'soins'), jamais supprimée
@@ -255,6 +280,7 @@ export const benignAccidents = pgTable('benign_accidents', {
   // Une seule inscription active par événement (une inscription annulée n'empêche pas de réinscrire).
   uniqueIndex('benign_accidents_event_active_unique').on(t.eventId).where(sql`cancelled_at is null`),
   index('benign_accidents_event_idx').on(t.eventId),
+  archiveState('benign_accidents_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // ─── Plan d'actions unique ──────────────────────────────────────────────────
@@ -327,7 +353,10 @@ export const actions = pgTable('actions', {
   check('actions_risk_level_check', sql`${t.riskLevel} is null or ${t.riskLevel} between 0 and 4`),
   check('actions_amounts_check', sql`(${t.hours} is null or ${t.hours} >= 0) and (${t.estimatedCost} is null or ${t.estimatedCost} >= 0) and (${t.actualCost} is null or ${t.actualCost} >= 0)`),
   index('actions_pilot_idx').on(t.pilotId),
+  // QUA-17 (migration 0018) : chargements filtrés par site (loadAllActions, siteWhere).
+  index('actions_site_idx').on(t.siteId),
   index('actions_follows_idx').on(t.followsActionId),
+  archiveState('actions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // Fil de commentaires daté et signé (ACT-24) : jamais modifié ; retrait motivé, texte conservé en base mais jamais envoyé
@@ -420,7 +449,9 @@ export const workUnits = pgTable('work_units', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('work_units_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 export const risks = pgTable('risks', {
   id: serial('id').primaryKey(),
@@ -439,12 +470,14 @@ export const risks = pgTable('risks', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('risks_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 export const riskActions = pgTable('risk_actions', {
   riskId: integer('risk_id').notNull().references(() => risks.id),
   actionId: text('action_id').notNull().references(() => actions.id),
-}, (t) => [primaryKey({ columns: [t.riskId, t.actionId] })]);
+}, (t) => [primaryKey({ columns: [t.riskId, t.actionId] }), index('risk_actions_action_idx').on(t.actionId)]);
 
 // Registre des mises à disposition du DUERP (R. 4121-4, DUE-01) : demandes d'accès des salariés, anciens salariés, CSE,
 // médecin du travail, inspection du travail, CARSAT…, avec la version communiquée. Jamais supprimée : annulation motivée.
@@ -463,7 +496,9 @@ export const duerpAccessRequests = pgTable('duerp_access_requests', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+}, (t) => [
+  archiveState('duerp_access_requests_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 // PAPRIPACT (L. 4121-3-1, DUE-02) : programme annuel de prévention issu du DUERP, un par année ; arrêté à la consultation
 // du CSE (lignes figées dans `snapshot`, type ProgramSnapshot de src/lib/data/risks.ts), rouvert seulement avec un motif.
@@ -518,7 +553,11 @@ export const requirements = pgTable('requirements', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('requirements_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+  check('requirements_evaluation_check', inList(t.evaluation, EVALUATION_CODES)),
+  check('requirements_linked_to_check', sql`${t.linkedTo} is null or ${inList(t.linkedTo, REQUIREMENT_LINK_CODES)}`),
+]);
 
 export const controls = pgTable('controls', {
   id: serial('id').primaryKey(),
@@ -541,7 +580,11 @@ export const controls = pgTable('controls', {
   // Code commun de l'équipement avec les moyens d'essais de Crucible (ex. PDE-PIL), publié par la vue pub_controles
   // (migration 0014) ; facultatif, plusieurs contrôles d'un même équipement portent le même code (equipmentCodeError).
   equipmentCode: text('equipment_code'),
-});
+}, (t) => [
+  // QUA-17 (migration 0018) : chargements filtrés par site (loadControls, siteWhere).
+  index('controls_site_idx').on(t.siteId),
+  archiveState('controls_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Historique des contrôles réalisés (le dernier met à jour controls.lastOn / nextOn / reserves).
 export const controlRecords = pgTable('control_records', {
@@ -563,7 +606,9 @@ export const controlRecords = pgTable('control_records', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+}, (t) => [
+  archiveState('control_records_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 // Historique des évaluations de conformité ; la dernière est recopiée dans requirements.evaluation / evaluationNote / lastEvaluatedOn.
 // Preuve facultative : attachments.entityType = 'requirement_evaluation'.
@@ -575,7 +620,9 @@ export const requirementEvaluations = pgTable('requirement_evaluations', {
   note: text('note'),
   evaluatedById: text('evaluated_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  check('requirement_evaluations_evaluation_check', inList(t.evaluation, EVALUATION_CODES)),
+]);
 
 // ─── Habilitations et formations ────────────────────────────────────────────
 
@@ -594,7 +641,9 @@ export const trainingTitles = pgTable('training_titles', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('training_titles_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 export const qualificationRequirements = pgTable('qualification_requirements', {
   personId: text('person_id').notNull().references(() => people.id),
@@ -618,7 +667,10 @@ export const qualifications = pgTable('qualifications', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-}, (t) => [index('qualifications_person_title_idx').on(t.personId, t.titleId)]);
+}, (t) => [
+  index('qualifications_person_title_idx').on(t.personId, t.titleId),
+  archiveState('qualifications_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 // Affectations lues depuis le planning Keystone.
 export const keystoneAssignments = pgTable('keystone_assignments', {
@@ -675,7 +727,9 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+}, (t) => [
+  archiveState('audit_plan_items_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 export const auditFindings = pgTable('audit_findings', {
   id: serial('id').primaryKey(),
@@ -686,13 +740,24 @@ export const auditFindings = pgTable('audit_findings', {
   kind: text('kind').notNull(), // FINDING_KINDS : ecart_majeur | ecart_mineur | observation | piste | point_fort
   text: text('text').notNull(),
   responseDueOn: date('response_due_on', { mode: 'string' }), // AUD-09 : réponse attendue (plan d'actions) au plus tard le
-  actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
-  // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, l'action liée reste au plan.
+  // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, les actions liées restent au plan.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+}, (t) => [
+  archiveState('audit_findings_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('audit_findings_kind_check', inList(t.kind, FINDING_KIND_CODES)),
+]);
+
+// Actions d'un constat d'audit (AUD-28, migration 0016 : reprise de l'ancienne colonne audit_findings.action_id) : un constat
+// porte plusieurs actions ; une action ne porte qu'un constat (un seul événement ou élément d'audit par action, posé à sa
+// création : EVENT_AUDIT_LOCKED, D20). Rattachement et détachement par le registre (src/lib/action-links.ts, type « finding ») ;
+// l'abandon de l'action la détache (ligne supprimée et journalisée, comme risk_actions).
+export const findingActions = pgTable('finding_actions', {
+  findingId: integer('finding_id').notNull().references(() => auditFindings.id),
+  actionId: text('action_id').notNull().references(() => actions.id),
+}, (t) => [primaryKey({ columns: [t.findingId, t.actionId] }), index('finding_actions_action_idx').on(t.actionId)]);
 
 // ─── Revue de direction (ISO 9001 §9.3)─────────────────────────────────────
 
@@ -718,7 +783,12 @@ export const reviews = pgTable('reviews', {
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  archiveState('reviews_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('reviews_status_check', inList(t.status, REVIEW_STATUS_CODES)),
+  check('reviews_kind_check', inList(t.kind, REVIEW_KIND_CODES)),
+  check('reviews_cancel_status_check', sql`(${t.status} = 'annulee') = (${t.cancelledAt} is not null)`),
+]);
 
 // Éléments d'entrée de la revue (check-list) : fournis par un contributeur, ou par Vigie (source automatique, état calculé).
 export const reviewItems = pgTable('review_items', {
@@ -743,7 +813,9 @@ export const reviewDecisions = pgTable('review_decisions', {
   dueOn: date('due_on', { mode: 'string' }),
   actionId: text('action_id').references(() => actions.id), // action du plan créée ou rattachée
   sort: integer('sort').notNull().default(0),
-});
+}, (t) => [
+  check('review_decisions_kind_check', inList(t.kind, REVIEW_DECISION_KIND_CODES)),
+]);
 
 // Objectifs QHSE mesurables (AUD-13, ISO 9001 §6.2 et §9.1) : cible d'un indicateur calculé de Vigie (OBJECTIVE_INDICATORS,
 // src/lib/objectives.ts) pour une année ; la valeur atteinte n'est jamais stockée. Décision de revue d'origine facultative.
@@ -762,7 +834,10 @@ export const qhseObjectives = pgTable('qhse_objectives', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-}, (t) => [check('qhse_objectives_target_check', sql`${t.target} >= 0`)]);
+}, (t) => [
+  check('qhse_objectives_target_check', sql`${t.target} >= 0`),
+  archiveState('qhse_objectives_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1) : enjeux internes et externes, parties
 // intéressées et leurs attentes, risques et opportunités avec leur traitement. Élément commun à l'entreprise.
@@ -778,7 +853,9 @@ export const contextItems = pgTable('context_items', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('context_items_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // ─── Plans de prévention et permis ──────────────────────────────────────────
 
@@ -796,7 +873,10 @@ export const contractors = pgTable('contractors', {
   // D16 (Matrix partage/50-vigie.sql) : fournisseur Keystone de l'entreprise (keystone.pub_fournisseurs.id), facultatif,
   // sans unicité (deux agences d'une même société) ; sans saisie dans Vigie à ce jour.
   supplierId: uuid('supplier_id'),
-}, (t) => [index('contractors_supplier_id_idx').on(t.supplierId)]);
+}, (t) => [
+  index('contractors_supplier_id_idx').on(t.supplierId),
+  archiveState('contractors_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Plan de prévention (Code du travail R. 4512-6 à R. 4512-12).
 export const preventionPlans = pgTable('prevention_plans', {
@@ -845,7 +925,12 @@ export const preventionPlans = pgTable('prevention_plans', {
   cancelReason: text('cancel_reason'),
   // D02 (Matrix partage/50-vigie.sql) : code projet Keystone, lu par vigie.pub_hse_projet ; sans saisie dans Vigie à ce jour.
   keystoneProjectCode: text('keystone_project_code'),
-}, (t) => [index('prevention_plans_keystone_project_code_idx').on(t.keystoneProjectCode)]);
+}, (t) => [
+  index('prevention_plans_keystone_project_code_idx').on(t.keystoneProjectCode),
+  archiveState('prevention_plans_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('prevention_plans_status_check', inList(t.status, PLAN_STATUS_CODES)),
+  check('prevention_plans_cancel_status_check', sql`(${t.status} = 'annule') = (${t.cancelledAt} is not null)`),
+]);
 
 // Modèles d'import du formulaire de plan de prévention : correspondance entre les champs
 // détectés dans le fichier (PDF remplissable, Word, scan) et les champs de Vigie.
@@ -901,7 +986,12 @@ export const permits = pgTable('permits', {
   cancelReason: text('cancel_reason'), // motif d'annulation (statut annule)
   // D02 (Matrix partage/50-vigie.sql) : code projet Keystone, lu par vigie.pub_hse_projet ; sans saisie dans Vigie à ce jour.
   keystoneProjectCode: text('keystone_project_code'),
-}, (t) => [index('permits_keystone_project_code_idx').on(t.keystoneProjectCode)]);
+}, (t) => [
+  index('permits_keystone_project_code_idx').on(t.keystoneProjectCode),
+  check('permits_status_check', inList(t.status, PERMIT_STATUS_CODES)),
+  check('permits_type_check', inList(t.type, PERMIT_TYPE_CODES)),
+  check('permits_cancel_check', sql`(${t.status} = 'annule') = (${t.cancelReason} is not null and btrim(${t.cancelReason}) <> '') and (${t.status} = 'annule' or ${t.cancelledById} is null)`),
+]);
 
 // ─── Documents maîtrisés ────────────────────────────────────────────────────
 
@@ -932,7 +1022,9 @@ export const documentVersions = pgTable('document_versions', {
   // n'est pas soumise à nouveau (remis à null à la soumission).
   returnedOn: date('returned_on', { mode: 'string' }),
   returnReason: text('return_reason'),
-});
+}, (t) => [
+  check('document_versions_status_check', inList(t.status, VERSION_STATUS_CODES)),
+]);
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
 
@@ -964,7 +1056,9 @@ export const wasteStreams = pgTable('waste_streams', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('waste_streams_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Registre chronologique des déchets sortants.
 export const wasteEntries = pgTable('waste_entries', {
@@ -1002,7 +1096,10 @@ export const wasteEntries = pgTable('waste_entries', {
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
   cancelReason: text('cancel_reason'),
-});
+}, (t) => [
+  archiveState('waste_entries_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('waste_entries_bsd_status_check', sql`${t.bsdStatus} is null or ${inList(t.bsdStatus, BSD_STATUS_CODES)}`),
+]);
 
 export const consumptions = pgTable('consumptions', {
   siteId: text('site_id').notNull().references(() => sites.id),
@@ -1039,7 +1136,9 @@ export const mapZones = pgTable('map_zones', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
-});
+}, (t) => [
+  archiveState('map_zones_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
 
 // Voies de circulation (accès) ; « shared » = voie commune à plusieurs équipes.
 export const mapRoutes = pgTable('map_routes', {
@@ -1078,7 +1177,10 @@ export const siteActivities = pgTable('site_activities', {
   cancelReason: text('cancel_reason'),
   // D02 (Matrix partage/50-vigie.sql) : code projet Keystone ; sans saisie dans Vigie à ce jour.
   keystoneProjectCode: text('keystone_project_code'),
-}, (t) => [index('site_activities_keystone_project_code_idx').on(t.keystoneProjectCode)]);
+}, (t) => [
+  index('site_activities_keystone_project_code_idx').on(t.keystoneProjectCode),
+  archiveState('site_activities_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 // Situation de coactivité maîtrisée (PRV-10) : paire d'activités de la carte (clé « a-b » de detectConflicts, la plus
 // petite d'abord) dont les mesures sont prises ; elle n'est plus signalée (badge, échéances) tant que la maîtrise n'est pas
@@ -1099,6 +1201,7 @@ export const coactivityControls = pgTable('coactivity_controls', {
 }, (t) => [
   uniqueIndex('coactivity_controls_active_pair').on(t.siteId, t.pairKey).where(sql`${t.cancelledAt} is null`),
   check('coactivity_controls_pair_check', sql`${t.activityA} < ${t.activityB}`),
+  archiveState('coactivity_controls_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // ─── Traçabilité et notifications ───────────────────────────────────────────

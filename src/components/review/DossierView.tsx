@@ -7,7 +7,7 @@ import { TONE, type Role } from '@/lib/domain';
 import type { ReviewDossierPage, ReviewRecordOnly, StoredDossier } from '@/lib/data/review';
 import {
   ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, Section,
-  capitalize, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
+  capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
 
 /**
@@ -297,16 +297,21 @@ export function DossierView({ page, role, notice }: {
               <table className="table rd-table">
                 <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
                 <tbody>
-                  {g.findings.map((f) => (
-                    <tr key={f.id}>
-                      <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
-                      <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {f.actionId ? <Ref href={f.action?.href} role={role}>{f.actionId}</Ref> : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
-                      </td>
-                      <td>{f.action ? <ActionStatus a={f.action} /> : '—'}</td>
-                    </tr>
-                  ))}
+                  {g.findings.map((f) => {
+                    // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
+                    const list = dossierFindingActions(f);
+                    return (
+                      <tr key={f.id}>
+                        <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
+                        <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
+                            : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
+                        </td>
+                        <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

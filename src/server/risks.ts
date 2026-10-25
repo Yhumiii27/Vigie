@@ -10,7 +10,7 @@ import {
   buildDuerpSnapshot, buildProgramSnapshot, DUERP_RETENTION, loadProgramSources, programDefaultIds, riskLinkedActionIds, versionComment, versionConflict,
 } from '@/lib/data/risks';
 import {
-  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, canEdit, type DuerpAccessChannel, type DuerpRequester,
+  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, canEdit, isClosedActionStatus, type DuerpAccessChannel, type DuerpRequester,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
@@ -63,8 +63,39 @@ async function riskWithSite(db: DbOrTx, id: number) {
   return row ?? null;
 }
 
+/** Rang d'un risque ajouté en dernier dans une unité (risques archivés compris, qui gardent leur rang). */
+async function nextRankInUnit(tx: DbOrTx, unitId: string) {
+  const [{ last }] = await tx.select({ last: max(t.risks.sort) }).from(t.risks).where(eq(t.risks.unitId, unitId));
+  return (last ?? -1) + 1;
+}
+
+/** Actions ouvertes (ni Vérifiées ni Abandonnées) liées au risque, d'un site autre que `siteId` (actions sans site : admises). */
+async function openActionsOutsideSite(db: DbOrTx, riskId: number, siteId: string) {
+  const rows = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId })
+    .from(t.riskActions).innerJoin(t.actions, eq(t.riskActions.actionId, t.actions.id)).where(eq(t.riskActions.riskId, riskId));
+  return rows.filter((a) => !isClosedActionStatus(a.status) && a.siteId != null && a.siteId !== siteId).map((a) => a.id)
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+}
+
 /**
- * Crée ou modifie un risque d'une unité de travail (cotation brute et résiduelle).
+ * DUE-14 : déplacement vers une unité d'un autre site refusé tant qu'une action ouverte liée au risque relève d'un autre
+ * site que celui de destination (une action relève du site de son élément, D20 ; jamais de changement de site silencieux).
+ */
+async function siteChangeBlocked(db: DbOrTx, riskId: number, fromSiteId: string | null, unit: { siteId: string | null; label: string }): Promise<FormState | null> {
+  if (!unit.siteId || unit.siteId === fromSiteId) return null;
+  const blocking = await openActionsOutsideSite(db, riskId, unit.siteId);
+  if (!blocking.length) return null;
+  return {
+    error: `Le risque porte ${blocking.length > 1 ? 'les actions ouvertes' : "l'action ouverte"} ${blocking.join(', ')} d'un autre site que celui de l'unité « ${unit.label} » : `
+      + "une action relève du site de son élément. Détachez-les du risque, changez leur site ou abandonnez-les, puis déplacez le risque.",
+    fieldErrors: { unitId: 'Actions liées d’un autre site.' },
+  };
+}
+
+/**
+ * Crée ou modifie un risque d'une unité de travail (cotation brute et résiduelle). Déplacement dans une autre unité
+ * (DUE-14) : le risque passe en dernier dans l'unité de destination ; vers un autre site, refusé tant qu'une action ouverte
+ * liée au risque relève d'un autre site que celui de destination.
  * La date de recotation du résiduel est mise à jour quand la cotation résiduelle change, ou quand le résiduel
  * est confirmé après vérification d'efficacité (case « residualReviewed »).
  */
@@ -104,9 +135,14 @@ export async function saveRisk(_prev: FormState, fd: FormData): Promise<FormStat
     const existing = await riskWithSite(db, id);
     if (!existing) return { error: 'Risque introuvable.' };
     if (existing.risk.archivedAt) return { error: ARCHIVED_RISK };
-    if (existing.risk.unitId !== unitId) {
+    const moved = existing.risk.unitId !== unitId;
+    if (moved) {
       const oldSiteError = await requireInSite(existing.siteId);
       if (oldSiteError) return { error: oldSiteError };
+      // DUE-14 : changement de site — une action relève du site de son élément (D20) ; une action ouverte liée au risque,
+      // d'un autre site que celui de destination, interdit le déplacement (jamais de changement de site silencieux).
+      const blocking = await siteChangeBlocked(db, id, existing.siteId, unit);
+      if (blocking) return blocking;
     }
     const before = existing.risk;
     const rerated = before.residualGravity !== values.residualGravity || before.residualProbability !== values.residualProbability;
@@ -114,7 +150,14 @@ export async function saveRisk(_prev: FormState, fd: FormData): Promise<FormStat
     const ok = await db.transaction(async (tx) => {
       // QUA-12 : risque modifié depuis l'ouverture du formulaire : rien n'est écrasé.
       if (await staleEditError(tx, 'risk', id, fd.get(VERSION_FIELD))) return 'changed' as const;
-      const [row] = await tx.update(t.risks).set({ ...values, ...(reviewed ? { residualReviewedOn: today() } : {}) })
+      // DUE-14 : contrôle refait dans la transaction (action rattachée entre-temps) ; risque déplacé dans une autre unité :
+      // placé en dernier parmi les risques de l'unité de destination.
+      if (moved) {
+        const blocking = await siteChangeBlocked(tx, id, existing.siteId, unit);
+        if (blocking) return blocking;
+      }
+      const rank = moved ? { sort: await nextRankInUnit(tx, unitId) } : {};
+      const [row] = await tx.update(t.risks).set({ ...values, ...rank, ...(reviewed ? { residualReviewedOn: today() } : {}) })
         .where(eq(t.risks.id, id)).returning({ id: t.risks.id });
       if (!row) return false;
       // Unité : comparaison sur l'identifiant, libellés dans le journal.
@@ -127,6 +170,7 @@ export async function saveRisk(_prev: FormState, fd: FormData): Promise<FormStat
       });
       return true;
     });
+    if (typeof ok === 'object') return ok;
     if (ok === 'changed') {
       revalidatePath('/', 'layout');
       return { error: STALE_EDIT };

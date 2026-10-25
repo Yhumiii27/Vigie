@@ -77,7 +77,7 @@ describe('création d’une action depuis une décision (saveAction, flux A)', (
     const [open] = await db.select().from(t.reviews).where(and(inArray(t.reviews.status, ['planifiee', 'tenue']), isNull(t.reviews.cancelledAt))).limit(1);
     expect(open, 'revue non clôturée dans le jeu de démonstration').toBeDefined();
     const [d] = await db.insert(t.reviewDecisions).values({ reviewId: open.id, kind: 'objectif', text: 'Atteindre 100 % des chefs d’équipe formés', sort: 99 }).returning();
-    await db.insert(t.sites).values({ id: 'ferme-e1', label: 'Site fermé', archivedAt: new Date('2026-01-01T00:00:00Z') });
+    await db.insert(t.sites).values({ id: 'ferme-e1', label: 'Site fermé', archivedAt: new Date('2026-01-01T00:00:00Z'), archiveReason: 'Site fermé' });
     const fields = (over: Record<string, string>) => form({
       source: 'objectif', link: `reviewdecision:${d.id}`, pilotId: 'clefevre', priority: 'moyen_terme', dueOn: '2026-12-15', verifyDueOn: '2027-01-15',
       domain: 'securite', problem: d.text, detail: 'Plan de formation des chefs d’équipe', siteId: 'ville-a', ...over,

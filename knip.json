@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "scripts/*.{ts,mjs}",
+    "src/instrumentation-node.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.{ts,mjs}",
+    "test/**/*.ts",
+    "*.{ts,mts}"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": [
+    "axe-core"
+  ]
+}

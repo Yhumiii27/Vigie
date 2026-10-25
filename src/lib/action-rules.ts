@@ -352,8 +352,9 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
 /**
  * Reprise d'un lien de l'action vérifiée par une action de suite (D21, réponses du service QHSE du 15/10/2026) :
  *   - 'source' : événement, constat, élément du programme — repris seulement s'il est l'élément de la source de l'action
- *     vérifiée (SOURCE_LINK_KINDS de sa cible) : l'événement est rattaché aussi à la suite, le constat ou l'élément du
- *     programme lui est déplacé ; sinon (ligne reprise à plusieurs éléments, D22) ni copié ni déplacé ;
+ *     vérifiée (SOURCE_LINK_KINDS de sa cible) : l'événement et le constat (plusieurs actions par constat, AUD-28) sont
+ *     rattachés aussi à la suite, l'élément du programme lui est déplacé ; sinon (ligne reprise à plusieurs éléments, D22)
+ *     ni copié ni déplacé ;
  *   - 'multi' : risque, revue, document, filière, enlèvement (plusieurs actions possibles) : rattaché aussi à la suite,
  *     l'action vérifiée le garde ;
  *   - 'single' : exigence, contrôle, version de document, décision de revue (une action à la fois) : déplacé vers la

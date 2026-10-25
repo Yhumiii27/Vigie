@@ -40,6 +40,23 @@ export const ORIGIN_LINKS: Record<OriginColumn, { kind: string; origin: (typeof 
 /** Lien du registre vers la source `target` de la colonne `column` (ex. « preventionplan:PP-2026-012 »). */
 export const originLink = (column: OriginColumn, target: string | number) => `${ORIGIN_LINKS[column].kind}:${target}`;
 
+/** « Coactivité JJ/MM/AAAA » (référence d'une action reprise, issue d'une situation de coactivité sans plan de prévention). */
+const COACTIVITY_REF = /^Coactivité (\d{2})\/(\d{2})\/(\d{4})(?:\s|$)/;
+
+/**
+ * Lien de la référence d'origine « Coactivité JJ/MM/AAAA » d'une action reprise (ACT-12) : carte du site de l'action à
+ * cette date (/prevention/carte?site=…&date=AAAA-MM-JJ), au lieu de l'écran Prévention ; null pour toute autre référence ou
+ * une date qui n'existe pas. Sans site (action « Tous les sites » reprise) : la carte du site sélectionné à cette date.
+ */
+export function coactivityOriginHref(originRef: string, siteId: string | null): string | null {
+  const m = COACTIVITY_REF.exec(originRef.trim());
+  if (!m) return null;
+  const iso = `${m[3]}-${m[2]}-${m[1]}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso) return null;
+  return `/prevention/carte?${siteId ? `site=${encodeURIComponent(siteId)}&` : ''}date=${iso}`;
+}
+
 // ─── Résolution d'une référence d'origine (règle pure) ──────────────────────
 
 /** Fiches sources connues : identifiants des plans, permis, documents et filières ; enlèvements (annulés compris). */

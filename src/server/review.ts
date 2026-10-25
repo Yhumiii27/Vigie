@@ -218,6 +218,8 @@ export async function rescheduleReview(_prev: FormState, fd: FormData): Promise<
   const f = formReader(fd);
   const id = f.int('id', { required: true, min: 1 });
   const to = f.date('to', { required: true });
+  // Motif du report (QUA-22), comme le report d'un élément du programme (AUD-03).
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -233,7 +235,7 @@ export async function rescheduleReview(_prev: FormState, fd: FormData): Promise<
     await moveReview(tx, review, to!, { postpone: true, byId: session.user.id });
     await logChange(tx, {
       byId: session.user.id,
-      entityType: 'review', entityId: review.id, action: 'update', summary: `Revue reportée au ${fmtDate(to!)}`,
+      entityType: 'review', entityId: review.id, action: 'update', summary: `Revue reportée au ${fmtDate(to!)}`, reason,
       details: [{ field: 'Date', from: fmtDate(review.reviewOn), to: fmtDate(to!) }],
     });
   });
@@ -400,7 +402,6 @@ export async function cancelReview(_prev: FormState, fd: FormData): Promise<Form
   const f = formReader(fd);
   const id = f.int('id', { required: true, min: 1 });
   const reason = f.reason();
-  if (reason.length > 300) f.fail('reason', '300 caractères au maximum.');
   if (!f.ok) return f.state();
 
   const db = await getDb();

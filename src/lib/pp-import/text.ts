@@ -203,9 +203,6 @@ export function parseDates(raw: string | undefined | null, refYear?: number): st
   return found;
 }
 
-/** Première date lisible d'un texte (AAAA-MM-JJ), ou null. */
-export const parseDate = (raw: string | undefined | null, refYear?: number) => parseDates(raw, refYear)[0] ?? null;
-
 /** Nombre d'heures écrit librement (« 1 200 h », « 60 heures », « 35,5 ») ; null si aucun nombre. */
 export function parseHours(raw: string | undefined | null): number | null {
   if (!raw) return null;

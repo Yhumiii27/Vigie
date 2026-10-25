@@ -7,6 +7,7 @@ import { config } from '../config';
 import { canManage, type TodoItem } from '../domain';
 import { REPORT_LIMITS, REPORT_LIMIT_RETENTION_MS, postTotalValue, reportLimitKey } from '../report-guard';
 import { readReportToken, reportPostStatus, reportTokenMatches, reportTokenPath, signReportToken } from '../report-token';
+import { loadSiteRows } from '../queries';
 import { currentSiteId, getSession, inSite, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 
@@ -27,7 +28,7 @@ export async function loadReportPosts(siteFilter?: string | null) {
     // Zones archivées (EVT-19) : plus de poste ni d'étiquette à imprimer.
     db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, qrVersion: t.mapZones.qrVersion })
       .from(t.mapZones).where(isNull(t.mapZones.archivedAt)).orderBy(asc(t.mapZones.siteId), asc(t.mapZones.name)),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    loadSiteRows(),
   ]);
   const active = new Map(sites.filter((s) => !s.archivedAt).map((s) => [s.id, shortLabel(s.label)]));
   return zones
@@ -39,7 +40,6 @@ export async function loadReportPosts(siteFilter?: string | null) {
         : `/signaler?poste=${z.id}&site=${encodeURIComponent(z.siteId)}`,
     }));
 }
-export type ReportPost = Awaited<ReturnType<typeof loadReportPosts>>[number];
 
 /** Poste ouvert par un QR code : lieu et site pré-remplis du formulaire. */
 export type ReportPostTarget = { zoneId: number; name: string; siteId: string; siteLabel: string };

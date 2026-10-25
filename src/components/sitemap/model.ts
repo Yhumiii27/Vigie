@@ -1,8 +1,8 @@
 // Carte du site et coactivité : référentiels et vues sérialisables (partagés serveur / client).
 
-import type { Conflict, CoPermit, Geometry, Pt, Team } from './coactivity';
+import type { CoPermit, Geometry, Pt, Team } from './coactivity';
 
-export type { Conflict, CoPermit, Geometry, Pt, Team };
+export type { CoPermit, Geometry, Pt, Team };
 
 /** Horizon de la liste « À positionner » et des échéances de coactivité. */
 export const COACTIVITY_HORIZON_DAYS = 15;

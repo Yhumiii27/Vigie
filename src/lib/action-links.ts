@@ -4,10 +4,11 @@ import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/components/events/shared';
 import { entryRef, wasteEntryHref, wasteStreamHref } from '@/components/environment/model';
-import { NON_QSE_LINK_MESSAGE, type LinkFacts } from './action-rules';
-import { ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
+import { NON_QSE_LINK_MESSAGE, actionRights, isNonQseLinkKind, type LinkFacts } from './action-rules';
+import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
 import { requireInSite } from './guard';
-import { ORIGIN_COLUMNS, ORIGIN_LINKS, originLink, type OriginColumn } from './origin-links';
+import { inSite } from './session';
+import { ORIGIN_LINKS, type OriginColumn } from './origin-links';
 
 // ─── Rattachements d'une action du plan à sa source ─────────────────────────
 //
@@ -19,7 +20,8 @@ import { ORIGIN_COLUMNS, ORIGIN_LINKS, originLink, type OriginColumn } from './o
 // Règles du paquet 1 (docs/specs/actions-qse.md § 12, D15, D20, D21 ; réponses du service QHSE du 15/10/2026) :
 //   - un seul événement ou audit par action (EVENT_AUDIT_LINK_KINDS : event, finding, plan) : posé à la création
 //     seulement, jamais rattaché ni détaché ensuite (EVENT_AUDIT_LOCKED) ; seul mouvement admis : la reprise par une action
-//     de suite (moveSlot, D21) ;
+//     de suite (verifyAction, D21) ; un constat porte plusieurs actions (AUD-28, table finding_actions), un élément du
+//     programme une seule ;
 //   - sources d'origine (ACT-01, `origin`) : plan de prévention, permis, document, filière et enlèvement, portés par une
 //     colonne de l'action (src/lib/origin-links.ts) ; posées à la création seulement, jamais rattachées ni détachées
 //     ensuite, conservées à l'abandon. La création d'une action depuis une version de document pose aussi `document_id`
@@ -278,21 +280,22 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     },
   },
 
+  // AUD-28 : un constat porte plusieurs actions (finding_actions) ; une action ne porte qu'un constat, posé à sa création
+  // (EVENT_AUDIT_LOCKED) ou repris par une action de suite (rattaché aussi, comme l'événement : followUpLinkMode).
   finding: {
     screen: 'audits',
     async attach(tx, [a], actionId) {
-      const [row] = await tx.select({ actionId: t.auditFindings.actionId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
+      const [row] = await tx.select({ id: t.auditFindings.id, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
       if (!row) return NOT_FOUND;
       if (row.cancelledAt) return 'Constat annulé : rattachement impossible.';
-      const taken = await slotTaken(tx, row.actionId, actionId);
-      if (!taken) await tx.update(t.auditFindings).set({ actionId }).where(eq(t.auditFindings.id, num(a)));
-      return taken;
+      await tx.insert(t.findingActions).values({ findingId: row.id, actionId }).onConflictDoNothing();
+      return null;
     },
     async detach(tx, [a], actionId) {
-      await tx.update(t.auditFindings).set({ actionId: null }).where(and(eq(t.auditFindings.id, num(a)), eq(t.auditFindings.actionId, actionId)));
+      await tx.delete(t.findingActions).where(and(eq(t.findingActions.findingId, num(a)), eq(t.findingActions.actionId, actionId)));
     },
     async detachAll(tx, actionId) {
-      await tx.update(t.auditFindings).set({ actionId: null }).where(eq(t.auditFindings.actionId, actionId));
+      await tx.delete(t.findingActions).where(eq(t.findingActions.actionId, actionId));
     },
     async facts(db, [a]) {
       const [f] = await db.select({ audit: t.auditFindings.audit, clause: t.auditFindings.clause, planItemId: t.auditFindings.planItemId }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
@@ -300,9 +303,10 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     },
     logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'audit_finding', entityId: num(a) } : null),
     async sources(db, ids) {
-      const rows = await db.select({ actionId: t.auditFindings.actionId, id: t.auditFindings.id, audit: t.auditFindings.audit, cancelledAt: t.auditFindings.cancelledAt })
-        .from(t.auditFindings).where(isNotNull(t.auditFindings.actionId));
-      // Un constat annulé garde son action : la source reste lisible (filtre « Annulés » de l'écran Audits).
+      const rows = await db.select({ actionId: t.findingActions.actionId, id: t.auditFindings.id, audit: t.auditFindings.audit, cancelledAt: t.auditFindings.cancelledAt })
+        .from(t.findingActions).innerJoin(t.auditFindings, eq(t.findingActions.findingId, t.auditFindings.id))
+        .where(ids ? inArray(t.findingActions.actionId, ids) : undefined);
+      // Un constat annulé garde ses actions : la source reste lisible (filtre « Annulés » de l'écran Audits).
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `finding:${r.id}`, kind: 'finding', label: `Constat${r.cancelledAt ? ' annulé' : ''} · ${r.audit}`, href: `/audits?constat=${r.id}` }));
     },
   },
@@ -572,6 +576,48 @@ export async function checkActionLink(db: DbOrTx, role: Role, link: string): Pro
   return siteError ? { error: siteError } : { parsed };
 }
 
+/** Action existante contrôlée par checkLinkChange. */
+type LinkedAction = { id: string; status: string; siteId: string | null; pilotId: string };
+export type LinkChange = { parsed: NonNullable<ReturnType<typeof parseActionLink>>; action: LinkedAction; sourceSiteId: string | null };
+
+/**
+ * Contrôles d'un rattachement (`link`) ou d'un détachement (`unlink`) d'un lien complémentaire sur une action existante,
+ * communs à linkAction / unlinkAction (src/server/links.ts) et à l'action liée d'une version de document (DOC-13,
+ * src/server/documents.ts), dans cet ordre (rien n'est révélé d'une action hors périmètre) : type connu, jamais l'événement
+ * ou l'audit (EVENT_AUDIT_LOCKED), ni une source d'origine (ORIGIN_LOCKED), ni un élément sans action QSE ; action
+ * existante, du site sélectionné et du périmètre (requireInSite) ; droits de la fiche (actionRights : canLink, action ni
+ * Vérifiée ni Abandonnée ; canUnlink, sauf Abandonnée) ; écran de l'élément ouvert en saisie au rôle ; site de l'élément
+ * (`sourceSiteId` imposé quand l'élément n'existe pas encore : version créée dans la même écriture) dans le site
+ * sélectionné ; au rattachement, action du site de l'élément (élément sans site : tout site). Le rôle QHSE est contrôlé par
+ * l'appelant (requireApprover).
+ */
+export async function checkLinkChange(
+  db: DbOrTx, who: { role: Role; userId: string }, link: string, actionId: string, mode: 'link' | 'unlink',
+  opts: { sourceSiteId?: string | null; siteMismatch?: string } = {},
+): Promise<{ error: string } | LinkChange> {
+  const parsed = parseActionLink(link);
+  if (!parsed) return { error: 'Type de rattachement inconnu.' };
+  if ((EVENT_AUDIT_LINK_KINDS as readonly string[]).includes(parsed.kind)) return { error: EVENT_AUDIT_LOCKED };
+  if (parsed.def.origin) return { error: ORIGIN_LOCKED };
+  if (isNonQseLinkKind(parsed.kind)) return { error: NON_QSE_LINK_MESSAGE };
+  const [action] = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId, pilotId: t.actions.pilotId })
+    .from(t.actions).where(eq(t.actions.id, actionId));
+  if (!action) return { error: 'Action introuvable.' };
+  const siteError = await requireInSite(action.siteId);
+  if (siteError) return { error: siteError };
+  const rights = actionRights(who.role, who.userId, action);
+  if (mode === 'link' && !rights.canLink) return { error: `L'action ${actionId} est vérifiée ou abandonnée : elle ne peut plus être rattachée.` };
+  if (mode === 'unlink' && !rights.canUnlink) return { error: `L'action ${actionId} est abandonnée : consultation seule.` };
+  if (!canEdit(who.role, parsed.def.screen)) return { error: 'Votre rôle ne permet pas cette modification.' };
+  const sourceSiteId = 'sourceSiteId' in opts ? opts.sourceSiteId ?? null : (await parsed.def.siteOf?.(db, parsed.args)) ?? null;
+  if ('sourceSiteId' in opts || parsed.def.siteOf) {
+    const sourceError = await requireInSite(sourceSiteId);
+    if (sourceError) return { error: sourceError };
+  }
+  if (mode === 'link' && !inSite(sourceSiteId, action.siteId)) return { error: opts.siteMismatch ?? `L'action ${actionId} concerne un autre site que l'élément à rattacher.` };
+  return { parsed, action, sourceSiteId };
+}
+
 /**
  * Faits de l'élément désigné par `link` (§ 2.12b) : référence d'origine par défaut (identifiant de l'événement,
  * « Constat · <audit> », « Programme <année> · <libellé> », texte de l'exigence, contrôle, document, filière, enlèvement,
@@ -582,13 +628,6 @@ export async function checkActionLink(db: DbOrTx, role: Role, link: string): Pro
 export async function linkFacts(db: DbOrTx, link: string): Promise<ElementFacts | null> {
   const parsed = parseActionLink(link);
   return parsed ? parsed.def.facts(db, parsed.args) : null;
-}
-
-/** Site de la source d'origine portée par l'action (colonnes ACT-01) : undefined sans source d'origine, null = sans site. */
-export async function originSiteOf(db: DbOrTx, a: Pick<typeof t.actions.$inferSelect, OriginColumn>): Promise<string | null | undefined> {
-  const column = ORIGIN_COLUMNS.find((c) => a[c] != null);
-  const parsed = column ? parseActionLink(originLink(column, a[column]!)) : null;
-  return parsed ? (await parsed.def.siteOf?.(db, parsed.args)) ?? null : undefined;
 }
 
 /** Fiche dont l'historique trace aussi les rattachements à la source `link` (LinkKind.logAs) ; null sinon. */
@@ -631,21 +670,6 @@ export async function actionLinks(db: DbOrTx, actionId: string): Promise<{ kind:
 }
 
 /**
- * Reprise d'un lien à action unique (constat, élément du programme, exigence, contrôle, version, décision) par l'action de
- * suite `toId` (D21) : le lien passe de `fromId` à `toId` dans la transaction de la vérification, après le passage de
- * `fromId` à « Vérifiée » (l'action vérifiée ne retient plus l'élément). Renvoie un message si l'élément refuse (constat
- * annulé, exigence archivée…) : rien n'est alors changé, l'action vérifiée garde son lien.
- */
-export async function moveSlot(tx: DbOrTx, kind: string, args: string[], fromId: string, toId: string): Promise<string | null> {
-  const def = Object.hasOwn(ACTION_LINKS, kind) ? ACTION_LINKS[kind] : undefined;
-  if (!def) return 'Type de rattachement inconnu.';
-  const link = [kind, ...args].join(':');
-  const held = (await def.sources(tx, [fromId])).some((s) => s.link === link);
-  if (!held) return `L'action ${fromId} ne porte pas cet élément.`;
-  return def.attach(tx, args, toId);
-}
-
-/**
  * Sources d'une action (fiche action) : chaque élément lié, avec le lien « kind:args » qui le désigne (« Détacher » d'un
  * lien complémentaire, ACT-02 ; l'appelant ne l'envoie au navigateur que pour le QHSE).
  */
@@ -656,9 +680,3 @@ export const loadActionSources = cache(async (actionId: string): Promise<(Action
   return all.map(({ actionId: _id, ...src }) => src);
 });
 
-/** Actions encore ouvertes parmi `ids` (contrôle avant rattachement). */
-export async function openActionIds(db: DbOrTx, ids: string[]) {
-  if (!ids.length) return new Set<string>();
-  const rows = await db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions).where(inArray(t.actions.id, ids));
-  return new Set(rows.filter((r) => !isClosedActionStatus(r.status)).map((r) => r.id));
-}

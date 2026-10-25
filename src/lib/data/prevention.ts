@@ -1,27 +1,23 @@
 import 'server-only';
-import { cache } from 'react';
 import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { schema as t } from '@/db';
 import type { ChangeEntry } from '@/components/ChangeLog';
 import {
-  PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, SIGNAL_HORIZON_DAYS, START_GAP_LABEL,
-  firstFullSignatureOn, firstMinuteReason, firstMinuteRule, fmtLocalLong, fmtLocalRange, fmtLocalShort, inGapWindow, inspectionDone, isFullySigned,
-  isInProgress, isMandatory, isPlanEnded, lacksSignedPlan, legalMandatory, legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitDays,
-  permitLacksSignedPlan, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planStatus, referenceNow,
-  ruleBasis, sevesoLabel, startGap, toParisLocal,
-  type ChecklistItem, type PermitPlanIssueKind, type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule,
-  type StartGapKind,
+  PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
+  fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded, legalMandatory,
+  legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
+  planEndIssue, planPhase, planStatus, ruleBasis, sevesoLabel, startGap, toParisLocal, type ChecklistItem, type PermitPlanIssueKind,
+  type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule, type StartGapKind,
 } from '@/components/prevention/model';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
-import { addDays, fmtDate, fmtDayMonth } from '../dates';
-import { today } from '@/lib/today';
-import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOSED, byUrgency, type EventType, type TodoItem, type Tone } from '../domain';
-import { actionView, loadPeople } from '../queries';
+import { fmtDate, fmtDayMonth } from '../dates';
+import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOSED, type EventType, type Tone } from '../domain';
+import { actionView } from '../queries';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
-import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { attachmentUrl } from '../uploads';
 import { entityVersions } from '@/server/versions';
+import { gapSummary, isOpenPermit, loadRows, plural, type Rows } from './prevention-rows';
 
 // ─── Plans de prévention et permis ──────────────────────────────────────────
 
@@ -240,89 +236,6 @@ export type ContractorView = {
   archiveBlock: string | null;
 };
 
-/**
- * Lignes du site sélectionné (scope 'site') ou de tout le périmètre (scope 'perimeter' : échéances, TDB-05) — plans,
- * permis —, référentiels et règle de prévention de chaque site.
- */
-const loadRows = cache(async (scope: SiteScope = 'site') => {
-  const [db, site, people, keep] = await Promise.all([getDb(), currentSiteId(), loadPeople(), siteFilter(scope)]);
-  const [contractors, plans, permits, sites, activities, linkedEvents] = await Promise.all([
-    db.select().from(t.contractors),
-    db.select().from(t.preventionPlans),
-    db.select().from(t.permits),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
-    // Activités de la carte (tous sites) : rattachements qui empêchent de supprimer ou d'annuler un plan.
-    db.select({ planId: t.siteActivities.preventionPlanId, endOn: t.siteActivities.endOn, cancelled: isNotNull(t.siteActivities.cancelledAt) }).from(t.siteActivities),
-    db.select({
-      id: t.events.id, planId: t.events.preventionPlanId, permitId: t.events.permitId, type: t.events.type, title: t.events.title,
-      occurredOn: t.events.occurredOn, step: t.events.step, dismissedAt: t.events.dismissedAt,
-    }).from(t.events).where(or(isNotNull(t.events.preventionPlanId), isNotNull(t.events.permitId))),
-  ]);
-  const now = today();
-  const rules = new Map(sites.map((s): [string, SiteRule] => [s.id, { seveso: s.seveso, ppFromFirstMinute: s.ppFromFirstMinute }]));
-  return {
-    db,
-    now,
-    nowMs: referenceNow(now).getTime(),
-    people,
-    contractors: contractors.sort((a, b) => a.name.replace(/^\[/, '').localeCompare(b.name.replace(/^\[/, ''), 'fr', { sensitivity: 'base' })),
-    sites,
-    selectedSite: site,
-    ruleOf: (siteId: string) => rules.get(siteId),
-    allPlans: plans,
-    allPermits: permits,
-    activities,
-    /** Plans cités par un événement (signalement lié à l'intervention). */
-    eventPlanIds: new Set(linkedEvents.map((e) => e.planId).filter(Boolean)),
-    linkedEvents,
-    plans: plans.filter((p) => keep(p.siteId)),
-    permits: permits.filter((p) => keep(p.siteId)),
-  };
-});
-type Rows = Awaited<ReturnType<typeof loadRows>>;
-type PermitRow = Rows['allPermits'][number];
-
-/**
- * Écarts du site sélectionné (même calcul pour l'écran, le badge et les échéances) : interventions en cours sans plan
- * obligatoire signé, et permis d'entreprises extérieures (demandés ou délivrés) sans plan signé couvrant leur validité
- * sur un site « dès la première minute ». L'indicateur compte des interventions : un permis rattaché à un plan déjà en écart
- * relève de la même intervention et n'est compté qu'une fois, avec son plan (affiché « Écart · compté avec PP-… »).
- */
-function gapsOf({ now, nowMs, plans, permits, allPlans, ruleOf }: Rows) {
-  const planById = new Map(allPlans.map((p) => [p.id, p]));
-  const linkedPlan = (p: PermitRow) => (p.preventionPlanId ? planById.get(p.preventionPlanId) : undefined);
-  const planGaps = new Set(plans.filter((p) => lacksSignedPlan(p, now, ruleOf(p.siteId))).map((p) => p.id));
-  const permitGaps = new Set(permits.filter((p) => permitLacksSignedPlan(p, linkedPlan(p), ruleOf(p.siteId), nowMs)).map((p) => p.id));
-  /** Permis en écart rattaché à un plan en écart → référence du plan qui porte l'écart. */
-  const gapWith = new Map(permits
-    .filter((p) => permitGaps.has(p.id) && p.preventionPlanId && planGaps.has(p.preventionPlanId))
-    .map((p): [string, string] => [p.id, p.preventionPlanId!]));
-  const countedPermitGaps = new Set([...permitGaps].filter((id) => !gapWith.has(id)));
-  return { linkedPlan, planGaps, permitGaps, gapWith, countedPermitGaps };
-}
-
-type PlanRow = Rows['allPlans'][number];
-
-/**
- * Écarts et nombre d'interventions sans plan signé (plans en écart, permis en écart comptés à part) : même calcul pour
- * l'écran et la veille. Écarts passés (PRV-01, indicateurs seulement, ni badge ni échéance) : interventions commencées
- * dans les 12 derniers mois avec un plan obligatoire signé après leur début, ou réalisées sans plan signé, hors écarts
- * en cours ; plans annulés et permis exclus (la délivrance d'un permis exige déjà un plan signé).
- */
-function gapSummary(rows: Rows) {
-  const { now, plans, ruleOf } = rows;
-  const gaps = gapsOf(rows);
-  const pastGaps = plans
-    .filter((p) => !gaps.planGaps.has(p.id) && inGapWindow(p, now))
-    .map((p) => ({ plan: p, kind: startGap(p, now, ruleOf(p.siteId)) }))
-    .filter((x): x is { plan: PlanRow; kind: StartGapKind } => !!x.kind)
-    .sort((a, b) => b.plan.startOn.localeCompare(a.plan.startOn));
-  return { gaps, gapCount: gaps.planGaps.size + gaps.countedPermitGaps.size, pastGaps, pastGapCount: pastGaps.length };
-}
-
-/** Permis encore actifs (demandés ou délivrés, éventuellement expirés non clos). */
-const isOpenPermit = (p: { status: string }) => p.status === 'demande' || p.status === 'delivre';
-const plural = (n: number, s: string, p = `${s}s`) => `${n} ${n > 1 ? p : s}`;
 /** Instant → « 31/03/2026 » (jour à Paris). */
 const fmtInstant = (d: Date) => fmtDate(toParisLocal(d).slice(0, 10));
 
@@ -738,104 +651,3 @@ export async function loadPrevention() {
     },
   };
 }
-export type PreventionData = Awaited<ReturnType<typeof loadPrevention>>;
-
-/**
- * Indicateur calculé pour la veille réglementaire (exigence du domaine PREVENTION_REQUIREMENT_DOMAIN, R. 4512-6) :
- * interventions sans plan signé en cours et écarts passés sur 12 mois (PRV-01), sur tout le périmètre de la personne
- * (VEI-06 : l'exigence vaut pour l'entreprise, quel que soit le site sélectionné), même calcul que l'écran. gapCount compte
- * les deux ; l'évaluation de conformité reste un jugement du pilote, affiché à côté.
- */
-export const loadPreventionCompliance = cache(async (): Promise<{
-  gapCount: number; currentGapCount: number; pastGapCount: number; label: string; tone: Tone; href: string;
-}> => {
-  const { gapCount: current, pastGapCount: past } = gapSummary(await loadRows('perimeter'));
-  const pastLabel = `${plural(past, 'écart passé', 'écarts passés')} sur 12 mois`;
-  return {
-    gapCount: current + past,
-    currentGapCount: current,
-    pastGapCount: past,
-    label: current
-      ? `${plural(current, 'intervention sans plan signé', 'interventions sans plan signé')}${past ? ` · ${pastLabel}` : ''}`
-      : past ? `Aucune intervention en cours sans plan signé · ${pastLabel}` : 'Aucun écart R. 4512-6 sur 12 mois',
-    tone: current ? 'danger' : past ? 'warn' : 'ok',
-    href: '/prevention',
-  };
-});
-
-/**
- * Échéances du domaine (tableau de bord, notifications, badge), sur tous les sites du périmètre (TDB-05, siteId du plan
- * ou du permis) ; plans clos ou annulés exclus :
- * - plans : intervention en cours sans plan signé (écart) ; plan obligatoire à signer avant un démarrage sous l'horizon ;
- *   période échue, plan à clore ; sinon inspection commune prévue sous l'horizon pour un plan non signé ;
- * - permis : écart (entreprise extérieure sans plan signé, compté avec son plan s'il est lui-même en écart) ;
- *   permis expiré non clos ou demande échue ; demande à délivrer dont la validité commence sous l'horizon.
- * Les échéances ouvrent directement la fiche concernée (/prevention?plan=… ou ?onglet=permis&permis=…).
- * Les écarts R. 4512-6 passés (PRV-01 : plan signé après le début, intervention réalisée sans plan signé) restent des
- * indicateurs (écran, veille, revue de direction) : ni échéance ni badge ; aucune action QSE n'est exigée à la clôture
- * (actions immédiates hors actions QSE, réponses du service QHSE du 15/10/2026).
- */
-export const loadPreventionSignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
-  const rows = await loadRows('perimeter');
-  const { now, nowMs, people, contractors, plans, permits, ruleOf } = rows;
-  const { gaps } = gapSummary(rows);
-  const horizon = addDays(now, SIGNAL_HORIZON_DAYS);
-  const contractorName = (id: string | null) => (id ? contractors.find((c) => c.id === id)?.name ?? id : 'Intervention interne');
-  const owner = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
-  const todo: TodoItem[] = [];
-
-  plans.forEach((p) => {
-    if (isPlanEnded(p)) return;
-    const href = `/prevention?plan=${p.id}`;
-    const who = [contractorName(p.contractorId), owner(p.ownerId)].filter(Boolean).join(' · ');
-    const ownerIds = p.ownerId ? [p.ownerId] : undefined;
-    const kind = 'Plan de prévention';
-    const siteId = p.siteId;
-    if (gaps.planGaps.has(p.id)) {
-      todo.push({ date: now, dueOn: p.startOn, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
-      return;
-    }
-    if (p.endOn < now) {
-      todo.push({ date: p.endOn, dueOn: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
-      return;
-    }
-    const toSignBeforeStart = p.startOn > now && p.startOn <= horizon && isMandatory(p, ruleOf(p.siteId)) && !isFullySigned(p);
-    if (toSignBeforeStart) {
-      todo.push({ date: p.startOn, dueOn: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds, siteId });
-    } else if (!isFullySigned(p) && p.inspectionOn && p.inspectionOn > now && p.inspectionOn <= horizon) {
-      todo.push({ date: p.inspectionOn, dueOn: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
-    }
-  });
-  permits.forEach((p) => {
-    const type: PermitType = p.type === 'essai' ? 'essai' : 'feu';
-    const label = PERMIT_TYPES[type].label.toLowerCase();
-    const who = [contractorName(p.contractorId), owner(p.issuerId)].filter(Boolean).join(' · ');
-    const href = `/prevention?onglet=permis&permis=${p.id}`;
-    const ownerIds = p.issuerId ? [p.issuerId] : undefined;
-    const siteId = p.siteId;
-    // Permis en écart : compté à part, sauf s'il est rattaché à un plan déjà en écart (échéance du plan).
-    if (gaps.permitGaps.has(p.id)) {
-      if (!gaps.countedPermitGaps.has(p.id)) return;
-      const what = p.status === 'demande' ? `demande de ${label}` : label;
-      todo.push({ date: now, kind: 'Permis', tone: 'danger', title: `${p.id} · ${what} d'une entreprise extérieure sans plan de prévention signé — ${p.location}`, who, href, ownerIds, siteId, overdue: true });
-      return;
-    }
-    if (permitState(p, nowMs) === 'expire') {
-      todo.push({
-        date: now, kind: 'Permis', tone: 'danger',
-        title: p.status === 'demande'
-          ? `${p.id} · demande de ${label} échue, jamais délivrée — ${p.location}`
-          : `${p.id} · ${label} expiré non clos — ${p.location}`,
-        who, href, ownerIds, siteId, overdue: true,
-      });
-      return;
-    }
-    const { from } = permitDays(p);
-    if (p.status === 'demande' && from <= horizon) {
-      const validity = fmtLocalRange(toParisLocal(p.validFrom), toParisLocal(p.validTo));
-      todo.push({ date: from > now ? from : now, dueOn: from, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
-    }
-  });
-
-  return { badge: todo.length, todo: todo.sort(byUrgency) };
-});

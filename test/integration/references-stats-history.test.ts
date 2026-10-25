@@ -7,7 +7,7 @@ import { loadActionStats } from '@/lib/data/action-stats';
 import { loadAllActions } from '@/lib/queries';
 import { createEvent } from '@/server/events';
 import { loadEntityHistory } from '@/server/history';
-import { saveContractor } from '@/server/prevention';
+import { saveContractor } from '@/server/contractors';
 import { nextEntityReference, referenceScope } from '@/server/references';
 
 // Paquet 2 : références sûres des autres fiches (PRD-08), statistiques du plan d'actions (ACT-29), historiques chargés à

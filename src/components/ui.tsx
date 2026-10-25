@@ -41,18 +41,6 @@ export function SegLinks({ options, size = 12, pad = '5px 10px' }: { options: { 
 /** Construit une URL en remplaçant certains paramètres de recherche (convention d'URL : src/lib/url-state.ts, UX-12). */
 export { hrefWith } from '@/lib/url-state';
 
-export function OutOfScope({ title, text }: { title: string; text: string }) {
-  return (
-    <div style={{ padding: '0 28px 28px' }}>
-      <div className="card" style={{ gap: 8, maxWidth: 560, border: '1px dashed var(--color-divider)', background: 'transparent' }}>
-        <div className="card-kicker">Hors périmètre de cette itération</div>
-        <div className="card-title" style={{ fontSize: 15 }}>{title}</div>
-        <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{text}</p>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Conteneur à défilement horizontal d'un tableau sans élément interactif : atteignable au clavier (flèches pour défiler) et
  * nommé (WCAG 2.1.1, règle axe scrollable-region-focusable).

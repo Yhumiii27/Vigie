@@ -13,7 +13,7 @@ import {
 } from '../domain';
 import type { Option } from '../form-options';
 import { actionLabel, canCreateAction, isLate } from '../action-rules';
-import { lcfirst, loadPeople, type ActionRow } from '../queries';
+import { lcfirst, loadActionRows, loadPeople, loadSiteRows, type ActionRow } from '../queries';
 import { loadQhseLeads, type Recipients } from './leads';
 import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite, siteFilter, type SiteScope } from '../session';
 import { loadChangeLog, loadChangeLogs } from './changelog';
@@ -259,8 +259,8 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.workUnits).orderBy(asc(t.workUnits.sort), asc(t.workUnits.label)),
     db.select().from(t.risks).orderBy(asc(t.risks.sort), asc(t.risks.id)),
     db.select().from(t.riskActions),
-    db.select().from(t.actions),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    loadActionRows(),
+    loadSiteRows(),
     currentSiteId(),
     db.select({ id: t.events.id, type: t.events.type, title: t.events.title, occurredOn: t.events.occurredOn, step: t.events.step, riskId: t.events.riskId, dismissedAt: t.events.dismissedAt })
       .from(t.events).where(isNotNull(t.events.riskId)),
@@ -550,7 +550,6 @@ export async function loadDuerpPrint() {
     actionInfo,
   };
 }
-export type DuerpPrint = Awaited<ReturnType<typeof loadDuerpPrint>>;
 
 // ─── Registre des mises à disposition du DUERP (R. 4121-4, DUE-01) ─────────
 
@@ -612,7 +611,6 @@ export async function loadDuerpAccessRegister(): Promise<{ requests: DuerpAccess
     pending: requests.filter((r) => r.pending).length,
   };
 }
-export type DuerpAccessRegister = Awaited<ReturnType<typeof loadDuerpAccessRegister>>;
 
 // ─── Programme annuel de prévention (PAPRIPACT, L. 4121-3-1, DUE-02) ─────────
 

@@ -297,10 +297,6 @@ export function parseHourRanges(s: string | null | undefined): [number, number][
   return ranges;
 }
 
-/** Première plage lue (compatibilité). */
-export function parseHours(s: string | null | undefined): [number, number] | null {
-  return parseHourRanges(s)[0] ?? null;
-}
 
 /** Les plages horaires se chevauchent (plage illisible ou absente : chevauchement supposé). */
 export function hoursOverlap(a: string | null | undefined, b: string | null | undefined) {

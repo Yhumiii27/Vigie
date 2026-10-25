@@ -2,6 +2,7 @@ import { and, count, desc, eq, isNull, like } from 'drizzle-orm';
 import * as t from '../schema';
 import { demoPdf } from './actions';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Jeu de démonstration du paquet 6 (fonctions des modules, migration 0011) : situation de coactivité maîtrisée (PRV-10)
 // et pièces jointes ajoutées après la saisie (DUE-09 : DUERP signé et justificatif d'un risque ; AUD-17 : pièces de la
@@ -30,7 +31,7 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
   const b = activities.find((x) => x.title.startsWith('Repli de la nacelle'));
   if (a && b) {
     const [lo, hi] = a.id < b.id ? [a, b] : [b, a];
-    const at = paris('2026-10-08', '09:30');
+    const at = paris(rel(-1), '09:30');
     const measure = 'Livraisons poids lourds suspendues de 13 h à 14 h pendant le repli de la nacelle ; voie balisée et guidée par le magasinier.';
     const [row] = await tx.insert(t.coactivityControls).values({
       siteId: 'ville-a', pairKey: `${lo.id}-${hi.id}`, activityA: lo.id, activityB: hi.id, measure, controlledById: 'clefevre', controlledAt: at,
@@ -57,26 +58,26 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
   const [current] = await tx.select({ version: t.duerpVersions.version }).from(t.duerpVersions).where(eq(t.duerpVersions.current, true));
   if (current) {
     await attach('duerp_version', current.version, { entityType: 'duerp_version', entityId: current.version }, 'DUERP signé',
-      `DUERP-${current.version}-signe.pdf`, 'hmarchand', paris('2026-03-20', '17:00'), `DUERP ${current.version}`);
+      `DUERP-${current.version}-signe.pdf`, 'hmarchand', paris(rel(-203), '17:00'), `DUERP ${current.version}`);
   }
   const [risk] = await tx.select({ id: t.risks.id }).from(t.risks).where(and(eq(t.risks.unitId, 'montage'), like(t.risks.hazard, 'Manutention%'), isNull(t.risks.archivedAt)));
   if (risk) {
     await attach('risk', String(risk.id), { entityType: 'risk', entityId: String(risk.id) }, 'Justificatif',
-      'mesurage-charges-poste-montage.pdf', 'clefevre', paris('2026-09-24', '11:00'), `risque ${risk.id}`);
+      'mesurage-charges-poste-montage.pdf', 'clefevre', paris(rel(-15), '11:00'), `risque ${risk.id}`);
   }
 
   // AUD-17 : présentation de la revue intermédiaire (clôturée : pièces figées) et contribution d'un élément d'entrée.
-  const [held] = await tx.select({ id: t.reviews.id }).from(t.reviews).where(eq(t.reviews.reviewOn, '2026-06-18'));
+  const [held] = await tx.select({ id: t.reviews.id }).from(t.reviews).where(eq(t.reviews.reviewOn, rel(-113)));
   if (held) {
     await attach('review', String(held.id), { entityType: 'review', entityId: String(held.id) }, 'Pièce de la revue',
-      'presentation-revue-intermediaire-2026.pdf', 'clefevre', paris('2026-06-18', '12:00'), 'revue du 18/06/2026');
+      'presentation-revue-intermediaire-2026.pdf', 'clefevre', paris(rel(-113), '12:00'), 'revue du 18/06/2026');
   }
   const [item] = await tx.select({ id: t.reviewItems.id, reviewId: t.reviewItems.reviewId }).from(t.reviewItems)
     .innerJoin(t.reviews, eq(t.reviews.id, t.reviewItems.reviewId))
-    .where(and(eq(t.reviews.reviewOn, '2026-12-10'), eq(t.reviewItems.ownerId, 'edubois'), like(t.reviewItems.label, 'Résultats des audits%')));
+    .where(and(eq(t.reviews.reviewOn, rel(62)), eq(t.reviewItems.ownerId, 'edubois'), like(t.reviewItems.label, 'Résultats des audits%')));
   if (item) {
     await attach('review_item', String(item.id), { entityType: 'review', entityId: String(item.reviewId) }, "Pièce d'un élément d'entrée",
-      'synthese-audits-2026.pdf', 'edubois', paris('2026-10-06', '15:30'), 'revue du 10/12/2026');
+      'synthese-audits-2026.pdf', 'edubois', paris(rel(-3), '15:30'), 'revue du 10/12/2026');
   }
 
   // DOC-11 : certificat de traitement d'un enlèvement de déchets dangereux traité.
@@ -85,6 +86,6 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
     .orderBy(desc(t.wasteEntries.removedOn)).limit(1);
   if (entry) {
     await attach('waste_entry', String(entry.id), { entityType: 'waste_entry', entityId: String(entry.id) }, "Pièce de l'enlèvement",
-      `certificat-traitement-${entry.bsd ?? entry.id}.pdf`, 'rfontaine', paris('2026-09-30', '10:00'), `enlèvement ${entry.id}`);
+      `certificat-traitement-${entry.bsd ?? entry.id}.pdf`, 'rfontaine', paris(rel(-9), '10:00'), `enlèvement ${entry.id}`);
   }
 }

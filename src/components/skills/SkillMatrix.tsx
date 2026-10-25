@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Attachments } from '@/components/Attachments';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { Input, Select } from '@/components/form';
-import { ReasonForm } from '@/components/ReasonDialog';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { Icon } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { legacySkillFilters, parseSkillFilters, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
@@ -222,14 +222,7 @@ function DepartedHistory({ records }: { records: ArchivedRecord[] }) {
 
 /** Salariés sortis de l'effectif (filtre « Sortis ») : date, motif, formations conservées et réintégration. */
 function DepartedList({ people, archive }: { people: Person[]; archive: ArchivedRecord[] }) {
-  const [pending, start] = useTransition();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [viewed, setViewed] = useState<Person | null>(null);
-  const reinstate = (id: string) => {
-    setBusy(id);
-    start(async () => { setError((await reinstatePerson(id)).error ?? null); setBusy(null); });
-  };
   const recordsOf = (id: string) => archive.filter((r) => r.person.id === id);
   return (
     <div className="card" style={{ padding: '6px 14px 10px' }}>
@@ -248,14 +241,15 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
               <td style={{ textAlign: 'right', width: 1, whiteSpace: 'nowrap' }}>
                 <span style={{ display: 'inline-flex', gap: 10 }}>
                   <button type="button" className="vg-text-btn" onClick={() => setViewed(p)}>Formations ({recordsOf(p.id).reduce((n, r) => n + r.entries.length, 0)})</button>
-                  <button type="button" className="vg-text-btn" disabled={pending} onClick={() => reinstate(p.id)}>{busy === p.id ? 'Réintégration…' : 'Réintégrer'}</button>
+                  <ReasonButton action={reinstatePerson} hidden={{ id: p.id }} label="Réintégrer" className="vg-text-btn" title="Réintégrer le salarié"
+                    kicker={p.name} submitLabel="Réintégrer" message="Le salarié revient dans la matrice, les échéances et les listes ; la réintégration est inscrite à son historique."
+                    placeholder="Ex. retour après fin de mission" />
                 </span>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      {error && <div role="alert" className="vg-form-error">{error}</div>}
       <Dialog open={!!viewed} onClose={() => setViewed(null)} width={600} kicker="Salarié sorti · consultation seule" title={viewed ? `Formations de ${viewed.name}` : ''}>
         {viewed && <DepartedHistory records={recordsOf(viewed.id)} />}
       </Dialog>

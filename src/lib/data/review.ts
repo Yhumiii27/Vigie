@@ -19,7 +19,7 @@ import type { ActionFormOptions } from '../action-view';
 import { clipText, decisionFollowUpGap, reviewCloseBlockers } from '../review-rules';
 import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
-import { planItemAuditLabel, planItemState } from './audits';
+import { findingActionsBy, planItemAuditLabel, planItemState } from './audits';
 import { loadEntityFiles } from './entity-files';
 import { loadChangeLog } from './changelog';
 import { loadContext } from './context';
@@ -28,7 +28,8 @@ import { fmtObjectiveTarget, fmtObjectiveValue } from '../objectives';
 import { loadDocuments } from './documents';
 import { loadEnvironment } from './environment';
 import { loadFormOptions } from './options';
-import { loadPrevention, loadPreventionSignals } from './prevention';
+import { loadPrevention } from './prevention';
+import { loadPreventionSignals } from './prevention-signals';
 import { loadRisks } from './risks';
 import { loadSkillMatrix, type SkillAlert } from './skills';
 
@@ -71,6 +72,17 @@ export type DossierActions = {
   /** Actions en retard ; `origin` = libellé de la source (clé conservée pour les dossiers figés). */
   lateActions?: (ActionBrief & { href: string; origin: string; originRef: string })[];
 };
+/**
+ * Constat de la section « Audits » du dossier : ses actions (AUD-28, plusieurs par constat). Un dossier figé avant la
+ * migration 0016 porte une seule action (`actionId`, `action`) : lu par dossierFindingActions (DossierView).
+ */
+export type DossierFinding = {
+  id: number; kind: string; kindLabel: string; tone: Tone; text: string; clause: string | null;
+  actions?: { id: string; action: (ActionBrief & { href: string }) | null }[];
+  /** Dossier figé avant AUD-28 : action unique du constat. */
+  actionId?: string | null; action?: (ActionBrief & { href: string }) | null;
+};
+
 /** Dossier conservé dans un instantané : format courant, ou ancien format (previousActions au lieu de previousFollowUp). */
 export type StoredDossier = ReviewDossier & { previousActions?: LegacyPreviousAction[] };
 
@@ -238,7 +250,6 @@ const historyRow = (r: Review) => ({
   id: r.id, reviewOn: r.reviewOn, kindShort: kindOf(r.kind).short, statusLabel: statusOf(r.status).label, statusTone: statusOf(r.status).tone,
   cancelled: isCancelled(r), cancelReason: r.cancelReason,
 });
-export type ReviewHistoryRow = ReturnType<typeof historyRow>;
 
 export type DecisionView = {
   id: number; kind: ReviewDecisionKind; kindLabel: string; tone: Tone; text: string; pilotId: string | null; pilot: string;
@@ -516,7 +527,7 @@ const fr = (n: number, digits: number) => n.toLocaleString('fr-FR', { minimumFra
 export async function buildReviewDossier(review: Review, reviews: Review[], opts: { asOf?: string } = {}) {
   const db = await getDb();
   const asOf = opts.asOf ?? dossierAsOf(review.reviewOn, today());
-  const [parts, events, controls, hours, siteRows, skills, risks, prevention, preventionSignals, documents, env, reqs, certs, plan, findings, site, allActions] = await Promise.all([
+  const [parts, events, controls, hours, siteRows, skills, risks, prevention, preventionSignals, documents, env, reqs, certs, plan, findings, findingLinks, site, allActions] = await Promise.all([
     buildRecordParts(review, reviews, asOf),
     loadEvents(),
     loadControls(),
@@ -534,6 +545,7 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     db.select().from(t.auditPlanItems).where(isNull(t.auditPlanItems.cancelledAt)).orderBy(asc(t.auditPlanItems.id)),
     // Constats annulés (saisis par erreur) : hors dossier.
     db.select().from(t.auditFindings).where(isNull(t.auditFindings.cancelledAt)).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
+    db.select().from(t.findingActions),
     currentSiteId(),
     // Périmètre : le suivi des décisions des revues précédentes (communes à l'entreprise) lit leurs actions de tout site.
     loadAllActions('perimeter'),
@@ -665,12 +677,13 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   }));
   // Libellé d'audit avec son mois (« Processus Production · juin 2026 ») : deux audits d'un même processus restent distincts.
   const planLabel = new Map(plan.map((p) => [p.id, planItemAuditLabel(p)]));
-  const groups = new Map<string, { label: string; first: number; findings: { id: number; kind: string; kindLabel: string; tone: Tone; text: string; clause: string | null; actionId: string | null; action: ReturnType<typeof briefOf> }[] }>();
+  const groups = new Map<string, { label: string; first: number; findings: DossierFinding[] }>();
+  const actionsOfFinding = findingActionsBy(findingLinks, briefOf);
   findings.filter((f) => !f.foundOn || f.foundOn <= asOf).forEach((f) => {
     const label = (f.planItemId ? planLabel.get(f.planItemId) : null) ?? f.audit;
     const g = groups.get(label) ?? { label, first: f.id, findings: [] };
     const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as Tone };
-    g.findings.push({ id: f.id, kind: f.kind, kindLabel: k.label, tone: k.tone, text: f.text, clause: f.clause, actionId: f.actionId, action: briefOf(f.actionId) });
+    g.findings.push({ id: f.id, kind: f.kind, kindLabel: k.label, tone: k.tone, text: f.text, clause: f.clause, actions: actionsOfFinding(f.id) });
     g.first = Math.min(g.first, f.id);
     groups.set(label, g);
   });

@@ -16,8 +16,3 @@ export async function publicOrigin(): Promise<string> {
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3200';
   return `${h.get('x-forwarded-proto') ?? 'http'}://${host}`;
 }
-
-/** Adresse absolue d'un chemin de Vigie (« /signaler?jeton=… »). */
-export async function publicUrlOf(path: string): Promise<string> {
-  return `${await publicOrigin()}${path}`;
-}

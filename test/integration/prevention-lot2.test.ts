@@ -3,8 +3,10 @@ import { form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { loadPrevention, loadPreventionCompliance, loadPreventionSignals } from '@/lib/data/prevention';
-import { cancelPermit, closePlan, deliverPermit, recordPlanEeSignature, savePlan, setPermitCheck, signPlanEu } from '@/server/prevention';
+import { loadPrevention } from '@/lib/data/prevention';
+import { loadPreventionCompliance, loadPreventionSignals } from '@/lib/data/prevention-signals';
+import { cancelPermit, deliverPermit, setPermitCheck } from '@/server/permits';
+import { closePlan, recordPlanEeSignature, savePlan, signPlanEu } from '@/server/prevention';
 
 /** Signature EU (PRV-07) : date, nom et qualité du signataire. */
 const signEu = (id: string, extra: Record<string, string> = {}) =>

@@ -14,7 +14,7 @@ import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { ActionDefaults } from '../action-view';
 import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, severityTone, type TodoItem, type Tone } from '../domain';
-import { actionView, isOpen, lcfirst, loadActions, loadEvents, loadPeople, type ActionRow } from '../queries';
+import { actionView, isOpen, lcfirst, loadActions, loadEvents, loadPeople, loadSiteRows, type ActionRow } from '../queries';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadChangeLogs } from './changelog';
 import { loadEntityFiles } from './entity-files';
@@ -161,7 +161,7 @@ const loadEnvironmentBase = cache(async (scope: SiteScope = 'site') => {
   const [site, keep, sites, streamRows, entryRows, consumptionRows, people] = await Promise.all([
     currentSiteId(),
     siteFilter(scope),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    loadSiteRows(),
     db.select().from(t.wasteStreams),
     db.select().from(t.wasteEntries),
     db.select().from(t.consumptions),

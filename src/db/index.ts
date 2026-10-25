@@ -12,7 +12,7 @@ import { withTransactionFiles } from './pending-files';
 import type { Db, DbEngine, Tx } from './types';
 import { log } from '@/lib/log';
 
-export type { Db, DbEngine, DbOrTx, Tx } from './types';
+export type { Db, DbEngine, DbOrTx } from './types';
 
 // Moteur choisi par la configuration (PRD-05) : DATABASE_URL → PostgreSQL (node-postgres, pool de connexions) ;
 // sinon PGlite dans VIGIE_DATA_DIR (démonstration, application Mac, tests ; « memory:// » pour une base en mémoire).

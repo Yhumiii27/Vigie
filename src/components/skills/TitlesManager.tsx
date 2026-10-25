@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Checkbox, Field, FormRow, Input } from '@/components/form';
-import { ReasonForm } from '@/components/ReasonDialog';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { fmtDate, parisDay } from '@/lib/dates';
 import type { ArchivedRecord, TrainingTitle } from '@/lib/data/skills';
 import { archiveTitle, restoreTitle, saveTitle } from '@/server/skills';
@@ -43,11 +43,8 @@ function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: T
 
 /** Titre archivé : date, motif, formations conservées (consultation seule) et « Restaurer ». */
 function ArchivedRow({ title, records, canManage }: { title: TrainingTitle; records: ArchivedRecord[]; canManage: boolean }) {
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const count = records.reduce((n, r) => n + r.entries.length, 0);
-  const restore = () => start(async () => { setError((await restoreTitle(title.id)).error ?? null); });
   const on = title.archivedAt ? fmtDate(parisDay(new Date(title.archivedAt))) : '';
   const row = (
     <tr>
@@ -61,12 +58,13 @@ function ArchivedRow({ title, records, canManage }: { title: TrainingTitle; reco
             {open ? 'Masquer les formations' : `Voir les formations (${count})`}
           </button>
         )}
-        {error && <span role="alert" style={{ display: 'block', fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
       </td>
       <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-500)' }}>{title.validityMonths ? `${title.validityMonths} mois` : 'Sans échéance'}</td>
       {canManage && (
         <td style={{ textAlign: 'right', width: 1 }}>
-          <button type="button" className="vg-text-btn" disabled={pending} onClick={restore}>{pending ? 'Restauration…' : 'Restaurer'}</button>
+          <ReasonButton action={restoreTitle} hidden={{ id: title.id }} label="Restaurer" className="vg-text-btn" title="Restaurer le titre"
+            kicker={title.label} submitLabel="Restaurer" message="Le titre revient dans la matrice avec ses exigences et ses formations."
+            placeholder="Ex. habilitation de nouveau exigée" />
         </td>
       )}
     </tr>

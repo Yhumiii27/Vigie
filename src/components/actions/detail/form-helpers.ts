@@ -12,8 +12,8 @@ import {
 import type { ActionDefaults, ActionDetailView, ActionFormOptions, ActionTargetOption } from '@/lib/action-view';
 import { fileBatchError } from '@/lib/attachments';
 import {
-  ACTION_AVANCEMENTS, ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, EVENT_AUDIT_LINK_KINDS, FOLLOW_REASONS,
-  SOURCE_KEYS, VERIFY_METHODS, isOpenAvancement, type Avancement, type FollowReason, type SourceKey,
+  ACTION_AVANCEMENTS, ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, EVENT_AUDIT_LINK_KINDS, SOURCE_KEYS,
+  VERIFY_METHODS, isOpenAvancement, type Avancement, type FollowReason, type SourceKey,
 } from '@/lib/domain';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 
@@ -233,8 +233,6 @@ export function followUpPrefill(
 }
 /** Préfixe des champs d'une section de suite (FormData de verifyAction, plan § 2.14). */
 export const FOLLOW_UP_PREFIX: Record<FollowReason, 'ne_' | 'nr_'> = { non_efficace: 'ne_', nouveau_risque: 'nr_' };
-/** « Suite de A-170 (non efficace) » / « A-221 · non efficace ». */
-export const followReasonLabel = (reason: FollowReason) => FOLLOW_REASONS[reason].toLowerCase();
 
 // ─── Dates (avertissements côté client, D24) ───────────────────────────────
 

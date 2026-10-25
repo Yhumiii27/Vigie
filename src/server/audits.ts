@@ -573,7 +573,7 @@ export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormS
 
 /**
  * Annule un constat saisi par erreur ou en double (motif obligatoire) : jamais supprimé, il sort des constats, des échéances
- * et du dossier de revue, et reste consultable avec le filtre « Annulés ». L'action liée reste au plan d'actions.
+ * et du dossier de revue, et reste consultable avec le filtre « Annulés ». Ses actions restent au plan d'actions.
  */
 export async function cancelFinding(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireAuditEditor();
@@ -586,13 +586,18 @@ export async function cancelFinding(_prev: FormState, fd: FormData): Promise<For
   const byId = session.user.id;
   const done = await db.transaction(async (tx) => {
     const [row] = await tx.update(t.auditFindings).set({ cancelledAt: new Date(), cancelledById: byId, cancelReason: reason })
-      .where(and(eq(t.auditFindings.id, id!), isNull(t.auditFindings.cancelledAt))).returning({ actionId: t.auditFindings.actionId, audit: t.auditFindings.audit });
+      .where(and(eq(t.auditFindings.id, id!), isNull(t.auditFindings.cancelledAt))).returning({ audit: t.auditFindings.audit });
     if (!row) return false;
+    // Actions du constat (AUD-28 : plusieurs par constat) : elles restent au plan d'actions, l'annulation est inscrite à
+    // l'historique de chacune (ACT-03).
+    const actionIds = (await tx.select({ id: t.findingActions.actionId }).from(t.findingActions).where(eq(t.findingActions.findingId, id!)))
+      .map((r) => r.id).sort((x, y) => x.localeCompare(y, 'fr', { numeric: true }));
     await logChange(tx, {
       entityType: 'audit_finding', entityId: id!, action: 'cancel', reason, byId,
-      summary: row.actionId ? `Constat annulé (l'action ${row.actionId} reste au plan d'actions)` : 'Constat annulé',
+      summary: actionIds.length > 1 ? `Constat annulé (les actions ${actionIds.join(', ')} restent au plan d'actions)`
+        : actionIds.length ? `Constat annulé (l'action ${actionIds[0]} reste au plan d'actions)` : 'Constat annulé',
     });
-    if (row.actionId) await logChange(tx, { entityType: 'action', entityId: row.actionId, action: 'update', summary: `Constat d'origine annulé (${row.audit})`, reason, byId });
+    for (const actionId of actionIds) await logChange(tx, { entityType: 'action', entityId: actionId, action: 'update', summary: `Constat d'origine annulé (${row.audit})`, reason, byId });
     return true;
   });
   if (!done) return { error: 'Constat introuvable ou déjà annulé.' };

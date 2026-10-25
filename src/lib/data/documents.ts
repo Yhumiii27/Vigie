@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, eq, ne } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
@@ -9,7 +9,7 @@ import {
 import { addDays, addMonths, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import { canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
-import { actionView, lcfirst, loadActions, loadPeople, type ActionRow, type Person } from '../queries';
+import { actionView, lcfirst, loadActionRows, loadActions, loadPeople, loadSiteRows, type ActionRow, type Person } from '../queries';
 import { actionLabel } from '../action-rules';
 import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inSite, siteFilter, type SiteScope } from '../session';
@@ -207,8 +207,8 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.documentVersions).orderBy(asc(t.documentVersions.id)),
     db.select({ id: t.attachments.id, entityId: t.attachments.entityId, fileName: t.attachments.fileName, size: t.attachments.size })
       .from(t.attachments).where(eq(t.attachments.entityType, 'document_version')).orderBy(asc(t.attachments.createdAt)),
-    db.select().from(t.actions).where(ne(t.actions.status, 'abandonnee')),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    loadActionRows().then((rows) => rows.filter((a) => a.status !== 'abandonnee')),
+    loadSiteRows(),
   ]);
   // Retraits tracés (motif obligatoire) : l'entrée « archive » la plus récente de chaque document.
   const logs = await loadChangeLogs('document', docs.map((d) => d.id));
@@ -292,7 +292,6 @@ export async function loadDocuments({ readOnly = false }: { readOnly?: boolean }
 
   return { rows, allIds, elsewhere, unavailable: {} as Record<string, UnavailableDoc>, now, kpis, overdueCount: overdue.length, actionOptions, suggestedDueOn: addDays(now, 30) };
 }
-export type DocumentsData = Awaited<ReturnType<typeof loadDocuments>>;
 type KpiTile = { key: 'vigueur' | 'revue' | 'retard' | 'brouillon'; label: string; value: number; sub: string; subTone: Tone; note: string };
 
 /**

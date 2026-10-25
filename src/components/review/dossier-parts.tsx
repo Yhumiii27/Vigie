@@ -2,10 +2,13 @@ import type { ReactNode } from 'react';
 import { ToneTag } from '@/components/ui';
 import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { REVIEW_FOLLOW_UP, TONE, canOpen, type Role } from '@/lib/domain';
-import type { FollowUpRow } from '@/lib/data/review';
+import type { DossierFinding, FollowUpRow } from '@/lib/data/review';
 import type { ActionBrief } from '@/lib/queries';
 
 // Éléments de mise en page du dossier de revue de direction (classes rd-* de src/app/revue-de-direction/dossier.css).
+
+/** Actions d'un constat du dossier, quel que soit son format (dossier figé avant AUD-28, migration 0016 : une seule action). */
+export const dossierFindingActions = (f: DossierFinding) => f.actions ?? (f.actionId ? [{ id: f.actionId, action: f.action ?? null }] : []);
 
 /** Numérotation des sections dans l'ordre d'affichage (une section absente ne consomme pas de numéro). */
 export function sectionCounter() {

@@ -170,13 +170,13 @@ describe('AUD-01 : programme annuel et revues liés par reviewId', () => {
     actAs('Animateur QHSE');
     const annual = await reviewOn('2026-12-10');
     const before = await planOf(annual.id);
-    expect(await rescheduleReview({}, form({ id: String(annual.id), to: '2027-01-14' }))).toEqual({ ok: true });
+    expect(await rescheduleReview({}, form({ id: String(annual.id), to: '2027-01-14', reason: 'Direction indisponible' }))).toEqual({ ok: true });
     expect(await planOf(annual.id)).toMatchObject({ id: before.id, year: 2027, month: 1, plannedOn: '2027-01-14', label: 'Annuelle 14/01', postponedFrom: '2026-12-10' });
     expect(await lastLog('audit_plan_item', before.id)).toMatchObject({
       action: 'update', summary: 'Reporté au 14/01/2027 (revue de direction)', byId: 'clefevre',
       details: expect.arrayContaining([{ field: 'Mois', from: 'décembre', to: 'janvier' }, { field: 'Année', from: '2026', to: '2027' }]),
     });
-    const clash = await rescheduleReview({}, form({ id: String(annual.id), to: '2026-06-25' }));
+    const clash = await rescheduleReview({}, form({ id: String(annual.id), to: '2026-06-25', reason: 'Direction indisponible' }));
     expect(clash.error).toContain('« Interm. 18/06 »');
     expect((await reviewOn('2027-01-14')).id).toBe(annual.id);
   });

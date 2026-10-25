@@ -102,11 +102,12 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     expect((await actionRow('A-186')).status).toBe('terminee');
   });
 
-  it('constat, exigence, contrôle déplacés ; risque sur les deux actions ; journaux de la vérifiée, de la suite et de la source', async () => {
+  // AUD-28 (changement volontaire) : le constat, qui porte plusieurs actions, est rattaché aussi à la suite au lieu d'être déplacé.
+  it('exigence, contrôle déplacés ; constat et risque sur les deux actions ; journaux de la vérifiée, de la suite et de la source', async () => {
     actAs('Animateur QHSE');
     const db = await getDb();
     await insertAction('A-T30', { status: 'terminee', doneOn: '2026-10-02', source: 'audit_interne', originRef: 'Audit interne · §7.2', pilotId: 'lmoreau' });
-    await db.update(t.auditFindings).set({ actionId: 'A-T30' }).where(eq(t.auditFindings.id, 3));
+    await db.insert(t.findingActions).values({ findingId: 3, actionId: 'A-T30' });
     await db.update(t.requirements).set({ actionId: 'A-T30' }).where(eq(t.requirements.id, 4));
     await db.update(t.controls).set({ actionId: 'A-T30' }).where(eq(t.controls.id, 3));
     await db.insert(t.riskActions).values({ riskId: 2, actionId: 'A-T30' });
@@ -118,19 +119,19 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
       status: 'a_faire', source: 'audit_interne', originRef: 'Audit interne · §7.2', followsActionId: 'A-T30', followReason: 'non_efficace',
       problem: 'Action A-T30 jugée non efficace le 09/10/2026 : Écart encore constaté.', pilotId: 'rfontaine', siteId: 'ville-a', openedOn: '2026-10-09',
     });
-    expect((await db.select().from(t.auditFindings).where(eq(t.auditFindings.id, 3)))[0].actionId).toBe(next);
+    expect((await db.select().from(t.findingActions).where(eq(t.findingActions.findingId, 3))).map((x) => x.actionId).sort()).toEqual(['A-T30', next].sort());
     expect((await db.select().from(t.requirements).where(eq(t.requirements.id, 4)))[0].actionId).toBe(next);
     expect((await db.select().from(t.controls).where(eq(t.controls.id, 3)))[0].actionId).toBe(next);
     expect((await db.select().from(t.riskActions).where(eq(t.riskActions.riskId, 2))).map((x) => x.actionId).sort()).toEqual(['A-205', 'A-T30', next].sort());
     const verified = (await changeLog('action', 'A-T30')).map((e) => [e.action, e.summary]);
     expect(verified).toEqual(expect.arrayContaining([
       ['status', 'Vérifiée : non efficace'],
-      ['unlink', expect.stringMatching(new RegExp(`^Constat · .* repris par l'action de suite ${next}$`))],
       ['unlink', expect.stringMatching(new RegExp(`^Exigence · .* repris par l'action de suite ${next}$`))],
       ['unlink', expect.stringMatching(new RegExp(` repris par l'action de suite ${next}$`))],
       ['follow_up', `Action de suite ${next} créée (non efficace)`],
     ]));
-    expect(verified.filter(([a]) => a === 'unlink')).toHaveLength(3);
+    expect(verified.filter(([a]) => a === 'unlink')).toHaveLength(2);
+    expect(verified.some(([, summary]) => /^Constat · .* repris par/.test(summary ?? ''))).toBe(false);
     expect(await changeLog('action', next)).toMatchObject([{ action: 'create', summary: 'Action de suite de A-T30 créée (non efficace)', byId: 'clefevre' }]);
     expect(await lastLog('audit_finding', 3)).toMatchObject({ action: 'link', summary: `Action ${next} créée et rattachée` });
     expect(await lastLog('risk', 2)).toMatchObject({ action: 'link', summary: `Action ${next} créée et rattachée` });
@@ -144,7 +145,7 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     const r = await verify('A-212', { effective: 'non_efficace', ...section('ne_') });
     const [next] = r.ids!;
     expect(await actionRow(next)).toMatchObject({ eventId: 'EV-2026-130', source: 'evenement' });
-    expect((await db.select().from(t.auditFindings).where(eq(t.auditFindings.id, 2)))[0].actionId).toBe('A-212');
+    expect((await db.select().from(t.findingActions).where(eq(t.findingActions.findingId, 2))).map((x) => x.actionId)).toEqual(['A-212']);
     expect((await db.select().from(t.documentVersions).where(eq(t.documentVersions.id, 25)))[0].actionId).toBe(next);
     expect((await actionRow('A-212')).eventId).toBe('EV-2026-130');
   });

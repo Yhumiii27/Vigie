@@ -90,11 +90,6 @@ export async function currentPersonId(): Promise<string> {
   return auth.identity.personId;
 }
 
-/** Fiche de la personne connectée (sans les données de connexion). */
-export async function currentPerson(): Promise<Person> {
-  return (await getSession()).user;
-}
-
 /** Périmètre de la personne connectée : sites autorisés, ou null pour tous les sites (archivés compris). */
 export async function allowedSiteIds(): Promise<string[] | null> {
   return (await getSession()).allowedSiteIds;
@@ -120,6 +115,17 @@ export const inSite = (siteId: string | null, itemSite: string | null | undefine
 
 /** Portée d'un chargement : site sélectionné (écrans), ou tout le périmètre de la personne (échéances, TDB-05). */
 export type SiteScope = 'site' | 'perimeter';
+
+/**
+ * Sites d'un chargement filtré en base (QUA-17) : null = aucun filtre (« Tous les sites », ou périmètre complet) ; sinon
+ * les sites admis par siteFilter(scope) — l'élément sans site passe toujours (condition SQL : site vide ou dans la liste,
+ * siteWhere de src/lib/queries.ts).
+ */
+export async function siteScopeIds(scope: SiteScope = 'site'): Promise<string[] | null> {
+  if (scope === 'perimeter') return allowedSiteIds();
+  const site = await currentSiteId();
+  return site ? [site] : null;
+}
 
 /**
  * Filtre de site d'un chargement : 'site' = site sélectionné (inSite ; « Tous les sites » = tout) ; 'perimeter' = tous les

@@ -6,19 +6,19 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog } from '@/components/Dialog';
-import { ReasonButton } from '@/components/ReasonDialog';
-import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
 import { CardHead, ToneTag } from '@/components/ui';
 import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { MONTHS_SHORT, addDays, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
-import { FINDING_KINDS, PLAN_ITEM_STATES, REASON_MAX, TONE } from '@/lib/domain';
+import { FINDING_KINDS, PLAN_ITEM_STATES, TONE } from '@/lib/domain';
 import type { FindingView, PlanItemView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { cancelPlanItem, removePlanItemReport, reschedulePlanItem, savePlanItem } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
-import { ActionLink, DialogFooter, FileList } from './parts';
+import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
 import { MONTH_OPTIONS, NEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from './shared';
 import styles from './audits.module.css';
 
@@ -402,27 +402,27 @@ function RescheduleForm({ item, yearOptions, onDone, onCancel }: { item: PlanIte
   const [year, setYear] = useState(item.year);
   const years = [...new Set([...yearOptions, item.year, item.year + 1])].sort((a, b) => a - b).map((y) => [String(y), String(y)] as const);
   return (
-    <ActionForm action={reschedulePlanItem} hidden={{ id: item.id }} onDone={() => onDone(year)} onCancel={onCancel} submitLabel="Reporter l'élément" submitIcon="ph-calendar-blank">
-      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+    <ReasonForm action={reschedulePlanItem} hidden={{ id: item.id }} onDone={() => onDone(year)} onCancel={onCancel} submitLabel="Reporter l'élément" submitIcon="ph-calendar-blank"
+      message={<>
         Prévu en {monthLabel(item.month, item.year)}{item.plannedOn ? `, le ${fmtDate(item.plannedOn)}` : ''}.
         {item.postponedFrom && ` Première planification conservée : ${firstPlanned(item.postponedFrom)}.`}
         {item.actionId && ` L'action porteuse ${item.actionId} garde son échéance : reportez-la au besoin depuis le plan d'actions.`}
-      </p>
-      <FormRow cols={3}>
-        <Field name="year" label="Année">
-          <Select name="year" options={years} value={String(year)} onChange={(e) => setYear(+e.target.value)} />
-        </Field>
-        <Field name="month" label="Mois">
-          <Select name="month" options={MONTH_OPTIONS} defaultValue={String(item.month)} />
-        </Field>
-        <Field name="plannedOn" label="Date prévue" hint="Dans le mois choisi.">
-          <Input name="plannedOn" type="date" defaultValue={item.plannedOn ?? ''} />
-        </Field>
-      </FormRow>
-      <Field name="reason" label="Motif" hint={item.actionId ? "Obligatoire, conservé dans l'historique ; l'action porteuse garde son échéance." : "Obligatoire, conservé dans l'historique de l'élément."}>
-        <TextArea name="reason" rows={3} maxLength={REASON_MAX} required autoFocus placeholder="Ex. Indisponibilité de l'auditeur, audit regroupé" />
-      </Field>
-    </ActionForm>
+      </>}
+      hint={item.actionId ? "Obligatoire, conservé dans l'historique ; l'action porteuse garde son échéance." : "Obligatoire, conservé dans l'historique de l'élément."}
+      placeholder="Ex. Indisponibilité de l'auditeur, audit regroupé"
+      before={(
+        <FormRow cols={3}>
+          <Field name="year" label="Année">
+            <Select name="year" options={years} value={String(year)} onChange={(e) => setYear(+e.target.value)} />
+          </Field>
+          <Field name="month" label="Mois">
+            <Select name="month" options={MONTH_OPTIONS} defaultValue={String(item.month)} />
+          </Field>
+          <Field name="plannedOn" label="Date prévue" hint="Dans le mois choisi.">
+            <Input name="plannedOn" type="date" defaultValue={item.plannedOn ?? ''} />
+          </Field>
+        </FormRow>
+      )} />
   );
 }
 
@@ -458,7 +458,7 @@ function FindingList({ findings, year, onLeave }: { findings: FindingView[]; yea
               {f.clause && <span style={{ color: 'var(--color-neutral-400)', marginRight: 6 }}>{f.clause}</span>}
               {f.text}
             </span>
-            <span style={{ whiteSpace: 'nowrap' }}>{f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}</span>
+            <span style={{ whiteSpace: 'nowrap' }}><ActionLinks actions={f.actions} compact /></span>
           </div>
         );
       })}

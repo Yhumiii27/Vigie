@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBackfillReport, originLink, resolveOriginRef, type OriginCatalog } from './origin-links';
+import { coactivityOriginHref, formatBackfillReport, originLink, resolveOriginRef, type OriginCatalog } from './origin-links';
 
 // Règle de résolution des références d'origine (ACT-01) : création d'une action et reprise des actions existantes.
 
@@ -83,5 +83,19 @@ describe('formatBackfillReport', () => {
       '  1 action Prévention, Documents ou Environnement examinée, 1 déjà rattachée (inchangées).',
       '  Aucun lien posé.',
     ]);
+  });
+});
+
+describe('coactivityOriginHref (ACT-12)', () => {
+  it('« Coactivité JJ/MM/AAAA » : carte du site de l’action à cette date', () => {
+    expect(coactivityOriginHref('Coactivité 09/10/2026', 'ville-a')).toBe('/prevention/carte?site=ville-a&date=2026-10-09');
+    expect(coactivityOriginHref(' Coactivité 28/09/2026 · voie de livraison', 'ville-b')).toBe('/prevention/carte?site=ville-b&date=2026-09-28');
+    expect(coactivityOriginHref('Coactivité 09/10/2026', null)).toBe('/prevention/carte?date=2026-10-09');
+  });
+  it('autre référence ou date inexistante : aucun lien', () => {
+    expect(coactivityOriginHref('Coactivité 31/02/2026', 'ville-a')).toBeNull();
+    expect(coactivityOriginHref('Coactivité', 'ville-a')).toBeNull();
+    expect(coactivityOriginHref('PP-2026-012', 'ville-a')).toBeNull();
+    expect(coactivityOriginHref('Coactivité 2026-10-09', 'ville-a')).toBeNull();
   });
 });

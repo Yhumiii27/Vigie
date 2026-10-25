@@ -58,7 +58,7 @@ describe('droits : écran « Habilitations et formations » modifiable', () => {
       expect(await savePerson({}, form({ name: 'X', siteId: 'ville-a' }))).toEqual({ error: DENIED });
       expect(await saveTitle({}, form({ label: 'Échafaudage', validityMonths: '6' }))).toEqual({ error: DENIED });
       expect(await archiveTitle({}, form({ id: 'sst', reason: 'Test' }))).toEqual({ error: DENIED });
-      expect(await reinstatePerson('ylambert')).toEqual({ error: DENIED });
+      expect(await reinstatePerson({}, form({ id: 'ylambert', reason: 'Retour' }))).toEqual({ error: DENIED });
     }
     expect(await requirement('kbernard', 'r484')).toBeUndefined();
     actAs('Chef de service');
@@ -224,7 +224,8 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'Démission' }))).toEqual({
       error: 'Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant la déclaration de sortie.',
     });
-    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Champ obligatoire.' } });
+    // QUA-22 (changement volontaire) : message commun des motifs.
+    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Motif obligatoire.' } });
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2025-10-01', leftReason: 'Démission' })))
       .toMatchObject({ fieldErrors: { leftOn: "La date de sortie ne peut pas remonter à plus d'un an." } });
   });
@@ -237,10 +238,10 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
     expect(await savePerson({}, form({ id: 'lmoreau', name: '[L. Moreau]', siteId: 'ville-a' }))).toEqual({ error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." });
     expect(await setRequirement('lmoreau', 'sst', false)).toEqual({ error: "Salarié sorti de l'effectif." });
 
-    expect(await reinstatePerson('lmoreau')).toEqual({});
+    expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Sortie annulée' }))).toEqual({ ok: true, id: 'lmoreau' });
     expect(await person('lmoreau')).toMatchObject({ leftOn: null, leftReason: null });
     expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'restore', summary: 'Salarié réintégré' });
-    expect(await reinstatePerson('lmoreau')).toEqual({ error: 'Aucune sortie déclarée pour ce salarié.' });
+    expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Encore' }))).toEqual({ error: 'Aucune sortie déclarée pour ce salarié.' });
   });
   it('modification de fiche : changement de site, journal ; e-mail et matricule absents du formulaire inchangés', async () => {
     actAs('Animateur QHSE', 'all');
@@ -276,7 +277,10 @@ describe('titres suivis', () => {
     // Historique figé pendant l'archivage.
     const [q] = await quals('proux', 'echafaudage-roulant');
     expect(await cancelQualification({}, form({ id: String(q.id), reason: 'Test' }))).toEqual({ error: 'Titre archivé : restaurez-le pour modifier ses formations.' });
-    expect(await restoreTitle('echafaudage-roulant')).toEqual({});
+    // QUA-22 (changement volontaire) : restauration avec motif, inscrit au journal.
+    expect(await restoreTitle({}, form({ id: 'echafaudage-roulant', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
+    expect(await restoreTitle({}, form({ id: 'echafaudage-roulant', reason: 'Échafaudage de nouveau utilisé' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
+    expect(await lastLog('training_title', 'echafaudage-roulant')).toMatchObject({ action: 'restore', reason: 'Échafaudage de nouveau utilisé' });
     expect((await changeLog('training_title', 'echafaudage-roulant')).map((l) => l.action)).toEqual(['create', 'update', 'archive', 'restore']);
   });
 });
