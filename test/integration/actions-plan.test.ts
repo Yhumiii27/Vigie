@@ -300,13 +300,13 @@ describe('éléments proposés par le sélecteur du formulaire (QHSE)', () => {
     const risk = before.find((x) => x.value.startsWith('risk:'))!;
     expect(risk).toBeDefined();
     const [r] = await db.select({ unitId: t.risks.unitId }).from(t.risks).where(eq(t.risks.id, Number(risk.value.slice(5))));
-    await db.update(t.workUnits).set({ archivedAt: new Date('2026-10-01T08:00:00Z') }).where(eq(t.workUnits.id, r.unitId));
+    await db.update(t.workUnits).set({ archivedAt: new Date('2026-10-01T08:00:00Z'), archiveReason: 'Unité regroupée' }).where(eq(t.workUnits.id, r.unitId));
     try {
       const targets = await loadActionTargets();
       expect(targets.some((x) => x.value === 'wastestream:FD-99' || x.siteId === 'ville-c')).toBe(false);
       expect(targets.some((x) => x.value === risk.value)).toBe(false);
     } finally {
-      await db.update(t.workUnits).set({ archivedAt: null }).where(eq(t.workUnits.id, r.unitId));
+      await db.update(t.workUnits).set({ archivedAt: null, archiveReason: null }).where(eq(t.workUnits.id, r.unitId));
     }
   });
 

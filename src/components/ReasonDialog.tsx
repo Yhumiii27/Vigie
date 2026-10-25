@@ -22,18 +22,22 @@ type ReasonFormProps = {
   onCancel?: () => void;
   /** Champs supplémentaires (date de sortie…), rendus après le motif. */
   children?: ReactNode;
+  /** Champs rendus avant le motif (nouvelle date d'un report…) ; le motif n'a alors pas le focus d'ouverture. */
+  before?: ReactNode;
 };
 
 /**
- * Formulaire « avec motif » : annulation, archivage, classement sans suite, réouverture.
- * Jamais de suppression d'un enregistrement tracé : qui, quand et pourquoi sont conservés côté serveur.
+ * Formulaire « avec motif » : annulation, archivage, classement sans suite, réouverture, restauration, retrait, report.
+ * Jamais de suppression d'un enregistrement tracé : qui, quand et pourquoi sont conservés côté serveur. Seul formulaire qui
+ * saisit le champ `reason` (QUA-22, src/server/reason-usage.test.ts) ; le serveur le lit par `formReader(fd).reason()`.
  */
-export function ReasonForm({ action, hidden, message, reasonLabel = 'Motif', hint, placeholder, submitLabel = 'Confirmer', submitIcon, onDone, onCancel, children }: ReasonFormProps) {
+export function ReasonForm({ action, hidden, message, reasonLabel = 'Motif', hint, placeholder, submitLabel = 'Confirmer', submitIcon, onDone, onCancel, children, before }: ReasonFormProps) {
   return (
     <ActionForm action={action} hidden={hidden} onDone={onDone} onCancel={onCancel} submitLabel={submitLabel} submitIcon={submitIcon}>
       {message && <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{message}</p>}
+      {before}
       <Field name="reason" label={reasonLabel} hint={hint ?? 'Obligatoire, conservé dans l’historique de la fiche.'}>
-        <TextArea name="reason" rows={3} maxLength={REASON_MAX} required autoFocus placeholder={placeholder} />
+        <TextArea name="reason" rows={3} maxLength={REASON_MAX} required autoFocus={!before} placeholder={placeholder} />
       </Field>
       {children}
     </ActionForm>

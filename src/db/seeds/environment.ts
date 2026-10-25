@@ -1,6 +1,7 @@
 import 'server-only';
 import * as t from '../schema';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Jeu de données initial du domaine « Environnement et déchets », relatif au 07/10/2026.
 // Registre 2026 incomplet : quatre enlèvements de déchets dangereux sans bordereau Trackdéchets
@@ -67,44 +68,44 @@ export function demoWasteStreamMentions(): Record<string, { pop: boolean; qualif
 
 // [filière, date d'enlèvement, quantité (kg), n° BSD, statut BSD, transporteur (défaut : collecteur), notes]
 const ENTRIES: [string, string, number, string | null, string | null, string | null, string | null][] = [
-  ['FD-07', '2025-10-08', 640, null, null, null, null],
-  ['FD-05', '2025-10-15', 2860, null, null, null, null],
-  ['FD-09', '2025-10-22', 1180, null, null, '[Transports Benne Express]', null],
-  ['FD-12', '2025-11-05', 280, null, null, null, null],
-  ['FD-01', '2025-11-14', 420, 'BSD-20251113-4HZT8QWM', 'traite', null, null],
-  ['FD-06', '2025-11-19', 540, null, null, null, null],
-  ['FD-02', '2025-12-03', 160, 'BSD-20251202-9RVX2LKC', 'traite', null, null],
-  ['FD-08', '2025-12-10', 1450, null, null, null, null],
-  ['FD-05', '2025-12-17', 3120, null, null, null, null],
-  ['FD-09', '2026-01-14', 1260, null, null, '[Transports Benne Express]', null],
-  ['FD-07', '2026-01-21', 580, null, null, null, null],
-  ['FD-10', '2026-01-28', 120, 'BSD-20260127-W2GH8PLD', 'traite', null, null],
-  ['FD-04', '2026-02-11', 1850, 'BSD-20260210-T3MP6YQA', 'traite', null, null],
-  ['FD-01', '2026-02-20', 380, 'BSD-20260219-8NWD5KRE', 'traite', null, null],
-  ['FD-05', '2026-03-04', 3340, null, null, null, null],
-  ['FD-03', '2026-03-12', 240, 'BSD-20260312-7KQ4P2XR', 'traite', null, null],
-  ['FD-12', '2026-03-18', 310, null, null, null, null],
-  ['FD-06', '2026-03-25', 610, null, null, null, null],
-  ['FD-10', '2026-04-09', 140, null, null, null, "Résidus de simulants d'essai, collecte ponctuelle : bordereau non saisi dans Trackdéchets."],
-  ['FD-09', '2026-04-15', 1120, null, null, '[Transports Benne Express]', null],
-  ['FD-08', '2026-04-22', 1280, null, null, null, null],
-  ['FD-02', '2026-05-06', 190, 'BSD-20260505-2CJF7VNS', 'traite', null, null],
-  ['FD-01', '2026-05-22', 450, 'BSD-20260521-6PLQ9XTA', 'traite', null, null],
-  ['FD-05', '2026-06-03', 2980, null, null, null, null],
-  ['FD-04', '2026-06-12', 2100, null, null, null, 'Enlèvement en urgence (bac de la CU-2 saturé) sous bordereau papier — à régulariser dans Trackdéchets.'],
-  ['FD-11', '2026-06-17', 260, 'BSD-20260616-H4VK7NQS', 'traite', null, null],
-  ['FD-07', '2026-06-24', 720, null, null, null, null],
-  ['FD-12', '2026-07-01', 290, null, null, null, null],
-  ['FD-09', '2026-07-08', 1340, null, null, '[Transports Benne Express]', null],
-  ['FD-03', '2026-07-17', 210, null, null, null, 'Numéro de bordereau non communiqué par le collecteur — relance en cours.'],
-  ['FD-11', '2026-08-19', 240, 'BSD-20260818-M3QX7TBC', 'collecte', null, 'Certificat de traitement non reçu de la raffinerie.'],
-  ['FD-05', '2026-08-26', 2450, null, null, null, 'Activité réduite (fermeture estivale).'],
-  ['FD-04', '2026-08-27', 1920, 'BSD-20260826-K5RW3HDN', 'emis', null, 'Signature du transporteur en attente dans Trackdéchets.'],
-  ['FD-06', '2026-09-09', 580, null, null, null, null],
-  ['FD-08', '2026-09-16', 1390, null, null, null, null],
-  ['FD-10', '2026-09-23', 110, 'BSD-20260922-R8DM2XWF', 'collecte', null, null],
-  ['FD-01', '2026-09-29', 520, 'BSD-20260928-Q7TB4MZE', 'collecte', null, "Huile pompée dans la rétention après le déversement EV-2026-126 et vidange de la cuve 1 000 L du magasin."],
-  ['FD-02', '2026-09-29', 85, null, null, null, 'Absorbants utilisés lors du déversement EV-2026-126 — BSD à créer.'],
+  ['FD-07', rel(-366), 640, null, null, null, null],
+  ['FD-05', rel(-359), 2860, null, null, null, null],
+  ['FD-09', rel(-352), 1180, null, null, '[Transports Benne Express]', null],
+  ['FD-12', rel(-338), 280, null, null, null, null],
+  ['FD-01', rel(-329), 420, 'BSD-20251113-4HZT8QWM', 'traite', null, null],
+  ['FD-06', rel(-324), 540, null, null, null, null],
+  ['FD-02', rel(-310), 160, 'BSD-20251202-9RVX2LKC', 'traite', null, null],
+  ['FD-08', rel(-303), 1450, null, null, null, null],
+  ['FD-05', rel(-296), 3120, null, null, null, null],
+  ['FD-09', rel(-268), 1260, null, null, '[Transports Benne Express]', null],
+  ['FD-07', rel(-261), 580, null, null, null, null],
+  ['FD-10', rel(-254), 120, 'BSD-20260127-W2GH8PLD', 'traite', null, null],
+  ['FD-04', rel(-240), 1850, 'BSD-20260210-T3MP6YQA', 'traite', null, null],
+  ['FD-01', rel(-231), 380, 'BSD-20260219-8NWD5KRE', 'traite', null, null],
+  ['FD-05', rel(-219), 3340, null, null, null, null],
+  ['FD-03', rel(-211), 240, 'BSD-20260312-7KQ4P2XR', 'traite', null, null],
+  ['FD-12', rel(-205), 310, null, null, null, null],
+  ['FD-06', rel(-198), 610, null, null, null, null],
+  ['FD-10', rel(-183), 140, null, null, null, "Résidus de simulants d'essai, collecte ponctuelle : bordereau non saisi dans Trackdéchets."],
+  ['FD-09', rel(-177), 1120, null, null, '[Transports Benne Express]', null],
+  ['FD-08', rel(-170), 1280, null, null, null, null],
+  ['FD-02', rel(-156), 190, 'BSD-20260505-2CJF7VNS', 'traite', null, null],
+  ['FD-01', rel(-140), 450, 'BSD-20260521-6PLQ9XTA', 'traite', null, null],
+  ['FD-05', rel(-128), 2980, null, null, null, null],
+  ['FD-04', rel(-119), 2100, null, null, null, 'Enlèvement en urgence (bac de la CU-2 saturé) sous bordereau papier — à régulariser dans Trackdéchets.'],
+  ['FD-11', rel(-114), 260, 'BSD-20260616-H4VK7NQS', 'traite', null, null],
+  ['FD-07', rel(-107), 720, null, null, null, null],
+  ['FD-12', rel(-100), 290, null, null, null, null],
+  ['FD-09', rel(-93), 1340, null, null, '[Transports Benne Express]', null],
+  ['FD-03', rel(-84), 210, null, null, null, 'Numéro de bordereau non communiqué par le collecteur — relance en cours.'],
+  ['FD-11', rel(-51), 240, 'BSD-20260818-M3QX7TBC', 'collecte', null, 'Certificat de traitement non reçu de la raffinerie.'],
+  ['FD-05', rel(-44), 2450, null, null, null, 'Activité réduite (fermeture estivale).'],
+  ['FD-04', rel(-43), 1920, 'BSD-20260826-K5RW3HDN', 'emis', null, 'Signature du transporteur en attente dans Trackdéchets.'],
+  ['FD-06', rel(-30), 580, null, null, null, null],
+  ['FD-08', rel(-23), 1390, null, null, null, null],
+  ['FD-10', rel(-16), 110, 'BSD-20260922-R8DM2XWF', 'collecte', null, null],
+  ['FD-01', rel(-10), 520, 'BSD-20260928-Q7TB4MZE', 'collecte', null, "Huile pompée dans la rétention après le déversement EV-2026-126 et vidange de la cuve 1 000 L du magasin."],
+  ['FD-02', rel(-10), 85, null, null, null, 'Absorbants utilisés lors du déversement EV-2026-126 — BSD à créer.'],
 ];
 
 // Consommations mensuelles : saisonnalité (janvier → décembre) et niveaux de base par site.
@@ -157,9 +158,9 @@ export async function seedEnvironment(tx: SeedTx) {
   // Doublon saisi par erreur puis annulé (registre conservé : jamais de suppression).
   const dib = byId.get('FD-09')!;
   await tx.insert(t.wasteEntries).values({
-    siteId: dib.siteId, streamId: dib.id, removedOn: '2026-07-09', quantity: 1340, transporter: '[Transports Benne Express]',
+    siteId: dib.siteId, streamId: dib.id, removedOn: rel(-92), quantity: 1340, transporter: '[Transports Benne Express]',
     ewcCode: dib.ewcCode, treatmentCode: dib.treatmentCode, destination: dib.destination, ...mentions(dib, '[Transports Benne Express]'), notes: null,
-    cancelledAt: new Date('2026-07-10T09:30:00+02:00'), cancelledById: 'clefevre', cancelReason: "Doublon de l'enlèvement du 08/07/2026 (saisie en double).",
+    cancelledAt: new Date(`${rel(-91)}T09:30:00+02:00`), cancelledById: 'clefevre', cancelReason: "Doublon de l'enlèvement du 08/07/2026 (saisie en double).",
   });
 
   // Janvier 2025 → septembre 2026 (août 2026 pour le site B : relevé de septembre manquant), léger aléa de ±4 %.

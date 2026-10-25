@@ -28,7 +28,7 @@ beforeAll(async () => {
   const db = await getDb();
   await db.insert(t.sites).values([
     { id: 'ville-a', label: 'Site A', sort: 1 }, { id: 'ville-b', label: 'Site B', sort: 2 },
-    { id: 'ville-c', label: 'Site C', sort: 0, archivedAt: new Date('2026-01-01T00:00:00Z') },
+    { id: 'ville-c', label: 'Site C', sort: 0, archivedAt: new Date('2026-01-01T00:00:00Z'), archiveReason: 'Site fermé' },
   ]);
   await db.insert(t.people).values([
     { id: 'pa', name: 'A. Dupont', email: 'a.dupont@exemple.fr', siteId: 'ville-a', sort: 0 },

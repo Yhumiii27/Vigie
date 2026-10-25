@@ -15,7 +15,7 @@ import { FINDING_KINDS, TONE } from '@/lib/domain';
 import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
 import { cancelFinding, saveFinding } from '@/server/audits';
-import { ActionLink, DialogFooter, RadioSeg, fileUrl } from './parts';
+import { ActionLink, ActionLinks, DialogFooter, RadioSeg, fileUrl } from './parts';
 import { FINDING_KEYS, OTHER_AUDIT, auditActionSource } from './shared';
 import styles from './audits.module.css';
 
@@ -143,16 +143,17 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
               onDone={(key) => { setSelected(key); close(); }} onCancel={close} />
             {finding && (
               <DialogFooter>
-                {finding.actionId && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--color-neutral-400)' }}>
-                    {/* Élément de la source de l'action : jamais détaché (D15). */}
-                    Action liée <ActionLink action={finding.action} id={finding.actionId} />
+                {finding.actions.length > 0 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, color: 'var(--color-neutral-400)' }}>
+                    {/* Élément de la source de ses actions : jamais détaché (D15) ; plusieurs actions par constat (AUD-28). */}
+                    {finding.actions.length > 1 ? 'Actions liées' : 'Action liée'}
+                    {finding.actions.map((a) => <ActionLink key={a.id} action={a.action} id={a.id} />)}
                   </span>
                 )}
                 <ReasonButton label="Annuler le constat" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm"
                   style={{ color: 'var(--tone-danger-fg)', marginLeft: 'auto' }} title="Annuler le constat" kicker="Constats d'audit"
                   action={cancelFinding} hidden={{ id: finding.id }} submitLabel="Annuler le constat" submitIcon="ph-prohibit"
-                  message={`Constat saisi par erreur ou en double : il n'est jamais supprimé. Il sort des constats, des échéances et du dossier de revue, et reste consultable avec le filtre « Annulés ».${finding.actionId ? ` L'action ${finding.actionId} reste dans le plan d'actions.` : ''}`}
+                  message={`Constat saisi par erreur ou en double : il n'est jamais supprimé. Il sort des constats, des échéances et du dossier de revue, et reste consultable avec le filtre « Annulés ».${finding.actions.length > 1 ? ` Les actions ${finding.actions.map((a) => a.id).join(', ')} restent dans le plan d'actions.` : finding.actions.length ? ` L'action ${finding.actions[0].id} reste dans le plan d'actions.` : ''}`}
                   placeholder="Ex. doublon du constat saisi le …" onDone={close} />
               </DialogFooter>
             )}
@@ -181,7 +182,7 @@ function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; fl
         <ChangeLogList entries={f.log} />
       </div>
       <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-        {f.actionId ? <ActionLink action={f.action} id={f.actionId} compact /> : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
+        <ActionLinks actions={f.actions} compact />
       </div>
     </div>
   );
@@ -207,7 +208,7 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
     <>
       {f.clause && <span className="tag tag-outline" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', marginRight: 6, verticalAlign: '1px' }}>{f.clause}</span>}
       {f.text}
-      {f.responseDueOn && !f.actionId && (
+      {f.responseDueOn && !f.actions.length && (
         <span style={{ display: 'block', fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>Réponse attendue le {fmtDate(f.responseDueOn)}</span>
       )}
     </>
@@ -221,13 +222,13 @@ function FindingRow({ finding: f, canEdit, canCreate, options, flash, onEdit }: 
         <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>{text}</span>
       )}
       <div style={{ fontSize: 12, whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-        {f.actionId ? (
-          <ActionLink action={f.action} id={f.actionId} compact />
-        ) : needsAction && canEdit && canCreate ? (
-          // Pas de « Rattacher une action existante » : le constat est l'élément de la source, posé à la création (D15).
-          <NewActionButton options={options} label="Créer l'action" className="vg-text-btn" icon="ph-plus"
+        {f.actions.length > 0 && <ActionLinks actions={f.actions} compact />}
+        {needsAction && canEdit && canCreate ? (
+          // Pas de « Rattacher une action existante » : le constat est l'élément de la source, posé à la création (D15) ;
+          // plusieurs actions par constat (AUD-28) : « Autre action » une fois la première créée.
+          <NewActionButton options={options} label={f.actions.length ? 'Autre action' : "Créer l'action"} className="vg-text-btn" icon="ph-plus"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} defaults={findingActionDefaults(f)} />
-        ) : (
+        ) : !f.actions.length && (
           <span style={{ color: 'var(--vg-text-muted)' }}>—</span>
         )}
       </div>

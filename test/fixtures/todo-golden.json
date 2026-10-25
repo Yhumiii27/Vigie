@@ -1,0 +1,220 @@
+{
+ "Animateur QHSE|ville-a": {
+  "todo": 76,
+  "visible": 67,
+  "badges": {
+   "todo": 67,
+   "docs": 6,
+   "watch": 11,
+   "audits": 8,
+   "actions": 12,
+   "env": 4,
+   "skills": 4,
+   "prevention": 11,
+   "events": 4,
+   "risks": 8
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "c92de172792093a16db444decef7d5bc822b212bd524069ce04af6e068220851"
+ },
+ "Animateur QHSE|ville-b": {
+  "todo": 76,
+  "visible": 49,
+  "badges": {
+   "todo": 49,
+   "docs": 5,
+   "audits": 8,
+   "actions": 4,
+   "env": 3,
+   "prevention": 2,
+   "watch": 6,
+   "risks": 2
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "7cfae93a63265a0ff1a95a069d96ca4190725da4ea20403f462129458cbf3f13"
+ },
+ "Animateur QHSE|all": {
+  "todo": 76,
+  "visible": 76,
+  "badges": {
+   "todo": 76,
+   "docs": 6,
+   "watch": 13,
+   "audits": 8,
+   "actions": 15,
+   "env": 7,
+   "skills": 4,
+   "prevention": 13,
+   "events": 4,
+   "risks": 9
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "f46277799f0f1607e877a952019940752ac77acc007abad2b3e0fdf66c13cb72"
+ },
+ "Direction|ville-a": {
+  "todo": 76,
+  "visible": 65,
+  "badges": {
+   "todo": 65,
+   "docs": 6,
+   "watch": 11,
+   "audits": 8,
+   "actions": 12,
+   "env": 4,
+   "skills": 4,
+   "prevention": 11,
+   "events": 4,
+   "risks": 8
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "0e8d28a2d45748f2cdc34f9ecdb90e3dd7ae0ee355f45a062177c7b4e01ba2d9"
+ },
+ "Direction|ville-b": {
+  "todo": 76,
+  "visible": 32,
+  "badges": {
+   "todo": 32,
+   "docs": 5,
+   "audits": 8,
+   "actions": 4,
+   "env": 3,
+   "prevention": 2,
+   "watch": 6,
+   "risks": 2
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "d5202e92442da11add25ee1f78b44540b00e8d125e14e3d48a220c3682059f76"
+ },
+ "Direction|all": {
+  "todo": 76,
+  "visible": 76,
+  "badges": {
+   "todo": 76,
+   "docs": 6,
+   "watch": 13,
+   "audits": 8,
+   "actions": 15,
+   "env": 7,
+   "skills": 4,
+   "prevention": 13,
+   "events": 4,
+   "risks": 9
+  },
+  "todoHash": "42f790d8720f3f8a8190194ffd1fc3384c494cfab26348643e4e94b4f07d75c3",
+  "visibleHash": "f46277799f0f1607e877a952019940752ac77acc007abad2b3e0fdf66c13cb72"
+ },
+ "Chef de service|ville-a": {
+  "todo": 72,
+  "visible": 40,
+  "badges": {
+   "todo": 40,
+   "watch": 11,
+   "docs": 1,
+   "skills": 4,
+   "audits": 3,
+   "prevention": 11,
+   "events": 3,
+   "risks": 7,
+   "actions": 3
+  },
+  "todoHash": "788b1e279cc5e70ec9919d3bacb2fc169a65158701bfa6cb055466b5a3e8d3da",
+  "visibleHash": "7b136cc6749401fb3ce28e5460cdcfb282c0faf4a2bfee592cb579a7ea6650b1"
+ },
+ "Chef de service|ville-b": {
+  "todo": 72,
+  "visible": 24,
+  "badges": {
+   "todo": 24,
+   "docs": 1,
+   "audits": 3,
+   "prevention": 2,
+   "watch": 6,
+   "risks": 2
+  },
+  "todoHash": "788b1e279cc5e70ec9919d3bacb2fc169a65158701bfa6cb055466b5a3e8d3da",
+  "visibleHash": "ab335fbd5aa8b2eeb5ab7b396ae07e6c9310c5d557ceede94224b320deb2e026"
+ },
+ "Chef de service|all": {
+  "todo": 72,
+  "visible": 45,
+  "badges": {
+   "todo": 45,
+   "watch": 13,
+   "docs": 1,
+   "skills": 4,
+   "audits": 3,
+   "prevention": 13,
+   "events": 3,
+   "risks": 8,
+   "actions": 3
+  },
+  "todoHash": "788b1e279cc5e70ec9919d3bacb2fc169a65158701bfa6cb055466b5a3e8d3da",
+  "visibleHash": "b301ec3754619bd815bd06c8a880fdb61fa1a953cf8c83d569b47c2a7e4a13e4"
+ },
+ "Chef de projet|ville-a": {
+  "todo": 66,
+  "visible": 14,
+  "badges": {
+   "todo": 14,
+   "prevention": 11,
+   "events": 3,
+   "actions": 1,
+   "audits": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "f0dd3dea09acc1d628f1378690729756f93a81f1299fff208bdf72b29d0c70d2"
+ },
+ "Chef de projet|ville-b": {
+  "todo": 66,
+  "visible": 4,
+  "badges": {
+   "todo": 4,
+   "prevention": 2,
+   "audits": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "a8ab3e295488c8e24dd24587c7b808140e10c79a1d1c741da6ca884883556ece"
+ },
+ "Chef de projet|all": {
+  "todo": 66,
+  "visible": 16,
+  "badges": {
+   "todo": 16,
+   "prevention": 13,
+   "events": 3,
+   "actions": 1,
+   "audits": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "f366da5e8e7998e3876767bcbe583f49a5f0636eac467999fd88ddec5bdc411d"
+ },
+ "Salarié|ville-a": {
+  "todo": 66,
+  "visible": 1,
+  "badges": {
+   "todo": 1,
+   "skills": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "7fe7c1a4e74edd200fff90173dda4fac4a9ec90ed5bcd277a0671200749ed1ac"
+ },
+ "Salarié|ville-b": {
+  "todo": 66,
+  "visible": 1,
+  "badges": {
+   "todo": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "8d1aa6d3960a94123860e889d29dfea456b183a11a809d0db3cf752214c2891b"
+ },
+ "Salarié|all": {
+  "todo": 66,
+  "visible": 1,
+  "badges": {
+   "todo": 1,
+   "skills": 1
+  },
+  "todoHash": "9b31d2b531b06ad323245eb892e0710e50df151003c166a39f8d36da77ea6548",
+  "visibleHash": "7fe7c1a4e74edd200fff90173dda4fac4a9ec90ed5bcd277a0671200749ed1ac"
+ }
+}

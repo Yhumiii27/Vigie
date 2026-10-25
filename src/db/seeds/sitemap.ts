@@ -1,6 +1,7 @@
 import 'server-only';
 import * as t from '../schema';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Carte du site et coactivité : zones, voies et activités de démonstration, relatives au 08/10/2026.
 // Les coordonnées sont saisies en pixels des plans schématiques (public/plans/ville-*.svg, viewBox 1600 × 1000)
@@ -64,58 +65,58 @@ type ActivitySeed = {
 const ACTIVITIES: ActivitySeed[] = [
   {
     site: 'ville-a', title: 'Maintenance du pont roulant 10 t (fins de course, câble)', team: 'externe', contractorId: 'EE-001', ownerId: 'sbenali',
-    preventionPlanId: 'PP-2026-013', zone: 'montage', at: [1060, 200], startOn: '2026-10-05', endOn: '2026-10-09', hours: '7 h 30 – 17 h',
+    preventionPlanId: 'PP-2026-013', zone: 'montage', at: [1060, 200], startOn: rel(-4), endOn: rel(0), hours: '7 h 30 – 17 h',
     vehicles: true, routes: [],
     notes: "Nacelle élévatrice sous le chemin de roulement (amenée le 05/10 par la voie de livraison et la voie est, laissée dans l'atelier jusqu'au repli) ; pont consigné, zone balisée au sol.",
   },
   {
     site: 'ville-a', title: 'Repli de la nacelle élévatrice (camion porte-engins)', team: 'externe', contractorId: 'EE-001', ownerId: 'sbenali',
-    preventionPlanId: 'PP-2026-013', at: [1400, 270], startOn: '2026-10-09', endOn: '2026-10-09', hours: '7 h 30 – 9 h 30',
+    preventionPlanId: 'PP-2026-013', at: [1400, 270], startOn: rel(0), endOn: rel(0), hours: '7 h 30 – 9 h 30',
     vehicles: true, routes: ['livraison', 'est'], notes: "Chargement devant la porte est de l'atelier montage ; sortie par la voie de livraison.",
   },
   {
     site: 'ville-a', title: 'Montage du malaxeur et retournement des bâtis', team: 'interne', ownerId: 'sbenali', keystoneProject: 'K-2025-042 · [Client A]',
-    zone: 'montage', at: [960, 330], startOn: '2026-09-14', endOn: '2026-10-16', hours: '7 h 30 – 16 h 30', vehicles: false, routes: ['pietons'],
+    zone: 'montage', at: [960, 330], startOn: rel(-25), endOn: rel(7), hours: '7 h 30 – 16 h 30', vehicles: false, routes: ['pietons'],
     notes: 'Postes M2 et M3 ; levages du poste M3 reportés sur le pont 5 t pendant la maintenance du pont 10 t.',
   },
   {
     site: 'ville-a', title: 'Meulage et soudure de reprise sur le bâti du poste de retournement', team: 'interne', ownerId: 'sbenali', permitId: 'PF-2026-031',
-    keystoneProject: 'K-2025-042 · [Client A]', zone: 'montage', at: [1080, 335], startOn: '2026-10-06', endOn: '2026-10-08', hours: '7 h 30 – 18 h',
+    keystoneProject: 'K-2025-042 · [Client A]', zone: 'montage', at: [1080, 335], startOn: rel(-3), endOn: rel(-1), hours: '7 h 30 – 18 h',
     vehicles: false, routes: [], notes: 'Permis de feu ; surveillance 2 h après la fin des travaux.',
   },
   {
     site: 'ville-a', title: 'Renforcement de la charpente de la mezzanine (soudage de platines)', team: 'externe', contractorId: 'EE-004', ownerId: 'clefevre',
-    preventionPlanId: 'PP-2026-015', zone: 'magasin', at: [1205, 640], startOn: '2026-10-06', endOn: '2026-10-16', hours: '7 h 30 – 17 h',
+    preventionPlanId: 'PP-2026-015', zone: 'magasin', at: [1205, 640], startOn: rel(-3), endOn: rel(7), hours: '7 h 30 – 17 h',
     vehicles: true, routes: ['livraison'], notes: 'Camion-plateau pour la livraison des platines, nacelle sous la mezzanine.',
   },
   {
     site: 'ville-a', title: 'Livraisons et expéditions poids lourds au quai du magasin', team: 'interne', ownerId: 'rfontaine',
-    zone: 'quai', at: [1330, 690], startOn: '2026-01-05', endOn: '2026-12-18', hours: '6 h – 14 h', vehicles: true, routes: ['livraison'],
+    zone: 'quai', at: [1330, 690], startOn: rel(-277), endOn: rel(70), hours: '6 h – 14 h', vehicles: true, routes: ['livraison'],
     notes: 'Quatre à six camions par jour ; manœuvres en marche arrière à quai.',
   },
   {
     site: 'ville-a', title: 'Chariot élévateur : approvisionnement des ateliers', team: 'interne', ownerId: 'rfontaine',
-    zone: 'magasin', at: [1000, 700], startOn: '2026-01-05', endOn: '2026-12-18', hours: '7 h – 16 h', vehicles: true, routes: ['chariots'],
+    zone: 'magasin', at: [1000, 700], startOn: rel(-277), endOn: rel(70), hours: '7 h – 16 h', vehicles: true, routes: ['chariots'],
     notes: 'Cariste titulaire du CACES R489 ; vitesse limitée à 5 km/h dans le magasin.',
   },
   {
     site: 'ville-a', title: 'Nettoyage industriel des ateliers et des fosses de rétention', team: 'externe', contractorId: 'EE-003', ownerId: 'sbenali',
-    preventionPlanId: 'PP-2025-041', zone: 'usinage', at: [510, 250], startOn: '2026-01-05', endOn: '2026-12-18', hours: '5 h – 7 h 30',
+    preventionPlanId: 'PP-2025-041', zone: 'usinage', at: [510, 250], startOn: rel(-277), endOn: rel(70), hours: '5 h – 7 h 30',
     vehicles: false, routes: ['pietons'], notes: 'Hors présence des équipes de production (horaires décalés).',
   },
   {
     site: 'ville-a', title: 'Enlèvement des bennes de copeaux (camion ampliroll)', team: 'externe', contractorId: 'EE-003', ownerId: 'rfontaine',
-    preventionPlanId: 'PP-2025-041', zone: 'bennes', at: [1445, 160], startOn: '2026-10-14', endOn: '2026-10-14', hours: '9 h – 11 h',
+    preventionPlanId: 'PP-2025-041', zone: 'bennes', at: [1445, 160], startOn: rel(5), endOn: rel(5), hours: '9 h – 11 h',
     vehicles: true, routes: ['livraison', 'est'],
   },
   {
     site: 'ville-b', title: "Essais d'endurance de la ligne de convoyage (produit inerte)", team: 'interne', ownerId: 'jpetit', permitId: 'PE-2026-008',
-    keystoneProject: 'K-2024-118 · [Client B]', zone: 'atex', at: [720, 290], startOn: '2026-10-06', endOn: '2026-10-09', hours: '8 h – 18 h',
+    keystoneProject: 'K-2024-118 · [Client B]', zone: 'atex', at: [720, 290], startOn: rel(-3), endOn: rel(0), hours: '8 h – 18 h',
     vehicles: false, routes: ['pietons'], notes: "Permis d'essai ; accès restreint à la zone d'essais pendant la campagne.",
   },
   {
     site: 'ville-b', title: 'Réception et préparation des produits inertes', team: 'interne', ownerId: 'amartin', keystoneProject: 'K-2024-118 · [Client B]',
-    zone: 'stockage', at: [1370, 280], startOn: '2026-09-28', endOn: '2026-11-27', hours: '8 h – 12 h', vehicles: true, routes: ['engins', 'acces'],
+    zone: 'stockage', at: [1370, 280], startOn: rel(-11), endOn: rel(49), hours: '8 h – 12 h', vehicles: true, routes: ['engins', 'acces'],
   },
 ];
 
@@ -149,6 +150,6 @@ export async function seedSitemap(tx: SeedTx) {
     routeIds: a.routes.map((k) => ref(routeId, a.site, k)),
     vehicles: a.vehicles,
     notes: a.notes ?? null,
-    createdAt: new Date('2026-10-02T09:00:00+02:00'),
+    createdAt: new Date(`${rel(-7)}T09:00:00+02:00`),
   })));
 }

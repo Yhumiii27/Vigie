@@ -21,6 +21,7 @@ import {
 } from '../domain';
 import type { Option } from '../form-options';
 import { hasLeft, type Person } from '../people';
+import { coactivityOriginHref } from '../origin-links';
 import { actionView, loadActions, loadAllActions, loadPeople, type ActionRow } from '../queries';
 import { getSession, inPerimeter, inSite, siteFilter, type Session } from '../session';
 import { today } from '@/lib/today';
@@ -136,7 +137,6 @@ export async function loadActionPlan(filters: ActionFilters) {
   const totals = { hours: sum(items, 'hours'), estimatedCost: sum(items, 'estimatedCost'), actualCost: sum(items, 'actualCost') };
   return { items, responsables, counts, totals, now };
 }
-export type ActionPlan = Awaited<ReturnType<typeof loadActionPlan>>;
 
 // ─── Listes du formulaire (QHSE seulement) ──────────────────────────────────
 
@@ -161,9 +161,9 @@ const fmtReview = (iso: string) => `Revue de direction du ${fmtDate(iso)}`;
  * événements ouverts aux actions (ACT-07, addActionBlocker), constats non annulés (hors points forts) et éléments du
  * programme de l'année et de la précédente, risques en vigueur, contrôles actifs, exigences en vigueur, revues non closes et
  * leurs décisions, documents, filières et enlèvements de l'année et de la précédente ; jamais un élément d'un site archivé
- * ni le risque d'une unité de travail archivée. Un élément à action unique (constat,
- * élément du programme, exigence, contrôle, décision) déjà porté par une action ouverte n'est pas proposé (il serait
- * refusé). Chaque option porte le site de l'élément (null : élément commun, le QHSE choisit) et ses sources admises
+ * ni le risque d'une unité de travail archivée. Un élément à action unique (élément du programme, exigence, contrôle,
+ * décision) déjà porté par une action ouverte n'est pas proposé (il serait refusé) ; un constat, qui porte plusieurs actions
+ * (AUD-28), l'est toujours. Chaque option porte le site de l'élément (null : élément commun, le QHSE choisit) et ses sources admises
  * (admissibleSources, D20 révisée) ; un élément qui ne permet aucune action QSE n'est jamais proposé.
  */
 export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> => {
@@ -178,7 +178,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   const year = Number(today().slice(0, 4));
   const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses] = await Promise.all([
     db.select({ id: t.events.id, title: t.events.title, type: t.events.type, step: t.events.step, dismissedAt: t.events.dismissedAt, siteId: t.events.siteId, occurredOn: t.events.occurredOn }).from(t.events),
-    db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, actionId: t.auditFindings.actionId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
+    db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
     db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, track: t.auditPlanItems.track, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, month: t.auditPlanItems.month, actionId: t.auditPlanItems.actionId, cancelledAt: t.auditPlanItems.cancelledAt }).from(t.auditPlanItems),
     db.select({ id: t.risks.id, hazard: t.risks.hazard, archivedAt: t.risks.archivedAt, unitArchivedAt: t.workUnits.archivedAt, unit: t.workUnits.label, siteId: t.workUnits.siteId, sort: t.risks.sort, unitSort: t.workUnits.sort })
       .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)),
@@ -209,7 +209,8 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     .sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.id.localeCompare(a.id, 'fr', { numeric: true }))
     .forEach((e) => add('event', e.id, `${e.id} · ${e.title}`, e.siteId, { eventType: e.type }, e.type === 'AT' ? { healthWarning: true } : {}));
   findings
-    .filter((f) => !f.cancelledAt && f.kind !== 'point_fort' && free(f.actionId))
+    // Un constat porte plusieurs actions (AUD-28) : proposé même s'il en porte déjà.
+    .filter((f) => !f.cancelledAt && f.kind !== 'point_fort')
     .forEach((f) => add('finding', f.id, `Constat${f.clause ? ` ${f.clause}` : ''} · ${f.audit} — ${f.text}`, null, { track: f.planItemId ? tracks.get(f.planItemId) ?? null : null }));
   planItems
     .filter((p) => !p.cancelledAt && recent(p.year) && free(p.actionId))
@@ -285,7 +286,10 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
     const target = a.source ? ACTION_SOURCES[a.source]?.target : null;
     const eventId = events.has(a.originRef) ? a.originRef : events.has(first) ? first : null;
     const year = /^Registre des déchets (\d{4})$/.exec(a.originRef)?.[1];
+    // ACT-12 : action reprise d'une situation de coactivité sans plan (« Coactivité JJ/MM/AAAA ») → carte du site à cette date.
+    const coactivity = a.legacyOrigin === 'prevention' ? coactivityOriginHref(a.originRef, a.siteId) : null;
     if (eventId && (target === 'event' || (!a.source && (a.legacyOrigin === 'ev' || a.legacyOrigin === 'client')))) list.push(eventSource(eventId, a.originRef));
+    else if (coactivity) list.push({ kind: 'reference', label: a.originRef, href: reader.restricted ? null : coactivity });
     else if (year && (a.source === 'dechets' || (!a.source && a.legacyOrigin === 'env'))) {
       list.push({ kind: 'reference', label: a.originRef, href: reader.restricted ? null : `/environnement?vue=bsd-manquants&annee=${year}` });
     } else {

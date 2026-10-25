@@ -54,7 +54,9 @@ export type PlanItemView = {
 
 export type FindingView = {
   id: number; audit: string; planItemId: number | null; clause: string | null; foundOn: string | null;
-  kind: string; text: string; sort: number; actionId: string | null; action: ActionBrief | null;
+  kind: string; text: string; sort: number;
+  /** Actions du constat (AUD-28 : plusieurs par constat, table finding_actions), par numéro ; `action` null hors périmètre (numéro seul). */
+  actions: FindingAction[];
   /** Réponse attendue (plan d'actions) au plus tard le (écarts, AUD-09). */
   responseDueOn: string | null;
   /** Ligne du programme de l'élément rattaché (source de l'action, D20) ; null hors programme. */
@@ -63,6 +65,8 @@ export type FindingView = {
   cancelled: { on: string; by: string; reason: string } | null;
   log: ChangeEntry[];
 };
+/** Action d'un constat : numéro, et résumé si la personne peut la lire (sinon null, numéro seul). */
+export type FindingAction = { id: string; action: ActionBrief | null };
 /** Constat annulé, avec le libellé de son audit (filtre « Annulés »). */
 export type CancelledFindingView = FindingView & { cancelled: NonNullable<FindingView['cancelled']>; groupLabel: string };
 /** Constats d'un même audit : élément du programme (clé p<id>) ou libellé libre hors programme (clé l<libellé>). */
@@ -137,13 +141,30 @@ export { isReviewPlanItem };
 /** Date de référence d'un élément du programme (tri, constats) : réalisation, date prévue, sinon fin du mois. */
 const planDate = (p: { year: number; month: number; plannedOn: string | null; doneOn: string | null }) => p.doneOn ?? p.plannedOn ?? monthEnd(p.year, p.month);
 
-const readAudits = cache(async () => {
+/**
+ * Actions de chaque constat (finding_actions, AUD-28), par numéro d'action croissant (A-9 avant A-10) ; `brief` résume une
+ * action (null hors périmètre de la personne : numéro seul).
+ */
+export function findingActionsBy<B extends ActionBrief | null>(rows: { findingId: number; actionId: string }[], brief: (id: string) => B) {
+  const by = new Map<number, string[]>();
+  rows.forEach((r) => by.set(r.findingId, [...(by.get(r.findingId) ?? []), r.actionId]));
+  return (findingId: number): { id: string; action: B }[] => (by.get(findingId) ?? [])
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+    .map((id) => ({ id, action: brief(id) }));
+}
+
+/**
+ * Programme, constats et certifications. `withLogs` : historique de chaque fiche (écran Audits) ; les échéances
+ * (loadAuditSignals) s'en passent (QUA-17 : trois lectures du journal en moins par page).
+ */
+const readAudits = cache(async (withLogs: boolean) => {
   const db = await getDb();
-  const [certs, items, findings, actions, people, files, reviews] = await Promise.all([
+  const [certs, items, findings, findingLinks, actions, people, files, reviews] = await Promise.all([
     db.select().from(t.certifications).orderBy(asc(t.certifications.sort), asc(t.certifications.id)),
     // Éléments annulés compris (AUD-03) : hors grille, échéances et constats, ils restent consultables (« Éléments annulés »).
     db.select().from(t.auditPlanItems).orderBy(asc(t.auditPlanItems.id)),
     db.select().from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
+    db.select().from(t.findingActions),
     // Actions de tout le périmètre de la personne (pas seulement du site sélectionné) : un constat ou une échéance, communs à
     // l'entreprise, gardent leur action liée quel que soit le site affiché ; hors périmètre, la référence seule (ActionLink).
     loadAllActions('perimeter'),
@@ -153,11 +174,12 @@ const readAudits = cache(async () => {
     // Revues portées par les échéances du programme (AUD-01).
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status, kind: t.reviews.kind }).from(t.reviews),
   ]);
-  const [findingLogs, planLogs, certLogs] = await Promise.all([
+  const none = new Map<string, ChangeEntry[]>();
+  const [findingLogs, planLogs, certLogs] = withLogs ? await Promise.all([
     loadChangeLogs('audit_finding', findings.map((f) => f.id)),
     loadChangeLogs('audit_plan_item', items.map((p) => p.id)),
     loadChangeLogs('certification', certs.map((c) => c.id)),
-  ]);
+  ]) : [none, none, none];
   const now = today();
   const actionsById = new Map(actions.map((a) => [a.id, a]));
   const reviewsById = new Map(reviews.map((r) => [r.id, r]));
@@ -168,9 +190,10 @@ const readAudits = cache(async () => {
     .map((f) => ({ id: f.id, fileName: f.fileName, createdAt: f.createdAt.toISOString() }));
 
   const trackOf = new Map(items.map((p) => [p.id, p.track]));
+  const actionsOf = findingActionsBy(findingLinks, brief);
   const findingViews: FindingView[] = findings.map((f) => ({
     id: f.id, audit: f.audit, planItemId: f.planItemId, clause: f.clause, foundOn: f.foundOn,
-    kind: f.kind, text: f.text, sort: f.sort, actionId: f.actionId, action: brief(f.actionId), responseDueOn: f.responseDueOn,
+    kind: f.kind, text: f.text, sort: f.sort, actions: actionsOf(f.id), responseDueOn: f.responseDueOn,
     track: f.planItemId != null ? trackOf.get(f.planItemId) ?? null : null,
     cancelled: f.cancelledAt ? { on: parisDay(f.cancelledAt), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
     log: findingLogs.get(String(f.id)) ?? [],
@@ -266,7 +289,7 @@ const numParam = (v: string | string[] | undefined) => (typeof v === 'string' &&
  * `constat` sont les liens profonds des échéances : sans ?annee=, l'année affichée est celle de l'élément.
  */
 export async function loadAudits({ year: askedYear, element, constat }: { year?: string | string[]; element?: string | string[]; constat?: string | string[] }) {
-  const { now, certs, plan, allPlan, findings, active, auditGroups, cancelledFindings } = await readAudits();
+  const { now, certs, plan, allPlan, findings, active, auditGroups, cancelledFindings } = await readAudits(true);
   const nowYear = yearOf(now);
   // Années proposées : aussi celles qui ne portent que des éléments annulés (liste « Éléments annulés »).
   const years = [...new Set(allPlan.map((p) => p.year))];
@@ -327,7 +350,7 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
  * certificats expirés, proches de la fin de validité ou sans audit de suivi programmé. Communs à tous les sites (siteId null).
  */
 export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [{ now, people, certs, plan, active }, leads] = await Promise.all([readAudits(), loadQhseLeads()]);
+  const [{ now, people, certs, plan, active }, leads] = await Promise.all([readAudits(false), loadQhseLeads()]);
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
   const planHref = (p: { id: number; year: number }) => `/audits?annee=${p.year}&element=${p.id}`;
@@ -350,7 +373,7 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
 
   // c) Écarts, observations et pistes de progrès sans action au plan d'actions ; un écart dont la réponse est attendue
   // à une date (AUD-09) est daté de ce délai tant qu'il n'est pas dépassé.
-  active.filter((f) => f.kind !== 'point_fort' && !f.actionId).forEach((f) => {
+  active.filter((f) => f.kind !== 'point_fort' && !f.actions.length).forEach((f) => {
     // Responsable de l'élément du programme, sinon les responsables QHSE (constat commun aux sites).
     const ownerId = f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null;
     const owners = ownerId ? { who: name(ownerId), ownerIds: [ownerId] } : leads.forSite(null);

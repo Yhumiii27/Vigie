@@ -316,9 +316,7 @@ export function withoutHealth<T extends Record<HealthField, unknown>>(row: T): T
 /** Types d'événement qui portent une origine de non-conformité. */
 export const hasNcOrigin = (type: string) => type === 'NC' || type === 'RC';
 /** Types d'événement qui portent le traitement d'un produit non conforme (EVT-17) : NC et réclamation client. */
-export const hasNcDisposition = hasNcOrigin;
-/** Accident du travail ou de trajet (type AT) ; maladie professionnelle (type MP). */
-export const isOccupationalDisease = (type: string) => type === 'MP';
+export const hasNcDisposition = (type: string) => hasNcOrigin(type);
 
 // ─── Analyse des causes ─────────────────────────────────────────────────────
 
@@ -383,7 +381,7 @@ export function analysisFilled(method: string, content: unknown): boolean {
 
 export const MAX_PHOTOS = 4;
 // Constantes et vignettes communes à toutes les pièces jointes : src/lib/attachments.ts (réexportées ici).
-export { ATTACH_ACCEPT, MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, MAX_FILE_BYTES, fileIcon, fmtSize, type AttachmentItem } from '@/lib/attachments';
+export { MAX_BATCH_BYTES, MAX_FILE_BYTES, type AttachmentItem } from '@/lib/attachments';
 
 // ─── Parcours terrain ───────────────────────────────────────────────────────
 

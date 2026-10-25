@@ -15,7 +15,6 @@ import { logChange } from './changelog';
 // Un site n'est jamais supprimé : archivé avec motif, il disparaît des sélecteurs et ses données restent consultables.
 
 const LABEL_MAX = 120;
-const ARCHIVE_REASON_MAX = 500;
 /** Ordre d'affichage saisi (colonne int4). */
 const SORT_MAX = 9999;
 
@@ -100,7 +99,6 @@ export async function archiveSite(_prev: FormState, fd: FormData): Promise<FormS
   const f = formReader(fd);
   const siteId = f.str('siteId', { required: true });
   const reason = f.reason();
-  if (reason.length > ARCHIVE_REASON_MAX) f.fail('reason', `${ARCHIVE_REASON_MAX} caractères au maximum.`);
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -119,12 +117,13 @@ export async function archiveSite(_prev: FormState, fd: FormData): Promise<FormS
   return { ok: true, id: siteId };
 }
 
-/** Réactivation d'un site archivé. */
+/** Réactivation d'un site archivé, motif obligatoire (QUA-22). */
 export async function restoreSite(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireApprover();
   if (error) return { error };
   const f = formReader(fd);
   const siteId = f.str('siteId', { required: true });
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -133,7 +132,7 @@ export async function restoreSite(_prev: FormState, fd: FormData): Promise<FormS
   if (!site.archivedAt) return { ok: true, id: siteId };
   await db.transaction(async (tx) => {
     await tx.update(t.sites).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.sites.id, siteId));
-    await logChange(tx, { entityType: 'site', entityId: siteId, action: 'restore', summary: `Site « ${site.label} » réactivé` });
+    await logChange(tx, { entityType: 'site', entityId: siteId, action: 'restore', summary: `Site « ${site.label} » réactivé`, reason });
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: siteId };

@@ -274,7 +274,6 @@ export const loadSkillMatrix = cache(async () => {
   return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], self: true };
 });
 
-export type SkillMatrixData = Awaited<ReturnType<typeof loadSkillMatrix>>;
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 

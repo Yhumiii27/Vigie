@@ -6,7 +6,7 @@ import { readEntraAuth } from './entra';
 import { LOGIN_PATH, accessHref } from './paths';
 import type { AuthState } from './types';
 
-export type { AccessDenial, AuthIdentity, AuthState } from './types';
+export type { AuthState } from './types';
 
 /**
  * Identité de la requête (mémorisée par requête), sans accès à la base :

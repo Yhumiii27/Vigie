@@ -58,6 +58,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Code mort (QUA-24) : fichiers, exports et dépendances inutilisés (knip.json), quelques secondes.
+      - name: Code mort (knip)
+        run: npm run knip
+
       - name: Tests (PGlite en mémoire)
         run: npm test
 

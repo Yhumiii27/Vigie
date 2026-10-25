@@ -13,9 +13,6 @@ export type AiLimits = { dailyScansPerPerson: number; monthlyTokens: number };
 export type AiUsageNumbers = { input: number; output: number; cacheCreation: number; cacheRead: number };
 const FEATURE = 'pp_scan';
 
-/** Jetons comptés par le plafond mensuel : entrée, sortie, écriture et lecture du cache. */
-export const billedTokens = (u: AiUsageNumbers) => u.input + u.output + u.cacheCreation + u.cacheRead;
-
 /** Début du mois civil de Paris contenant `now`. */
 export const monthStart = (now: Date) => fromParisLocal(`${parisDay(now).slice(0, 7)}-01T00:00`) ?? now;
 

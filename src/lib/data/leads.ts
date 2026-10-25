@@ -62,4 +62,3 @@ export const loadQhseLeads = cache(async () => {
     approvers: [...animators, ...directors],
   };
 });
-export type QhseLeads = Awaited<ReturnType<typeof loadQhseLeads>>;

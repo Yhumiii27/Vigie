@@ -4,12 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
-import { ReasonForm } from '@/components/ReasonDialog';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
 import type { ContractorView } from '@/lib/data/prevention';
-import { archiveContractor, restoreContractor, saveContractor } from '@/server/prevention';
-import { ErrorLine, Facts, Notice, SectionTitle, muted, rowOpener, useRun } from './parts';
+import { archiveContractor, restoreContractor, saveContractor } from '@/server/contractors';
+import { Facts, Notice, SectionTitle, muted, rowOpener } from './parts';
 import { TipButton } from '@/components/Tip';
 
 function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
@@ -52,7 +52,6 @@ const telHref = (phone: string) => `tel:${phone.replace(/\s/g, '')}`;
 function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
   contractor: ContractorView; canManage: boolean; onEdit: () => void; onArchive: () => void;
 }) {
-  const { pending, error, run } = useRun();
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {c.archived && (
@@ -97,11 +96,14 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
 
       <LazyChangeLog entity="contractor" id={c.id} />
 
-      <ErrorLine error={error} />
       {canManage && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {c.archived
-            ? <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => run(() => restoreContractor(c.id))}><Icon name="ph-arrow-counter-clockwise" size={13} />Réactiver</button>
+            ? (
+              <ReasonButton action={restoreContractor} hidden={{ id: c.id }} label="Réactiver" icon="ph-arrow-counter-clockwise" title="Réactiver l’entreprise"
+                kicker={c.name} submitLabel="Réactiver" message="L’entreprise est de nouveau proposée dans les formulaires de plans et de permis."
+                placeholder="Ex. nouvelle intervention prévue" />
+            )
             : (
               <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!c.archiveBlock} tip={c.archiveBlock} onClick={onArchive}>
                 <Icon name="ph-archive" size={13} />Archiver

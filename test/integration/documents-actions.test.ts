@@ -132,11 +132,35 @@ describe('actions liées à un document et à ses versions', () => {
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: closed.id })))
       .toMatchObject({ fieldErrors: { actionId: `L'action ${closed.id} est vérifiée ou abandonnée : elle ne peut plus être rattachée.` } });
     const elsewhere = await firstAction((a) => a.siteId === 'ville-b' && !['verifiee', 'abandonnee'].includes(a.status));
+    // DOC-13 : mêmes contrôles et même ordre que linkAction (checkLinkChange) — le site de l'action est contrôlé d'abord
+    // (rien n'est révélé d'une action hors du site sélectionné) ; sous « Tous les sites », le site du document.
+    expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: elsewhere.id })))
+      .toMatchObject({ fieldErrors: { actionId: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' } });
+    actAs('Animateur QHSE', 'all');
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: elsewhere.id })))
       .toMatchObject({ fieldErrors: { actionId: `L'action ${elsewhere.id} concerne un autre site que le document.` } });
+    actAs('Animateur QHSE');
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: 'A-9999' })))
       .toMatchObject({ fieldErrors: { actionId: 'Action introuvable.' } });
     expect((await versionOf('IT-MON-012', 'A')).actionId).toBe('A-215');
+  });
+
+  it('DOC-13 : contrôles du registre des rattachements (checkLinkChange) — action abandonnée portée par la version : retrait et remplacement refusés, journal inchangé', async () => {
+    const db = await getDb();
+    actAs('Animateur QHSE');
+    const v = await versionOf('IT-MON-012', 'A');
+    const abandoned = await firstAction((a) => a.status === 'abandonnee' && (a.siteId === 'ville-a' || a.siteId === null));
+    // Ligne reprise : version encore liée à une action abandonnée (l'abandon détache d'ordinaire la version).
+    await db.update(t.documentVersions).set({ actionId: abandoned.id }).where(eq(t.documentVersions.id, v.id));
+    const before = await changeLogCount(abandoned.id);
+    const other = await firstAction((a) => a.siteId === 'ville-a' && !['verifiee', 'abandonnee'].includes(a.status));
+    expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: other.id })))
+      .toMatchObject({ fieldErrors: { actionId: `L'action ${abandoned.id} est abandonnée : consultation seule.` } });
+    expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: '' })))
+      .toMatchObject({ fieldErrors: { actionId: `L'action ${abandoned.id} est abandonnée : consultation seule.` } });
+    expect((await versionOf('IT-MON-012', 'A')).actionId).toBe(abandoned.id);
+    expect(await changeLogCount(abandoned.id)).toBe(before);
+    await db.update(t.documentVersions).set({ actionId: v.actionId }).where(eq(t.documentVersions.id, v.id));
   });
 
   it('document commun : action d’un site hors du site sélectionné refusée ; sous « Tous les sites », acceptée', async () => {

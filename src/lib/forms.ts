@@ -10,8 +10,6 @@ import { REASON_MAX } from './domain';
  */
 export type FormState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string>; id?: string; ids?: string[]; warnings?: string[]; message?: string };
 
-export const initialFormState: FormState = {};
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DECIMAL = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 
@@ -19,6 +17,20 @@ const DECIMAL = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 export function fmtDecimal(n: number): string {
   const [int, dec] = String(Math.abs(n)).split('.');
   return `${n < 0 ? '-' : ''}${int.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0')}${dec ? `,${dec}` : ''}`;
+}
+
+/**
+ * Règle commune du motif (QUA-22) : annulation, archivage, classement sans suite, réouverture, restauration, retrait,
+ * levée — obligatoire (non vide après suppression des espaces), REASON_MAX caractères au plus. Lu par
+ * `formReader(fd).reason()` dans les server actions de formulaire, par reasonError pour une server action appelée avec le
+ * motif en argument (retrait d'une pièce jointe) ; saisi par ReasonButton / ReasonForm (src/components/ReasonDialog.tsx).
+ * Imposé par src/server/reason-usage.test.ts.
+ */
+export function reasonError(value: unknown): string | null {
+  const v = typeof value === 'string' ? value.trim() : '';
+  if (!v) return 'Motif obligatoire.';
+  if (v.length > REASON_MAX) return `${REASON_MAX} caractères au maximum.`;
+  return null;
 }
 
 /** Lecteur de FormData qui accumule les erreurs par champ. */
@@ -99,8 +111,8 @@ export function formReader(fd: FormData) {
     /** Motif obligatoire (annulation, archivage, classement sans suite…) : champ `reason` de ReasonButton / ReasonForm. */
     reason(name = 'reason') {
       const v = raw(name);
-      if (!v) fail(name, 'Motif obligatoire.');
-      else if (v.length > REASON_MAX) fail(name, `${REASON_MAX} caractères au maximum.`);
+      const error = reasonError(v);
+      if (error) fail(name, error);
       return v;
     },
     /** Valeurs multiples (cases à cocher de même nom), nettoyées et non vides. */

@@ -43,7 +43,7 @@ describe('actions de la fiche événement', () => {
     expect(detail.actions.map((a) => a.id)).toContain('A-212');
     const audits = await loadAudits({});
     const finding = audits.auditGroups.flatMap((g) => g.findings).find((f) => f.clause === '§8.5.1')!;
-    expect(finding).toMatchObject({ actionId: 'A-212', action: { id: 'A-212', title: expect.stringMatching(/^Mettre à jour la gamme/) } });
+    expect(finding.actions).toMatchObject([{ id: 'A-212', action: { id: 'A-212', title: expect.stringMatching(/^Mettre à jour la gamme/) } }]);
   });
 
   it('création depuis l’événement : service QHSE seulement, source imposée, événement lié, journal', async () => {

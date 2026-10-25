@@ -1,8 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
 import { ALL_SITES, byUrgency, type TodoItem } from '../domain';
+import { loadSiteRows } from '../queries';
 import { currentSiteId, getSession } from '../session';
 import { visibleTodo, type VisibleTodo } from '../todo-visibility';
 import { loadActionSignals } from './actions';
@@ -10,7 +9,7 @@ import { loadAuditSignals } from './audits';
 import { loadDocumentSignals } from './documents';
 import { loadEnvironmentSignals } from './environment';
 import { loadEventSignals } from './events';
-import { loadPreventionSignals } from './prevention';
+import { loadPreventionSignals } from './prevention-signals';
 import { loadReportPostSignals } from './report-posts';
 import { loadReviewSignals } from './review';
 import { loadRiskSignals } from './risks';
@@ -38,10 +37,7 @@ export const loadTodo = cache(async (): Promise<TodoItem[]> => {
 });
 
 /** Sites de la base, archivés compris (libellés des échéances d'un autre site, périmètre des indicateurs). */
-export const loadSiteDirectory = cache(async () => {
-  const db = await getDb();
-  return db.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites).orderBy(asc(t.sites.sort));
-});
+export const loadSiteDirectory = cache(async () => (await loadSiteRows()).map((s) => ({ id: s.id, label: s.label, archivedAt: s.archivedAt })));
 
 /** Libellé court d'un site (« Site de [Ville B] » pour « Site de [Ville B] — zone d'essais »). */
 export const shortSiteLabel = (label: string) => label.split(' — ')[0];

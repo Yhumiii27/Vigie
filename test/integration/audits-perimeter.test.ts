@@ -42,19 +42,18 @@ describe('actions des constats d’audit et périmètre', () => {
   it('site sélectionné quelconque : l’action du périmètre reste citée ; hors périmètre, son numéro seul', async () => {
     const db = await getDb();
     // Constat qui porte une action du site A (jeu de démonstration).
-    const [row] = await db.select({ id: t.auditFindings.id, actionId: t.auditFindings.actionId }).from(t.auditFindings)
-      .innerJoin(t.actions, eq(t.actions.id, t.auditFindings.actionId)).where(eq(t.actions.siteId, 'ville-a')).limit(1);
+    const [row] = await db.select({ id: t.findingActions.findingId, actionId: t.findingActions.actionId }).from(t.findingActions)
+      .innerJoin(t.actions, eq(t.actions.id, t.findingActions.actionId)).where(eq(t.actions.siteId, 'ville-a')).limit(1);
     expect(row, 'constat portant une action du site A').toBeDefined();
     const findingOf = async () => (await loadAudits({})).auditGroups.flatMap((g) => g.findings).find((f) => f.id === row.id)!;
 
     // Direction (tous les sites), site B sélectionné : action du site A lue.
     await actAsEntra('hmarchand', 'Direction', null, 'ville-b');
-    expect((await findingOf()).action).toMatchObject({ id: row.actionId, title: expect.any(String) });
+    expect((await findingOf()).actions[0].action).toMatchObject({ id: row.actionId, title: expect.any(String) });
 
     // Chef de projet rattaché au site B, sans autre site accordé : numéro seul, aucune donnée de l'action.
     await actAsEntra('jpetit', 'Chef de projet', [], 'ville-b');
     const f = await findingOf();
-    expect(f.actionId).toBe(row.actionId);
-    expect(f.action).toBeNull();
+    expect(f.actions).toEqual([{ id: row.actionId, action: null }]);
   });
 });

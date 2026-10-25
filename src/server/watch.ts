@@ -33,13 +33,6 @@ async function findPerson(id: string) {
   return p;
 }
 
-/** Motif d'archivage, de restauration ou d'annulation (champ `reason`). */
-function readReason(f: ReturnType<typeof formReader>) {
-  const reason = f.reason();
-  if (reason && reason.length < 3) f.fail('reason', 'Motif trop court (3 caractères au minimum).');
-  return reason;
-}
-
 /** Contrôle d'un envoi de pièces jointes (nombre, volume, contenu, limites de la personne : checkUploadBatch) ; erreur portée par le champ `name`. */
 async function checkFiles(f: ReturnType<typeof formReader>, name: string, files: File[], by: string) {
   const err = await checkUploadBatch(files, by);
@@ -225,7 +218,7 @@ export async function archiveRequirement(_prev: FormState, fd: FormData): Promis
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id', { required: true });
-  const reason = readReason(f);
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -247,7 +240,7 @@ export async function restoreRequirement(_prev: FormState, fd: FormData): Promis
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id', { required: true });
-  const reason = readReason(f);
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -447,7 +440,7 @@ export async function archiveControl(_prev: FormState, fd: FormData): Promise<Fo
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id', { required: true });
-  const reason = readReason(f);
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const { control, error: ctrlError } = await loadControlForEdit(id!, { archived: true });
@@ -468,7 +461,7 @@ export async function restoreControl(_prev: FormState, fd: FormData): Promise<Fo
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id', { required: true });
-  const reason = readReason(f);
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const { control, error: ctrlError } = await loadControlForEdit(id!, { archived: true });
@@ -495,7 +488,7 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   if (error) return { error };
   const f = formReader(fd);
   const id = f.int('id', { required: true });
-  const reason = readReason(f);
+  const reason = f.reason();
   if (!f.ok) return f.state();
 
   const db = await getDb();

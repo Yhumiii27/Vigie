@@ -440,7 +440,6 @@ export const loadEventLinkOptions = cache(async () => {
     permits: permits.filter((p) => p.status !== 'annule' && inSite(site, p.siteId)).map((p) => [p.id, clip(`${p.id} · ${p.description}`)] as Option),
   };
 });
-export type EventLinkOptions = Awaited<ReturnType<typeof loadEventLinkOptions>>;
 
 // ─── Parcours terrain : « Mes signalements » ────────────────────────────────
 
@@ -688,4 +687,3 @@ export async function loadDatPrint(id: string) {
     cpam: cpamState(e, entry, site, today(), name),
   };
 }
-export type DatPrint = NonNullable<Awaited<ReturnType<typeof loadDatPrint>>>;

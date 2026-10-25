@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
-import { ReasonButton } from '@/components/ReasonDialog';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { DeleteButton } from '@/components/audits/parts';
 import { fmtDate } from '@/lib/dates';
 import { REVIEW_DECISION_KINDS, REVIEW_DECISION_KEYS, REVIEW_KINDS, REVIEW_KIND_KEYS, REVIEW_SOURCES, REVIEW_SOURCE_KEYS, type ReviewKind } from '@/lib/domain';
@@ -183,11 +183,12 @@ export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }:
 
 export function RescheduleForm({ review, onClose }: { review: ReviewView; onClose: () => void }) {
   return (
-    <ActionForm action={rescheduleReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }} submitLabel="Reporter la revue">
-      <Field name="to" label="Nouvelle date" hint="L'échéance de la revue au programme annuel est reportée à cette date (première date conservée).">
-        <Input name="to" type="date" defaultValue={review.reviewOn} autoFocus />
-      </Field>
-    </ActionForm>
+    <ReasonForm action={rescheduleReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }} submitLabel="Reporter la revue"
+      placeholder="Ex. Indisponibilité de la direction" before={(
+        <Field name="to" label="Nouvelle date" hint="L'échéance de la revue au programme annuel est reportée à cette date (première date conservée).">
+          <Input name="to" type="date" defaultValue={review.reviewOn} autoFocus />
+        </Field>
+      )} />
   );
 }
 
@@ -233,6 +234,6 @@ export function CancelReviewButton({ review }: { review: ReviewView }) {
     <ReasonButton action={cancelReview} hidden={{ id: review.id }} label="Annuler la revue" icon="ph-x-circle" className="btn btn-ghost vg-btn-sm"
       title="Annuler la revue" kicker={`Revue de direction du ${fmtDate(review.reviewOn)}`} submitLabel="Annuler la revue"
       message="La revue et sa check-list restent consultables dans l'historique (filtre « Afficher les annulées »). Son échéance au programme annuel est annulée avec elle (liste « Éléments annulés »)."
-      hint="Obligatoire, 300 caractères au maximum." placeholder="Ex. Revue regroupée avec la revue annuelle" />
+      placeholder="Ex. Revue regroupée avec la revue annuelle" />
   );
 }

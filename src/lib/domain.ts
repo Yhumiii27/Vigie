@@ -280,8 +280,6 @@ export const REMINDER_KIND = 'Rappel du mercredi';
 /** Longueur maximale d'un motif (abandon, archivage, classement sans suite, réouverture). */
 export const REASON_MAX = 1000;
 
-/** Domaine d'exigence de veille des plans de prévention (R. 4512-6) ; rattachement à l'indicateur : linkedTo 'prevention' (VEI-07). */
-export const PREVENTION_REQUIREMENT_DOMAIN = 'Plans de prévention';
 
 // Cotation des risques : gravité 1–4 × probabilité 1–4.
 export const RISK_LEVELS = [

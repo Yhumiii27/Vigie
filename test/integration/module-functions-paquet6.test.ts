@@ -82,10 +82,10 @@ describe('pièces jointes génériques', () => {
     expect(await add('control_record', record.id, 'rapport-vgp.pdf')).toEqual({ count: 1 });
     expect(await lastLog('control', control.id)).toMatchObject({ action: 'attach', details: [{ field: 'Rapport de contrôle', to: 'rapport-vgp.pdf' }] });
     const [att] = await filesOf('control_record', record.id);
-    await (await db()).update(t.controlRecords).set({ cancelledAt: new Date() }).where(eq(t.controlRecords.id, record.id));
+    await (await db()).update(t.controlRecords).set({ cancelledAt: new Date(), cancelReason: 'Saisie en double' }).where(eq(t.controlRecords.id, record.id));
     expect(await add('control_record', record.id)).toEqual({ error: 'Enregistrement annulé : ses pièces jointes sont conservées pour la trace.' });
     expect(await removeEntityFile(att.id, 'erreur')).toEqual({ error: 'Enregistrement annulé : ses pièces jointes sont conservées pour la trace.' });
-    await (await db()).update(t.controlRecords).set({ cancelledAt: null }).where(eq(t.controlRecords.id, record.id));
+    await (await db()).update(t.controlRecords).set({ cancelledAt: null, cancelReason: null }).where(eq(t.controlRecords.id, record.id));
     // Chargement : pièces jointes de l'enregistrement, avec leur auteur.
     const c = (await loadWatch()).controls.find((x) => x.id === control.id);
     expect(c?.records.find((r) => r.id === record.id)?.files).toEqual([expect.objectContaining({ name: 'rapport-vgp.pdf', uploadedBy: expect.any(String) })]);
@@ -246,13 +246,13 @@ describe('échéances de la revue (AUD-16)', () => {
     // Revue annuelle planifiée le 10/12/2026 : aucune alerte « prochaine revue ».
     expect(todo.some((x) => x.key?.startsWith('revue-prochaine|'))).toBe(false);
     const [planned] = await (await db()).select().from(t.reviews).where(eq(t.reviews.status, 'planifiee'));
-    await (await db()).update(t.reviews).set({ status: 'annulee' }).where(eq(t.reviews.id, planned.id));
+    await (await db()).update(t.reviews).set({ status: 'annulee', cancelledAt: new Date(), cancelReason: 'Revue reportée' }).where(eq(t.reviews.id, planned.id));
     try {
       actAs('Direction', 'all');
       const next = (await loadReviewSignals()).todo.find((x) => x.key?.startsWith('revue-prochaine|'));
       expect(next).toMatchObject({ tone: 'warn', siteId: null, dueOn: '2026-06-18', title: expect.stringContaining('à planifier') });
     } finally {
-      await (await db()).update(t.reviews).set({ status: 'planifiee' }).where(eq(t.reviews.id, planned.id));
+      await (await db()).update(t.reviews).set({ status: 'planifiee', cancelledAt: null, cancelReason: null }).where(eq(t.reviews.id, planned.id));
     }
   });
 });

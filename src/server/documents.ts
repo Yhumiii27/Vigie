@@ -5,12 +5,12 @@ import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
 import { today } from '@/lib/today';
+import { checkLinkChange } from '@/lib/action-links';
 import { isQhse } from '@/lib/action-rules';
-import { canApprove, canEdit, isClosedActionStatus, type Role } from '@/lib/domain';
+import { canApprove, canEdit, type Role } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
-import { inSite } from '@/lib/session';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
@@ -54,37 +54,38 @@ const VERSION_LINK_QHSE_ONLY = "Le rattachement d'une action à une version rel�
 /**
  * Action liée facultative d'une version (lien complémentaire « docversion », D15). Champ absent du formulaire (rôle hors
  * QHSE, qui ne reçoit pas la liste) ou valeur inchangée : action actuelle conservée telle quelle. Tout changement (pose,
- * remplacement, retrait) relève du service QHSE, comme linkAction / unlinkAction : action existante, ni Vérifiée ni
- * Abandonnée, du site du document (document commun : tout site) et du site sélectionné ; l'action remplacée ou retirée,
- * du site sélectionné et du périmètre. Jamais `actions.document_id`
- * (posé à la création seulement, D15) : l'écran lit aussi document_versions.action_id.
+ * remplacement, retrait) relève du service QHSE et passe par les contrôles du registre des rattachements, comme
+ * linkAction / unlinkAction (DOC-13 : checkLinkChange, src/lib/action-links.ts) : l'action posée est existante, ni
+ * Vérifiée ni Abandonnée, du site sélectionné et du périmètre, et du site du document (document commun : tout site) ;
+ * l'action remplacée ou retirée est détachée avec les mêmes contrôles (site sélectionné, périmètre, sauf Abandonnée) ;
+ * l'écran Documents est ouvert en saisie au rôle et le document du site sélectionné. `versionId` : version modifiée (null :
+ * version créée par cette écriture, site du document imposé). Jamais `actions.document_id` (posé à la création seulement,
+ * D15) : l'écran lit aussi document_versions.action_id.
  */
-async function readAction(f: Reader, fd: FormData, db: Db, role: Role, current: { actionId: string | null; docSiteId: string | null }) {
+async function readAction(
+  f: Reader, fd: FormData, db: Db, who: { role: Role; userId: string },
+  current: { actionId: string | null; docSiteId: string | null; versionId: number | null },
+) {
   if (!fd.has('actionId')) return current.actionId;
   const posted = f.opt('actionId');
   if (posted === current.actionId) return posted;
-  if (!isQhse(role)) {
+  if (!isQhse(who.role)) {
     f.fail('actionId', VERSION_LINK_QHSE_ONLY);
     return current.actionId;
   }
-  // L'action détachée (remplacement, retrait) est elle aussi modifiée : site sélectionné et périmètre (comme unlinkAction).
+  const link = `docversion:${current.versionId ?? 0}`;
+  const opts = { sourceSiteId: current.docSiteId, siteMismatch: posted ? `L'action ${posted} concerne un autre site que le document.` : undefined };
+  // L'action détachée (remplacement, retrait) est elle aussi modifiée.
   if (current.actionId) {
-    const [old] = await db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, current.actionId));
-    const siteError = old ? await requireInSite(old.siteId) : null;
-    if (siteError) {
-      f.fail('actionId', siteError);
+    const detached = await checkLinkChange(db, who, link, current.actionId, 'unlink', opts);
+    if ('error' in detached) {
+      f.fail('actionId', detached.error);
       return current.actionId;
     }
   }
   if (!posted) return null;
-  const [a] = await db.select({ id: t.actions.id, status: t.actions.status, siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, posted));
-  if (!a) f.fail('actionId', 'Action introuvable.');
-  else if (isClosedActionStatus(a.status)) f.fail('actionId', `L'action ${a.id} est vérifiée ou abandonnée : elle ne peut plus être rattachée.`);
-  else if (!inSite(current.docSiteId, a.siteId)) f.fail('actionId', `L'action ${a.id} concerne un autre site que le document.`);
-  else {
-    const siteError = await requireInSite(a.siteId);
-    if (siteError) f.fail('actionId', siteError);
-  }
+  const attached = await checkLinkChange(db, who, link, posted, 'link', opts);
+  if ('error' in attached) f.fail('actionId', attached.error);
   return posted;
 }
 
@@ -165,7 +166,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
   const meta = await readMetadata(f, db, null);
   const rawRef = f.str('ref', { max: 30 }).toUpperCase().replace(/\s+/g, '');
   const summary = f.str('summary', { max: 300 }) || 'Création du document';
-  const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: meta.siteId });
+  const actionId = await readAction(f, fd, db, { role: session.role, userId: session.user.id }, { actionId: null, docSiteId: meta.siteId, versionId: null });
   const file = await readFile(f, session.user.id);
   if (rawRef && !REF_PATTERN.test(rawRef)) f.fail('ref', 'Format attendu : lettres et chiffres séparés par des tirets (ex. PR-QHSE-006).');
   if (!f.ok) return f.state();
@@ -282,7 +283,7 @@ export async function reviseDocument(_prev: FormState, fd: FormData): Promise<Fo
   const documentId = f.str('documentId', { required: true });
   const summary = f.str('summary', { required: true, max: 300 });
   const [doc] = documentId ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, documentId)) : [];
-  const actionId = await readAction(f, fd, db, session.role, { actionId: null, docSiteId: doc?.siteId ?? null });
+  const actionId = await readAction(f, fd, db, { role: session.role, userId: session.user.id }, { actionId: null, docSiteId: doc?.siteId ?? null, versionId: null });
   const file = await readFile(f, session.user.id);
   if (!f.ok) return f.state();
   const siteError = await documentSiteError(documentId);
@@ -349,7 +350,7 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
   const { v } = loaded;
   const summary = f.str('summary', { required: true, max: 300 });
   const [doc] = v ? await db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, v.documentId)) : [];
-  const actionId = await readAction(f, fd, db, session.role, { actionId: v?.actionId ?? null, docSiteId: doc?.siteId ?? null });
+  const actionId = await readAction(f, fd, db, { role: session.role, userId: session.user.id }, { actionId: v?.actionId ?? null, docSiteId: doc?.siteId ?? null, versionId: v?.id ?? null });
   const file = await readFile(f, session.user.id);
   const removeFile = f.bool('removeFile');
   if (!f.ok) return f.state();

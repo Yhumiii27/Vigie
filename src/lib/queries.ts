@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc } from 'drizzle-orm';
+import { and, asc, inArray, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { workforceAccident } from './event-filters';
 import { actionLabel, isLate, isVerificationLate, kanbanColumn, lateDays, missingFields } from './action-rules';
@@ -11,7 +11,7 @@ import {
   SKILL_SOON_DAYS, STEP_CLOSED, canSeeEventType, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
 } from './domain';
 import { PERSON_COLUMNS, type Person } from './people';
-import { getSession, siteFilter, type SiteScope } from './session';
+import { getSession, siteFilter, siteScopeIds, type SiteScope } from './session';
 
 export type { Person, SiteScope };
 export type EventRow = typeof t.events.$inferSelect;
@@ -29,6 +29,19 @@ export const loadPeople = cache(async () => {
   return byId(await db.select(PERSON_COLUMNS).from(t.people).orderBy(asc(t.people.sort)));
 });
 
+/**
+ * Condition SQL d'un chargement filtré par site (QUA-17) : élément sans site, ou d'un des sites `ids` (siteScopeIds) ;
+ * undefined sans filtre. Les chargements gardent aussi le filtre siteFilter en mémoire (mêmes résultats qu'avant).
+ */
+export const siteWhere = (col: AnyColumn, ids: string[] | null): SQL | undefined =>
+  ids == null ? undefined : ids.length ? or(isNull(col), inArray(col, ids)) : isNull(col);
+
+/** Sites de la base, archivés compris, dans l'ordre d'affichage : chargement partagé par les écrans et les échéances (QUA-17). */
+export const loadSiteRows = cache(async () => {
+  const db = await getDb();
+  return db.select().from(t.sites).orderBy(asc(t.sites.sort));
+});
+
 // Les chargements ci-dessous sont filtrés sur le site sélectionné (cookie, scope 'site' par défaut ; « Tous les sites »
 // consolide), ou sur tout le périmètre de la personne (scope 'perimeter' : échéances, TDB-05). cache() distingue les
 // appels par leurs arguments : f() et f('site') sont deux entrées, sans conséquence.
@@ -39,18 +52,31 @@ export const loadPeople = cache(async () => {
  * de tous les écrans, indicateurs et échéances des autres rôles.
  */
 export const loadSiteEvents = cache(async (scope: SiteScope = 'site') => {
-  const [db, keep, { role }] = await Promise.all([getDb(), siteFilter(scope), getSession()]);
-  const rows = (await db.select().from(t.events)).filter((e) => keep(e.siteId) && canSeeEventType(role, e.type));
+  const [db, keep, ids, { role }] = await Promise.all([getDb(), siteFilter(scope), siteScopeIds(scope), getSession()]);
+  const rows = (await db.select().from(t.events).where(siteWhere(t.events.siteId, ids))).filter((e) => keep(e.siteId) && canSeeEventType(role, e.type));
   return rows.sort((a, b) => b.occurredOn.localeCompare(a.occurredOn) || b.id.localeCompare(a.id, 'fr', { numeric: true }));
 });
 
 /** Événements du site hors classés sans suite : base des indicateurs (TF1/TG, pyramide, NC ouvertes…). */
 export const loadEvents = cache(async (scope: SiteScope = 'site') => (await loadSiteEvents(scope)).filter((e) => !e.dismissedAt));
 
-/** Toutes les actions du site, abandonnées comprises (affichage « Abandonnées », historique). */
+/**
+ * Toutes les actions de la base, tous sites, abandonnées comprises : lecture unique par requête, partagée par les chargements
+ * qui lisent tout le plan (DUERP, documents, et loadAllActions sans filtre de site) — QUA-17.
+ */
+export const loadActionRows = cache(async () => {
+  const db = await getDb();
+  return db.select().from(t.actions);
+});
+
+/**
+ * Toutes les actions du site, abandonnées comprises (affichage « Abandonnées », historique). Site sélectionné ou périmètre
+ * restreint : filtrées en base (siteWhere, QUA-17) ; sinon lecture partagée (loadActionRows).
+ */
 export const loadAllActions = cache(async (scope: SiteScope = 'site') => {
-  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
-  return (await db.select().from(t.actions)).filter((a) => keep(a.siteId));
+  const [db, keep, ids] = await Promise.all([getDb(), siteFilter(scope), siteScopeIds(scope)]);
+  const rows = ids == null ? await loadActionRows() : await db.select().from(t.actions).where(siteWhere(t.actions.siteId, ids));
+  return rows.filter((a) => keep(a.siteId));
 });
 
 /** Actions du site hors abandonnées : base de tous les calculs transverses (retards, échéances, revues…). */
@@ -58,8 +84,9 @@ export const loadActions = cache(async (scope: SiteScope = 'site') => (await loa
 
 /** Contrôles périodiques actifs du site (les équipements réformés, archivés, sont exclus). */
 export const loadControls = cache(async (scope: SiteScope = 'site') => {
-  const [db, keep] = await Promise.all([getDb(), siteFilter(scope)]);
-  return (await db.select().from(t.controls).orderBy(asc(t.controls.sort))).filter((c) => !c.archivedAt && keep(c.siteId));
+  const [db, keep, ids] = await Promise.all([getDb(), siteFilter(scope), siteScopeIds(scope)]);
+  return (await db.select().from(t.controls).where(and(isNull(t.controls.archivedAt), siteWhere(t.controls.siteId, ids))).orderBy(asc(t.controls.sort)))
+    .filter((c) => !c.archivedAt && keep(c.siteId));
 });
 
 // ─── Règles de calcul ───────────────────────────────────────────────────────
@@ -213,7 +240,6 @@ export function eventView(e: EventRow, people: Map<string, Person>, now = today(
     days: daysBetween(e.occurredOn, now),
   };
 }
-export type EventView = ReturnType<typeof eventView>;
 
 /** Libellé et ton d'une action en retard (§ 6.3), à la place de son avancement. */
 const LATE_STATUS = { label: 'En retard', tone: 'danger' as Tone };
@@ -255,7 +281,6 @@ export function actionView(a: ActionRow, people: Map<string, Person>, now = toda
     toComplete: missing.length > 0,
   };
 }
-export type ActionView = ReturnType<typeof actionView>;
 
 /**
  * Action du plan d'actions rattachée à un élément (audit, revue…), avancement calculé. Clés inchangées depuis l'ancien

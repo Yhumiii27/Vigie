@@ -10,7 +10,7 @@ import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
 import { actionHref } from '@/lib/action-rules';
 import type { PermitView, PlanChoice } from '@/lib/data/prevention';
-import { cancelPermit, closePermit, deliverPermit, linkPermitPlan, savePermit, setPermitCheck } from '@/server/prevention';
+import { cancelPermit, closePermit, deliverPermit, linkPermitPlan, savePermit, setPermitCheck } from '@/server/permits';
 import { SaveStatus, safeCall } from '@/components/feedback';
 import {
   FIRE_WATCH_HOURS, PERMIT_TYPES, PERMIT_TYPE_KEYS, addHoursLocal, fmtLocalLong, lcfirst, missingPresets, permitNeedsSignedPlan, planCovers, ruleBasis,

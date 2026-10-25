@@ -135,13 +135,16 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
     expect(await create({ link: 'plan:7', source: 'audit_interne', originRef: '' })).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     const f = await created({ link: 'finding:3', source: 'audit_interne', originRef: '' });
     expect(f.originRef).toMatch(/^Constat · /);
-    const [finding] = await (await getDb()).select().from(t.auditFindings).where(eq(t.auditFindings.id, 3));
-    expect(finding.actionId).toBe(f.id);
+    const findingActions = async () => (await (await getDb()).select().from(t.findingActions).where(eq(t.findingActions.findingId, 3))).map((x) => x.actionId).sort();
+    expect(await findingActions()).toEqual([f.id]);
     expect(await lastLog('audit_finding', 3)).toMatchObject({ action: 'link', summary: `Action ${f.id} créée et rattachée`, byId: 'clefevre' });
     expect(await created({ link: 'plan:6', source: 'audit_certification', originRef: '' })).toMatchObject({ originRef: 'Programme 2026 · Audit de suivi ISO 9001' });
     expect(await created({ link: 'plan:7', source: 'audit_fournisseur', originRef: '' })).toMatchObject({ source: 'audit_fournisseur' });
-    // Constat déjà porté par une action ouverte : refusé.
-    expect(await create({ link: 'finding:3', source: 'audit_interne', originRef: '' })).toMatchObject({ error: expect.stringContaining(`Déjà rattaché à l'action ${f.id}`) });
+    // AUD-28 (changement volontaire : un constat portait une seule action) : plusieurs actions par constat, la première
+    // reste rattachée.
+    const second = await created({ link: 'finding:3', source: 'audit_interne', originRef: '' });
+    expect(await findingActions()).toEqual([f.id, second.id].sort());
+    expect(await lastLog('audit_finding', 3)).toMatchObject({ action: 'link', summary: `Action ${second.id} créée et rattachée` });
   });
 
   it('risque, exigence, contrôle, décision de revue, version de document', async () => {
@@ -220,7 +223,7 @@ describe('modification (QHSE, D16, D17, D24)', () => {
     expect(await saveAction({}, form(editFields(a, { source: 'comex' })))).toEqual({ ok: true, id: 'A-212' });
     expect((await actionRow('A-212')).source).toBe('evenement');
     const raw = await insertAction('A-T01', { source: null });
-    await (await getDb()).update(t.auditFindings).set({ actionId: 'A-T01' }).where(eq(t.auditFindings.id, 5));
+    await (await getDb()).insert(t.findingActions).values({ findingId: 5, actionId: 'A-T01' });
     expect(await saveAction({}, form(editFields(raw, { source: '' })))).toMatchObject({ fieldErrors: { source: 'Champ obligatoire.' } });
     expect(await saveAction({}, form(editFields(raw, { source: 'comex' })))).toMatchObject({ fieldErrors: { source: "Source incompatible avec l'élément lié." } });
     expect(await saveAction({}, form(editFields(raw, { source: 'audit_interne' })))).toEqual({ ok: true, id: 'A-T01' });

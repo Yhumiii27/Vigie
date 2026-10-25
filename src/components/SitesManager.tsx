@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from './form';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select } from './form';
+import { ReasonButton, ReasonForm } from './ReasonDialog';
 import { Dialog } from './Dialog';
 import { LazyChangeLog } from './LazyChangeLog';
 import { SEVESO_LEVELS } from './prevention/model';
@@ -113,21 +114,19 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
       )}
 
       {view !== 'list' && 'archive' in view && (
-        <ActionForm action={archiveSite} hidden={{ siteId: view.archive.id }} onDone={back} onCancel={back} submitLabel="Archiver le site" submitIcon="ph-archive">
-          <Field name="reason" label="Motif" hint="Le site disparaît des sélecteurs ; ses données restent consultables sous « Tous les sites ».">
-            <TextArea name="reason" rows={3} maxLength={500} required autoFocus placeholder="Site fermé, cédé, regroupé…" />
-          </Field>
-        </ActionForm>
+        <ReasonForm action={archiveSite} hidden={{ siteId: view.archive.id }} onDone={back} onCancel={back} submitLabel="Archiver le site" submitIcon="ph-archive"
+          hint="Le site disparaît des sélecteurs ; ses données restent consultables sous « Tous les sites »." placeholder="Site fermé, cédé, regroupé…" />
       )}
     </Dialog>
   );
 }
 
-/** Réactivation d'un site archivé : formulaire réduit à son bouton. */
+/** Réactivation d'un site archivé, avec motif (QUA-22). */
 function RestoreButton({ siteId }: { siteId: string }) {
   return (
-    <div style={{ flex: 'none', marginTop: -8 }}>
-      <ActionForm action={restoreSite} hidden={{ siteId }} submitLabel="Réactiver">{null}</ActionForm>
+    <div style={{ flex: 'none' }}>
+      <ReasonButton action={restoreSite} hidden={{ siteId }} label="Réactiver" icon="ph-arrow-counter-clockwise" title="Réactiver le site" kicker="Gérer les sites"
+        submitLabel="Réactiver le site" message="Le site revient dans les sélecteurs et les formulaires." placeholder="Ex. reprise d'activité sur le site" />
     </div>
   );
 }

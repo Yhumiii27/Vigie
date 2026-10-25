@@ -39,12 +39,25 @@ export function ActionLink({ action, id, compact }: { action: ActionBrief | null
     <Tip tip={tip}>
       {(described) => (
         <Link href={`/actions?action=${encodeURIComponent(action.id)}`} className="vg-link" {...described}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', minHeight: 24 }}>
           <Dot color={TONE[action.tone].dot} size={6} />
           {compact ? action.id : <span>{action.id} · <span style={{ color: 'var(--color-neutral-300)' }}>{action.status}</span></span>}
         </Link>
       )}
     </Tip>
+  );
+}
+
+/**
+ * Actions d'un constat (AUD-28 : plusieurs par constat), l'une sous l'autre ; `empty` sans action. Une action hors
+ * périmètre de la personne : numéro seul (ActionLink).
+ */
+export function ActionLinks({ actions, compact, empty }: { actions: { id: string; action: ActionBrief | null }[]; compact?: boolean; empty?: ReactNode }) {
+  if (!actions.length) return <>{empty ?? <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}</>;
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+      {actions.map((a) => <ActionLink key={a.id} action={a.action} id={a.id} compact={compact} />)}
+    </span>
   );
 }
 

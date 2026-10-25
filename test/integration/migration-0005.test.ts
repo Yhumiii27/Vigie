@@ -248,8 +248,9 @@ describe('migration 0005 — base de démonstration 0004', () => {
 
   it('lignes à plusieurs éléments et dates incohérentes reprises telles quelles (D22, D24)', async () => {
     expect(action('A-212').eventId).toBe('EV-2026-130');
-    const findings = (await base.db.select().from(t.auditFindings).orderBy(asc(t.auditFindings.id))).filter((f) => ['A-212', 'A-205'].includes(f.actionId ?? ''));
-    expect(findings.map((f) => [f.id, f.actionId])).toEqual([[2, 'A-212'], [4, 'A-205']]);
+    // Actions des constats reprises par 0016 dans finding_actions (AUD-28).
+    const findings = (await base.db.select().from(t.findingActions).orderBy(asc(t.findingActions.findingId))).filter((f) => ['A-212', 'A-205'].includes(f.actionId));
+    expect(findings.map((f) => [f.findingId, f.actionId])).toEqual([[2, 'A-212'], [4, 'A-205']]);
     const risks = await base.db.select().from(t.riskActions).where(eq(t.riskActions.actionId, 'A-205'));
     expect(risks).toEqual([{ riskId: 2, actionId: 'A-205' }]);
     for (const id of ['A-170', 'A-176']) {
@@ -268,7 +269,9 @@ describe('migration 0005 — base de démonstration 0004', () => {
       ['controls', await base.db.select({ id: t.controls.id, actionId: t.controls.actionId }).from(t.controls)],
       ['review_decisions', await base.db.select({ id: t.reviewDecisions.id, actionId: t.reviewDecisions.actionId }).from(t.reviewDecisions)],
       ['audit_plan_items', await base.db.select({ id: t.auditPlanItems.id, actionId: t.auditPlanItems.actionId }).from(t.auditPlanItems)],
-      ['audit_findings', await base.db.select({ id: t.auditFindings.id, actionId: t.auditFindings.actionId }).from(t.auditFindings)],
+      // AUD-28 : action d'un constat reprise par 0016 dans finding_actions (une ligne par constat dans la base 0004).
+      ['audit_findings', await base.db.select({ id: t.auditFindings.id, actionId: t.findingActions.actionId }).from(t.auditFindings)
+        .leftJoin(t.findingActions, eq(t.findingActions.findingId, t.auditFindings.id))],
       ['document_versions', await base.db.select({ id: t.documentVersions.id, actionId: t.documentVersions.actionId }).from(t.documentVersions)],
     ] as const) {
       const ids = byId(table);

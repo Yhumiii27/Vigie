@@ -373,7 +373,8 @@ export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<For
   const f = formReader(fd);
   const id = f.str('id', { required: true });
   const leftOn = f.date('leftOn', { required: true });
-  const leftReason = f.str('leftReason', { required: true, max: 200 });
+  // Motif de la sortie : règle commune des motifs (QUA-22, formReader.reason).
+  const leftReason = f.reason('leftReason');
   if (leftOn && leftOn < addMonths(today(), -12)) f.fail('leftOn', "La date de sortie ne peut pas remonter à plus d'un an.");
   if (!f.ok) return f.state();
   const db = await getDb();
@@ -392,10 +393,14 @@ export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<For
   return { ok: true, id };
 }
 
-/** Réintègre un salarié sorti (ou annule une sortie déclarée) : il revient dans la matrice et les listes. */
-export async function reinstatePerson(id: string): Promise<{ error?: string }> {
+/** Réintègre un salarié sorti (ou annule une sortie déclarée), motif obligatoire (QUA-22) : il revient dans la matrice et les listes. */
+export async function reinstatePerson(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
   const db = await getDb();
   const [person] = await db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, id));
   if (!person) return { error: 'Salarié introuvable.' };
@@ -404,10 +409,10 @@ export async function reinstatePerson(id: string): Promise<{ error?: string }> {
   if (blocked) return { error: blocked };
   await db.transaction(async (tx) => {
     await tx.update(t.people).set({ leftOn: null, leftReason: null }).where(eq(t.people.id, id));
-    await logChange(tx, { entityType: 'person', entityId: id, action: 'restore', summary: 'Salarié réintégré' });
+    await logChange(tx, { entityType: 'person', entityId: id, action: 'restore', summary: 'Salarié réintégré', reason });
   });
   done();
-  return {};
+  return { ok: true, id };
 }
 
 /**
@@ -501,18 +506,22 @@ export async function archiveTitle(_prev: FormState, fd: FormData): Promise<Form
   return { ok: true, id };
 }
 
-/** Restaure un titre archivé : il revient dans la matrice avec ses exigences et formations. */
-export async function restoreTitle(id: string): Promise<{ error?: string }> {
+/** Restaure un titre archivé, motif obligatoire (QUA-22) : il revient dans la matrice avec ses exigences et formations. */
+export async function restoreTitle(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
   const db = await getDb();
   const [title] = await db.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, id));
   if (!title) return { error: 'Titre introuvable.' };
-  if (!title.archivedAt) return {};
+  if (!title.archivedAt) return { ok: true, id };
   await db.transaction(async (tx) => {
     await tx.update(t.trainingTitles).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.trainingTitles.id, id));
-    await logChange(tx, { entityType: 'training_title', entityId: id, action: 'restore', summary: `Titre « ${title.label} » restauré` });
+    await logChange(tx, { entityType: 'training_title', entityId: id, action: 'restore', summary: `Titre « ${title.label} » restauré`, reason });
   });
   done();
-  return {};
+  return { ok: true, id };
 }

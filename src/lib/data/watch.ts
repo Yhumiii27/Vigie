@@ -10,11 +10,11 @@ import {
   CONTROL_HORIZON_DAYS, CONTROL_RESULTS, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   isBlockingControlResult, type ControlResult, type TodoItem, type Tone,
 } from '../domain';
-import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, requirementDue } from '../queries';
+import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { loadLinkedEvents } from './linked-events';
-import { loadPreventionCompliance } from './prevention';
+import { loadPreventionCompliance } from './prevention-signals';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
 
 // ─── Veille et contrôles ────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export async function loadWatch() {
     loadPeople(),
     db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
     db.select().from(t.controls).orderBy(asc(t.controls.sort), asc(t.controls.id)),
-    db.select().from(t.sites).orderBy(asc(t.sites.sort)),
+    loadSiteRows(),
     db.select().from(t.keystoneProjects).orderBy(asc(t.keystoneProjects.deliveryOn)),
     currentSiteId(),
     loadDuerpStatus(),
@@ -265,7 +265,6 @@ export async function loadWatch() {
 export type WatchData = Awaited<ReturnType<typeof loadWatch>>;
 export type RequirementView = WatchData['requirements'][number];
 export type ControlView = WatchData['controls'][number];
-export type ControlRecordView = ControlView['records'][number];
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 

@@ -122,9 +122,9 @@ export async function moveAction(_prev: FormState, fd: FormData): Promise<FormSt
 type Carried = { link: string; label: string; siteId: string | null; move: boolean };
 
 /**
- * Liens de l'action vérifiée repris par ses actions de suite (D21, followUpLinkMode) : l'élément de la source (événement :
- * rattaché aussi ; constat ou élément du programme : déplacé, le constat avant l'élément ; un élément qui ne correspond pas
- * à la source — ligne reprise, D22 — n'est pas repris), les liens à plusieurs actions (risque, revue, document, filière,
+ * Liens de l'action vérifiée repris par ses actions de suite (D21, followUpLinkMode) : l'élément de la source (événement et
+ * constat, qui portent plusieurs actions — AUD-28 — : rattachés aussi ; élément du programme : déplacé ; le constat avant
+ * l'élément ; un élément qui ne correspond pas à la source — ligne reprise, D22 — n'est pas repris), les liens à plusieurs actions (risque, revue, document, filière,
  * enlèvement : rattachés aussi) et les liens à action unique (exigence, contrôle, version, décision : déplacés vers la
  * première suite). Habilitation, plan de prévention, permis : jamais repris.
  */
@@ -144,7 +144,9 @@ async function carriedLinks(db: DbOrTx, a: ActionRow): Promise<Carried[]> {
       if (!sourceKinds.includes(l.kind)) continue;
       if (l.kind !== 'event' && l !== sourceAudit) continue;
     }
-    const move = mode === 'single' || (mode === 'source' && l.kind !== 'event');
+    // Élément de la source : l'événement et le constat (plusieurs actions, AUD-28) sont rattachés aussi ; l'élément du
+    // programme (une action à la fois) est déplacé.
+    const move = mode === 'single' || (mode === 'source' && l.kind === 'plan');
     out.push({ link: l.link, label: l.label, siteId: await siteOf(l.link), move });
   }
   return out;

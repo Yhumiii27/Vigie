@@ -126,4 +126,3 @@ export async function loadSsctReport(rawYear: string | undefined) {
     periodEnd: year === currentYear ? now : `${year}-12-31`,
   };
 }
-export type SsctReport = NonNullable<Awaited<ReturnType<typeof loadSsctReport>>>;

@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { fmtDate } from '@/lib/dates';
-import { REASON_MAX, canApprove, canEdit, canManage, canSee, type Role } from '@/lib/domain';
+import { canApprove, canEdit, canManage, canSee, type Role } from '@/lib/domain';
 import { ENTITY_FILE_KINDS, attachSummary, detachSummary, isEntityFileKind, validEntityId, type EntityFileKind } from '@/lib/entity-files';
-import { formReader } from '@/lib/forms';
+import { formReader, reasonError } from '@/lib/forms';
 import { requireInSite } from '@/lib/guard';
 import { getSession } from '@/lib/session';
 import { deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
@@ -168,9 +168,10 @@ export async function addEntityFiles(fd: FormData): Promise<Result> {
 export async function removeEntityFile(attachmentId: string, reason: string): Promise<Result> {
   const session = await getSession();
   if (typeof attachmentId !== 'string' || !attachmentId) return { error: 'Pièce jointe introuvable.' };
-  const motive = typeof reason === 'string' ? reason.trim() : '';
-  if (!motive) return { error: 'Motif obligatoire.' };
-  if (motive.length > REASON_MAX) return { error: `Motif : ${REASON_MAX} caractères au maximum.` };
+  // Règle commune des motifs (QUA-22) : obligatoire, REASON_MAX caractères au plus.
+  const reasonIssue = reasonError(reason);
+  if (reasonIssue) return { error: reasonIssue };
+  const motive = String(reason).trim();
   const db = await getDb();
   const [row] = await db.select().from(t.attachments).where(eq(t.attachments.id, attachmentId));
   if (!row || !isEntityFileKind(row.entityType) || row.health) return { error: 'Pièce jointe introuvable.' };

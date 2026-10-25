@@ -1,6 +1,7 @@
 import { and, count, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import * as t from '../schema';
 import type { SeedTx } from './types';
+import { rel } from './dates';
 
 // Jeu de démonstration de la vue pub_controles (demande de Crucible, migration 0014) : code commun d'équipement du banc
 // d'essais BE-1, moyen d'essais partagé (zone d'essais du site B), saisi dans la fiche du contrôle et journalisé.
@@ -25,6 +26,6 @@ export async function seedControlCodes(tx: SeedTx) {
   await tx.update(t.controls).set({ equipmentCode: DEMO_EQUIPMENT_CODE }).where(eq(t.controls.id, bench.id));
   await tx.insert(t.changeLog).values({
     entityType: 'control', entityId: String(bench.id), action: 'update', summary: 'Contrôle modifié', byId: 'clefevre',
-    at: new Date('2026-10-08T09:30:00+02:00'), details: [{ field: 'Code équipement', from: null, to: DEMO_EQUIPMENT_CODE }],
+    at: new Date(`${rel(-1)}T09:30:00+02:00`), details: [{ field: 'Code équipement', from: null, to: DEMO_EQUIPMENT_CODE }],
   });
 }
