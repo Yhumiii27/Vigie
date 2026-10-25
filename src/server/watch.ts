@@ -6,7 +6,7 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS, canSee } from '@/lib/domain';
-import { equipmentCodeError, legalTextUrlError, normalizeEquipmentCode } from '@/lib/watch-rules';
+import { currentEvaluation, equipmentCodeError, legalTextUrlError, normalizeEquipmentCode } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
@@ -210,6 +210,52 @@ export async function evaluateRequirement(_prev: FormState, fd: FormData): Promi
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: String(current.id) };
+}
+
+/**
+ * Annule une évaluation de conformité saisie par erreur (VEI-16) : motif obligatoire, jamais supprimée (preuves conservées,
+ * figées). L'évaluation courante de l'exigence est recalculée d'après les évaluations restantes (currentEvaluation : la plus
+ * récente, sinon « À évaluer »). Service QHSE et direction, comme l'annulation d'un enregistrement de contrôle ; exigence
+ * archivée : figée. Journal de l'exigence dans la transaction.
+ */
+export async function cancelRequirementEvaluation(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const [row] = await db.select().from(t.requirementEvaluations).where(eq(t.requirementEvaluations.id, id!));
+  if (!row) return { error: 'Évaluation introuvable.' };
+  if (row.cancelledAt) return { error: 'Évaluation déjà annulée.' };
+  const [req] = await db.select().from(t.requirements).where(eq(t.requirements.id, row.requirementId));
+  if (!req) return { error: 'Exigence introuvable.' };
+  if (req.archivedAt) return { error: ARCHIVED_REQ };
+
+  const label = (k: string | null) => (k ? REQUIREMENT_EVAL[k]?.label ?? k : null);
+  const done = await db.transaction(async (tx) => {
+    const cancelled = await tx.update(t.requirementEvaluations).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason })
+      .where(and(eq(t.requirementEvaluations.id, row.id), isNull(t.requirementEvaluations.cancelledAt))).returning({ id: t.requirementEvaluations.id });
+    if (!cancelled.length) return false;
+    const history = await tx.select().from(t.requirementEvaluations).where(eq(t.requirementEvaluations.requirementId, req.id));
+    const next = currentEvaluation(history.map((e) => ({ id: e.id, evaluatedOn: e.evaluatedOn, evaluation: e.evaluation, note: e.note, cancelled: !!e.cancelledAt })));
+    await tx.update(t.requirements).set(next).where(eq(t.requirements.id, req.id));
+    await logChange(tx, {
+      entityType: 'requirement', entityId: req.id, action: 'cancel', reason, byId: session.user.id,
+      summary: `Évaluation « ${label(row.evaluation)} » du ${fmtDate(row.evaluatedOn)} annulée`,
+      details: diffFields(
+        { evaluation: req.evaluation, evaluationNote: req.evaluationNote, lastEvaluatedOn: req.lastEvaluatedOn },
+        next, { evaluation: 'Évaluation', evaluationNote: 'Précision', lastEvaluatedOn: 'Dernière évaluation' },
+        (v) => (v == null || v === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtDate(String(v)) : label(String(v))),
+      ),
+    });
+    return true;
+  });
+  if (!done) return { error: 'Évaluation déjà annulée.' };
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(req.id) };
 }
 
 /** Archive une exigence (texte abrogé) : motif obligatoire, historique et action liée conservés, retirée de la une. */

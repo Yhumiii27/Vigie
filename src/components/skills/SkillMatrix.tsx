@@ -41,6 +41,8 @@ type Props = {
   /** Vue Salarié : sa seule ligne, sans filtres ni personnel. */
   self: boolean;
   canManage: boolean;
+  /** Titres suivis (communs à tous les sites) : ajout, modification, archivage — service QHSE et direction (HAB-12). */
+  canManageTitles: boolean;
   options: Opts;
   today: string;
   defaultSiteId: string;
@@ -68,6 +70,14 @@ function replaceFilters(patch: Partial<SkillFilters>) {
 /** Ligne « à traiter » : titre requis à échéance proche, expiré ou jamais suivi, ou manque pendant une affectation. */
 const toTreat = (r: SkillRow, today: string) =>
   r.cells.some((c) => c.state === 's' || c.state === 'x' || c.state === 'r' || c.state === 'p' || r.assignments.some((a) => lapseFor(c.state, c.expiresOn, a, today) !== null));
+
+/** Ligne affichée par les filtres de l'URL (vue Matrice) : même règle que la liste `shown` ci-dessous. */
+function rowShown(r: SkillRow, f: SkillFilters, today: string) {
+  if (f.etat === 'sortis') return false;
+  if (f.etat === 'a-traiter' && !toTreat(r, today)) return false;
+  const q = clean(f.q.trim());
+  return (!f.service || r.person.service === f.service) && (!q || clean(`${r.person.name} ${r.person.job} ${r.person.service}`).includes(q));
+}
 
 const LEGEND: SkillState[] = ['v', 's', 'x', 'r', 'p', 'n'];
 const sub = (text: string) => <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{text}</span>;
@@ -258,7 +268,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 }
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
-export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, options, today, defaultSiteId, initialSel, closeHref }: Props) {
+export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
   const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel'>('view');
@@ -269,8 +279,11 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   const [linked, setLinked] = useState(!!initialSel);
   const [highlight, setHighlight] = useState(initialSel && !initialSel.titleId ? initialSel.personId : null);
   const filters = parseSkillFilters(useSearchParams());
+  // Lien profond : la ligne visée est-elle cachée par les filtres de l'URL (HAB-17) ? Seulement alors ils sont remis à zéro.
+  const linkTarget = initialSel ? rows.find((r) => r.person.id === initialSel.personId) : undefined;
+  const linkHidden = !!linkTarget && !rowShown(linkTarget, filters, today);
   // Recherche : saisie locale (pas de rendu à chaque frappe depuis l'URL), recopiée dans l'URL.
-  const [query, setQueryState] = useState(filters.q);
+  const [query, setQueryState] = useState(linkHidden ? '' : filters.q);
   const setQuery = (q: string) => { setQueryState(q); replaceFilters({ q: q.trim() }); };
   // Vue Salarié : pas de filtres ; « Sortis » réservé à l'encadrement.
   const chip: Chip = self || (filters.etat === 'sortis' && !canManage) ? 'tous' : CHIP_OF[filters.etat];
@@ -293,13 +306,14 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
       setSel(initialSel.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
       setMode('view');
       setHighlight(initialSel.titleId ? null : initialSel.personId);
-      setQueryState('');
+      if (linkHidden) setQueryState('');
     }
   }
-  // Un lien profond remet les filtres à zéro pour que la ligne visée soit visible.
+  // Un lien profond ne touche aux filtres de l'URL que s'ils cachent la ligne visée (HAB-17) : ils sont alors remis à zéro ;
+  // sinon les filtres choisis sont gardés.
   useEffect(() => {
-    if (linkKey) replaceFilters({ etat: 'tous', service: '', q: '' });
-  }, [linkKey]);
+    if (linkHidden) replaceFilters({ etat: 'tous', service: '', q: '' });
+  }, [linkKey, linkHidden]);
   const hlRef = useRef<HTMLTableRowElement>(null);
   useEffect(() => { if (highlight) hlRef.current?.scrollIntoView({ block: 'center' }); }, [highlight]);
 
@@ -358,7 +372,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Soon label="Importer le personnel (Lucca · CSV)" icon="ph-upload-simple" tip="Import à venir" />
             <Soon label="Connecteur Cursus · à venir" icon="ph-plugs-connected" tip="Cursus est propriétaire des données personnelles des salariés" />
-            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManage} />
+            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} />
             {canManage && (
               <DialogButton label="Ajouter un salarié" icon="ph-user-plus" title="Ajouter un salarié" kicker="Personnel" width={540}>
                 {(close) => <PersonForm sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={close} onCancel={close} />}

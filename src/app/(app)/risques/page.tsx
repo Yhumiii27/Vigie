@@ -17,6 +17,7 @@ import { fmtDate, yearOf } from '@/lib/dates';
 import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, canSeeHealth, isEmployee, riskLevel } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions, type FormOptions } from '@/lib/data/options';
+import { offeredOr } from '@/lib/form-options';
 import { loadDuerpAccessRegister, loadPreventionProgram, loadRisks } from '@/lib/data/risks';
 import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
@@ -147,7 +148,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
             <VersionsButton versions={versions} canApprove={approve} people={approve ? options.people : []} history={edit} />
             {edit && (
               <NewVersionButton canApprove={approve} people={options.people} current={version?.version ?? null} nextVersion={nextVersion}
-                nextUpdateOn={nextUpdateOn} defaultValidatorId={version?.validatedById ?? session.user.id} totals={totals} />
+                nextUpdateOn={nextUpdateOn} defaultValidatorId={offeredOr(options.people, version?.validatedById, session.user.id)} totals={totals} />
             )}
           </span>
         </div>

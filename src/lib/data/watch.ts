@@ -199,7 +199,9 @@ export async function loadWatch() {
       } : null,
       evaluations: evaluations.filter((e) => e.requirementId === r.id).map((e) => {
         const v = evalOf(e.evaluation);
-        return { id: e.id, date: fmtDate(e.evaluatedOn), evaluation: e.evaluation, label: v.label, tone: v.tone, note: e.note, by: name(e.evaluatedById), files: filesOf('requirement_evaluation', e.id) };
+        // VEI-16 : évaluation annulée (saisie par erreur) gardée à l'historique, barrée, avec son motif.
+        const cancelled = e.cancelledAt ? { on: fmtDate(parisDay(e.cancelledAt)), by: name(e.cancelledById), reason: e.cancelReason ?? '' } : null;
+        return { id: e.id, date: fmtDate(e.evaluatedOn), evaluation: e.evaluation, label: v.label, tone: v.tone, note: e.note, by: name(e.evaluatedById), files: filesOf('requirement_evaluation', e.id), cancelled };
       }),
     };
   });

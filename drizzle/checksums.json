@@ -95,6 +95,11 @@
       "when": 1792924059873,
       "sql": "cf9dff5af3880ab0e789b51efa76b9f0fc15cef506be362a5f17772aa9c4d1b6",
       "snapshot": "d4da3eff997914e3e45ceca247fe97e2920f40a14f79961b612fcd17cc5212f2"
+    },
+    "0019_traceability_fixes": {
+      "when": 1792962259934,
+      "sql": "a56fef0f5ebe64b641f1ba714206e906b112e58e688f022105d9268f3ea0780a",
+      "snapshot": "55edd8b2eaee9f08fbdf2fafeec88ebb0000af7cbd34af5708b5a2d099d8464e"
     }
   }
 }

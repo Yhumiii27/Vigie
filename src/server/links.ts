@@ -29,20 +29,26 @@ async function check(link: string, actionId: string, mode: 'link' | 'unlink') {
 
 type Checked = Exclude<Awaited<ReturnType<typeof check>>, { error: string }>;
 
-/** Libellés lisibles des sources de ce type portées par l'action (historique : jamais la syntaxe interne « risk:12 »). */
-const labelsOf = async (tx: DbOrTx, c: Checked) => (await c.parsed.def.sources(tx, [c.action.id])).map((s) => s.label);
+/**
+ * Sources de ce type portées par l'action : comparées par leur lien (« risk:12 »), jamais par leur libellé — deux risques
+ * au même danger de la même unité portent le même libellé « Unité · Danger » (DUE-12) ; l'historique n'écrit que le
+ * libellé lisible.
+ */
+const sourcesOf = async (tx: DbOrTx, c: Checked) => (await c.parsed.def.sources(tx, [c.action.id])).map((s) => ({ link: s.link, label: s.label }));
+type Src = Awaited<ReturnType<typeof sourcesOf>>[number];
+const missingFrom = (list: Src[]) => (s: Src) => !list.some((x) => x.link === s.link);
 
 /** Rattache l'action existante `actionId` au lien complémentaire `link` (ex. « risk:12 », « control:3 »). */
 export async function linkAction(link: string, actionId: string): Promise<Result> {
   const c = await check(link, actionId, 'link');
   if ('error' in c) return { error: c.error };
   const error = await c.db.transaction(async (tx) => {
-    const before = await labelsOf(tx, c);
+    const before = await sourcesOf(tx, c);
     const err = await c.parsed.def.attach(tx, c.parsed.args, actionId);
     if (err) return err;
-    const added = (await labelsOf(tx, c)).filter((l) => !before.includes(l));
+    const added = (await sourcesOf(tx, c)).filter(missingFrom(before));
     if (added.length) {
-      await logChange(tx, { entityType: 'action', entityId: actionId, action: 'link', summary: `Rattachée à ${added.join(' ; ')}`, byId: c.byId });
+      await logChange(tx, { entityType: 'action', entityId: actionId, action: 'link', summary: `Rattachée à ${added.map((x) => x.label).join(' ; ')}`, byId: c.byId });
       // Aussi dans l'historique de la source quand elle en a un (fiche risque).
       const source = c.parsed.def.logAs?.(c.parsed.args);
       if (source) await logChange(tx, { ...source, action: 'link', summary: `Action ${actionId} rattachée`, byId: c.byId });
@@ -61,13 +67,12 @@ export async function unlinkAction(link: string, actionId: string): Promise<Resu
   const error = await c.db.transaction(async (tx) => {
     const blocked = await c.parsed.def.detachBlocked?.(tx, c.parsed.args, actionId);
     if (blocked) return blocked;
-    const before = await labelsOf(tx, c);
+    const before = await sourcesOf(tx, c);
     await c.parsed.def.detach(tx, c.parsed.args, actionId);
     // Historique seulement si l'action était bien rattachée à cette source (detach est sans effet sinon).
-    const after = await labelsOf(tx, c);
-    const removed = before.filter((l) => !after.includes(l));
+    const removed = before.filter(missingFrom(await sourcesOf(tx, c)));
     if (removed.length) {
-      await logChange(tx, { entityType: 'action', entityId: actionId, action: 'unlink', summary: `Détachée de ${removed.join(' ; ')}`, byId: c.byId });
+      await logChange(tx, { entityType: 'action', entityId: actionId, action: 'unlink', summary: `Détachée de ${removed.map((x) => x.label).join(' ; ')}`, byId: c.byId });
       const source = c.parsed.def.logAs?.(c.parsed.args);
       if (source) await logChange(tx, { ...source, action: 'unlink', summary: `Action ${actionId} détachée (elle reste dans le plan d'actions)`, byId: c.byId });
     }

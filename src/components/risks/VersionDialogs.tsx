@@ -8,7 +8,7 @@ import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/component
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import type { Option } from '@/lib/data/options';
+import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { DuerpVersionDetail, DuerpVersionView, RiskRecord } from '@/lib/data/risks';
 import { createDuerpVersion, updateCurrentDuerpVersion } from '@/server/risks';
 import { Cotation } from './RiskForm';
@@ -212,7 +212,7 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
 }
 
 type VersionDefaults = {
-  version: string; validatedById?: string | null; cseConsultedOn?: string | null; spstSentOn?: string | null; portalDepositedOn?: string | null; comment?: string | null;
+  version: string; validatedById?: string | null; validatedBy?: string; cseConsultedOn?: string | null; spstSentOn?: string | null; portalDepositedOn?: string | null; comment?: string | null;
 };
 
 /** Champs d'une version : création (numéro proposé) ou complément de la version en vigueur. */
@@ -225,6 +225,9 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
   onCancel: () => void;
 }) {
   const create = mode === 'create';
+  // DUE-15 : à la modification, le validateur enregistré reste un choix même sorti de l'effectif (signalé, withCurrent) ;
+  // jamais proposé pour une nouvelle version (le serveur refuse une personne sortie qui n'est pas déjà le validateur).
+  const validators = create ? people : withCurrent(people, defaults.validatedById, `${defaults.validatedBy || defaults.validatedById}${LEFT_SUFFIX}`);
   return (
     <ActionForm action={create ? createDuerpVersion : updateCurrentDuerpVersion} onDone={onDone} onCancel={onCancel}
       submitLabel={create ? 'Archiver et créer la version' : 'Enregistrer'} hidden={create ? undefined : { version: defaults.version }}>
@@ -236,7 +239,7 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
           </Field>
         )}
         <Field name="validatedById" label="Validée par">
-          <Select name="validatedById" options={people} defaultValue={defaults.validatedById ?? ''} placeholder="Choisir…" />
+          <Select name="validatedById" options={validators} defaultValue={defaults.validatedById ?? ''} placeholder="Choisir…" />
         </Field>
         <Field name="cseConsultedOn" label="Consultation du CSE" hint={create ? undefined : 'Date de la réunion où le CSE a été consulté.'}>
           <Input name="cseConsultedOn" type="date" defaultValue={defaults.cseConsultedOn ?? ''} />

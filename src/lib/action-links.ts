@@ -503,10 +503,13 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
   reviewdecision: {
     screen: 'audits',
     async attach(tx, [a], actionId) {
-      const [d] = await tx.select({ id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, actionId: t.reviewDecisions.actionId, status: t.reviews.status })
-        .from(t.reviewDecisions).innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, num(a)));
+      const [d] = await tx.select({
+        id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, actionId: t.reviewDecisions.actionId, cancelledAt: t.reviewDecisions.cancelledAt, status: t.reviews.status,
+      }).from(t.reviewDecisions).innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, num(a)));
       if (!d) return NOT_FOUND;
       if (d.status === 'cloturee' || d.status === 'annulee') return 'Revue clôturée : rattachement impossible.';
+      // AUD-36 : décision abandonnée après la séance (consultation seule).
+      if (d.cancelledAt) return 'Décision abandonnée : rattachement impossible.';
       const taken = await slotTaken(tx, d.actionId, actionId);
       if (taken) return taken;
       const other = await otherReview(tx, actionId, d.reviewId);

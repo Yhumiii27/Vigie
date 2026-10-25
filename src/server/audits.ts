@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/components/audits/shared';
 import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
@@ -601,6 +601,42 @@ export async function cancelFinding(_prev: FormState, fd: FormData): Promise<For
     return true;
   });
   if (!done) return { error: 'Constat introuvable ou déjà annulé.' };
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(id) };
+}
+
+/**
+ * Rétablit un constat annulé à tort (AUD-25), motif obligatoire : il revient dans les constats, les échéances et le dossier
+ * des revues à venir (un dossier déjà figé ne change pas). Refusé si son audit du programme a été annulé depuis. Journal du
+ * constat et de chacune de ses actions, dans la transaction.
+ */
+export async function restoreFinding(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireAuditEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select({ finding: t.auditFindings, item: { cancelledAt: t.auditPlanItems.cancelledAt } }).from(t.auditFindings)
+    .leftJoin(t.auditPlanItems, eq(t.auditPlanItems.id, t.auditFindings.planItemId)).where(eq(t.auditFindings.id, id!));
+  if (!row) return { error: 'Constat introuvable.' };
+  if (!row.finding.cancelledAt) return { error: "Ce constat n'est pas annulé." };
+  if (row.item?.cancelledAt) return { error: 'Audit annulé au programme : le constat ne peut pas être rétabli.' };
+  const byId = session.user.id;
+  const restored = await db.transaction(async (tx) => {
+    const [r] = await tx.update(t.auditFindings).set({ cancelledAt: null, cancelledById: null, cancelReason: null })
+      .where(and(eq(t.auditFindings.id, id!), isNotNull(t.auditFindings.cancelledAt))).returning({ audit: t.auditFindings.audit });
+    if (!r) return false;
+    await logChange(tx, {
+      entityType: 'audit_finding', entityId: id!, action: 'restore', reason, byId,
+      summary: 'Constat rétabli', details: [{ field: "Motif de l'annulation", from: row.finding.cancelReason, to: null }],
+    });
+    const actionIds = (await tx.select({ id: t.findingActions.actionId }).from(t.findingActions).where(eq(t.findingActions.findingId, id!))).map((x) => x.id).sort();
+    for (const actionId of actionIds) await logChange(tx, { entityType: 'action', entityId: actionId, action: 'update', summary: `Constat d'origine rétabli (${r.audit})`, reason, byId });
+    return true;
+  });
+  if (!restored) return { error: "Ce constat n'est pas annulé." };
   revalidatePath('/', 'layout');
   return { ok: true, id: String(id) };
 }

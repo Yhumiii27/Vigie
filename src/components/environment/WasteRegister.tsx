@@ -23,7 +23,10 @@ import { entryActionDefaults } from './action-defaults';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
-  | 'pop' | 'qualification' | 'collectorSiret' | 'collectorAddress' | 'collectorReceipt' | 'destinationSiret' | 'destinationAddress' | 'archived'>;
+  | 'pop' | 'qualification' | 'collectorSiret' | 'collectorAddress' | 'collectorReceipt' | 'destinationSiret' | 'destinationAddress' | 'archived' | 'siteArchived'>;
+
+/** Filière proposée pour un nouvel enlèvement : en service (DOC-09) et sur un site en service (DOC-20). */
+const offeredStream = (s: StreamOption) => !s.archived && !s.siteArchived;
 
 const BSD_OPTIONS = BSD_STATUS_KEYS.map((k) => [k, BSD_STATUS[k].label] as const);
 const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
@@ -220,7 +223,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
 export function NewEntryButton({ streams, today, showSite, transporters, carriers, defaultStreamId, events }: {
   streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string; events: readonly EventOption[];
 }) {
-  const none = !streams.some((s) => !s.archived);
+  const none = !streams.some(offeredStream);
   return (
     <DialogButton label="Nouvel enlèvement" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvel enlèvement" kicker="Registre des déchets"
       width={620} disabled={none} tooltip={none ? "Créez d'abord une filière (onglet Filières)." : undefined}>
@@ -236,8 +239,9 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
   events: readonly EventOption[]; onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
-  // Filières en service, plus la filière archivée de l'enlèvement modifié (DOC-09).
-  const streams = allStreams.filter((s) => !s.archived || s.id === entry?.streamId);
+  // Filières en service d'un site en service, plus la filière de l'enlèvement modifié même archivée ou d'un site archivé
+  // (DOC-09, DOC-20 : jamais proposées pour un nouveau choix).
+  const streams = allStreams.filter((s) => offeredStream(s) || s.id === entry?.streamId);
   const initialStream = entry?.streamId ?? (defaultStreamId && streams.some((s) => s.id === defaultStreamId) ? defaultStreamId : streams.length === 1 ? streams[0].id : '');
   const [streamId, setStreamId] = useState(initialStream);
   const stream = streams.find((s) => s.id === streamId);

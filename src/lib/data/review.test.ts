@@ -58,7 +58,8 @@ describe('withRecordParts : dossier de séance et compte rendu courant', () => {
 describe('reviewFollowUp : suivi des revues précédentes (§9.3.2 a)', () => {
   const people = new Map<string, Person>([['p1', { id: 'p1', name: '[P. Un]' } as Person]]);
   const decision = (over: Partial<ReviewDecisionRow>): ReviewDecisionRow => ({
-    id: 1, reviewId: 1, kind: 'decision', text: 'Décision', pilotId: 'p1', dueOn: '2026-06-30', actionId: null, sort: 0, ...over,
+    id: 1, reviewId: 1, kind: 'decision', text: 'Décision', pilotId: 'p1', dueOn: '2026-06-30', actionId: null, sort: 0,
+    cancelledAt: null, cancelledById: null, cancelReason: null, ...over,
   });
   const action = (over: Partial<ActionRow>): ActionRow => ({
     id: 'A-1', detail: 'Action', source: 'revue_direction', originRef: '', pilotId: 'p1', openedOn: '2025-12-11', dueOn: '2026-06-30', initialDueOn: '2026-06-30',
@@ -83,6 +84,15 @@ describe('reviewFollowUp : suivi des revues précédentes (§9.3.2 a)', () => {
     expect(by.get('Recruter')).toMatchObject({ state: 'no_action', tone: 'neutral', review: 'Revue du 11/12/2025', pilot: '[P. Un]' });
     expect(by.get('Développer')).toMatchObject({ state: 'no_action', tone: 'warn', open: true });
     expect(by.get('Étudier')).toMatchObject({ state: 'cancelled', open: false, cancelled: { on: '2026-09-24', reason: 'Doublon' }, actionId: 'A-2' });
+  });
+
+  it('décision abandonnée après la séance (AUD-36) : plus à suivre, date et motif', () => {
+    const rows = reviewFollowUp({
+      ...base,
+      decisions: [decision({ id: 4, text: 'Abandonnée', cancelledAt: new Date('2026-10-01T08:00:00Z'), cancelledById: 'p1', cancelReason: 'Reprise en 2027' })],
+      actions: [],
+    });
+    expect(rows).toEqual([expect.objectContaining({ text: 'Abandonnée', state: 'cancelled', open: false, actionId: null, cancelled: { on: '2026-10-01', reason: 'Reprise en 2027' } })]);
   });
 
   it('actions rattachées sans décision ; revue plus ancienne que la période : lignes ouvertes seulement ; ouvertes d’abord', () => {

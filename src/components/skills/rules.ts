@@ -1,4 +1,4 @@
-import { addDays, daysBetween, monthName } from '@/lib/dates';
+import { addDays, daysBetween, fmtDate, monthName } from '@/lib/dates';
 import { SKILL_SOON_DAYS, type SkillState } from '@/lib/domain';
 
 // Règles métier des habilitations, partagées par le serveur (chargement, actions) et les formulaires.
@@ -155,4 +155,59 @@ export function renewalForecast(
   const titles = [...used.entries()].map(([id, label]) => ({ id, label }))
     .sort((a, b) => titleOrder.indexOf(a.id) - titleOrder.indexOf(b.id));
   return { overdue: overdue.sort(order), months: keys.map((month) => ({ month, items: byMonth.get(month)!.sort(order) })), titles };
+}
+
+// ─── Lien profond ?salarie=…&titre=… (HAB-17) ───────────────────────────────
+
+/** Ce que la page sait de la personne et du titre visés par un lien profond. */
+export type SkillLinkFacts = {
+  /** Vue Salarié : seule sa ligne est affichée. */
+  self: boolean;
+  selfId: string;
+  personId: string;
+  titleId?: string;
+  /** Salariés présents de la matrice (site sélectionné). */
+  rowIds: ReadonlySet<string>;
+  /** Personnel présent du site non suivi dans la matrice. */
+  otherIds: ReadonlySet<string>;
+  /** Salariés sortis du site sélectionné : date de sortie. */
+  departed: ReadonlyMap<string, string>;
+  /** Personne du périmètre rattachée à un autre site que celui sélectionné. */
+  otherSite: boolean;
+  activeTitleIds: ReadonlySet<string>;
+  /** Titres archivés : intitulé. */
+  archivedTitles: ReadonlyMap<string, string>;
+};
+
+export type SkillLinkResult = {
+  /** Case ouverte (titre actif) ou ligne mise en évidence (sans titre ou titre non affiché). */
+  select?: { personId: string; titleId?: string };
+  /** Message affiché quand la cible n'est pas (entièrement) affichée ; jamais rien d'une personne hors du périmètre. */
+  notice?: string;
+};
+
+/** Message unique d'une personne absente du périmètre ou inconnue (rien n'est révélé, UX-13). */
+export const SKILL_LINK_MISSING = 'Salarié introuvable ou hors de votre périmètre.';
+
+/**
+ * Lien profond vers la matrice : un message précis par cas (HAB-17) — fiche d'autrui en vue Salarié, salarié sorti,
+ * personnel hors matrice, autre site du périmètre, titre archivé ou inconnu ; message unique hors périmètre.
+ */
+export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
+  if (f.self && f.personId !== f.selfId) return { notice: 'Fiche non accessible : seules vos habilitations sont affichées.' };
+  if (!f.rowIds.has(f.personId)) {
+    const left = f.departed.get(f.personId);
+    if (left) return { notice: `Salarié sorti de l'effectif le ${fmtDate(left)} : ses formations sont conservées en consultation seule (filtre « Sortis »).` };
+    if (f.otherIds.has(f.personId)) return { notice: "Cette personne n'est pas suivie dans la matrice des habilitations (personnel hors matrice)." };
+    if (f.otherSite) return { notice: 'Salarié rattaché à un autre site que celui sélectionné : changez de site pour afficher sa ligne.' };
+    return { notice: SKILL_LINK_MISSING };
+  }
+  if (!f.titleId || f.activeTitleIds.has(f.titleId)) return { select: { personId: f.personId, titleId: f.titleId } };
+  const archived = f.archivedTitles.get(f.titleId);
+  return {
+    select: { personId: f.personId },
+    notice: archived
+      ? `Titre « ${archived} » archivé : il n'est plus suivi dans la matrice ; ses formations restent consultables dans « Titres suivis ». La ligne du salarié est mise en évidence.`
+      : 'Titre introuvable : la ligne du salarié est mise en évidence.',
+  };
 }

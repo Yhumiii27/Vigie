@@ -265,11 +265,13 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
 
 /**
  * Matrice telle que la session la voit : le rôle Salarié ne voit que sa propre ligne, ses échéances et ses
- * affectations (données personnelles, Cursus propriétaire) ; ni le personnel non suivi, ni les sortis.
+ * affectations (données personnelles, Cursus propriétaire) ; ni le personnel non suivi, ni les sortis. Sa ligne ne dépend
+ * pas du site sélectionné (HAB-14) : elle est prise sur tout son périmètre, puis réduite à lui.
  */
 export const loadSkillMatrix = cache(async () => {
-  const [data, session] = await Promise.all([loadSkillData(), getSession()]);
-  if (!isEmployee(session.role)) return { ...data, self: false };
+  const session = await getSession();
+  if (!isEmployee(session.role)) return { ...(await loadSkillData()), self: false };
+  const data = await loadSkillData('perimeter');
   const mine = <T extends { person: Person }>(list: T[]) => list.filter((x) => x.person.id === session.user.id);
   return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], self: true };
 });

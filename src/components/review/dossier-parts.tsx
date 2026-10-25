@@ -138,7 +138,7 @@ export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role 
               {x.state === 'no_action' && <span style={{ color: x.tone === 'neutral' ? undefined : TONE[x.tone].fg }}>{REVIEW_FOLLOW_UP.no_action.label}</span>}
               {x.state === 'cancelled' && (
                 <span style={{ display: 'grid', gap: 2 }}>
-                  <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{REVIEW_FOLLOW_UP.cancelled.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
+                  <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{x.actionId ? REVIEW_FOLLOW_UP.cancelled.label : REVIEW_FOLLOW_UP.abandoned.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
                   {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>Motif : {x.cancelled.reason}</span>}
                 </span>
               )}

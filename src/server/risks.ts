@@ -15,6 +15,7 @@ import {
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
+import { hasLeft } from '@/lib/people';
 import { currentSiteId, inSite } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
 import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
@@ -440,7 +441,11 @@ export async function moveWorkUnit(id: string, dir: 'up' | 'down'): Promise<{ er
 
 // ─── Versions du DUERP ──────────────────────────────────────────────────────
 
-async function readVersionFields(fd: FormData) {
+/**
+ * Champs d'une version. `keepValidatorId` : validateur déjà enregistré sur la version complétée, conservé même s'il est
+ * sorti de l'effectif (DUE-15, withCurrent du formulaire) ; toute autre personne sortie est refusée (nouveau choix).
+ */
+async function readVersionFields(fd: FormData, keepValidatorId: string | null = null) {
   const f = formReader(fd);
   const validatedById = f.str('validatedById', { required: true });
   const cseConsultedOn = f.date('cseConsultedOn');
@@ -453,8 +458,9 @@ async function readVersionFields(fd: FormData) {
   if (portalDepositedOn && portalDepositedOn > today()) f.fail('portalDepositedOn', "Date postérieure à aujourd'hui.");
   if (validatedById) {
     const db = await getDb();
-    const [p] = await db.select({ id: t.people.id }).from(t.people).where(eq(t.people.id, validatedById));
+    const [p] = await db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, validatedById));
     if (!p) f.fail('validatedById', 'Personne inconnue.');
+    else if (hasLeft(p, today()) && validatedById !== keepValidatorId) f.fail('validatedById', "Personne sortie de l'effectif : choisissez un validateur présent.");
   }
   return { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment };
 }
@@ -519,11 +525,13 @@ export async function createDuerpVersion(_prev: FormState, fd: FormData): Promis
 export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireRiskApprover();
   if (error) return { error };
-  const { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment } = await readVersionFields(fd);
+  const db = await getDb();
+  const asked = typeof fd.get('version') === 'string' ? String(fd.get('version')).trim() : '';
+  const [stored] = asked ? await db.select({ validatedById: t.duerpVersions.validatedById }).from(t.duerpVersions).where(eq(t.duerpVersions.version, asked)) : [];
+  const { f, validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, comment } = await readVersionFields(fd, stored?.validatedById ?? null);
   const version = f.str('version', { required: true });
   if (!f.ok) return f.state();
 
-  const db = await getDb();
   const [row] = await db.select().from(t.duerpVersions).where(eq(t.duerpVersions.version, version));
   if (!row) return { error: 'Version introuvable.' };
   if (!row.current) return { error: 'Une version archivée ne peut plus être modifiée.' };

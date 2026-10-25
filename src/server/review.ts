@@ -17,7 +17,7 @@ import { ALL_SITES, getSession } from '@/lib/session';
 import {
   buildReviewDossier, followingReview, isEditableReview, parseReviewSnapshot, reviewRecordParts, withRecordParts, type Review, type ReviewSnapshot,
 } from '@/lib/data/review';
-import { reviewCloseBlockers } from '@/lib/review-rules';
+import { decisionDueError, duplicateLabel, plannedReviewTwin, reviewCloseBlockers, reviewItemDueError } from '@/lib/review-rules';
 import { diffFields, logChange } from './changelog';
 
 type Result = { error?: string };
@@ -196,6 +196,14 @@ export async function createReview(_prev: FormState, fd: FormData): Promise<Form
 
   const db = await getDb();
   if (await dateTaken(db, reviewOn!)) return { error: `Une revue est déjà prévue le ${fmtDate(reviewOn!)}.`, fieldErrors: { reviewOn: 'Date déjà occupée.' } };
+  // AUD-31 : une seule revue planifiée par type et par année.
+  const twin = plannedReviewTwin(await db.select().from(t.reviews), { reviewOn: reviewOn!, kind });
+  if (twin) {
+    return {
+      error: `La ${REVIEW_KINDS[kind].label.toLowerCase()} du ${fmtDate(twin.reviewOn)} est déjà planifiée en ${yearOf(twin.reviewOn)} : reportez-la plutôt que d'en planifier une seconde.`,
+      fieldErrors: { reviewOn: 'Revue de ce type déjà planifiée cette année.' },
+    };
+  }
   const source = copyItems && copyFrom ? await findReview(db, copyFrom) : undefined;
   const id = await db.transaction(async (tx) => {
     const [row] = await tx.insert(t.reviews).values({ reviewOn: reviewOn!, kind }).returning({ id: t.reviews.id });
@@ -365,7 +373,7 @@ export async function closeReview(id: number): Promise<Result> {
   const review = reviews.find((r) => r.id === id);
   if (!review) return { error: NOT_FOUND };
   // AUD-14 : compte rendu complet (participants, synthèse) et décisions pilotées avant le visa.
-  const decisions = await db.select({ text: t.reviewDecisions.text, pilotId: t.reviewDecisions.pilotId }).from(t.reviewDecisions)
+  const decisions = await db.select({ text: t.reviewDecisions.text, pilotId: t.reviewDecisions.pilotId, cancelledAt: t.reviewDecisions.cancelledAt }).from(t.reviewDecisions)
     .where(eq(t.reviewDecisions.reviewId, review.id));
   const blockers = reviewCloseBlockers({ ...review, participantIds: review.participantIds as string[] }, decisions);
   if (blockers.length) return { error: blockers.join(' ') };
@@ -393,6 +401,37 @@ export async function closeReview(id: number): Promise<Result> {
   });
   done();
   return {};
+}
+
+/**
+ * Rectificatif d'une revue clôturée (AUD-34) : le dossier figé au visa ne se modifie jamais ; le rectificatif est un ajout
+ * daté, motivé et signé par la direction (mêmes droits que le visa, canSignReview), affiché avec le dossier et la carte de
+ * la revue et inscrit à son historique. Jamais modifié ni retiré : une erreur se corrige par un nouveau rectificatif.
+ */
+export async function addReviewCorrection(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { error, session } = await requireReviewSigner();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const text = f.str('text', { required: true, max: 2000 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const review = await findReview(db, id!);
+  if (!review) return { error: NOT_FOUND };
+  if (review.status !== 'cloturee') return { error: 'Seule une revue clôturée reçoit un rectificatif : avant le visa, corrigez le compte rendu.' };
+  const byId = session.user.id;
+  const newId = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(t.reviewCorrections).values({ reviewId: review.id, text, reason, signedById: byId }).returning({ id: t.reviewCorrections.id });
+    await logChange(tx, {
+      byId, entityType: 'review', entityId: review.id, action: 'correct', reason,
+      summary: `Rectificatif signé par ${session.user.name} (dossier figé inchangé) : ${text.slice(0, 120)}`,
+    });
+    return row.id;
+  });
+  done();
+  return { ok: true, id: String(newId) };
 }
 
 /** Annulation d'une revue planifiée (motif obligatoire) : son échéance du programme est annulée avec elle (AUD-30). */
@@ -464,6 +503,10 @@ export async function setReviewItemDone(id: number, isDone: boolean): Promise<Re
   return {};
 }
 
+/**
+ * Ajoute ou modifie un élément de la check-list. AUD-31 (valeurs saisies ou modifiées seulement) : remise au plus tard le
+ * jour de la séance et jamais déjà passée (reviewItemDueError), libellé unique dans la revue (duplicateLabel).
+ */
 export async function saveReviewItem(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error, session } = await requireReviewEditor();
   if (error) return { error };
@@ -482,26 +525,32 @@ export async function saveReviewItem(_prev: FormState, fd: FormData): Promise<Fo
   const auto = REVIEW_SOURCES[source].auto;
   // Élément automatique : fourni par Vigie, sans contributeur ni date de remise.
   const values = { label, source, ownerId: auto ? null : ownerId, owner: auto ? '' : owner, dueOn: auto ? null : dueOn };
-
-  if (id) {
-    const row = await itemWithReview(db, id);
-    if (!row) return { error: 'Élément introuvable.' };
-    if (!isEditableReview(row.review)) return { error: 'Revue clôturée ou annulée : check-list figée.' };
-    await db.transaction(async (tx) => {
-      await tx.update(t.reviewItems).set(values).where(eq(t.reviewItems.id, id));
-      await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: row.review.id, action: 'update', summary: `Élément « ${label} » modifié` });
-    });
-    done();
-    return { ok: true, id: String(id) };
-  }
-  const review = await findReview(db, reviewId!);
+  const row = id ? await itemWithReview(db, id) : undefined;
+  if (id && !row) return { error: 'Élément introuvable.' };
+  const review = row ? row.review : await findReview(db, reviewId!);
   if (!review) return { error: NOT_FOUND };
   if (!isEditableReview(review)) return { error: 'Revue clôturée ou annulée : check-list figée.' };
+  const siblings = (await db.select({ id: t.reviewItems.id, label: t.reviewItems.label }).from(t.reviewItems).where(eq(t.reviewItems.reviewId, review.id)));
+  if (label !== row?.item.label && duplicateLabel(label, siblings, id)) f.fail('label', 'Cet élément figure déjà dans la check-list de la revue.');
+  if (values.dueOn !== (row?.item.dueOn ?? null)) {
+    const dateError = reviewItemDueError(values.dueOn, review.reviewOn, today());
+    if (dateError) f.fail('dueOn', dateError);
+  }
+  if (!f.ok) return f.state();
+
+  if (row) {
+    await db.transaction(async (tx) => {
+      await tx.update(t.reviewItems).set(values).where(eq(t.reviewItems.id, row.item.id));
+      await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', summary: `Élément « ${label} » modifié` });
+    });
+    done();
+    return { ok: true, id: String(row.item.id) };
+  }
   const newId = await db.transaction(async (tx) => {
     const rows = await tx.select({ sort: t.reviewItems.sort }).from(t.reviewItems).where(eq(t.reviewItems.reviewId, review.id));
-    const [row] = await tx.insert(t.reviewItems).values({ reviewId: review.id, ...values, done: !auto && f.bool('done'), sort: nextSort(rows) }).returning({ id: t.reviewItems.id });
+    const [created] = await tx.insert(t.reviewItems).values({ reviewId: review.id, ...values, done: !auto && f.bool('done'), sort: nextSort(rows) }).returning({ id: t.reviewItems.id });
     await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', summary: `Élément « ${label} » ajouté à la check-list` });
-    return row.id;
+    return created.id;
   });
   done();
   return { ok: true, id: String(newId) };
@@ -530,6 +579,13 @@ export async function deleteReviewItem(id: number): Promise<Result> {
 
 // ─── Décisions, objectifs et besoins en ressources ──────────────────────────
 
+const DECISION_FIELDS = { kind: 'Nature', text: 'Intitulé', pilot: 'Pilote', dueOn: 'Échéance' } as const;
+
+/**
+ * Ajoute ou modifie une décision, un objectif ou un besoin en ressources. Une reformulation garde l'ancien libellé au journal
+ * (AUD-36, details) ; une décision abandonnée reste en consultation seule. AUD-31 (valeurs saisies ou modifiées seulement) :
+ * échéance ni antérieure à la revue ni déjà passée (decisionDueError), intitulé unique parmi les décisions en vigueur.
+ */
 export async function saveReviewDecision(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error, session } = await requireReviewEditor();
   if (error) return { error };
@@ -546,35 +602,99 @@ export async function saveReviewDecision(_prev: FormState, fd: FormData): Promis
   if (!(await validPerson(db, pilotId))) return { error: 'Pilote introuvable.', fieldErrors: { pilotId: 'Choisissez une personne de la liste.' } };
   const values = { kind: kind!, text, pilotId, dueOn };
   const label = REVIEW_DECISION_KINDS[kind!].label;
-
-  if (id) {
-    const [row] = await db.select({ d: t.reviewDecisions, review: t.reviews }).from(t.reviewDecisions)
-      .innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, id));
-    if (!row) return { error: 'Décision introuvable.' };
-    if (!isEditableReview(row.review)) return { error: 'Revue clôturée ou annulée : décisions figées.' };
-    await db.transaction(async (tx) => {
-      await tx.update(t.reviewDecisions).set(values).where(eq(t.reviewDecisions.id, id));
-      await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: row.review.id, action: 'update', summary: `${label} modifié(e) : ${text.slice(0, 80)}` });
-    });
-    done();
-    return { ok: true, id: String(id) };
-  }
-  const review = await findReview(db, reviewId!);
+  const [row] = id
+    ? await db.select({ d: t.reviewDecisions, review: t.reviews }).from(t.reviewDecisions)
+      .innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, id))
+    : [];
+  if (id && !row) return { error: 'Décision introuvable.' };
+  const review = row ? row.review : await findReview(db, reviewId!);
   if (!review) return { error: NOT_FOUND };
   if (!isEditableReview(review)) return { error: 'Revue clôturée ou annulée : décisions figées.' };
+  if (row?.d.cancelledAt) return { error: 'Décision abandonnée : consultation seule.' };
+  const siblings = (await db.select({ id: t.reviewDecisions.id, label: t.reviewDecisions.text, cancelledAt: t.reviewDecisions.cancelledAt }).from(t.reviewDecisions)
+    .where(eq(t.reviewDecisions.reviewId, review.id))).filter((d) => !d.cancelledAt);
+  if (text !== row?.d.text && duplicateLabel(text, siblings, id)) f.fail('text', 'Cette décision figure déjà dans la revue.');
+  if (dueOn !== (row?.d.dueOn ?? null)) {
+    const dateError = decisionDueError(dueOn, review.reviewOn, today());
+    if (dateError) f.fail('dueOn', dateError);
+  }
+  if (!f.ok) return f.state();
+
+  if (row) {
+    const people = await db.select({ id: t.people.id, name: t.people.name }).from(t.people);
+    const nameOf = (pid: string | null) => (pid ? people.find((p) => p.id === pid)?.name ?? pid : null);
+    const shown = (x: { kind: string; text: string; pilotId: string | null; dueOn: string | null }) => ({
+      kind: REVIEW_DECISION_KINDS[x.kind as keyof typeof REVIEW_DECISION_KINDS]?.label ?? x.kind, text: x.text, pilot: nameOf(x.pilotId), dueOn: shownDate(x.dueOn),
+    });
+    const details = diffFields(shown(row.d), shown(values), DECISION_FIELDS);
+    if (!details.length) return { ok: true, id: String(row.d.id) };
+    await db.transaction(async (tx) => {
+      await tx.update(t.reviewDecisions).set(values).where(eq(t.reviewDecisions.id, row.d.id));
+      // Reformulation après la séance : l'ancien libellé reste au journal (AUD-36).
+      const reworded = row.d.text !== text && review.status !== 'planifiee';
+      await logChange(tx, {
+        byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', details,
+        summary: reworded ? `${label} reformulé(e) après la séance : ${text.slice(0, 80)}` : `${label} modifié(e) : ${text.slice(0, 80)}`,
+      });
+    });
+    done();
+    return { ok: true, id: String(row.d.id) };
+  }
   const newId = await db.transaction(async (tx) => {
     const rows = await tx.select({ sort: t.reviewDecisions.sort }).from(t.reviewDecisions).where(eq(t.reviewDecisions.reviewId, review.id));
-    const [row] = await tx.insert(t.reviewDecisions).values({ reviewId: review.id, ...values, sort: nextSort(rows) }).returning({ id: t.reviewDecisions.id });
+    const [created] = await tx.insert(t.reviewDecisions).values({ reviewId: review.id, ...values, sort: nextSort(rows) }).returning({ id: t.reviewDecisions.id });
     await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', summary: `${label} ajouté(e) : ${text.slice(0, 80)}` });
-    return row.id;
+    return created.id;
   });
   done();
   return { ok: true, id: String(newId) };
 }
 
 /**
+ * Décision, objectif ou besoin abandonné après la séance (AUD-36), motif obligatoire : jamais retiré, il reste affiché barré
+ * dans la carte et le dossier (qui, quand, pourquoi), ne compte plus dans les contrôles du visa ni dans les échéances « sans
+ * suite » (AUD-16). Revue tenue : rôles qui saisissent le compte rendu ; revue clôturée : la direction (mêmes droits que le
+ * visa ; le dossier figé ne change pas). Refusé tant qu'une action du plan porte la décision (l'abandonner d'abord : elle
+ * libère la décision). Avant la séance : « Retirer ».
+ */
+export async function abandonReviewDecision(_prev: FormState, fd: FormData): Promise<FormState> {
+  const editor = await requireReviewEditor();
+  if (editor.error) return { error: editor.error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const [row] = await db.select({ d: t.reviewDecisions, review: t.reviews }).from(t.reviewDecisions)
+    .innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, id!));
+  if (!row) return { error: 'Décision introuvable.' };
+  if (row.review.status === 'planifiee') return { error: 'Revue pas encore tenue : retirez le projet de décision.' };
+  if (row.review.status === 'annulee') return { error: 'Revue annulée : décisions figées.' };
+  if (row.review.status === 'cloturee') {
+    const signer = await requireReviewSigner();
+    if (signer.error) return { error: 'Revue clôturée : abandon d’une décision réservé à la direction.' };
+  }
+  if (row.d.cancelledAt) return { error: 'Décision déjà abandonnée.' };
+  if (row.d.actionId) return { error: `Décision portée par l'action ${row.d.actionId} : abandonnez d'abord l'action dans le plan d'actions.` };
+  const label = REVIEW_DECISION_KINDS[row.d.kind as keyof typeof REVIEW_DECISION_KINDS]?.label ?? 'Décision';
+  const byId = editor.session.user.id;
+  const abandoned = await db.transaction(async (tx) => {
+    const rows = await tx.update(t.reviewDecisions).set({ cancelledAt: new Date(), cancelledById: byId, cancelReason: reason })
+      .where(and(eq(t.reviewDecisions.id, row.d.id), isNull(t.reviewDecisions.cancelledAt), isNull(t.reviewDecisions.actionId))).returning({ id: t.reviewDecisions.id });
+    if (!rows.length) return false;
+    await logChange(tx, { byId, entityType: 'review', entityId: row.review.id, action: 'cancel', reason, summary: `${label} abandonné(e) : ${row.d.text.slice(0, 80)}` });
+    return true;
+  });
+  if (!abandoned) return { error: 'Décision modifiée entre-temps : rechargez la page.' };
+  done();
+  return { ok: true, id: String(row.d.id) };
+}
+
+/**
  * Suppression réelle tolérée : projet de décision préparé avant la séance, sans action créée. Une fois la revue
- * tenue, la décision appartient au compte rendu (éventuellement diffusé) : on peut la corriger, plus la retirer.
+ * tenue, la décision appartient au compte rendu (éventuellement diffusé) : on peut la reformuler (ancien libellé au journal)
+ * ou la déclarer abandonnée avec un motif (abandonReviewDecision), plus la retirer.
  */
 export async function deleteReviewDecision(id: number): Promise<Result> {
   const { error, session } = await requireReviewEditor();
@@ -584,7 +704,7 @@ export async function deleteReviewDecision(id: number): Promise<Result> {
   const [row] = await db.select({ d: t.reviewDecisions, review: t.reviews }).from(t.reviewDecisions)
     .innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(eq(t.reviewDecisions.id, id));
   if (!row) return { error: 'Décision introuvable.' };
-  if (row.review.status !== 'planifiee') return { error: 'Revue tenue : les décisions du compte rendu sont conservées (corrigez leur intitulé au besoin).' };
+  if (row.review.status !== 'planifiee') return { error: 'Revue tenue : les décisions du compte rendu sont conservées (reformulez-les, ou déclarez-les abandonnées avec un motif).' };
   if (row.d.actionId) return { error: `Décision portée par l'action ${row.d.actionId} : détachez-la ou abandonnez-la d'abord dans le plan d'actions.` };
   await db.transaction(async (tx) => {
     await tx.delete(t.reviewDecisions).where(eq(t.reviewDecisions.id, id));

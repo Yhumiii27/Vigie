@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, desc, isNull } from 'drizzle-orm';
+import { asc, desc, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
@@ -254,7 +254,35 @@ const historyRow = (r: Review) => ({
 export type DecisionView = {
   id: number; kind: ReviewDecisionKind; kindLabel: string; tone: Tone; text: string; pilotId: string | null; pilot: string;
   dueOn: string | null; actionId: string | null; action: ActionBrief | null; sort: number;
+  /** AUD-36 : abandonnée après la séance (qui, quand, pourquoi) ; absent des dossiers figés avant le paquet 12. */
+  cancelled?: { on: string; by: string; reason: string } | null;
 };
+
+/** Abandon d'une décision (AUD-36) tel qu'affiché : jour de Paris, auteur, motif. */
+const decisionCancel = (d: Pick<ReviewDecisionRow, 'cancelledAt' | 'cancelledById' | 'cancelReason'>, people: Map<string, Person>) =>
+  d.cancelledAt ? { on: parisDay(d.cancelledAt), by: d.cancelledById ? people.get(d.cancelledById)?.name ?? '—' : '—', reason: d.cancelReason ?? '' } : null;
+
+/** Rectificatif d'une revue clôturée (AUD-34) : ajout daté, motivé et signé, jamais modifié. */
+export type ReviewCorrectionView = { id: number; on: string; at: string; by: string; text: string; reason: string };
+
+/** Rectificatifs des revues `ids`, du plus ancien au plus récent (AUD-34). */
+export async function loadReviewCorrections(ids: number[]): Promise<Map<number, ReviewCorrectionView[]>> {
+  const out = new Map<number, ReviewCorrectionView[]>();
+  if (!ids.length) return out;
+  const db = await getDb();
+  const [rows, people] = await Promise.all([
+    db.select().from(t.reviewCorrections).where(inArray(t.reviewCorrections.reviewId, ids)).orderBy(asc(t.reviewCorrections.signedAt), asc(t.reviewCorrections.id)),
+    loadPeople(),
+  ]);
+  rows.forEach((r) => {
+    const list = out.get(r.reviewId) ?? [];
+    list.push({
+      id: r.id, on: parisDay(r.signedAt), at: toParisLocal(r.signedAt), by: r.signedById ? people.get(r.signedById)?.name ?? '—' : '—', text: r.text, reason: r.reason,
+    });
+    out.set(r.reviewId, list);
+  });
+  return out;
+}
 
 /**
  * Préparation, décisions et actions d'une revue (partagé par la carte et le dossier). Les décisions d'une revue valent pour
@@ -279,7 +307,7 @@ async function readReviewRecord(review: Review, reviews: Review[]) {
     return {
       id: d.id, kind: d.kind as ReviewDecisionKind, kindLabel: k.label, tone: k.tone, text: d.text, pilotId: d.pilotId,
       pilot: d.pilotId ? people.get(d.pilotId)?.name ?? '—' : '—', dueOn: d.dueOn, actionId: d.actionId,
-      action: d.actionId ? actionBrief(byAction.get(d.actionId), people, now) : null, sort: d.sort,
+      action: d.actionId ? actionBrief(byAction.get(d.actionId), people, now) : null, sort: d.sort, cancelled: decisionCancel(d, people),
     };
   });
   const linked = new Set(decisions.map((d) => d.actionId).filter(Boolean));
@@ -334,12 +362,13 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   };
   const history = reviews.map(historyRow);
   if (!current) {
-    return { now, review: null, reviewFiles: [], reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
+    return { now, review: null, reviewFiles: [], corrections: [] as ReviewCorrectionView[], reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
       defaults: { nextOn: addMonths(now, 1), holdNext: { on: addMonths(now, 1), kind: 'ordinaire' as ReviewKind }, originRef: '', copyFrom: null },
       flags: { ...flags, editable: false, mine: false, closeBlockers: [] as string[] } };
   }
-  const [rec, changes, programme, reviewFiles] = await Promise.all([
+  const [rec, changes, programme, reviewFiles, corrections] = await Promise.all([
     readReviewRecord(current, reviews), loadChangeLog('review', current.id), reviewProgramme(current.id, now), loadEntityFiles('review', [current.id]),
+    loadReviewCorrections([current.id]),
   ]);
   // AUD-17 : pièces des éléments d'entrée (figées avec la revue clôturée ou annulée).
   const itemFiles = await loadEntityFiles('review_item', rec.checklist.map((i) => i.id));
@@ -361,6 +390,8 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
     review: rec.view,
     /** Pièces jointes de la revue (AUD-17). */
     reviewFiles: reviewFiles.get(String(current.id)) ?? [],
+    /** Rectificatifs signés après le visa (AUD-34). */
+    corrections: corrections.get(current.id) ?? [],
     reviews: history,
     items,
     decisions: rec.decisions,
@@ -384,7 +415,9 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
     flags: {
       ...flags, editable, mine: items.some((i) => i.ownerId === session.user.id),
       /** Contrôles avant le visa (AUD-14), affichés à la place du bouton de clôture. */
-      closeBlockers: current.status === 'tenue' ? reviewCloseBlockers({ ...current, participantIds: current.participantIds as string[] }, rec.decisions) : [],
+      closeBlockers: current.status === 'tenue'
+        ? reviewCloseBlockers({ ...current, participantIds: current.participantIds as string[] }, rec.decisions.map((d) => ({ ...d, cancelledAt: d.cancelled?.on ?? null })))
+        : [],
     },
   };
 }
@@ -488,6 +521,10 @@ export function reviewFollowUp({ prior, decisions, actions, people, asOf, from }
       const kind = (d.kind in REVIEW_DECISION_KINDS ? d.kind : 'decision') as ReviewDecisionKind;
       const common = { ...base, key: `d${d.id}`, kind, kindLabel: k.label, text: d.text, pilot: name(d.pilotId), dueOn: d.dueOn, actionId: d.actionId };
       const a = d.actionId ? byId.get(d.actionId) : undefined;
+      // AUD-36 : décision abandonnée après la séance (motif) : plus à suivre.
+      if (d.cancelledAt) {
+        return { ...common, tone: REVIEW_FOLLOW_UP.cancelled.tone, action: null, cancelled: { on: parisDay(d.cancelledAt), reason: d.cancelReason ?? '' }, open: false, state: 'cancelled' };
+      }
       if (a?.status === 'abandonnee') return { ...common, tone: REVIEW_FOLLOW_UP.cancelled.tone, action: brief(a), cancelled: cancelOf(a), open: false, state: 'cancelled' };
       if (a) { const b = brief(a); return { ...common, tone: b.tone, action: b, cancelled: null, open: !isClosedActionStatus(a.status), state: 'action' }; }
       // Action hors du périmètre (référence seule) : suivie dans le plan d'actions, considérée comme ouverte.
@@ -871,10 +908,12 @@ export async function loadReviewDossierPage({ revue }: { revue?: string | string
   }
   const snap = parseReviewSnapshot(review.snapshot);
   if (review.status === 'cloturee') {
+    // AUD-34 : rectificatifs signés après le visa, affichés avec le dossier figé (qui reste inchangé).
+    const corrections = (await loadReviewCorrections([review.id])).get(review.id) ?? [];
     if (snap) {
-      return { ...base, mode: 'snapshot' as const, dossier: snap.dossier, asOf: snap.asOf, takenOn: snap.takenOn, takenBy: snap.takenBy, seance: snap.seance ?? null };
+      return { ...base, mode: 'snapshot' as const, dossier: snap.dossier, asOf: snap.asOf, takenOn: snap.takenOn, takenBy: snap.takenBy, seance: snap.seance ?? null, corrections };
     }
-    return { ...base, mode: 'record' as const, dossier: null, record: await reviewRecordParts(review, reviews) };
+    return { ...base, mode: 'record' as const, dossier: null, record: await reviewRecordParts(review, reviews), corrections };
   }
   if (review.status === 'tenue' && snap?.phase === 'seance') {
     const dossier = withRecordParts(snap.dossier, await reviewRecordParts(review, reviews, snap.asOf));
@@ -937,7 +976,7 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
   const actionById = new Map(actions.map((a) => [a.id, a]));
   reviews.filter((r) => r.status === 'tenue' || r.status === 'cloturee').forEach((r) => {
     const href = `/audits?annee=${yearOf(r.reviewOn)}&revue=${r.id}#revue`;
-    decisions.filter((d) => d.reviewId === r.id && !!d.dueOn && d.dueOn < now).forEach((d) => {
+    decisions.filter((d) => d.reviewId === r.id && !d.cancelledAt && !!d.dueOn && d.dueOn < now).forEach((d) => {
       const a = d.actionId ? actionById.get(d.actionId) : undefined;
       const state = decisionFollowUpGap(a?.status ?? null, !!d.actionId);
       if (!state) return;
@@ -1027,6 +1066,7 @@ export async function loadMyContributions({ revue }: { revue?: string | string[]
       return {
         id: d.id, kind: d.kind as ReviewDecisionKind, kindLabel: k.label, tone: k.tone, text: d.text, pilotId: d.pilotId, pilot: name(d.pilotId),
         dueOn: d.dueOn, actionId: d.actionId, action: d.actionId && shown ? actionBrief(byAction.get(d.actionId), people, now) : null, sort: d.sort,
+        cancelled: decisionCancel(d, people),
       };
     });
     // Compte rendu : dossier figé au visa (revue clôturée dans Vigie), sinon la revue elle-même.

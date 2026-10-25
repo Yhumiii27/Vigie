@@ -661,8 +661,12 @@ export function DossierView({ page, role, notice }: {
           <tbody>
             {d.decisions.map((x) => (
               <tr key={x.id}>
-                <td><ToneTag tone={x.tone} style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</ToneTag></td>
-                <td>{x.text}</td>
+                <td><ToneTag tone={x.cancelled ? 'neutral' : x.tone} style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</ToneTag></td>
+                <td>
+                  {/* AUD-36 : décision abandonnée après la séance, barrée avec son motif. */}
+                  <span style={x.cancelled ? { textDecoration: 'line-through' } : undefined}>{x.text}</span>
+                  {x.cancelled && <span className="rd-muted" style={{ display: 'block', fontSize: 11 }}>Abandonnée le {fmtDate(x.cancelled.on)} par {x.cancelled.by} · motif : {x.cancelled.reason}</span>}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{x.action ? <><Ref href={`/actions?action=${encodeURIComponent(x.action.id)}`} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></> : x.actionId ?? '—'}</td>
@@ -685,6 +689,25 @@ export function DossierView({ page, role, notice }: {
           <div>Date de la prochaine revue{r.nextReviewOn && <div className="rd-sign-value">{fmtDate(r.nextReviewOn)}</div>}</div>
           <div>Visa de la direction{r.closedOn && <div className="rd-sign-value">{r.closedBy ?? '—'} le {fmtDate(r.closedOn)}</div>}</div>
         </div>
+        {/* AUD-34 : rectificatifs signés après le visa ; le dossier figé ci-dessus reste inchangé. */}
+        {'corrections' in page && page.corrections.length > 0 && (
+          <>
+            <h3 className="rd-h3">Rectificatifs après le visa</h3>
+            <table className="table rd-table">
+              <thead><tr><th>Date</th><th style={{ width: '50%' }}>Rectificatif</th><th>Motif</th><th>Signé par</th></tr></thead>
+              <tbody>
+                {page.corrections.map((c) => (
+                  <tr key={c.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.on)}</td>
+                    <td style={{ whiteSpace: 'pre-line' }}>{c.text}</td>
+                    <td>{c.reason}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{c.by}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
       </Section>
 
       <div className="rd-foot">

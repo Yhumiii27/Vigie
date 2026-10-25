@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { canEdit, isClosedActionStatus } from '@/lib/domain';
+import { canApprove, canEdit, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
@@ -43,6 +43,19 @@ async function requireSkillsEditor() {
   const { session, error } = await requireManager();
   if (error) return { session, error };
   return canEdit(session.role, 'skills') ? { session, error: null } : { session, error: 'Votre rôle ne permet pas cette modification.' };
+}
+
+/** Refus d'une modification des titres suivis hors QHSE (HAB-12). */
+const TITLES_RESERVED = "Titres suivis communs à tous les sites : réservés à l'animateur QHSE et à la direction.";
+
+/**
+ * Titres suivis (ajout, intitulé, validité, archivage, restauration) : communs à tous les sites (aucun siteId), ils
+ * relèvent du service QHSE et de la direction (HAB-12), comme tout élément commun à tous les sites (ALL_SITES_RESERVED).
+ */
+async function requireTitlesEditor() {
+  const { session, error } = await requireSkillsEditor();
+  if (error) return { session, error };
+  return canApprove(session.role) ? { session, error: null } : { session, error: TITLES_RESERVED };
 }
 
 /** Salarié sorti de l'effectif à la date du jour (archivé : plus de saisie sur sa fiche ni ses formations). */
@@ -421,7 +434,7 @@ export async function reinstatePerson(_prev: FormState, fd: FormData): Promise<F
  * échéances enregistrées ne sont pas recalculées.
  */
 export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireSkillsEditor();
+  const { error } = await requireTitlesEditor();
   if (error) return { error };
   const db = await getDb();
   const titles = await db.select().from(t.trainingTitles);
@@ -486,7 +499,7 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
  * sont conservées et consultables. Refusé tant qu'un recyclage rattaché à une exigence de ce titre est ouvert.
  */
 export async function archiveTitle(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireSkillsEditor();
+  const { session, error } = await requireTitlesEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -508,7 +521,7 @@ export async function archiveTitle(_prev: FormState, fd: FormData): Promise<Form
 
 /** Restaure un titre archivé, motif obligatoire (QUA-22) : il revient dans la matrice avec ses exigences et formations. */
 export async function restoreTitle(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireSkillsEditor();
+  const { error } = await requireTitlesEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
