@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast } from './rules';
+import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillLinkTarget } from './rules';
 
 // Règles des habilitations (QUA-03) : manque au regard d'une affectation Keystone, recyclage à planifier.
 
@@ -101,5 +101,34 @@ describe('renewalForecast (HAB-09)', () => {
   it('passage d’année', () => {
     const f = renewalForecast([], '2026-12-05', 3);
     expect(f.months.map((m) => m.month)).toEqual(['2026-12', '2027-01', '2027-02']);
+  });
+});
+
+describe('skillLinkTarget : lien profond vers la matrice (HAB-17)', () => {
+  const base = {
+    self: false, selfId: 'moi', personId: 'p1', titleId: undefined as string | undefined,
+    rowIds: new Set(['p1', 'moi']), otherIds: new Set(['enc']), departed: new Map([['parti', '2026-09-30']]), otherSite: false,
+    activeTitleIds: new Set(['sst']), archivedTitles: new Map([['ancien', 'Habilitation ancienne']]),
+  };
+  it('case ouverte (titre actif) ou ligne mise en évidence', () => {
+    expect(skillLinkTarget({ ...base, titleId: 'sst' })).toEqual({ select: { personId: 'p1', titleId: 'sst' } });
+    expect(skillLinkTarget(base)).toEqual({ select: { personId: 'p1', titleId: undefined } });
+  });
+  it('titre archivé ou inconnu : ligne mise en évidence, message précis', () => {
+    expect(skillLinkTarget({ ...base, titleId: 'ancien' })).toEqual({
+      select: { personId: 'p1' },
+      notice: "Titre « Habilitation ancienne » archivé : il n'est plus suivi dans la matrice ; ses formations restent consultables dans « Titres suivis ». La ligne du salarié est mise en évidence.",
+    });
+    expect(skillLinkTarget({ ...base, titleId: 'x' }).notice).toBe('Titre introuvable : la ligne du salarié est mise en évidence.');
+  });
+  it('salarié sorti, hors matrice, autre site du périmètre, inconnu ou hors périmètre', () => {
+    expect(skillLinkTarget({ ...base, personId: 'parti' }).notice).toBe("Salarié sorti de l'effectif le 30/09/2026 : ses formations sont conservées en consultation seule (filtre « Sortis »).");
+    expect(skillLinkTarget({ ...base, personId: 'enc' }).notice).toMatch(/personnel hors matrice/);
+    expect(skillLinkTarget({ ...base, personId: 'ailleurs', otherSite: true }).notice).toMatch(/autre site que celui sélectionné/);
+    expect(skillLinkTarget({ ...base, personId: 'inconnu' })).toEqual({ notice: SKILL_LINK_MISSING });
+  });
+  it('vue Salarié : la fiche d’autrui n’est jamais affichée', () => {
+    expect(skillLinkTarget({ ...base, self: true, personId: 'p1' })).toEqual({ notice: 'Fiche non accessible : seules vos habilitations sont affichées.' });
+    expect(skillLinkTarget({ ...base, self: true, personId: 'moi', titleId: 'sst' })).toEqual({ select: { personId: 'moi', titleId: 'sst' } });
   });
 });

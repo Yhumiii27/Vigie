@@ -128,6 +128,12 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
   if (streamId && !stream) f.fail('streamId', 'Filière inconnue.');
   // Filière archivée (DOC-09) : plus de nouvel enlèvement ; un enlèvement déjà inscrit dessus reste modifiable.
   else if (stream?.archivedAt && stream.id !== current?.streamId) f.fail('streamId', 'Filière archivée : réactivez-la ou choisissez une filière en service.');
+  // DOC-20 : filière d'un site archivé — plus de nouvel enlèvement ni de changement de filière vers elle (message du champ,
+  // avant le refus générique de requireInSite) ; un enlèvement déjà inscrit dessus reste modifiable.
+  else if (stream && stream.id !== current?.streamId) {
+    const [site] = await db.select({ archivedAt: t.sites.archivedAt }).from(t.sites).where(eq(t.sites.id, stream.siteId));
+    if (site?.archivedAt) f.fail('streamId', "Filière d'un site archivé : choisissez une filière d'un site en service.");
+  }
   if (stream && !transporter) transporter = stream.collector;
   // Transporteur = collecteur de la filière : ses mentions (SIRET, adresse, récépissé) complètent celles laissées vides.
   if (stream && transporter === stream.collector) {

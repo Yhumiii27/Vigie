@@ -11,3 +11,10 @@ export const ARCHIVED_SITE_SUFFIX = ' (archivé)';
 /** Ajoute à une liste de choix la valeur déjà enregistrée si elle n'y figure plus (personne sortie, site archivé…). */
 export const withCurrent = (options: readonly Option[], value: string | null | undefined, label: string | undefined) =>
   value && !options.some(([v]) => v === value) ? [...options, [value, label ?? value] as Option] : options;
+
+/**
+ * Valeur proposée par défaut pour un nouveau choix : `value` si la liste la propose encore, sinon `fallback` — jamais une
+ * personne sortie ni un site archivé (DUE-15 : validateur de la version précédente sorti de l'effectif).
+ */
+export const offeredOr = (options: readonly Option[], value: string | null | undefined, fallback: string | null) =>
+  value && options.some(([v]) => v === value) ? value : fallback;

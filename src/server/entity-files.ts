@@ -73,11 +73,15 @@ async function ownerOf(db: DbOrTx, kind: EntityFileKind, id: string, session: Se
       return { journalId: num, frozen: r.archivedAt ? 'Exigence archivée : restaurez-la pour la modifier.' : null };
     }
     case 'requirement_evaluation': {
-      const [e] = await db.select({ requirementId: t.requirementEvaluations.requirementId, evaluatedOn: t.requirementEvaluations.evaluatedOn, archivedAt: t.requirements.archivedAt })
-        .from(t.requirementEvaluations).innerJoin(t.requirements, eq(t.requirements.id, t.requirementEvaluations.requirementId))
+      const [e] = await db.select({
+        requirementId: t.requirementEvaluations.requirementId, evaluatedOn: t.requirementEvaluations.evaluatedOn, cancelledAt: t.requirementEvaluations.cancelledAt,
+        archivedAt: t.requirements.archivedAt,
+      }).from(t.requirementEvaluations).innerJoin(t.requirements, eq(t.requirements.id, t.requirementEvaluations.requirementId))
         .where(eq(t.requirementEvaluations.id, num));
       if (!e) return null;
-      return { journalId: e.requirementId, context: `évaluation du ${fmtDate(e.evaluatedOn)}`, frozen: e.archivedAt ? 'Exigence archivée : restaurez-la pour la modifier.' : null };
+      // VEI-16 : preuves d'une évaluation annulée conservées telles quelles (figées).
+      const frozen = e.archivedAt ? 'Exigence archivée : restaurez-la pour la modifier.' : e.cancelledAt ? 'Évaluation annulée : ses preuves sont conservées telles quelles.' : null;
+      return { journalId: e.requirementId, context: `évaluation du ${fmtDate(e.evaluatedOn)}`, frozen };
     }
     case 'control_record': {
       const [r] = await db.select({

@@ -104,8 +104,9 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
               <div className="vg-h6">Décisions et objectifs</div>
               {rec.decisions.map((d) => (
                 <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline' }}>
-                  <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
-                  <span>{d.text}</span>
+                  <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
+                  <span style={d.cancelled ? { textDecoration: 'line-through' } : undefined}>{d.text}</span>
+                  {d.cancelled && <><span /><span style={muted}>Abandonnée le {fmtDate(d.cancelled.on)} · motif : {d.cancelled.reason}</span></>}
                   <span />
                   <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', ...muted }}>
                     <span>{d.pilot}{d.dueOn ? ` · ${fmtDayMonth(d.dueOn)}` : ''}</span>

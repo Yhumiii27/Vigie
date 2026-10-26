@@ -622,8 +622,14 @@ export const requirementEvaluations = pgTable('requirement_evaluations', {
   note: text('note'),
   evaluatedById: text('evaluated_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // VEI-16 (migration 0019) : évaluation saisie par erreur annulée (motif obligatoire), jamais supprimée ; l'évaluation
+  // courante de l'exigence est recalculée d'après les évaluations restantes.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 }, (t) => [
   check('requirement_evaluations_evaluation_check', inList(t.evaluation, EVALUATION_CODES)),
+  archiveState('requirement_evaluations_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // ─── Habilitations et formations ────────────────────────────────────────────
@@ -815,8 +821,28 @@ export const reviewDecisions = pgTable('review_decisions', {
   dueOn: date('due_on', { mode: 'string' }),
   actionId: text('action_id').references(() => actions.id), // action du plan créée ou rattachée
   sort: integer('sort').notNull().default(0),
+  // AUD-36 (migration 0019) : décision abandonnée après la séance (motif obligatoire, jamais retirée) ; affichée barrée.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
 }, (t) => [
   check('review_decisions_kind_check', inList(t.kind, REVIEW_DECISION_KIND_CODES)),
+  archiveState('review_decisions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
+// AUD-34 (migration 0019) : rectificatifs d'une revue clôturée. Le dossier figé au visa ne se modifie jamais : un rectificatif
+// est un ajout daté, motivé et signé par la direction (mêmes droits que le visa, canSignReview), affiché avec le dossier et à
+// l'historique de la revue ; jamais modifié ni supprimé (un rectificatif erroné se corrige par un nouveau rectificatif).
+export const reviewCorrections = pgTable('review_corrections', {
+  id: serial('id').primaryKey(),
+  reviewId: integer('review_id').notNull().references(() => reviews.id),
+  text: text('text').notNull(), // correction apportée au dossier (ce qui est rectifié et comment)
+  reason: text('reason').notNull(), // motif du rectificatif
+  signedById: text('signed_by_id').references(() => people.id),
+  signedAt: timestamp('signed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('review_corrections_review_idx').on(t.reviewId),
+  check('review_corrections_text_check', sql`btrim(${t.text}) <> '' and btrim(${t.reason}) <> ''`),
 ]);
 
 // Objectifs QHSE mesurables (AUD-13, ISO 9001 §6.2 et §9.1) : cible d'un indicateur calculé de Vigie (OBJECTIVE_INDICATORS,

@@ -4,11 +4,13 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast } from '@/components/skills/rules';
+import { renewalForecast, skillLinkTarget } from '@/components/skills/rules';
 import { today } from '@/lib/today';
-import { SCREENS, canEdit } from '@/lib/domain';
+import { SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
-import { ALL_SITES } from '@/lib/session';
+import { ALL_SITES, inPerimeter } from '@/lib/session';
+import { hasLeft } from '@/lib/people';
+import { loadPeople } from '@/lib/queries';
 import { loadFormOptions, type Option } from '@/lib/data/options';
 import { loadSiteAdmin } from '@/lib/data/sites';
 import { loadSkillMatrix } from '@/lib/data/skills';
@@ -26,6 +28,8 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
     await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin()]);
   // Même règle que les server actions du domaine (requireSkillsEditor).
   const manage = canEdit(session.role, 'skills');
+  // Titres suivis, communs à tous les sites : service QHSE et direction seulement (requireTitlesEditor, HAB-12).
+  const manageTitles = manage && canApprove(session.role);
   const now = today();
   // Nouveau salarié : site sélectionné, ou le premier site en vue « Tous les sites ».
   const defaultSiteId = session.site.id === ALL_SITES ? sites[0]?.[0] ?? '' : session.site.id;
@@ -38,10 +42,20 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   // Lien profond (échéances, notifications, fiche action) : ?salarie=<personId>[&titre=<titleId>].
   const personId = str(sp.salarie);
   const titleId = str(sp.titre);
-  const target = personId ? rows.find((r) => r.person.id === personId) : undefined;
-  const initialSel = target
-    ? { personId: target.person.id, titleId: titleId && titles.some((ti) => ti.id === titleId) ? titleId : undefined }
-    : undefined;
+  // HAB-17 : message précis quand la cible n'est pas affichée (sortie, hors matrice, autre site, titre archivé ou inconnu) ;
+  // message unique pour une personne inconnue ou hors du périmètre.
+  let otherSite = false;
+  if (personId && !self && session.site.id !== ALL_SITES) {
+    const p = (await loadPeople()).get(personId);
+    otherSite = !!p && !hasLeft(p, today()) && p.siteId !== session.site.id && inPerimeter(session.allowedSiteIds, p.siteId);
+  }
+  const link = personId ? skillLinkTarget({
+    self, selfId: session.user.id, personId, titleId,
+    rowIds: new Set(rows.map((r) => r.person.id)), otherIds: new Set(others.map((p) => p.id)),
+    departed: new Map(departed.map((p) => [p.id, p.leftOn ?? ''])), otherSite,
+    activeTitleIds: new Set(titles.map((ti) => ti.id)), archivedTitles: new Map(archivedTitles.map((ti) => [ti.id, ti.label])),
+  }) : null;
+  const initialSel = link?.select;
 
   const sub = self ? `Mes habilitations · ${titles.length} titres suivis` : `${rows.length} salariés · ${titles.length} titres suivis`;
   // HAB-09 : vue « À prévoir » (?vue=a-prevoir) — recyclages et formations des 12 prochains mois, calculés à l'affichage.
@@ -56,7 +70,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
     <>
       <PageHeader title={SCREENS.skills.title} sub={sub} />
       <div className="vg-page">
-        {personId && !target && <MissingNotice text={self ? 'Fiche non accessible : seules vos habilitations sont affichées.' : 'Salarié introuvable, sorti des effectifs ou hors du site sélectionné.'} closeHref="/habilitations" />}
+        {link?.notice && <MissingNotice text={link.notice} closeHref="/habilitations" />}
         <SkillAlerts alerts={lapses} today={now} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <SegLinks options={views} />
@@ -78,7 +92,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         ) : (
           <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
-            canManage={manage} options={options} today={now} defaultSiteId={defaultSiteId}
+            canManage={manage} canManageTitles={manageTitles} options={options} today={now} defaultSiteId={defaultSiteId}
             initialSel={initialSel} closeHref="/habilitations" />
         )}
       </div>

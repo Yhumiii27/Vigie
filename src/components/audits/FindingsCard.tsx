@@ -14,7 +14,7 @@ import { fmtDate } from '@/lib/dates';
 import { FINDING_KINDS, TONE } from '@/lib/domain';
 import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
-import { cancelFinding, saveFinding } from '@/server/audits';
+import { cancelFinding, restoreFinding, saveFinding } from '@/server/audits';
 import { ActionLink, ActionLinks, DialogFooter, RadioSeg, fileUrl } from './parts';
 import { FINDING_KEYS, OTHER_AUDIT, auditActionSource } from './shared';
 import styles from './audits.module.css';
@@ -120,7 +120,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
           )}
         </div>
       )}
-      {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} flash={f.id === flashId} />) : (
+      {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} canEdit={canEdit} flash={f.id === flashId} />) : (
         <>
           {group?.findings.map((f) => (
             <FindingRow key={f.id} finding={f} canEdit={canEdit} canCreate={canCreate} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
@@ -165,8 +165,8 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
   );
 }
 
-/** Constat annulé (filtre « Annulés ») : lecture seule, avec le motif et l'historique. */
-function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; flash?: boolean }) {
+/** Constat annulé (filtre « Annulés ») : lecture seule, avec le motif et l'historique ; « Rétablir » motivé (AUD-25). */
+function CancelledRow({ finding: f, canEdit, flash }: { finding: CancelledFindingView; canEdit: boolean; flash?: boolean }) {
   const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as const };
   return (
     <div className={`vg-rule-bottom${flash ? ` ${styles.flash}` : ''}`} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'start', padding: '6px 0' }}>
@@ -179,6 +179,12 @@ function CancelledRow({ finding: f, flash }: { finding: CancelledFindingView; fl
           {f.groupLabel} · annulé le {fmtDate(f.cancelled.on)}{f.cancelled.by && ` par ${f.cancelled.by}`}
         </span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>Motif : {f.cancelled.reason}</span>
+        {canEdit && (
+          <ReasonButton label="Rétablir le constat" icon="ph-arrow-counter-clockwise" className="btn btn-ghost vg-btn-sm" style={{ justifySelf: 'start' }}
+            title="Rétablir le constat" kicker="Constats d'audit" action={restoreFinding} hidden={{ id: f.id }} submitLabel="Rétablir le constat"
+            submitIcon="ph-arrow-counter-clockwise" placeholder="Ex. annulé par erreur, le constat figure au rapport"
+            message="Le constat revient dans les constats de son audit, ses échéances et le dossier des revues à venir ; un dossier de revue déjà figé ne change pas. L'annulation reste à l'historique." />
+        )}
         <ChangeLogList entries={f.log} />
       </div>
       <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>

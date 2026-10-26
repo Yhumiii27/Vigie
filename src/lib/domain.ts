@@ -505,6 +505,8 @@ export const REVIEW_CLOSE_DAYS = 30;
 export const REVIEW_FOLLOW_UP = {
   no_action: { label: 'Sans action au plan', tone: 'warn' },
   cancelled: { label: 'Action abandonnée', tone: 'neutral' },
+  /** AUD-36 : décision, objectif ou besoin abandonné après la séance (motif), sans action au plan. */
+  abandoned: { label: 'Abandonnée après la séance', tone: 'neutral' },
 } as const satisfies Record<string, { label: string; tone: Tone }>;
 
 // ─── Navigation, écrans et rôles ────────────────────────────────────────────

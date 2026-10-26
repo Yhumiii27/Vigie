@@ -19,13 +19,17 @@ export const FINDING_KEYS = Object.keys(FINDING_KINDS);
 /** Ligne du programme annuel où s'inscrivent les échéances des revues de direction (AUD-01). */
 export const REVIEW_TRACK = 'Revues de direction';
 
+/** « revue(s) de direction », casse et espaces indifférents (AUD-23). */
+const REVIEW_WORDS = /\brevues?\s+de\s+direction\b/i;
+
 /**
  * Échéance du programme qui porte une revue de direction (ni auditeur, ni périmètre, ni rapport, ni constats) : ligne des
- * revues, ou libellé / intitulé « revue de direction ». Une « revue de contrat » ou « de conception » reste un audit.
+ * revues (« Revues de direction »), ou libellé / intitulé « revue de direction ». Une ligne ou un élément « Revue de
+ * contrat », « Revue de conception », « Revue documentaire »… reste un audit (AUD-23 : plus de simple mot « revue »).
  * Même règle pour le formulaire (affichage des champs d'audit), le serveur et les chargements.
  */
 export const isReviewPlanItem = (p: { track: string; label: string; detail: string | null }) =>
-  /revue/i.test(p.track) || /revue\s+de\s+direction/i.test(`${p.label} ${p.detail ?? ''}`);
+  REVIEW_WORDS.test(p.track) || REVIEW_WORDS.test(`${p.label} ${p.detail ?? ''}`);
 
 export const MONTH_OPTIONS = MONTHS_SHORT.map((_, i) => {
   const name = monthName(i + 1);

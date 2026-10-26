@@ -31,6 +31,8 @@ export type StreamView = {
   id: string;
   siteId: string;
   site: string;
+  /** DOC-20 : site archivé — la filière n'est plus proposée pour un nouvel enlèvement (seulement gardée par l'enlèvement qui la porte). */
+  siteArchived: boolean;
   label: string;
   ewcCode: string;
   hazardous: boolean;
@@ -170,6 +172,7 @@ const loadEnvironmentBase = cache(async (scope: SiteScope = 'site') => {
   ]);
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const siteSiret = new Map(sites.map((s) => [s.id, s.siret]));
+  const archivedSites = new Set(sites.filter((s) => s.archivedAt).map((s) => s.id));
   const streams = streamRows.filter((s) => keep(s.siteId));
   const streamById = new Map(streamRows.map((s) => [s.id, s]));
   // Enlèvements d'une même filière le même jour (annulés compris) : la référence courte « FD-11 · 19/08/2026 » ne suffit plus.
@@ -257,7 +260,7 @@ const loadEnvironmentBase = cache(async (scope: SiteScope = 'site') => {
   const withEntries = new Set(entries.map((e) => e.siteId));
   const registrySites = sites.filter((s) => keep(s.id) && (!s.archivedAt || withEntries.has(s.id)))
     .map((s) => ({ id: s.id, label: s.label, siret: s.siret, archived: !!s.archivedAt }));
-  return { now, site, sites: scopeSites, consumptionSites, registrySites, siteLabel, streams, entries, cancelled, consumptions, people };
+  return { now, site, sites: scopeSites, consumptionSites, registrySites, siteLabel, archivedSites, streams, entries, cancelled, consumptions, people };
 });
 
 /**
@@ -288,7 +291,7 @@ export async function wasteEntryYear(id: number): Promise<number | null> {
 export async function loadEnvironment(requestedYear?: number) {
   const now = today();
   const currentYear = +now.slice(0, 4);
-  const [{ site, sites, consumptionSites, registrySites, siteLabel, streams, entries, cancelled, consumptions, people }, events, actions, requirements, streamSources] = await Promise.all([
+  const [{ site, sites, consumptionSites, registrySites, siteLabel, archivedSites, streams, entries, cancelled, consumptions, people }, events, actions, requirements, streamSources] = await Promise.all([
     loadEnvironmentBase(), loadEvents(), loadActions(), loadWasteRequirements(),
     // Sources des actions (abandonnées comprises) : seule la présence compte, pour verrouiller la suppression d'une filière.
     getDb().then((db) => db.select({ streamId: t.actions.wasteStreamId }).from(t.actions).where(isNotNull(t.actions.wasteStreamId))),
@@ -335,7 +338,7 @@ export async function loadEnvironment(requestedYear?: number) {
     const mine = entries.filter((e) => e.streamId === s.id);
     const inYear = mine.filter((e) => e.year === year);
     return {
-      id: s.id, siteId: s.siteId, site: siteLabel.get(s.siteId) ?? s.siteId, label: s.label, ewcCode: s.ewcCode, hazardous: s.hazardous,
+      id: s.id, siteId: s.siteId, site: siteLabel.get(s.siteId) ?? s.siteId, siteArchived: archivedSites.has(s.siteId), label: s.label, ewcCode: s.ewcCode, hazardous: s.hazardous,
       unit: s.unit, treatmentCode: s.treatmentCode, treatmentLabel: treatmentLabel(s.treatmentCode), recovery: isRecovery(s.treatmentCode),
       channel: s.channel, collector: s.collector, destination: s.destination,
       pop: s.pop, qualification: s.qualification, qualificationLabel: qualificationLabel(s.qualification),

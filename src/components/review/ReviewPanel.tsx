@@ -15,7 +15,9 @@ import { addDays, fmtDate, fmtDayMonth, yearOf } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { ReviewCardData } from '@/lib/data/review';
 import { setReviewItemDone } from '@/server/review';
-import { CancelReviewButton, CloseReviewButton, CreateReviewForm, DecisionForm, HoldForm, ItemForm, RescheduleForm } from './ReviewDialogs';
+import {
+  AbandonDecisionButton, CancelReviewButton, CloseReviewButton, CorrectionButton, CreateReviewForm, DecisionForm, HoldForm, ItemForm, RescheduleForm,
+} from './ReviewDialogs';
 import styles from './review.module.css';
 import { SaveStatus, safeCall } from '@/components/feedback';
 
@@ -54,7 +56,7 @@ export function reviewActionDefaults(reviewId: number, originRef: string): Actio
 export function ReviewPanel({ data, params, showCancelled, allSites }: {
   data: ReviewCardData; params: Record<string, string | undefined>; showCancelled: boolean; allSites: boolean;
 }) {
-  const { now, review, reviewFiles, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
+  const { now, review, reviewFiles, corrections, items, decisions, extraActions, previous, changes, options, people, linkable, defaults, flags, programme } = data;
   const [list, setDone] = useOptimistic(items, (state, { id, done }: { id: number; done: boolean }) => state.map((r) => (r.id === id ? { ...r, done } : r)));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,8 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
   const decision = editing?.kind === 'decision' && editing.id != null ? decisions.find((d) => d.id === editing.id) : undefined;
   const notYet = !!review && review.reviewOn > now;
   const held = review && (review.status === 'tenue' || review.status === 'cloturee');
+  // AUD-36 : abandon motivé d'une décision après la séance — revue tenue : rôles qui saisissent ; clôturée : la direction.
+  const canAbandon = !!review && ((review.status === 'tenue' && edit) || (review.status === 'cloturee' && flags.canEdit && flags.canSign));
 
   const toggle = (r: (typeof items)[number]) => start(async () => {
     setError(null);
@@ -189,14 +193,17 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             <div className="vg-h6">Décisions et objectifs</div>
             {decisions.map((d) => (
               <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline', fontSize: 12.5 }}>
-                <ToneTag tone={d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
-                {edit ? (
+                <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
+                {/* AUD-36 : décision abandonnée après la séance, barrée (consultation seule). */}
+                {d.cancelled ? <span style={{ textDecoration: 'line-through', color: 'var(--color-neutral-400)' }}>{d.text}</span> : edit ? (
                   <button type="button" className={styles.textBtn} onClick={() => setEditing({ kind: 'decision', id: d.id })} title="Modifier">{d.text}</button>
                 ) : <span>{d.text}</span>}
                 <span />
                 <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', ...muted }}>
                   <span>{d.pilot}{d.dueOn ? ` · ${fmtDayMonth(d.dueOn)}` : ''}</span>
-                  {d.actionId ? (
+                  {d.cancelled ? (
+                    <span>Abandonnée le {fmtDate(d.cancelled.on)} par {d.cancelled.by} · motif : {d.cancelled.reason}</span>
+                  ) : d.actionId ? (
                     <>
                       <ActionLink action={d.action} id={d.actionId} />
                       {actionEdit && <LinkActionButton link={`reviewdecision:${d.id}`} current={d.actionId} tooltip={`Détacher ${d.actionId} de la décision (l'action reste dans le plan, rattachée à la revue)`} />}
@@ -208,6 +215,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                       <LinkActionButton link={`reviewdecision:${d.id}`} actions={linkable} label="Rattacher" />
                     </>
                   )}
+                  {!d.cancelled && !d.actionId && canAbandon && <AbandonDecisionButton decision={d} />}
                 </span>
               </div>
             ))}
@@ -296,6 +304,21 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* AUD-34 : rectificatifs d'une revue clôturée (dossier figé inchangé), signés par la direction. */}
+        {review?.status === 'cloturee' && (corrections.length > 0 || (flags.canEdit && flags.canSign)) && (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div className="vg-h6">Rectificatifs après le visa</div>
+            {corrections.map((c) => (
+              <div key={c.id} style={{ display: 'grid', gap: 2, fontSize: 12.5 }}>
+                <span style={{ whiteSpace: 'pre-line', textWrap: 'pretty' }}>{c.text}</span>
+                <span style={muted}>Signé par {c.by} le {fmtDate(c.on)} · motif : {c.reason}</span>
+              </div>
+            ))}
+            {!corrections.length && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun rectificatif.</div>}
+            {flags.canEdit && flags.canSign && <span><CorrectionButton review={review} /></span>}
           </div>
         )}
 

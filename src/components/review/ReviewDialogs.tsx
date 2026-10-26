@@ -9,7 +9,8 @@ import { REVIEW_DECISION_KINDS, REVIEW_DECISION_KEYS, REVIEW_KINDS, REVIEW_KIND_
 import type { Option } from '@/lib/data/options';
 import type { DecisionView, ReviewItemView, ReviewView } from '@/lib/data/review';
 import {
-  cancelReview, closeReview, createReview, deleteReviewDecision, deleteReviewItem, holdReview, rescheduleReview, saveReviewDecision, saveReviewItem,
+  abandonReviewDecision, addReviewCorrection, cancelReview, closeReview, createReview, deleteReviewDecision, deleteReviewItem, holdReview, rescheduleReview,
+  saveReviewDecision, saveReviewItem,
 } from '@/server/review';
 import styles from './review.module.css';
 
@@ -226,6 +227,33 @@ export function CloseReviewButton({ id, allSites }: { id: number; allSites: bool
       </span>
       {error && <span role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </span>
+  );
+}
+
+/** Décision abandonnée après la séance (AUD-36) : motif obligatoire, la décision reste affichée barrée. */
+export function AbandonDecisionButton({ decision }: { decision: DecisionView }) {
+  return (
+    <ReasonButton action={abandonReviewDecision} hidden={{ id: decision.id }} label="Abandonner" className="vg-text-btn"
+      title={`${decision.kindLabel} abandonné(e)`} kicker={decision.text.length > 80 ? `${decision.text.slice(0, 79)}…` : decision.text} submitLabel="Abandonner"
+      message="La décision n'est jamais retirée du compte rendu : elle reste affichée barrée avec la date, l'auteur et le motif, et ne donne plus d'échéance « sans suite »."
+      placeholder="Ex. objectif repris par la décision de la revue suivante" />
+  );
+}
+
+/**
+ * Rectificatif d'une revue clôturée (AUD-34), signé par la direction : ajout daté et motivé, affiché avec le dossier figé
+ * (qui ne change pas) et à l'historique de la revue.
+ */
+export function CorrectionButton({ review }: { review: ReviewView }) {
+  return (
+    <ReasonButton action={addReviewCorrection} hidden={{ id: review.id }} label="Ajouter un rectificatif" icon="ph-pen-nib" className="btn btn-ghost vg-btn-sm"
+      title="Rectificatif de la revue" kicker={`Revue de direction du ${fmtDate(review.reviewOn)}`} submitLabel="Signer le rectificatif"
+      message="Le dossier figé au visa ne se modifie pas : le rectificatif s'y ajoute, daté et signé en votre nom, et ne pourra plus être modifié (une erreur se corrige par un nouveau rectificatif)."
+      placeholder="Ex. erreur de saisie relevée par le CSE" before={(
+        <Field name="text" label="Rectificatif" hint="Ce qui est rectifié dans le dossier et la correction apportée.">
+          <TextArea name="text" rows={4} maxLength={2000} autoFocus />
+        </Field>
+      )} />
   );
 }
 

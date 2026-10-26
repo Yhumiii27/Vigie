@@ -44,3 +44,16 @@ export function equipmentCodeError(code: string | null): string | null {
   if (!EQUIPMENT_CODE.test(code)) return 'Lettres majuscules, chiffres et tirets seulement, sans tiret au début ni à la fin (ex. PDE-PIL).';
   return null;
 }
+
+/** Évaluation de conformité de l'historique d'une exigence (requirement_evaluations). */
+export type EvaluationEntry = { id: number; evaluatedOn: string; evaluation: string; note: string | null; cancelled: boolean };
+
+/**
+ * Évaluation courante d'une exigence d'après son historique (VEI-16) : la plus récente non annulée (date, puis saisie la
+ * plus récente) ; sans évaluation restante : « À évaluer », sans date ni précision.
+ */
+export function currentEvaluation(entries: readonly EvaluationEntry[]): { evaluation: string; evaluationNote: string | null; lastEvaluatedOn: string | null } {
+  const [last] = entries.filter((e) => !e.cancelled)
+    .sort((a, b) => b.evaluatedOn.localeCompare(a.evaluatedOn) || b.id - a.id);
+  return last ? { evaluation: last.evaluation, evaluationNote: last.note, lastEvaluatedOn: last.evaluatedOn } : { evaluation: 'a_evaluer', evaluationNote: null, lastEvaluatedOn: null };
+}

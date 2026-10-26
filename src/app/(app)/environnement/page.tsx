@@ -86,10 +86,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
   const scopeSites = d.sites.map((s) => [s.id, s.label] as const);
   const streamOptions: StreamOption[] = d.streams.map(({
     id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
-    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived, siteArchived,
   }) => ({
     id, label, ewcCode, hazardous, unit, collector, destination, treatmentCode, channel, site, siteId,
-    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived,
+    pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress, archived, siteArchived,
   }));
   // Filières en service (DOC-09) : seules proposées pour un nouvel enlèvement et comptées dans l'onglet.
   const activeStreams = d.streams.filter((s) => !s.archived);

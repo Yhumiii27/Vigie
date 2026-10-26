@@ -19,7 +19,7 @@ import type { FormOptions } from '@/lib/data/options';
 import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
 import { EntityFiles } from '@/components/EntityFiles';
-import { archiveRequirement, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
+import { archiveRequirement, cancelRequirementEvaluation, evaluateRequirement, restoreRequirement, saveRequirement } from '@/server/watch';
 import { requirementActionDefaults } from './action-defaults';
 import { ArchivedBanner, FILES_HINT, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
@@ -274,7 +274,7 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
           )}
           {view === 'historique' && (
             <>
-              <EvaluationHistory r={r} editable={editable} />
+              <EvaluationHistory r={r} editable={editable} canCancel={canApprove && !r.archived} />
               <LazyChangeLog entity="requirement" id={r.id} title="Journal des modifications" />
             </>
           )}
@@ -343,8 +343,12 @@ function KeystoneProjects({ r }: { r: RequirementView }) {
   );
 }
 
-/** Historique des évaluations de conformité : la plus récente d'abord. */
-function EvaluationHistory({ r, editable }: { r: RequirementView; editable: boolean }) {
+/**
+ * Historique des évaluations de conformité : la plus récente d'abord. Une évaluation saisie par erreur s'annule avec un motif
+ * (VEI-16, service QHSE et direction) : barrée, gardée à l'historique, l'évaluation courante est recalculée.
+ */
+function EvaluationHistory({ r, editable, canCancel }: { r: RequirementView; editable: boolean; canCancel: boolean }) {
+  const latest = r.evaluations.find((e) => !e.cancelled)?.id;
   if (!r.evaluations.length) {
     return (
       <div className="vg-inset" style={{ padding: '12px 14px', fontSize: 12.5, color: 'var(--color-neutral-400)' }}>
@@ -358,18 +362,30 @@ function EvaluationHistory({ r, editable }: { r: RequirementView; editable: bool
         <div key={e.id} className={i < r.evaluations.length - 1 ? 'vg-rule-bottom' : undefined}
           style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 12, padding: '10px 0' }}>
           <div style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 500 }}>{e.date}</span>
-            {i === 0 && <span style={muted}>Dernière</span>}
+            <span style={{ fontSize: 12.5, fontWeight: 500, textDecoration: e.cancelled ? 'line-through' : undefined }}>{e.date}</span>
+            {e.id === latest && <span style={muted}>Dernière</span>}
+            {e.cancelled && <span style={muted}>Annulée</span>}
           </div>
           <div style={{ display: 'grid', gap: 5, minWidth: 0 }}>
-            <div><ToneTag tone={e.tone}>{e.label}</ToneTag></div>
+            <div style={e.cancelled ? { textDecoration: 'line-through' } : undefined}><ToneTag tone={e.cancelled ? 'neutral' : e.tone}>{e.label}</ToneTag></div>
             {e.note && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{e.note}</p>}
-            {/* VEI-08 : preuves complétées ou retirées (motif) après l'évaluation. */}
-            {(e.files.length > 0 || editable) && (
+            {e.cancelled && (
+              <span style={{ fontSize: 11.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+                Annulée le {e.cancelled.on}{e.cancelled.by && ` par ${e.cancelled.by}`} — motif : {e.cancelled.reason}
+              </span>
+            )}
+            {/* VEI-08 : preuves complétées ou retirées (motif) après l'évaluation ; figées une fois l'évaluation annulée. */}
+            {(e.files.length > 0 || (editable && !e.cancelled)) && (
               <EntityFiles kind="requirement_evaluation" entityId={e.id} title="Preuves" kicker={`${r.text} · évaluation du ${e.date}`} files={e.files}
-                canAdd={editable} emptyText="Aucune preuve jointe." />
+                canAdd={editable && !e.cancelled} emptyText="Aucune preuve jointe." />
             )}
             {e.by && <span style={muted}>Évaluée par {e.by}</span>}
+            {canCancel && !e.cancelled && (
+              <ReasonButton label="Annuler cette évaluation" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm" style={{ justifySelf: 'start' }}
+                title="Annuler l'évaluation" kicker={`${r.text} · évaluation du ${e.date}`} action={cancelRequirementEvaluation} hidden={{ id: e.id }}
+                submitLabel="Annuler l'évaluation" submitIcon="ph-prohibit" placeholder="Ex. saisie sur la mauvaise exigence"
+                message="Évaluation saisie par erreur : elle n'est jamais supprimée. Elle reste barrée dans l'historique avec ses preuves, et l'évaluation courante de l'exigence est recalculée d'après les évaluations restantes (« À évaluer » s'il n'en reste aucune)." />
+            )}
           </div>
         </div>
       ))}
