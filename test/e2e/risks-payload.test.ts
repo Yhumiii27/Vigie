@@ -42,6 +42,8 @@ describe.skipIf(!base)('Salarié : DUERP en consultation (serveur construit)', (
       const paths = [
         '/risques', '/risques?unite=essais', '/risques?unite=magasin', '/risques?etat=archives', '/risques?registre=1', '/risques?programme=2026',
         '/risques/imprimer', '/risques/imprimer?version=2025.1', '/risques/imprimer/programme?annee=2026',
+        // DUE-17 (paquet 13) : vue d'ensemble toutes unités.
+        '/risques?vue=ensemble',
       ];
       for (const path of paths) {
         const { status, body } = await load(path, rsc);

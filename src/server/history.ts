@@ -20,7 +20,9 @@ export type HistoryEntity =
   // Paquet 3 (traçabilité et journal) :
   | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption'
   // Paquet 5 (conformité réglementaire) : objectifs QHSE (AUD-13), contexte du système de management (CNF-05).
-  | 'qhse_objective' | 'context_item';
+  | 'qhse_objective' | 'context_item'
+  // Paquet 13 : registre de sécurité (VEI-15).
+  | 'safety_notice';
 
 type Rule = {
   screen: ScreenKey;
@@ -181,6 +183,16 @@ const RULES: Record<HistoryEntity, Rule> = {
       if (n === null) return undefined;
       const [c] = await (await db()).select({ id: t.contextItems.id }).from(t.contextItems).where(eq(t.contextItems.id, n));
       return c && { siteId: null };
+    },
+  },
+  // Registre de sécurité (VEI-15) : observation ou mise en demeure d'un site.
+  safety_notice: {
+    screen: 'watch',
+    async siteOf(id) {
+      const n = num(id);
+      if (n === null) return undefined;
+      const [o] = await (await db()).select({ siteId: t.safetyNotices.siteId }).from(t.safetyNotices).where(eq(t.safetyNotices.id, n));
+      return o;
     },
   },
 };

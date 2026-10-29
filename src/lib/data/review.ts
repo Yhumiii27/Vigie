@@ -32,6 +32,7 @@ import { loadPrevention } from './prevention';
 import { loadPreventionSignals } from './prevention-signals';
 import { loadRisks } from './risks';
 import { loadSkillMatrix, type SkillAlert } from './skills';
+import { skillIndicators } from '@/components/skills/rules';
 
 // ─── Revue de direction (ISO 9001 §9.3) ─────────────────────────────────────
 
@@ -852,7 +853,8 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     prevention: preventionView,
     documents: documentView,
     environment,
-    skills: { counts: skillCounts, alerts: skillAlerts, href: '/habilitations' },
+    // HAB-18 : taux de conformité, formations sur 12 mois (efficacité évaluée à froid, HAB-13), recyclages en retard.
+    skills: { counts: skillCounts, alerts: skillAlerts, indicators: skillIndicators(skills.rows, asOf), href: '/habilitations' },
     // §9.3.2 c (AUD-13) : degré de réalisation des objectifs ; valeurs calculées à la date d'arrêt du dossier.
     objectives: objectiveData.objectives.map((o) => ({
       label: o.label, indicator: o.indicatorLabel, target: fmtObjectiveTarget(o.indicator, o.target), value: fmtObjectiveValue(o.indicator, o.value),

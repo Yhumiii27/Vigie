@@ -2,7 +2,7 @@
 // Code du travail R. 4512-6 à R. 4512-12 · arrêté du 19 mars 1993 (liste des travaux dangereux).
 // Règle interne par site (établissement Seveso seuil haut) : plan écrit et signé dès la première minute d'intervention.
 
-import { addMonths, toParisLocal } from '@/lib/dates';
+import { addDays, addMonths, toParisLocal } from '@/lib/dates';
 import type { Tone } from '@/lib/domain';
 
 export { addHoursLocal, fromParisLocal, referenceNow, toParisLocal } from '@/lib/dates';
@@ -277,6 +277,44 @@ export function planPhase(p: PlanLike, now: string): PlanPhase {
   if (p.status === 'clos') return 'clos';
   if (p.startOn > now) return 'a_venir';
   return p.endOn < now ? 'a_clore' : 'en_cours';
+}
+
+// ─── Inspections et réunions périodiques (PRV-17) ──────────────────────────
+
+/**
+ * Inspections et réunions périodiques de coordination pendant l'intervention (art. R. 4513-2 : le chef de l'entreprise
+ * utilisatrice les organise selon une périodicité qu'il définit), notamment pour les interventions longues (contrat annuel
+ * de maintenance) : périodicité fixée sur le plan (prevention_plans.meeting_period_days), séances tenues dans
+ * prevention_plan_meetings (migration 0020), annulées avec un motif, jamais supprimées.
+ */
+export type PlanMeetingKind = 'inspection' | 'reunion';
+export const PLAN_MEETING_KINDS: Record<PlanMeetingKind, string> = {
+  inspection: 'Inspection commune périodique',
+  reunion: 'Réunion périodique de coordination',
+};
+export const PLAN_MEETING_KIND_KEYS = Object.keys(PLAN_MEETING_KINDS) as PlanMeetingKind[];
+/** Bornes de la périodicité (jours) : hebdomadaire au plus souvent proposé… jusqu'à annuelle. */
+export const MEETING_PERIOD_MIN_DAYS = 1;
+export const MEETING_PERIOD_MAX_DAYS = 365;
+
+/**
+ * Prochaine inspection ou réunion périodique attendue d'un plan : null sans périodicité, plan clos ou annulé, intervention
+ * pas encore commencée ou terminée. Point de départ : la dernière séance tenue (non annulée, au plus tard aujourd'hui),
+ * sinon l'inspection commune préalable réalisée, sinon le début de l'intervention ; due = départ + périodicité, bornée à la
+ * fin de l'intervention (au-delà, aucune séance n'est plus attendue).
+ */
+export function nextPeriodicMeeting(
+  p: { status: string; startOn: string; endOn: string; inspectionOn: string | null; meetingPeriodDays: number | null },
+  meetings: readonly { heldOn: string; cancelled: boolean }[],
+  now: string,
+): { dueOn: string; from: string; late: boolean } | null {
+  if (!p.meetingPeriodDays || isPlanEnded(p) || p.startOn > now || p.endOn < now) return null;
+  const held = meetings.filter((m) => !m.cancelled && m.heldOn <= now).map((m) => m.heldOn).sort().at(-1);
+  const inspection = p.inspectionOn && p.inspectionOn <= now ? p.inspectionOn : null;
+  const from = [held, inspection, p.startOn].filter((d): d is string => !!d).sort().at(-1)!;
+  const dueOn = addDays(from, p.meetingPeriodDays);
+  if (dueOn > p.endOn) return null;
+  return { dueOn, from, late: dueOn < now };
 }
 
 // ─── Permis de feu et permis d'essai ────────────────────────────────────────

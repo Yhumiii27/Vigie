@@ -100,6 +100,11 @@
       "when": 1792962259934,
       "sql": "a56fef0f5ebe64b641f1ba714206e906b112e58e688f022105d9268f3ea0780a",
       "snapshot": "55edd8b2eaee9f08fbdf2fafeec88ebb0000af7cbd34af5708b5a2d099d8464e"
+    },
+    "0020_compliance_functions": {
+      "when": 1793286539166,
+      "sql": "16f1f6975d3f78d9999653863435a0279ce38883a60ad66c9e3de5719fd1aad0",
+      "snapshot": "6e17ddeac28a5802fbc4c3ac1e69fbbd43a725156cf820ec366594b1b6250043"
     }
   }
 }

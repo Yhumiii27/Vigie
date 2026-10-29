@@ -81,7 +81,9 @@ describe('VEI-10 et VEI-11 : exigences et contrôles', () => {
     expect(appliesToSite(['ville-b'], null)).toBe(true);
   });
   it('résultats de contrôle : défavorable et mise à l’arrêt bloquent l’équipement', () => {
-    expect(Object.keys(CONTROL_RESULTS)).toEqual(['favorable', 'reserves', 'defavorable', 'arret']);
+    // VEI-14 (paquet 13) : « hors tolérance » ajouté pour l'étalonnage d'un équipement de mesure, bloquant lui aussi.
+    expect(Object.keys(CONTROL_RESULTS)).toEqual(['favorable', 'reserves', 'defavorable', 'arret', 'hors_tolerance']);
+    expect(isBlockingControlResult('hors_tolerance')).toBe(true);
     expect(isBlockingControlResult('defavorable')).toBe(true);
     expect(isBlockingControlResult('arret')).toBe(true);
     expect(isBlockingControlResult('reserves')).toBe(false);

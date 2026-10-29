@@ -27,4 +27,14 @@ export const FINDING_KIND_CODES = ['ecart_majeur', 'ecart_mineur', 'observation'
 /** waste_entries.bsd_status : BSD_STATUS (src/components/environment/model.ts), ou vide. */
 export const BSD_STATUS_CODES = ['brouillon', 'emis', 'collecte', 'traite', 'refuse', 'accepte_partiel'] as const;
 /** requirements.linked_to : REQUIREMENT_LINKS (src/lib/domain.ts), ou vide. */
-export const REQUIREMENT_LINK_CODES = ['duerp', 'prevention', 'waste_register', 'waste_bsd'] as const;
+export const REQUIREMENT_LINK_CODES = ['duerp', 'prevention', 'waste_register', 'waste_bsd', 'certification'] as const;
+/** controls.category : CONTROL_CATEGORIES (src/lib/domain.ts) — VEI-14, migration 0020. */
+export const CONTROL_CATEGORY_CODES = ['reglementaire', 'metrologie'] as const;
+/** safety_notices.kind : SAFETY_NOTICE_KINDS (src/lib/domain.ts) — VEI-15. */
+export const SAFETY_NOTICE_KIND_CODES = ['observation', 'mise_en_demeure'] as const;
+/** prevention_plan_meetings.kind : PLAN_MEETING_KINDS (src/components/prevention/model.ts) — PRV-17. */
+export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
+/** risk_measure_links.kind : MEASURE_LINK_KINDS (src/lib/domain.ts) — DUE-19. */
+export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
+/** qualifications.effectiveness : TRAINING_EFFECTIVENESS (src/lib/domain.ts) — HAB-13. */
+export const EFFECTIVENESS_CODES = ['efficace', 'partielle', 'non_efficace'] as const;

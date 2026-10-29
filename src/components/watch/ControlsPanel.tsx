@@ -15,12 +15,12 @@ import { Icon, ToneTag } from '@/components/ui';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { addMonths, fmtDate } from '@/lib/dates';
-import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, TONE } from '@/lib/domain';
+import { CONTROL_CATEGORIES, CONTROL_CATEGORY_KEYS, CONTROL_RESULTS, TONE, controlResultsFor, isControlCategory } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { ControlFilter, ControlView } from '@/lib/data/watch';
 import {
-  archiveControl, cancelControlRecord, recordControl, restoreControl, saveControl, type CancelRecordState,
+  archiveControl, cancelControlRecord, recordControl, restoreControl, saveControl, type CancelRecordState, type RecordControlState,
 } from '@/server/watch';
 import { controlOverdueDefaults, controlReserveDefaults } from './action-defaults';
 import { ArchivedBanner, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
@@ -99,6 +99,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
               <tr key={c.id} {...rowOpener(() => open(c.id, firstView(c)))} data-obsolete={c.archived || undefined}>
                 <td style={{ fontWeight: 500, minWidth: 180 }}>
                   {c.equipment}
+                  {c.category === 'metrologie' && <span className="tag tag-neutral" style={{ marginLeft: 6, fontSize: 11, verticalAlign: 'middle' }}>Métrologie</span>}
                   {(showSite || c.responsible || c.equipmentCode) && (
                     <div style={{ ...muted, fontWeight: 400, marginTop: 2 }}>{[c.equipmentCode, showSite && c.siteLabel, c.responsible].filter(Boolean).join(' · ')}</div>
                   )}
@@ -189,6 +190,8 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
         ['Statut', <ToneTag key="s" tone={c.tone} style={{ marginTop: 1 }}>{c.status}</ToneTag>],
         ['Prochain', <span key="n" style={{ color: c.tone === 'neutral' ? undefined : TONE[c.tone].dot }}>{c.next}</span>],
         ['Dernier', c.last],
+        ['Nature', isControlCategory(c.category) ? CONTROL_CATEGORIES[c.category].label : c.category],
+        !!c.tolerance && ['Tolérance', c.tolerance],
         ['Périodicité', `Tous les ${months(c.periodMonths)}`],
         ['Organisme', c.organization],
         !!c.equipmentCode && ['Code équipement', c.equipmentCode],
@@ -246,7 +249,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
           )}
           {current === 'realise' && (
             <RecordForm c={c} today={today} suggestions={suggestions}
-              onDone={() => { setView('historique'); setNotice("Contrôle réalisé enregistré dans l'historique."); }} onCancel={onClose} />
+              onDone={(s) => { setView('historique'); setNotice(s.notice ?? "Contrôle réalisé enregistré dans l'historique."); }} onCancel={onClose} />
           )}
         </>
       )}
@@ -358,6 +361,12 @@ function History({ c, canApprove, canEditFiles, onNotice }: {
             </div>
             {r.cancelLabel && <span style={{ ...muted, fontSize: 11.5, color: 'var(--color-neutral-300)' }}>{r.cancelLabel}</span>}
             {r.notes && <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{r.notes}</p>}
+            {r.eventId && (
+              <span style={{ fontSize: 12 }}>
+                <span style={muted}>Non-conformité ouverte · </span>
+                <Link href={`/evenements?sel=${encodeURIComponent(r.eventId)}`} className="vg-link" style={{ fontSize: 12 }}>{r.eventId}</Link>
+              </span>
+            )}
             {/* VEI-08 : rapport complété ou retiré (motif) après la saisie ; figé sur un enregistrement annulé. */}
             <EntityFiles kind="control_record" entityId={r.id} title="Rapport et pièces jointes" kicker={`${c.equipment} · contrôle du ${r.date}`} files={r.files}
               canAdd={canEditFiles && !r.cancelled} emptyText="Pas de rapport joint." />
@@ -413,6 +422,14 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
       <Field name="equipment" label="Équipement">
         <Input name="equipment" defaultValue={c?.equipment} placeholder="Ex. Pont roulant 10 t — atelier montage" maxLength={160} autoFocus={!c} />
       </Field>
+      <FormRow>
+        <Field name="category" label="Nature" hint="Étalonnage : équipement de surveillance et de mesure (ISO 9001 §7.1.5) ; un résultat hors tolérance ouvre une non-conformité.">
+          <Select name="category" options={CATEGORY_OPTIONS} defaultValue={c?.category ?? 'reglementaire'} />
+        </Field>
+        <Field name="tolerance" label="Tolérance (étalonnage)" hint="Erreur maximale tolérée, classe de précision… Facultatif.">
+          <Input name="tolerance" defaultValue={c?.tolerance ?? ''} placeholder="Ex. ± 0,02 mm" maxLength={120} />
+        </Field>
+      </FormRow>
       <Field name="equipmentCode" label="Code équipement" hint="Facultatif · code commun avec le moyen d'essais de Crucible (majuscules, chiffres, tirets), publié avec le contrôle.">
         <Input name="equipmentCode" defaultValue={c?.equipmentCode ?? ''} placeholder="Ex. PDE-PIL" maxLength={32} autoCapitalize="characters" spellCheck={false}
           style={{ textTransform: 'uppercase' }} />
@@ -464,10 +481,12 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
   );
 }
 
-const RESULT_OPTIONS = CONTROL_RESULT_KEYS.map((k) => [k, CONTROL_RESULTS[k].label] as const);
+const CATEGORY_OPTIONS = CONTROL_CATEGORY_KEYS.map((k) => [k, CONTROL_CATEGORIES[k].label] as const);
+/** Résultats proposés selon la nature du contrôle (VEI-14 : « hors tolérance » pour un étalonnage seulement). */
+const resultOptions = (category: string) => controlResultsFor(category).map((k) => [k, CONTROL_RESULTS[k].label] as const);
 
 function RecordForm({ c, today, suggestions, onDone, onCancel }: {
-  c: ControlView; today: string; suggestions: ControlSuggestions; onDone: () => void; onCancel: () => void;
+  c: ControlView; today: string; suggestions: ControlSuggestions; onDone: (state: RecordControlState) => void; onCancel: () => void;
 }) {
   const uid = useId();
   const [date, setDate] = useState(today);
@@ -487,8 +506,11 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
         </Field>
       </FormRow>
       {/* VEI-11 : avis de l'organisme ; défavorable ou mise à l'arrêt : équipement signalé jusqu'à un contrôle favorable. */}
-      <Field name="result" label="Résultat du contrôle" hint="Défavorable ou mise à l'arrêt : l'équipement est signalé jusqu'à un nouveau contrôle favorable.">
-        <Select name="result" options={RESULT_OPTIONS} defaultValue="" placeholder="Choisir…" />
+      <Field name="result" label={c.category === 'metrologie' ? "Résultat de l'étalonnage" : 'Résultat du contrôle'}
+        hint={c.category === 'metrologie'
+          ? "Hors tolérance : l'équipement est signalé jusqu'à un nouvel étalonnage conforme et une non-conformité est ouverte (validité des mesures antérieures à évaluer)."
+          : "Défavorable ou mise à l'arrêt : l'équipement est signalé jusqu'à un nouveau contrôle favorable."}>
+        <Select name="result" options={resultOptions(c.category)} defaultValue="" placeholder="Choisir…" />
       </Field>
       <Field name="reserves" label="Réserves"
         hint={`Nombre et objet, ex. « 1 · fin de course à régler ». Vide = aucune réserve.${c.actionId ? ` Des réserves différentes détachent ${c.actionId}, qui reste dans le plan d'actions.` : ''}`}>

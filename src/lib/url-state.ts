@@ -39,7 +39,7 @@ export const ARCHIVES = 'archives';
 export const DETAIL_PARAMS = {
   '/evenements': { evenement: 'sel' },
   '/actions': { action: 'action' },
-  '/veille': { exigence: 'exigence', controle: 'controle' },
+  '/veille': { exigence: 'exigence', controle: 'controle', observation: 'observation' },
   '/risques': { risque: 'risque' },
   '/documents': { document: 'doc' },
   '/prevention': { plan: 'plan', permis: 'permis' },

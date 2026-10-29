@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, asc, eq, isNull, max } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -10,7 +10,8 @@ import {
   buildDuerpSnapshot, buildProgramSnapshot, DUERP_RETENTION, loadProgramSources, programDefaultIds, riskLinkedActionIds, versionComment, versionConflict,
 } from '@/lib/data/risks';
 import {
-  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, canEdit, isClosedActionStatus, type DuerpAccessChannel, type DuerpRequester,
+  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, MEASURE_LINK_KINDS, MEASURE_LINK_KIND_KEYS, canEdit, isClosedActionStatus,
+  type DuerpAccessChannel, type DuerpRequester,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
@@ -267,6 +268,86 @@ export async function archiveRisk(_prev: FormState, fd: FormData): Promise<FormS
   return { ok: true, id: String(id) };
 }
 
+// ─── Mesures de maîtrise liées (DUE-19) ─────────────────────────────────────
+
+/**
+ * Lie une mesure de maîtrise du risque à un élément de Vigie (DUE-19) : contrôle périodique (en service, du site de l'unité
+ * ou commun), document maîtrisé (en vigueur, du site de l'unité ou commun) ou titre d'habilitation (actif). Rôles qui
+ * modifient le DUERP, site de l'unité (`requireInSite`), risque en vigueur ; une seule liaison en cours par élément. Journal
+ * du risque dans la transaction.
+ */
+export async function linkRiskMeasure(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireRiskEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const riskId = f.int('riskId', { required: true, min: 1 });
+  const kind = f.oneOf('kind', MEASURE_LINK_KIND_KEYS, { required: true });
+  const targetId = f.str('targetId', { required: true, max: 64 });
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const existing = await riskWithSite(db, riskId!);
+  if (!existing) return { error: 'Risque introuvable.' };
+  const siteError = await requireInSite(existing.siteId);
+  if (siteError) return { error: siteError };
+  if (existing.risk.archivedAt) return { error: ARCHIVED_RISK };
+  if (existing.unitArchivedAt) return { error: ARCHIVED_UNIT };
+  const sameSite = (siteId: string | null) => !siteId || !existing.siteId || siteId === existing.siteId;
+  let label: string | null = null;
+  const target: { controlId?: number; documentId?: string; titleId?: string } = {};
+  if (kind === 'control') {
+    const id = /^\d{1,9}$/.test(targetId) ? Number(targetId) : NaN;
+    const [c] = Number.isNaN(id) ? [] : await db.select().from(t.controls).where(eq(t.controls.id, id));
+    if (c && !c.archivedAt && sameSite(c.siteId)) { label = `${c.controlType} · ${c.equipment}`; target.controlId = c.id; }
+  } else if (kind === 'document') {
+    const [d] = await db.select().from(t.documents).where(eq(t.documents.id, targetId));
+    const [inForce] = d ? await db.select({ id: t.documentVersions.id }).from(t.documentVersions)
+      .where(and(eq(t.documentVersions.documentId, d.id), eq(t.documentVersions.status, 'approuve'))) : [];
+    if (d && inForce && sameSite(d.siteId)) { label = `${d.id} · ${d.title}`; target.documentId = d.id; }
+  } else {
+    const [ti] = await db.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, targetId));
+    if (ti && !ti.archivedAt) { label = ti.label; target.titleId = ti.id; }
+  }
+  if (!label) return { error: 'Certains champs sont à corriger.', fieldErrors: { targetId: 'Élément inconnu, retiré ou d’un autre site.' } };
+  const kindLabel = MEASURE_LINK_KINDS[kind!].label.toLowerCase();
+  const done = await db.transaction(async (tx) => {
+    const active = await tx.select().from(t.riskMeasureLinks).where(and(eq(t.riskMeasureLinks.riskId, riskId!), isNull(t.riskMeasureLinks.removedAt)));
+    const same = (l: (typeof active)[number]) => (kind === 'control' ? l.controlId === target.controlId : kind === 'document' ? l.documentId === target.documentId : l.titleId === target.titleId);
+    if (active.some((l) => l.kind === kind && same(l))) return false;
+    await tx.insert(t.riskMeasureLinks).values({ riskId: riskId!, kind: kind!, ...target, createdById: session.user.id });
+    await logChange(tx, { entityType: 'risk', entityId: riskId!, action: 'link', byId: session.user.id, summary: `Mesure de maîtrise liée (${kindLabel}) : ${label}` });
+    return true;
+  });
+  if (!done) return { error: 'Certains champs sont à corriger.', fieldErrors: { targetId: 'Élément déjà lié à ce risque.' } };
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(riskId) };
+}
+
+/** Retire une mesure liée d'un risque (motif obligatoire) : la liaison est conservée, marquée retirée, au journal du risque. */
+export async function removeRiskMeasure(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireRiskEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [link] = await db.select().from(t.riskMeasureLinks).where(eq(t.riskMeasureLinks.id, id!));
+  if (!link) return { error: 'Mesure introuvable.' };
+  if (link.removedAt) return { error: 'Mesure déjà retirée.' };
+  const existing = await riskWithSite(db, link.riskId);
+  if (!existing) return { error: 'Risque introuvable.' };
+  const siteError = await requireInSite(existing.siteId);
+  if (siteError) return { error: siteError };
+  if (existing.risk.archivedAt) return { error: ARCHIVED_RISK };
+  const what = link.controlId != null ? `contrôle n° ${link.controlId}` : link.documentId ? `document ${link.documentId}` : `titre « ${link.titleId} »`;
+  await db.transaction(async (tx) => {
+    await tx.update(t.riskMeasureLinks).set({ removedAt: new Date(), removedById: session.user.id, removeReason: reason }).where(eq(t.riskMeasureLinks.id, link.id));
+    await logChange(tx, { entityType: 'risk', entityId: link.riskId, action: 'unlink', byId: session.user.id, reason, summary: `Mesure de maîtrise retirée : ${what}` });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(link.riskId) };
+}
+
 /** Restaure un risque archivé dans son unité (animateur QHSE, direction), avec motif ; l'unité doit être en vigueur. */
 export async function restoreRisk(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireRiskApprover();
@@ -295,7 +376,36 @@ export async function restoreRisk(_prev: FormState, fd: FormData): Promise<FormS
 const slug = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '') || 'unite';
 
-/** Crée une unité de travail ou modifie son libellé et son site. */
+/**
+ * DUE-20 : zones du plan de site couvertes par l'unité (une unité par zone) — zones en service du site de l'unité ; une zone
+ * couverte par une autre unité lui est retirée. Journal de l'unité, et de la carte du site (`site_map`) pour chaque zone.
+ * Les zones d'un ancien site sont détachées quand l'unité change de site.
+ */
+async function applyUnitZones(tx: DbOrTx, unit: { id: string; label: string }, siteId: string, wanted: number[] | null) {
+  const zones = await tx.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, workUnitId: t.mapZones.workUnitId, archivedAt: t.mapZones.archivedAt })
+    .from(t.mapZones);
+  const current = zones.filter((z) => z.workUnitId === unit.id);
+  const keep = wanted ?? current.filter((z) => z.siteId === siteId).map((z) => z.id);
+  const removed = current.filter((z) => !keep.includes(z.id));
+  const added = zones.filter((z) => keep.includes(z.id) && z.workUnitId !== unit.id);
+  for (const z of removed) {
+    await tx.update(t.mapZones).set({ workUnitId: null }).where(eq(t.mapZones.id, z.id));
+    await logChange(tx, { entityType: 'site_map', entityId: z.siteId, action: 'update', summary: `Zone « ${z.name} » détachée de l'unité de travail « ${unit.label} »` });
+  }
+  for (const z of added) {
+    await tx.update(t.mapZones).set({ workUnitId: unit.id }).where(eq(t.mapZones.id, z.id));
+    await logChange(tx, { entityType: 'site_map', entityId: z.siteId, action: 'update', summary: `Zone « ${z.name} » rattachée à l'unité de travail « ${unit.label} »` });
+    if (z.workUnitId) await logChange(tx, { entityType: 'work_unit', entityId: z.workUnitId, action: 'update', summary: `Zone « ${z.name} » rattachée à l'unité « ${unit.label} »` });
+  }
+  if (removed.length || added.length) {
+    await logChange(tx, {
+      entityType: 'work_unit', entityId: unit.id, action: 'update',
+      summary: [added.length && `Zones du plan rattachées : ${added.map((z) => z.name).join(', ')}`, removed.length && `zones détachées : ${removed.map((z) => z.name).join(', ')}`].filter(Boolean).join(' ; '),
+    });
+  }
+}
+
+/** Crée une unité de travail ou modifie son libellé, son site et ses zones du plan de site (DUE-20). */
 export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireRiskEditor();
   if (error) return { error };
@@ -303,6 +413,9 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
   const id = f.opt('id');
   const label = f.str('label', { required: true, max: 80 });
   const siteId = f.str('siteId', { required: true });
+  // DUE-20 : zones cochées (champ présent : liste complète) ; absent (ancien formulaire) : zones conservées sur le site.
+  const zoneIds = fd.has('zonesField') ? [...new Set(f.list('zoneIds').map(Number))] : null;
+  if (zoneIds?.some((z) => !Number.isInteger(z) || z < 1)) f.fail('zoneIds', 'Zone inconnue.');
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -322,14 +435,22 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
       ? { error: 'Une unité archivée porte déjà ce nom sur ce site.', fieldErrors: { label: "Libellé d'une unité archivée : restaurez-la plutôt (filtre « Archivés »)." } }
       : { error: 'Une unité de travail porte déjà ce nom sur ce site.', fieldErrors: { label: 'Libellé déjà utilisé sur ce site.' } };
   }
+  if (zoneIds?.length) {
+    const found = await db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId, archivedAt: t.mapZones.archivedAt }).from(t.mapZones).where(inArray(t.mapZones.id, zoneIds));
+    if (found.length !== zoneIds.length || found.some((z) => z.siteId !== siteId || z.archivedAt)) {
+      return { error: 'Certains champs sont à corriger.', fieldErrors: { zoneIds: "Zone inconnue, archivée ou d'un autre site que celui de l'unité." } };
+    }
+  }
 
   if (id && before) {
     const ok = await db.transaction(async (tx) => {
       const [row] = await tx.update(t.workUnits).set({ label, siteId }).where(eq(t.workUnits.id, id)).returning({ id: t.workUnits.id });
       if (!row) return false;
       const site = (sid: unknown) => (sid ? sites.find((s) => s.id === sid)?.label ?? String(sid) : 'Tous les sites');
-      await logChange(tx, { entityType: 'work_unit', entityId: id, action: 'update', summary: 'Unité de travail modifiée', details: diffFields(before, { label, siteId }, { label: 'Libellé', siteId: 'Site' })
-        .map((d) => (d.field === 'Site' ? { ...d, from: site(before.siteId), to: site(siteId) } : d)) });
+      const details = diffFields(before, { label, siteId }, { label: 'Libellé', siteId: 'Site' })
+        .map((d) => (d.field === 'Site' ? { ...d, from: site(before.siteId), to: site(siteId) } : d));
+      if (details.length || zoneIds === null) await logChange(tx, { entityType: 'work_unit', entityId: id, action: 'update', summary: 'Unité de travail modifiée', details });
+      await applyUnitZones(tx, { id, label }, siteId, zoneIds);
       return true;
     });
     if (!ok) return { error: 'Unité de travail introuvable.' };
@@ -345,6 +466,7 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
   await db.transaction(async (tx) => {
     await tx.insert(t.workUnits).values({ id: newId, label, siteId, sort });
     await logChange(tx, { entityType: 'work_unit', entityId: newId, action: 'create', summary: `Unité de travail « ${label} » ajoutée` });
+    if (zoneIds?.length) await applyUnitZones(tx, { id: newId, label }, siteId, zoneIds);
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: newId };

@@ -1,4 +1,4 @@
-import { addDays, daysBetween, fmtDate, monthName } from '@/lib/dates';
+import { addDays, addMonths, daysBetween, fmtDate, monthName } from '@/lib/dates';
 import { SKILL_SOON_DAYS, type SkillState } from '@/lib/domain';
 
 // Règles métier des habilitations, partagées par le serveur (chargement, actions) et les formulaires.
@@ -209,5 +209,35 @@ export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
     notice: archived
       ? `Titre « ${archived} » archivé : il n'est plus suivi dans la matrice ; ses formations restent consultables dans « Titres suivis ». La ligne du salarié est mise en évidence.`
       : 'Titre introuvable : la ligne du salarié est mise en évidence.',
+  };
+}
+
+// ─── Indicateurs de compétences de la revue de direction (HAB-18) ───────────
+
+/**
+ * Indicateurs de compétences du dossier de revue (HAB-18, ISO 9001 §7.2 et §9.3.2 ; ISO 45001 §7.2), calculés, jamais
+ * stockés : taux de conformité (titres requis valides, y compris expirant sous 60 jours, sur l'ensemble des titres requis),
+ * formations suivies sur les 12 mois précédant `asOf` (non annulées, tous titres), dont évaluées à froid et jugées non ou
+ * partiellement efficaces (HAB-13), recyclages en retard (titres requis expirés).
+ */
+export function skillIndicators(
+  rows: readonly { cells: readonly { state: SkillState; history: readonly { obtainedOn: string; cancelled: unknown; effectiveness: { key: string } | null }[] }[] }[],
+  asOf: string,
+) {
+  const cells = rows.flatMap((r) => r.cells);
+  const required = cells.filter((c) => c.state !== 'n');
+  const compliant = required.filter((c) => c.state === 'v' || c.state === 's').length;
+  const from = addMonths(asOf, -12);
+  const trainings = cells.flatMap((c) => c.history).filter((e) => !e.cancelled && e.obtainedOn > from && e.obtainedOn <= asOf);
+  const evaluated = trainings.filter((e) => e.effectiveness);
+  return {
+    required: required.length,
+    compliant,
+    /** Taux de conformité en % (arrondi à l'entier), null sans titre requis. */
+    rate: required.length ? Math.round((compliant / required.length) * 100) : null,
+    trainings12: trainings.length,
+    evaluated: evaluated.length,
+    ineffective: evaluated.filter((e) => e.effectiveness!.key !== 'efficace').length,
+    lateRenewals: required.filter((c) => c.state === 'x').length,
   };
 }

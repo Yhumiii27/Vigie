@@ -35,6 +35,10 @@ type Props = {
   defaultZoneId?: number;
   /** Message du QR code d'une zone archivée (« ce poste n'existe plus, choisissez le lieu »). */
   notice?: string;
+  /** Zone fixée par le QR code du poste (DUE-20 : ses risques sont proposés). */
+  postZoneId?: number;
+  /** DUE-20 : risques de l'unité de travail de chaque zone (clé : identifiant de la zone), à rattacher au signalement. */
+  zoneRisks?: Record<string, { id: number; label: string }[]>;
 };
 
 type Recognition = { lang: string; interimResults: boolean; onresult: (e: { results: { 0: { transcript: string } }[] }) => void; onend: () => void; start: () => void; stop: () => void };
@@ -91,7 +95,7 @@ async function shrinkPhoto(file: File): Promise<Shrunk> {
 }
 
 /** Formulaire de signalement terrain (mobile) — crée l'événement à l'étape « Déclaré ». */
-export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType, token, publicMode = false, loginHref, zones = [], defaultZoneId, notice }: Props) {
+export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType, token, publicMode = false, loginHref, zones = [], defaultZoneId, notice, postZoneId, zoneRisks = {} }: Props) {
   const maxPhotos = publicMode ? MAX_PUBLIC_PHOTOS : MAX_PHOTOS;
   const maxFileBytes = publicMode ? MAX_PUBLIC_PHOTO_BYTES : MAX_FILE_BYTES;
   const [type, setType] = useState<string | null>(defaultType ?? null);
@@ -99,9 +103,13 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
   const [editLocation, setEditLocation] = useState(!defaultLocation);
   const [zoneId, setZoneId] = useState(defaultZoneId && zones.some((z) => z.id === defaultZoneId) ? String(defaultZoneId) : '');
   // Lieu choisi dans les zones du site (EVT-19) : le texte reprend le nom de la zone tant qu'il n'est pas saisi.
+  const [riskId, setRiskId] = useState('');
+  // DUE-20 : risques de l'unité de la zone du poste (QR code) ou de la zone choisie.
+  const riskOptions = zoneRisks[String(postZoneId ?? zoneId)] ?? [];
   const pickZone = (value: string) => {
     const previous = zones.find((z) => String(z.id) === zoneId)?.name ?? '';
     setZoneId(value);
+    setRiskId('');
     const z = zones.find((x) => String(x.id) === value);
     if (!location.trim() || location === previous) setLocation(z?.name ?? '');
   };
@@ -131,7 +139,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
 
   const release = (list: Photo[]) => list.forEach((p) => { URL.revokeObjectURL(p.url); urls.current.delete(p.url); });
 
-  const reset = () => { setSent(null); setType(defaultType ?? null); setGrave(null); setAnonymous(false); setDescription(''); setError(null); };
+  const reset = () => { setSent(null); setType(defaultType ?? null); setGrave(null); setAnonymous(false); setDescription(''); setRiskId(''); setError(null); };
 
   const dictate = () => {
     if (listening) { rec.current?.stop(); return; }
@@ -211,6 +219,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
     fd.set('type', type ?? '');
     fd.set('location', location);
     if (zoneId) fd.set('zoneId', zoneId);
+    if (riskId && riskOptions.some((r) => String(r.id) === riskId)) fd.set('riskId', riskId);
     if (siteId) fd.set('siteId', siteId);
     fd.set('description', description);
     if (grave) fd.set('gravity', grave);
@@ -321,6 +330,17 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
         )}
         {!editLocation && <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>Pré-rempli par le QR code du poste</span>}
       </div>
+
+      {riskOptions.length > 0 && (
+        <div className="field">
+          <label htmlFor="report-risk">Risque du poste concerné (facultatif)</label>
+          <select id="report-risk" className="input" value={riskId} onChange={(e) => setRiskId(e.target.value)} style={{ fontSize: FIELD_FONT, minHeight: TOUCH }}>
+            <option value="">Je ne sais pas</option>
+            {riskOptions.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>Risques du document unique pour ce poste</span>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor="report-desc">Description</label>

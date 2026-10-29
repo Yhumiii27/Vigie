@@ -563,6 +563,16 @@ export function DossierView({ page, role, notice }: {
               {d.skills.counts.people} salarié{d.skills.counts.people > 1 ? 's' : ''} suivi{d.skills.counts.people > 1 ? 's' : ''} dans la <Ref href={d.skills.href} role={role}>matrice</Ref> · {d.skills.counts.expired} titre{d.skills.counts.expired > 1 ? 's' : ''} expiré{d.skills.counts.expired > 1 ? 's' : ''} · {d.skills.counts.soon} expirant sous 60 jours · {d.skills.counts.never} requis jamais suivi{d.skills.counts.never > 1 ? 's' : ''}
             </p>
           )}
+          {/* HAB-18 : indicateurs de compétences (absents des dossiers figés avant le paquet 13). */}
+          {d.skills.indicators && (
+            <div className="rd-kpis">
+              <Kpi label="Conformité des titres requis" value={d.skills.indicators.rate == null ? '—' : `${d.skills.indicators.rate} %`}
+                note={`${d.skills.indicators.compliant} sur ${d.skills.indicators.required} titres requis valides`} />
+              <Kpi label="Formations sur 12 mois" value={String(d.skills.indicators.trainings12)}
+                note={`${d.skills.indicators.evaluated} évaluée${d.skills.indicators.evaluated > 1 ? 's' : ''} à froid · ${d.skills.indicators.ineffective} non ou partiellement efficace${d.skills.indicators.ineffective > 1 ? 's' : ''}`} />
+              <Kpi label="Recyclages en retard" value={String(d.skills.indicators.lateRenewals)} note="titres requis expirés" />
+            </div>
+          )}
           <h3 className="rd-h3">Alertes d&apos;habilitation sur les affectations Keystone</h3>
           {d.skills.alerts?.length ? (
             <table className="table rd-table">

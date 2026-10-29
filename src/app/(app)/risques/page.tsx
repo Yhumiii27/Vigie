@@ -12,6 +12,8 @@ import { ExportMenu } from '@/components/risks/ExportMenu';
 import { DuerpAccessNotice } from '@/components/risks/AccessNotice';
 import { AccessRegister } from '@/components/risks/AccessRegister';
 import { ProgramPanel } from '@/components/risks/ProgramPanel';
+import { OverviewPanel } from '@/components/risks/OverviewPanel';
+import { duerpOverview } from '@/components/risks/overview';
 import { NewVersionButton, VersionsButton } from '@/components/risks/VersionDialogs';
 import { fmtDate, yearOf } from '@/lib/dates';
 import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, canSeeHealth, isEmployee, riskLevel } from '@/lib/domain';
@@ -43,7 +45,9 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   // ?programme=<année> : programme annuel de prévention (tous les rôles) ; ?registre=1 : mises à disposition (approbateurs).
   const programYear = typeof sp.programme === 'string' && /^\d{4}$/.test(sp.programme) ? Number(sp.programme) : null;
   const registerOn = approve && sp.registre === '1' && programYear == null;
-  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, actionsQhse, duerpRequirement }, options, register, program] =
+  // DUE-17 : vue d'ensemble toutes unités (?vue=ensemble), tous les rôles.
+  const overviewOn = sp.vue === 'ensemble' && programYear == null && !registerOn;
+  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, actionsQhse, duerpRequirement, measureOptions, zoneOptions }, options, register, program] =
     await Promise.all([
       loadRisks(),
       edit ? loadFormOptions() : Promise.resolve(NO_OPTIONS),
@@ -55,7 +59,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const riskParam = typeof sp.risque === 'string' ? Number(sp.risque) : null;
   const deepRisk = riskParam == null ? undefined : risks.find((r) => r.id === riskParam);
   const deepArchived = riskParam == null || deepRisk ? undefined : archivedRisks.find((r) => r.id === riskParam);
-  const archives = edit && !program && !registerOn && (wantsArchives(sp) || !!deepArchived);
+  const archives = edit && !program && !registerOn && !overviewOn && (wantsArchives(sp) || !!deepArchived);
   const archivedCount = archivedRisks.length + archivedUnits.length;
   const askedUnit = typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : undefined;
   const unitId = deepRisk?.unitId ?? askedUnit ?? units[0]?.id;
@@ -63,19 +67,22 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   // UX-07 : unité choisie explicitement (lien de la liste ou lien profond) — gardée dans l'URL, la fiche remplace alors la
   // liste sur téléphone ; sans choix, la première unité (grand écran) et la liste des unités (téléphone).
   const explicitUnit = !!askedUnit || !!deepRisk;
+  const overview = overviewOn && !deepRisk && !askedUnit;
   const params = {
     unite: explicitUnit ? unitId : undefined, mode: residual ? 'residuel' : undefined, etat: archives ? ARCHIVES : undefined,
-    programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined,
+    programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined, vue: overview ? 'ensemble' : undefined,
   };
-  // Panneau de droite : une unité, ou « Archivés », le programme annuel, le registre (les autres paramètres sont remis à zéro).
-  const panel = { etat: undefined, programme: undefined, registre: undefined };
-  const unitPanel = !archives && !program && !registerOn;
+  // Panneau de droite : une unité, ou la vue d'ensemble, « Archivés », le programme annuel, le registre (les autres
+  // paramètres sont remis à zéro).
+  const panel = { etat: undefined, programme: undefined, registre: undefined, vue: undefined };
+  const unitPanel = !archives && !program && !registerOn && !overview;
   const rows = risks.filter((r) => r.unitId === unitId);
   const unit = units.find((u) => u.id === unitId);
   // Site affiché (null = « Tous les sites ») : une unité rattachée à un autre site n'apparaît pas dans la liste.
   const viewSite = session.site.id === ALL_SITES ? null : { id: session.site.id, label: session.site.label };
   const defaultSiteId = viewSite?.id ?? session.siteOptions[0]?.id ?? '';
   const unitOptions = units.map(({ id, label, site }) => ({ id, label, site }));
+  const unitLabels = Object.fromEntries(units.map((u) => [u.id, u.label]));
   // Formulaire d'action : service QHSE seulement (ACT-22) ; listes vides sinon. Date du jour du serveur (VIGIE_TODAY).
   const actionOptions: ActionFormOptions = actionsQhse
     ? { people: options.people, sites: options.sites, today: today() }
@@ -159,6 +166,14 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
         <div className="vg-split vg-md" data-focus={explicitUnit || !unitPanel ? 'detail' : 'list'} style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
           <div className="vg-md-list" style={{ display: 'grid', gap: 2 }}>
             <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>Unités de travail</div>
+            {units.length > 0 && (
+              <Link href={hrefWith('/risques', params, { ...panel, unite: undefined, vue: overview ? undefined : 'ensemble' })} scroll={false}
+                className={`vg-item${overview ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }}
+                aria-current={overview ? 'page' : undefined}>
+                <Icon name="ph-squares-four" size={13} />
+                <span style={{ flex: 1, fontSize: 12.5 }}>Vue d&apos;ensemble · toutes unités</span>
+              </Link>
+            )}
             {units.map((u) => (
               <Link key={u.id} href={hrefWith('/risques', params, { ...panel, unite: u.id })} scroll={false} className={`vg-item${u.id === unitId && unitPanel ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
                 <span style={{ flex: 1, fontSize: 12.5 }}>{u.label}</span>
@@ -201,13 +216,17 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 )}
               </Link>
             )}
-            {edit && <AddUnitButton sites={options.sites} defaultSiteId={defaultSiteId} viewSite={viewSite} residual={residual} />}
+            {edit && <AddUnitButton sites={options.sites} zones={zoneOptions} unitLabels={unitLabels} defaultSiteId={defaultSiteId} viewSite={viewSite} residual={residual} />}
           </div>
 
           <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           <BackToList href={hrefWith('/risques', { mode: params.mode }, {})} label="Retour aux unités de travail" />
-          {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}`} />}
-          {program ? (
+          {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}:${overview}`} />}
+          {overview ? (
+            <OverviewPanel data={duerpOverview(units.map((u) => ({ id: u.id, label: u.label, site: u.site })), risks, residual)} residual={residual}
+              brutHref={hrefWith('/risques', params, { mode: undefined })} residualHref={hrefWith('/risques', params, { mode: 'residuel' })}
+              unitHref={(id) => hrefWith('/risques', params, { ...panel, unite: id })} scopeLabel={session.site.label} />
+          ) : program ? (
             <ProgramPanel key={program.year} data={program} canApprove={approve} showPilot={!employee} showHistory={edit}
               yearLinks={program.years.map((y) => ({ year: y, href: hrefWith('/risques', params, { programme: String(y) }) }))} />
           ) : registerOn && register ? (
@@ -242,8 +261,13 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 <div className="card" style={{ gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 22 }}>
                     <div className="card-kicker">{unit.label}{units.some((u) => u.site !== unit.site) ? ` · ${unit.site}` : ''}</div>
-                    {edit && <EditUnitButton unit={unit} sites={options.sites} viewSite={viewSite} residual={residual} isFirst={units[0]?.id === unit.id} isLast={units.at(-1)?.id === unit.id} />}
+                    {edit && <EditUnitButton unit={unit} sites={options.sites} zones={zoneOptions} unitLabels={unitLabels} viewSite={viewSite} residual={residual} isFirst={units[0]?.id === unit.id} isLast={units.at(-1)?.id === unit.id} />}
                   </div>
+                  {unit.zones.length > 0 && (
+                    <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="ph-map-pin" size={12} />Zones du plan : {unit.zones.map((z) => z.name).join(', ')}
+                    </span>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                     {stats.map((k) => (
                       <div key={k.k} style={{ display: 'grid', gap: 2 }}>
@@ -270,6 +294,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               <div className="card" style={{ padding: '6px 14px 10px' }}>
                 <div style={{ overflowX: 'auto' }}>
                   <RiskTable key={`${unit.id}:${deepRisk?.id ?? ''}`} rows={rows} unit={unit} units={unitOptions} canManage={edit} showEvents={!employee} showHistory={edit}
+                    measureOptions={measureOptions}
                     actionsQhse={actionsQhse} options={actionOptions}
                     linkableActions={linkableActions} initialRiskId={deepRisk?.id} />
                 </div>

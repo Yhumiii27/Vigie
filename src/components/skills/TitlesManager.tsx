@@ -13,7 +13,7 @@ function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: T
   const others = titles.filter((x) => x.id !== title?.id);
   const prereq = new Set(title?.prerequisiteIds ?? []);
   return (
-    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1' }}>
+    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1', awarenessField: '1' }}>
       <FormRow>
         <Field name="label" label="Intitulé">
           <Input name="label" defaultValue={title?.label} placeholder="Ex. Habilitation soudure" maxLength={60} autoFocus />
@@ -22,6 +22,10 @@ function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: T
           <Input name="validityMonths" type="number" inputMode="numeric" min={0} max={240} step={1} defaultValue={title?.validityMonths ?? 36} />
         </Field>
       </FormRow>
+      {/* HAB-13 : sensibilisation (ISO 45001 §7.3), suivie et évaluée comme une formation. */}
+      <Field name="awareness" label="Sensibilisation" hint="Accueil sécurité, causerie, consignes : action de sensibilisation (ISO 45001 §7.3) plutôt qu'une formation qualifiante.">
+        <Checkbox name="awareness" label="Action de sensibilisation" defaultChecked={title?.awareness ?? false} />
+      </Field>
       <Field name="firstAid" label="Secourisme" hint="Titulaires en cours de validité proposés comme donneurs de soins du registre des accidents bénins.">
         <Checkbox name="firstAid" label="Sauveteur secouriste du travail (SST) ou équivalent" defaultChecked={title?.firstAid ?? false} />
       </Field>
@@ -116,6 +120,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
               <td>
                 {t.label}
                 {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }} title="Donneurs de soins du registre des accidents bénins">Secourisme</span>}
+                {t.awareness && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }}>Sensibilisation</span>}
               </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t.validityMonths ? `${t.validityMonths} mois` : 'Sans échéance'}</td>
               {canManage && (

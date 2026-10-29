@@ -1,13 +1,14 @@
 import 'server-only';
 import { cache } from 'react';
 import {
-  PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, permitDays, permitState, toParisLocal,
+  PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, nextPeriodicMeeting, permitDays, permitState, toParisLocal,
   type PermitType,
 } from '@/components/prevention/model';
 import { addDays, fmtDate } from '../dates';
 import { byUrgency, type TodoItem, type Tone } from '../domain';
 import { TODO_HORIZON_DAYS } from '../horizons';
 import { gapSummary, loadRows, plural } from './prevention-rows';
+import { loadQhseLeads } from './leads';
 
 // Échéances de la prévention et indicateur de la veille (R. 4512-6) — QUA-26 : extrait de src/lib/data/prevention.ts.
 
@@ -47,8 +48,8 @@ export const loadPreventionCompliance = cache(async (): Promise<{
  * (actions immédiates hors actions QSE, réponses du service QHSE du 15/10/2026).
  */
 export const loadPreventionSignals = cache(async (): Promise<{ badge: number; todo: TodoItem[] }> => {
-  const rows = await loadRows('perimeter');
-  const { now, nowMs, people, contractors, plans, permits, ruleOf } = rows;
+  const [rows, leads] = await Promise.all([loadRows('perimeter'), loadQhseLeads()]);
+  const { now, nowMs, people, contractors, plans, permits, ruleOf, meetingsOf } = rows;
   const { gaps } = gapSummary(rows);
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const contractorName = (id: string | null) => (id ? contractors.find((c) => c.id === id)?.name ?? id : 'Intervention interne');
@@ -69,6 +70,17 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     if (p.endOn < now) {
       todo.push({ date: p.endOn, dueOn: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
       return;
+    }
+    // PRV-17 : inspection ou réunion périodique de coordination due (périodicité du plan) pendant l'intervention ;
+    // responsable du plan, sinon responsable QHSE du site.
+    const meeting = nextPeriodicMeeting(p, meetingsOf(p.id).map((m) => ({ heldOn: m.heldOn, cancelled: !!m.cancelledAt })), now);
+    if (meeting && meeting.dueOn <= horizon) {
+      const to = p.ownerId ? { who, ownerIds: [p.ownerId] } : { who: [contractorName(p.contractorId), leads.forSite(p.siteId).who].filter(Boolean).join(' · '), ownerIds: leads.forSite(p.siteId).ownerIds };
+      todo.push({
+        date: meeting.late ? now : meeting.dueOn, dueOn: meeting.dueOn, kind, tone: meeting.late ? 'danger' : 'warn', overdue: meeting.late || undefined,
+        title: `${p.id} · inspection ou réunion périodique de coordination ${meeting.late ? `en retard depuis le ${fmtDate(meeting.dueOn)}` : `avant le ${fmtDate(meeting.dueOn)}`} — ${p.title}`,
+        href, ...to, siteId, key: `pp-reunion|${p.id}`,
+      });
     }
     const toSignBeforeStart = p.startOn > now && p.startOn <= horizon && isMandatory(p, ruleOf(p.siteId)) && !isFullySigned(p);
     if (toSignBeforeStart) {

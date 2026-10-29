@@ -4,7 +4,7 @@ import {
   activityLinkIssues, addHoursLocal, firstFullSignatureOn, fmtLocalRange, fmtPeriod, fromParisLocal, fullSignatureOn, inGapWindow, isInProgress, isMandatory, lacksSignedPlan,
   lcfirst, legalReason, mandatoryReason, missingPlanContent, missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan,
   permitActivityBlocker, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
-  toParisLocal, validityOver, type PlanContent, type SiteRule,
+  nextPeriodicMeeting, toParisLocal, validityOver, type PlanContent, type SiteRule,
 } from './model';
 
 // Règles des plans de prévention et des permis (QUA-03) : R. 4512-6 à R. 4512-12, règle « dès la première minute ».
@@ -300,5 +300,21 @@ describe('PRV-11 : activités de la carte rattachées à un plan ou à un permis
     // Permis déjà rattaché, désormais clos : l'activité se modifie encore, tant que ses dates ne sortent pas de la validité.
     expect(permitActivityBlocker({ ...permit, status: 'clos' }, '2026-10-06', '2026-10-08', { keptLink: true, datesChanged: false })).toBeNull();
     expect(permitActivityBlocker({ ...permit, status: 'clos' }, '2026-10-06', '2026-10-08', { keptLink: true, datesChanged: true })).toMatch(/ne couvre aucun jour/);
+  });
+});
+
+describe('nextPeriodicMeeting : inspections et réunions périodiques (PRV-17)', () => {
+  const plan = { status: 'signe', startOn: '2026-01-05', endOn: '2026-12-31', inspectionOn: '2026-01-02', meetingPeriodDays: 30 };
+  it('depuis la dernière séance tenue, sinon le début de l’intervention', () => {
+    expect(nextPeriodicMeeting(plan, [], '2026-01-20')).toEqual({ dueOn: '2026-02-04', from: '2026-01-05', late: false });
+    expect(nextPeriodicMeeting(plan, [{ heldOn: '2026-09-20', cancelled: false }, { heldOn: '2026-10-01', cancelled: true }], '2026-10-09'))
+      .toEqual({ dueOn: '2026-10-20', from: '2026-09-20', late: false });
+    expect(nextPeriodicMeeting(plan, [{ heldOn: '2026-08-01', cancelled: false }], '2026-10-09')).toMatchObject({ dueOn: '2026-08-31', late: true });
+  });
+  it('rien sans périodicité, hors intervention, plan clos, ou séance due après la fin', () => {
+    expect(nextPeriodicMeeting({ ...plan, meetingPeriodDays: null }, [], '2026-03-01')).toBeNull();
+    expect(nextPeriodicMeeting(plan, [], '2025-12-31')).toBeNull();
+    expect(nextPeriodicMeeting({ ...plan, status: 'clos' }, [], '2026-03-01')).toBeNull();
+    expect(nextPeriodicMeeting({ ...plan, endOn: '2026-02-01' }, [], '2026-01-20')).toBeNull();
   });
 });

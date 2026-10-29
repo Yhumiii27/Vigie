@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { and, asc, desc, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { toAttachmentItem } from '../attachments';
 import { appliesToSite } from '../watch-rules';
@@ -8,14 +8,16 @@ import { addDays, addMonths, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   CONTROL_HORIZON_DAYS, CONTROL_RESULTS, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
-  isBlockingControlResult, type ControlResult, type TodoItem, type Tone,
+  SAFETY_NOTICE_KINDS, isBlockingControlResult, requirementReviewMonths, type ControlResult, type SafetyNoticeKind, type TodoItem, type Tone,
 } from '../domain';
-import { actionView, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
+import { actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
-import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
+import { currentSiteId, getSession, inPerimeter, inSite, siteFilter } from '../session';
+import { loadQhseLeads } from './leads';
 import { loadLinkedEvents } from './linked-events';
 import { loadPreventionCompliance } from './prevention-signals';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
+import { loadWasteIndicators } from './environment';
 
 // ─── Veille et contrôles ────────────────────────────────────────────────────
 
@@ -56,6 +58,27 @@ function duerpIndicator(d: DuerpStatus, horizonDays: number): RequirementIndicat
   return { label: `DUERP ${d.version} en vigueur · mise à jour avant le ${fmtDate(d.nextUpdateOn)}`, tone: soon ? 'warn' : 'ok', href: d.href, gap: false };
 }
 
+/**
+ * VEI-12 : état calculé de chaque certification (statut du certificat : engagement, validité, suspension, prochain audit
+ * au programme — certificationStatus, comme l'écran Audits), pour l'exigence rattachée à l'indicateur « certification ».
+ * Certificat suspendu ou expiré : écart.
+ */
+const loadCertificationIndicators = cache(async (now: string): Promise<Map<string, RequirementIndicator>> => {
+  const db = await getDb();
+  const [certs, items] = await Promise.all([
+    db.select().from(t.certifications),
+    db.select({ certificationId: t.auditPlanItems.certificationId, done: t.auditPlanItems.done, plannedOn: t.auditPlanItems.plannedOn, year: t.auditPlanItems.year, month: t.auditPlanItems.month })
+      .from(t.auditPlanItems).where(and(isNotNull(t.auditPlanItems.certificationId), isNull(t.auditPlanItems.cancelledAt))),
+  ]);
+  return new Map(certs.map((c) => {
+    // Prochain audit au programme (élément non réalisé), comme l'écran Audits ; sans date : fin du mois prévu.
+    const next = items.filter((p) => p.certificationId === c.id && !p.done)
+      .map((p) => p.plannedOn ?? `${p.year}-${String(p.month).padStart(2, '0')}-31`).sort()[0] ?? null;
+    const state = certificationStatus(c, next, now);
+    return [c.id, { label: `${c.standard} · ${state.label}`, tone: state.tone, href: '/audits', gap: state.tone === 'danger' }];
+  }));
+});
+
 // ─── Projets Keystone concernés (veille, tableau de bord) ───────────────────
 
 type ProjectRow = typeof t.keystoneProjects.$inferSelect;
@@ -84,7 +107,7 @@ export async function loadWatch() {
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [session, people, reqs, allControls, sites, projects, site, duerp, prevention] = await Promise.all([
+  const [session, people, reqs, allControls, sites, projects, site, duerp, prevention, waste, certs] = await Promise.all([
     getSession(),
     loadPeople(),
     db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
@@ -94,13 +117,19 @@ export async function loadWatch() {
     currentSiteId(),
     loadDuerpStatus(),
     loadPreventionCompliance(),
+    loadWasteIndicators(),
+    loadCertificationIndicators(now),
   ]);
   // Indicateur rattaché explicitement (linkedTo, VEI-07) — DUERP : échéance et état repris de la version en vigueur
-  // (/risques) ; plans de prévention (R. 4512-6) : interventions sans plan signé (/prevention).
+  // (/risques) ; plans de prévention (R. 4512-6) : interventions sans plan signé (/prevention) ; VEI-12 : registre des
+  // déchets (mentions) et bordereaux (BSD manquants), tout le périmètre (/environnement) ; certification choisie (/audits).
   const indicatorOf = (r: (typeof reqs)[number]): RequirementIndicator | null =>
     r.linkedTo === 'duerp' ? duerpIndicator(duerp, TODO_HORIZON_DAYS)
       : r.linkedTo === 'prevention' ? { ...prevention, gap: prevention.gapCount > 0 }
-        : null;
+        : r.linkedTo === 'waste_bsd' ? waste.bsd
+          : r.linkedTo === 'waste_register' ? waste.register
+            : r.linkedTo === 'certification' && r.certificationId ? certs.get(r.certificationId) ?? null
+              : null;
   const controls = allControls.filter((c) => inSite(site, c.siteId));
   // VEI-06 : une exigence vaut pour toute l'entreprise — ses contrôles rattachés sont lus sur tout le périmètre de la
   // personne, quel que soit le site sélectionné (l'onglet « Contrôles périodiques » reste filtré par site).
@@ -166,7 +195,8 @@ export async function loadWatch() {
     const due = requirementDue(r, perimeterControls);
     const late = linked.find((c) => c.overdue);
     const indicator = archived ? null : indicatorOf(r);
-    const reviewOn = r.lastEvaluatedOn && r.evaluation !== 'a_evaluer' ? addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS) : null;
+    // VEI-18 : périodicité de réévaluation propre à l'exigence (12 mois par défaut).
+    const reviewOn = r.lastEvaluatedOn && r.evaluation !== 'a_evaluer' ? addMonths(r.lastEvaluatedOn, requirementReviewMonths(r)) : null;
     const duerpDue = r.linkedTo === 'duerp' && duerp.nextUpdateOn ? `${fmtDate(duerp.nextUpdateOn)} · mise à jour annuelle du DUERP` : null;
     return {
       ...r,
@@ -192,6 +222,7 @@ export async function loadWatch() {
       suggestGap: !archived && (!!late || !!indicator?.gap) && r.evaluation !== 'ecart',
       suggestReason: late ? 'Contrôle rattaché dépassé' : indicator?.gap ? 'Indicateur calculé en écart' : null,
       suggestNote: (late ? `${late.controlType} ${lcfirst(equipShort(late.equipment))} dépassée` : indicator?.gap ? indicator.label : '').slice(0, 160) || null,
+      reviewEvery: requirementReviewMonths(r),
       nextReview: reviewOn && !archived ? {
         on: reviewOn,
         label: `Réévaluation avant le ${fmtDate(reviewOn)}`,
@@ -219,6 +250,8 @@ export async function loadWatch() {
       /** VEI-11 : résultat du contrôle (null pour une saisie antérieure). */
       result: r.result && r.result in CONTROL_RESULTS ? { key: r.result as ControlResult, ...CONTROL_RESULTS[r.result as ControlResult] } : null,
       recordedBy: name(r.recordedById),
+      /** VEI-14 : non-conformité ouverte par un étalonnage hors tolérance. */
+      eventId: r.eventId,
       cancelled: !!r.cancelledAt,
       cancelLabel: traceLabel('Annulé', r.cancelledAt, name(r.cancelledById), r.cancelReason),
       /** Enregistrement qui fixe l'état du contrôle (le plus récent non annulé, à la date du dernier contrôle). */
@@ -232,6 +265,8 @@ export async function loadWatch() {
 
   return {
     requirements,
+    // VEI-12 : certifications proposées pour l'indicateur « certification » d'une exigence.
+    certifications: [...certs.keys()].map((id) => [id, certs.get(id)!.label.split(' · ')[0]] as const),
     controls: controls.map((c) => {
       const s = controlState.get(c.id)!;
       const archived = !!c.archivedAt;
@@ -342,19 +377,143 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     } else if (dated && r.dueOn && r.dueOn <= horizon && !compliant) {
       todo.push({ ...base, date: r.dueOn, dueOn: r.dueOn, tone: 'warn', count: 0, title: `${r.text} — applicable le ${fmtDayMonth(r.dueOn)}` });
     } else if (r.lastEvaluatedOn) {
-      const reviewOn = addMonths(r.lastEvaluatedOn, REQUIREMENT_REVIEW_MONTHS);
+      // VEI-18 : périodicité propre à l'exigence ; « annuelle » pour 12 mois (intitulé et clé inchangés par défaut).
+      const months = requirementReviewMonths(r);
+      const reviewOn = addMonths(r.lastEvaluatedOn, months);
       if (reviewOn <= horizon) {
         const late = reviewOn < now;
         todo.push({
           ...base, date: late ? now : reviewOn, dueOn: reviewOn, tone: 'warn', overdue: late || undefined, count: 0,
-          title: `${r.text} — réévaluation annuelle${late ? ` en retard depuis le ${fmtDayMonth(reviewOn)}` : ''}`,
+          title: `${r.text} — ${months === REQUIREMENT_REVIEW_MONTHS ? 'réévaluation annuelle' : `réévaluation (tous les ${months} mois)`}${late ? ` en retard depuis le ${fmtDayMonth(reviewOn)}` : ''}`,
         });
       }
     }
   });
 
+  // VEI-15 : observations et mises en demeure du registre de sécurité sans réponse, sur les sites du périmètre, au
+  // responsable QHSE du site ; délai fixé : échéance (badge) sous l'horizon ou dépassée ; sans délai : à traiter (count 0).
+  const [notices, keep, leads] = await Promise.all([
+    db.select().from(t.safetyNotices).where(and(isNull(t.safetyNotices.cancelledAt), isNull(t.safetyNotices.answeredOn))),
+    siteFilter('perimeter'), loadQhseLeads(),
+  ]);
+  let noticeBadge = 0;
+  notices.filter((n) => keep(n.siteId)).forEach((n) => {
+    const to = leads.forSite(n.siteId);
+    const label = SAFETY_NOTICE_KINDS[n.kind as SafetyNoticeKind]?.label ?? 'Observation';
+    const base = {
+      kind: 'Registre de sécurité', who: [n.authority, to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: n.siteId,
+      href: `/veille?onglet=registre&observation=${n.id}`, key: `registre-securite|${n.id}`,
+    };
+    const what = `${label} (${n.authority}) du ${fmtDayMonth(n.receivedOn)}`;
+    if (n.dueOn && n.dueOn < now) {
+      noticeBadge += 1;
+      todo.push({ ...base, date: now, dueOn: n.dueOn, tone: 'danger', overdue: true, title: `${what} — réponse en retard depuis le ${fmtDayMonth(n.dueOn)}` });
+    } else if (n.dueOn && n.dueOn <= horizon) {
+      noticeBadge += 1;
+      todo.push({ ...base, date: n.dueOn, dueOn: n.dueOn, tone: n.kind === 'mise_en_demeure' ? 'danger' : 'warn', title: `${what} — réponse attendue avant le ${fmtDayMonth(n.dueOn)}` });
+    } else if (!n.dueOn) {
+      todo.push({ ...base, date: now, tone: 'warn', count: 0, title: `${what} — réponse à apporter` });
+    }
+  });
+
   const badge = controls.filter((c) => controlStatus(c, now).days <= CONTROL_HORIZON_DAYS).length
     + controls.filter((c) => c.reserves && !c.actionId).length
-    + reqs.filter((r) => r.evaluation === 'a_evaluer' || (NEEDS_ACTION.has(r.evaluation) && !r.actionId)).length;
+    + reqs.filter((r) => r.evaluation === 'a_evaluer' || (NEEDS_ACTION.has(r.evaluation) && !r.actionId)).length
+    + noticeBadge;
   return { badge, todo };
 });
+
+// ─── Registre de sécurité (VEI-15) ──────────────────────────────────────────
+
+/** Observation ou mise en demeure du registre de sécurité, telle qu'affichée (onglet « Registre de sécurité », impression). */
+export type SafetyNoticeView = {
+  id: number; siteId: string; siteLabel: string; kind: SafetyNoticeKind; kindLabel: string; tone: Tone;
+  receivedOn: string; authority: string; reference: string | null; text: string; dueOn: string | null;
+  controlId: number | null; control: string | null;
+  answeredOn: string | null; answer: string | null; answeredBy: string;
+  /** Réponse attendue (non répondue, non annulée) : en retard après le délai. */
+  state: { label: string; tone: Tone };
+  cancelled: { on: string; by: string; reason: string } | null;
+};
+
+const noticeState = (n: { answeredOn: string | null; dueOn: string | null; cancelledAt: Date | null }, now: string): { label: string; tone: Tone } =>
+  n.cancelledAt ? { label: 'Annulée', tone: 'neutral' }
+    : n.answeredOn ? { label: `Réponse apportée le ${fmtDate(n.answeredOn)}`, tone: 'ok' }
+      : n.dueOn && n.dueOn < now ? { label: `Réponse en retard depuis le ${fmtDate(n.dueOn)}`, tone: 'danger' }
+        : n.dueOn ? { label: `Réponse attendue avant le ${fmtDate(n.dueOn)}`, tone: 'warn' }
+          : { label: 'Réponse à apporter', tone: 'warn' };
+
+/**
+ * Observations et mises en demeure du registre de sécurité (L. 4711-1) du site sélectionné (« Tous les sites » :
+ * périmètre), annulées comprises (barrées), la plus récente d'abord ; équipements proposés (contrôles en service du site).
+ */
+export const loadSafetyNotices = cache(async (): Promise<{ notices: SafetyNoticeView[]; controlOptions: (readonly [string, string, string | null])[] }> => {
+  const db = await getDb();
+  const now = today();
+  const [rows, people, sites, keep, controls] = await Promise.all([
+    db.select().from(t.safetyNotices).orderBy(desc(t.safetyNotices.receivedOn), desc(t.safetyNotices.id)),
+    loadPeople(), loadSiteRows(), siteFilter('site'), loadControls(),
+  ]);
+  const siteLabel = new Map(sites.map((s) => [s.id, s.label.split(' — ')[0]]));
+  const name = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
+  const allControls = rows.some((r) => r.controlId)
+    ? new Map((await db.select({ id: t.controls.id, equipment: t.controls.equipment }).from(t.controls)).map((c) => [c.id, c.equipment]))
+    : new Map<number, string>();
+  return {
+    notices: rows.filter((r) => keep(r.siteId)).map((r) => ({
+      id: r.id, siteId: r.siteId, siteLabel: siteLabel.get(r.siteId) ?? r.siteId,
+      kind: r.kind as SafetyNoticeKind, kindLabel: SAFETY_NOTICE_KINDS[r.kind as SafetyNoticeKind]?.label ?? r.kind, tone: SAFETY_NOTICE_KINDS[r.kind as SafetyNoticeKind]?.tone ?? 'neutral',
+      receivedOn: r.receivedOn, authority: r.authority, reference: r.reference, text: r.text, dueOn: r.dueOn,
+      controlId: r.controlId, control: r.controlId ? allControls.get(r.controlId) ?? null : null,
+      answeredOn: r.answeredOn, answer: r.answer, answeredBy: name(r.answeredById),
+      state: noticeState(r, now),
+      cancelled: r.cancelledAt ? { on: fmtDate(parisDay(r.cancelledAt)), by: name(r.cancelledById), reason: r.cancelReason ?? '' } : null,
+    })),
+    // [identifiant, équipement, site] : la liste du formulaire garde les contrôles du site choisi (ou communs).
+    controlOptions: controls.map((c) => [String(c.id), `${c.equipment} · ${c.controlType}`, c.siteId] as const),
+  };
+});
+
+/**
+ * Registre de sécurité imprimable par site (L. 4711-1 : attestations, consignes, résultats et rapports des contrôles et
+ * vérifications, observations et mises en demeure) : pour chaque site du choix (site sélectionné, sinon tous les sites du
+ * périmètre), les vérifications périodiques réalisées (enregistrements non annulés des contrôles du site et des contrôles
+ * communs, équipements réformés compris) et les observations et mises en demeure (non annulées). Consolidé à l'affichage,
+ * jamais stocké.
+ */
+export async function loadSafetyRegisterPrint() {
+  const db = await getDb();
+  const now = today();
+  const [{ notices }, sites, keep, controls, people] = await Promise.all([
+    loadSafetyNotices(), loadSiteRows(), siteFilter('site'), db.select().from(t.controls).orderBy(asc(t.controls.sort), asc(t.controls.id)), loadPeople(),
+  ]);
+  const shown = controls.filter((c) => keep(c.siteId));
+  const records = shown.length
+    ? await db.select().from(t.controlRecords).where(and(inArray(t.controlRecords.controlId, shown.map((c) => c.id)), isNull(t.controlRecords.cancelledAt)))
+      .orderBy(desc(t.controlRecords.performedOn), desc(t.controlRecords.id))
+    : [];
+  const registerSites = sites.filter((s) => keep(s.id) && (!s.archivedAt || notices.some((n) => n.siteId === s.id)));
+  return {
+    now,
+    sites: registerSites.map((s) => {
+      const mine = shown.filter((c) => !c.siteId || c.siteId === s.id);
+      return {
+        id: s.id, label: s.label, siret: s.siret, archived: !!s.archivedAt,
+        controls: mine.map((c) => {
+          const state = controlStatus(c, now);
+          return {
+            id: c.id, equipment: c.equipment, controlType: c.controlType, category: c.category, organization: c.organization, period: c.periodMonths,
+            responsible: c.responsibleId ? people.get(c.responsibleId)?.name ?? '' : '', common: !c.siteId,
+            next: c.nextOn, status: c.archivedAt ? 'Équipement réformé' : state.label, tone: (c.archivedAt ? 'neutral' : state.tone) as Tone,
+            reserves: c.reserves,
+            records: records.filter((r) => r.controlId === c.id).map((r) => ({
+              id: r.id, performedOn: r.performedOn, organization: r.organization, reserves: r.reserves, notes: r.notes,
+              result: r.result && r.result in CONTROL_RESULTS ? CONTROL_RESULTS[r.result as ControlResult].label : null, eventId: r.eventId,
+            })),
+          };
+        }),
+        notices: notices.filter((n) => n.siteId === s.id && !n.cancelled),
+      };
+    }),
+  };
+}

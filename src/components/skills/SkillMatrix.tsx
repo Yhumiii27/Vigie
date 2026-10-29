@@ -4,16 +4,16 @@ import { useEffect, useOptimistic, useRef, useState, useTransition, type Keyboar
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Attachments } from '@/components/Attachments';
 import { Dialog, DialogButton } from '@/components/Dialog';
-import { Input, Select } from '@/components/form';
+import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { Icon } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { legacySkillFilters, parseSkillFilters, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
-import { SKILL_FILTERS, SKILL_STATES, type SkillFilter, type SkillState } from '@/lib/domain';
+import { SKILL_FILTERS, SKILL_STATES, TONE, TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, type SkillFilter, type SkillState } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
 import type { Person } from '@/lib/queries';
-import { addQualificationFiles, cancelQualification, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
+import { addQualificationFiles, cancelQualification, evaluateTrainingEffectiveness, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
 import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { PersonForm } from './PersonForm';
@@ -196,6 +196,8 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
           onRemove={removeQualificationFile} />
       )}
 
+      {qid !== null && <Effectiveness cell={cell} canManage={canManage} today={today} />}
+
       <HistoryTable entries={cell.history} onCancel={canManage ? (e) => onCancelTraining(e.id) : undefined} />
       {/* Journal de la case (HAB-03) : formations, attestations, exigence — à la saisie seulement, chargé à l'ouverture. */}
       {canManage && <LazyChangeLog entity="skill_cell" id={`${row.person.id}|${cell.title.id}`} title="Historique des modifications" />}
@@ -211,6 +213,56 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
             <button type="button" className="btn btn-secondary" onClick={onCorrect}><Icon name="ph-pencil-simple" size={14} />Corriger</button>
           )}
           <button type="button" className="btn btn-primary" onClick={onRecord}><Icon name="ph-certificate" size={14} />Enregistrer / renouveler</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EFFECTIVENESS_OPTIONS = TRAINING_EFFECTIVENESS_KEYS.map((k) => [k, TRAINING_EFFECTIVENESS[k].label] as const);
+
+/**
+ * HAB-13 : évaluation à froid de l'efficacité de la formation en cours (ISO 45001 §7.2 d) — résultat, date et constat ;
+ * saisie par l'encadrement des habilitations, lecture pour le salarié concerné. Une nouvelle évaluation remplace la
+ * précédente (journal de la case).
+ */
+function Effectiveness({ cell, canManage, today }: { cell: SkillCell; canManage: boolean; today: string }) {
+  const [editing, setEditing] = useState(false);
+  const current = cell.history.find((e) => e.id === cell.qualificationId) ?? null;
+  if (!current) return null;
+  const ev = current.effectiveness;
+  return (
+    <div style={{ display: 'grid', gap: 8 }}>
+      <h6 className="vg-h6">{cell.title.awareness ? 'Efficacité de la sensibilisation' : 'Efficacité de la formation'} · évaluation à froid</h6>
+      {ev ? (
+        <div style={{ display: 'grid', gap: 3, fontSize: 12.5 }}>
+          <span style={{ color: TONE[ev.tone].fg }}>{ev.label} · évaluée le {fmtDate(ev.on)}{ev.by && ev.by !== '—' ? ` par ${ev.by}` : ''}</span>
+          {ev.note && <span style={{ color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{ev.note}</span>}
+        </div>
+      ) : (
+        <span style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Non évaluée : compétence acquise à vérifier quelques semaines après la formation (observation au poste, entretien, test).</span>
+      )}
+      {canManage && !editing && (
+        <button type="button" className="vg-text-btn" style={{ justifySelf: 'start' }} onClick={() => setEditing(true)}>
+          {ev ? "Modifier l'évaluation" : "Évaluer l'efficacité"}
+        </button>
+      )}
+      {canManage && editing && (
+        <div className="vg-inset" style={{ padding: '10px 12px' }}>
+          <ActionForm action={evaluateTrainingEffectiveness} hidden={{ id: current.id }} onDone={() => setEditing(false)} onCancel={() => setEditing(false)}
+            submitLabel="Enregistrer l'évaluation" submitIcon="ph-seal-check">
+            <FormRow>
+              <Field name="effectiveness" label="Résultat">
+                <Select name="effectiveness" options={EFFECTIVENESS_OPTIONS} defaultValue={ev?.key ?? ''} placeholder="Choisir…" />
+              </Field>
+              <Field name="effectivenessOn" label="Évaluée le">
+                <Input name="effectivenessOn" type="date" defaultValue={ev?.on ?? today} min={current.obtainedOn} max={today} />
+              </Field>
+            </FormRow>
+            <Field name="effectivenessNote" label="Constat" hint="Obligatoire si la formation n'est pas jugée efficace (écarts observés, suite donnée).">
+              <TextArea name="effectivenessNote" rows={2} maxLength={500} defaultValue={ev?.note ?? ''} />
+            </Field>
+          </ActionForm>
         </div>
       )}
     </div>

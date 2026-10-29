@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillLinkTarget } from './rules';
+import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillIndicators, skillLinkTarget } from './rules';
 
 // Règles des habilitations (QUA-03) : manque au regard d'une affectation Keystone, recyclage à planifier.
 
@@ -130,5 +130,30 @@ describe('skillLinkTarget : lien profond vers la matrice (HAB-17)', () => {
   it('vue Salarié : la fiche d’autrui n’est jamais affichée', () => {
     expect(skillLinkTarget({ ...base, self: true, personId: 'p1' })).toEqual({ notice: 'Fiche non accessible : seules vos habilitations sont affichées.' });
     expect(skillLinkTarget({ ...base, self: true, personId: 'moi', titleId: 'sst' })).toEqual({ select: { personId: 'moi', titleId: 'sst' } });
+  });
+});
+
+describe('skillIndicators : indicateurs de compétences de la revue (HAB-18)', () => {
+  const entry = (obtainedOn: string, extra: { cancelled?: boolean; effectiveness?: string } = {}) =>
+    ({ obtainedOn, cancelled: extra.cancelled ? { at: '', by: '', reason: 'x' } : null, effectiveness: extra.effectiveness ? { key: extra.effectiveness } : null });
+  const rows = [
+    { cells: [
+      { state: 'v' as const, history: [entry('2026-03-01', { effectiveness: 'efficace' }), entry('2023-03-01')] },
+      { state: 'x' as const, history: [entry('2021-01-01')] },
+      { state: 'n' as const, history: [entry('2026-06-01', { effectiveness: 'partielle' })] },
+    ] },
+    { cells: [
+      { state: 's' as const, history: [entry('2026-09-30', { cancelled: true }), entry('2025-11-01')] },
+      { state: 'r' as const, history: [] },
+      { state: 'p' as const, history: [entry('2025-10-10')] },
+    ] },
+  ];
+  it('taux de conformité, formations sur 12 mois et efficacité, recyclages en retard', () => {
+    expect(skillIndicators(rows, '2026-10-09')).toEqual({
+      required: 5, compliant: 2, rate: 40, trainings12: 4, evaluated: 2, ineffective: 1, lateRenewals: 1,
+    });
+  });
+  it('sans titre requis : taux non calculé', () => {
+    expect(skillIndicators([], '2026-10-09')).toMatchObject({ required: 0, rate: null, trainings12: 0 });
   });
 });

@@ -1,27 +1,27 @@
 {
  "Animateur QHSE|ville-a": {
-  "todo": 76,
-  "visible": 68,
+  "todo": 79,
+  "visible": 71,
   "badges": {
-   "todo": 68,
+   "todo": 71,
    "docs": 6,
-   "watch": 11,
+   "watch": 12,
    "audits": 8,
    "actions": 12,
    "env": 4,
    "skills": 4,
-   "prevention": 11,
+   "prevention": 12,
    "events": 4,
-   "risks": 8
+   "risks": 9
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
-  "visibleHash": "eaaf55ed5589b92753c8de9a741317a4765012fd4ee651a007843c08603fd82f"
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
+  "visibleHash": "365beafc7769119bf8a41014a42afcb868d8fc8de034b3791ecf193a3fd49be8"
  },
  "Animateur QHSE|ville-b": {
-  "todo": 76,
-  "visible": 51,
+  "todo": 79,
+  "visible": 53,
   "badges": {
-   "todo": 51,
+   "todo": 53,
    "docs": 5,
    "audits": 8,
    "actions": 4,
@@ -30,47 +30,47 @@
    "watch": 6,
    "risks": 2
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
-  "visibleHash": "11844944cdec5021863e94f4776ee832584c6e4105c10644bbcc5aa44f05eacb"
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
+  "visibleHash": "159335cbf1ddfac2473ea6098842a2df179a9c02d07819f6b6283ea18044d484"
  },
  "Animateur QHSE|all": {
-  "todo": 76,
-  "visible": 76,
+  "todo": 79,
+  "visible": 79,
   "badges": {
-   "todo": 76,
+   "todo": 79,
    "docs": 6,
-   "watch": 13,
+   "watch": 14,
    "audits": 8,
    "actions": 15,
    "env": 7,
    "skills": 4,
-   "prevention": 13,
+   "prevention": 14,
    "events": 4,
-   "risks": 9
+   "risks": 10
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
-  "visibleHash": "d72d343258906bdde4ea13903b35a0762111ff78e86692d97b0c9618d19d82c4"
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
+  "visibleHash": "9d3f224e8a693b90785cd9dc8ccf98e3f25d55efad42b89d0f6a402e14696760"
  },
  "Direction|ville-a": {
-  "todo": 76,
-  "visible": 65,
+  "todo": 79,
+  "visible": 68,
   "badges": {
-   "todo": 65,
+   "todo": 68,
    "docs": 6,
-   "watch": 11,
+   "watch": 12,
    "audits": 8,
    "actions": 12,
    "env": 4,
    "skills": 4,
-   "prevention": 11,
+   "prevention": 12,
    "events": 4,
-   "risks": 8
+   "risks": 9
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
-  "visibleHash": "1a1c59ec87137aebb42c0686a8213033154340691b14e639e93cba374d070401"
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
+  "visibleHash": "d2f7e0b4b4e6f0f9d0336b88aa954f68478ef88343cbfa412fad1e5ff6e4b00f"
  },
  "Direction|ville-b": {
-  "todo": 76,
+  "todo": 79,
   "visible": 32,
   "badges": {
    "todo": 32,
@@ -82,139 +82,139 @@
    "watch": 6,
    "risks": 2
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
   "visibleHash": "b4b5d4d74f4700c959b7b6ee615c889df7e2e185b0d772dfd229d6a051cda4db"
  },
  "Direction|all": {
-  "todo": 76,
-  "visible": 76,
+  "todo": 79,
+  "visible": 79,
   "badges": {
-   "todo": 76,
+   "todo": 79,
    "docs": 6,
-   "watch": 13,
+   "watch": 14,
    "audits": 8,
    "actions": 15,
    "env": 7,
    "skills": 4,
-   "prevention": 13,
+   "prevention": 14,
    "events": 4,
-   "risks": 9
+   "risks": 10
   },
-  "todoHash": "492625d944a8b147b74fbf43d607dc8bfef6db26a2ac59a7a5384c614c7b76fa",
-  "visibleHash": "d72d343258906bdde4ea13903b35a0762111ff78e86692d97b0c9618d19d82c4"
+  "todoHash": "3974fe7ef11e92a45cc2a1b5aef1ac121a2ae98bdf130310772cca27d807b84b",
+  "visibleHash": "9d3f224e8a693b90785cd9dc8ccf98e3f25d55efad42b89d0f6a402e14696760"
  },
  "Chef de service|ville-a": {
-  "todo": 72,
-  "visible": 40,
+  "todo": 75,
+  "visible": 43,
   "badges": {
-   "todo": 40,
-   "watch": 11,
+   "todo": 43,
+   "watch": 12,
    "docs": 1,
    "skills": 4,
    "audits": 3,
-   "prevention": 11,
+   "prevention": 12,
    "events": 3,
-   "risks": 7,
+   "risks": 8,
    "actions": 3
   },
-  "todoHash": "e2a9b5a39a0ede5450eff06b02087e9c95bc3b5c350017c0a5a557e2ef8f7f96",
-  "visibleHash": "ddfe2bc59320f5bc01d6187b9ea68afc9fccf871c6f539a293d294eafe8d5e17"
+  "todoHash": "77eaf876105bbae9ab2f7a91935260391114055a0946e1359f0307da16136ad3",
+  "visibleHash": "61cdf39567aa0627403e586d3efef5b0e92e01295b344d15c0c38536894253ee"
  },
  "Chef de service|ville-b": {
-  "todo": 72,
-  "visible": 25,
+  "todo": 75,
+  "visible": 26,
   "badges": {
-   "todo": 25,
+   "todo": 26,
    "docs": 1,
    "audits": 3,
    "prevention": 2,
    "watch": 6,
    "risks": 2
   },
-  "todoHash": "e2a9b5a39a0ede5450eff06b02087e9c95bc3b5c350017c0a5a557e2ef8f7f96",
-  "visibleHash": "8f81deaa85e1cdd88ef54ce4e3ee6a7eb2dc692c4e9d3f1fe9f689057f525a89"
+  "todoHash": "77eaf876105bbae9ab2f7a91935260391114055a0946e1359f0307da16136ad3",
+  "visibleHash": "6673de42ea92117fe15b0d4bea6d8430eb968b3ec86a96f191ffee9c85d8c692"
  },
  "Chef de service|all": {
-  "todo": 72,
-  "visible": 45,
+  "todo": 75,
+  "visible": 48,
   "badges": {
-   "todo": 45,
-   "watch": 13,
+   "todo": 48,
+   "watch": 14,
    "docs": 1,
    "skills": 4,
    "audits": 3,
-   "prevention": 13,
+   "prevention": 14,
    "events": 3,
-   "risks": 8,
+   "risks": 9,
    "actions": 3
   },
-  "todoHash": "e2a9b5a39a0ede5450eff06b02087e9c95bc3b5c350017c0a5a557e2ef8f7f96",
-  "visibleHash": "4527706ce503ade926ff731b0ca50103f40788397ce493a8e6210e47249e906d"
+  "todoHash": "77eaf876105bbae9ab2f7a91935260391114055a0946e1359f0307da16136ad3",
+  "visibleHash": "556f5b5375108073a5495989a36b6e474f8ba626c684b9fd120d433e9fe1d605"
  },
  "Chef de projet|ville-a": {
-  "todo": 66,
-  "visible": 14,
+  "todo": 68,
+  "visible": 15,
   "badges": {
-   "todo": 14,
-   "prevention": 11,
+   "todo": 15,
+   "prevention": 12,
    "events": 3,
    "actions": 1,
    "audits": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
-  "visibleHash": "58d4c952f692953c944678335c081751360c072e51b38c810be54e04d40db15c"
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
+  "visibleHash": "ca596466124193929f359c936e2cd5f74b004a95f37c1da99444b9f52dd90ff1"
  },
  "Chef de projet|ville-b": {
-  "todo": 66,
+  "todo": 68,
   "visible": 4,
   "badges": {
    "todo": 4,
    "prevention": 2,
    "audits": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
   "visibleHash": "a8ab3e295488c8e24dd24587c7b808140e10c79a1d1c741da6ca884883556ece"
  },
  "Chef de projet|all": {
-  "todo": 66,
-  "visible": 16,
+  "todo": 68,
+  "visible": 17,
   "badges": {
-   "todo": 16,
-   "prevention": 13,
+   "todo": 17,
+   "prevention": 14,
    "events": 3,
    "actions": 1,
    "audits": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
-  "visibleHash": "1c7aed6a67eb913d84dc0e02ebd6c6acf0459457c9634575e9ce50f34b794821"
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
+  "visibleHash": "8d5d131ffa92fcf3547ceb03a26bbec6e251c8bd4e9581793b2768d3e0970162"
  },
  "Salarié|ville-a": {
-  "todo": 66,
+  "todo": 68,
   "visible": 1,
   "badges": {
    "todo": 1,
    "skills": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
   "visibleHash": "7fe7c1a4e74edd200fff90173dda4fac4a9ec90ed5bcd277a0671200749ed1ac"
  },
  "Salarié|ville-b": {
-  "todo": 66,
+  "todo": 68,
   "visible": 1,
   "badges": {
    "todo": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
   "visibleHash": "8d1aa6d3960a94123860e889d29dfea456b183a11a809d0db3cf752214c2891b"
  },
  "Salarié|all": {
-  "todo": 66,
+  "todo": 68,
   "visible": 1,
   "badges": {
    "todo": 1,
    "skills": 1
   },
-  "todoHash": "d753447e3a805a7d5ca412ef8c225aa6a823834e0b49b37c6d34ede318cbfd79",
+  "todoHash": "ee52e69bfb1305a239d4359b988c531f782ba5a29349ee876b2a75b96196e60a",
   "visibleHash": "7451bc9dc034cacb3ff1b3f2654caa9beb98afa215276b0bc044ebeb21a96210"
  }
 }

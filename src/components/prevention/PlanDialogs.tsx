@@ -19,6 +19,7 @@ import {
   lcfirst, ruleBasis, type PlanContentField, type PlanContentGroup,
 } from './model';
 import { TipButton } from '@/components/Tip';
+import { PlanMeetings } from './PlanMeetings';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
   contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
@@ -505,6 +506,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
           </div>
         )}
       </div>
+
+      <PlanMeetings plan={plan} editable={editable} today={options.today} />
 
       <PlanAttachments plan={plan} editable={editable} />
 

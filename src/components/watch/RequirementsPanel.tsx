@@ -14,7 +14,7 @@ import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { fmtDate } from '@/lib/dates';
-import { REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_NEEDS_ACTION, TONE, isRequirementLink } from '@/lib/domain';
+import { REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MAX, REQUIREMENT_REVIEW_MONTHS, TONE, isRequirementLink } from '@/lib/domain';
 import type { FormOptions } from '@/lib/data/options';
 import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { RequirementView } from '@/lib/data/watch';
@@ -24,7 +24,7 @@ import { requirementActionDefaults } from './action-defaults';
 import { ArchivedBanner, FILES_HINT, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 
 /** `applicableSites` (VEI-10) : sites proposés pour l'applicabilité d'une exigence — périmètre complet seulement, sinon vide. */
-type Opts = Pick<FormOptions, 'people' | 'sites'> & { applicableSites?: readonly Option[] };
+type Opts = Pick<FormOptions, 'people' | 'sites'> & { applicableSites?: readonly Option[]; certifications?: readonly Option[] };
 /**
  * Plan d'actions (ACT-22, réponses du service QHSE du 15/10/2026) : `actionOptions` (listes du formulaire d'action) et
  * `linkActions` (actions ouvertes à rattacher) ne sont fournis qu'au service QHSE, seul à créer une action et à modifier
@@ -178,6 +178,8 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
         ['Évaluation', <ToneTag key="e" tone={r.tone} style={{ marginTop: 1 }}>{r.evalLabel}</ToneTag>],
         ['Dernière évaluation', r.lastEvaluated ?? (r.evaluation === 'a_evaluer' ? 'Jamais évaluée' : 'Non datée')],
         r.nextReview && ['Réévaluation', <span key="r" style={{ color: r.nextReview.tone === 'neutral' ? undefined : TONE[r.nextReview.tone].dot }}>{r.nextReview.label.replace('Réévaluation avant', 'Avant')}</span>],
+        // VEI-18 : périodicité propre à l'exigence (12 mois par défaut).
+        ['Périodicité', `Réévaluation tous les ${r.reviewEvery} mois${r.reviewMonths == null ? ' (par défaut)' : ''}`],
         ['Échéance', r.due || '—'],
         r.indicator && ['Indicateur calculé', (
           <Link key="i" href={r.indicator.href} className="vg-link" style={{ fontSize: 12.5, color: r.indicator.tone === 'ok' ? undefined : TONE[r.indicator.tone].dot }}>
@@ -447,6 +449,8 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
   const pilots = withCurrent(options.people, r?.pilotId, r ? `${r.pilot || r.pilotId}${LEFT_SUFFIX}` : undefined);
   const applicable = options.applicableSites ?? [];
   const chosen = new Set(r?.siteIds ?? []);
+  // VEI-12 : la certification n'est demandée que pour l'indicateur « certification ».
+  const [linkedTo, setLinkedTo] = useState(r?.linkedTo ?? '');
   return (
     <ActionForm action={saveRequirement} hidden={{ id: r?.id, siteIdsField: applicable.length ? '1' : undefined, linkedToField: '1' }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
       <FormRow>
@@ -462,7 +466,16 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
       </Field>
       <Field name="linkedTo" label="Indicateur rattaché"
         hint={isRequirementLink(r?.linkedTo) ? REQUIREMENT_LINKS[r.linkedTo].hint : "Facultatif : l'état de l'exigence est alors repris d'un indicateur calculé de Vigie (un indicateur par exigence en vigueur)."}>
-        <Select name="linkedTo" options={LINK_OPTIONS} defaultValue={r?.linkedTo ?? ''} placeholder="Aucun indicateur" />
+        <Select name="linkedTo" options={LINK_OPTIONS} value={linkedTo} onChange={(e) => setLinkedTo(e.target.value)} placeholder="Aucun indicateur" />
+      </Field>
+      {linkedTo === 'certification' && (
+        <Field name="certificationId" label="Certification rattachée" hint="Une exigence en vigueur par certification ; état repris du statut du certificat (écran Audits).">
+          <Select name="certificationId" options={options.certifications ?? []} defaultValue={r?.certificationId ?? ''} placeholder="Choisir…" />
+        </Field>
+      )}
+      <Field name="reviewMonths" label="Réévaluation de la conformité tous les (mois)"
+        hint={`Vide = ${REQUIREMENT_REVIEW_MONTHS} mois. Périodicité propre à l'exigence (1 à ${REQUIREMENT_REVIEW_MAX} mois), comptée depuis la dernière évaluation.`}>
+        <Input name="reviewMonths" type="number" min={1} max={REQUIREMENT_REVIEW_MAX} step={1} inputMode="numeric" defaultValue={r?.reviewMonths ?? ''} placeholder={String(REQUIREMENT_REVIEW_MONTHS)} />
       </Field>
       {applicable.length > 0 && (
         <Field name="siteIds" label="Sites concernés" hint="Aucun site coché : l'exigence s'applique à tous les sites.">
