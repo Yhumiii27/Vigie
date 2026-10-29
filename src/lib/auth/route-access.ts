@@ -47,6 +47,8 @@ export const HEALTH_PAGES: readonly { path: string; back: string }[] = [
   { path: '/evenements/imprimer', back: '/evenements' },
   // Bilan annuel santé, sécurité et conditions de travail (CNF-03, BILAN_SSCT_PATH) : accidents, maladies professionnelles.
   { path: '/risques/bilan-ssct', back: '/risques' },
+  // Données d'une personne (SEC-13, droit d'accès RGPD) : accidents dont elle est victime compris.
+  { path: '/habilitations/donnees-personnelles', back: '/habilitations' },
 ];
 
 const under = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);

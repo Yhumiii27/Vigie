@@ -21,8 +21,8 @@ export type HistoryEntity =
   | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption'
   // Paquet 5 (conformité réglementaire) : objectifs QHSE (AUD-13), contexte du système de management (CNF-05).
   | 'qhse_objective' | 'context_item'
-  // Paquet 13 : registre de sécurité (VEI-15).
-  | 'safety_notice';
+  // Paquet 13 : registre de sécurité (VEI-15), situations d'urgence (CNF-08), demandes de changement (CNF-11).
+  | 'safety_notice' | 'emergency_situation' | 'change_request';
 
 type Rule = {
   screen: ScreenKey;
@@ -192,6 +192,24 @@ const RULES: Record<HistoryEntity, Rule> = {
       const n = num(id);
       if (n === null) return undefined;
       const [o] = await (await db()).select({ siteId: t.safetyNotices.siteId }).from(t.safetyNotices).where(eq(t.safetyNotices.id, n));
+      return o;
+    },
+  },
+  // Situation d'urgence d'un site (CNF-08) : lecteurs de l'écran « Évaluation des risques ».
+  emergency_situation: {
+    screen: 'risks',
+    async siteOf(id) {
+      const n = num(id);
+      if (n === null) return undefined;
+      const [o] = await (await db()).select({ siteId: t.emergencySituations.siteId }).from(t.emergencySituations).where(eq(t.emergencySituations.id, n));
+      return o;
+    },
+  },
+  // Demande de changement (CNF-11) : lecteurs de l'écran Audits ; site de la demande (null : entreprise).
+  change_request: {
+    screen: 'audits',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.changeRequests.siteId }).from(t.changeRequests).where(eq(t.changeRequests.id, id));
       return o;
     },
   },

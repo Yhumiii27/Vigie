@@ -29,12 +29,14 @@ type Props = {
   /** Site sélectionné (null = « Tous les sites ») : site proposé pour un nouveau document. */
   siteId: string | null;
   suggestedDueOn: string;
+  /** Personne connectée (revue périodique sans modification par le propriétaire du document, DOC-15). */
+  userId?: string;
 };
 
 const muted = 'var(--color-neutral-400)';
 
 /** Registre des documents maîtrisés : tableau filtré et fiche du document en fenêtre modale. */
-export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, canApprove, options, existingIds, elsewhere, unavailable = {}, siteId, suggestedDueOn }: Props) {
+export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, canApprove, options, existingIds, elsewhere, unavailable = {}, siteId, suggestedDueOn, userId }: Props) {
   // La fiche ouverte est portée par l'URL (?doc=PR-QHSE-003) : lien profond depuis les échéances et notifications.
   // Convention d'URL (UX-12) : ouverture ajoutée à l'historique (« Précédent » ferme la fiche), fermeture en place.
   const openId = useSearchParams().get('doc');
@@ -140,7 +142,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
 
       <Dialog open={!!doc} onClose={() => open(null)} width={900} title={doc?.title ?? ''}
         kicker={doc ? `${doc.id} · ${doc.typeLabel} · ${doc.processLabel}` : undefined}>
-        {doc && <DocumentPanel key={doc.id} doc={doc} canManage={canManage} canApprove={canApprove} options={options} suggestedDueOn={suggestedDueOn} />}
+        {doc && <DocumentPanel key={doc.id} doc={doc} canManage={canManage} canApprove={canApprove} options={options} suggestedDueOn={suggestedDueOn} userId={userId} />}
       </Dialog>
     </>
   );

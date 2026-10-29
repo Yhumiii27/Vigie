@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
-import { Dialog } from '@/components/Dialog';
+import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { Aside, CardHead, ToneTag } from '@/components/ui';
@@ -14,9 +14,10 @@ import { fmtDate } from '@/lib/dates';
 import { FINDING_KINDS, TONE } from '@/lib/domain';
 import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
-import { cancelFinding, restoreFinding, saveFinding } from '@/server/audits';
+import { cancelFinding, convertFreeAudit, restoreFinding, saveFinding } from '@/server/audits';
 import { ActionLink, ActionLinks, DialogFooter, RadioSeg, fileUrl } from './parts';
-import { FINDING_KEYS, OTHER_AUDIT, auditActionSource } from './shared';
+import { FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, auditActionSource, isReviewPlanItem } from './shared';
+import type { PlanFormOptions } from './ProgramTimeline';
 import styles from './audits.module.css';
 
 type Opts = ActionFormOptions;
@@ -41,12 +42,16 @@ type Props = {
   options: Opts;
   /** Constat à ouvrir d'emblée (lien profond `?constat=<id>`). */
   initialFindingId?: number;
+  /** AUD-20 : listes du formulaire « Enregistrer comme audit hors programme » (constats à libellé libre). */
+  planOptions?: PlanFormOptions;
+  /** Lignes du programme proposées pour cet audit. */
+  tracks?: string[];
   /** URL sans le lien profond, rétablie à la fermeture. */
   closeHref?: string;
 };
 
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCreate = false, options, initialFindingId, closeHref }: Props) {
+export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCreate = false, options, initialFindingId, closeHref, planOptions = { people: [], sites: [] }, tracks = [] }: Props) {
   const router = useRouter();
   // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
   // un constat annulé s'affiche dans le filtre « Annulés ».
@@ -91,9 +96,14 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
     group.date && fmtDate(group.date),
     group.auditor,
     report && <a key="r" href={fileUrl(report.id)} target="_blank" rel="noopener" className="vg-link" title={report.fileName}>Rapport<span className="vg-sr-only">{` : ${report.fileName}`}</span></a>,
+    group.unplanned && group.planItemId != null && <span key="u">Audit hors programme</span>,
     group.planItemId != null && (
       <Link key="p" href={`/audits?annee=${group.year}&element=${group.planItemId}`} scroll={false} className="vg-link">Voir au programme</Link>
     ),
+    // AUD-20 : constats d'un audit à libellé libre (antérieurs) — enregistrer l'audit comme un vrai audit hors programme.
+    group.planItemId == null && (canEdit
+      ? <ConvertAuditButton key="c" label={group.label} tracks={tracks} options={planOptions} defaultOn={group.date} />
+      : <span key="c">Audit à libellé libre</span>),
   ].filter(Boolean);
 
   return (
@@ -197,13 +207,15 @@ function CancelledRow({ finding: f, canEdit, flash }: { finding: CancelledFindin
 /**
  * Valeurs proposées pour l'action d'un constat (ACT-28) : source selon la ligne du programme (auditActionSource), constat
  * lié (un seul élément d'audit par action, D15 : jamais rattaché ni détaché ensuite), problème = texte du constat ; site
- * choisi par le service QHSE (un audit n'a pas de site).
+ * choisi par le service QHSE pour un constat commun à l'entreprise, sinon celui du constat (AUD-22).
  */
-export function findingActionDefaults(f: Pick<FindingView, 'id' | 'kind' | 'audit' | 'clause' | 'text' | 'track'>): ActionDefaults {
+export function findingActionDefaults(f: Pick<FindingView, 'id' | 'kind' | 'audit' | 'clause' | 'text' | 'track' | 'siteId'>): ActionDefaults {
   const k = FINDING_KINDS[f.kind]?.label ?? f.kind;
   return {
     ...auditActionSource('finding', f.track), link: `finding:${f.id}`, linkLabel: `${k}${f.clause ? ` ${f.clause}` : ''} — ${f.audit}`,
     originRef: f.audit.slice(0, 120), problem: `${k} — ${f.audit}${f.clause ? ` (${f.clause})` : ''} : ${f.text}`,
+    // AUD-22 : site du constat imposé à l'action (constat commun : le service QHSE choisit).
+    ...(f.siteId ? { siteId: f.siteId } : {}),
   };
 }
 
@@ -255,17 +267,21 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
   const options: Option[] = finding?.planItemId != null && !auditOptions.some(([v]) => v === String(finding.planItemId))
     ? [[String(finding.planItemId), finding.audit], ...auditOptions] : auditOptions;
   const known = initialPlan != null && options.some(([v]) => v === String(initialPlan));
-  const [choice, setChoice] = useState(known ? String(initialPlan) : OTHER_AUDIT);
+  // AUD-20 : libellé d'audit libre pour un constat antérieur seulement ; un nouveau constat se rattache à un audit enregistré.
+  const legacy = !!finding && finding.planItemId == null;
+  const [choice, setChoice] = useState(known ? String(initialPlan) : legacy || !options.length ? OTHER_AUDIT : options[0][0]);
   const [audit, setAudit] = useState(finding?.audit ?? defaultAudit);
   const other = choice === OTHER_AUDIT;
   return (
     <ActionForm action={saveFinding} onDone={() => onDone(other ? groupKey(null, audit.trim()) : groupKey(+choice, ''))} onCancel={onCancel}
       submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'} hidden={{ id: finding?.id }}>
-      <Field name="planItemId" label="Audit" hint={other ? undefined : "Le libellé et la date par défaut viennent de l'élément du programme."}>
+      <Field name="planItemId" label="Audit" hint={other && !legacy
+        ? "Aucun audit réalisé : déclarez l'audit réalisé au programme, ou enregistrez un « Audit hors programme » (date, auditeur, rapport)."
+        : other ? undefined : "Le libellé et la date par défaut viennent de l'élément du programme (audit hors programme compris)."}>
         <Select name="planItemId" value={choice} onChange={(e) => setChoice(e.target.value)}
-          options={[...options, [OTHER_AUDIT, 'Autre audit (hors programme)…'] as const]} />
+          options={legacy ? [...options, [OTHER_AUDIT, 'Audit à libellé libre (antérieur)…'] as const] : options.length ? options : [[OTHER_AUDIT, 'Aucun audit réalisé'] as const]} />
       </Field>
-      {other && (
+      {other && legacy && (
         <>
           <Field name="audit" label="Audit hors programme" hint="Choisissez un audit existant ou saisissez-en un nouveau (ex. Audit client [Client A] · mars 2026).">
             <Input name="audit" list="vg-audit-labels" value={audit} onChange={(e) => setAudit(e.target.value)} />
@@ -294,5 +310,51 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
         <Input name="responseDueOn" type="date" defaultValue={finding?.responseDueOn ?? ''} />
       </Field>
     </ActionForm>
+  );
+}
+
+/**
+ * AUD-20 : enregistre un audit à libellé libre (constats antérieurs) comme un audit hors programme réalisé : ligne, date de
+ * réalisation, auditeur, périmètre et site ; ses constats sans audit y sont rattachés (journal de chacun).
+ */
+function ConvertAuditButton({ label, tracks, options, defaultOn }: { label: string; tracks: string[]; options: PlanFormOptions; defaultOn: string | null }) {
+  const lines = tracks.filter((tr) => !isReviewPlanItem({ track: tr, label: '', detail: null }));
+  const [track, setTrack] = useState(lines[0] ?? NEW_TRACK);
+  return (
+    <DialogButton label="Enregistrer comme audit hors programme" className="vg-text-btn" title="Audit hors programme" kicker={label} width={560}>
+      {(close) => (
+        <ActionForm action={convertFreeAudit} hidden={{ audit: label }} submitLabel="Enregistrer l'audit" onCancel={close} onDone={close}>
+          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+            L&apos;audit « {label} » devient un audit hors programme réalisé ; ses constats y sont rattachés et prennent son site.
+          </p>
+          <FormRow>
+            <Field name="track" label="Ligne du programme">
+              <Select name="track" value={track} onChange={(e) => setTrack(e.target.value)} options={[...lines.map((t) => [t, t] as const), [NEW_TRACK, 'Nouvelle ligne…'] as const]} />
+            </Field>
+            <Field name="doneOn" label="Réalisé le">
+              <Input name="doneOn" type="date" defaultValue={defaultOn ?? ''} />
+            </Field>
+          </FormRow>
+          {track === NEW_TRACK && (
+            <Field name="newTrack" label="Nom de la nouvelle ligne"><Input name="newTrack" maxLength={40} /></Field>
+          )}
+          <Field name="label" label="Libellé court" hint="Affiché dans la cellule du programme (30 caractères au maximum).">
+            <Input name="label" defaultValue={label.slice(0, 30)} maxLength={30} />
+          </Field>
+          <FormRow>
+            <Field name="auditorId" label="Auditeur interne">
+              <Select name="auditorId" options={options.people} placeholder="Aucun" />
+            </Field>
+            <Field name="auditor" label="Auditeur externe"><Input name="auditor" maxLength={120} /></Field>
+          </FormRow>
+          <FormRow>
+            <Field name="scope" label="Périmètre"><Input name="scope" maxLength={200} /></Field>
+            <Field name="siteId" label="Site">
+              <Select name="siteId" options={options.sites} defaultValue={options.sites[0]?.[0] ?? ''} />
+            </Field>
+          </FormRow>
+        </ActionForm>
+      )}
+    </DialogButton>
   );
 }

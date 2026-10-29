@@ -166,7 +166,7 @@ describe('AUD-01 : programme annuel et revues liés par reviewId', () => {
     expect(card.programme).toMatchObject({ id: adopted.id, year: 2027, label: 'Annuelle 18/03', stateLabel: 'À venir' });
   });
 
-  it('revue reportée : son échéance suit (première date conservée) ; mois occupé refusé', async () => {
+  it('revue reportée : son échéance suit (première date conservée) ; mois occupé admis (AUD-21)', async () => {
     actAs('Animateur QHSE');
     const annual = await reviewOn('2026-12-10');
     const before = await planOf(annual.id);
@@ -176,8 +176,10 @@ describe('AUD-01 : programme annuel et revues liés par reviewId', () => {
       action: 'update', summary: 'Reporté au 14/01/2027 (revue de direction)', byId: 'clefevre',
       details: expect.arrayContaining([{ field: 'Mois', from: 'décembre', to: 'janvier' }, { field: 'Année', from: '2026', to: '2027' }]),
     });
-    const clash = await rescheduleReview({}, form({ id: String(annual.id), to: '2026-06-25', reason: 'Direction indisponible' }));
-    expect(clash.error).toContain('« Interm. 18/06 »');
+    // AUD-21 (paquet 13) : plusieurs éléments par ligne et par mois — juin 2027, qui porte déjà la revue intermédiaire du 17/06, n'est plus refusé.
+    expect(await rescheduleReview({}, form({ id: String(annual.id), to: '2027-06-24', reason: 'Direction indisponible' }))).toEqual({ ok: true });
+    expect(await planOf(annual.id)).toMatchObject({ id: before.id, year: 2027, month: 6, plannedOn: '2027-06-24' });
+    expect(await rescheduleReview({}, form({ id: String(annual.id), to: '2027-01-14', reason: 'Retour à la date de janvier' }))).toEqual({ ok: true });
     expect((await reviewOn('2027-01-14')).id).toBe(annual.id);
   });
 

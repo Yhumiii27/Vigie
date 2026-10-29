@@ -38,3 +38,9 @@ export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
 export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
 /** qualifications.effectiveness : TRAINING_EFFECTIVENESS (src/lib/domain.ts) — HAB-13. */
 export const EFFECTIVENESS_CODES = ['efficace', 'partielle', 'non_efficace'] as const;
+/** documents.origin : DOC_ORIGINS (src/components/documents/meta.ts) — DOC-17, migration 0021. */
+export const DOC_ORIGIN_CODES = ['interne', 'externe'] as const;
+/** change_requests.kind : CHANGE_KINDS (src/lib/domain.ts) — CNF-11. */
+export const CHANGE_KIND_CODES = ['organisation', 'procede', 'equipement', 'produit', 'exigence', 'autre'] as const;
+/** change_requests.status : CHANGE_STATUS (src/lib/domain.ts) — CNF-11. */
+export const CHANGE_STATUS_CODES = ['demandee', 'acceptee', 'refusee', 'realisee'] as const;

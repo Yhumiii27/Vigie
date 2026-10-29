@@ -32,7 +32,7 @@ function matchesStatus(d: DocumentRow, s: StatusFilter) {
 }
 
 export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
-  const { role } = await guard('docs');
+  const { role, user } = await guard('docs');
   const sp = await searchParams;
   // Rôles en consultation seule : documents en vigueur, sans cycle de vie ni brouillons.
   const manager = canEdit(role, 'docs');
@@ -140,6 +140,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
             actionForm: qhse ? { people: formOptions.people, sites: formOptions.sites, today: data.now } : null,
           } : READER_OPTIONS}
           existingIds={data.allIds}
+          userId={user.id}
           elsewhere={data.elsewhere}
           unavailable={data.unavailable}
           siteId={siteId}

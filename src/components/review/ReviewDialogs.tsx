@@ -176,7 +176,7 @@ export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }:
       </FormRow>
       {copyFrom && copyLabel && <Checkbox name="copyItems" label={`Reprendre la check-list de la ${copyLabel.toLowerCase()}`} defaultChecked />}
       <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        La revue est inscrite au programme annuel : elle reprend l&apos;échéance de revue déjà prévue ce mois-là, sinon elle est ajoutée à la ligne « Revues de direction » si ce mois y est libre (sinon : hors programme).
+        La revue est inscrite au programme annuel : elle reprend l&apos;échéance de revue déjà prévue ce mois-là, sinon elle est ajoutée à la ligne « Revues de direction ».
       </p>
     </ActionForm>
   );

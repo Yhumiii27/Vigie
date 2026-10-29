@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { REVIEW_TRACK, isReviewPlanItem } from '@/components/audits/shared';
 import type { ChangeEntry } from '@/components/ChangeLog';
@@ -17,6 +17,8 @@ import { loadQhseLeads } from './leads';
 import { loadChangeLogs } from './changelog';
 import type { Option } from './options';
 import { missingDetail } from '@/lib/url-state';
+import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
+import { ALL_SITES } from '../domain';
 
 // ─── Audits et certifications ───────────────────────────────────────────────
 
@@ -32,6 +34,16 @@ export type PlanItemView = {
   id: number; year: number; track: string; month: number; label: string;
   plannedOn: string | null; detail: string | null; ownerId: string | null; owner: string;
   done: boolean; doneOn: string | null; auditor: string | null; scope: string | null; certificationId: string | null;
+  /** AUD-27 : auditeur interne (personne) ; `auditor` reste le texte d'un auditeur ou organisme externe. */
+  auditorId: string | null; auditorName: string;
+  /** Auditeur affiché : auditeur interne puis externe (« L. Moreau · [Organisme] »), vide sans auditeur. */
+  auditorLabel: string;
+  /** AUD-27 : auditeur interne sans titre valide d'auditeur interne à la date de l'audit (signalé, jamais refusé). */
+  auditorUnqualified: boolean;
+  /** AUD-22 : site audité (null : commun à l'entreprise) et son libellé (« Tous les sites »). */
+  siteId: string | null; site: string;
+  /** AUD-20 : audit hors programme (non planifié), enregistré réalisé ; hors échéances du programme. */
+  unplanned: boolean;
   actionId: string | null; action: ActionBrief | null;
   state: PlanItemState; reports: AttachmentBrief[]; findingCount: number;
   /** Nature de l'élément selon sa ligne (Audit interne, Visite sécurité…). */
@@ -65,6 +77,8 @@ export type FindingView = {
   track: string | null;
   /** Annulation (constat saisi par erreur ou en double) : hors groupes et échéances, visible avec le filtre « Annulés ». */
   cancelled: { on: string; by: string; reason: string } | null;
+  /** AUD-22 : site du constat (celui de son audit ; null : commun à l'entreprise). */
+  siteId: string | null;
   log: ChangeEntry[];
 };
 /** Action d'un constat : numéro, et résumé si la personne peut la lire (sinon null, numéro seul). */
@@ -75,10 +89,14 @@ export type CancelledFindingView = FindingView & { cancelled: NonNullable<Findin
 export type AuditGroup = {
   key: string; label: string; planItemId: number | null; year: number | null; date: string | null; auditor: string | null;
   reports: AttachmentBrief[]; findings: FindingView[];
+  /** AUD-20 : audit hors programme enregistré (élément `unplanned`), ou libellé libre d'un constat antérieur (planItemId null). */
+  unplanned: boolean;
 };
 
 /** Référentiel avec son statut calculé, ses audits rattachés au programme et son certificat. */
 export type CertView = Certification & {
+  /** AUD-22 : site couvert (« Tous les sites » : certificat de l'entreprise). */
+  site: string;
   state: { label: string; tone: Tone };
   nextAudit: { id: number; year: number; plannedOn: string } | null;
   lastAudit: { id: number; year: number; doneOn: string | null; findingCount: number } | null;
@@ -122,16 +140,14 @@ type SlotItem = {
  * Place d'une revue de direction au programme annuel (AUD-01), parmi les éléments non annulés du mois de la revue :
  * - `adopt` : échéance de revue saisie au seul programme (sans revue rattachée, non réalisée), de préférence sur la ligne
  *   « Revues de direction » — la revue la reprend ;
- * - `taken` : la ligne « Revues de direction » porte déjà un élément ce mois-là (la revue reste « hors programme ») ;
- * - `create` : mois libre, l'échéance est créée sur la ligne « Revues de direction ».
+ * - `create` : sinon, l'échéance est créée sur la ligne « Revues de direction » (AUD-21 : plusieurs éléments par ligne et
+ *   par mois, un mois déjà occupé ne laisse plus la revue « hors programme »).
  */
-export function reviewSlot(items: SlotItem[], reviewOn: string): { adopt: number } | { create: true } | { taken: string } {
+export function reviewSlot(items: SlotItem[], reviewOn: string): { adopt: number } | { create: true } {
   const month = items.filter((p) => !p.cancelledAt && p.year === yearOf(reviewOn) && p.month === monthOf(reviewOn));
   const free = month.filter((p) => p.reviewId == null && !p.done && isReviewPlanItem(p));
   const pick = free.find((p) => p.track === REVIEW_TRACK) ?? free[0];
-  if (pick) return { adopt: pick.id };
-  const taken = month.find((p) => p.track === REVIEW_TRACK);
-  return taken ? { taken: taken.label } : { create: true };
+  return pick ? { adopt: pick.id } : { create: true };
 }
 
 /** Libellé d'audit repris par les constats rattachés à un élément du programme (« Processus Production · juin 2026 »). */
@@ -161,7 +177,7 @@ export function findingActionsBy<B extends ActionBrief | null>(rows: { findingId
  */
 const readAudits = cache(async (withLogs: boolean) => {
   const db = await getDb();
-  const [certs, items, findings, findingLinks, actions, people, files, reviews] = await Promise.all([
+  const [certs, items, findings, findingLinks, actions, people, files, reviews, sites, auditorTitles, auditorQuals, hiddenTracks] = await Promise.all([
     db.select().from(t.certifications).orderBy(asc(t.certifications.sort), asc(t.certifications.id)),
     // Éléments annulés compris (AUD-03) : hors grille, échéances et constats, ils restent consultables (« Éléments annulés »).
     db.select().from(t.auditPlanItems).orderBy(asc(t.auditPlanItems.id)),
@@ -175,6 +191,14 @@ const readAudits = cache(async (withLogs: boolean) => {
       .from(t.attachments).where(inArray(t.attachments.entityType, ['audit_plan_item', 'certification'])).orderBy(asc(t.attachments.createdAt)),
     // Revues portées par les échéances du programme (AUD-01).
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status, kind: t.reviews.kind }).from(t.reviews),
+    db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
+    // AUD-27 : titres qui qualifient un auditeur interne, et formations (non annulées) de ces titres.
+    db.select({ id: t.trainingTitles.id }).from(t.trainingTitles).where(and(eq(t.trainingTitles.internalAuditor, true), isNull(t.trainingTitles.archivedAt))),
+    db.select({ personId: t.qualifications.personId, titleId: t.qualifications.titleId, obtainedOn: t.qualifications.obtainedOn, expiresOn: t.qualifications.expiresOn })
+      .from(t.qualifications).innerJoin(t.trainingTitles, eq(t.trainingTitles.id, t.qualifications.titleId))
+      .where(and(eq(t.trainingTitles.internalAuditor, true), isNull(t.qualifications.cancelledAt))),
+    // AUD-24 : lignes masquées par année.
+    db.select().from(t.auditPlanTracks),
   ]);
   const none = new Map<string, ChangeEntry[]>();
   const [findingLogs, planLogs, certLogs] = withLogs ? await Promise.all([
@@ -191,6 +215,10 @@ const readAudits = cache(async (withLogs: boolean) => {
     .filter((f) => f.entityType === entityType && f.entityId === String(id))
     .map((f) => ({ id: f.id, fileName: f.fileName, createdAt: f.createdAt.toISOString() }));
 
+  const siteLabel = new Map(sites.map((x) => [x.id, x.label.split(' — ')[0]]));
+  const siteName = (id: string | null) => (id ? siteLabel.get(id) ?? id : 'Tous les sites');
+  // AUD-27 : qualification d'auditeur interne valide à la date de l'audit (obtenue avant, non expirée) — signalée seulement.
+  const qualifiedAuditor = (personId: string, on: string) => auditorQuals.some((q) => q.personId === personId && q.obtainedOn <= on && (!q.expiresOn || q.expiresOn >= on));
   const trackOf = new Map(items.map((p) => [p.id, p.track]));
   const actionsOf = findingActionsBy(findingLinks, brief);
   const findingViews: FindingView[] = findings.map((f) => ({
@@ -198,6 +226,7 @@ const readAudits = cache(async (withLogs: boolean) => {
     kind: f.kind, text: f.text, sort: f.sort, actions: actionsOf(f.id), responseDueOn: f.responseDueOn,
     track: f.planItemId != null ? trackOf.get(f.planItemId) ?? null : null,
     cancelled: f.cancelledAt ? { on: parisDay(f.cancelledAt), by: name(f.cancelledById), reason: f.cancelReason ?? '' } : null,
+    siteId: f.siteId,
     log: findingLogs.get(String(f.id)) ?? [],
   }));
   const active = findingViews.filter((f) => !f.cancelled);
@@ -209,10 +238,16 @@ const readAudits = cache(async (withLogs: boolean) => {
     const locked = p.reviewId != null;
     const cancelled = p.cancelledAt ? { on: parisDay(p.cancelledAt), by: name(p.cancelledById), reason: p.cancelReason ?? '' } : null;
     const reschedulable = !p.done && !cancelled && !locked;
+    const auditorName = name(p.auditorId);
+    const hasFindings = findings.some((f) => f.planItemId === p.id);
     return {
       id: p.id, year: p.year, track: p.track, month: p.month, label: p.label, plannedOn: p.plannedOn, detail: p.detail,
       ownerId: p.ownerId, owner: name(p.ownerId),
       done: p.done, doneOn: p.doneOn, auditor: p.auditor, scope: p.scope, certificationId: p.certificationId,
+      auditorId: p.auditorId, auditorName,
+      auditorLabel: [auditorName, p.auditor].filter(Boolean).join(' · '),
+      auditorUnqualified: !!p.auditorId && auditorTitles.length > 0 && !qualifiedAuditor(p.auditorId, p.doneOn ?? planStart(p)),
+      siteId: p.siteId, site: siteName(p.siteId), unplanned: p.unplanned,
       actionId: p.actionId, action: brief(p.actionId),
       state: planItemState(p, now), reports, findingCount: active.filter((f) => f.planItemId === p.id).length,
       kind: planTrackKind(p.track), isReview: isReviewPlanItem(p),
@@ -222,7 +257,8 @@ const readAudits = cache(async (withLogs: boolean) => {
       postponedFrom: p.postponedFrom,
       cancelled,
       reschedulable,
-      cancellable: reschedulable && !p.actionId && !reports.length && !findings.some((f) => f.planItemId === p.id),
+      // AUD-20 : un audit hors programme saisi par erreur (sans rapport, constat ni action) s'annule aussi.
+      cancellable: (reschedulable || (p.unplanned && !cancelled)) && !p.actionId && !reports.length && !hasFindings,
       log: planLogs.get(String(p.id)) ?? [],
     };
   });
@@ -238,8 +274,8 @@ const readAudits = cache(async (withLogs: boolean) => {
     let g = groups.get(key);
     if (!g) {
       g = item
-        ? { key, label: planItemAuditLabel(item), planItemId: item.id, year: item.year, date: item.doneOn ?? item.plannedOn, auditor: item.auditor, reports: item.reports, findings: [] }
-        : { key, label: f.audit, planItemId: null, year: null, date: null, auditor: null, reports: [], findings: [] };
+        ? { key, label: planItemAuditLabel(item), planItemId: item.id, year: item.year, date: item.doneOn ?? item.plannedOn, auditor: item.auditorLabel || null, reports: item.reports, findings: [], unplanned: item.unplanned }
+        : { key, label: f.audit, planItemId: null, year: null, date: null, auditor: null, reports: [], findings: [], unplanned: true };
       groups.set(key, g);
     }
     g.findings.push(f);
@@ -268,6 +304,7 @@ const readAudits = cache(async (withLogs: boolean) => {
     const files = filesOf('certification', c.id);
     return {
       ...c,
+      site: siteName(c.siteId),
       state: certificationStatus(c, next?.plannedOn ?? null, now),
       nextAudit: next,
       lastAudit: last ? { id: last.id, year: last.year, doneOn: last.doneOn, findingCount: last.findingCount } : null,
@@ -277,7 +314,7 @@ const readAudits = cache(async (withLogs: boolean) => {
     };
   });
 
-  return { now, people, actionsById, certs: certViews, plan, allPlan: allViews, findings: findingViews, active, auditGroups, cancelledFindings };
+  return { now, people, actionsById, certs: certViews, plan, allPlan: allViews, findings: findingViews, active, auditGroups, cancelledFindings, hiddenTracks, siteName };
 });
 
 /** Lignes du programme dans l'ordre de leur première apparition. */
@@ -287,11 +324,41 @@ const tracksOf = (items: { track: string }[]) => [...new Set(items.map((p) => p.
 const numParam = (v: string | string[] | undefined) => (typeof v === 'string' && /^\d{1,9}$/.test(v) ? +v : null);
 
 /**
+ * AUD-22 : élément visible sur l'écran — dans le périmètre de la personne et sur le site sélectionné (un élément sans site,
+ * commun à l'entreprise, vaut pour tous les sites). Même règle pour le programme, les constats et les certifications.
+ */
+export const auditVisible = (selected: string | null, allowed: string[] | null) => (siteId: string | null) => inPerimeter(allowed, siteId) && inSite(selected, siteId);
+
+/**
+ * Lignes affichées d'une année (AUD-24) : celles de l'année précédente qui porte des éléments (programme reconduit), puis
+ * celles propres à l'année ; une ligne masquée pour l'année n'est plus affichée tant qu'elle n'y porte aucun élément.
+ */
+export function programTracks(plan: { year: number; track: string }[], year: number, hidden: readonly string[]) {
+  const prevYears = [...new Set(plan.map((p) => p.year))].filter((y) => y < year);
+  const refYear = prevYears.length ? Math.max(...prevYears) : null;
+  const own = tracksOf(plan.filter((p) => p.year === year));
+  const inherited = refYear ? tracksOf(plan.filter((p) => p.year === refYear)).filter((tr) => !own.includes(tr) && !hidden.includes(tr)) : [];
+  return { refYear, tracks: [...new Set([...inherited, ...own])], hiddenTracks: refYear ? tracksOf(plan.filter((p) => p.year === refYear)).filter((tr) => !own.includes(tr) && hidden.includes(tr)) : [] };
+}
+
+/**
  * Écran « Audits et certifications ». `year` vient du paramètre ?annee= ; `element` (élément du programme) et
- * `constat` sont les liens profonds des échéances : sans ?annee=, l'année affichée est celle de l'élément.
+ * `constat` sont les liens profonds des échéances : sans ?annee=, l'année affichée est celle de l'élément. AUD-22 : éléments
+ * du site sélectionné et du périmètre de la personne (les éléments communs à l'entreprise valent pour tous les sites).
  */
 export async function loadAudits({ year: askedYear, element, constat }: { year?: string | string[]; element?: string | string[]; constat?: string | string[] }) {
-  const { now, certs, plan, allPlan, findings, active, auditGroups, cancelledFindings } = await readAudits(true);
+  const [base, selected, { allowedSiteIds }] = await Promise.all([readAudits(true), currentSiteId(), getSession()]);
+  const visible = auditVisible(selected, allowedSiteIds);
+  const { now, hiddenTracks: hiddenRows } = base;
+  const certs = base.certs.filter((c) => visible(c.siteId));
+  const allPlan = base.allPlan.filter((p) => visible(p.siteId));
+  const plan = allPlan.filter((p) => !p.cancelled);
+  const findings = base.findings.filter((f) => visible(f.siteId));
+  const active = findings.filter((f) => !f.cancelled);
+  const auditGroups = base.auditGroups
+    .map((g) => ({ ...g, findings: g.findings.filter((f) => visible(f.siteId)) }))
+    .filter((g) => g.findings.length);
+  const cancelledFindings = base.cancelledFindings.filter((f) => visible(f.siteId));
   const nowYear = yearOf(now);
   // Années proposées : aussi celles qui ne portent que des éléments annulés (liste « Éléments annulés »).
   const years = [...new Set(allPlan.map((p) => p.year))];
@@ -303,11 +370,11 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
   const findingId = numParam(constat);
   const openFinding = findingId != null && findings.some((f) => f.id === findingId) ? findingId : undefined;
 
-  // Lignes affichées : celles de l'année précédente (programme reconduit) puis celles propres à l'année (éléments en vigueur).
-  const prevYears = [...new Set(plan.map((p) => p.year))].filter((y) => y < year);
-  const refYear = prevYears.length ? Math.max(...prevYears) : null;
+  // Lignes affichées : celles de l'année précédente (programme reconduit) puis celles propres à l'année, sauf les lignes
+  // masquées pour l'année (AUD-24).
+  const hiddenOfYear = hiddenRows.filter((h) => h.year === year && h.hiddenAt).map((h) => h.track);
+  const { refYear, tracks, hiddenTracks } = programTracks(plan, year, hiddenOfYear);
   const items = plan.filter((p) => p.year === year);
-  const tracks = [...new Set([...(refYear ? tracksOf(plan.filter((p) => p.year === refYear)) : []), ...tracksOf(items)])];
   const itemIds = new Set(items.map((p) => p.id));
   // Éléments annulés de l'année, le plus récemment annulé d'abord.
   const cancelledPlan = allPlan
@@ -319,7 +386,7 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
   const auditOptions: Option[] = plan
     .filter((p) => !p.isReview && p.done)
     .sort((a, b) => planDate(b).localeCompare(planDate(a)) || b.id - a.id)
-    .map((p) => [String(p.id), planItemAuditLabel(p)] as Option);
+    .map((p) => [String(p.id), `${planItemAuditLabel(p)}${p.unplanned ? ' · hors programme' : ''}`] as Option);
 
   return {
     now,
@@ -327,6 +394,10 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
     year,
     yearOptions,
     tracks,
+    /** AUD-24 : lignes reprises de l'année précédente masquées pour cette année (« Afficher à nouveau »). */
+    hiddenTracks,
+    /** AUD-24 : reconduction possible — année précédente portant des éléments en vigueur (hors revues et audits hors programme). */
+    renewFrom: refYear === year - 1 && plan.some((p) => p.year === refYear && !p.unplanned && p.reviewId == null) ? refYear : null,
     allTracks: tracksOf(plan),
     plan: items,
     cancelledPlan,
@@ -343,6 +414,29 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
   };
 }
 
+/**
+ * Programme annuel imprimable (AUD-26, ISO 9001 §9.2.2) : éléments en vigueur de l'année (site sélectionné et périmètre,
+ * AUD-22), par ligne et par mois, avec l'état, l'auditeur, le périmètre et le nombre de constats ; éléments annulés comptés.
+ */
+export async function loadAuditProgramPrint(askedYear?: string) {
+  const [base, selected, session] = await Promise.all([readAudits(false), currentSiteId(), getSession()]);
+  const visible = auditVisible(selected, session.allowedSiteIds);
+  const plan = base.allPlan.filter((p) => visible(p.siteId));
+  const years = [...new Set(plan.map((p) => p.year))].sort((a, b) => a - b);
+  const nowYear = yearOf(base.now);
+  const year = askedYear && /^\d{4}$/.test(askedYear) && years.includes(+askedYear) ? +askedYear : years.includes(nowYear) || !years.length ? nowYear : years.at(-1)!;
+  const items = plan.filter((p) => p.year === year && !p.cancelled)
+    .sort((a, b) => a.month - b.month || (a.plannedOn ?? '').localeCompare(b.plannedOn ?? '') || a.id - b.id);
+  const hidden = base.hiddenTracks.filter((h) => h.year === year && h.hiddenAt).map((h) => h.track);
+  const { tracks } = programTracks(plan.filter((p) => !p.cancelled), year, hidden);
+  return {
+    year, years, now: base.now, items, tracks,
+    cancelledCount: plan.filter((p) => p.year === year && p.cancelled).length,
+    site: session.site.id === ALL_SITES ? 'Tous les sites' : session.site.label,
+    certs: base.certs.filter((c) => visible(c.siteId)).map((c) => [c.id, c.standard] as const),
+  };
+}
+
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
@@ -350,10 +444,17 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
 /**
  * Échéances du domaine : programme en retard (à confirmer), à venir sous 15 jours ou prévu au mois sans date (AUD-18),
  * constats sans action,
- * certificats expirés, proches de la fin de validité ou sans audit de suivi programmé. Communs à tous les sites (siteId null).
+ * certificats expirés, proches de la fin de validité ou sans audit de suivi programmé. AUD-22 : site de l'élément (null :
+ * commun à l'entreprise), sur tout le périmètre de la personne ; un élément sans responsable va au responsable QHSE du site.
  */
 export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: TodoItem[] }> => {
-  const [{ now, people, actionsById, certs, plan, active }, leads] = await Promise.all([readAudits(false), loadQhseLeads()]);
+  const [base, leads, { allowedSiteIds }] = await Promise.all([readAudits(false), loadQhseLeads(), getSession()]);
+  // AUD-22 : tout le périmètre de la personne (TDB-05) ; chaque échéance porte le site de son élément (null : entreprise).
+  const keep = (siteId: string | null) => inPerimeter(allowedSiteIds, siteId);
+  const { now, people, actionsById } = base;
+  const certs = base.certs.filter((c) => keep(c.siteId));
+  const plan = base.plan.filter((p) => keep(p.siteId));
+  const active = base.active.filter((f) => keep(f.siteId));
   const horizon = addDays(now, TODO_HORIZON_DAYS);
   const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '' : '');
   const planHref = (p: { id: number; year: number }) => `/audits?annee=${p.year}&element=${p.id}`;
@@ -362,7 +463,7 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
 
   // a) et b) Programme annuel en vigueur (annulés exclus) : échéance passée non confirmée, ou prévue dans l'horizon.
   plan.forEach((p) => {
-    const who = { who: p.owner, ownerIds: p.ownerId ? [p.ownerId] : undefined, href: planHref(p), siteId: null };
+    const who = { who: p.owner, ownerIds: p.ownerId ? [p.ownerId] : undefined, href: planHref(p), siteId: p.siteId };
     if (p.state === 'late') {
       // Échéance d'une revue rattachée (AUD-01) : « compte rendu à saisir » relève de loadReviewSignals (src/lib/data/review.ts) ;
       // sa réalisation et son annulation suivent la revue. Une échéance de revue saisie au seul programme reste « à confirmer ».
@@ -395,9 +496,9 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
   active.filter((f) => f.kind !== 'point_fort' && !f.actions.length).forEach((f) => {
     // Responsable de l'élément du programme, sinon les responsables QHSE (constat commun aux sites).
     const ownerId = f.planItemId != null ? planById.get(f.planItemId)?.ownerId : null;
-    const owners = ownerId ? { who: name(ownerId), ownerIds: [ownerId] } : leads.forSite(null);
+    const owners = ownerId ? { who: name(ownerId), ownerIds: [ownerId] } : leads.forSite(f.siteId);
     const gap = FINDING_GAP_KINDS.includes(f.kind);
-    const base = { kind: "Constat d'audit", who: owners.who, ownerIds: owners.ownerIds, href: `/audits?constat=${f.id}`, siteId: null };
+    const base = { kind: "Constat d'audit", who: owners.who, ownerIds: owners.ownerIds, href: `/audits?constat=${f.id}`, siteId: f.siteId };
     const label = `${FINDING_KINDS[f.kind]?.label ?? f.kind} sans action — ${clip(f.text, 90)}`;
     if (gap && f.responseDueOn && f.responseDueOn >= now) {
       todo.push({ ...base, date: f.responseDueOn, dueOn: f.responseDueOn, tone: 'warn', title: `${label} · réponse attendue le ${fmtDayMonth(f.responseDueOn)}` });
@@ -411,8 +512,8 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
 
   // d) Certificats : expiré, fin de validité proche, audit de suivi non programmé (l'audit à venir relève du programme).
   certs.filter((c) => c.tone === 'ok').forEach((c) => {
-    const { who, ownerIds } = leads.forSite(null);
-    const base = { kind: 'Certification', who, ownerIds, href: '/audits', siteId: null };
+    const { who, ownerIds } = leads.forSite(c.siteId);
+    const base = { kind: 'Certification', who, ownerIds, href: '/audits', siteId: c.siteId };
     // AUD-08 : suspension par l'organisme, jusqu'à sa levée.
     if (c.suspendedOn) todo.push({ ...base, date: now, dueOn: c.suspendedOn, tone: 'danger', title: `Certificat ${c.standard} suspendu depuis le ${fmtDayMonth(c.suspendedOn)}`, overdue: true });
     if (c.validUntil && c.validUntil < now) {

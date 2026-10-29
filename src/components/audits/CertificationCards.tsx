@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
-import { ActionForm, Field, FormRow, Input, TextArea } from '@/components/form';
+import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { withCurrent, type Option } from '@/lib/form-options';
 import { Dot } from '@/components/ui';
 import { FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
@@ -75,7 +76,7 @@ function CertificationCycle({ cert, onDone }: { cert: CertView; onDone: () => vo
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 /** Cartes des référentiels (statut calculé, audits du programme, certificat) ; l'animateur QHSE et la direction les modifient. */
-export function CertificationCards({ certs, canApprove }: { certs: CertView[]; canApprove: boolean }) {
+export function CertificationCards({ certs, canApprove, sites = [] }: { certs: CertView[]; canApprove: boolean; sites?: readonly Option[] }) {
   const [editing, setEditing] = useState<Editing>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const close = () => { setEditing(null); setFileError(null); };
@@ -86,7 +87,7 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         {certs.map((c) => {
           const file = c.files.at(-1);
-          const validity = [c.organization, c.validUntil && `valable jusqu'au ${fmtDate(c.validUntil)}`].filter(Boolean).join(' · ');
+          const validity = [c.organization, c.validUntil && `valable jusqu'au ${fmtDate(c.validUntil)}`, c.siteId && c.site].filter(Boolean).join(' · ');
           const links = (file || c.nextAudit || c.lastAudit) && (
             <div className="vg-target-links" style={{ display: 'flex', flexWrap: 'wrap', gap: '0 12px', fontSize: 11.5, marginTop: 2 }}>
               {file && (
@@ -161,9 +162,15 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
               <Field name="tone" label="Engagement">
                 <RadioSeg name="tone" defaultValue={cert?.tone ?? 'warn'} options={CERT_TONES.map((k) => [k, CERT_TONE_LABELS[k], certDot(k)] as const)} />
               </Field>
-              <Field name="organization" label="Organisme certificateur">
-                <Input name="organization" defaultValue={cert?.organization ?? ''} />
-              </Field>
+              <FormRow>
+                <Field name="organization" label="Organisme certificateur">
+                  <Input name="organization" defaultValue={cert?.organization ?? ''} />
+                </Field>
+                {/* AUD-22 : site couvert par le certificat ; « Tous les sites » : certificat de l'entreprise (multisite). */}
+                <Field name="siteId" label="Site">
+                  <Select name="siteId" options={cert ? withCurrent(sites, cert.siteId ?? 'all', cert.site) : sites} defaultValue={cert ? cert.siteId ?? 'all' : sites[0]?.[0] ?? ''} />
+                </Field>
+              </FormRow>
               <FormRow>
                 <Field name="issuedOn" label="Émis le">
                   <Input name="issuedOn" type="date" defaultValue={cert?.issuedOn ?? ''} />

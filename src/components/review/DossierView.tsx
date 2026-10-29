@@ -4,7 +4,7 @@ import { CERT_TONE_LABELS, certDot, type CertTone } from '@/components/audits/sh
 import { Dot, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
 import { TONE, type Role } from '@/lib/domain';
-import type { ReviewDossierPage, ReviewRecordOnly, StoredDossier } from '@/lib/data/review';
+import type { DossierFinding, ReviewDossierPage, ReviewRecordOnly, StoredDossier } from '@/lib/data/review';
 import {
   ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, Section,
   capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
@@ -219,6 +219,13 @@ export function DossierView({ page, role, notice }: {
               </tbody>
             </table>
           ) : <Empty>Aucun audit fournisseur sur la période.</Empty>}
+          {/* AUD-33 : constats des audits fournisseurs (dossier figé avant le paquet 13 : ils restent sous Audits). */}
+          {d.suppliers.findingGroups && (
+            <>
+              <h3 className="rd-h3">Constats des audits fournisseurs</h3>
+              {d.suppliers.findingGroups.length ? <FindingGroups groups={d.suppliers.findingGroups} role={role} /> : <Empty>Aucun constat d&apos;audit fournisseur.</Empty>}
+            </>
+          )}
           <h3 className="rd-h3">Non-conformités d&apos;origine fournisseur</h3>
           {d.suppliers.ncs?.length ? (
             <table className="table rd-table">
@@ -291,31 +298,7 @@ export function DossierView({ page, role, notice }: {
           ) : <Empty>Aucun élément au programme sur cette période.</Empty>}
 
           <h3 className="rd-h3">Constats d&apos;audit</h3>
-          {d.audits.auditGroups?.length ? d.audits.auditGroups.map((g) => (
-            <div key={g.label} style={{ display: 'grid', gap: 4 }}>
-              <h4 className="rd-h4">{g.label}</h4>
-              <table className="table rd-table">
-                <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
-                <tbody>
-                  {g.findings.map((f) => {
-                    // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
-                    const list = dossierFindingActions(f);
-                    return (
-                      <tr key={f.id}>
-                        <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
-                        <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
-                            : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
-                        </td>
-                        <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )) : <Empty>Aucun constat enregistré.</Empty>}
+          {d.audits.auditGroups?.length ? <FindingGroups groups={d.audits.auditGroups} role={role} /> : <Empty>Aucun constat enregistré.</Empty>}
         </Section>
       )}
 
@@ -727,5 +710,38 @@ export function DossierView({ page, role, notice }: {
         {page.mode === 'record' && `Compte rendu enregistré dans Vigie · consulté le ${fmtDate(page.now)}.`}
       </div>
     </main>
+  );
+}
+
+/** Constats regroupés par audit (sections Audits et Fournisseurs, AUD-33) ; plusieurs actions par constat (AUD-28). */
+function FindingGroups({ groups, role }: { groups: { label: string; findings: DossierFinding[] }[]; role: Role }) {
+  return (
+    <>
+      {groups.map((g) => (
+            <div key={g.label} style={{ display: 'grid', gap: 4 }}>
+              <h4 className="rd-h4">{g.label}</h4>
+              <table className="table rd-table">
+                <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
+                <tbody>
+                  {g.findings.map((f) => {
+                    // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
+                    const list = dossierFindingActions(f);
+                    return (
+                      <tr key={f.id}>
+                        <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
+                        <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
+                            : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
+                        </td>
+                        <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+      ))}
+    </>
   );
 }

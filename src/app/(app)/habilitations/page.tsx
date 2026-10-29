@@ -6,7 +6,7 @@ import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
 import { renewalForecast, skillLinkTarget } from '@/components/skills/rules';
 import { today } from '@/lib/today';
-import { SCREENS, canApprove, canEdit } from '@/lib/domain';
+import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { ALL_SITES, inPerimeter } from '@/lib/session';
 import { hasLeft } from '@/lib/people';
@@ -74,6 +74,12 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         <SkillAlerts alerts={lapses} today={now} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <SegLinks options={views} />
+          {/* SEC-13 : droit d'accès d'un salarié (RGPD) — animateur QHSE et direction (données de santé comprises). */}
+          {canSeeHealth(session.role) && (
+            <a href="/habilitations/donnees-personnelles" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
+              <i className="ph ph-user-list" style={{ fontSize: 13 }} aria-hidden />Données personnelles
+            </a>
+          )}
         </div>
         {forecast ? (
           <div className="card" style={{ gap: 12 }}>

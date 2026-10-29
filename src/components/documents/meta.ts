@@ -14,6 +14,11 @@ export const DOC_TYPES: Record<DocType, { label: string; plural: string; prefix:
 };
 export const DOC_TYPE_KEYS = Object.keys(DOC_TYPES) as DocType[];
 
+/** DOC-17 (ISO 9001 §7.5.3.2) : origine d'un document — interne, ou externe (norme, document client, fournisseur, organisme). */
+export type DocOrigin = 'interne' | 'externe';
+export const DOC_ORIGINS: Record<DocOrigin, string> = { interne: 'Interne', externe: "D'origine externe" };
+export const DOC_ORIGIN_KEYS = Object.keys(DOC_ORIGINS) as DocOrigin[];
+
 /** Processus de l'entreprise : le code entre dans la référence (PR-QHSE-003, IT-MON-012…). */
 export const PROCESSES: Record<string, string> = {
   QHSE: 'Management QHSE',

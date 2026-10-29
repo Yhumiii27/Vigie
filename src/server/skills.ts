@@ -491,6 +491,8 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const scopeLabel = f.str('scopeLabel', { max: 60 }) || null;
   // HAB-13 : action de sensibilisation (§7.3) plutôt que formation qualifiante ; lue si le formulaire porte le champ.
   const awarenessField = fd.has('awarenessField');
+  // AUD-27 : titre qui qualifie un auditeur interne ; lu si le formulaire porte le champ.
+  const auditorField = fd.has('internalAuditorField');
   if (prerequisitesField) {
     const active = new Map(titles.filter((x) => !x.archivedAt).map((x) => [x.id, x]));
     if (prerequisiteIds.some((p) => p === id)) f.fail('prerequisiteIds', 'Un titre ne peut pas être son propre prérequis.');
@@ -513,6 +515,7 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
     const prereq = prerequisitesField ? prerequisiteIds : prev.prerequisiteIds ?? [];
     const scope = prerequisitesField ? scopeLabel : prev.scopeLabel;
     const awareness = awarenessField ? f.bool('awareness') : prev.awareness;
+    const internalAuditor = auditorField ? f.bool('internalAuditor') : prev.internalAuditor;
     const labelOf = (ids: readonly string[]) => ids.map((x) => titles.find((ti) => ti.id === x)?.label ?? x).join(', ') || null;
     const details = [
       ...(prev.label !== label ? [{ field: 'Intitulé', from: prev.label, to: label }] : []),
@@ -521,9 +524,10 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
       ...(labelOf(prev.prerequisiteIds ?? []) !== labelOf(prereq) ? [{ field: 'Prérequis', from: labelOf(prev.prerequisiteIds ?? []), to: labelOf(prereq) }] : []),
       ...((prev.scopeLabel ?? null) !== scope ? [{ field: 'Catégories ou niveaux', from: prev.scopeLabel, to: scope }] : []),
       ...(prev.awareness !== awareness ? [{ field: 'Sensibilisation', from: prev.awareness ? 'oui' : 'non', to: awareness ? 'oui' : 'non' }] : []),
+      ...(prev.internalAuditor !== internalAuditor ? [{ field: 'Auditeur interne', from: prev.internalAuditor ? 'oui' : 'non', to: internalAuditor ? 'oui' : 'non' }] : []),
     ];
     await db.transaction(async (tx) => {
-      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope, awareness }).where(eq(t.trainingTitles.id, id));
+      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope, awareness, internalAuditor }).where(eq(t.trainingTitles.id, id));
       await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
     });
     done();
@@ -533,8 +537,9 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const sort = Math.max(-1, ...titles.map((x) => x.sort)) + 1;
   const firstAid = firstAidField && f.bool('firstAid');
   const awareness = awarenessField && f.bool('awareness');
+  const internalAuditor = auditorField && f.bool('internalAuditor');
   await db.transaction(async (tx) => {
-    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid, awareness, prerequisiteIds: prerequisitesField ? prerequisiteIds : [], scopeLabel: prerequisitesField ? scopeLabel : null });
+    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid, awareness, internalAuditor, prerequisiteIds: prerequisitesField ? prerequisiteIds : [], scopeLabel: prerequisitesField ? scopeLabel : null });
     await logChange(tx, { entityType: 'training_title', entityId: newId, action: 'create', summary: `Titre « ${label} » ajouté${firstAid ? ' (secourisme)' : ''}` });
   });
   done();

@@ -406,6 +406,29 @@ export const SAFETY_NOTICE_KINDS: Record<SafetyNoticeKind, { label: string; tone
 export const SAFETY_NOTICE_KIND_KEYS = Object.keys(SAFETY_NOTICE_KINDS) as SafetyNoticeKind[];
 
 /**
+ * Gestion des changements (CNF-11, change_requests, migration 0021, ISO 9001 §6.3 et §8.5.6, ISO 45001 §8.1.3) : nature du
+ * changement et état de la demande (décision du service QHSE, puis mise en œuvre constatée).
+ */
+export type ChangeKind = 'organisation' | 'procede' | 'equipement' | 'produit' | 'exigence' | 'autre';
+export const CHANGE_KINDS: Record<ChangeKind, { label: string }> = {
+  organisation: { label: 'Organisation, responsabilités' },
+  procede: { label: 'Procédé, méthode de travail' },
+  equipement: { label: 'Équipement, installation, local' },
+  produit: { label: 'Produit, service' },
+  exigence: { label: 'Exigence légale ou client' },
+  autre: { label: 'Autre' },
+};
+export const CHANGE_KIND_KEYS = Object.keys(CHANGE_KINDS) as ChangeKind[];
+export type ChangeStatus = 'demandee' | 'acceptee' | 'refusee' | 'realisee';
+export const CHANGE_STATUS: Record<ChangeStatus, { label: string; tone: Tone }> = {
+  demandee: { label: 'À évaluer', tone: 'warn' },
+  acceptee: { label: 'Acceptée · à mettre en œuvre', tone: 'accent' },
+  refusee: { label: 'Refusée', tone: 'neutral' },
+  realisee: { label: 'Mise en œuvre', tone: 'ok' },
+};
+export const CHANGE_STATUS_KEYS = Object.keys(CHANGE_STATUS) as ChangeStatus[];
+
+/**
  * Mesure de maîtrise d'un risque du DUERP liée à un élément de Vigie (DUE-19, risk_measure_links, migration 0020) : un
  * contrôle périodique, un document maîtrisé ou un titre d'habilitation ; signalée quand elle n'est plus valide.
  */

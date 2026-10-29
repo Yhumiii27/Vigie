@@ -297,9 +297,14 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     async detachAll(tx, actionId) {
       await tx.delete(t.findingActions).where(eq(t.findingActions.actionId, actionId));
     },
+    // AUD-22 : site du constat (celui de son audit ; null : commun à l'entreprise), imposé à l'action.
+    async siteOf(tx, [a]) {
+      const [f] = await tx.select({ siteId: t.auditFindings.siteId }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
+      return f?.siteId;
+    },
     async facts(db, [a]) {
-      const [f] = await db.select({ audit: t.auditFindings.audit, clause: t.auditFindings.clause, planItemId: t.auditFindings.planItemId }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
-      return f ? { reference: ref(`Constat · ${f.audit}${f.clause ? ` · ${f.clause}` : ''}`), siteId: null, facts: { track: await planTrack(db, f.planItemId) } } : null;
+      const [f] = await db.select({ audit: t.auditFindings.audit, clause: t.auditFindings.clause, planItemId: t.auditFindings.planItemId, siteId: t.auditFindings.siteId }).from(t.auditFindings).where(eq(t.auditFindings.id, num(a)));
+      return f ? { reference: ref(`Constat · ${f.audit}${f.clause ? ` · ${f.clause}` : ''}`), siteId: f.siteId, facts: { track: await planTrack(db, f.planItemId) } } : null;
     },
     logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'audit_finding', entityId: num(a) } : null),
     async sources(db, ids) {
@@ -327,10 +332,15 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     async detachAll(tx, actionId) {
       await tx.update(t.auditPlanItems).set({ actionId: null }).where(eq(t.auditPlanItems.actionId, actionId));
     },
+    // AUD-22 : site de l'élément du programme (null : commun à l'entreprise), imposé à l'action.
+    async siteOf(tx, [a]) {
+      const [p] = await tx.select({ siteId: t.auditPlanItems.siteId }).from(t.auditPlanItems).where(eq(t.auditPlanItems.id, num(a)));
+      return p?.siteId;
+    },
     async facts(db, [a]) {
-      const [p] = await db.select({ year: t.auditPlanItems.year, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, track: t.auditPlanItems.track })
+      const [p] = await db.select({ year: t.auditPlanItems.year, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, track: t.auditPlanItems.track, siteId: t.auditPlanItems.siteId })
         .from(t.auditPlanItems).where(eq(t.auditPlanItems.id, num(a)));
-      return p ? { reference: ref(`Programme ${p.year} · ${p.detail ?? p.label}`), siteId: null, facts: { track: p.track } } : null;
+      return p ? { reference: ref(`Programme ${p.year} · ${p.detail ?? p.label}`), siteId: p.siteId, facts: { track: p.track } } : null;
     },
     logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'audit_plan_item', entityId: num(a) } : null),
     async sources(db, ids) {

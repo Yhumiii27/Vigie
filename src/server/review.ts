@@ -100,8 +100,8 @@ const shownDate = (d: string | null) => (d ? fmtDate(d) : null);
 
 /**
  * Inscrit la revue au programme annuel (reviewSlot) : reprend l'échéance de revue saisie au seul programme ce mois-là, sinon
- * la crée sur la ligne « Revues de direction » si ce mois y est libre ; sinon la revue reste « hors programme ». Sans effet
- * pour une revue déjà rattachée.
+ * la crée sur la ligne « Revues de direction » (AUD-21 : même si ce mois y porte déjà un élément). Sans effet pour une revue
+ * déjà rattachée.
  */
 async function ensurePlanItem(tx: DbOrTx, review: Pick<Review, 'id' | 'reviewOn' | 'kind'>, byId: string) {
   if (await planItemOf(tx, review.id)) return;
@@ -111,7 +111,6 @@ async function ensurePlanItem(tx: DbOrTx, review: Pick<Review, 'id' | 'reviewOn'
   const month = monthOf(on);
   const items = await tx.select().from(t.auditPlanItems).where(and(eq(t.auditPlanItems.year, year), eq(t.auditPlanItems.month, month)));
   const slot = reviewSlot(items, on);
-  if ('taken' in slot) return;
   if ('adopt' in slot) {
     const p = items.find((i) => i.id === slot.adopt)!;
     const values = { reviewId: review.id, plannedOn: on, year, month, label: planLabel(kind, on), detail: p.detail ?? planDetail(kind), ownerId: p.ownerId ?? await directorId(tx, byId) };
@@ -129,17 +128,6 @@ async function ensurePlanItem(tx: DbOrTx, review: Pick<Review, 'id' | 'reviewOn'
     entityType: 'audit_plan_item', entityId: row.id, action: 'create', byId,
     summary: `Ajouté au programme ${year} (${REVIEW_TRACK}, ${monthName(month)}) · revue du ${fmtDate(on)}`,
   });
-}
-
-/** Le programme n'admet qu'un élément en vigueur par ligne et par mois : message d'erreur si le déplacement de l'échéance entre en conflit. */
-async function planClash(db: DbOrTx, linked: PlanRow | undefined, to: string) {
-  if (!linked) return null;
-  const [clash] = await db.select({ label: t.auditPlanItems.label }).from(t.auditPlanItems)
-    .where(and(eq(t.auditPlanItems.year, yearOf(to)), eq(t.auditPlanItems.track, linked.track), eq(t.auditPlanItems.month, monthOf(to)),
-      isNull(t.auditPlanItems.cancelledAt), ne(t.auditPlanItems.id, linked.id)));
-  return clash
-    ? `Le programme annuel prévoit déjà « ${clash.label} » en ${monthName(monthOf(to))} ${yearOf(to)} sur la ligne « ${linked.track} ». Libérez ce mois dans le programme ou choisissez une autre date.`
-    : null;
 }
 
 /**
@@ -236,8 +224,6 @@ export async function rescheduleReview(_prev: FormState, fd: FormData): Promise<
   if (review.status !== 'planifiee') return { error: 'Seule une revue planifiée peut être reportée.' };
   if (review.reviewOn === to) return { ok: true };
   if (await dateTaken(db, to!, review.id)) return { error: `Une revue est déjà prévue le ${fmtDate(to!)}.`, fieldErrors: { to: 'Date déjà occupée.' } };
-  const clash = await planClash(db, await planItemOf(db, review.id), to!);
-  if (clash) return { error: clash, fieldErrors: { to: 'Mois déjà occupé au programme annuel.' } };
 
   await db.transaction(async (tx) => {
     await moveReview(tx, review, to!, { postpone: true, byId: session.user.id });
@@ -288,8 +274,6 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
   const linked = await planItemOf(db, review.id);
   if (reviewOn !== review.reviewOn) {
     if (await dateTaken(db, reviewOn!, review.id)) return { error: `Une autre revue est enregistrée le ${fmtDate(reviewOn!)}.`, fieldErrors: { reviewOn: 'Date déjà occupée.' } };
-    const clash = await planClash(db, linked, reviewOn!);
-    if (clash) return { error: clash, fieldErrors: { reviewOn: 'Mois déjà occupé au programme annuel.' } };
   }
 
   // Prochaine revue : déjà enregistrée à cette date (rien à faire), sinon la revue planifiée qui suit celle-ci est
@@ -305,10 +289,6 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
       error: `La revue du ${fmtDate(plannedNext.reviewOn)} est planifiée : indiquez-la comme prochaine revue (ou une autre date pour la reporter), ou faites-la annuler avant d'effacer cette date.`,
       fieldErrors: { nextReviewOn: 'Prochaine revue déjà planifiée.' },
     };
-  }
-  if (nextReviewOn && !nextExisting && plannedNext) {
-    const clash = await planClash(db, await planItemOf(db, plannedNext.id), nextReviewOn);
-    if (clash) return { error: clash, fieldErrors: { nextReviewOn: 'Mois déjà occupé au programme annuel.' } };
   }
 
   const values = { participantIds, externalParticipants, customerPerception, resourceNeeds, minutes, nextReviewOn, status: 'tenue', recordedById: session.user.id };

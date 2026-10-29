@@ -13,7 +13,7 @@ function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: T
   const others = titles.filter((x) => x.id !== title?.id);
   const prereq = new Set(title?.prerequisiteIds ?? []);
   return (
-    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1', awarenessField: '1' }}>
+    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1', awarenessField: '1', internalAuditorField: '1' }}>
       <FormRow>
         <Field name="label" label="Intitulé">
           <Input name="label" defaultValue={title?.label} placeholder="Ex. Habilitation soudure" maxLength={60} autoFocus />
@@ -25,6 +25,10 @@ function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: T
       {/* HAB-13 : sensibilisation (ISO 45001 §7.3), suivie et évaluée comme une formation. */}
       <Field name="awareness" label="Sensibilisation" hint="Accueil sécurité, causerie, consignes : action de sensibilisation (ISO 45001 §7.3) plutôt qu'une formation qualifiante.">
         <Checkbox name="awareness" label="Action de sensibilisation" defaultChecked={title?.awareness ?? false} />
+      </Field>
+      {/* AUD-27 : qualification d'auditeur interne, vérifiée (signalée) pour l'auditeur interne d'un audit du programme. */}
+      <Field name="internalAuditor" label="Auditeur interne" hint="Formation d'auditeur interne (ISO 19011…) : l'auditeur interne d'un audit sans titre valide de ce type est signalé.">
+        <Checkbox name="internalAuditor" label="Qualifie un auditeur interne" defaultChecked={title?.internalAuditor ?? false} />
       </Field>
       <Field name="firstAid" label="Secourisme" hint="Titulaires en cours de validité proposés comme donneurs de soins du registre des accidents bénins.">
         <Checkbox name="firstAid" label="Sauveteur secouriste du travail (SST) ou équivalent" defaultChecked={title?.firstAid ?? false} />
@@ -121,6 +125,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
                 {t.label}
                 {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }} title="Donneurs de soins du registre des accidents bénins">Secourisme</span>}
                 {t.awareness && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }}>Sensibilisation</span>}
+                {t.internalAuditor && <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }}>Auditeur interne</span>}
               </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t.validityMonths ? `${t.validityMonths} mois` : 'Sans échéance'}</td>
               {canManage && (
