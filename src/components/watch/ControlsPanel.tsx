@@ -7,6 +7,7 @@ import { ActionFields } from '@/components/ActionFormDialog';
 import { EntityFiles } from '@/components/EntityFiles';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { LinkedEvents } from '@/components/LinkedEvents';
+import { newEventHref } from '@/lib/event-prefill';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { LinkActionButton } from '@/components/LinkActionButton';
@@ -48,7 +49,9 @@ function nextFrom(lastOn: string, period: string) {
 
 // ─── Tableau des contrôles ──────────────────────────────────────────────────
 
-export function ControlsPanel({ rows, filter, canManage, canApprove, options, actionOptions, linkActions, requirementOptions, today, showSite, suggestions, initialId, closeHref }: ActionProps & {
+export function ControlsPanel({ rows, filter, canManage, canApprove, options, actionOptions, linkActions, requirementOptions, today, showSite, suggestions, initialId, closeHref, emptyText }: ActionProps & {
+  /** Liste vide par l'effet des filtres (VEI-13). */
+  emptyText?: string;
   /** Contrôles du site, archivés compris (filtre « Archivés ») : la fiche ouverte reste affichée après son archivage. */
   rows: ControlView[];
   filter?: ControlFilter;
@@ -92,7 +95,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
           <tbody>
             {shown.length === 0 && (
               <tr><td colSpan={canManage ? 9 : 8} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-                {filter === 'archives' ? 'Aucun contrôle archivé.' : rows.some((c) => !c.archived) ? 'Aucun contrôle dans cette catégorie.' : showSite ? 'Aucun contrôle périodique suivi.' : 'Aucun contrôle périodique suivi sur ce site.'}
+                {emptyText ?? (filter === 'archives' ? 'Aucun contrôle archivé.' : rows.some((c) => !c.archived) ? 'Aucun contrôle dans cette catégorie.' : showSite ? 'Aucun contrôle périodique suivi.' : 'Aucun contrôle périodique suivi sur ce site.')}
               </td></tr>
             )}
             {shown.map((c) => (
@@ -222,7 +225,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
         onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
 
       {/* EVT-14 : événements rattachés à l'équipement (pannes, presque-accidents, non-conformités). */}
-      {!creating && <LinkedEvents events={c.events} />}
+      {!creating && <LinkedEvents events={c.events} reportHref={canManage && !c.archived ? newEventHref('controle', c.id) : null} />}
 
       {!creating && (
         <>

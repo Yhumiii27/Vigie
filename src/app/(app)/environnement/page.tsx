@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { PageHeader } from '@/components/PageHeader';
 import { Aside, CardHead, Dot, Icon, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
@@ -341,7 +342,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
               <CardHead title="Événements environnementaux" aside={
                 <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
                   <Aside>{plural(d.envEvents.length, 'ouvert', 'ouverts')}</Aside>
-                  <Link href="/signaler?type=ENV" className="vg-link" title="Signaler un déversement, une fuite, un rejet…">Signaler</Link>
+                  {/* EVT-24 : encadrement — « Nouvel événement » de type Environnement ; Salarié — formulaire terrain. */}
+                  <Link href={manage ? newEventHref('type', 'ENV') : '/signaler?type=ENV'} className="vg-link">
+                    Signaler<span className="vg-sr-only"> un déversement, une fuite, un rejet…</span>
+                  </Link>
                 </span>
               } />
               <div style={{ display: 'grid', gap: 2 }}>

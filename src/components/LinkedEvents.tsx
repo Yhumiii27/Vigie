@@ -6,11 +6,21 @@ import type { LinkedEvent } from '@/lib/data/linked-events';
 /**
  * Événements rattachés à la fiche (EVT-14 : contrôle périodique, document maîtrisé), le plus récent d'abord ; lien vers la
  * fiche de l'événement pour les rôles qui ouvrent l'écran Événements. Sans donnée de santé (chargement : loadLinkedEvents).
+ * `reportHref` (EVT-24) : « Signaler un événement » ouvre « Nouvel événement » prérempli depuis la fiche (encadrement).
  */
-export function LinkedEvents({ events, empty = 'Aucun événement rattaché. Le rattachement se fait depuis la fiche de l’événement.' }: { events: LinkedEvent[]; empty?: string }) {
+export function LinkedEvents({ events, reportHref, empty = 'Aucun événement rattaché. Le rattachement se fait depuis la fiche de l’événement.' }: {
+  events: LinkedEvent[]; reportHref?: string | null; empty?: string;
+}) {
   return (
     <section style={{ display: 'grid', gap: 6 }}>
-      <h6 className="vg-h6">Événements liés{events.length ? <span style={{ color: 'var(--vg-text-muted)' }}> · {events.length}</span> : null}</h6>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <h6 className="vg-h6">Événements liés{events.length ? <span style={{ color: 'var(--vg-text-muted)' }}> · {events.length}</span> : null}</h6>
+        {reportHref && (
+          <Link href={reportHref} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+          </Link>
+        )}
+      </div>
       {events.length ? (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
           {events.map((e) => (

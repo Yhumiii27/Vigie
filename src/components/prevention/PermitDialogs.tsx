@@ -2,6 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { useRouter } from 'next/navigation';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
@@ -18,7 +19,7 @@ import {
 } from './model';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle,
-  contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
+  contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
@@ -348,7 +349,9 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
         ['Travaux', permit.description],
         ['Lieu', permit.location],
         ['Site', permit.site],
-        ['Entreprise', permit.contractor ?? 'Intervention interne'],
+        ['Entreprise', permit.contractorId && permit.contractor
+          ? <Link href={contractorHref(permit.contractorId)} className="vg-link" style={{ fontSize: 12.5 }}>{permit.contractor}</Link>
+          : permit.contractor ?? 'Intervention interne'],
         ['Intervenant(s)', permit.performer],
         ['Plan de prévention', permit.plan
           ? <>{permit.plan.id}<span style={{ display: 'block', ...muted, color: permit.plan.signed ? 'var(--color-neutral-500)' : 'var(--tone-warn-fg)' }}>{permit.plan.signed ? 'Signé' : 'Non signé'} · {permit.plan.period}</span></>
@@ -386,7 +389,7 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
       )}
 
       <LinkedEvents events={permit.events} emptyLabel="Aucun événement rattaché à ce permis."
-        reportHref={canManage ? `/evenements?nouveau=1&permis=${encodeURIComponent(permit.id)}` : null} />
+        reportHref={canManage ? newEventHref('permis', permit.id) : null} />
 
       <ChangeLogList entries={permit.history} />
 

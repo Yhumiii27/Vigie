@@ -6,6 +6,7 @@ import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@
 import { RISK_ACTION_THRESHOLD, RISK_LEVELS, SEVERITY, riskLevel } from '@/lib/domain';
 import type { RiskView, WorkUnitView } from '@/lib/data/risks';
 import { saveRisk } from '@/server/risks';
+import { hazardSuggestions } from '@/lib/hazard-families';
 
 const GRAVITY: [string, string][] = [1, 2, 3, 4].map((n) => [String(n), SEVERITY[n]]);
 const PROBABILITY: [string, string][] = [['1', 'P1 · improbable'], ['2', 'P2 · possible'], ['3', 'P3 · probable'], ['4', 'P4 · très probable']];
@@ -43,13 +44,16 @@ export type RiskFormDefaults = Partial<Pick<RiskView, 'id' | 'unitId' | 'hazard'
  * Formulaire d'ajout / de modification d'un risque, avec cotation brute et résiduelle calculées en direct.
  * `reviewPrompt` : actions vérifiées, résiduel à recoter — la case enregistre la recotation même sans changement de cotation.
  */
-export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCancel }: {
+export function RiskFields({ units, defaults = {}, reviewPrompt, hazards, onDone, onCancel }: {
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];
+  /** Libellés de danger déjà employés (suggestions, DUE-18). */
+  hazards?: readonly string[];
   defaults?: RiskFormDefaults;
   reviewPrompt?: boolean;
   onDone: () => void;
   onCancel?: () => void;
 }) {
+  const listId = useId();
   const [g, setG] = useState(defaults.gravity ?? 2);
   const [p, setP] = useState(defaults.probability ?? 2);
   const [rg, setRg] = useState(defaults.residualGravity ?? defaults.gravity ?? 2);
@@ -62,9 +66,11 @@ export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCance
       <Field name="unitId" label="Unité de travail">
         <Select name="unitId" options={unitOptions} defaultValue={defaults.unitId} />
       </Field>
-      <Field name="hazard" label="Danger" hint="Famille de danger (ex. Manutention mécanique, Bruit, Chute de hauteur).">
-        <Input name="hazard" defaultValue={defaults.hazard} maxLength={120} autoFocus={!editing} />
+      {/* DUE-18 : familles de dangers usuelles (INRS ED 840) et libellés déjà employés, proposées sans être imposées. */}
+      <Field name="hazard" label="Danger" hint="Famille de danger : choisissez une suggestion (familles INRS) ou saisissez un autre libellé.">
+        <Input name="hazard" defaultValue={defaults.hazard} maxLength={120} autoFocus={!editing} list={listId} autoComplete="off" />
       </Field>
+      <datalist id={listId}>{hazardSuggestions(hazards).map((h) => <option key={h} value={h} />)}</datalist>
       <Field name="situation" label="Situation dangereuse">
         <TextArea name="situation" defaultValue={defaults.situation} rows={2} maxLength={500} placeholder="Qui est exposé, à quoi, dans quelle activité…" />
       </Field>
@@ -95,10 +101,10 @@ export function RiskFields({ units, defaults = {}, reviewPrompt, onDone, onCance
 }
 
 /** Bouton « Ajouter un risque » : l'unité sélectionnée est proposée par défaut. */
-export function AddRiskButton({ units, unitId }: { units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[]; unitId?: string }) {
+export function AddRiskButton({ units, unitId, hazards }: { units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[]; unitId?: string; hazards?: readonly string[] }) {
   return (
     <DialogButton label="Ajouter un risque" icon="ph-plus" title="Ajouter un risque" kicker="Document unique" width={600}>
-      {(close) => <RiskFields units={units} defaults={{ unitId }} onDone={close} onCancel={close} />}
+      {(close) => <RiskFields units={units} defaults={{ unitId }} hazards={hazards} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseEventFilters } from './event-filters';
 import {
   DETAIL_PARAMS, canonicalHref, firstParam, hrefWith, legacySkillFilters, missingDetail, parseSkillFilters, searchWith,
-  skillFiltersParams, wantsArchives,
+  parseSkillTitle, skillFiltersParams, wantsArchives,
 } from './url-state';
 
 describe('convention d’URL (UX-12)', () => {
@@ -92,5 +92,12 @@ describe('filtres de la matrice des habilitations', () => {
     expect(legacySkillFilters(JSON.stringify({ chip: 'tous', service: '' }))).toBeNull();
     expect(legacySkillFilters('{pas du json')).toBeNull();
     expect(legacySkillFilters(null)).toBeNull();
+  });
+
+  it('parseSkillTitle : filtre par titre suivi (HAB-16), titre en vigueur de la liste seulement', () => {
+    expect(parseSkillTitle({ habilitation: 'caces-r489' }, ['caces-r489', 'sst'])).toBe('caces-r489');
+    expect(parseSkillTitle(new URLSearchParams('habilitation=sst'), ['caces-r489', 'sst'])).toBe('sst');
+    expect(parseSkillTitle({ habilitation: 'archive' }, ['sst'])).toBe('');
+    expect(parseSkillTitle({ titre: 'sst' }, ['sst'])).toBe('');
   });
 });

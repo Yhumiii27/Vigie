@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { EntityFiles } from '@/components/EntityFiles';
@@ -223,7 +224,15 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
       <MeasuresSection risk={risk} unit={unit} editable={editable && !unitArchived} options={measureOptions} />
 
       {showEvents && <section style={{ display: 'grid', gap: 8 }}>
-        <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
+          {/* EVT-24 : « Nouvel événement » prérempli (site, unité, risque) ; risque en vigueur, rôles qui modifient le DUERP. */}
+          {editable && !unitArchived && (
+            <Link href={newEventHref('risque', risk.id)} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+            </Link>
+          )}
+        </div>
         {risk.events.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
             {risk.events.map((e) => (

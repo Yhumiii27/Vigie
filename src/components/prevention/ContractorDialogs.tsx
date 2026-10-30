@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
@@ -9,7 +10,7 @@ import { ActionForm, Field, FormRow, Input } from '@/components/form';
 import { Icon, ToneTag } from '@/components/ui';
 import type { ContractorView } from '@/lib/data/prevention';
 import { archiveContractor, restoreContractor, saveContractor } from '@/server/contractors';
-import { Facts, Notice, SectionTitle, muted, rowOpener } from './parts';
+import { Facts, Notice, SectionTitle, dropUrlParam, muted, rowOpener } from './parts';
 import { TipButton } from '@/components/Tip';
 
 function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
@@ -145,10 +146,15 @@ const count = (n: number, active: number, activeLabel: string) => (
   </>
 );
 
-/** Liste des entreprises extérieures ; un clic ouvre la fiche (tous rôles). */
-export function ContractorsTable({ contractors, canManage, emptyLabel }: { contractors: ContractorView[]; canManage: boolean; emptyLabel: string }) {
-  const [selId, setSelId] = useState<string | null>(null);
+/**
+ * Liste des entreprises extérieures ; un clic ouvre la fiche (tous rôles). `openId` (PRV-14) : fiche ouverte par lien direct
+ * (?onglet=entreprises&entreprise=<id>, depuis un plan ou un permis), paramètre retiré de l'URL à la fermeture.
+ */
+export function ContractorsTable({ contractors, canManage, emptyLabel, openId }: { contractors: ContractorView[]; canManage: boolean; emptyLabel: string; openId?: string }) {
+  const router = useRouter();
+  const [selId, setSelId] = useState<string | null>(openId ?? null);
   const sel = contractors.find((c) => c.id === selId) ?? null;
+  const close = () => { setSelId(null); dropUrlParam((href, o) => router.replace(href, o), 'entreprise'); };
 
   return (
     <>
@@ -177,7 +183,7 @@ export function ContractorsTable({ contractors, canManage, emptyLabel }: { contr
           </table>
         </div>
       </div>
-      <ContractorDialog contractor={sel} onClose={() => setSelId(null)} canManage={canManage} />
+      <ContractorDialog contractor={sel} onClose={close} canManage={canManage} />
     </>
   );
 }

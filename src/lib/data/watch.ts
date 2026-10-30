@@ -75,7 +75,7 @@ const loadCertificationIndicators = cache(async (now: string): Promise<Map<strin
     const next = items.filter((p) => p.certificationId === c.id && !p.done)
       .map((p) => p.plannedOn ?? `${p.year}-${String(p.month).padStart(2, '0')}-31`).sort()[0] ?? null;
     const state = certificationStatus(c, next, now);
-    return [c.id, { label: `${c.standard} · ${state.label}`, tone: state.tone, href: '/audits', gap: state.tone === 'danger' }];
+    return [c.id, { label: `${c.standard} · ${state.label}`, tone: state.tone, href: `/audits?referentiel=${encodeURIComponent(c.id)}`, gap: state.tone === 'danger' }];
   }));
 });
 
@@ -209,6 +209,8 @@ export async function loadWatch() {
         : [r.dueOn && fmtDate(r.dueOn), r.dueNote].filter(Boolean).join(' · ')),
       /** Échéance tirée du prochain contrôle rattaché (VEI-03) : la date saisie n'est plus proposée. */
       dueFromControl: !!due.control,
+      /** VEI-13 : date de l'échéance affichée (tri « par échéance ») ; null sans échéance. */
+      dueSort: (r.linkedTo === 'duerp' && duerp.nextUpdateOn) || (due.control ? due.on : null) || r.dueOn || null,
       indicator,
       evalLabel: r.evaluationNote ? `${ev.label} · ${r.evaluationNote}` : ev.label,
       tone: ev.tone,

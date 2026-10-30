@@ -42,10 +42,10 @@ export const DETAIL_PARAMS = {
   '/veille': { exigence: 'exigence', controle: 'controle', observation: 'observation' },
   '/risques': { risque: 'risque', situation: 'situation' },
   '/documents': { document: 'doc' },
-  '/prevention': { plan: 'plan', permis: 'permis' },
+  '/prevention': { plan: 'plan', permis: 'permis', entreprise: 'entreprise' },
   '/environnement': { enlevement: 'enlevement', filiere: 'filiere' },
   '/habilitations': { salarie: 'salarie' },
-  '/audits': { element: 'element', constat: 'constat', revue: 'revue', changement: 'changement' },
+  '/audits': { element: 'element', constat: 'constat', revue: 'revue', changement: 'changement', referentiel: 'referentiel' },
   '/audits/contributions': { revue: 'revue' },
   '/revue-de-direction': { revue: 'revue' },
   '/apercu-mobile': { signalement: 'sel' },
@@ -149,3 +149,13 @@ export function searchWith(search: string, patch: Record<string, string | undefi
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
+
+/**
+ * HAB-16 : filtre de la matrice par titre suivi, `?habilitation=<identifiant du titre>` (distinct de `?titre=`, case
+ * ouverte par un lien profond avec `?salarie=`) : identifiant d'un titre en vigueur de la liste, sinon aucun.
+ */
+export function parseSkillTitle(sp: SearchParams | URLSearchParams, titleIds: readonly string[]): string {
+  const v = (sp instanceof URLSearchParams ? sp.get('habilitation') ?? undefined : firstParam(sp.habilitation))?.trim() ?? '';
+  return titleIds.includes(v) ? v : '';
+}
+

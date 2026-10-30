@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -589,4 +589,36 @@ export async function restoreTitle(_prev: FormState, fd: FormData): Promise<Form
   });
   done();
   return { ok: true, id };
+}
+
+/**
+ * HAB-15 : déplace un titre suivi d'un rang vers la gauche (« up ») ou la droite (« down ») dans les colonnes de la matrice,
+ * parmi les titres en vigueur (les titres archivés gardent leur rang) ; service QHSE et direction (requireTitlesEditor,
+ * HAB-12), commun à tous les sites. Renumérotation 0..n-1 dans la transaction, inscrite au journal du titre.
+ */
+export async function moveTitle(id: string, dir: 'up' | 'down'): Promise<{ error?: string }> {
+  const { error } = await requireTitlesEditor();
+  if (error) return { error };
+  if (typeof id !== 'string' || !id || (dir !== 'up' && dir !== 'down')) return { error: 'Titre introuvable.' };
+  const db = await getDb();
+  const result = await db.transaction(async (tx) => {
+    const scope = await tx.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, sort: t.trainingTitles.sort }).from(t.trainingTitles)
+      .where(isNull(t.trainingTitles.archivedAt)).orderBy(asc(t.trainingTitles.sort), asc(t.trainingTitles.id));
+    const i = scope.findIndex((x) => x.id === id);
+    if (i < 0) return { error: 'Titre introuvable ou archivé.' };
+    const j = dir === 'up' ? i - 1 : i + 1;
+    if (j < 0 || j >= scope.length) return { moved: false };
+    const title = scope[i];
+    const neighbour = scope[j];
+    [scope[i], scope[j]] = [scope[j], scope[i]];
+    for (const [n, x] of scope.entries()) if (x.sort !== n) await tx.update(t.trainingTitles).set({ sort: n }).where(eq(t.trainingTitles.id, x.id));
+    await logChange(tx, {
+      entityType: 'training_title', entityId: id, action: 'move',
+      summary: `Titre « ${title.label} » placé ${dir === 'up' ? 'avant' : 'après'} « ${neighbour.label} » dans la matrice`,
+    });
+    return { moved: true };
+  });
+  if ('error' in result) return { error: result.error };
+  if (result.moved) done();
+  return {};
 }

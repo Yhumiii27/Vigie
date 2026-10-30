@@ -87,6 +87,14 @@ export function ActionStatus({ a, plain }: { a: Pick<ActionBrief, 'status' | 'to
 type LinkedBrief = ActionBrief & { href?: string };
 
 /** Actions liées, une par ligne : numéro (lien) · avancement. */
+/**
+ * UX-15 : conteneur à défilement horizontal d'un tableau du dossier sur téléphone (sans effet à l'impression) ; focalisable
+ * pour défiler au clavier.
+ */
+export function ScrollTable({ children }: { children: ReactNode }) {
+  return <div className="rd-scroll" tabIndex={0} role="group" aria-label="Tableau, défilement horizontal sur petit écran">{children}</div>;
+}
+
 export function ActionRefs({ actions, role }: { actions: LinkedBrief[] | undefined; role: Role }) {
   if (!actions?.length) return <>—</>;
   return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain /></div>)}</>;
@@ -96,25 +104,27 @@ export function ActionTable({ rows, role, review, extra }: {
   rows: (LinkedBrief & { originRef?: string; review?: string })[]; role: Role; review?: boolean; extra?: (a: LinkedBrief & { originRef?: string }) => ReactNode;
 }) {
   return (
-    <table className="table rd-table">
-      <thead><tr><th>N°</th><th>Action</th>{review && <th>Revue</th>}<th>Responsable</th><th>Date cible</th><th>Avancement</th></tr></thead>
-      <tbody>
-        {rows.map((a) => (
-          <tr key={a.id}>
-            <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.id}</Ref></td>
-            <td>
-              {a.title}
-              {extra && <div className="rd-muted" style={{ fontSize: 11 }}>{extra(a)}</div>}
-              {a.efficacyNote && <div className="rd-muted" style={{ fontSize: 11 }}>Efficacité : {a.efficacyNote}</div>}
-            </td>
-            {review && <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{a.review ?? '—'}</td>}
-            <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
-            <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>vérifiée le {fmtDate(a.closedOn)}</div>}</td>
-            <td><ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.status}</ToneTag></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ScrollTable>
+      <table className="table rd-table">
+        <thead><tr><th>N°</th><th>Action</th>{review && <th>Revue</th>}<th>Responsable</th><th>Date cible</th><th>Avancement</th></tr></thead>
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.id}>
+              <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.id}</Ref></td>
+              <td>
+                {a.title}
+                {extra && <div className="rd-muted" style={{ fontSize: 11 }}>{extra(a)}</div>}
+                {a.efficacyNote && <div className="rd-muted" style={{ fontSize: 11 }}>Efficacité : {a.efficacyNote}</div>}
+              </td>
+              {review && <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{a.review ?? '—'}</td>}
+              <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>vérifiée le {fmtDate(a.closedOn)}</div>}</td>
+              <td><ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.status}</ToneTag></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </ScrollTable>
   );
 }
 
@@ -124,32 +134,34 @@ export function ActionTable({ rows, role, review, extra }: {
  */
 export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role }) {
   return (
-    <table className="table rd-table">
-      <thead><tr><th>Revue</th><th>Nature</th><th style={{ width: '38%' }}>Décision ou action</th><th>Pilote</th><th>Échéance</th><th>Suite donnée</th></tr></thead>
-      <tbody>
-        {rows.map((x) => (
-          <tr key={x.key}>
-            <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{x.review}</td>
-            <td style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</td>
-            <td>{x.text}</td>
-            <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
-            <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
-            <td>
-              {x.state === 'no_action' && <span style={{ color: x.tone === 'neutral' ? undefined : TONE[x.tone].fg }}>{REVIEW_FOLLOW_UP.no_action.label}</span>}
-              {x.state === 'cancelled' && (
-                <span style={{ display: 'grid', gap: 2 }}>
-                  <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{x.actionId ? REVIEW_FOLLOW_UP.cancelled.label : REVIEW_FOLLOW_UP.abandoned.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
-                  {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>Motif : {x.cancelled.reason}</span>}
-                </span>
-              )}
-              {x.state === 'action' && (x.action
-                ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></span>
-                : <span className="rd-muted">{x.actionId}</span>)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ScrollTable>
+      <table className="table rd-table">
+        <thead><tr><th>Revue</th><th>Nature</th><th style={{ width: '38%' }}>Décision ou action</th><th>Pilote</th><th>Échéance</th><th>Suite donnée</th></tr></thead>
+        <tbody>
+          {rows.map((x) => (
+            <tr key={x.key}>
+              <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{x.review}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</td>
+              <td>{x.text}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
+              <td>
+                {x.state === 'no_action' && <span style={{ color: x.tone === 'neutral' ? undefined : TONE[x.tone].fg }}>{REVIEW_FOLLOW_UP.no_action.label}</span>}
+                {x.state === 'cancelled' && (
+                  <span style={{ display: 'grid', gap: 2 }}>
+                    <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{x.actionId ? REVIEW_FOLLOW_UP.cancelled.label : REVIEW_FOLLOW_UP.abandoned.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
+                    {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>Motif : {x.cancelled.reason}</span>}
+                  </span>
+                )}
+                {x.state === 'action' && (x.action
+                  ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></span>
+                  : <span className="rd-muted">{x.actionId}</span>)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </ScrollTable>
   );
 }
 

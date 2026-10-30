@@ -355,9 +355,19 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
   const plan = allPlan.filter((p) => !p.cancelled);
   const findings = base.findings.filter((f) => visible(f.siteId));
   const active = findings.filter((f) => !f.cancelled);
-  const auditGroups = base.auditGroups
+  const withFindings = base.auditGroups
     .map((g) => ({ ...g, findings: g.findings.filter((f) => visible(f.siteId)) }))
     .filter((g) => g.findings.length);
+  // AUD-29 : audits réalisés du programme en vigueur (hors revues) sans constat — ils figurent aussi dans la liste des
+  // constats (« sans constat »), au rang de leur date ; site sélectionné et périmètre (AUD-22).
+  const covered = new Set(withFindings.map((g) => g.planItemId));
+  const silent: AuditGroup[] = plan.filter((p) => p.done && !p.isReview && !covered.has(p.id)).map((p) => ({
+    key: `p${p.id}`, label: planItemAuditLabel(p), planItemId: p.id, year: p.year, date: p.doneOn ?? p.plannedOn, auditor: p.auditorLabel || null,
+    reports: p.reports, findings: [], unplanned: p.unplanned,
+  }));
+  // Tri stable : les audits avec constats gardent leur ordre (date, puis premier constat) ; un audit sans constat prend
+  // le rang de sa date.
+  const auditGroups = [...withFindings, ...silent].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
   const cancelledFindings = base.cancelledFindings.filter((f) => visible(f.siteId));
   const nowYear = yearOf(now);
   // Années proposées : aussi celles qui ne portent que des éléments annulés (liste « Éléments annulés »).
@@ -513,19 +523,22 @@ export const loadAuditSignals = cache(async (): Promise<{ badge?: number; todo: 
   // d) Certificats : expiré, fin de validité proche, audit de suivi non programmé (l'audit à venir relève du programme).
   certs.filter((c) => c.tone === 'ok').forEach((c) => {
     const { who, ownerIds } = leads.forSite(c.siteId);
-    const base = { kind: 'Certification', who, ownerIds, href: '/audits', siteId: c.siteId };
+    // AUD-19 : l'échéance ouvre le référentiel (?referentiel=) ; clé d'état lu inchangée (ancien lien /audits), pour ne
+    // perdre aucune échéance déjà lue.
+    const base = { kind: 'Certification', who, ownerIds, href: `/audits?referentiel=${encodeURIComponent(c.id)}`, siteId: c.siteId };
+    const titled = (title: string) => ({ title, key: `Certification|/audits|${title}` });
     // AUD-08 : suspension par l'organisme, jusqu'à sa levée.
-    if (c.suspendedOn) todo.push({ ...base, date: now, dueOn: c.suspendedOn, tone: 'danger', title: `Certificat ${c.standard} suspendu depuis le ${fmtDayMonth(c.suspendedOn)}`, overdue: true });
+    if (c.suspendedOn) todo.push({ ...base, date: now, dueOn: c.suspendedOn, tone: 'danger', ...titled(`Certificat ${c.standard} suspendu depuis le ${fmtDayMonth(c.suspendedOn)}`), overdue: true });
     if (c.validUntil && c.validUntil < now) {
-      todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'danger', title: `Certificat ${c.standard} expiré`, overdue: true });
+      todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'danger', ...titled(`Certificat ${c.standard} expiré`), overdue: true });
     } else if (c.validUntil && daysBetween(now, c.validUntil) <= CERT_SOON_DAYS) {
       // AUD-08 : fin de validité signalée 30 jours avant (et non plus 15).
-      todo.push({ ...base, date: c.validUntil, dueOn: c.validUntil, tone: 'warn', title: `Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}` });
+      todo.push({ ...base, date: c.validUntil, dueOn: c.validUntil, tone: 'warn', ...titled(`Certificat ${c.standard} · fin de validité le ${fmtDate(c.validUntil)}`) });
     }
     // AUD-08 : renouvellement à préparer — fin de cycle sous 6 mois sans audit programmé avant la fin de validité.
     if (c.validUntil && c.validUntil >= now && daysBetween(now, c.validUntil) <= CERT_RENEWAL_NOTICE_DAYS && !(c.nextAudit && c.nextAudit.plannedOn <= c.validUntil)) {
       todo.push({ ...base, date: now, dueOn: c.validUntil, tone: 'warn', overdue: true, key: `certification|${c.id}|renouvellement`, title: `${c.standard} · audit de renouvellement à programmer avant le ${fmtDate(c.validUntil)}` });
-    } else if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', title: `${c.standard} · audit de suivi à programmer`, overdue: true });
+    } else if (!c.nextAudit) todo.push({ ...base, date: now, tone: 'warn', ...titled(`${c.standard} · audit de suivi à programmer`), overdue: true });
   });
 
   // Les contributions attendues pour la revue de direction relèvent de loadReviewSignals (src/lib/data/review.ts).

@@ -44,7 +44,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 
 // ─── Tableau des exigences ──────────────────────────────────────────────────
 
-export function RequirementsPanel({ rows, archives = false, canManage, canApprove, options, actionOptions, linkActions, today, initialId, closeHref }: ActionProps & {
+export function RequirementsPanel({ rows, archives = false, canManage, canApprove, options, actionOptions, linkActions, today, initialId, closeHref, emptyText }: ActionProps & {
+  /** Liste vide par l'effet des filtres (VEI-13). */
+  emptyText?: string;
   /** Toutes les exigences (archivées comprises) : la fiche ouverte reste affichée après son archivage. */
   rows: RequirementView[];
   /** Liste des exigences archivées (`?etat=archives`, UX-12) au lieu des exigences en vigueur. */
@@ -77,7 +79,7 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
           <tbody>
             {shown.length === 0 && (
               <tr><td colSpan={7} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-                {archives ? 'Aucune exigence archivée.' : 'Aucune exigence suivie pour l’instant.'}
+                {emptyText ?? (archives ? 'Aucune exigence archivée.' : 'Aucune exigence suivie pour l’instant.')}
               </td></tr>
             )}
             {shown.map((r) => (

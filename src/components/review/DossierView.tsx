@@ -6,7 +6,7 @@ import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
 import { TONE, type Role } from '@/lib/domain';
 import type { DossierFinding, ReviewDossierPage, ReviewRecordOnly, StoredDossier } from '@/lib/data/review';
 import {
-  ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, Section,
+  ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, ScrollTable, Section,
   capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
 
@@ -126,41 +126,47 @@ export function DossierView({ page, role, notice }: {
       {d.events && (
         <Section n={n()} title="Non-conformités et événements" aside={`${plural(d.events.openNc?.length ?? 0, 'NC ouverte', 'NC ouvertes')}`}>
           <div className="rd-cols">
-            <table className="table rd-table">
-              <thead><tr><th>Type</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouverts</th></tr></thead>
-              <tbody>
-                {d.events.byType?.map((t) => (
-                  <tr key={t.key}><td>{t.label}</td><td className="rd-num-cell">{t.n12}</td><td className="rd-num-cell">{t.open}</td></tr>
-                ))}
-              </tbody>
-            </table>
-            <table className="table rd-table">
-              <thead><tr><th>Non-conformités par origine</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouvertes</th></tr></thead>
-              <tbody>
-                {d.events.ncByOrigin?.map((o) => (
-                  <tr key={o.origin}><td>{o.origin}</td><td className="rd-num-cell">{o.n12}</td><td className="rd-num-cell">{o.open}</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Type</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouverts</th></tr></thead>
+                <tbody>
+                  {d.events.byType?.map((t) => (
+                    <tr key={t.key}><td>{t.label}</td><td className="rd-num-cell">{t.n12}</td><td className="rd-num-cell">{t.open}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Non-conformités par origine</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouvertes</th></tr></thead>
+                <tbody>
+                  {d.events.ncByOrigin?.map((o) => (
+                    <tr key={o.origin}><td>{o.origin}</td><td className="rd-num-cell">{o.n12}</td><td className="rd-num-cell">{o.open}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           </div>
           <p className="rd-empty rd-muted">Les réclamations client sont comptées sous l&apos;origine « Réclamation client ».</p>
           <h3 className="rd-h3">Non-conformités ouvertes</h3>
           {d.events.openNc?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Origine</th><th>Étape</th><th>Actions</th></tr></thead>
-              <tbody>
-                {d.events.openNc.map((e) => (
-                  <tr key={e.id}>
-                    <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
-                    <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
-                    <td className="rd-muted">{e.origin}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
-                    <td><ActionRefs actions={e.actions} role={role} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Origine</th><th>Étape</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {d.events.openNc.map((e) => (
+                    <tr key={e.id}>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
+                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
+                      <td className="rd-muted">{e.origin}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
+                      <td><ActionRefs actions={e.actions} role={role} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune non-conformité ouverte.</Empty>}
         </Section>
       )}
@@ -175,21 +181,23 @@ export function DossierView({ page, role, notice }: {
               {d.complaints.length > 0 && ` · ${open} en cours de traitement · ${closed} clôturée${closed > 1 ? 's' : ''}`}
             </p>
             {d.complaints.length ? (
-              <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Date</th><th>Réclamation</th><th>Projet Keystone</th><th>Étape</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {d.complaints.map((c) => (
-                    <tr key={c.id}>
-                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={c.href} role={role}>{c.id}</Ref></td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.occurredOn)}</td>
-                      <td>{c.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {c.pilot}</div></td>
-                      <td className="rd-muted">{c.project ?? '—'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{c.step}</td>
-                      <td><ActionRefs actions={c.actions} role={role} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ScrollTable>
+                <table className="table rd-table">
+                  <thead><tr><th>Réf.</th><th>Date</th><th>Réclamation</th><th>Projet Keystone</th><th>Étape</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {d.complaints.map((c) => (
+                      <tr key={c.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={c.href} role={role}>{c.id}</Ref></td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.occurredOn)}</td>
+                        <td>{c.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {c.pilot}</div></td>
+                        <td className="rd-muted">{c.project ?? '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{c.step}</td>
+                        <td><ActionRefs actions={c.actions} role={role} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollTable>
             ) : <Empty>Aucune réclamation client sur la période.</Empty>}
             <h3 className="rd-h3">Perception des clients</h3>
             <RecordText text={r.customerPerception} held={held} placeholder="résultats d'enquête de satisfaction, retours clients, respect des délais de livraison" />
@@ -205,19 +213,21 @@ export function DossierView({ page, role, notice }: {
           </p>
           <h3 className="rd-h3">Audits fournisseurs du programme</h3>
           {d.suppliers.audits?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Date</th><th>Intitulé</th><th>Auditeur</th><th>État</th></tr></thead>
-              <tbody>
-                {d.suppliers.audits.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.plannedOn ? fmtDate(p.plannedOn) : `${capitalize(monthName(p.month))} ${p.year}`}</td>
-                    <td><Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref></td>
-                    <td className="rd-muted">{p.auditor ?? p.owner ?? '—'}</td>
-                    <td><ToneTag tone={p.state.tone} style={{ whiteSpace: 'nowrap' }}>{p.state.label}</ToneTag></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Date</th><th>Intitulé</th><th>Auditeur</th><th>État</th></tr></thead>
+                <tbody>
+                  {d.suppliers.audits.map((p) => (
+                    <tr key={p.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{p.plannedOn ? fmtDate(p.plannedOn) : `${capitalize(monthName(p.month))} ${p.year}`}</td>
+                      <td><Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref></td>
+                      <td className="rd-muted">{p.auditor ?? p.owner ?? '—'}</td>
+                      <td><ToneTag tone={p.state.tone} style={{ whiteSpace: 'nowrap' }}>{p.state.label}</ToneTag></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucun audit fournisseur sur la période.</Empty>}
           {/* AUD-33 : constats des audits fournisseurs (dossier figé avant le paquet 13 : ils restent sous Audits). */}
           {d.suppliers.findingGroups && (
@@ -228,20 +238,22 @@ export function DossierView({ page, role, notice }: {
           )}
           <h3 className="rd-h3">Non-conformités d&apos;origine fournisseur</h3>
           {d.suppliers.ncs?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Étape</th><th>Actions</th></tr></thead>
-              <tbody>
-                {d.suppliers.ncs.map((e) => (
-                  <tr key={e.id}>
-                    <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
-                    <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
-                    <td><ActionRefs actions={e.actions} role={role} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Étape</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {d.suppliers.ncs.map((e) => (
+                    <tr key={e.id}>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
+                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
+                      <td><ActionRefs actions={e.actions} role={role} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune non-conformité fournisseur sur la période.</Empty>}
         </Section>
       )}
@@ -250,22 +262,24 @@ export function DossierView({ page, role, notice }: {
         <Section n={n()} title="Audits et certifications">
           <h3 className="rd-h3">Certifications</h3>
           {d.audits.certs?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Référentiel</th><th>Domaine</th><th>Statut</th><th>Commentaire</th></tr></thead>
-              <tbody>
-                {d.audits.certs.map((c) => (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{c.standard}</td>
-                    <td>{c.domain}</td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dot color={certDot(c.tone)} />{c.status?.label}</span>
-                      <div className="rd-muted" style={{ fontSize: 11 }}>{[CERT_TONE_LABELS[c.tone as CertTone], c.organization].filter(Boolean).join(' · ')}</div>
-                    </td>
-                    <td className="rd-muted">{c.note}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Référentiel</th><th>Domaine</th><th>Statut</th><th>Commentaire</th></tr></thead>
+                <tbody>
+                  {d.audits.certs.map((c) => (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{c.standard}</td>
+                      <td>{c.domain}</td>
+                      <td>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dot color={certDot(c.tone)} />{c.status?.label}</span>
+                        <div className="rd-muted" style={{ fontSize: 11 }}>{[CERT_TONE_LABELS[c.tone as CertTone], c.organization].filter(Boolean).join(' · ')}</div>
+                      </td>
+                      <td className="rd-muted">{c.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucun référentiel suivi.</Empty>}
 
           <h3 className="rd-h3"><Ref href={d.audits.programmeHref} role={role}>Programme d&apos;audits et de visites</Ref></h3>
@@ -277,24 +291,26 @@ export function DossierView({ page, role, notice }: {
             </p>
           )}
           {d.audits.programme?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Mois</th><th>Ligne</th><th>Intitulé</th><th>Responsable</th><th>État</th></tr></thead>
-              <tbody>
-                {d.audits.programme.map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.plannedOn ? fmtDate(p.plannedOn) : `${capitalize(monthName(p.month))} ${p.year}`}</td>
-                    <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{p.track}</td>
-                    <td>
-                      <Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref>
-                      {p.postponedFrom && <div className="rd-muted" style={{ fontSize: 11 }}>Reporté · initialement {p.postponedFrom.endsWith('-01') ? `${monthName(+p.postponedFrom.slice(5, 7))} ${yearOf(p.postponedFrom)}` : fmtDate(p.postponedFrom)}</div>}
-                      {p.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={p.action.href} role={role}>{p.action.id}</Ref> · {p.action.status}</div>}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.owner || '—'}</td>
-                    <td><ToneTag tone={p.state.tone} style={{ whiteSpace: 'nowrap' }}>{p.state.label}</ToneTag></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Mois</th><th>Ligne</th><th>Intitulé</th><th>Responsable</th><th>État</th></tr></thead>
+                <tbody>
+                  {d.audits.programme.map((p) => (
+                    <tr key={p.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{p.plannedOn ? fmtDate(p.plannedOn) : `${capitalize(monthName(p.month))} ${p.year}`}</td>
+                      <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{p.track}</td>
+                      <td>
+                        <Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref>
+                        {p.postponedFrom && <div className="rd-muted" style={{ fontSize: 11 }}>Reporté · initialement {p.postponedFrom.endsWith('-01') ? `${monthName(+p.postponedFrom.slice(5, 7))} ${yearOf(p.postponedFrom)}` : fmtDate(p.postponedFrom)}</div>}
+                        {p.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={p.action.href} role={role}>{p.action.id}</Ref> · {p.action.status}</div>}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{p.owner || '—'}</td>
+                      <td><ToneTag tone={p.state.tone} style={{ whiteSpace: 'nowrap' }}>{p.state.label}</ToneTag></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucun élément au programme sur cette période.</Empty>}
 
           <h3 className="rd-h3">Constats d&apos;audit</h3>
@@ -305,53 +321,57 @@ export function DossierView({ page, role, notice }: {
       {d.actions && (
         <Section n={n()} title="Plan d'actions" aside={`${plural(d.actions.totals?.open ?? 0, 'ouverte', 'ouvertes')} · ${d.actions.totals?.late ?? 0} en retard`}>
           {actionRows?.length ? (
-            <table className="table rd-table">
-              {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
-              {d.actions.bySource
-                ? <thead><tr><th>Source</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Terminées — à vérifier</th><th className="rd-num-cell">Vérifiées · période</th></tr></thead>
-                : <thead><tr><th>Origine</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Efficacité à vérifier</th><th className="rd-num-cell">Clôturées · 12 mois</th></tr></thead>}
-              <tbody>
-                {actionRows.map((o) => (
-                  <tr key={o.key}>
-                    <td>{o.label}</td>
-                    <td className="rd-num-cell">{o.open}</td>
-                    <td className="rd-num-cell" style={{ color: o.late ? TONE.danger.dot : undefined }}>{o.late}</td>
-                    <td className="rd-num-cell">{o.verify}</td>
-                    <td className="rd-num-cell">{o.closed}</td>
-                  </tr>
-                ))}
-                {d.actions.totals && (
-                  <tr className="rd-total">
-                    <td>Total</td>
-                    <td className="rd-num-cell">{d.actions.totals.open}</td>
-                    <td className="rd-num-cell">{d.actions.totals.late}</td>
-                    <td className="rd-num-cell">{d.actions.totals.verify}</td>
-                    <td className="rd-num-cell">{d.actions.totals.closed}</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
+                {d.actions.bySource
+                  ? <thead><tr><th>Source</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Terminées — à vérifier</th><th className="rd-num-cell">Vérifiées · période</th></tr></thead>
+                  : <thead><tr><th>Origine</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Efficacité à vérifier</th><th className="rd-num-cell">Clôturées · 12 mois</th></tr></thead>}
+                <tbody>
+                  {actionRows.map((o) => (
+                    <tr key={o.key}>
+                      <td>{o.label}</td>
+                      <td className="rd-num-cell">{o.open}</td>
+                      <td className="rd-num-cell" style={{ color: o.late ? TONE.danger.dot : undefined }}>{o.late}</td>
+                      <td className="rd-num-cell">{o.verify}</td>
+                      <td className="rd-num-cell">{o.closed}</td>
+                    </tr>
+                  ))}
+                  {d.actions.totals && (
+                    <tr className="rd-total">
+                      <td>Total</td>
+                      <td className="rd-num-cell">{d.actions.totals.open}</td>
+                      <td className="rd-num-cell">{d.actions.totals.late}</td>
+                      <td className="rd-num-cell">{d.actions.totals.verify}</td>
+                      <td className="rd-num-cell">{d.actions.totals.closed}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune action au plan d&apos;actions.</Empty>}
           {!!d.actions.lateActions?.length && (
             <>
               <h3 className="rd-h3">Actions en retard</h3>
-              <table className="table rd-table">
-                {d.actions.bySource
-                  ? <thead><tr><th>N°</th><th>Action</th><th>Source</th><th>Responsable</th><th>Date cible</th><th className="rd-num-cell">Retard</th></tr></thead>
-                  : <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th className="rd-num-cell">Retard</th></tr></thead>}
-                <tbody>
-                  {d.actions.lateActions.map((a) => (
-                    <tr key={a.id}>
-                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.id}</Ref></td>
-                      <td>{a.title}</td>
-                      <td className="rd-muted">{a.origin} · {a.originRef}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}</td>
-                      <td className="rd-num-cell">{daysBetween(a.dueOn, asOf)} j</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ScrollTable>
+                <table className="table rd-table">
+                  {d.actions.bySource
+                    ? <thead><tr><th>N°</th><th>Action</th><th>Source</th><th>Responsable</th><th>Date cible</th><th className="rd-num-cell">Retard</th></tr></thead>
+                    : <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th className="rd-num-cell">Retard</th></tr></thead>}
+                  <tbody>
+                    {d.actions.lateActions.map((a) => (
+                      <tr key={a.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.id}</Ref></td>
+                        <td>{a.title}</td>
+                        <td className="rd-muted">{a.origin} · {a.originRef}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}</td>
+                        <td className="rd-num-cell">{daysBetween(a.dueOn, asOf)} j</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollTable>
             </>
           )}
         </Section>
@@ -362,25 +382,27 @@ export function DossierView({ page, role, notice }: {
           aside={d.watch.requirementCounts?.filter((c) => c.n).map((c) => `${c.n} ${evalCount(c.key, c.label, c.n)}`).join(' · ')}>
           <h3 className="rd-h3">Exigences réglementaires</h3>
           {d.watch.requirements?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Exigence</th><th>Domaine</th><th>Évaluation</th><th>Échéance</th><th>Pilote</th><th>Action</th></tr></thead>
-              <tbody>
-                {d.watch.requirements.map((q) => (
-                  <tr key={q.id}>
-                    <td style={{ fontWeight: 500 }}><Ref href={q.href} role={role}>{q.text}</Ref></td>
-                    <td className="rd-muted">{q.domain}</td>
-                    <td>
-                      <ToneTag tone={q.tone} style={{ whiteSpace: 'nowrap' }}>{q.evalLabel}</ToneTag>
-                      {q.evalNote && <div className="rd-muted" style={{ fontSize: 11, marginTop: 2 }}>{q.evalNote}</div>}
-                      {q.lastEvaluatedOn && <div className="rd-muted" style={{ fontSize: 11 }}>évaluée le {fmtDate(q.lastEvaluatedOn)}</div>}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{[q.dueOn && fmtDate(q.dueOn), q.dueNote].filter(Boolean).join(' · ') || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{q.pilot}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{q.action ? <><Ref href={q.action.href} role={role}>{q.action.id}</Ref> · <ActionStatus a={q.action} plain /></> : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Exigence</th><th>Domaine</th><th>Évaluation</th><th>Échéance</th><th>Pilote</th><th>Action</th></tr></thead>
+                <tbody>
+                  {d.watch.requirements.map((q) => (
+                    <tr key={q.id}>
+                      <td style={{ fontWeight: 500 }}><Ref href={q.href} role={role}>{q.text}</Ref></td>
+                      <td className="rd-muted">{q.domain}</td>
+                      <td>
+                        <ToneTag tone={q.tone} style={{ whiteSpace: 'nowrap' }}>{q.evalLabel}</ToneTag>
+                        {q.evalNote && <div className="rd-muted" style={{ fontSize: 11, marginTop: 2 }}>{q.evalNote}</div>}
+                        {q.lastEvaluatedOn && <div className="rd-muted" style={{ fontSize: 11 }}>évaluée le {fmtDate(q.lastEvaluatedOn)}</div>}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{[q.dueOn && fmtDate(q.dueOn), q.dueNote].filter(Boolean).join(' · ') || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{q.pilot}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{q.action ? <><Ref href={q.action.href} role={role}>{q.action.id}</Ref> · <ActionStatus a={q.action} plain /></> : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune exigence suivie.</Empty>}
           {d.watch.controls && (
             <>
@@ -389,24 +411,26 @@ export function DossierView({ page, role, notice }: {
                 {d.watch.controls.overdue} dépassé{d.watch.controls.overdue > 1 ? 's' : ''} · {d.watch.controls.soon} sous 30 jours · {d.watch.controls.planned} planifié{d.watch.controls.planned > 1 ? 's' : ''} · {plural(d.watch.controls.withReserves, 'contrôle avec réserves', 'contrôles avec réserves')}
               </p>
               {d.watch.controls.rows?.length ? (
-                <table className="table rd-table">
-                  <thead><tr><th>Équipement</th><th>Contrôle</th><th>Organisme</th><th>Échéance</th><th>État</th><th>Réserves</th></tr></thead>
-                  <tbody>
-                    {d.watch.controls.rows.map((c) => (
-                      <tr key={c.id}>
-                        <td style={{ fontWeight: 500 }}><Ref href={c.href} role={role}>{c.equipment}</Ref></td>
-                        <td>{c.type}</td>
-                        <td className="rd-muted">{c.organization}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.nextOn)}</td>
-                        <td><ToneTag tone={c.status.tone} style={{ whiteSpace: 'nowrap' }}>{c.status.label}</ToneTag></td>
-                        <td>
-                          {c.reserves ?? '—'}
-                          {c.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={c.action.href} role={role}>{c.action.id}</Ref> · {c.action.status}</div>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ScrollTable>
+                  <table className="table rd-table">
+                    <thead><tr><th>Équipement</th><th>Contrôle</th><th>Organisme</th><th>Échéance</th><th>État</th><th>Réserves</th></tr></thead>
+                    <tbody>
+                      {d.watch.controls.rows.map((c) => (
+                        <tr key={c.id}>
+                          <td style={{ fontWeight: 500 }}><Ref href={c.href} role={role}>{c.equipment}</Ref></td>
+                          <td>{c.type}</td>
+                          <td className="rd-muted">{c.organization}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.nextOn)}</td>
+                          <td><ToneTag tone={c.status.tone} style={{ whiteSpace: 'nowrap' }}>{c.status.label}</ToneTag></td>
+                          <td>
+                            {c.reserves ?? '—'}
+                            {c.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={c.action.href} role={role}>{c.action.id}</Ref> · {c.action.status}</div>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollTable>
               ) : <Empty>Aucun contrôle dépassé, à échéance sous 30 jours ou avec réserves.</Empty>}
             </>
           )}
@@ -429,21 +453,23 @@ export function DossierView({ page, role, notice }: {
                 {plural(d.risks.priority.count, 'risque coté au-dessus du seuil d’action', 'risques cotés au-dessus du seuil d’action')} · {d.risks.priority.withoutAction} sans action en cours
               </p>
               {d.risks.priority.top?.length ? (
-                <table className="table rd-table">
-                  <thead><tr><th>Unité de travail</th><th>Danger</th><th className="rd-num-cell">Brut → résiduel</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {d.risks.priority.top.map((k) => (
-                      <tr key={k.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}><Ref href={k.href} role={role}>{k.unit}</Ref></td>
-                        <td>{k.hazard}</td>
-                        <td className="rd-num-cell">{k.score} → {k.residual}</td>
-                        <td>{k.actions.length ? k.actions.map((a) => (
-                          <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <span style={{ color: a.tone === 'neutral' ? undefined : TONE[a.tone].dot }}>{a.status}</span></div>
-                        )) : <span className="rd-muted">Sans action</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ScrollTable>
+                  <table className="table rd-table">
+                    <thead><tr><th>Unité de travail</th><th>Danger</th><th className="rd-num-cell">Brut → résiduel</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {d.risks.priority.top.map((k) => (
+                        <tr key={k.id}>
+                          <td style={{ whiteSpace: 'nowrap' }}><Ref href={k.href} role={role}>{k.unit}</Ref></td>
+                          <td>{k.hazard}</td>
+                          <td className="rd-num-cell">{k.score} → {k.residual}</td>
+                          <td>{k.actions.length ? k.actions.map((a) => (
+                            <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <span style={{ color: a.tone === 'neutral' ? undefined : TONE[a.tone].dot }}>{a.status}</span></div>
+                          )) : <span className="rd-muted">Sans action</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollTable>
               ) : <Empty>Aucun risque au-dessus du seuil d&apos;action.</Empty>}
             </>
           )}
@@ -481,35 +507,39 @@ export function DossierView({ page, role, notice }: {
           )}
           <h3 className="rd-h3">Revues périodiques en retard</h3>
           {d.documents.overdue?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Réf.</th><th>Document</th><th>Propriétaire</th><th>Revue prévue le</th></tr></thead>
-              <tbody>
-                {d.documents.overdue.map((x) => (
-                  <tr key={x.id}>
-                    <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={x.href} role={role}>{x.id}</Ref></td>
-                    <td>{x.title}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{x.owner}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{x.nextReviewOn ? fmtDate(x.nextReviewOn) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Réf.</th><th>Document</th><th>Propriétaire</th><th>Revue prévue le</th></tr></thead>
+                <tbody>
+                  {d.documents.overdue.map((x) => (
+                    <tr key={x.id}>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={x.href} role={role}>{x.id}</Ref></td>
+                      <td>{x.title}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{x.owner}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{x.nextReviewOn ? fmtDate(x.nextReviewOn) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune revue documentaire dépassée.</Empty>}
           <h3 className="rd-h3">Versions en attente d&apos;approbation</h3>
           {d.documents.pending?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Réf.</th><th>Version</th><th>Document</th><th>Soumise le</th></tr></thead>
-              <tbody>
-                {d.documents.pending.map((x) => (
-                  <tr key={`${x.docId}-${x.version}`}>
-                    <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={x.href} role={role}>{x.docId}</Ref></td>
-                    <td>{x.version}</td>
-                    <td>{x.title}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{x.submittedOn ? fmtDate(x.submittedOn) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Réf.</th><th>Version</th><th>Document</th><th>Soumise le</th></tr></thead>
+                <tbody>
+                  {d.documents.pending.map((x) => (
+                    <tr key={`${x.docId}-${x.version}`}>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={x.href} role={role}>{x.docId}</Ref></td>
+                      <td>{x.version}</td>
+                      <td>{x.title}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{x.submittedOn ? fmtDate(x.submittedOn) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune version en revue.</Empty>}
         </Section>
       )}
@@ -558,20 +588,22 @@ export function DossierView({ page, role, notice }: {
           )}
           <h3 className="rd-h3">Alertes d&apos;habilitation sur les affectations Keystone</h3>
           {d.skills.alerts?.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Salarié</th><th>Titre</th><th>État</th><th>Affectation</th><th>Période</th></tr></thead>
-              <tbody>
-                {d.skills.alerts.map((a) => (
-                  <tr key={`${a.person}-${a.title}-${a.assignment}-${a.startOn}`}>
-                    <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.person}</Ref></td>
-                    <td>{a.title}</td>
-                    <td><ToneTag tone={a.state.tone} style={{ whiteSpace: 'nowrap' }}>{a.state.label}</ToneTag></td>
-                    <td>{a.assignment}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.startOn)} → {fmtDate(a.endOn)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Salarié</th><th>Titre</th><th>État</th><th>Affectation</th><th>Période</th></tr></thead>
+                <tbody>
+                  {d.skills.alerts.map((a) => (
+                    <tr key={`${a.person}-${a.title}-${a.assignment}-${a.startOn}`}>
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={a.href} role={role}>{a.person}</Ref></td>
+                      <td>{a.title}</td>
+                      <td><ToneTag tone={a.state.tone} style={{ whiteSpace: 'nowrap' }}>{a.state.label}</ToneTag></td>
+                      <td>{a.assignment}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.startOn)} → {fmtDate(a.endOn)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucune affectation à venir sur un titre manquant, expiré ou expirant avant la fin de l&apos;affectation.</Empty>}
           <h3 className="rd-h3">Besoins en ressources</h3>
           <RecordText text={r.resourceNeeds} held={held} placeholder="effectifs, équipements, budget, formations à programmer" />
@@ -582,20 +614,22 @@ export function DossierView({ page, role, notice }: {
       {d.objectives && (
         <Section n={n()} title="Objectifs QHSE" aside={`${d.objectives.filter((o) => o.tone === 'ok').length}/${d.objectives.length} atteints`}>
           {d.objectives.length ? (
-            <table className="table rd-table">
-              <thead><tr><th>Objectif</th><th>Indicateur</th><th>Cible</th><th>Valeur</th><th>État</th></tr></thead>
-              <tbody>
-                {d.objectives.map((o) => (
-                  <tr key={`${o.label}-${o.indicator}-${o.site}`}>
-                    <td style={{ fontWeight: 500 }}>{o.label}<span className="rd-muted" style={{ display: 'block', fontSize: 11.5, fontWeight: 400 }}>{o.site}</span></td>
-                    <td>{o.indicator}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{o.target}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{o.value}</td>
-                    <td><ToneTag tone={o.tone} style={{ whiteSpace: 'nowrap' }}>{o.status}</ToneTag></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Objectif</th><th>Indicateur</th><th>Cible</th><th>Valeur</th><th>État</th></tr></thead>
+                <tbody>
+                  {d.objectives.map((o) => (
+                    <tr key={`${o.label}-${o.indicator}-${o.site}`}>
+                      <td style={{ fontWeight: 500 }}>{o.label}<span className="rd-muted" style={{ display: 'block', fontSize: 11.5, fontWeight: 400 }}>{o.site}</span></td>
+                      <td>{o.indicator}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{o.target}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{o.value}</td>
+                      <td><ToneTag tone={o.tone} style={{ whiteSpace: 'nowrap' }}>{o.status}</ToneTag></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           ) : <Empty>Aucun objectif mesurable enregistré pour l&apos;année.</Empty>}
         </Section>
       )}
@@ -649,27 +683,29 @@ export function DossierView({ page, role, notice }: {
         )}
 
         <h3 className="rd-h3">Décisions et objectifs</h3>
-        <table className="table rd-table">
-          <thead><tr><th>Nature</th><th style={{ width: '46%' }}>Décision, objectif ou besoin en ressources</th><th>Pilote</th><th>Échéance</th><th>Action</th></tr></thead>
-          <tbody>
-            {d.decisions.map((x) => (
-              <tr key={x.id}>
-                <td><ToneTag tone={x.cancelled ? 'neutral' : x.tone} style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</ToneTag></td>
-                <td>
-                  {/* AUD-36 : décision abandonnée après la séance, barrée avec son motif. */}
-                  <span style={x.cancelled ? { textDecoration: 'line-through' } : undefined}>{x.text}</span>
-                  {x.cancelled && <span className="rd-muted" style={{ display: 'block', fontSize: 11 }}>Abandonnée le {fmtDate(x.cancelled.on)} par {x.cancelled.by} · motif : {x.cancelled.reason}</span>}
-                </td>
-                <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{x.action ? <><Ref href={`/actions?action=${encodeURIComponent(x.action.id)}`} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></> : x.actionId ?? '—'}</td>
-              </tr>
-            ))}
-            {h.status === 'planifiee' && Array.from({ length: BLANK_DECISIONS }, (_, i) => (
-              <tr key={`blank-${i}`} className="rd-blank-row"><td /><td /><td /><td /><td /></tr>
-            ))}
-          </tbody>
-        </table>
+        <ScrollTable>
+          <table className="table rd-table">
+            <thead><tr><th>Nature</th><th style={{ width: '46%' }}>Décision, objectif ou besoin en ressources</th><th>Pilote</th><th>Échéance</th><th>Action</th></tr></thead>
+            <tbody>
+              {d.decisions.map((x) => (
+                <tr key={x.id}>
+                  <td><ToneTag tone={x.cancelled ? 'neutral' : x.tone} style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</ToneTag></td>
+                  <td>
+                    {/* AUD-36 : décision abandonnée après la séance, barrée avec son motif. */}
+                    <span style={x.cancelled ? { textDecoration: 'line-through' } : undefined}>{x.text}</span>
+                    {x.cancelled && <span className="rd-muted" style={{ display: 'block', fontSize: 11 }}>Abandonnée le {fmtDate(x.cancelled.on)} par {x.cancelled.by} · motif : {x.cancelled.reason}</span>}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{x.action ? <><Ref href={`/actions?action=${encodeURIComponent(x.action.id)}`} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></> : x.actionId ?? '—'}</td>
+                </tr>
+              ))}
+              {h.status === 'planifiee' && Array.from({ length: BLANK_DECISIONS }, (_, i) => (
+                <tr key={`blank-${i}`} className="rd-blank-row"><td /><td /><td /><td /><td /></tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollTable>
         {!d.decisions.length && h.status !== 'planifiee' && <Empty>Aucune décision enregistrée.</Empty>}
         {d.extraActions.length > 0 && (
           <>
@@ -686,19 +722,21 @@ export function DossierView({ page, role, notice }: {
         {'corrections' in page && page.corrections.length > 0 && (
           <>
             <h3 className="rd-h3">Rectificatifs après le visa</h3>
-            <table className="table rd-table">
-              <thead><tr><th>Date</th><th style={{ width: '50%' }}>Rectificatif</th><th>Motif</th><th>Signé par</th></tr></thead>
-              <tbody>
-                {page.corrections.map((c) => (
-                  <tr key={c.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.on)}</td>
-                    <td style={{ whiteSpace: 'pre-line' }}>{c.text}</td>
-                    <td>{c.reason}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{c.by}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ScrollTable>
+              <table className="table rd-table">
+                <thead><tr><th>Date</th><th style={{ width: '50%' }}>Rectificatif</th><th>Motif</th><th>Signé par</th></tr></thead>
+                <tbody>
+                  {page.corrections.map((c) => (
+                    <tr key={c.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.on)}</td>
+                      <td style={{ whiteSpace: 'pre-line' }}>{c.text}</td>
+                      <td>{c.reason}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{c.by}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
           </>
         )}
       </Section>
@@ -720,26 +758,28 @@ function FindingGroups({ groups, role }: { groups: { label: string; findings: Do
       {groups.map((g) => (
             <div key={g.label} style={{ display: 'grid', gap: 4 }}>
               <h4 className="rd-h4">{g.label}</h4>
-              <table className="table rd-table">
-                <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
-                <tbody>
-                  {g.findings.map((f) => {
-                    // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
-                    const list = dossierFindingActions(f);
-                    return (
-                      <tr key={f.id}>
-                        <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
-                        <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
-                            : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
-                        </td>
-                        <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <ScrollTable>
+                <table className="table rd-table">
+                  <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
+                  <tbody>
+                    {g.findings.map((f) => {
+                      // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
+                      const list = dossierFindingActions(f);
+                      return (
+                        <tr key={f.id}>
+                          <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
+                          <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
+                              : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
+                          </td>
+                          <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </ScrollTable>
             </div>
       ))}
     </>

@@ -97,3 +97,30 @@ export function pickPeriod(annee?: string, mois?: string): Period | null {
  */
 export const inPeriod = (p: { validFrom: string; validTo: string }, period: Pick<Period, 'from' | 'to'>) =>
   p.validFrom.slice(0, 10) <= period.to && p.validTo.slice(0, 10) >= period.from;
+
+// ─── PRV-14 : filtres par entreprise extérieure et par projet Keystone (plans et permis) ───────────────────────
+
+/** Intervention filtrable : entreprise extérieure (null : intervention interne) et projet Keystone. */
+type Intervention = { contractorId: string | null; contractor: string | null; keystoneProject: string | null };
+export type InterventionFilters = { entreprise?: string; projet?: string };
+
+/**
+ * Filtres `?entreprise=<id>` et `?projet=<code>` d'une liste de plans ou de permis : choix proposés = entreprises et
+ * projets présents dans la liste chargée (site sélectionné, périmètre) ; valeur inconnue ignorée. Une fiche ouverte par
+ * lien direct (`open`) que les filtres cacheraient les retire (comme pour la phase, pickFilter).
+ */
+export function interventionFilters<T extends Intervention>(rows: readonly T[], sp: { entreprise?: string; projet?: string }, open?: T) {
+  const byLabel = (a: readonly [string, string], b: readonly [string, string]) => a[1].localeCompare(b[1], 'fr');
+  const contractors = [...new Map(rows.filter((r) => r.contractorId).map((r) => [r.contractorId!, r.contractor ?? r.contractorId!])).entries()].sort(byLabel);
+  const projects = [...new Set(rows.map((r) => r.keystoneProject).filter((p): p is string => !!p))].map((p) => [p, p] as const).sort(byLabel);
+  const asked: InterventionFilters = {
+    entreprise: contractors.some(([id]) => id === sp.entreprise) ? sp.entreprise : undefined,
+    projet: projects.some(([p]) => p === sp.projet) ? sp.projet : undefined,
+  };
+  const filters = open && !matchesIntervention(open, asked) ? {} : asked;
+  return { filters, contractors, projects };
+}
+
+/** Intervention retenue par les filtres (entreprise, projet). */
+export const matchesIntervention = (r: Intervention, f: InterventionFilters) =>
+  (!f.entreprise || r.contractorId === f.entreprise) && (!f.projet || r.keystoneProject === f.projet);

@@ -34,6 +34,10 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   // CNF-11 : demandes de changement (site sélectionné ; communes à l'entreprise sur tous les sites).
   const [objectives, context, changes] = await Promise.all([loadObjectives(year), loadContext(), loadChanges()]);
   const changeParam = typeof sp.changement === 'string' ? sp.changement : undefined;
+  // AUD-19 : lien profond vers un référentiel (échéances de certification, indicateur de la veille) ; site sélectionné et
+  // périmètre (certs déjà filtrés, AUD-22), sinon bandeau « introuvable ».
+  const certParam = typeof sp.referentiel === 'string' ? sp.referentiel : undefined;
+  const openCert = certParam && certs.some((c) => c.id === certParam) ? certParam : undefined;
   const openChange = changeParam && changes.rows.some((c) => c.id === changeParam) ? changeParam : undefined;
   // Saisie : animateur QHSE et direction ; consultation pour le chef de service et le chef de projet (AUD-02), qui ouvrent
   // en lecture les éléments dont ils sont responsables (?element=).
@@ -66,7 +70,8 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
         {missingElement && <MissingNotice text="Élément du programme d'audit introuvable pour l'année affichée." closeHref={closeHref} />}
         {missingFinding && <MissingNotice text="Constat d'audit introuvable." closeHref={closeHref} />}
         {missingDetail(sp.changement, !!openChange) && <MissingNotice text="Demande de changement introuvable ou hors du site sélectionné." closeHref={closeHref} />}
-        <CertificationCards certs={certs} canApprove={approve} sites={approve ? siteChoices : []} />
+        {missingDetail(sp.referentiel, !!openCert) && <MissingNotice text="Référentiel introuvable ou hors du site sélectionné." closeHref={closeHref} />}
+        <CertificationCards key={openCert ?? 'certs'} certs={certs} canApprove={approve} sites={approve ? siteChoices : []} initialId={openCert} closeHref={closeHref} />
 
         <ObjectivesCard data={objectives} canEdit={edit}
           options={edit ? { people: options.people, sites: options.sites, allSites: options.allSites } : { people: [], sites: [], allSites: false }} />
@@ -81,7 +86,8 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
 
         {/* Pas de `key` liée au lien profond : la fermeture retire ?constat= de l'URL sans remonter la carte ni changer de groupe. */}
         <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} canEdit={edit}
-          canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} planOptions={planOptions} tracks={allTracks} />
+          canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} planOptions={planOptions} tracks={allTracks}
+          initialKind={typeof sp.nature === 'string' ? sp.nature : undefined} />
 
         <div id="revue" style={{ scrollMarginTop: 16 }}>
           <ReviewCard searchParams={sp} />

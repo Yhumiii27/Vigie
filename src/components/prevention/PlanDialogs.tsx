@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { useRouter } from 'next/navigation';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
@@ -22,7 +23,7 @@ import { TipButton } from '@/components/Tip';
 import { PlanMeetings } from './PlanMeetings';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
-  contractorChoices, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
+  contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
 
 /** Pièces jointes acceptées sur un plan : PDF, images, Word. */
@@ -440,7 +441,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       )}
 
       <Facts items={[
-        ['Entreprise extérieure', <>{plan.contractor}<span style={{ display: 'block', ...muted }}>{plan.contractorTrade}</span></>],
+        // PRV-14 : accès direct à la fiche de l'entreprise (onglet Entreprises extérieures).
+        ['Entreprise extérieure', <><Link href={contractorHref(plan.contractorId)} className="vg-link" style={{ fontSize: 12.5 }}>{plan.contractor}</Link><span style={{ display: 'block', ...muted }}>{plan.contractorTrade}</span></>],
         ['Lieu', plan.location],
         ['Site', plan.site],
         ['Période', plan.period],
@@ -547,7 +549,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       )}
 
       <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
-        reportHref={canManage ? `/evenements?nouveau=1&plan=${encodeURIComponent(plan.id)}` : null} />
+        reportHref={canManage ? newEventHref('plan', plan.id) : null} />
 
       <LazyChangeLog entity="prevention_plan" id={plan.id} />
 

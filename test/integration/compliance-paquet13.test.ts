@@ -99,7 +99,7 @@ describe('VEI-12 : indicateurs calculés (déchets, certification)', () => {
     expect(bsd.indicator).toMatchObject({ href: expect.stringContaining('/environnement') });
     expect(typeof bsd.indicator!.gap).toBe('boolean');
     const iso = requirements.find((r) => r.linkedTo === 'certification')!;
-    expect(iso.indicator).toMatchObject({ label: expect.stringMatching(/^ISO 9001:2015 · /), href: '/audits', gap: false });
+    expect(iso.indicator).toMatchObject({ label: expect.stringMatching(/^ISO 9001:2015 · /), href: '/audits?referentiel=iso9001', gap: false }); // AUD-19 : lien profond vers le référentiel
     // Certificat suspendu : écart suggéré.
     await (await db()).update(t.certifications).set({ suspendedOn: '2026-10-01', suspendReason: 'Écart majeur non levé' }).where(eq(t.certifications.id, 'iso9001'));
     const suspended = (await loadWatch()).requirements.find((r) => r.linkedTo === 'certification')!;

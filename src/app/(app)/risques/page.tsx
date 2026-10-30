@@ -7,6 +7,8 @@ import { Icon, MissingNotice, SegLinks, hrefWith } from '@/components/ui';
 import { ArchivePanel } from '@/components/risks/ArchivePanel';
 import { AddRiskButton } from '@/components/risks/RiskForm';
 import { RiskTable } from '@/components/risks/RiskTable';
+import { RiskMatrix } from '@/components/risks/RiskMatrix';
+import { inCell, matrixRows, parseCellFilter } from '@/components/risks/matrix';
 import { AddUnitButton, EditUnitButton } from '@/components/risks/UnitDialogs';
 import { ExportMenu } from '@/components/risks/ExportMenu';
 import { DuerpAccessNotice } from '@/components/risks/AccessNotice';
@@ -17,7 +19,7 @@ import { EmergencyPanel } from '@/components/risks/EmergencyPanel';
 import { duerpOverview } from '@/components/risks/overview';
 import { NewVersionButton, VersionsButton } from '@/components/risks/VersionDialogs';
 import { fmtDate, yearOf } from '@/lib/dates';
-import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, canSeeHealth, isEmployee, riskLevel } from '@/lib/domain';
+import { PROGRAM_SHORT, RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, SCREENS, TONE, canApprove, canEdit, canSee, canSeeHealth, isEmployee } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions, type FormOptions } from '@/lib/data/options';
 import { offeredOr } from '@/lib/form-options';
@@ -90,22 +92,19 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const viewSite = session.site.id === ALL_SITES ? null : { id: session.site.id, label: session.site.label };
   const defaultSiteId = viewSite?.id ?? session.siteOptions[0]?.id ?? '';
   const unitOptions = units.map(({ id, label, site }) => ({ id, label, site }));
+  const showUnitSite = !viewSite && new Set(units.map((u) => u.site)).size > 1;
   const unitLabels = Object.fromEntries(units.map((u) => [u.id, u.label]));
   // Formulaire d'action : service QHSE seulement (ACT-22) ; listes vides sinon. Date du jour du serveur (VIGIE_TODAY).
   const actionOptions: ActionFormOptions = actionsQhse
     ? { people: options.people, sites: options.sites, today: today() }
     : { people: [], sites: [], today: today() };
 
-  const cells: { t: string; bg: string; color: string; fs: number }[] = [];
-  for (let g = 4; g >= 1; g--) {
-    cells.push({ t: `G${g}`, bg: 'transparent', color: 'var(--color-neutral-500)', fs: 11 });
-    for (let p = 1; p <= 4; p++) {
-      const n = rows.filter((r) => (residual ? r.residualGravity : r.gravity) === g && (residual ? r.residualProbability : r.probability) === p).length;
-      cells.push({ t: n ? String(n) : '', bg: RISK_LEVELS[riskLevel(g * p)].bg, color: 'var(--color-text)', fs: 13 });
-    }
-  }
-  cells.push({ t: '', bg: 'transparent', color: 'transparent', fs: 11 });
-  for (let p = 1; p <= 4; p++) cells.push({ t: `P${p}`, bg: 'transparent', color: 'var(--color-neutral-500)', fs: 11 });
+  // DUE-16 : matrice G × P en tableau (en-têtes de ligne et de colonne, nom de chaque case) ; une case non vide filtre le
+  // tableau des risques (?gravite=&probabilite=, cotation brute ou résiduelle selon ?mode=) ; un lien profond ?risque= l'emporte.
+  const askedCell = deepRisk ? null : parseCellFilter(sp);
+  const matrix = matrixRows(rows, residual);
+  const cell = askedCell && matrix.flat().some((c) => c.g === askedCell.g && c.p === askedCell.p && c.n > 0) ? askedCell : null;
+  const tableRows = rows.filter((r) => inCell(r, cell, residual));
 
   const high = rows.filter((r) => r.gravity * r.probability >= RISK_ACTION_THRESHOLD).length;
   const resHigh = rows.filter((r) => r.residualGravity * r.residualProbability >= RISK_ACTION_THRESHOLD).length;
@@ -185,7 +184,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
             )}
             {units.map((u) => (
               <Link key={u.id} href={hrefWith('/risques', params, { ...panel, unite: u.id })} scroll={false} className={`vg-item${u.id === unitId && unitPanel ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px' }}>
-                <span style={{ flex: 1, fontSize: 12.5 }}>{u.label}</span>
+                {/* DUE-13 : sous « Tous les sites », le site sous le libellé distingue deux unités homonymes. */}
+                <span style={{ flex: 1, fontSize: 12.5, minWidth: 0 }}>
+                  {u.label}
+                  {showUnitSite && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{u.site}</span>}
+                </span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{u.count}</span>
                 {u.alerts > 0 && (
                   <span title={`${u.alerts} risque${u.alerts > 1 ? 's' : ''} ≥ ${RISK_ACTION_THRESHOLD} sans action de réduction ou au résiduel encore élevé`}
@@ -266,11 +269,10 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                       { href: hrefWith('/risques', params, { mode: 'residuel' }), label: 'Résiduel', on: residual },
                     ]} />
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'auto repeat(4, minmax(0, 1fr))', gap: 4, fontSize: 12 }}>
-                    {cells.map((c, i) => (
-                      <div key={i} style={{ minHeight: 40, display: 'grid', placeItems: 'center', borderRadius: 4, background: c.bg, color: c.color, fontSize: c.fs, padding: '0 6px' }}>{c.t}</div>
-                    ))}
-                  </div>
+                  <RiskMatrix rows={matrix} selected={cell} residual={residual} caption={`Matrice ${residual ? 'du risque résiduel' : 'de la cotation brute'} · ${unit.label}`}
+                    hrefOf={(c) => (cell && c.g === cell.g && c.p === cell.p
+                      ? hrefWith('/risques', params, { gravite: undefined, probabilite: undefined })
+                      : hrefWith('/risques', params, { gravite: String(c.g), probabilite: String(c.p) }))} />
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-400)' }}>
                     {RISK_LEVELS.map((l) => (
                       <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: l.bg }} />{l.label}</span>
@@ -304,7 +306,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                     Cotation gravité 1–4 × probabilité 1–4. À partir de {RISK_ACTION_THRESHOLD}, une action de réduction est obligatoire et suivie dans le plan d&apos;actions unique ; le risque résiduel est recoté après vérification d&apos;efficacité.
                   </p>
                   <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {edit && <AddRiskButton units={unitOptions} unitId={unit.id} />}
+                    {edit && <AddRiskButton units={unitOptions} unitId={unit.id} hazards={risks.map((r) => r.hazard)} />}
                     <ExportMenu unit={{ id: unit.id, label: unit.label }} scopeLabel={session.site.label} unitCount={units.length} />
                   </div>
                 </div>
@@ -312,7 +314,15 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
               <div className="card" style={{ padding: '6px 14px 10px' }}>
                 <div style={{ overflowX: 'auto' }}>
-                  <RiskTable key={`${unit.id}:${deepRisk?.id ?? ''}`} rows={rows} unit={unit} units={unitOptions} canManage={edit} showEvents={!employee} showHistory={edit}
+                  {cell && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0 2px', fontSize: 12 }}>
+                      <span style={{ color: 'var(--vg-text-muted)' }}>{tableRows.length} risque{tableRows.length > 1 ? 's' : ''} sur {rows.length}</span>
+                      <Link href={hrefWith('/risques', params, { gravite: undefined, probabilite: undefined })} scroll={false} className="vg-chip is-on">
+                        {residual ? 'Résiduel' : 'Brut'} G{cell.g} × P{cell.p}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only"> : retirer ce filtre</span>
+                      </Link>
+                    </div>
+                  )}
+                  <RiskTable key={`${unit.id}:${deepRisk?.id ?? ''}:${cell ? `${cell.g}${cell.p}` : ''}`} rows={tableRows} unit={unit} units={unitOptions} canManage={edit} showEvents={!employee} showHistory={edit}
                     measureOptions={measureOptions}
                     actionsQhse={actionsQhse} options={actionOptions}
                     linkableActions={linkableActions} initialRiskId={deepRisk?.id} />

@@ -14,7 +14,7 @@ import { addDays, fmtDate, parisDay, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {
   ALL_SITES, AVANCEMENT, BENIGN_CAREGIVER_KINDS, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, METHODS, QUALIFY_DELAY_DAYS, STEP_CLOSED,
-  canSeeHealth, isEmployee, type BenignCaregiverKind, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
+  canSee, canSeeEventType, canSeeHealth, isEmployee, type BenignCaregiverKind, type EventTransition, type EventType, type Role, type Tone, type TodoItem,
 } from '../domain';
 import { canCreateAction } from '../action-rules';
 import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents, type Person } from '../queries';
@@ -24,6 +24,7 @@ import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import { logAccess } from '@/server/access-log';
 import type { Option } from './options';
+import type { NewEventSource } from '../event-prefill';
 import { entityVersion } from '@/server/versions';
 
 // ─── Signalements et événements ─────────────────────────────────────────────
@@ -267,12 +268,16 @@ export function mpQuestionnaireState(e: Pick<EventRow, 'mpQuestionnaireReceivedO
  * le Salarié ne voit que ses propres signalements nominatifs (rapprochement par identifiant, jamais les anonymes).
  */
 export const loadVisibleEvents = cache(async () => {
-  const [events, { role, user }] = await Promise.all([loadSiteEvents(), getSession()]);
-  return isEmployee(role) ? events.filter((e) => e.declarantId === user.id && !e.anonymous) : events;
+  const { role, user } = await getSession();
+  // EVT-27 : le Salarié lit ses propres signalements nominatifs sur tout son périmètre, quel que soit le site sélectionné
+  // (comme « Mes signalements ») ; les autres rôles, les événements du site sélectionné.
+  if (isEmployee(role)) return (await loadSiteEvents('perimeter')).filter((e) => e.declarantId === user.id && !e.anonymous);
+  return loadSiteEvents();
 });
 
 /**
- * Fiche d'un événement consultable (loadVisibleEvents : site sélectionné, ses propres signalements pour le Salarié),
+ * Fiche d'un événement consultable (loadVisibleEvents : site sélectionné, ses propres signalements sur tout son périmètre
+ * pour le Salarié, EVT-27),
  * classés sans suite compris : vue, actions liées, contenus d'analyse, pièces jointes, historique du workflow,
  * rattachements et éventuel blocage du passage à l'étape suivante ; null si l'événement n'est pas consultable.
  * Données de santé (SEC-06) : retirées de la fiche (valeurs à null, `health: false`) pour un rôle non habilité.
@@ -479,7 +484,7 @@ export type MyReport = Awaited<ReturnType<typeof loadMyReports>>[number];
 export async function loadMyReport(id: string) {
   const db = await getDb();
   const now = today();
-  const { user } = await getSession();
+  const { user, role, allowedSiteIds } = await getSession();
   const [[e], people] = await Promise.all([
     db.select().from(t.events).where(and(eq(t.events.id, id), eq(t.events.declarantId, user.id), eq(t.events.anonymous, false))),
     loadPeople(),
@@ -488,16 +493,23 @@ export async function loadMyReport(id: string) {
   const [[site], actions, photos, steps] = await Promise.all([
     db.select({ label: t.sites.label }).from(t.sites).where(eq(t.sites.id, e.siteId)),
     db.select().from(t.actions).where(eq(t.actions.eventId, e.id)),
-    db.select({ mime: t.attachments.mimeType }).from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, e.id), eq(t.attachments.health, false))),
+    db.select({ id: t.attachments.id, fileName: t.attachments.fileName, mime: t.attachments.mimeType }).from(t.attachments)
+      .where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, e.id), eq(t.attachments.health, false)))
+      .orderBy(asc(t.attachments.createdAt)),
     loadSteps([e.id]),
   ]);
   const type = EVENT_TYPES[e.type as EventType];
+  const images = photos.filter((p) => p.mime.startsWith('image/'));
+  const photosReadable = canSee(role, 'events') && canSeeEventType(role, e.type) && inPerimeter(allowedSiteIds, e.siteId);
   return {
     id: e.id, title: e.title, location: e.location, siteLabel: site?.label.split(' — ')[0] ?? e.siteId,
     typeLabel: type.label, typeTone: type.tone, typeIcon: type.icon,
     occurredOn: e.occurredOn, createdOn: isoDay(e.createdAt), step: e.step, stepDates: stepDatesOf(steps, e.createdAt, e.step),
     description: e.description, immediateMeasures: e.immediateMeasures,
-    photoCount: photos.filter((p) => p.mime.startsWith('image/')).length,
+    photoCount: images.length,
+    // EVT-27 : photos montrées au déclarant (miniatures servies par /fichiers, mêmes droits que canReadAttachment : écran
+    // Événements, site du périmètre, type d'événement lisible) ; sinon leur nombre seul. Jamais une pièce médicale.
+    photos: photosReadable ? images.map((p) => ({ id: p.id, url: attachmentUrl(p.id), name: p.fileName })) : [],
     dismissed: e.dismissedAt ? { on: isoDay(e.dismissedAt), reason: e.dismissReason ?? '' } : null,
     actions: actions
       .sort((a, b) => a.id.localeCompare(b.id, 'fr', { numeric: true }))
@@ -631,24 +643,47 @@ export async function loadBenignRegister(siteId: string | null, year?: number) {
 export type BenignRegister = NonNullable<Awaited<ReturnType<typeof loadBenignRegister>>>;
 
 /**
- * Valeurs proposées à « Nouvel événement » ouvert depuis un plan de prévention ou un permis (?plan=, ?permis=) :
- * site et lieu repris de l'intervention ; un identifiant inconnu ou hors du site sélectionné est ignoré.
+ * Valeurs proposées à « Nouvel événement » ouvert depuis la fiche d'un autre écran (EVT-24, src/lib/event-prefill.ts) :
+ * plan de prévention ou permis (?plan=, ?permis= : site, lieu et rattachement), contrôle périodique (?controle= : site,
+ * équipement, rattachement), risque du DUERP (?risque= : site, lieu = unité de travail, rattachement), document maîtrisé
+ * (?document= : site, rattachement), type proposé (?type=ENV depuis l'écran Environnement). Seul un élément que la
+ * personne voit sur cet écran est repris (site sélectionné et périmètre ; risque, unité et contrôle en vigueur ; plan ou
+ * permis non annulé) ; un identifiant inconnu, archivé ou hors périmètre est ignoré sans rien révéler. Aucune donnée de
+ * santé n'est lue.
  */
-export async function loadNewEventDefaults(planId: string | undefined, permitId: string | undefined) {
+export async function loadNewEventDefaults(asked: Partial<Record<NewEventSource, string>> & { type?: EventType }) {
   const db = await getDb();
-  const site = await currentSiteId();
-  const [[permit], [planRow]] = await Promise.all([
-    permitId ? db.select().from(t.permits).where(eq(t.permits.id, permitId)) : [],
-    planId ? db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, planId)) : [],
+  const [site, { allowedSiteIds }] = await Promise.all([currentSiteId(), getSession()]);
+  const visible = (siteId: string | null) => inSite(site, siteId) && inPerimeter(allowedSiteIds, siteId);
+  const num = (v: string | undefined) => (v && /^\d{1,9}$/.test(v) ? Number(v) : null);
+  const controlId = num(asked.controle);
+  const riskId = num(asked.risque);
+  const [[permit], [planRow], [control], [risk], [doc]] = await Promise.all([
+    asked.permis ? db.select().from(t.permits).where(eq(t.permits.id, asked.permis)) : [],
+    asked.plan ? db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, asked.plan)) : [],
+    controlId != null ? db.select({ id: t.controls.id, siteId: t.controls.siteId, equipment: t.controls.equipment, archivedAt: t.controls.archivedAt })
+      .from(t.controls).where(eq(t.controls.id, controlId)) : [],
+    riskId != null ? db.select({ id: t.risks.id, unit: t.workUnits.label, siteId: t.workUnits.siteId, archivedAt: t.risks.archivedAt, unitArchivedAt: t.workUnits.archivedAt })
+      .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.risks.id, riskId)) : [],
+    asked.document ? db.select({ id: t.documents.id, siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, asked.document)) : [],
   ]);
-  const p = permit && inSite(site, permit.siteId) ? permit : undefined;
-  const pp = planRow && inSite(site, planRow.siteId) && (!p || p.siteId === planRow.siteId) ? planRow : undefined;
-  if (!p && !pp) return null;
+  const p = permit && permit.status !== 'annule' && visible(permit.siteId) ? permit : undefined;
+  const pp = planRow && planRow.status !== 'annule' && visible(planRow.siteId) && (!p || p.siteId === planRow.siteId) ? planRow : undefined;
+  const c = control && !control.archivedAt && visible(control.siteId) ? control : undefined;
+  const r = risk && !risk.archivedAt && !risk.unitArchivedAt && visible(risk.siteId) ? risk : undefined;
+  const d = doc && visible(doc.siteId) ? doc : undefined;
+  if (!p && !pp && !c && !r && !d && !asked.type) return null;
   return {
-    siteId: p?.siteId ?? pp!.siteId,
-    location: p?.location ?? pp!.location,
+    // Site de l'élément ; un contrôle ou un document commun à l'entreprise (sans site) laisse le site par défaut.
+    siteId: p?.siteId ?? pp?.siteId ?? c?.siteId ?? r?.siteId ?? d?.siteId ?? undefined,
+    location: p?.location ?? pp?.location ?? r?.unit ?? undefined,
+    equipment: c?.equipment ?? undefined,
+    type: asked.type,
     permitId: p?.id ?? null,
     preventionPlanId: pp?.id ?? p?.preventionPlanId ?? null,
+    controlId: c?.id ?? null,
+    riskId: r?.id ?? null,
+    documentId: d?.id ?? null,
   };
 }
 

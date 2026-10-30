@@ -7,6 +7,7 @@ import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
 import { LinkedEvents } from '@/components/LinkedEvents';
+import { newEventHref } from '@/lib/event-prefill';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
@@ -247,7 +248,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               {doc.closedActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
             </div>
           )}
-          {canManage && <LinkedEvents events={doc.events} />}
+          {canManage && <LinkedEvents events={doc.events} reportHref={newEventHref('document', doc.id)} />}
 
           <section style={{ display: 'grid', gap: 8 }}>
             {/* Consultation seule : la version en vigueur, sans l'historique ni les actions liées. */}

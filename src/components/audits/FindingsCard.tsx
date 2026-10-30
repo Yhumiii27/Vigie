@@ -48,10 +48,20 @@ type Props = {
   tracks?: string[];
   /** URL sans le lien profond, rétablie à la fermeture. */
   closeHref?: string;
+  /** AUD-29 : nature de constat filtrée par l'URL (?nature=<clé de FINDING_KINDS>), validée par la page. */
+  initialKind?: string;
 };
 
+/** AUD-29 : filtre de nature écrit dans l'URL sans aller-retour serveur (history.replaceState, convention UX-12). */
+function replaceKind(kind: string) {
+  const url = new URL(window.location.href);
+  if (kind) url.searchParams.set('nature', kind);
+  else url.searchParams.delete('nature');
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 /** Constats d'audit (le dernier audit par défaut), avec rattachement au plan d'actions unique. */
-export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCreate = false, options, initialFindingId, closeHref, planOptions = { people: [], sites: [] }, tracks = [] }: Props) {
+export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCreate = false, options, initialFindingId, closeHref, planOptions = { people: [], sites: [] }, tracks = [], initialKind = '' }: Props) {
   const router = useRouter();
   // Lien profond ?constat= : groupe du constat sélectionné et fenêtre ouverte (saisie), sinon constat surligné (animation CSS) ;
   // un constat annulé s'affiche dans le filtre « Annulés ».
@@ -59,7 +69,13 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
   const linkCancelled = initialFindingId != null && !linkGroup && cancelled.some((f) => f.id === initialFindingId);
   const linkEdit: Editing = linkGroup && canEdit ? { id: initialFindingId! } : null;
   const linkFlash = (linkGroup && !canEdit) || linkCancelled ? initialFindingId : undefined;
-  const [selected, setSelected] = useState(linkGroup?.key ?? groups[0]?.key ?? '');
+  // Par défaut : le dernier audit qui porte des constats (un audit sans constat reste choisissable, AUD-29).
+  const [selected, setSelected] = useState(linkGroup?.key ?? (groups.find((g) => g.findings.length) ?? groups[0])?.key ?? '');
+  // Un lien profond vers un constat d'une autre nature retire le filtre (le constat visé reste visible).
+  const linkKind = linkGroup?.findings.find((f) => f.id === initialFindingId)?.kind;
+  const [kind, setKindState] = useState(FINDING_KEYS.includes(initialKind) && (!linkKind || linkKind === initialKind) ? initialKind : '');
+  const setKind = (k: string) => { setKindState(k); replaceKind(k); };
+  const ofKind = (list: FindingView[]) => (kind ? list.filter((f) => f.kind === kind) : list);
   const [showCancelled, setShowCancelled] = useState(linkCancelled);
   const [editing, setEditing] = useState<Editing>(linkEdit);
   const [deepLink, setDeepLink] = useState(initialFindingId != null);
@@ -71,6 +87,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
     setPrevLink(initialFindingId);
     if (initialFindingId != null) {
       if (linkGroup) setSelected(linkGroup.key);
+      if (linkKind && kind && linkKind !== kind) setKindState('');
       setShowCancelled(linkCancelled);
       setEditing(linkEdit);
       setDeepLink(true);
@@ -90,7 +107,8 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
   const finding = editing?.id != null ? groups.flatMap((g) => g.findings).find((f) => f.id === editing.id) : undefined;
   // Constat annulé depuis sa fenêtre : la fenêtre se ferme, sans basculer un instant sur « Nouveau constat ».
   const justCancelled = editing?.id != null && !finding && cancelled.some((f) => f.id === editing.id);
-  const latest = !group || group.key === groups[0]?.key;
+  const latest = !group || group.key === (groups.find((g) => g.findings.length) ?? groups[0])?.key;
+  const shownFindings = group ? ofKind(group.findings) : [];
   const report = group?.reports.at(-1);
   const meta = group && [
     group.date && fmtDate(group.date),
@@ -115,13 +133,33 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
           {meta.map((m, i) => <span key={i} style={{ display: 'inline-flex', gap: 6 }}>{i > 0 && <span aria-hidden>·</span>}{m}</span>)}
         </div>
       )}
+      {!showCancelled && groups.some((g) => g.findings.length) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--vg-text-muted)' }}>
+            Nature
+            <select className="input" style={{ fontSize: 12, padding: '4px 8px', width: 'auto' }} value={kind} onChange={(e) => setKind(e.target.value)}>
+              <option value="">Toutes</option>
+              {FINDING_KEYS.map((k) => <option key={k} value={k}>{FINDING_KINDS[k].label}</option>)}
+            </select>
+          </label>
+          {kind && (
+            <button type="button" className="vg-chip is-on" onClick={() => setKind('')}>
+              {FINDING_KINDS[kind].label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only"> : retirer ce filtre</span>
+            </button>
+          )}
+        </div>
+      )}
       {(groups.length > 1 || cancelled.length > 0) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {!showCancelled && groups.length > 1 && groups.map((g) => (
-            <button key={g.key} type="button" className={`vg-chip${g.key === group?.key ? ' is-on' : ''}`} aria-pressed={g.key === group?.key} onClick={() => setSelected(g.key)}>
-              {g.label}<span style={{ color: 'var(--color-neutral-500)' }}>{g.findings.length}</span>
-            </button>
-          ))}
+          {!showCancelled && groups.length > 1 && groups.map((g) => {
+            const n = ofKind(g.findings).length;
+            return (
+              <button key={g.key} type="button" className={`vg-chip${g.key === group?.key ? ' is-on' : ''}`} aria-pressed={g.key === group?.key} onClick={() => setSelected(g.key)}>
+                {g.label}
+                {g.findings.length === 0 ? <span style={{ color: 'var(--vg-text-muted)' }}>sans constat</span> : <span style={{ color: 'var(--color-neutral-500)' }}>{n}</span>}
+              </button>
+            );
+          })}
           {cancelled.length > 0 && (
             <button type="button" className={`vg-chip${showCancelled ? ' is-on' : ''}`} aria-pressed={showCancelled} style={{ marginLeft: 'auto' }}
               onClick={() => setShowCancelled((v) => !v)}>
@@ -132,10 +170,14 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
       )}
       {showCancelled ? cancelled.map((f) => <CancelledRow key={f.id} finding={f} canEdit={canEdit} flash={f.id === flashId} />) : (
         <>
-          {group?.findings.map((f) => (
+          {shownFindings.map((f) => (
             <FindingRow key={f.id} finding={f} canEdit={canEdit} canCreate={canCreate} options={options} flash={f.id === flashId} onEdit={() => setEditing({ id: f.id })} />
           ))}
           {!group && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré.</div>}
+          {group && group.findings.length === 0 && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat enregistré pour cet audit.</div>}
+          {group && group.findings.length > 0 && shownFindings.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '4px 0' }}>Aucun constat de cette nature pour cet audit.</div>
+          )}
         </>
       )}
       {canEdit && !showCancelled && (

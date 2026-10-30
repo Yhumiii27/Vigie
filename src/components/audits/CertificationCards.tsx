@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
@@ -76,10 +77,25 @@ function CertificationCycle({ cert, onDone }: { cert: CertView; onDone: () => vo
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 /** Cartes des référentiels (statut calculé, audits du programme, certificat) ; l'animateur QHSE et la direction les modifient. */
-export function CertificationCards({ certs, canApprove, sites = [] }: { certs: CertView[]; canApprove: boolean; sites?: readonly Option[] }) {
-  const [editing, setEditing] = useState<Editing>(null);
+export function CertificationCards({ certs, canApprove, sites = [], initialId, closeHref }: {
+  certs: CertView[]; canApprove: boolean; sites?: readonly Option[];
+  /** AUD-19 : référentiel visé par un lien profond (?referentiel=<id>, échéances de certification) — fiche ouverte pour qui la modifie, carte mise en évidence sinon. */
+  initialId?: string;
+  /** URL sans le lien profond, rétablie à la fermeture. */
+  closeHref?: string;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<Editing>(initialId && canApprove ? { id: initialId } : null);
+  const [deepLink, setDeepLink] = useState(!!initialId);
   const [fileError, setFileError] = useState<string | null>(null);
-  const close = () => { setEditing(null); setFileError(null); };
+  const flashId = initialId && !canApprove ? initialId : undefined;
+  useEffect(() => {
+    if (initialId) document.getElementById(`referentiel-${initialId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [initialId]);
+  const close = () => {
+    setEditing(null); setFileError(null);
+    if (deepLink && closeHref) { setDeepLink(false); router.replace(closeHref, { scroll: false }); }
+  };
   const cert = editing?.id ? certs.find((c) => c.id === editing.id) : undefined;
 
   return (
@@ -127,10 +143,10 @@ export function CertificationCards({ certs, canApprove, sites = [] }: { certs: C
               {links}
             </>
           );
-          if (!canApprove) return <div key={c.id} className="card" style={{ gap: 6 }}>{body}</div>;
+          if (!canApprove) return <div key={c.id} id={`referentiel-${c.id}`} className={`card${flashId === c.id ? ` ${styles.flash}` : ''}`} style={{ gap: 6, scrollMarginTop: 16 }}>{body}</div>;
           return (
             // Carte cliquable à la souris ; au clavier, le bouton « Modifier » de la carte (pas d'élément interactif imbriqué).
-            <div key={c.id} className={`card ${styles.clickCard}`} style={{ gap: 6 }} onClick={() => setEditing({ id: c.id })}>
+            <div key={c.id} id={`referentiel-${c.id}`} className={`card ${styles.clickCard}`} style={{ gap: 6, scrollMarginTop: 16 }} onClick={() => setEditing({ id: c.id })}>
               {body}
             </div>
           );

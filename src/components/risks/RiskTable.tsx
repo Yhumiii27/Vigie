@@ -66,8 +66,14 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
         <thead><tr><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Mesures existantes</th><th>Risque résiduel</th><th>Actions</th></tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} {...rowOpener(() => show(r))}>
-              <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{r.hazard}</td>
+            // DUE-16 : la ligne reste cliquable à la souris ; au clavier et pour les lecteurs d'écran, le danger est un bouton
+            // nommé qui ouvre la fiche (plus de ligne focalisable sans rôle).
+            <tr key={r.id} className="is-clickable" onClick={(e) => { if (!fromControl(e) && !selectingText()) show(r); }}>
+              <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <button type="button" className="vg-text-btn" style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit', textAlign: 'left' }} onClick={() => show(r)}>
+                  {r.hazard}<span className="vg-sr-only"> : ouvrir la fiche du risque</span>
+                </button>
+              </td>
               <td style={{ color: 'var(--color-neutral-300)' }}>{r.situation}</td>
               <td><Cotation g={r.gravity} p={r.probability} /></td>
               <td style={{ color: 'var(--color-neutral-300)' }}>{r.existingMeasures || '—'}</td>

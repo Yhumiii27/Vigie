@@ -9,13 +9,17 @@ import { AddSafetyNoticeButton, SafetyRegisterPanel } from '@/components/watch/S
 import { today } from '@/lib/today';
 import { canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
-import { REQUIREMENT_REVIEW_MONTHS, SCREENS, canApprove as canApproveRole, canManage as canManageRole } from '@/lib/domain';
+import { REQUIREMENT_EVAL, REQUIREMENT_REVIEW_MONTHS, SCREENS, canApprove as canApproveRole, canManage as canManageRole } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { CONTROL_FILTERS, loadSafetyNotices, loadWatch, type ControlFilter } from '@/lib/data/watch';
 import { ALL_SITES } from '@/lib/session';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 import { TipButton } from '@/components/Tip';
+import { FilterBar } from '@/components/FilterBar';
+import {
+  SORT_DUE, controlChoices, filterControls, filterRequirements, hasListFilters, parseControlFilters, parseRequirementFilters, requirementChoices,
+} from '@/lib/watch-filters';
 
 export const metadata: Metadata = { title: SCREENS.watch.title };
 
@@ -62,7 +66,22 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
   const filter = ((tab === 'controles' && wantsArchives(sp)) || (openControl?.archived && !askedStatus) ? ARCHIVES : askedStatus) as ControlFilter | undefined;
   const ctrlParams = { onglet: 'controles', statut: filter === ARCHIVES ? undefined : filter, etat: filter === ARCHIVES ? ARCHIVES : undefined };
   const ctrlChipHref = (key: ControlFilter | undefined) =>
-    hrefWith('/veille', { onglet: 'controles' }, key === ARCHIVES ? { etat: ARCHIVES } : { statut: key });
+    // VEI-13 : la recherche, le responsable et le tri sont gardés d'une catégorie à l'autre.
+    hrefWith('/veille', { onglet: 'controles', q: ctrlFilters.q, tri: ctrlFilters.tri }, key === ARCHIVES ? { etat: ARCHIVES } : { statut: key });
+
+  // VEI-13 : filtres, recherche et tri des exigences et des contrôles (src/lib/watch-filters.ts), portés par l'URL ; la fiche
+  // ouverte par lien profond reste affichée même si les filtres l'écartent.
+  const reqScope = requirements.filter((r) => r.archived === archives);
+  const reqChoices = requirementChoices(reqScope, REQUIREMENT_EVAL);
+  const reqFilters = tab === 'exigences' ? parseRequirementFilters(sp, reqChoices) : {};
+  const reqFiltered = filterRequirements(reqScope, reqFilters);
+  const reqRows = openRequirement && !reqFiltered.includes(openRequirement) ? [...reqFiltered, openRequirement] : reqFiltered;
+  const ctrlScope = controls.filter((c) => (filter ? c.filter === filter : !c.archived));
+  const ctrlChoices = controlChoices(ctrlScope);
+  const ctrlFilters = tab === 'controles' ? parseControlFilters(sp, ctrlChoices) : {};
+  const ctrlFiltered = filterControls(controls, ctrlFilters);
+  const ctrlRows = openControl && !ctrlFiltered.includes(openControl) ? [...ctrlFiltered, openControl] : ctrlFiltered;
+  const sortOptions = [[SORT_DUE, 'Échéance la plus proche']] as const;
 
   const openNotices = register.notices.filter((n) => !n.cancelled && !n.answeredOn).length;
   const tabs = [['exigences', 'Exigences', activeReqs.length], ['controles', 'Contrôles périodiques', activeCtrls.length], ['registre', 'Registre de sécurité', openNotices]] as const;
@@ -135,7 +154,15 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
                 {`Réévaluation de la conformité tous les ${REQUIREMENT_REVIEW_MONTHS} mois, sauf périodicité propre à l'exigence`}
               </span>
             </div>
-            <RequirementsPanel key={openRequirement?.id ?? 'list'} rows={requirements} archives={archives} canManage={canManage} canApprove={canApprove}
+            <FilterBar path="/veille" base={reqParams} detail={['exigence']} fields={[
+              { name: 'q', label: 'Recherche', search: true, placeholder: 'Texte, domaine, exigence…', value: reqFilters.q },
+              { name: 'evaluation', label: 'Évaluation', all: 'Toutes', options: reqChoices.evaluations, value: reqFilters.evaluation },
+              { name: 'domaine', label: 'Domaine', options: reqChoices.domains, value: reqFilters.domaine },
+              { name: 'pilote', label: 'Pilote', options: reqChoices.pilots, value: reqFilters.pilote },
+              { name: 'tri', label: 'Tri', all: 'Ordre de la veille', options: sortOptions, value: reqFilters.tri },
+            ]} />
+            <RequirementsPanel key={openRequirement?.id ?? 'list'} rows={reqRows} archives={archives}
+              emptyText={hasListFilters(reqFilters) ? 'Aucune exigence ne correspond aux filtres.' : undefined} canManage={canManage} canApprove={canApprove}
               options={options} actionOptions={actionOptions} linkActions={linkActions} today={now} initialId={openRequirement?.id} closeHref={openRequirement ? hrefWith('/veille', reqParams, {}) : undefined} />
           </>
         ) : (
@@ -150,7 +177,13 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
                 Prochain contrôle = dernier contrôle + périodicité
               </span>
             </div>
-            <ControlsPanel key={openControl?.id ?? 'list'} rows={controls} filter={filter} canManage={canManage} canApprove={canApprove}
+            <FilterBar path="/veille" base={ctrlParams} detail={['controle']} fields={[
+              { name: 'q', label: 'Recherche', search: true, placeholder: 'Équipement, nature, organisme…', value: ctrlFilters.q },
+              { name: 'responsable', label: 'Responsable', options: ctrlChoices.responsibles, value: ctrlFilters.responsable },
+              { name: 'tri', label: 'Tri', all: 'Ordre de la veille', options: sortOptions, value: ctrlFilters.tri },
+            ]} />
+            <ControlsPanel key={openControl?.id ?? 'list'} rows={ctrlRows} filter={filter}
+              emptyText={hasListFilters(ctrlFilters) ? 'Aucun contrôle ne correspond aux filtres.' : undefined} canManage={canManage} canApprove={canApprove}
               options={options} actionOptions={actionOptions} linkActions={linkActions} requirementOptions={requirementOptions} today={now}
               showSite={session.site.id === ALL_SITES} suggestions={suggestions}
               initialId={openControl?.id} closeHref={openControl ? hrefWith('/veille', ctrlParams, {}) : undefined} />

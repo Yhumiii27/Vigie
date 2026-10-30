@@ -15,7 +15,7 @@ const text = { margin: 0, fontSize: 13.5, lineHeight: 1.45, color: 'var(--color-
 
 /**
  * Détail d'un signalement pour son déclarant (parcours terrain, mobile, lecture seule) : avancement daté,
- * description, mesures immédiates et suite donnée (actions et avancement). L'analyse des causes n'est pas montrée.
+ * description, mesures immédiates, suite donnée (actions et avancement) et photos (EVT-27). L'analyse des causes n'est pas montrée.
  */
 export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { report: Report; backHref: string; topPadding?: number }) {
   const closed = r.step >= STEP_CLOSED;
@@ -89,7 +89,22 @@ export function MyReportDetail({ report: r, backHref, topPadding = 62 }: { repor
         )}
       </Section>
 
-      {r.photoCount > 0 && (
+      {r.photos.length > 0 ? (
+        <Section title={`Photos · ${r.photos.length}`}>
+          {/* EVT-27 : photos du signalement (miniatures, ouvertes en grand dans un nouvel onglet). */}
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8 }}>
+            {r.photos.map((p, i) => (
+              <li key={p.id}>
+                <a href={p.url} target="_blank" rel="noopener" style={{ display: 'block', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--color-divider)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- pièce jointe servie par /fichiers (droits vérifiés), pas d'optimisation d'image */}
+                  <img src={p.url} alt={`Photo ${i + 1} du signalement`} loading="lazy" style={{ display: 'block', width: '100%', aspectRatio: '1', objectFit: 'cover' }} />
+                  <span className="vg-sr-only"> (ouvre la photo dans un nouvel onglet)</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : r.photoCount > 0 && (
         <p style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--color-neutral-500)' }}>
           <i className="ph ph-camera" style={{ fontSize: 15 }} aria-hidden />
           {r.photoCount} photo{r.photoCount > 1 ? 's' : ''} jointe{r.photoCount > 1 ? 's' : ''} au signalement, transmise{r.photoCount > 1 ? 's' : ''} à l&apos;animateur QHSE.

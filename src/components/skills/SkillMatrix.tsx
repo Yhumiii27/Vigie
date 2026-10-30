@@ -8,7 +8,7 @@ import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/component
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { Icon } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
-import { legacySkillFilters, parseSkillFilters, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
+import { legacySkillFilters, parseSkillFilters, parseSkillTitle, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
 import { SKILL_FILTERS, SKILL_STATES, TONE, TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, type SkillFilter, type SkillState } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
@@ -50,6 +50,8 @@ type Props = {
   initialSel?: { personId: string; titleId?: string };
   /** URL rétablie à la fermeture d'une case ouverte par lien profond. */
   closeHref: string;
+  /** HAB-16 : libellé du site de rattachement de chaque salarié, sous « Tous les sites » (sinon null : site implicite). */
+  siteLabels?: Record<string, string> | null;
 };
 
 type Chip = 'tous' | SkillFilter;
@@ -62,19 +64,25 @@ const clean = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').
 const LEGACY_FILTER_KEY = 'vigie.skills.filter';
 const CHIP_OF: Record<SkillScope, Chip> = { tous: 'tous', 'a-traiter': 'a_traiter', sortis: 'sortis' };
 const SCOPE_OF: Record<Chip, SkillScope> = { tous: 'tous', a_traiter: 'a-traiter', sortis: 'sortis' };
-function replaceFilters(patch: Partial<SkillFilters>) {
-  const search = searchWith(window.location.search, skillFiltersParams({ ...parseSkillFilters(new URLSearchParams(window.location.search)), ...patch }));
+function replaceFilters(patch: Partial<SkillFilters> & { habilitation?: string }) {
+  const { habilitation, ...rest } = patch;
+  const params = skillFiltersParams({ ...parseSkillFilters(new URLSearchParams(window.location.search)), ...rest });
+  const search = searchWith(window.location.search, habilitation === undefined ? params : { ...params, habilitation: habilitation || undefined });
   window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
 }
+
+/** HAB-16 : case du titre filtré à afficher pour le salarié (titre requis ou formation enregistrée). */
+const followsTitle = (r: SkillRow, titleId: string) => r.cells.some((c) => c.title.id === titleId && (c.required || c.qualificationId != null));
 
 /** Ligne « à traiter » : titre requis à échéance proche, expiré ou jamais suivi, ou manque pendant une affectation. */
 const toTreat = (r: SkillRow, today: string) =>
   r.cells.some((c) => c.state === 's' || c.state === 'x' || c.state === 'r' || c.state === 'p' || r.assignments.some((a) => lapseFor(c.state, c.expiresOn, a, today) !== null));
 
 /** Ligne affichée par les filtres de l'URL (vue Matrice) : même règle que la liste `shown` ci-dessous. */
-function rowShown(r: SkillRow, f: SkillFilters, today: string) {
+function rowShown(r: SkillRow, f: SkillFilters, today: string, titleId = '') {
   if (f.etat === 'sortis') return false;
   if (f.etat === 'a-traiter' && !toTreat(r, today)) return false;
+  if (titleId && !followsTitle(r, titleId)) return false;
   const q = clean(f.q.trim());
   return (!f.service || r.person.service === f.service) && (!q || clean(`${r.person.name} ${r.person.job} ${r.person.service}`).includes(q));
 }
@@ -320,7 +328,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 }
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
-export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref }: Props) {
+export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
   const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel'>('view');
@@ -330,10 +338,16 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   // Lien profond en cours : l'URL est rétablie à la fermeture de la case ; sans titre, la ligne est mise en évidence.
   const [linked, setLinked] = useState(!!initialSel);
   const [highlight, setHighlight] = useState(initialSel && !initialSel.titleId ? initialSel.personId : null);
-  const filters = parseSkillFilters(useSearchParams());
+  const searchParams = useSearchParams();
+  const filters = parseSkillFilters(searchParams);
+  // HAB-16 : filtre par titre suivi (?habilitation=), une seule colonne ; sans objet pour la vue Salarié.
+  const urlTitle = self ? '' : parseSkillTitle(searchParams, titles.map((x) => x.id));
   // Lien profond : la ligne visée est-elle cachée par les filtres de l'URL (HAB-17) ? Seulement alors ils sont remis à zéro.
   const linkTarget = initialSel ? rows.find((r) => r.person.id === initialSel.personId) : undefined;
-  const linkHidden = !!linkTarget && !rowShown(linkTarget, filters, today);
+  const linkHidden = !!linkTarget && !rowShown(linkTarget, filters, today, urlTitle);
+  // Choix local recopié dans l'URL (comme la recherche) : l'URL écrite par history.replaceState n'est relue qu'au chargement.
+  const [titleChoice, setTitleChoice] = useState(linkHidden ? '' : urlTitle);
+  const titleFilter = self || !titles.some((x) => x.id === titleChoice) ? '' : titleChoice;
   // Recherche : saisie locale (pas de rendu à chaque frappe depuis l'URL), recopiée dans l'URL.
   const [query, setQueryState] = useState(linkHidden ? '' : filters.q);
   const setQuery = (q: string) => { setQueryState(q); replaceFilters({ q: q.trim() }); };
@@ -358,13 +372,13 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
       setSel(initialSel.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
       setMode('view');
       setHighlight(initialSel.titleId ? null : initialSel.personId);
-      if (linkHidden) setQueryState('');
+      if (linkHidden) { setQueryState(''); setTitleChoice(''); }
     }
   }
   // Un lien profond ne touche aux filtres de l'URL que s'ils cachent la ligne visée (HAB-17) : ils sont alors remis à zéro ;
   // sinon les filtres choisis sont gardés.
   useEffect(() => {
-    if (linkHidden) replaceFilters({ etat: 'tous', service: '', q: '' });
+    if (linkHidden) replaceFilters({ etat: 'tous', service: '', q: '', habilitation: '' });
   }, [linkKey, linkHidden]);
   const hlRef = useRef<HTMLTableRowElement>(null);
   useEffect(() => { if (highlight) hlRef.current?.scrollIntoView({ block: 'center' }); }, [highlight]);
@@ -390,8 +404,10 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   const service = !self && services.includes(filters.service) ? filters.service : '';
   const q = clean(query.trim());
   const matches = (p: Person) => (!service || p.service === service) && (!q || clean(`${p.name} ${p.job} ${p.service}`).includes(q));
-  const treat = rows.filter((r) => toTreat(r, today));
-  const shown = (chip === 'a_traiter' ? treat : rows).filter((r) => matches(r.person));
+  const treat = rows.filter((r) => toTreat(r, today) && (!titleFilter || followsTitle(r, titleFilter)));
+  const shown = (chip === 'a_traiter' ? treat : rows).filter((r) => matches(r.person) && (!titleFilter || followsTitle(r, titleFilter)));
+  const shownTitles = titleFilter ? titles.filter((x) => x.id === titleFilter) : titles;
+  const setTitleFilter = (v: string) => { setTitleChoice(v); replaceFilters({ habilitation: v }); };
   const shownDeparted = departed.filter(matches);
   const setChip = (c: Chip) => replaceFilters({ etat: SCOPE_OF[c] });
   const setService = (v: string) => replaceFilters({ service: v });
@@ -451,6 +467,12 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
                 value={service} onChange={(e) => setService(e.target.value)} />
             </div>
           )}
+          {titles.length > 1 && (
+            <div style={{ flex: '0 1 220px' }}>
+              <Select name="skills-title" aria-label="Titre suivi" options={titles.map((x) => [x.id, x.label] as const)} placeholder="Tous les titres"
+                value={titleFilter} onChange={(e) => setTitleFilter(e.target.value)} />
+            </div>
+          )}
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
             {chips.map((c) => (
               <button key={c.key} type="button" className={`vg-chip${chip === c.key ? ' is-on' : ''}`} aria-pressed={chip === c.key} onClick={() => setChip(c.key)}>
@@ -464,17 +486,18 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
       {chip === 'sortis' ? <DepartedList people={shownDeparted} archive={archive} /> : (
         <div className="card" style={{ padding: '6px 14px 10px' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ fontSize: 12.5, minWidth: 880 }}>
+            {/* HAB-16 : colonne « Salarié » figée au défilement horizontal (vg-sticky-col). */}
+            <table className="table vg-sticky-table" style={{ fontSize: 12.5, minWidth: titleFilter ? undefined : 880 }}>
               <thead>
                 <tr>
-                  <th>Salarié</th>
-                  {titles.map((t) => <th key={t.id} title={validityLabel(t)} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{t.label}</th>)}
+                  <th className="vg-sticky-col">Salarié</th>
+                  {shownTitles.map((t) => <th key={t.id} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{t.label}<span className="vg-sr-only"> · {validityLabel(t)}</span></th>)}
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 && (
                   <tr>
-                    <td colSpan={titles.length + 1} style={{ padding: '14px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>
+                    <td colSpan={shownTitles.length + 1} style={{ padding: '14px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>
                       {rows.length === 0 ? 'Aucun salarié suivi dans la matrice pour ce site.' : 'Aucun salarié ne correspond aux filtres.'}
                     </td>
                   </tr>
@@ -485,13 +508,18 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
                     <>
                       <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.person.job}</span>
                       {r.person.service && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{r.person.service}</span>}
+                      {siteLabels && r.person.siteId && siteLabels[r.person.siteId] && (
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>
+                          <i className="ph ph-factory" style={{ fontSize: 11, marginRight: 3 }} aria-hidden /><span className="vg-sr-only">Site : </span>{siteLabels[r.person.siteId]}
+                        </span>
+                      )}
                       {r.leavingOn && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>Sortie le {fmtDate(r.leavingOn)}</span>}
                     </>
                   );
                   return (
                     <tr key={r.person.id} ref={hl ? hlRef : undefined}
                       style={hl ? { background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', outline: '1px solid var(--color-accent)', outlineOffset: -1 } : undefined}>
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      <td className="vg-sticky-col" style={{ whiteSpace: 'nowrap' }}>
                         {canManage ? (
                           <div role="button" tabIndex={0} className="vg-row" title="Modifier la fiche du salarié" style={{ gap: 0, padding: '3px 8px', margin: '-3px -8px' }}
                             onClick={() => setEditId(r.person.id)} onKeyDown={onKey(r.person.id)}>
@@ -505,7 +533,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
                           </>
                         )}
                       </td>
-                      {r.cells.map((c) => {
+                      {r.cells.filter((c) => !titleFilter || c.title.id === titleFilter).map((c) => {
                         const tip = cellTip(c);
                         return (
                           <td key={c.title.id} style={{ textAlign: 'center' }}>

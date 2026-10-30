@@ -31,6 +31,7 @@ import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
 import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
+import { NEW_EVENT_SOURCES, prefillKey, prefillType, sourceParam } from '@/lib/event-prefill';
 import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
 
@@ -58,7 +59,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const now = today();
   const manager = canManage(role);
   const employee = isEmployee(role);
-  // Salarié : ses propres signalements uniquement (filtre dans loadVisibleEvents).
+  // Salarié : ses propres signalements uniquement, sur tout son périmètre (filtre dans loadVisibleEvents, EVT-27).
   const [events, people, options, linkOptions] = await Promise.all([loadVisibleEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
 
   // EVT-13 : filtres d'URL (étape, pilote, période, gravité, ancienneté ; blessure pour les seuls rôles habilités aux
@@ -78,7 +79,10 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const [detail, closures, newDefaults] = await Promise.all([
     selId ? loadEventDetail(selId) : null,
     loadEventClosures(list.filter((e) => e.step >= STEP_CLOSED).map((e) => e.id)),
-    manager && sp.nouveau === '1' ? loadNewEventDefaults(str(sp.plan), str(sp.permis)) : null,
+    // EVT-24 : formulaire prérempli depuis la fiche d'un autre écran (src/lib/event-prefill.ts).
+    manager && sp.nouveau === '1'
+      ? loadNewEventDefaults({ ...Object.fromEntries(NEW_EVENT_SOURCES.map((k) => [k, sourceParam(sp, k)])), type: prefillType(str(sp.type)) })
+      : null,
   ]);
   const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
   const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined };
@@ -110,7 +114,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
 
   return (
     <>
-      <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · tous types`}
+      <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · ${employee ? 'vos signalements, tous vos sites' : 'tous types'}`}
         actions={manager && (
           <>
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
@@ -119,9 +123,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
                 <i className="ph ph-notebook" style={{ fontSize: 14 }} aria-hidden />Registre des accidents bénins
               </a>
             )}
-            <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
+            <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
               health={health} initialOpen={sp.nouveau === '1'}
-              defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
+              defaults={{
+                siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, equipment: newDefaults?.equipment, type: newDefaults?.type,
+                preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, controlId: newDefaults?.controlId,
+                riskId: newDefaults?.riskId, documentId: newDefaults?.documentId, declarantId: user.id,
+              }} />
           </>
         )} />
       {/* UX-07 : sur téléphone, la fiche demandée (?sel=) remplace la liste, avec « Retour à la liste ». */}
