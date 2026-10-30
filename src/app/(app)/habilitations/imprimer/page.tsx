@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { PrintButton } from '@/components/PrintButton';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast } from '@/components/skills/rules';
+import { renewalForecast } from '@/lib/rules/skills';
 import { fmtDate } from '@/lib/dates';
 import { guard } from '@/lib/guard';
 import { loadSkillMatrix } from '@/lib/data/skills';

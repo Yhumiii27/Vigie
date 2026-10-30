@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
-import { Dialog } from '@/components/Dialog';
+import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
 import { CardHead, ToneTag } from '@/components/ui';
@@ -15,11 +15,12 @@ import { MONTHS_SHORT, addDays, fmtDate, monthName, monthOf, yearOf } from '@/li
 import { FINDING_KINDS, PLAN_ITEM_STATES, TONE } from '@/lib/domain';
 import type { FindingView, PlanItemView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
+import { offeredOr, withCurrent } from '@/lib/form-options';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
-import { cancelPlanItem, removePlanItemReport, reschedulePlanItem, savePlanItem } from '@/server/audits';
+import { cancelPlanItem, hideTrack, removePlanItemReport, renameTrack, renewProgram, reschedulePlanItem, savePlanItem, showTrack } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
 import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
-import { MONTH_OPTIONS, NEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from './shared';
+import { MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Opts = ActionFormOptions;
@@ -30,15 +31,20 @@ type Opts = ActionFormOptions;
  * l'élément, responsable de l'élément, date cible = date prévue (vérification proposée 30 jours après) ; site choisi par le
  * service QHSE.
  */
-export function planItemActionDefaults(item: Pick<PlanItemView, 'id' | 'track' | 'label' | 'detail' | 'year' | 'month' | 'ownerId' | 'plannedOn'>): ActionDefaults {
+export function planItemActionDefaults(item: Pick<PlanItemView, 'id' | 'track' | 'label' | 'detail' | 'year' | 'month' | 'ownerId' | 'plannedOn' | 'siteId'>): ActionDefaults {
   return {
     ...auditActionSource('plan', item.track), link: `plan:${item.id}`, linkLabel: `${item.track} · ${item.detail ?? item.label}`,
     originRef: `Programme ${item.year} · ${item.detail ?? item.label}`.slice(0, 120), problem: item.detail ?? item.label,
     pilotId: item.ownerId ?? undefined, dueOn: item.plannedOn ?? undefined, verifyDueOn: item.plannedOn ? addDays(item.plannedOn, 30) : undefined,
+    // AUD-22 : site de l'élément imposé à l'action (élément commun : le service QHSE choisit).
+    ...(item.siteId ? { siteId: item.siteId } : {}),
   };
 }
-/** Élément ouvert : existant (id) ou à créer (ligne + mois ; ligne null = nouvelle ligne). */
-type Editing = { id: number } | { track: string | null; month: number } | null;
+/** Élément ouvert : existant (id), à créer (ligne + mois ; ligne null = nouvelle ligne) ou audit hors programme (AUD-20). */
+type Editing = { id: number } | { track: string | null; month: number } | { unplanned: true } | null;
+
+/** Listes du formulaire d'un élément : personnes présentes (responsable, auditeur interne) et sites (AUD-22, « Tous les sites » en tête quand admis). */
+export type PlanFormOptions = { people: readonly Option[]; sites: readonly Option[] };
 /** Vue secondaire de la fenêtre d'un élément : nouveau constat, report. */
 type Sub = 'finding' | 'reschedule' | null;
 
@@ -64,6 +70,12 @@ type Props = {
   /** Service QHSE (canCreateAction) : « Créer l'action de suivi » (ACT-22). */
   canCreate?: boolean;
   options: Opts;
+  /** Listes du formulaire d'un élément (vides en consultation). */
+  planOptions: PlanFormOptions;
+  /** AUD-24 : lignes reprises de l'année précédente masquées pour l'année affichée. */
+  hiddenTracks: string[];
+  /** AUD-24 : année reconductible (année précédente), ou null. */
+  renewFrom: number | null;
   aside?: ReactNode;
   /** Élément à ouvrir d'emblée (lien profond `?element=<id>`). */
   initialId?: number;
@@ -80,7 +92,8 @@ const muted = { color: 'var(--color-neutral-500)' } as const;
  * verrouillée (« Ouvrir la revue ») ; un élément se reporte (« Reporter… ») ou s'annule avec un motif, jamais supprimé.
  */
 export function ProgramTimeline({
-  year, curMonth, tracks, allTracks, items, cancelled, findings, certs, auditOptions, yearOptions, canEdit, canCreate = false, options, aside, initialId, closeHref,
+  year, curMonth, tracks, allTracks, items, cancelled, findings, certs, auditOptions, yearOptions, canEdit, canCreate = false, options, planOptions, hiddenTracks, renewFrom,
+  aside, initialId, closeHref,
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState<Editing>(initialId ? { id: initialId } : null);
@@ -102,21 +115,32 @@ export function ProgramTimeline({
   // Fiche en lecture : rôle en consultation, échéance de revue rattachée (verrouillée) ou élément annulé.
   const readOnly = !!item && (!canEdit || item.locked || !!item.cancelled);
 
+  const unplannedNew = !!editing && 'unplanned' in editing;
   const title = item
     ? sub === 'finding' ? `Nouveau constat · ${item.detail ?? item.label}`
       : sub === 'reschedule' ? `Reporter · ${item.detail ?? item.label}`
-        : `${item.track} · ${monthName(item.month)}${item.cancelled ? ' · annulé' : ''}`
-    : editing && 'track' in editing && editing.track ? `Nouvel élément · ${editing.track}` : 'Nouvelle ligne du programme';
+        : `${item.track} · ${monthName(item.month)}${item.unplanned ? ' · hors programme' : ''}${item.cancelled ? ' · annulé' : ''}`
+    : unplannedNew ? 'Audit hors programme'
+      : editing && 'track' in editing && editing.track ? `Nouvel élément · ${editing.track}` : 'Nouvelle ligne du programme';
 
   return (
     <div className="card" style={{ gap: 10 }}>
       <CardHead title={`Programme annuel ${year}`} aside={(
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 }}>
           {aside}
+          {/* AUD-26 : programme annuel imprimable (ISO 9001 §9.2.2), lien HTML simple (feuille d'impression dédiée). */}
+          <a href={`/audits/imprimer?annee=${year}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer</a>
           {canEdit && (
-            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing({ track: null, month: curMonth >= 1 && curMonth <= 12 ? curMonth : 1 })}>
-              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter une ligne
-            </button>
+            <>
+              <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing({ unplanned: true })}>
+                <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Audit hors programme
+              </button>
+              <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing({ track: null, month: curMonth >= 1 && curMonth <= 12 ? curMonth : 1 })}>
+                <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Ajouter une ligne
+              </button>
+              <TracksButton year={year} tracks={tracks} items={items} hidden={hiddenTracks} />
+              {renewFrom != null && <RenewButton year={year} from={renewFrom} />}
+            </>
           )}
         </span>
       )} />
@@ -161,8 +185,8 @@ export function ProgramTimeline({
         )}
         {editing && !sub && (!item || !readOnly) && (
           <>
-            <PlanItemForm key={item ? item.id : 'new'} year={year} item={item} trackOptions={trackOptions} people={options.people} certs={certs}
-              track={'track' in editing ? editing.track : undefined} month={'month' in editing ? editing.month : undefined}
+            <PlanItemForm key={item ? item.id : unplannedNew ? 'unplanned' : 'new'} year={year} item={item} trackOptions={trackOptions} options={planOptions} certs={certs}
+              track={'track' in editing ? editing.track : undefined} month={'month' in editing ? editing.month : undefined} unplanned={unplannedNew}
               onReschedule={() => setSub('reschedule')} onDone={() => close()} />
             {item && !item.isReview && (
               <ReportSection item={item} findings={itemFindings} onAddFinding={() => setSub('finding')} onLeave={() => close({ keepUrl: true })} />
@@ -216,33 +240,112 @@ function TrackRow({ track, items, curMonth, canEdit, onOpen }: {
       <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', padding: '0 6px', color: 'var(--color-neutral-300)' }}>{track}</div>
       {MONTHS_SHORT.map((_, i) => {
         const m = i + 1;
-        const it = items.find((p) => p.month === m);
-        const style: CSSProperties = {
+        // AUD-21 : plusieurs éléments par ligne et par mois, l'un sous l'autre (date prévue, puis ordre de saisie).
+        const list = items.filter((p) => p.month === m).sort((a, b) => (a.plannedOn ?? '').localeCompare(b.plannedOn ?? '') || a.id - b.id);
+        const empty: CSSProperties = {
           minHeight: 34, display: 'flex', alignItems: 'center', padding: '0 6px', borderRadius: 4, minWidth: 0,
-          ...(it ? STATE_STYLE[it.state] : { background: m === curMonth ? 'color-mix(in srgb, var(--color-accent) 6%, transparent)' : 'transparent', color: 'transparent' }),
+          background: m === curMonth ? 'color-mix(in srgb, var(--color-accent) 6%, transparent)' : 'transparent', color: 'transparent',
         };
-        const title = it
-          ? [it.detail ?? it.label, it.plannedOn && `prévu le ${fmtDate(it.plannedOn)}`, it.postponedFrom && `reporté (initialement ${firstPlanned(it.postponedFrom)})`, it.owner,
-            it.done ? (it.doneOn ? `réalisé le ${fmtDate(it.doneOn)}` : 'réalisé') : it.state === 'late' && 'à confirmer',
-            it.locked && 'revue de direction : ouvrir la revue'].filter(Boolean).join(' · ')
-          : canEdit ? `Ajouter en ${monthName(m)} · ${track}` : undefined;
-        const content = it && (
-          <span style={{ display: 'block', width: '100%', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {it.locked && <><i className="ph ph-lock-simple" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Revue de direction</span></>}
-            {it.done && <><i className="ph ph-check" style={{ fontSize: 11, marginRight: 3, color: TONE.ok.dot, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Réalisé</span></>}
-            {it.state === 'late' && <><i className="ph ph-warning" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">À confirmer</span></>}
-            {it.label}
-          </span>
-        );
-        // Élément : ouvert par tous (fiche en lecture seule hors saisie) ; cellule vide : ajout réservé à la saisie.
-        if (!it && !canEdit) return <div key={m} style={style} />;
-        return (
-          <button key={m} type="button" title={title} className={styles.cell} style={style} onClick={() => onOpen(m, it)}>
-            {content ?? <i className={`ph ph-plus ${styles.plus}`} aria-hidden />}
+        const addButton = (compact: boolean) => (
+          <button key="add" type="button" title={`Ajouter en ${monthName(m)} · ${track}`} className={styles.cell}
+            style={compact ? { ...empty, minHeight: 24, justifyContent: 'center' } : empty} onClick={() => onOpen(m)}>
+            <i className={`ph ph-plus ${styles.plus}`} aria-hidden /><span className="vg-sr-only">{`Ajouter en ${monthName(m)} · ${track}`}</span>
           </button>
+        );
+        if (!list.length) return canEdit ? <div key={m} style={{ display: 'grid' }}>{addButton(false)}</div> : <div key={m} style={empty} />;
+        return (
+          <div key={m} style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+            {list.map((it) => {
+              const style: CSSProperties = { minHeight: list.length > 1 ? 26 : 34, display: 'flex', alignItems: 'center', padding: '0 6px', borderRadius: 4, minWidth: 0, ...STATE_STYLE[it.state] };
+              const title = [it.detail ?? it.label, it.unplanned && 'hors programme', it.plannedOn && !it.unplanned && `prévu le ${fmtDate(it.plannedOn)}`,
+                it.postponedFrom && `reporté (initialement ${firstPlanned(it.postponedFrom)})`, it.owner, it.siteId && it.site,
+                it.done ? (it.doneOn ? `réalisé le ${fmtDate(it.doneOn)}` : 'réalisé') : it.state === 'late' && 'à confirmer',
+                it.locked && 'revue de direction : ouvrir la revue'].filter(Boolean).join(' · ');
+              return (
+                <button key={it.id} type="button" title={title} className={styles.cell} style={style} onClick={() => onOpen(m, it)}>
+                  <span style={{ display: 'block', width: '100%', textAlign: 'center', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                    {it.locked && <><i className="ph ph-lock-simple" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Revue de direction</span></>}
+                    {it.done && <><i className="ph ph-check" style={{ fontSize: 11, marginRight: 3, color: TONE.ok.dot, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">Réalisé</span></>}
+                    {it.state === 'late' && <><i className="ph ph-warning" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">À confirmer</span></>}
+                    {it.unplanned && <span className="vg-sr-only">Hors programme : </span>}
+                    {it.label}
+                  </span>
+                </button>
+              );
+            })}
+            {canEdit && addButton(true)}
+          </div>
         );
       })}
     </>
+  );
+}
+
+/**
+ * Gestion des lignes de l'année (AUD-24) : renommer une ligne qui porte des éléments, masquer une ligne reprise de l'année
+ * précédente sans élément (motif), afficher à nouveau une ligne masquée (motif). La ligne des revues ne se renomme ni ne se masque.
+ */
+function TracksButton({ year, tracks, items, hidden }: { year: number; tracks: string[]; items: PlanItemView[]; hidden: string[] }) {
+  return (
+    <DialogButton label="Lignes…" icon="ph-rows" title={`Lignes du programme ${year}`} kicker="Programme annuel" width={560}>
+      {(close) => (
+        <div style={{ display: 'grid', gap: 10, fontSize: 12.5 }}>
+          {tracks.map((tr) => {
+            const n = items.filter((p) => p.track === tr).length;
+            const review = isReviewPlanItem({ track: tr, label: '', detail: null }) || tr === REVIEW_TRACK;
+            return (
+              <div key={tr} className="vg-rule-bottom" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                <span style={{ fontWeight: 500 }}>{tr}</span>
+                <span style={muted}>{n ? `${n} élément${n > 1 ? 's' : ''}` : 'reprise de l’année précédente, sans élément'}</span>
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
+                  {!review && n > 0 && (
+                    <DialogButton label="Renommer" className="btn btn-ghost vg-btn-sm" title={`Renommer « ${tr} »`} kicker={`Programme ${year}`} width={460}>
+                      {(done) => (
+                        <ActionForm action={renameTrack} hidden={{ year, from: tr }} submitLabel="Renommer la ligne" onCancel={done} onDone={() => { done(); close(); }}>
+                          <Field name="to" label="Nouveau nom" hint="Tous les éléments de la ligne cette année prennent ce nom (journal de chaque élément).">
+                            <Input name="to" defaultValue={tr} maxLength={40} autoFocus />
+                          </Field>
+                        </ActionForm>
+                      )}
+                    </DialogButton>
+                  )}
+                  {!review && n === 0 && (
+                    <ReasonButton label="Masquer" className="btn btn-ghost vg-btn-sm" title={`Masquer « ${tr} »`} kicker={`Programme ${year}`}
+                      action={hideTrack} hidden={{ year, track: tr }} submitLabel="Masquer la ligne"
+                      message={`La ligne n'est plus affichée au programme ${year} ; les années précédentes ne changent pas.`}
+                      placeholder="Ex. plus d'audit fournisseur prévu cette année" onDone={close} />
+                  )}
+                </span>
+              </div>
+            );
+          })}
+          {hidden.length > 0 && <span className="card-kicker">Lignes masquées</span>}
+          {hidden.map((tr) => (
+            <div key={tr} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: 'var(--color-neutral-400)' }}>{tr}</span>
+              <ReasonButton label="Afficher à nouveau" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }} title={`Afficher « ${tr} »`} kicker={`Programme ${year}`}
+                action={showTrack} hidden={{ year, track: tr }} submitLabel="Afficher la ligne" placeholder="Ex. audit fournisseur finalement prévu" onDone={close} />
+            </div>
+          ))}
+        </div>
+      )}
+    </DialogButton>
+  );
+}
+
+/** Reconduction du programme de l'année précédente (AUD-24) : éléments recopiés à réaliser, dates décalées d'un an. */
+function RenewButton({ year, from }: { year: number; from: number }) {
+  return (
+    <DialogButton label={`Reconduire ${from}`} icon="ph-copy" title={`Reconduire le programme ${from} sur ${year}`} kicker="Programme annuel" width={500}>
+      {(close) => (
+        <ActionForm action={renewProgram} hidden={{ year }} submitLabel="Reconduire" submitIcon="ph-copy" onCancel={close} onDone={close}>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+            Chaque élément du programme {from} (hors revues de direction et audits hors programme) est recopié en {year}, à réaliser,
+            au même mois, date prévue décalée d&apos;un an. Un élément déjà présent n&apos;est pas recopié ; chaque élément créé est inscrit à son historique.
+          </p>
+        </ActionForm>
+      )}
+    </DialogButton>
   );
 }
 
@@ -274,38 +377,48 @@ function CancelledList({ items, open, onToggle, onOpen }: { items: PlanItemView[
   );
 }
 
-function PlanItemForm({ year, item, track, month, trackOptions, people, certs, onReschedule, onDone }: {
-  year: number; item?: PlanItemView; track?: string | null; month?: number; trackOptions: string[]; people: Opts['people']; certs: readonly Option[];
-  onReschedule: () => void; onDone: () => void;
+function PlanItemForm({ year, item, track, month, unplanned = false, trackOptions, options, certs, onReschedule, onDone }: {
+  year: number; item?: PlanItemView; track?: string | null; month?: number; unplanned?: boolean; trackOptions: string[]; options: PlanFormOptions;
+  certs: readonly Option[]; onReschedule: () => void; onDone: () => void;
 }) {
-  const [trackChoice, setTrackChoice] = useState(item?.track ?? track ?? NEW_TRACK);
+  const auditLines = trackOptions.filter((tr) => !isReviewPlanItem({ track: tr, label: '', detail: null }));
+  const [trackChoice, setTrackChoice] = useState(item?.track ?? track ?? (unplanned ? auditLines[0] ?? NEW_TRACK : NEW_TRACK));
   const [newTrack, setNewTrack] = useState('');
   const [label, setLabel] = useState(item?.label ?? '');
   const [detail, setDetail] = useState(item?.detail ?? '');
   const [fileError, setFileError] = useState<string | null>(null);
   const isNew = trackChoice === NEW_TRACK;
+  const outOfPlan = unplanned || !!item?.unplanned;
   // Même règle que le serveur et les chargements : ligne des revues, ou libellé / intitulé « revue de direction ».
   const review = isReviewPlanItem({ track: isNew ? newTrack : trackChoice, label, detail });
-  // Responsable sorti de l'effectif : gardé dans la liste, sinon l'enregistrement l'effacerait sans le dire.
-  const owners = item?.ownerId && !people.some(([v]) => v === item.ownerId)
-    ? [...people, [item.ownerId, `${item.owner || item.ownerId} — sorti de l'effectif`] as const]
-    : people;
+  // Responsable ou auditeur sorti de l'effectif : gardés dans la liste (withCurrent), jamais proposés pour un nouveau choix.
+  const owners = withCurrent(options.people, item?.ownerId, `${item?.owner || item?.ownerId} — sorti de l'effectif`);
+  const auditors = withCurrent(options.people, item?.auditorId, `${item?.auditorName || item?.auditorId} — sorti de l'effectif`);
+  // AUD-22 : site de l'élément ; site absent de la liste (archivé, autre site) gardé à la modification.
+  const sites = item ? withCurrent(options.sites, item.siteId ?? ALL_SITES_VALUE, item.site) : options.sites;
+  const lines = outOfPlan ? auditLines : trackOptions;
   return (
-    <ActionForm action={savePlanItem} onDone={onDone} onCancel={onDone} submitLabel={item ? 'Enregistrer' : 'Ajouter au programme'}
-      hidden={{ id: item?.id, year: item ? undefined : year }} encType="multipart/form-data">
-      {review && (
+    <ActionForm action={savePlanItem} onDone={onDone} onCancel={onDone} submitLabel={item ? 'Enregistrer' : unplanned ? "Enregistrer l'audit" : 'Ajouter au programme'}
+      hidden={{ id: item?.id, year: item || unplanned ? undefined : year, unplanned: unplanned ? '1' : undefined }} encType="multipart/form-data">
+      {outOfPlan && (
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+          <i className="ph ph-info" style={{ fontSize: 13, marginRight: 4, verticalAlign: '-2px' }} aria-hidden />
+          Audit hors programme (audit client, inopiné…) : enregistré réalisé à sa date, avec son auditeur, son rapport et ses constats ; hors échéances du programme.
+        </p>
+      )}
+      {review && !outOfPlan && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
           <i className="ph ph-info" style={{ fontSize: 13, marginRight: 4, verticalAlign: '-2px' }} aria-hidden />
           Planifiez la revue depuis la carte Revue de direction : elle reprendra cet élément.
         </p>
       )}
-      {item ? (
+      {item || outOfPlan ? (
         <>
           <Field name="track" label="Ligne du programme">
             <Select name="track" value={trackChoice} onChange={(e) => setTrackChoice(e.target.value)}
-              options={[...trackOptions.map((t) => [t, t] as const), [NEW_TRACK, 'Nouvelle ligne…'] as const]} />
+              options={[...lines.map((t) => [t, t] as const), [NEW_TRACK, 'Nouvelle ligne…'] as const]} />
           </Field>
-          <Planning item={item} onReschedule={onReschedule} />
+          {item && !item.unplanned && <Planning item={item} onReschedule={onReschedule} />}
         </>
       ) : (
         <FormRow>
@@ -325,15 +438,20 @@ function PlanItemForm({ year, item, track, month, trackOptions, people, certs, o
       )}
       <FormRow>
         <Field name="label" label="Libellé court" hint="Affiché dans la cellule (30 caractères au maximum).">
-          <Input name="label" defaultValue={item?.label} maxLength={30} placeholder="Ex. BE · 17/10" autoFocus={!isNew} onChange={(e) => setLabel(e.target.value)} />
+          <Input name="label" defaultValue={item?.label} maxLength={30} placeholder={outOfPlan ? 'Ex. Client [Client A]' : 'Ex. BE · 17/10'} autoFocus={!isNew} onChange={(e) => setLabel(e.target.value)} />
         </Field>
-        {!item && (
+        {!item && !outOfPlan && (
           <Field name="plannedOn" label="Date prévue" hint="Reprise dans les échéances à 15 jours.">
             <Input name="plannedOn" type="date" />
           </Field>
         )}
+        {outOfPlan && (
+          <Field name="doneOn" label="Réalisé le" hint="Fixe le mois de l'audit au programme.">
+            <Input name="doneOn" type="date" defaultValue={item?.doneOn ?? ''} />
+          </Field>
+        )}
       </FormRow>
-      <Field name="detail" label="Intitulé détaillé" hint="Ex. Processus Conception BE, Audit de suivi ISO 9001.">
+      <Field name="detail" label="Intitulé détaillé" hint={outOfPlan ? 'Ex. Audit client [Client A] — exigences qualité fournisseur.' : 'Ex. Processus Conception BE, Audit de suivi ISO 9001.'}>
         <Input name="detail" defaultValue={item?.detail ?? ''} onChange={(e) => setDetail(e.target.value)} />
       </Field>
       <FormRow>
@@ -345,25 +463,37 @@ function PlanItemForm({ year, item, track, month, trackOptions, people, certs, o
         </Field>
       </FormRow>
       {!review && (
+        <>
+          <FormRow>
+            <Field name="auditorId" label="Auditeur interne" hint="Personne de l'annuaire (qualification d'auditeur vérifiée sur les titres « auditeur interne »).">
+              <Select name="auditorId" options={auditors} defaultValue={item?.auditorId ?? ''} placeholder="Aucun" />
+            </Field>
+            <Field name="auditor" label="Auditeur externe" hint="Organisme ou auditeur hors annuaire.">
+              <Input name="auditor" defaultValue={item?.auditor ?? ''} maxLength={120} />
+            </Field>
+          </FormRow>
+          <FormRow>
+            <Field name="scope" label="Périmètre">
+              <Input name="scope" defaultValue={item?.scope ?? ''} maxLength={200} />
+            </Field>
+            <Field name="siteId" label="Site" hint="Site audité ; « Tous les sites » : audit commun à l'entreprise.">
+              <Select name="siteId" options={sites} defaultValue={item ? item.siteId ?? ALL_SITES_VALUE : offeredOr(sites, ALL_SITES_VALUE, sites[0]?.[0] ?? '') ?? ''} />
+            </Field>
+          </FormRow>
+        </>
+      )}
+      {!outOfPlan && (
         <FormRow>
-          <Field name="auditor" label="Auditeur" hint="Interne ou organisme.">
-            <Input name="auditor" defaultValue={item?.auditor ?? ''} maxLength={120} />
+          <Field name="done" group label="État">
+            <div style={{ minHeight: 34, display: 'flex', alignItems: 'center' }}>
+              <Checkbox name="done" label="Réalisé" defaultChecked={item?.done} />
+            </div>
           </Field>
-          <Field name="scope" label="Périmètre">
-            <Input name="scope" defaultValue={item?.scope ?? ''} maxLength={200} />
+          <Field name="doneOn" label="Réalisé le" hint="Par défaut, la date prévue si elle est passée.">
+            <Input name="doneOn" type="date" defaultValue={item?.doneOn ?? ''} />
           </Field>
         </FormRow>
       )}
-      <FormRow>
-        <Field name="done" group label="État">
-          <div style={{ minHeight: 34, display: 'flex', alignItems: 'center' }}>
-            <Checkbox name="done" label="Réalisé" defaultChecked={item?.done} />
-          </div>
-        </Field>
-        <Field name="doneOn" label="Réalisé le" hint="Par défaut, la date prévue si elle est passée.">
-          <Input name="doneOn" type="date" defaultValue={item?.doneOn ?? ''} />
-        </Field>
-      </FormRow>
       {!review && (
         <>
           <Field name="report" label="Rapport d'audit" hint={FILES_HINT}>
@@ -375,6 +505,9 @@ function PlanItemForm({ year, item, track, month, trackOptions, people, certs, o
     </ActionForm>
   );
 }
+
+/** Valeur du choix « Tous les sites » (élément commun à l'entreprise), identique à ALL_SITES de src/lib/domain.ts. */
+const ALL_SITES_VALUE = 'all';
 
 /** Planification d'un élément existant, en lecture : elle ne change que par « Reporter… » (motif obligatoire, AUD-03). */
 function Planning({ item, onReschedule }: { item: PlanItemView; onReschedule?: () => void }) {
@@ -486,7 +619,12 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
       ['Motif', item.cancelled.reason || '—'],
     ] as [string, ReactNode][] : []),
     ['Responsable', item.owner || '—'],
-    ...(item.isReview ? [] : [['Auditeur', item.auditor || '—'], ['Périmètre', item.scope || '—']] as [string, ReactNode][]),
+    ...(item.isReview ? [] : [
+      ['Auditeur', <span key="au">{item.auditorLabel || '—'}{item.auditorUnqualified && <span style={{ display: 'block', fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>Sans titre valide d&apos;auditeur interne à la date de l&apos;audit</span>}</span>],
+      ['Périmètre', item.scope || '—'],
+      ['Site', item.site],
+    ] as [string, ReactNode][]),
+    ...(item.unplanned ? [['Programme', 'Audit hors programme'] as [string, ReactNode]] : []),
     ...(certLabel ? [['Référentiel', certLabel] as [string, ReactNode]] : []),
     ...(item.review ? [['Revue', <ToneTag key="r" tone={item.review.statusTone}>{item.review.statusLabel}</ToneTag>] as [string, ReactNode]] : []),
     ['Action', item.actionId ? <ActionLink key="a" action={item.action} id={item.actionId} /> : '—'],

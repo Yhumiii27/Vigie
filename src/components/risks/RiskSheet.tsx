@@ -2,18 +2,20 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { EntityFiles } from '@/components/EntityFiles';
 import { LinkActionButton, LinkActionForm } from '@/components/LinkActionButton';
 import { ReasonForm } from '@/components/ReasonDialog';
+import { ActionForm, Field, Select } from '@/components/form';
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { admissibleSources } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
-import { EVENT_TYPES, RISK_FLAGS, TONE, proposedDomain, type EventType } from '@/lib/domain';
-import type { ArchiveInfo, LinkedAction, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
-import { archiveRisk, confirmResidual, moveRisk, restoreRisk } from '@/server/risks';
+import { EVENT_TYPES, MEASURE_LINK_KINDS, MEASURE_LINK_KIND_KEYS, RISK_FLAGS, TONE, proposedDomain, type EventType, type MeasureLinkKind } from '@/lib/domain';
+import type { ArchiveInfo, LinkedAction, MeasureOptions, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
+import { archiveRisk, confirmResidual, linkRiskMeasure, moveRisk, removeRiskMeasure, restoreRisk } from '@/server/risks';
 import { Cotation, RiskFields } from './RiskForm';
 
 export type RiskSheetView = 'sheet' | 'edit' | 'newAction' | 'link' | 'archive' | 'restore';
@@ -69,7 +71,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * rattachement d'actions, nouvelle action et archivage (jamais de suppression). Un risque archivé est en lecture seule ; l'animateur QHSE et la direction peuvent le restaurer.
  * Une seule fenêtre dont la vue change : pas de fenêtres imbriquées.
  */
-export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, isFirst, isLast, view, onView, onClose }: {
+export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, canApprove = false, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, measureOptions, isFirst, isLast, view, onView, onClose }: {
   risk: RiskView;
   unit: Unit;
   /** Unité du risque archivée : restauration du risque impossible avant celle de l'unité. */
@@ -86,6 +88,8 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   showHistory?: boolean;
   options: ActionFormOptions;
   linkableActions: RisksData['linkableActions'];
+  /** DUE-19 : éléments proposés comme mesure de maîtrise (rôles qui modifient le DUERP). */
+  measureOptions?: MeasureOptions;
   isFirst: boolean;
   isLast: boolean;
   view: RiskSheetView;
@@ -217,8 +221,18 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         )}
       </section>
 
+      <MeasuresSection risk={risk} unit={unit} editable={editable && !unitArchived} options={measureOptions} />
+
       {showEvents && <section style={{ display: 'grid', gap: 8 }}>
-        <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
+          {/* EVT-24 : « Nouvel événement » prérempli (site, unité, risque) ; risque en vigueur, rôles qui modifient le DUERP. */}
+          {editable && !unitArchived && (
+            <Link href={newEventHref('risque', risk.id)} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+            </Link>
+          )}
+        </div>
         {risk.events.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
             {risk.events.map((e) => (
@@ -284,5 +298,69 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * DUE-19 : mesures de maîtrise liées à un contrôle, un document ou une habilitation, avec leur validité calculée ; liaison
+ * et retrait (motif) dans la fiche même, sans seconde fenêtre (rôles qui modifient le DUERP, risque en vigueur).
+ */
+function MeasuresSection({ risk, unit, editable, options }: { risk: RiskView; unit: Unit; editable: boolean; options?: MeasureOptions }) {
+  const [adding, setAdding] = useState(false);
+  const [kind, setKind] = useState<MeasureLinkKind>('control');
+  const [removing, setRemoving] = useState<number | null>(null);
+  if (!risk.measures.length && !editable) return null;
+  const linked = new Set(risk.measures.map((m) => `${m.kind}:${m.targetId}`));
+  const choices = (options?.[kind] ?? [])
+    .filter(([id, , siteId]) => !linked.has(`${kind}:${id}`) && (!siteId || !unit.siteId || siteId === unit.siteId))
+    .map(([id, label]) => [id, label] as const);
+  return (
+    <section style={{ display: 'grid', gap: 8 }}>
+      <div className="vg-eyebrow">Mesures de maîtrise liées{risk.measures.length ? ` · ${risk.measures.length}` : ''}</div>
+      {risk.measures.length ? (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+          {risk.measures.map((m) => (
+            <li key={m.id} style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
+                <i className={`ph ${MEASURE_LINK_KINDS[m.kind].icon}`} style={{ fontSize: 13, color: 'var(--color-neutral-400)' }} aria-hidden />
+                <span className="vg-sr-only">{MEASURE_LINK_KINDS[m.kind].label} : </span>
+                {m.href ? <Link href={m.href} className="vg-link" style={{ fontSize: 12.5, flex: 1, minWidth: 160 }}>{m.label}</Link> : <span style={{ flex: 1, minWidth: 160 }}>{m.label}</span>}
+                <ToneTag tone={m.tone}>{m.valid ? m.state : `Plus valide · ${m.state}`}</ToneTag>
+                {editable && removing !== m.id && (
+                  <button type="button" className="vg-text-btn" onClick={() => { setRemoving(m.id); setAdding(false); }}>Retirer</button>
+                )}
+              </div>
+              {editable && removing === m.id && (
+                <div className="vg-inset" style={{ padding: '10px 12px' }}>
+                  <ReasonForm action={removeRiskMeasure} hidden={{ id: m.id }} submitLabel="Retirer la mesure" submitIcon="ph-link-break"
+                    placeholder="Ex. équipement remplacé, consigne intégrée à une autre procédure" onDone={() => setRemoving(null)} onCancel={() => setRemoving(null)}
+                    message={<>La mesure « {m.label} » ne sera plus suivie pour ce risque ; la liaison reste au journal du risque avec son motif.</>} />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucune mesure liée à un contrôle, un document ou une habilitation.</div>
+      )}
+      {editable && !adding && (
+        <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, justifySelf: 'start' }} onClick={() => { setAdding(true); setRemoving(null); }}>
+          <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />Lier une mesure de maîtrise
+        </button>
+      )}
+      {editable && adding && (
+        <div className="vg-inset" style={{ padding: '10px 12px' }}>
+          <ActionForm action={linkRiskMeasure} hidden={{ riskId: risk.id }} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} submitLabel="Lier la mesure" submitIcon="ph-link">
+            <Field name="kind" label="Élément">
+              <Select name="kind" options={MEASURE_LINK_KIND_KEYS.map((k) => [k, MEASURE_LINK_KINDS[k].label] as const)} value={kind} onChange={(e) => setKind(e.target.value as MeasureLinkKind)} />
+            </Field>
+            <Field name="targetId" label={MEASURE_LINK_KINDS[kind].label}
+              hint="Signalée quand elle n'est plus valide : contrôle dépassé ou défavorable, document sans version en vigueur, habilitation expirée chez un salarié du site.">
+              <Select key={kind} name="targetId" options={choices} defaultValue="" placeholder={choices.length ? 'Choisir…' : 'Aucun élément disponible'} />
+            </Field>
+          </ActionForm>
+        </div>
+      )}
+    </section>
   );
 }

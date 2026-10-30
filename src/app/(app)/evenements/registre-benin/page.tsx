@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { PrintButton } from '@/components/PrintButton';
-import { BENIGN_REGISTER_PATH } from '@/components/events/shared';
+import { BENIGN_REGISTER_PATH } from '@/lib/rules/events';
 import { hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';

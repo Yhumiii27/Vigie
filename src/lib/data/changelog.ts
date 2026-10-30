@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { loadPeople } from '../queries';
 
 /**

@@ -4,9 +4,9 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast, skillLinkTarget } from '@/components/skills/rules';
+import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
 import { today } from '@/lib/today';
-import { SCREENS, canApprove, canEdit } from '@/lib/domain';
+import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { ALL_SITES, inPerimeter } from '@/lib/session';
 import { hasLeft } from '@/lib/people';
@@ -56,6 +56,11 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
     activeTitleIds: new Set(titles.map((ti) => ti.id)), archivedTitles: new Map(archivedTitles.map((ti) => [ti.id, ti.label])),
   }) : null;
   const initialSel = link?.select;
+  // HAB-16 : sous « Tous les sites », site de rattachement de chaque salarié de la matrice (libellés des seuls sites affichés).
+  const rowSites = new Set(rows.map((r) => r.person.siteId).filter(Boolean));
+  const siteLabels = !self && session.site.id === ALL_SITES && rowSites.size > 1
+    ? Object.fromEntries(allSites.filter((x) => rowSites.has(x.id)).map((x) => [x.id, x.label.split(' — ')[0]]))
+    : null;
 
   const sub = self ? `Mes habilitations · ${titles.length} titres suivis` : `${rows.length} salariés · ${titles.length} titres suivis`;
   // HAB-09 : vue « À prévoir » (?vue=a-prevoir) — recyclages et formations des 12 prochains mois, calculés à l'affichage.
@@ -74,6 +79,12 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         <SkillAlerts alerts={lapses} today={now} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <SegLinks options={views} />
+          {/* SEC-13 : droit d'accès d'un salarié (RGPD) — animateur QHSE et direction (données de santé comprises). */}
+          {canSeeHealth(session.role) && (
+            <a href="/habilitations/donnees-personnelles" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
+              <i className="ph ph-user-list" style={{ fontSize: 13 }} aria-hidden />Données personnelles
+            </a>
+          )}
         </div>
         {forecast ? (
           <div className="card" style={{ gap: 12 }}>
@@ -93,7 +104,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
           <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
             canManage={manage} canManageTitles={manageTitles} options={options} today={now} defaultSiteId={defaultSiteId}
-            initialSel={initialSel} closeHref="/habilitations" />
+            initialSel={initialSel} closeHref="/habilitations" siteLabels={siteLabels} />
         )}
       </div>
     </>

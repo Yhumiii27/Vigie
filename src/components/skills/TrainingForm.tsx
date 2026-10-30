@@ -8,7 +8,7 @@ import { addMonths, fmtDate } from '@/lib/dates';
 import type { SkillRow, TrainingTitle } from '@/lib/data/skills';
 import { saveQualification } from '@/server/skills';
 import { period } from './common';
-import { coversNeed, heldState, lapseFor, type Span } from './rules';
+import { coversNeed, heldState, lapseFor, type Span } from '@/lib/rules/skills';
 
 type Props = {
   rows: SkillRow[];

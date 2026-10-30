@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ReportForm } from '@/components/ReportForm';
-import { reportQuery } from '@/components/events/shared';
+import { reportQuery } from '@/lib/rules/events';
 import { LOGIN_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
-import { ARCHIVED_POST_NOTICE, loadSiteZones, resolveReportPost, resolveReportToken } from '@/lib/data/report-posts';
+import { ARCHIVED_POST_NOTICE, loadSiteZones, loadZoneRisks, resolveReportPost, resolveReportToken } from '@/lib/data/report-posts';
 import { REPORT_TYPE_KEYS } from '@/lib/domain';
 import { ALL_SITES, getOptionalSession } from '@/lib/session';
 
@@ -33,11 +33,15 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
     if (!check || !('post' in check)) return <Frame><Unavailable status={check?.status === 'revoked' ? 'revoked' : 'invalid'} loginHref={loginHref} /></Frame>;
     // QR code d'une zone archivée (EVT-19) : formulaire ouvert sur le site du poste, lieu à choisir parmi ses zones.
     const archived = check.status === 'archived';
+    const zones = archived ? await loadSiteZones(check.post.siteId) : undefined;
+    // DUE-20 : risques de l'unité de travail du poste (ou des zones proposées), à rattacher au signalement.
+    const zoneRisks = await loadZoneRisks(archived ? (zones ?? []).map((z) => z.id) : [check.post.zoneId]);
     return (
       <Frame>
         <ReportForm publicMode token={token} siteLabel={check.post.siteLabel} defaultLocation={archived ? '' : check.post.name} topPadding={24}
           defaultType={type} loginHref={loginHref}
-          zones={archived ? await loadSiteZones(check.post.siteId) : undefined} notice={archived ? ARCHIVED_POST_NOTICE : undefined} />
+          zones={zones} notice={archived ? ARCHIVED_POST_NOTICE : undefined}
+          postZoneId={archived ? undefined : check.post.zoneId} zoneRisks={zoneRisks} />
       </Frame>
     );
   }
@@ -56,6 +60,8 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
   // Lieux proposés (zones en service) quand le QR code ne fixe pas le poste.
   const zones = live ? [] : await loadSiteZones((post ?? archivedPost)?.siteId ?? fallbackSite?.id);
   const notice = archivedPost ? ARCHIVED_POST_NOTICE : undefined;
+  // DUE-20 : risques de l'unité de travail du poste (QR code) ou des zones proposées.
+  const zoneRisks = await loadZoneRisks(live ? [live.zoneId] : zones.map((z) => z.id));
   return (
     <Frame>
       <div style={{ padding: '14px 18px 0', display: 'grid', gap: 10 }}>
@@ -73,7 +79,8 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
       </div>
       <ReportForm token={check && 'post' in check ? token : undefined} siteLabel={siteLabel} siteId={(post ?? archivedPost)?.siteId} defaultLocation={lieu}
         topPadding={14} myReportsHref={`/signaler/mes-signalements${qs}`} defaultType={type}
-        zones={zones} defaultZoneId={legacy && !legacy.archived ? legacy.zoneId : undefined} notice={notice} />
+        zones={zones} defaultZoneId={legacy && !legacy.archived ? legacy.zoneId : undefined} notice={notice}
+        postZoneId={live?.zoneId} zoneRisks={zoneRisks} />
     </Frame>
   );
 }

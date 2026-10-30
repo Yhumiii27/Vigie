@@ -17,9 +17,10 @@ import { fmtSiret } from '@/lib/siret';
 import {
   BSD_PLACEHOLDER, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, QUALIFICATION_KEYS, REGISTER_MENTIONS, TREATMENT_QUALIFICATIONS, fmtQty, isTransitCode, lcfirst,
   qualificationError, qualificationLabel, treatmentLabel,
-} from './model';
+} from '@/lib/rules/environment';
 import { CompanyIdField, LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier } from './parts';
 import { entryActionDefaults } from './action-defaults';
+import { withCurrent } from '@/lib/form-options';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
@@ -267,7 +268,7 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
 
   // Événements du site de la filière choisie ; un événement déjà lié mais clôturé depuis reste proposé.
   const siteEvents = events.filter((e) => !stream || e.siteId === stream.siteId).map((e) => [e.id, e.label] as const);
-  const eventOptions = entry?.eventId && !siteEvents.some(([v]) => v === entry.eventId) ? [[entry.eventId, entry.eventId] as const, ...siteEvents] : siteEvents;
+  const eventOptions = withCurrent(siteEvents, entry?.eventId, null, 'start');
   const options = streams.map((s) => [s.id, `${s.label} · ${s.ewcCode}${showSite ? ` — ${shortSite(s.site)}` : ''}`] as const);
   const bsdHint = !info
     ? `Format Trackdéchets : ${BSD_PLACEHOLDER}.`

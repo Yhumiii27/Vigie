@@ -4,7 +4,7 @@ import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { AuthState } from '@/lib/auth';
-import { fmtEuro } from '@/components/risks/format';
+import { fmtEuro } from '@/lib/rules/risk-format';
 import { VACANT_QHSE_LEAD, isMine, type Role, type TodoItem } from '@/lib/domain';
 import {
   loadDuerpAccessRegister, loadDuerpPrint, loadDuerpVersion, loadPreventionProgram, loadProgramSources, loadRiskSignals, loadRisks,

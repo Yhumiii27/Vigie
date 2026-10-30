@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
-import { firstMinuteReason, ruleBasis, type SiteRule } from '@/components/prevention/model';
+import { firstMinuteReason, ruleBasis, type SiteRule } from '@/lib/rules/prevention';
 import { ConfirmButton, ErrorLine, Facts, Notice, SectionTitle, muted, useRun } from '@/components/prevention/parts';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ReasonForm } from '@/components/ReasonDialog';
@@ -13,12 +13,13 @@ import { TONE } from '@/lib/domain';
 import {
   archiveZone, cancelActivity, deleteRoute, replaceSitePlan, resetSitePlan, saveActivity, saveMapSettings, saveRoute, saveZone,
 } from '@/server/sitemap';
-import { activeOn, containingZone, lacksSignedPlan, type Conflict, type Pt } from './coactivity';
+import { activeOn, containingZone, lacksSignedPlan, type Conflict, type Pt } from '@/lib/rules/coactivity';
 import {
   DEFAULT_PLANS, ROUTE_KINDS, ROUTE_KIND_KEYS, TEAMS, ZONE_KINDS, ZONE_KIND_KEYS,
   type ActivityDraft, type ActivityView, type MapConfig, type RouteView, type SitemapChoices, type Team, type ZoneView,
-} from './model';
+} from '@/lib/rules/sitemap';
 import styles from './sitemap.module.css';
+import { withCurrent } from '@/lib/form-options';
 
 // Fenêtres de la carte du site : zones, voies, activités, échelle et plan de fond.
 
@@ -188,8 +189,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
   const guessed = !activity && point && src.zoneId != null && src.zoneId !== detected?.id ? zones.find((z) => z.id === src.zoneId) : undefined;
   const zoneHint = detected && zoneId === detected.id && (!activity || activity.zoneId == null) ? `Déduite de la position : ${detected.name}.`
     : point && !detected ? `Position hors des zones dessinées${guessed ? ` (lieu indiqué : ${guessed.name})` : ''}.` : undefined;
-  const projects = src.keystoneProject && !choices.projects.some(([v]) => v === src.keystoneProject)
-    ? [[src.keystoneProject, src.keystoneProject] as const, ...choices.projects] : choices.projects;
+  const projects = withCurrent(choices.projects, src.keystoneProject, null, 'start');
   const routeIds = new Set(src.routeIds ?? []);
 
   const pickPlan = (id: string) => {

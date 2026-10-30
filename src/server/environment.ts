@@ -6,12 +6,12 @@ import { getDb, schema as t } from '@/db';
 import {
   BSD_NUMBER, BSD_REFUSALS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, bsdRefusalErrors, QUALIFICATION_KEYS, TREATMENT_KEYS, WASTE_UNIT_KEYS, defaultQualification, isHazardousCode, isTransitCode,
   normalizeEwc, qualificationError, qualificationLabel, resolveMentions,
-} from '@/components/environment/model';
+} from '@/lib/rules/environment';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
-import { STEP_CLOSED, canEdit } from '@/lib/domain';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { STEP_CLOSED } from '@/lib/domain';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { currentPersonId } from '@/lib/session';
 import { fmtSiret, isEuVatNumber, isSiret, normalizeSiret } from '@/lib/siret';
 import { diffFields, logChange } from './changelog';
@@ -22,10 +22,7 @@ const MAX_CONSUMPTION = 999_999_999;
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 /** Saisie réservée aux rôles qui ont accès à l'écran « Environnement et déchets » (hors salariés et lecture seule). */
-async function requireEnvManager(): Promise<string | null> {
-  const { session, error } = await requireManager();
-  return error ?? (canEdit(session.role, 'env') ? null : 'Votre rôle ne permet pas cette modification.');
-}
+const requireEnvManager = async (): Promise<string | null> => (await requireEditor('env')).error;
 
 const ENTRY_LABELS = {
   streamId: 'Filière', removedOn: "Date d'enlèvement", quantity: 'Quantité', transporter: 'Transporteur',

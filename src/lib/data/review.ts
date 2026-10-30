@@ -32,6 +32,7 @@ import { loadPrevention } from './prevention';
 import { loadPreventionSignals } from './prevention-signals';
 import { loadRisks } from './risks';
 import { loadSkillMatrix, type SkillAlert } from './skills';
+import { skillIndicators } from '@/lib/rules/skills';
 
 // ─── Revue de direction (ISO 9001 §9.3) ─────────────────────────────────────
 
@@ -564,7 +565,7 @@ const fr = (n: number, digits: number) => n.toLocaleString('fr-FR', { minimumFra
 export async function buildReviewDossier(review: Review, reviews: Review[], opts: { asOf?: string } = {}) {
   const db = await getDb();
   const asOf = opts.asOf ?? dossierAsOf(review.reviewOn, today());
-  const [parts, events, controls, hours, siteRows, skills, risks, prevention, preventionSignals, documents, env, reqs, certs, plan, findings, findingLinks, site, allActions] = await Promise.all([
+  const [parts, events, controls, hours, siteRows, skills, risks, prevention, preventionSignals, documents, env, reqs, allCerts, allPlan, allFindings, findingLinks, site, allActions] = await Promise.all([
     buildRecordParts(review, reviews, asOf),
     loadEvents(),
     loadControls(),
@@ -588,6 +589,11 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     loadAllActions('perimeter'),
   ]);
   const { rec, header, record } = parts;
+  // AUD-22 : programme, constats et certifications du site sélectionné (les éléments communs à l'entreprise valent pour tous
+  // les sites) ; le dossier de séance, figé sous « Tous les sites », les couvre tous.
+  const certs = allCerts.filter((c) => inSite(site, c.siteId));
+  const plan = allPlan.filter((p) => inSite(site, p.siteId));
+  const findings = allFindings.filter((f) => inSite(site, f.siteId));
   // AUD-13 et CNF-05 : objectifs de l'année de la date d'arrêt (cible TF1 comprise), contexte du système de management.
   const [objectiveData, contextData, target] = await Promise.all([loadObjectives(yearOf(asOf)), loadContext(), tf1Target(yearOf(asOf), site)]);
   const { now, people, prior } = rec;
@@ -696,7 +702,11 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     id: e.id, occurredOn: e.occurredOn, title: e.title, step: EVENT_STEPS[e.step], open: isOpen(e), pilot: name(e.pilotId),
     actions: eventActions(e.id), href: eventHref(e.id),
   }));
-  const suppliers = {
+  const suppliers: {
+    audits: typeof supplierAudits; ncs: typeof supplierNcs; summary: { audits: number; auditsDone: number; ncs: number; ncOpen: number };
+    /** AUD-33 : constats des audits fournisseurs (absents d'un dossier figé avant le paquet 13 : ils figurent alors sous Audits). */
+    findingGroups?: { label: string; findings: DossierFinding[] }[];
+  } = {
     audits: supplierAudits,
     ncs: supplierNcs,
     summary: {
@@ -714,17 +724,24 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   }));
   // Libellé d'audit avec son mois (« Processus Production · juin 2026 ») : deux audits d'un même processus restent distincts.
   const planLabel = new Map(plan.map((p) => [p.id, planItemAuditLabel(p)]));
-  const groups = new Map<string, { label: string; first: number; findings: DossierFinding[] }>();
+  type FindingGroup = { label: string; first: number; findings: DossierFinding[] };
+  const groups = new Map<string, FindingGroup>();
+  // AUD-33 : constats des audits fournisseurs (ligne « Fournisseurs » du programme) rangés dans la section Fournisseurs.
+  const supplierGroups = new Map<string, FindingGroup>();
+  const supplierItems = new Set(plan.filter((p) => p.track === 'Fournisseurs').map((p) => p.id));
   const actionsOfFinding = findingActionsBy(findingLinks, briefOf);
   findings.filter((f) => !f.foundOn || f.foundOn <= asOf).forEach((f) => {
     const label = (f.planItemId ? planLabel.get(f.planItemId) : null) ?? f.audit;
-    const g = groups.get(label) ?? { label, first: f.id, findings: [] };
+    const into = f.planItemId != null && supplierItems.has(f.planItemId) ? supplierGroups : groups;
+    const g = into.get(label) ?? { label, first: f.id, findings: [] };
     const k = FINDING_KINDS[f.kind] ?? { label: f.kind, tone: 'neutral' as Tone };
     g.findings.push({ id: f.id, kind: f.kind, kindLabel: k.label, tone: k.tone, text: f.text, clause: f.clause, actions: actionsOfFinding(f.id) });
     g.first = Math.min(g.first, f.id);
-    groups.set(label, g);
+    into.set(label, g);
   });
-  const auditGroups = [...groups.values()].sort((a, b) => b.first - a.first).map(({ label, findings: list }) => ({ label, findings: list }));
+  const sortGroups = (m: Map<string, FindingGroup>) => [...m.values()].sort((a, b) => b.first - a.first).map(({ label, findings: list }) => ({ label, findings: list }));
+  const auditGroups = sortGroups(groups);
+  suppliers.findingGroups = sortGroups(supplierGroups);
 
   // 7. Plan d'actions par source (§ 12), sur le site sélectionné : avancements actuels, retards à la date d'arrêt ; Vérifiées
   // pendant la période examinée (closed_on = date de la vérification).
@@ -852,7 +869,8 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     prevention: preventionView,
     documents: documentView,
     environment,
-    skills: { counts: skillCounts, alerts: skillAlerts, href: '/habilitations' },
+    // HAB-18 : taux de conformité, formations sur 12 mois (efficacité évaluée à froid, HAB-13), recyclages en retard.
+    skills: { counts: skillCounts, alerts: skillAlerts, indicators: skillIndicators(skills.rows, asOf), href: '/habilitations' },
     // §9.3.2 c (AUD-13) : degré de réalisation des objectifs ; valeurs calculées à la date d'arrêt du dossier.
     objectives: objectiveData.objectives.map((o) => ({
       label: o.label, indicator: o.indicatorLabel, target: fmtObjectiveTarget(o.indicator, o.target), value: fmtObjectiveValue(o.indicator, o.value),

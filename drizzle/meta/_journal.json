@@ -141,6 +141,20 @@
       "when": 1792962259934,
       "tag": "0019_traceability_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793286539166,
+      "tag": "0020_compliance_functions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793292192167,
+      "tag": "0021_management_system",
+      "breakpoints": true
     }
   ]
 }

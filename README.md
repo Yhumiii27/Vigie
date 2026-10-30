@@ -4,6 +4,19 @@ Application web du système EPC2i : signalements terrain, plan d'actions unique,
 
 ## Démarrer
 
+### Environnement de développement
+
+Prérequis : Node.js de `.nvmrc` (22, comme la CI ; `nvm use`, `fnm use` ou `volta`) ; PostgreSQL 16 facultatif (tests d'intégration en mode serveur). Aucun secret n'est nécessaire : la démonstration n'exige aucune variable.
+
+```bash
+scripts/dev-setup.sh              # contrôle de la version de Node, npm ci, next typegen
+scripts/dev-setup.sh --postgres   # en plus : rôle local « vigie » (mot de passe « vigie », comme la CI) pour TEST_DATABASE_URL
+scripts/dev-check.sh              # types, lint, code mort (knip), tests PGlite, migrations — l'ordre de la CI
+scripts/dev-check.sh --pg --build # en plus : tests d'intégration sur PostgreSQL et construction de démonstration
+```
+
+Les consignes des agents de code sont dans `AGENTS.md` (renvoi à `CLAUDE.md`, bloc tenu à jour par `next dev`).
+
 ### Démonstration et développement
 
 ```bash
@@ -39,7 +52,7 @@ TEST_DATABASE_URL=postgres://vigie@127.0.0.1:5432/postgres npm test   # intégra
 npm run db:check    # migrations publiées inchangées, schéma = migrations, application à une base vide (public et schéma vigie du serveur)
 ```
 
-`VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e` contrôle la charge des pages du Salarié contre `npm run start:demo`. Parcours dans le navigateur (Playwright, Chromium) : `VIGIE_DEMO=1 npm run build && npm run test:pw` (serveur de démonstration lancé sur des dossiers jetables, ou `VIGIE_E2E_URL` ; navigateur : `npx playwright install chromium`), dont le clavier de la coque et un contrôle axe-core WCAG 2.2 A et AA des écrans principaux (`test/playwright/accessibilite.spec.ts`). Intégration continue : `.github/workflows/ci.yml` (Node de `.nvmrc`). Une migration publiée ne se modifie jamais : voir `CLAUDE.md`.
+`VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e` contrôle la charge des pages du Salarié contre `npm run start:demo`. Parcours dans le navigateur (Playwright, Chromium) : `VIGIE_DEMO=1 npm run build && npm run test:pw` (serveur de démonstration lancé sur des dossiers jetables, ou `VIGIE_E2E_URL` ; navigateur : `npx playwright install chromium`), dont le clavier de la coque, la pagination des événements et un contrôle axe-core WCAG 2.2 A et AA de chaque écran et de ses vues principales, par rôle, sur bureau, tablette et téléphone (`test/playwright/accessibilite*.spec.ts`). Recette visuelle : `npm run test:visual` (captures de référence `test/playwright/__captures__/`, à lancer sur le jeu de démonstration intact ; `-- --update-snapshots` après un changement voulu, chaque image relue). Intégration continue : `.github/workflows/ci.yml` (Node de `.nvmrc`). Une migration publiée ne se modifie jamais : voir `CLAUDE.md`.
 
 ## Application Mac
 

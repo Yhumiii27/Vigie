@@ -6,7 +6,7 @@ import { BenignRegisterBlock } from './BenignRegister';
 import { CancelCpamWaiverButton, CpamWaiverButton } from './CpamWaiver';
 import { FieldGrid, Restricted } from './FieldGrid';
 import { MedicalAttachments } from './MedicalAttachments';
-import { injuryLabel } from './shared';
+import { injuryLabel } from '@/lib/rules/events';
 
 /** « AAAA-MM-JJTHH:mm » → « 08/09/2026 à 16:10 ». */
 const fmtLocal = (local: string) => `${fmtDate(local.slice(0, 10))} à ${local.slice(11, 16)}`;

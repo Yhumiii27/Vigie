@@ -2,11 +2,11 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { lapseFor, missingPrerequisites, period, type Lapse } from '@/components/skills/rules';
+import { lapseFor, missingPrerequisites, period, type Lapse } from '@/lib/rules/skills';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';
-import { TODO_HORIZON_DAYS, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone } from '../domain';
+import { TODO_HORIZON_DAYS, TRAINING_EFFECTIVENESS, isClosedActionStatus, isEmployee, type SkillState, type TodoItem, type Tone, type TrainingEffectiveness } from '../domain';
 import { hasLeft } from '../people';
 import { canReadAction } from '../action-rules';
 import { actionView, lcfirst, loadPeople, skillState, type Person } from '../queries';
@@ -57,6 +57,8 @@ export type QualificationEntry = {
   cancelled: { at: string; by: string; reason: string } | null;
   /** Attestations jointes. */
   files: AttachmentItem[];
+  /** HAB-13 : évaluation à froid de l'efficacité (null : non évaluée). */
+  effectiveness: { key: TrainingEffectiveness; label: string; tone: Tone; on: string; note: string | null; by: string } | null;
 };
 
 export type SkillCell = {
@@ -183,6 +185,9 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
       recordedAt: q.recordedAt.toISOString(), recordedBy: name(q.recordedById),
       cancelled: q.cancelledAt ? { at: q.cancelledAt.toISOString(), by: name(q.cancelledById), reason: q.cancelReason ?? '' } : null,
       files: filesOf.get(String(q.id)) ?? [],
+      effectiveness: q.effectiveness && q.effectivenessOn && q.effectiveness in TRAINING_EFFECTIVENESS
+        ? { key: q.effectiveness as TrainingEffectiveness, ...TRAINING_EFFECTIVENESS[q.effectiveness as TrainingEffectiveness], on: q.effectivenessOn, note: q.effectivenessNote, by: name(q.effectivenessById) }
+        : null,
     });
     history.set(key, list);
   });

@@ -14,7 +14,7 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -136,6 +136,15 @@ end
 $vigie$;`;
 
 /**
+ * Réglages de session qu'un client pg_restore plus récent que le serveur écrit dans un script SQL (pg_restore 17 :
+ * `SET transaction_timeout = 0;`, inconnu d'un serveur 16) : sans effet sur la copie, retirés avant psql. Connecté à la
+ * base (pgRestore), pg_restore ne les émet que si le serveur les connaît.
+ */
+export function withoutNewerSettings(sql: string): string {
+  return sql.replace(/^SET transaction_timeout = 0;\r?\n/gm, '');
+}
+
+/**
  * Remplace le contenu du schéma vigie par une copie pg_dump, en une seule transaction : en cas d'erreur, la base est
  * inchangée. pg_restore écrit d'abord le script SQL de la copie dans `work` (copie illisible, format ou version non pris
  * en charge : erreur avant toute modification), puis psql exécute le vidage du schéma (EMPTY_SERVER_SCHEMA_SQL) et ce
@@ -147,6 +156,7 @@ export async function pgReplace(url: string, file: string, work: string) {
   const script = path.join(/*turbopackIgnore: true*/ work, 'restauration.sql');
   await run('pg_restore', ['--no-owner', '--no-privileges', `--schema=${SERVER_SCHEMA}`, `--file=${script}`, file], c.env);
   try {
+    await writeFile(script, withoutNewerSettings(await readFile(script, 'utf8')));
     await run('psql', ['--no-psqlrc', '--quiet', '--single-transaction', '--set=ON_ERROR_STOP=1', `--dbname=${c.dbname}`,
       `--command=set client_min_messages = warning; ${EMPTY_SERVER_SCHEMA_SQL}`, `--file=${script}`], c.env);
   } finally {

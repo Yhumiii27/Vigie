@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
-import { ActionForm, Field, FormRow, Input, TextArea } from '@/components/form';
+import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { withCurrent, type Option } from '@/lib/form-options';
 import { Dot } from '@/components/ui';
 import { FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
@@ -14,7 +16,7 @@ import type { CertView } from '@/lib/data/audits';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { deleteCertification, reinstateCertification, removeCertificationFile, renewCertification, saveCertification, suspendCertification } from '@/server/audits';
 import { DeleteButton, DialogFooter, FileList, RadioSeg, fileUrl } from './parts';
-import { CERT_TONES, CERT_TONE_LABELS, certDot } from './shared';
+import { CERT_TONES, CERT_TONE_LABELS, certDot } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Editing = { id: string | null } | null;
@@ -75,10 +77,25 @@ function CertificationCycle({ cert, onDone }: { cert: CertView; onDone: () => vo
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
 
 /** Cartes des référentiels (statut calculé, audits du programme, certificat) ; l'animateur QHSE et la direction les modifient. */
-export function CertificationCards({ certs, canApprove }: { certs: CertView[]; canApprove: boolean }) {
-  const [editing, setEditing] = useState<Editing>(null);
+export function CertificationCards({ certs, canApprove, sites = [], initialId, closeHref }: {
+  certs: CertView[]; canApprove: boolean; sites?: readonly Option[];
+  /** AUD-19 : référentiel visé par un lien profond (?referentiel=<id>, échéances de certification) — fiche ouverte pour qui la modifie, carte mise en évidence sinon. */
+  initialId?: string;
+  /** URL sans le lien profond, rétablie à la fermeture. */
+  closeHref?: string;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<Editing>(initialId && canApprove ? { id: initialId } : null);
+  const [deepLink, setDeepLink] = useState(!!initialId);
   const [fileError, setFileError] = useState<string | null>(null);
-  const close = () => { setEditing(null); setFileError(null); };
+  const flashId = initialId && !canApprove ? initialId : undefined;
+  useEffect(() => {
+    if (initialId) document.getElementById(`referentiel-${initialId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [initialId]);
+  const close = () => {
+    setEditing(null); setFileError(null);
+    if (deepLink && closeHref) { setDeepLink(false); router.replace(closeHref, { scroll: false }); }
+  };
   const cert = editing?.id ? certs.find((c) => c.id === editing.id) : undefined;
 
   return (
@@ -86,7 +103,7 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         {certs.map((c) => {
           const file = c.files.at(-1);
-          const validity = [c.organization, c.validUntil && `valable jusqu'au ${fmtDate(c.validUntil)}`].filter(Boolean).join(' · ');
+          const validity = [c.organization, c.validUntil && `valable jusqu'au ${fmtDate(c.validUntil)}`, c.siteId && c.site].filter(Boolean).join(' · ');
           const links = (file || c.nextAudit || c.lastAudit) && (
             <div className="vg-target-links" style={{ display: 'flex', flexWrap: 'wrap', gap: '0 12px', fontSize: 11.5, marginTop: 2 }}>
               {file && (
@@ -126,10 +143,10 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
               {links}
             </>
           );
-          if (!canApprove) return <div key={c.id} className="card" style={{ gap: 6 }}>{body}</div>;
+          if (!canApprove) return <div key={c.id} id={`referentiel-${c.id}`} className={`card${flashId === c.id ? ` ${styles.flash}` : ''}`} style={{ gap: 6, scrollMarginTop: 16 }}>{body}</div>;
           return (
             // Carte cliquable à la souris ; au clavier, le bouton « Modifier » de la carte (pas d'élément interactif imbriqué).
-            <div key={c.id} className={`card ${styles.clickCard}`} style={{ gap: 6 }} onClick={() => setEditing({ id: c.id })}>
+            <div key={c.id} id={`referentiel-${c.id}`} className={`card ${styles.clickCard}`} style={{ gap: 6, scrollMarginTop: 16 }} onClick={() => setEditing({ id: c.id })}>
               {body}
             </div>
           );
@@ -161,9 +178,15 @@ export function CertificationCards({ certs, canApprove }: { certs: CertView[]; c
               <Field name="tone" label="Engagement">
                 <RadioSeg name="tone" defaultValue={cert?.tone ?? 'warn'} options={CERT_TONES.map((k) => [k, CERT_TONE_LABELS[k], certDot(k)] as const)} />
               </Field>
-              <Field name="organization" label="Organisme certificateur">
-                <Input name="organization" defaultValue={cert?.organization ?? ''} />
-              </Field>
+              <FormRow>
+                <Field name="organization" label="Organisme certificateur">
+                  <Input name="organization" defaultValue={cert?.organization ?? ''} />
+                </Field>
+                {/* AUD-22 : site couvert par le certificat ; « Tous les sites » : certificat de l'entreprise (multisite). */}
+                <Field name="siteId" label="Site">
+                  <Select name="siteId" options={cert ? withCurrent(sites, cert.siteId ?? 'all', cert.site) : sites} defaultValue={cert ? cert.siteId ?? 'all' : sites[0]?.[0] ?? ''} />
+                </Field>
+              </FormRow>
               <FormRow>
                 <Field name="issuedOn" label="Émis le">
                   <Input name="issuedOn" type="date" defaultValue={cert?.issuedOn ?? ''} />

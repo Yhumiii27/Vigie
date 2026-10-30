@@ -234,6 +234,10 @@ async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
         .innerJoin(t.workUnits, eq(t.workUnits.id, t.risks.unitId)).where(eq(t.risks.id, num))) : null;
     case 'waste_entry':
       return Number.isInteger(num) ? one(db.select({ siteId: t.wasteEntries.siteId }).from(t.wasteEntries).where(eq(t.wasteEntries.id, num))) : null;
+    // AUD-22 (paquet 13) : rapport d'un audit du programme, certificat d'un référentiel (null : commun à l'entreprise).
+    case 'audit_plan_item':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.auditPlanItems.siteId }).from(t.auditPlanItems).where(eq(t.auditPlanItems.id, num))) : null;
+    case 'certification': return one(db.select({ siteId: t.certifications.siteId }).from(t.certifications).where(eq(t.certifications.id, row.entityId)));
     default: return null;
   }
 }

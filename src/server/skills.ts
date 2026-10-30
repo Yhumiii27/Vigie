@@ -2,16 +2,17 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { canApprove, canEdit, isClosedActionStatus } from '@/lib/domain';
+import { TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, canApprove, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
-import { prerequisiteCycle } from '@/components/skills/rules';
+import { prerequisiteCycle } from '@/lib/rules/skills';
+import { nextSort } from '@/lib/sort-order';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
 // Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
@@ -39,11 +40,7 @@ const requirementKey = (personId: string, titleId: string) => `${personId}|${tit
  * Saisie réservée aux rôles qui ont accès à l'écran « Habilitations et formations » (hors salariés et lecture seule) :
  * le chef de projet saisit ailleurs mais n'a pas cet écran, il ne modifie rien ici.
  */
-async function requireSkillsEditor() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  return canEdit(session.role, 'skills') ? { session, error: null } : { session, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireSkillsEditor = () => requireEditor('skills');
 
 /** Refus d'une modification des titres suivis hors QHSE (HAB-12). */
 const TITLES_RESERVED = "Titres suivis communs à tous les sites : réservés à l'animateur QHSE et à la direction.";
@@ -192,6 +189,48 @@ export async function cancelQualification(_prev: FormState, fd: FormData): Promi
   });
   done();
   return { ok: true };
+}
+
+/**
+ * HAB-13 : évaluation à froid de l'efficacité d'une formation (ISO 45001 §7.2 d, ISO 9001 §7.2 c) — résultat, date (au plus
+ * tôt l'obtention, au plus tard aujourd'hui) et constat (obligatoire si la formation n'est pas jugée efficace). Une nouvelle
+ * évaluation remplace la précédente, gardée au journal de la formation. Formation non annulée, salarié présent, titre actif,
+ * site du salarié (frozenReason) ; rôles qui saisissent les habilitations.
+ */
+export async function evaluateTrainingEffectiveness(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireSkillsEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const effectiveness = f.oneOf('effectiveness', TRAINING_EFFECTIVENESS_KEYS, { required: true });
+  const effectivenessOn = f.date('effectivenessOn', { required: true });
+  const effectivenessNote = f.str('effectivenessNote', { max: 500 }) || null;
+  if (effectiveness && effectiveness !== 'efficace' && !effectivenessNote) f.fail('effectivenessNote', 'Précisez le constat (écarts observés, suite donnée).');
+  if (effectivenessOn && effectivenessOn > today()) f.fail('effectivenessOn', "Date postérieure à aujourd'hui.");
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const row = await findQualification(db, id!);
+  if (!row) return { error: 'Formation introuvable.' };
+  if (row.q.cancelledAt) return { error: 'Formation annulée : elle ne peut plus être évaluée.' };
+  const blocked = await frozenReason(row);
+  if (blocked) return { error: blocked };
+  if (effectivenessOn! < row.q.obtainedOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { effectivenessOn: "L'évaluation suit l'obtention de la formation." } };
+  const label = (k: string | null) => (k ? TRAINING_EFFECTIVENESS[k as keyof typeof TRAINING_EFFECTIVENESS]?.label ?? k : null);
+  const values = { effectiveness: effectiveness!, effectivenessOn: effectivenessOn!, effectivenessNote, effectivenessById: session.user.id };
+  await db.transaction(async (tx) => {
+    await tx.update(t.qualifications).set(values).where(eq(t.qualifications.id, row.q.id));
+    await logChange(tx, {
+      entityType: 'qualification', entityId: row.q.id, action: 'evaluate', byId: session.user.id,
+      summary: `Efficacité de la formation du ${fmtDate(row.q.obtainedOn)} évaluée le ${fmtDate(values.effectivenessOn)} : ${label(values.effectiveness)}`,
+      details: diffFields(
+        { effectiveness: label(row.q.effectiveness), effectivenessOn: row.q.effectivenessOn ? fmtDate(row.q.effectivenessOn) : null, effectivenessNote: row.q.effectivenessNote },
+        { effectiveness: label(values.effectiveness), effectivenessOn: fmtDate(values.effectivenessOn), effectivenessNote },
+        { effectiveness: 'Efficacité', effectivenessOn: 'Évaluée le', effectivenessNote: 'Constat' },
+      ),
+    });
+  });
+  done();
+  return { ok: true, id: String(row.q.id) };
 }
 
 /** Ajoute des attestations à une formation (non annulée, salarié présent, titre actif). */
@@ -366,7 +405,7 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
   const blocked = await requireInSite(siteId, { create: true });
   if (blocked) return { error: blocked };
   const newId = randomUUID();
-  const sort = Math.max(-1, ...people.map((p) => p.sort)) + 1;
+  const sort = nextSort(people);
   await db.transaction(async (tx) => {
     await tx.insert(t.people).values({ id: newId, ...values, sort });
     await logChange(tx, { entityType: 'person', entityId: newId, action: 'create', summary: 'Salarié ajouté' });
@@ -447,6 +486,10 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const prerequisitesField = fd.has('prerequisitesField');
   const prerequisiteIds = [...new Set(f.list('prerequisiteIds'))];
   const scopeLabel = f.str('scopeLabel', { max: 60 }) || null;
+  // HAB-13 : action de sensibilisation (§7.3) plutôt que formation qualifiante ; lue si le formulaire porte le champ.
+  const awarenessField = fd.has('awarenessField');
+  // AUD-27 : titre qui qualifie un auditeur interne ; lu si le formulaire porte le champ.
+  const auditorField = fd.has('internalAuditorField');
   if (prerequisitesField) {
     const active = new Map(titles.filter((x) => !x.archivedAt).map((x) => [x.id, x]));
     if (prerequisiteIds.some((p) => p === id)) f.fail('prerequisiteIds', 'Un titre ne peut pas être son propre prérequis.');
@@ -468,6 +511,8 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
     const firstAid = firstAidField ? f.bool('firstAid') : prev.firstAid;
     const prereq = prerequisitesField ? prerequisiteIds : prev.prerequisiteIds ?? [];
     const scope = prerequisitesField ? scopeLabel : prev.scopeLabel;
+    const awareness = awarenessField ? f.bool('awareness') : prev.awareness;
+    const internalAuditor = auditorField ? f.bool('internalAuditor') : prev.internalAuditor;
     const labelOf = (ids: readonly string[]) => ids.map((x) => titles.find((ti) => ti.id === x)?.label ?? x).join(', ') || null;
     const details = [
       ...(prev.label !== label ? [{ field: 'Intitulé', from: prev.label, to: label }] : []),
@@ -475,19 +520,23 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
       ...(prev.firstAid !== firstAid ? [{ field: 'Secourisme', from: prev.firstAid ? 'oui' : 'non', to: firstAid ? 'oui' : 'non' }] : []),
       ...(labelOf(prev.prerequisiteIds ?? []) !== labelOf(prereq) ? [{ field: 'Prérequis', from: labelOf(prev.prerequisiteIds ?? []), to: labelOf(prereq) }] : []),
       ...((prev.scopeLabel ?? null) !== scope ? [{ field: 'Catégories ou niveaux', from: prev.scopeLabel, to: scope }] : []),
+      ...(prev.awareness !== awareness ? [{ field: 'Sensibilisation', from: prev.awareness ? 'oui' : 'non', to: awareness ? 'oui' : 'non' }] : []),
+      ...(prev.internalAuditor !== internalAuditor ? [{ field: 'Auditeur interne', from: prev.internalAuditor ? 'oui' : 'non', to: internalAuditor ? 'oui' : 'non' }] : []),
     ];
     await db.transaction(async (tx) => {
-      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope }).where(eq(t.trainingTitles.id, id));
+      await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope, awareness, internalAuditor }).where(eq(t.trainingTitles.id, id));
       await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
     });
     done();
     return { ok: true, id };
   }
   const newId = uniqueId(titleSlug(label), new Set(titles.map((x) => x.id)), '-');
-  const sort = Math.max(-1, ...titles.map((x) => x.sort)) + 1;
+  const sort = nextSort(titles);
   const firstAid = firstAidField && f.bool('firstAid');
+  const awareness = awarenessField && f.bool('awareness');
+  const internalAuditor = auditorField && f.bool('internalAuditor');
   await db.transaction(async (tx) => {
-    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid, prerequisiteIds: prerequisitesField ? prerequisiteIds : [], scopeLabel: prerequisitesField ? scopeLabel : null });
+    await tx.insert(t.trainingTitles).values({ id: newId, label, validityMonths: validityMonths!, sort, firstAid, awareness, internalAuditor, prerequisiteIds: prerequisitesField ? prerequisiteIds : [], scopeLabel: prerequisitesField ? scopeLabel : null });
     await logChange(tx, { entityType: 'training_title', entityId: newId, action: 'create', summary: `Titre « ${label} » ajouté${firstAid ? ' (secourisme)' : ''}` });
   });
   done();
@@ -537,4 +586,36 @@ export async function restoreTitle(_prev: FormState, fd: FormData): Promise<Form
   });
   done();
   return { ok: true, id };
+}
+
+/**
+ * HAB-15 : déplace un titre suivi d'un rang vers la gauche (« up ») ou la droite (« down ») dans les colonnes de la matrice,
+ * parmi les titres en vigueur (les titres archivés gardent leur rang) ; service QHSE et direction (requireTitlesEditor,
+ * HAB-12), commun à tous les sites. Renumérotation 0..n-1 dans la transaction, inscrite au journal du titre.
+ */
+export async function moveTitle(id: string, dir: 'up' | 'down'): Promise<{ error?: string }> {
+  const { error } = await requireTitlesEditor();
+  if (error) return { error };
+  if (typeof id !== 'string' || !id || (dir !== 'up' && dir !== 'down')) return { error: 'Titre introuvable.' };
+  const db = await getDb();
+  const result = await db.transaction(async (tx) => {
+    const scope = await tx.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, sort: t.trainingTitles.sort }).from(t.trainingTitles)
+      .where(isNull(t.trainingTitles.archivedAt)).orderBy(asc(t.trainingTitles.sort), asc(t.trainingTitles.id));
+    const i = scope.findIndex((x) => x.id === id);
+    if (i < 0) return { error: 'Titre introuvable ou archivé.' };
+    const j = dir === 'up' ? i - 1 : i + 1;
+    if (j < 0 || j >= scope.length) return { moved: false };
+    const title = scope[i];
+    const neighbour = scope[j];
+    [scope[i], scope[j]] = [scope[j], scope[i]];
+    for (const [n, x] of scope.entries()) if (x.sort !== n) await tx.update(t.trainingTitles).set({ sort: n }).where(eq(t.trainingTitles.id, x.id));
+    await logChange(tx, {
+      entityType: 'training_title', entityId: id, action: 'move',
+      summary: `Titre « ${title.label} » placé ${dir === 'up' ? 'avant' : 'après'} « ${neighbour.label} » dans la matrice`,
+    });
+    return { moved: true };
+  });
+  if ('error' in result) return { error: result.error };
+  if (result.moved) done();
+  return {};
 }

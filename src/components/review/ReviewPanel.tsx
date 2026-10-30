@@ -183,6 +183,9 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           <div style={{ display: 'grid', gap: 4, fontSize: 12.5 }}>
             <div><span style={muted}>Participants · </span>{[...review.participants, review.externalParticipants].filter(Boolean).join(', ') || '—'}</div>
             {review.minutes && <div style={{ color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{review.minutes}</div>}
+            {/* AUD-35 : perception des clients (§9.3.2 c1) et besoins en ressources (§9.3.3 c) saisis au compte rendu. */}
+            {review.customerPerception && <div style={{ whiteSpace: 'pre-line', textWrap: 'pretty' }}><span style={muted}>Perception des clients · </span>{review.customerPerception}</div>}
+            {review.resourceNeeds && <div style={{ whiteSpace: 'pre-line', textWrap: 'pretty' }}><span style={muted}>Besoins en ressources · </span>{review.resourceNeeds}</div>}
             {review.closedOn && <div style={muted}>Visa de la direction : {review.closedBy ?? '—'} le {fmtDate(review.closedOn)}</div>}
           </div>
         )}

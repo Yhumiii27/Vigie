@@ -5,11 +5,12 @@ import { ActionForm, Checkbox, Field, FormRow, Input, Select } from './form';
 import { ReasonButton, ReasonForm } from './ReasonDialog';
 import { Dialog } from './Dialog';
 import { LazyChangeLog } from './LazyChangeLog';
-import { SEVESO_LEVELS } from './prevention/model';
+import { SEVESO_LEVELS } from '@/lib/rules/prevention';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
 import { TipButton } from '@/components/Tip';
+import { withCurrent } from '@/lib/form-options';
 
 export type { SiteAdminRow };
 
@@ -23,8 +24,7 @@ const sevesoLabel = (v: string | null) => SEVESO_LEVELS.find(([k]) => k === v)?.
 
 /** Champ « Responsable QHSE » d'un site (création, modification, amorçage) : vide = poste vacant. */
 export function QhseLeadField({ options, current }: { options: readonly Option[]; current?: Pick<SiteAdminRow, 'qhseLeadId' | 'qhseLead'> }) {
-  const list = current?.qhseLeadId && !options.some(([v]) => v === current.qhseLeadId)
-    ? [...options, [current.qhseLeadId, current.qhseLead ?? current.qhseLeadId] as const] : options;
+  const list = withCurrent(options, current?.qhseLeadId, current?.qhseLead);
   return (
     <Field name="qhseLeadId" label="Responsable QHSE" hint="Destinataire des alertes du site ; vacant : alertes aux animateurs QHSE.">
       <Select name="qhseLeadId" options={[['', 'À désigner'], ...list]} defaultValue={current?.qhseLeadId ?? ''} />

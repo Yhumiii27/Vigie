@@ -5,10 +5,14 @@ import { and, desc, eq, isNull, max, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS, canSee } from '@/lib/domain';
+import {
+  CONTROL_CATEGORIES, CONTROL_CATEGORY_KEYS, CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS,
+  REQUIREMENT_REVIEW_MAX, REQUIREMENT_REVIEW_MONTHS, SAFETY_NOTICE_KINDS, SAFETY_NOTICE_KIND_KEYS, controlResultsFor,
+} from '@/lib/domain';
+import { nextEntityReference } from './references';
 import { currentEvaluation, equipmentCodeError, legalTextUrlError, normalizeEquipmentCode } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
@@ -19,12 +23,7 @@ const ARCHIVED_REQ = 'Exigence archivée : restaurez-la pour la modifier.';
 const ARCHIVED_CTRL = 'Contrôle archivé : restaurez-le pour le modifier.';
 
 /** Saisie réservée aux rôles qui modifient et ont accès à l'écran « Veille et contrôles ». */
-async function requireWatchManager() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  if (!canSee(session.role, 'watch')) return { session, error: 'Votre rôle ne permet pas cette modification.' };
-  return { session, error: null };
-}
+const requireWatchManager = () => requireEditor('watch');
 
 /** Personne choisie (pilote, responsable) : présente ou sortie de l'effectif (`leftOn`), undefined si inconnue. */
 async function findPerson(id: string) {
@@ -54,7 +53,7 @@ const REQ_LABELS = {
   text: 'Texte', domain: 'Domaine', summary: "Ce qu'il exige", dueOn: 'Échéance', dueNote: "Note d'échéance", evaluation: 'Évaluation',
   evaluationNote: 'Précision', pilotId: 'Pilote', impact: 'Impact', keystoneProjects: 'Projets Keystone (surcharge)',
   affectsProjects: 'Concerne les projets Keystone', featured: 'À la une', siteIds: 'Sites concernés', legifranceUrl: 'Lien vers le texte',
-  linkedTo: 'Indicateur rattaché',
+  linkedTo: 'Indicateur rattaché', reviewMonths: 'Réévaluation tous les (mois)', certificationId: 'Certification rattachée',
 } as const;
 
 /**
@@ -103,11 +102,27 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
   // VEI-07 : indicateur calculé rattaché explicitement (liste fermée, vide = aucun) ; absent du formulaire : conservé.
   const linkedToField = fd.has('linkedToField');
   const linkedTo = linkedToField ? f.oneOf('linkedTo', REQUIREMENT_LINK_KEYS) ?? null : current?.linkedTo ?? null;
-  if (linkedToField && linkedTo && linkedTo !== current?.linkedTo) {
+  // VEI-12 : certification rattachée (indicateur « certification » seulement), une exigence en vigueur par certification.
+  const certificationId = linkedTo !== 'certification' ? null
+    : linkedToField ? f.opt('certificationId') : current?.certificationId ?? null;
+  if (linkedToField && linkedTo === 'certification') {
+    if (!certificationId) f.fail('certificationId', 'Choisissez la certification dont l’exigence reprend l’état.');
+    else {
+      const [cert] = await db.select({ id: t.certifications.id }).from(t.certifications).where(eq(t.certifications.id, certificationId));
+      if (!cert) f.fail('certificationId', 'Certification inconnue.');
+      else if (certificationId !== current?.certificationId) {
+        const [taken] = await db.select({ id: t.requirements.id, text: t.requirements.text }).from(t.requirements)
+          .where(and(eq(t.requirements.certificationId, certificationId), isNull(t.requirements.archivedAt), id ? ne(t.requirements.id, id) : undefined));
+        if (taken) f.fail('certificationId', `Certification déjà rattachée à l'exigence « ${taken.text} » : détachez-la d'abord.`);
+      }
+    }
+  } else if (linkedToField && linkedTo && linkedTo !== current?.linkedTo) {
     const [taken] = await db.select({ id: t.requirements.id, text: t.requirements.text }).from(t.requirements)
       .where(and(eq(t.requirements.linkedTo, linkedTo), isNull(t.requirements.archivedAt), id ? ne(t.requirements.id, id) : undefined));
     if (taken) f.fail('linkedTo', `Indicateur déjà rattaché à l'exigence « ${taken.text} » : détachez-le d'abord.`);
   }
+  // VEI-18 : périodicité de réévaluation propre à l'exigence (vide = 12 mois) ; champ absent du formulaire : conservée.
+  const reviewMonths = fd.has('reviewMonths') ? f.int('reviewMonths', { min: 1, max: REQUIREMENT_REVIEW_MAX }) ?? null : current?.reviewMonths ?? null;
   if (siteIdsField) {
     const known = new Set((await db.select({ id: t.sites.id, archivedAt: t.sites.archivedAt }).from(t.sites)).filter((s) => !s.archivedAt || current?.siteIds?.includes(s.id)).map((s) => s.id));
     const before = [...(current?.siteIds ?? [])].sort().join(',');
@@ -120,7 +135,7 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
 
   const values = {
     text, domain, summary, dueOn, dueNote, evaluation: evaluation!, evaluationNote, pilotId, impact, affectsProjects, keystoneProjects, featured,
-    siteIds: sitesOf, legifranceUrl: linkOf, linkedTo,
+    siteIds: sitesOf, legifranceUrl: linkOf, linkedTo, certificationId, reviewMonths,
   };
   const evalRow = (requirementId: number) => ({ requirementId, evaluatedOn: now, evaluation: values.evaluation, note: evaluationNote, evaluatedById: session.user.id });
 
@@ -131,9 +146,12 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
     const siteNames = new Map((await db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label.split(' — ')[0]]));
     const showSites = (ids: string[] | null | undefined) => (ids?.length ? ids.map((x) => siteNames.get(x) ?? x).join(', ') : 'Tous les sites');
     const linkLabel = (k: string | null) => (k ? REQUIREMENT_LINKS[k as keyof typeof REQUIREMENT_LINKS]?.label ?? k : null);
+    const certNames = new Map((await db.select({ id: t.certifications.id, standard: t.certifications.standard }).from(t.certifications)).map((c) => [c.id, c.standard]));
+    const certLabel = (k: string | null) => (k ? certNames.get(k) ?? k : null);
+    const months = (n: number | null) => (n == null ? `${REQUIREMENT_REVIEW_MONTHS} (par défaut)` : String(n));
     const details = diffFields(
-      { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds), linkedTo: linkLabel(current.linkedTo) },
-      { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds), linkedTo: linkLabel(values.linkedTo) }, REQ_LABELS, fmtLog,
+      { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds), linkedTo: linkLabel(current.linkedTo), certificationId: certLabel(current.certificationId), reviewMonths: months(current.reviewMonths) },
+      { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds), linkedTo: linkLabel(values.linkedTo), certificationId: certLabel(values.certificationId), reviewMonths: months(values.reviewMonths) }, REQ_LABELS, fmtLog,
     );
     await db.transaction(async (tx) => {
       if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, current.id)));
@@ -306,7 +324,7 @@ export async function restoreRequirement(_prev: FormState, fd: FormData): Promis
 const CTRL_LABELS = {
   equipment: 'Équipement', controlType: 'Type de contrôle', periodMonths: 'Périodicité (mois)', organization: 'Organisme',
   responsibleId: 'Responsable', siteId: 'Site', lastOn: 'Dernier contrôle', nextOn: 'Prochain contrôle', reserves: 'Réserves',
-  requirementId: 'Exigence', equipmentCode: 'Code équipement',
+  requirementId: 'Exigence', equipmentCode: 'Code équipement', category: 'Nature', tolerance: 'Tolérance (EMT)',
 } as const;
 
 const RECORD_TO_CHANGE = 'Modifié par « Enregistrer un contrôle » (ou l’annulation d’un enregistrement) : le changement est alors tracé dans l’historique.';
@@ -348,6 +366,9 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
   const equipmentCode = before && !fd.has('equipmentCode') ? before.equipmentCode : normalizeEquipmentCode(f.opt('equipmentCode'));
   const codeError = equipmentCodeError(equipmentCode);
   if (codeError) f.fail('equipmentCode', codeError);
+  // VEI-14 : nature du contrôle (vérification réglementaire ou étalonnage) et tolérance ; champs absents : valeurs conservées.
+  const category = fd.has('category') ? f.oneOf('category', CONTROL_CATEGORY_KEYS) ?? 'reglementaire' : before?.category ?? 'reglementaire';
+  const tolerance = fd.has('tolerance') ? f.str('tolerance', { max: 120 }) || null : before?.tolerance ?? null;
   const lastOn = before && !fd.has('lastOn') ? before.lastOn : f.date('lastOn', { required: true });
   let nextOn = f.date('nextOn');
   const reserves = before && !fd.has('reserves') ? before.reserves : f.str('reserves', { max: 160 }) || null;
@@ -375,10 +396,14 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
     if (!f.ok) return f.state();
   }
 
-  const values = { equipment, equipmentCode, controlType, periodMonths: periodMonths!, organization, responsibleId, siteId, requirementId, lastOn: lastOn!, nextOn: nextOn!, reserves };
+  const values = { equipment, equipmentCode, controlType, periodMonths: periodMonths!, organization, responsibleId, siteId, requirementId, lastOn: lastOn!, nextOn: nextOn!, reserves, category, tolerance };
   let savedId = id;
   if (before) {
-    const details = diffFields(await withNames(before, ['responsibleId']), await withNames({ ...before, ...values }, ['responsibleId']), CTRL_LABELS, fmtLog);
+    const cat = (k: string) => CONTROL_CATEGORIES[k as keyof typeof CONTROL_CATEGORIES]?.short ?? k;
+    const details = diffFields(
+      { ...(await withNames(before, ['responsibleId'])), category: cat(before.category) },
+      { ...(await withNames({ ...before, ...values }, ['responsibleId'])), category: cat(values.category) }, CTRL_LABELS, fmtLog,
+    );
     await db.transaction(async (tx) => {
       await tx.update(t.controls).set(values).where(eq(t.controls.id, before.id));
       if (details.length) await logChange(tx, { entityType: 'control', entityId: before.id, action: 'update', summary: 'Contrôle modifié', details });
@@ -411,12 +436,52 @@ async function logControlDetach(tx: DbOrTx | null, control: { id: number; contro
   });
 }
 
+/** Réponse de recordControl : `notice` quand la non-conformité d'un étalonnage hors tolérance n'a pas pu être ouverte d'office. */
+export type RecordControlState = FormState & { notice?: string; eventId?: string };
+
+/**
+ * VEI-14 : non-conformité ouverte par un étalonnage hors tolérance (ISO 9001 §7.1.5.2 : évaluer la validité des résultats
+ * de mesure antérieurs) — événement NC à l'étape « Déclaré », rattaché à l'équipement (events.control_id) et à
+ * l'enregistrement (control_records.event_id), déclaré par la personne qui saisit le contrôle ; journal de l'événement et du
+ * contrôle dans la même transaction. Équipement commun à tous les sites (sans site) : aucune NC d'office (un événement porte
+ * un site), `notice` invite à la déclarer.
+ */
+async function openOutOfToleranceNc(
+  control: typeof t.controls.$inferSelect, record: { id: number; performedOn: string; organization: string; notes: string | null },
+  user: { id: string; name: string },
+): Promise<string | null> {
+  if (!control.siteId) return null;
+  const db = await getDb();
+  const siteId = control.siteId;
+  return db.transaction(async (tx) => {
+    const id = await nextEntityReference(tx, 'event', `EV-${today().slice(0, 4)}-`);
+    const equipment = control.equipment.split(' — ')[0];
+    await tx.insert(t.events).values({
+      id, siteId, type: 'NC', step: 0, severity: 2, anonymous: false,
+      title: `Équipement de mesure hors tolérance — ${equipment}`.slice(0, 160),
+      occurredOn: record.performedOn, location: control.equipment.slice(0, 120),
+      declarant: user.name, declarantId: user.id, controlId: control.id, equipment: control.equipment.slice(0, 160),
+      isoClause: '7.1.5 Monitoring and measuring resources',
+      description: [
+        `${control.controlType} du ${fmtDate(record.performedOn)} par ${record.organization} : résultat hors tolérance${control.tolerance ? ` (tolérance : ${control.tolerance})` : ''}.`,
+        record.notes ?? '',
+        'Évaluer la validité des mesures réalisées depuis le dernier étalonnage conforme et décider du traitement (ISO 9001 §7.1.5.2).',
+      ].filter(Boolean).join('\n'),
+    });
+    await tx.update(t.controlRecords).set({ eventId: id }).where(eq(t.controlRecords.id, record.id));
+    await logChange(tx, { entityType: 'event', entityId: id, action: 'create', byId: user.id, summary: `Non-conformité ouverte par l'étalonnage hors tolérance du ${fmtDate(record.performedOn)} (${equipment})` });
+    await logChange(tx, { entityType: 'control', entityId: control.id, action: 'link', byId: user.id, summary: `Non-conformité ${id} ouverte : étalonnage hors tolérance du ${fmtDate(record.performedOn)}` });
+    return id;
+  });
+}
+
 /**
  * Enregistre un contrôle réalisé (historique + rapport joint). S'il est le plus récent,
  * il met à jour le contrôle : dernier = date, prochain = date + périodicité, réserves (l'état précédent est conservé
  * sur l'enregistrement pour pouvoir l'annuler). De nouvelles réserves détachent l'action de levée des précédentes.
+ * Résultat proposé selon la nature du contrôle (controlResultsFor) ; un étalonnage hors tolérance ouvre une NC (VEI-14).
  */
-export async function recordControl(_prev: FormState, fd: FormData): Promise<FormState> {
+export async function recordControl(_prev: FormState, fd: FormData): Promise<RecordControlState> {
   const { session, error } = await requireWatchManager();
   if (error) return { error };
   const f = formReader(fd);
@@ -436,6 +501,9 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
 
   const { control, error: ctrlError } = await loadControlForEdit(controlId!);
   if (!control) return { error: ctrlError };
+  if (result && !controlResultsFor(control.category).includes(result)) {
+    return { error: 'Certains champs sont à corriger.', fieldErrors: { result: `Résultat non proposé pour un contrôle « ${CONTROL_CATEGORIES[control.category as keyof typeof CONTROL_CATEGORIES]?.short ?? control.category} ».` } };
+  }
   const db = await getDb();
   const latest = performedOn! >= control.lastOn;
   // Réserves différentes : « Lever les réserves » réapparaît, l'ancienne action reste dans le plan d'actions.
@@ -476,6 +544,14 @@ export async function recordControl(_prev: FormState, fd: FormData): Promise<For
   // Nouvelles réserves : l'action de levée des précédentes est détachée du contrôle (elle reste au plan) ; son historique
   // le trace (ACT-03), une fois l'enregistrement définitif (rapport stocké).
   if (control.actionId && actionId !== control.actionId) await logControlDetach(null, control, control.actionId, `nouvelles réserves au contrôle du ${fmtDate(performedOn!)}`, session.user.id);
+  // VEI-14 : étalonnage hors tolérance → non-conformité (après le rapport stocké : l'enregistrement est définitif).
+  if (result === 'hors_tolerance') {
+    const eventId = await openOutOfToleranceNc(control, { id: recordId, performedOn: performedOn!, organization, notes }, session.user);
+    revalidatePath('/', 'layout');
+    return eventId
+      ? { ok: true, id: String(recordId), eventId, notice: `Contrôle enregistré · non-conformité ${eventId} ouverte (étalonnage hors tolérance).` }
+      : { ok: true, id: String(recordId), notice: 'Contrôle enregistré · équipement commun à tous les sites : déclarez la non-conformité depuis l’écran Événements.' };
+  }
   revalidatePath('/', 'layout');
   return { ok: true, id: String(recordId) };
 }
@@ -576,4 +652,128 @@ export async function cancelControlRecord(_prev: FormState, fd: FormData): Promi
   revalidatePath('/', 'layout');
   const res: CancelRecordState = { ok: true, id: String(record.id), notice: fixesState && !next ? 'Aucun autre enregistrement : état du contrôle à corriger dans la fiche.' : undefined };
   return res;
+}
+
+// ─── Registre de sécurité : observations et mises en demeure (VEI-15) ───────
+
+const NOTICE_LABELS = {
+  kind: 'Nature', receivedOn: 'Reçue le', authority: 'Émetteur', reference: 'Référence', text: 'Objet', dueOn: 'Délai de réponse', controlId: 'Équipement',
+} as const;
+const CANCELLED_NOTICE = 'Observation annulée : elle reste au registre en consultation seule.';
+
+/** Observation ou mise en demeure chargée pour une écriture : existante, du périmètre (site), non annulée. */
+async function loadNoticeForEdit(id: number) {
+  const db = await getDb();
+  const [notice] = await db.select().from(t.safetyNotices).where(eq(t.safetyNotices.id, id));
+  if (!notice) return { notice: null, error: 'Observation introuvable.' };
+  const siteError = await requireInSite(notice.siteId);
+  if (siteError) return { notice: null, error: siteError };
+  if (notice.cancelledAt) return { notice: null, error: CANCELLED_NOTICE };
+  return { notice, error: null };
+}
+
+/**
+ * Inscrit ou modifie une observation ou une mise en demeure au registre de sécurité du site (L. 4711-1) : émetteur
+ * (inspection du travail, CARSAT, organisme), date de réception, objet, délai de réponse, équipement concerné (contrôle du
+ * même site, facultatif). Encadrement qui saisit la veille ; site du périmètre (`requireInSite`, création ou changement de
+ * site). Journal `safety_notice` dans la transaction.
+ */
+export async function saveSafetyNotice(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireWatchManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { min: 1 });
+  const kind = f.oneOf('kind', SAFETY_NOTICE_KIND_KEYS, { required: true });
+  const siteId = f.str('siteId', { required: true });
+  const receivedOn = f.date('receivedOn', { required: true });
+  const authority = f.str('authority', { required: true, max: 120 });
+  const reference = f.str('reference', { max: 60 }) || null;
+  const text = f.str('text', { required: true, max: 2000 });
+  const dueOn = f.date('dueOn');
+  const controlId = f.int('controlId', { min: 1 });
+  if (receivedOn && receivedOn > today()) f.fail('receivedOn', 'Date de réception postérieure à aujourd’hui.');
+  if (receivedOn && dueOn && dueOn < receivedOn) f.fail('dueOn', 'Le délai de réponse suit la réception.');
+  if (!f.ok) return f.state();
+
+  const before = id ? await loadNoticeForEdit(id) : null;
+  if (before?.error) return { error: before.error };
+  const current = before?.notice ?? null;
+  if (!current || current.siteId !== siteId) {
+    const siteError = await requireInSite(siteId, { create: true });
+    if (siteError) return { error: siteError, fieldErrors: { siteId: 'Site non autorisé.' } };
+  }
+  const db = await getDb();
+  if (controlId && controlId !== current?.controlId) {
+    const [ctrl] = await db.select({ siteId: t.controls.siteId, archivedAt: t.controls.archivedAt }).from(t.controls).where(eq(t.controls.id, controlId));
+    if (!ctrl || (ctrl.siteId && ctrl.siteId !== siteId)) f.fail('controlId', 'Équipement inconnu sur ce site.');
+    else if (ctrl.archivedAt) f.fail('controlId', 'Équipement réformé : choisissez un contrôle en service.');
+    if (!f.ok) return f.state();
+  }
+  const values = { kind: kind!, siteId, receivedOn: receivedOn!, authority, reference, text, dueOn, controlId };
+  const kindLabel = SAFETY_NOTICE_KINDS[values.kind].label;
+  let savedId = id;
+  if (current) {
+    const label = (k: string) => SAFETY_NOTICE_KINDS[k as keyof typeof SAFETY_NOTICE_KINDS]?.label ?? k;
+    const details = diffFields({ ...current, kind: label(current.kind) }, { ...current, ...values, kind: label(values.kind) }, NOTICE_LABELS, fmtLog);
+    await db.transaction(async (tx) => {
+      await tx.update(t.safetyNotices).set(values).where(eq(t.safetyNotices.id, current.id));
+      if (details.length) await logChange(tx, { entityType: 'safety_notice', entityId: current.id, action: 'update', byId: session.user.id, summary: `${kindLabel} modifiée`, details });
+    });
+  } else {
+    savedId = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(t.safetyNotices).values({ ...values, createdById: session.user.id }).returning({ id: t.safetyNotices.id });
+      await logChange(tx, { entityType: 'safety_notice', entityId: row.id, action: 'create', byId: session.user.id, summary: `${kindLabel} (${authority}) inscrite au registre de sécurité` });
+      return row.id;
+    });
+  }
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(savedId) };
+}
+
+/**
+ * Réponse apportée à une observation ou une mise en demeure (mise en conformité, courrier de réponse) : date et texte
+ * obligatoires ; une nouvelle réponse remplace la précédente, l'ancienne reste au journal.
+ */
+export async function answerSafetyNotice(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireWatchManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const answeredOn = f.date('answeredOn', { required: true });
+  const answer = f.str('answer', { required: true, max: 2000 });
+  if (answeredOn && answeredOn > today()) f.fail('answeredOn', 'Date postérieure à aujourd’hui.');
+  if (!f.ok) return f.state();
+  const { notice, error: noticeError } = await loadNoticeForEdit(id!);
+  if (!notice) return { error: noticeError };
+  if (answeredOn! < notice.receivedOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { answeredOn: 'La réponse suit la réception.' } };
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.update(t.safetyNotices).set({ answeredOn, answer, answeredById: session.user.id }).where(eq(t.safetyNotices.id, notice.id));
+    await logChange(tx, {
+      entityType: 'safety_notice', entityId: notice.id, action: 'answer', byId: session.user.id,
+      summary: `Réponse du ${fmtDate(answeredOn!)} enregistrée`,
+      details: diffFields(notice, { answeredOn, answer }, { answeredOn: 'Réponse le', answer: 'Réponse' }, fmtLog),
+    });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(notice.id) };
+}
+
+/** Annule une observation saisie par erreur (motif obligatoire, jamais supprimée) : animateur QHSE et direction. */
+export async function cancelSafetyNotice(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const { notice, error: noticeError } = await loadNoticeForEdit(id!);
+  if (!notice) return { error: noticeError };
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.update(t.safetyNotices).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.safetyNotices.id, notice.id));
+    await logChange(tx, { entityType: 'safety_notice', entityId: notice.id, action: 'cancel', byId: session.user.id, reason, summary: `${SAFETY_NOTICE_KINDS[notice.kind as keyof typeof SAFETY_NOTICE_KINDS]?.label ?? 'Observation'} annulée` });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(notice.id) };
 }

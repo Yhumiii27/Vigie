@@ -6,7 +6,7 @@ import { Dialog } from '@/components/Dialog';
 import { ToneTag } from '@/components/ui';
 import { RISK_ACTION_THRESHOLD, RISK_FLAGS, TONE } from '@/lib/domain';
 import type { ActionFormOptions } from '@/lib/action-view';
-import type { RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
+import type { MeasureOptions, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { Cotation } from './RiskForm';
 import { RiskSheet, actionColor, riskSheetHeading, type RiskSheetView } from './RiskSheet';
 import { Tip, TipText } from '@/components/Tip';
@@ -32,7 +32,7 @@ export function rowOpener(open: () => void) {
 type OpenState = { id: number; view: RiskSheetView; direct?: boolean };
 
 /** Tableau des risques de l'unité ; un clic sur une ligne ouvre la fiche du risque (lecture pour tous, modification pour l'encadrement). */
-export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, initialRiskId }: {
+export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, showEvents = true, showHistory = true, options, linkableActions, measureOptions, initialRiskId }: {
   rows: RiskView[];
   unit: Unit;
   units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[];
@@ -45,6 +45,8 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
   showHistory?: boolean;
   options: ActionFormOptions;
   linkableActions: RisksData['linkableActions'];
+  /** DUE-19 : éléments proposés comme mesure de maîtrise (rôles qui modifient le DUERP). */
+  measureOptions?: MeasureOptions;
   /** Lien profond ?risque=<id> : fiche ouverte au chargement. */
   initialRiskId?: number;
 }) {
@@ -64,8 +66,14 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
         <thead><tr><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Mesures existantes</th><th>Risque résiduel</th><th>Actions</th></tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} {...rowOpener(() => show(r))}>
-              <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{r.hazard}</td>
+            // DUE-16 : la ligne reste cliquable à la souris ; au clavier et pour les lecteurs d'écran, le danger est un bouton
+            // nommé qui ouvre la fiche (plus de ligne focalisable sans rôle).
+            <tr key={r.id} className="is-clickable" onClick={(e) => { if (!fromControl(e) && !selectingText()) show(r); }}>
+              <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <button type="button" className="vg-text-btn" style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit', textAlign: 'left' }} onClick={() => show(r)}>
+                  {r.hazard}<span className="vg-sr-only"> : ouvrir la fiche du risque</span>
+                </button>
+              </td>
               <td style={{ color: 'var(--color-neutral-300)' }}>{r.situation}</td>
               <td><Cotation g={r.gravity} p={r.probability} /></td>
               <td style={{ color: 'var(--color-neutral-300)' }}>{r.existingMeasures || '—'}</td>
@@ -105,7 +113,7 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
       <Dialog open={!!current} onClose={close} title={heading?.title ?? ''} kicker={heading?.kicker} width={open?.view === 'newAction' ? 560 : 640}>
         {current && open && (
           <RiskSheet key={`${current.id}:${open.view}`} risk={current} unit={unit} units={units} canManage={canManage} showEvents={showEvents} showHistory={showHistory} options={options}
-            actionsQhse={actionsQhse} linkableActions={linkableActions} isFirst={index === 0} isLast={index === rows.length - 1}
+            actionsQhse={actionsQhse} linkableActions={linkableActions} measureOptions={measureOptions} isFirst={index === 0} isLast={index === rows.length - 1}
             view={canManage && (actionsQhse || (open.view !== 'newAction' && open.view !== 'link')) ? open.view : 'sheet'} onView={onView} onClose={close} />
         )}
       </Dialog>

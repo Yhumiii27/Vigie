@@ -4,8 +4,9 @@ import { redirect } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { ContractorsTable, NewContractorButton } from '@/components/prevention/ContractorDialogs';
 import {
-  PERMIT_FILTERS, PERMIT_TYPE_FILTERS, PLAN_FILTERS, filterParam, pickFilter, pickType, shownFilters,
+  PERMIT_FILTERS, PERMIT_TYPE_FILTERS, PLAN_FILTERS, filterParam, interventionFilters, matchesIntervention, pickFilter, pickType, shownFilters,
 } from '@/components/prevention/filters';
+import { FilterBar } from '@/components/FilterBar';
 import { NewPermitButton, PermitAlertActions, PermitsTable } from '@/components/prevention/PermitDialogs';
 import { NewPlanButton, PlanAlertActions, PlansTable } from '@/components/prevention/PlanDialogs';
 import { SiteRuleButton } from '@/components/prevention/SiteRuleDialogs';
@@ -17,7 +18,7 @@ import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { loadPrevention, type PlanView, type SiteRuleView } from '@/lib/data/prevention';
 import { lcfirst } from '@/lib/queries';
-import { ARCHIVES, canonicalHref, wantsArchives } from '@/lib/url-state';
+import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 
 export const metadata: Metadata = { title: SCREENS.prevention.title };
 
@@ -64,22 +65,32 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   const tab: Tab = openPlan ? 'plans' : openPermit ? 'permis' : TABS.find(([k]) => k === str(sp.onglet))?.[0] ?? 'plans';
 
   // Plans : filtre par phase (?filtre=) ; une fiche ouverte par lien direct bascule sur le filtre qui la contient.
+  // PRV-14 : filtres par entreprise extérieure (?entreprise=) et par projet Keystone (?projet=), sur l'onglet affiché ;
+  // sur l'onglet Entreprises, ?entreprise= ouvre la fiche de l'entreprise.
+  const asked = { entreprise: str(sp.entreprise), projet: str(sp.projet) };
+  const planSel = interventionFilters(d.plans, tab === 'plans' ? asked : {}, openPlan);
+  const permitSel = interventionFilters(d.permits, tab === 'permis' ? asked : {}, openPermit);
   const planFilter = pickFilter(PLAN_FILTERS, tab === 'plans' ? str(sp.filtre) : undefined, openPlan?.phase);
-  const plans = d.plans.filter((p) => planFilter.states.includes(p.phase));
-  const planCount = (f: (typeof PLAN_FILTERS)[number]) => d.plans.filter((p) => f.states.includes(p.phase)).length;
+  const planScope = d.plans.filter((p) => matchesIntervention(p, planSel.filters));
+  const plans = planScope.filter((p) => planFilter.states.includes(p.phase));
+  const planCount = (f: (typeof PLAN_FILTERS)[number]) => planScope.filter((p) => f.states.includes(p.phase)).length;
+  const planParams = { filtre: filterParam(PLAN_FILTERS, planFilter), ...planSel.filters };
 
   // Permis : filtre par état (?filtre=) puis par type (?type=), compteurs des types après le filtre d'état.
   const permitFilter = pickFilter(PERMIT_FILTERS, tab === 'permis' ? str(sp.filtre) : undefined, openPermit?.state);
   const permitType = pickType(str(sp.type), openPermit?.type);
-  const byState = d.permits.filter((p) => permitFilter.states.includes(p.state));
+  const permitScope = d.permits.filter((p) => matchesIntervention(p, permitSel.filters));
+  const byState = permitScope.filter((p) => permitFilter.states.includes(p.state));
   const permits = permitType ? byState.filter((p) => p.type === permitType) : byState;
-  const permitCount = (f: (typeof PERMIT_FILTERS)[number]) => d.permits.filter((p) => f.states.includes(p.state) && (!permitType || p.type === permitType)).length;
-  const permitParams = { filtre: filterParam(PERMIT_FILTERS, permitFilter), type: permitType ?? undefined };
+  const permitCount = (f: (typeof PERMIT_FILTERS)[number]) => permitScope.filter((p) => f.states.includes(p.state) && (!permitType || p.type === permitType)).length;
+  const permitParams = { filtre: filterParam(PERMIT_FILTERS, permitFilter), type: permitType ?? undefined, ...permitSel.filters };
   const registerHref = hrefWith('/prevention/imprimer/permis', {}, permitParams);
 
   // Entreprises : actives (par défaut) ou archivées.
   // Entreprises archivées : ?etat=archives (UX-12 ; l'ancien ?filtre=archivees est réécrit par le proxy et ci-dessus).
-  const showArchived = tab === 'entreprises' && wantsArchives(sp);
+  // PRV-14 : fiche d'une entreprise ouverte par lien direct (?onglet=entreprises&entreprise=<id>), archivée comprise.
+  const openContractor = tab === 'entreprises' ? d.contractors.find((c) => c.id === str(sp.entreprise)) : undefined;
+  const showArchived = tab === 'entreprises' && (wantsArchives(sp) || !!openContractor?.archived);
   const contractors = d.contractors.filter((c) => c.archived === showArchived);
   const archivedCount = d.contractors.filter((c) => c.archived).length;
 
@@ -214,12 +225,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
 
         {missingPlan && <MissingNotice text="Plan de prévention introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
         {missingPermit && <MissingNotice text="Permis introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
+        {tab === 'entreprises' && missingDetail(sp.entreprise, !!openContractor) && <MissingNotice text="Entreprise extérieure introuvable." closeHref={tabHref(tab)} />}
 
         {tab === 'plans' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={shownFilters(PLAN_FILTERS, planFilter, planCount).map((f) => ({
-                href: hrefWith('/prevention', {}, { filtre: filterParam(PLAN_FILTERS, f) }),
+                href: hrefWith('/prevention', planParams, { filtre: filterParam(PLAN_FILTERS, f) }),
                 label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{planCount(f)}</span></>,
                 on: f === planFilter,
               }))} />
@@ -231,6 +243,10 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                     : "Plan écrit obligatoire (R. 4512-7) : 400 h sur 12 mois ou travaux dangereux (liste de l'arrêté du 19 mars 1993)"}
               </span>
             </div>
+            <FilterBar path="/prevention" base={{ filtre: planParams.filtre }} detail={['plan']} fields={[
+              { name: 'entreprise', label: 'Entreprise extérieure', all: 'Toutes', options: planSel.contractors, value: planSel.filters.entreprise },
+              { name: 'projet', label: 'Projet Keystone', options: planSel.projects, value: planSel.filters.projet },
+            ]} />
             <PlansTable key={openPlan?.id ?? 'liste'} plans={plans} options={options} canManage={manage} openId={openPlan?.id} emptyLabel={planFilter.empty} />
           </>
         )}
@@ -239,12 +255,12 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={shownFilters(PERMIT_FILTERS, permitFilter, permitCount).map((f) => ({
-                href: hrefWith('/prevention', { onglet: 'permis', type: permitParams.type }, { filtre: filterParam(PERMIT_FILTERS, f) }),
+                href: hrefWith('/prevention', { ...permitParams, onglet: 'permis' }, { filtre: filterParam(PERMIT_FILTERS, f) }),
                 label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{permitCount(f)}</span></>,
                 on: f === permitFilter,
               }))} />
               <SegLinks options={PERMIT_TYPE_FILTERS.map((f) => ({
-                href: hrefWith('/prevention', { onglet: 'permis', filtre: permitParams.filtre }, { type: f.key ?? undefined }),
+                href: hrefWith('/prevention', { ...permitParams, onglet: 'permis' }, { type: f.key ?? undefined }),
                 label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{f.key ? byState.filter((p) => p.type === f.key).length : byState.length}</span></>,
                 on: f.key === permitType,
               }))} />
@@ -259,6 +275,10 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                 </span>
               )}
             </div>
+            <FilterBar path="/prevention" base={{ onglet: 'permis', filtre: permitParams.filtre, type: permitParams.type }} detail={['permis']} fields={[
+              { name: 'entreprise', label: 'Entreprise extérieure', all: 'Toutes', options: permitSel.contractors, value: permitSel.filters.entreprise },
+              { name: 'projet', label: 'Projet Keystone', options: permitSel.projects, value: permitSel.filters.projet },
+            ]} />
             <PermitsTable key={openPermit?.id ?? 'liste'} permits={permits} options={options} canManage={manage} openId={openPermit?.id}
               emptyLabel={permitType ? `${permitFilter.empty.replace(/\.$/, '')} (${permitType === 'feu' ? 'permis de feu' : "permis d'essai"}).` : permitFilter.empty} />
           </>
@@ -273,7 +293,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               ]} />
               <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Plans et permis comptés sur le site sélectionné</span>
             </div>
-            <ContractorsTable contractors={contractors} canManage={manage}
+            <ContractorsTable key={openContractor?.id ?? 'liste'} contractors={contractors} canManage={manage} openId={openContractor?.id}
               emptyLabel={showArchived ? 'Aucune entreprise archivée.' : 'Aucune entreprise extérieure enregistrée.'} />
           </>
         )}

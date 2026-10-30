@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { newEventHref } from '@/lib/event-prefill';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { PageHeader } from '@/components/PageHeader';
 import { Aside, CardHead, Dot, Icon, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
@@ -10,10 +11,10 @@ import { NewEntryButton, WasteRegister, type StreamOption } from '@/components/e
 import { SiteSiretButton } from '@/components/environment/SiteSiret';
 import { Note } from '@/components/environment/parts';
 import type { Carrier, Installation } from '@/components/environment/parts';
-import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/components/environment/model';
+import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/lib/rules/environment';
 import styles from '@/components/environment/environment.module.css';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
-import { BSD_STALE_DAYS } from '@/components/environment/model';
+import { BSD_STALE_DAYS } from '@/lib/rules/environment';
 import { SCREENS, TONE, canApprove, canEdit, canSee, type Tone } from '@/lib/domain';
 import { fmtSiret } from '@/lib/siret';
 import { guard } from '@/lib/guard';
@@ -341,7 +342,10 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
               <CardHead title="Événements environnementaux" aside={
                 <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 10 }}>
                   <Aside>{plural(d.envEvents.length, 'ouvert', 'ouverts')}</Aside>
-                  <Link href="/signaler?type=ENV" className="vg-link" title="Signaler un déversement, une fuite, un rejet…">Signaler</Link>
+                  {/* EVT-24 : encadrement — « Nouvel événement » de type Environnement ; Salarié — formulaire terrain. */}
+                  <Link href={manage ? newEventHref('type', 'ENV') : '/signaler?type=ENV'} className="vg-link">
+                    Signaler<span className="vg-sr-only"> un déversement, une fuite, un rejet…</span>
+                  </Link>
                 </span>
               } />
               <div style={{ display: 'grid', gap: 2 }}>

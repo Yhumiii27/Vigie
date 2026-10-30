@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { MyReportDetail } from '@/components/events/MyReportDetail';
-import { reportQuery } from '@/components/events/shared';
+import { reportQuery } from '@/lib/rules/events';
 import { loadMyReport } from '@/lib/data/events';
 
 export const metadata: Metadata = { title: 'Mon signalement' };

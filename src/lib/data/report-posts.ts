@@ -136,3 +136,26 @@ export const loadReportPostSignals = cache(async (): Promise<{ todo: TodoItem[] 
     }),
   };
 });
+
+/**
+ * DUE-20 : risques en vigueur de l'unité de travail couverte par chaque zone (map_zones.work_unit_id, unité en vigueur),
+ * proposés au signalement terrain (« Risque du poste concerné », facultatif) — danger et situation seulement, sans cotation
+ * ni action : le DUERP est consultable par tous les salariés (R. 4121-4). Clé : identifiant de la zone.
+ */
+export async function loadZoneRisks(zoneIds: readonly number[]): Promise<Record<string, { id: number; label: string }[]>> {
+  const ids = [...new Set(zoneIds)].filter((z) => Number.isInteger(z) && z > 0);
+  if (!ids.length) return {};
+  const db = await getDb();
+  const rows = await db.select({ zoneId: t.mapZones.id, riskId: t.risks.id, hazard: t.risks.hazard, situation: t.risks.situation })
+    .from(t.mapZones)
+    .innerJoin(t.workUnits, eq(t.mapZones.workUnitId, t.workUnits.id))
+    .innerJoin(t.risks, eq(t.risks.unitId, t.workUnits.id))
+    .where(and(inArray(t.mapZones.id, ids), isNull(t.mapZones.archivedAt), isNull(t.workUnits.archivedAt), isNull(t.risks.archivedAt)))
+    .orderBy(asc(t.risks.sort), asc(t.risks.id));
+  const out: Record<string, { id: number; label: string }[]> = {};
+  for (const r of rows) {
+    const situation = r.situation.length > 70 ? `${r.situation.slice(0, 69)}…` : r.situation;
+    (out[String(r.zoneId)] ??= []).push({ id: r.riskId, label: situation ? `${r.hazard} — ${situation}` : r.hazard });
+  }
+  return out;
+}

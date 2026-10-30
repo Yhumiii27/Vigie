@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { CertificationCards } from '@/components/audits/CertificationCards';
 import { ContextCard } from '@/components/audits/ContextCard';
+import { ChangesCard } from '@/components/audits/ChangesCard';
 import { ObjectivesCard } from '@/components/audits/ObjectivesCard';
 import { FindingsCard } from '@/components/audits/FindingsCard';
 import { ProgramTimeline } from '@/components/audits/ProgramTimeline';
@@ -10,10 +11,12 @@ import { Aside, MissingNotice, SegLinks } from '@/components/ui';
 import { isoWeek, monthName, monthOf, yearOf } from '@/lib/dates';
 import { canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
-import { SCREENS, canApprove, canEdit } from '@/lib/domain';
+import { ALL_SITES, SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadAudits } from '@/lib/data/audits';
 import { loadContext } from '@/lib/data/context';
+import { loadChanges } from '@/lib/data/changes';
+import { missingDetail } from '@/lib/url-state';
 import { loadObjectives } from '@/lib/data/objectives';
 import { loadFormOptions } from '@/lib/data/options';
 
@@ -26,9 +29,16 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     loadAudits({ year: sp.annee, element: sp.element, constat: sp.constat }),
     loadFormOptions(),
   ]);
-  const { now, certs, year, yearOptions, tracks, allTracks, plan, cancelledPlan, planFindings, auditGroups, cancelledFindings, auditOptions, openElement, openFinding, missingElement, missingFinding } = data;
+  const { now, certs, year, yearOptions, tracks, hiddenTracks, renewFrom, allTracks, plan, cancelledPlan, planFindings, auditGroups, cancelledFindings, auditOptions, openElement, openFinding, missingElement, missingFinding } = data;
   // AUD-13, CNF-05 : objectifs mesurables de l'année du programme, contexte du système de management.
-  const [objectives, context] = await Promise.all([loadObjectives(year), loadContext()]);
+  // CNF-11 : demandes de changement (site sélectionné ; communes à l'entreprise sur tous les sites).
+  const [objectives, context, changes] = await Promise.all([loadObjectives(year), loadContext(), loadChanges()]);
+  const changeParam = typeof sp.changement === 'string' ? sp.changement : undefined;
+  // AUD-19 : lien profond vers un référentiel (échéances de certification, indicateur de la veille) ; site sélectionné et
+  // périmètre (certs déjà filtrés, AUD-22), sinon bandeau « introuvable ».
+  const certParam = typeof sp.referentiel === 'string' ? sp.referentiel : undefined;
+  const openCert = certParam && certs.some((c) => c.id === certParam) ? certParam : undefined;
+  const openChange = changeParam && changes.rows.some((c) => c.id === changeParam) ? changeParam : undefined;
   // Saisie : animateur QHSE et direction ; consultation pour le chef de service et le chef de projet (AUD-02), qui ouvrent
   // en lecture les éléments dont ils sont responsables (?element=).
   const edit = canEdit(session.role, 'audits');
@@ -42,6 +52,10 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     ? { people: options.people, sites: options.sites, today: now }
     : { people: [], sites: [], today: now };
   const certOptions = certs.map((c) => [c.id, c.standard] as const);
+  // AUD-22, AUD-27 : sites (« Tous les sites » en tête quand le périmètre est complet) et personnes des formulaires du
+  // programme, des constats et des certifications — rôles qui saisissent seulement.
+  const siteChoices = [...(options.allSites ? [[ALL_SITES, 'Tous les sites'] as const] : []), ...options.sites];
+  const planOptions = edit ? { people: options.people, sites: siteChoices } : { people: [], sites: [] };
   const closeHref = `/audits?annee=${year}`;
 
   const yearNav = yearOptions.length > 1 && (
@@ -55,19 +69,25 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
       <div className="vg-page">
         {missingElement && <MissingNotice text="Élément du programme d'audit introuvable pour l'année affichée." closeHref={closeHref} />}
         {missingFinding && <MissingNotice text="Constat d'audit introuvable." closeHref={closeHref} />}
-        <CertificationCards certs={certs} canApprove={approve} />
+        {missingDetail(sp.changement, !!openChange) && <MissingNotice text="Demande de changement introuvable ou hors du site sélectionné." closeHref={closeHref} />}
+        {missingDetail(sp.referentiel, !!openCert) && <MissingNotice text="Référentiel introuvable ou hors du site sélectionné." closeHref={closeHref} />}
+        <CertificationCards key={openCert ?? 'certs'} certs={certs} canApprove={approve} sites={approve ? siteChoices : []} initialId={openCert} closeHref={closeHref} />
 
         <ObjectivesCard data={objectives} canEdit={edit}
           options={edit ? { people: options.people, sites: options.sites, allSites: options.allSites } : { people: [], sites: [], allSites: false }} />
         <ContextCard data={context} canEdit={edit} />
+        <ChangesCard key={openChange ?? 'changes'} rows={changes.rows} canEdit={edit} canApprove={approve} versions={changes.versions} today={now}
+          options={edit ? { people: options.people, sites: siteChoices } : { people: [], sites: [] }} initialId={openChange} closeHref={closeHref} />
 
         <ProgramTimeline key={openElement ?? 'prog'} year={year} curMonth={curMonth} tracks={tracks} allTracks={allTracks} items={plan} cancelled={cancelledPlan}
           findings={planFindings} certs={certOptions} auditOptions={auditOptions} yearOptions={yearOptions} canEdit={edit} canCreate={canCreate} options={actionOptions}
+          planOptions={planOptions} hiddenTracks={hiddenTracks} renewFrom={renewFrom}
           initialId={openElement} closeHref={closeHref} aside={<><Aside>{period}</Aside>{yearNav}</>} />
 
         {/* Pas de `key` liée au lien profond : la fermeture retire ?constat= de l'URL sans remonter la carte ni changer de groupe. */}
         <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} canEdit={edit}
-          canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} />
+          canCreate={canCreate} options={actionOptions} initialFindingId={openFinding} closeHref={closeHref} planOptions={planOptions} tracks={allTracks}
+          initialKind={typeof sp.nature === 'string' ? sp.nature : undefined} />
 
         <div id="revue" style={{ scrollMarginTop: 16 }}>
           <ReviewCard searchParams={sp} />

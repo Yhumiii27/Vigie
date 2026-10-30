@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { loadEntityHistory, type HistoryEntity } from '@/server/history';
-import { ChangeLogEntries, ChangeLogSummary, type ChangeEntry } from './ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
+import { ChangeLogEntries, ChangeLogSummary } from './ChangeLog';
 
 /**
  * Historique chargé à l'ouverture du bloc (QUA-11) : le journal d'une fiche n'est plus envoyé avec toute la liste de

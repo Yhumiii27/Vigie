@@ -190,6 +190,7 @@ describe('paquet 8 : journal, antivirus, plafonds de la lecture des scans', () =
     expect(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr' }).log).toEqual({ level: 'info', format: 'json' });
     expect(demo.clamav).toBeNull();
     expect(demo.aiLimits).toEqual({ dailyScansPerPerson: 20, monthlyTokens: 2_000_000 });
+    expect(demo.aiScan).toEqual({ model: 'claude-opus-5-5', timeoutMs: 600_000 });
   });
   it('valeurs saisies', () => {
     const c = parseConfig({
@@ -209,5 +210,21 @@ describe('paquet 8 : journal, antivirus, plafonds de la lecture des scans', () =
     } catch (e) {
       expect((e as ConfigError).problems.map((p) => p.split(' :')[0])).toEqual(['VIGIE_LOG_LEVEL', 'VIGIE_LOG_FORMAT', 'VIGIE_CLAMAV', 'VIGIE_AI_DAILY_SCANS', 'VIGIE_AI_MONTHLY_TOKENS']);
     }
+  });
+});
+
+describe('paquet 15 : appel de lecture des scans (INT-13)', () => {
+  it('modèle et délai configurables', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_AI_MODEL: 'claude-sonnet-5-5', VIGIE_AI_TIMEOUT: '1200' }).aiScan)
+      .toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 1_200_000 });
+  });
+  it('valeurs invalides : une ligne par variable', () => {
+    try {
+      parseConfig({ VIGIE_DEMO: '1', VIGIE_AI_MODEL: 'claude opus', VIGIE_AI_TIMEOUT: '10' });
+      expect.unreachable();
+    } catch (e) {
+      expect((e as ConfigError).problems.map((p) => p.split(' :')[0])).toEqual(['VIGIE_AI_MODEL', 'VIGIE_AI_TIMEOUT']);
+    }
+    expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_AI_TIMEOUT: '7200' })).toThrow(ConfigError);
   });
 });

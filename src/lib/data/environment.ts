@@ -2,14 +2,14 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import {
   BSD_PENDING, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, READING_DUE_DAY, REGISTER_MENTIONS_FROM, entryRef, fmtQty, isBsdStatus,
   isHazardousCode, isRecovery, monthLong, monthShort, qualificationLabel, registerGaps, resolveMentions, shiftMonth, streamGaps, toRegisterQuantity, toTonnes,
   treatmentLabel, type BsdStatus, type ConsumptionKind,
   wasteEntryHref,
-} from '@/components/environment/model';
-import { hrefWith } from '@/components/ui';
+} from '@/lib/rules/environment';
+import { hrefWith } from '@/lib/url-state';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { ActionDefaults } from '../action-view';
@@ -581,6 +581,38 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     });
   }
   return { todo };
+});
+
+// ─── Indicateurs calculés de la veille (VEI-12) ─────────────────────────────
+
+/** Indicateur calculé d'une exigence de veille rattachée aux déchets (même forme que RequirementIndicator de la veille). */
+export type WasteIndicator = { label: string; tone: Tone; href: string; gap: boolean };
+
+/**
+ * Indicateurs des exigences rattachées au registre des déchets (VEI-12), sur tout le périmètre de la personne (l'exigence
+ * vaut pour l'entreprise, VEI-06), mêmes calculs que les échéances : `waste_bsd` (R. 541-45) — enlèvements de déchets
+ * dangereux sans bordereau, en écart ; bordereaux non finalisés à surveiller ; `waste_register` (R. 541-43, arrêté du
+ * 31 mai 2021) — enlèvements aux mentions incomplètes depuis 2022, en écart. Jamais stockés.
+ */
+export const loadWasteIndicators = cache(async (): Promise<{ bsd: WasteIndicator; register: WasteIndicator }> => {
+  const { now, entries } = await loadEnvironmentBase('perimeter');
+  const currentYear = +now.slice(0, 4);
+  const fromYear = +REGISTER_MENTIONS_FROM.slice(0, 4);
+  const missing = entries.filter((e) => e.missingBsd);
+  const stale = entries.filter((e) => e.staleBsd);
+  const incomplete = entries.filter((e) => e.gaps.length && e.year >= fromYear);
+  const yearOf = (rows: EntryView[]) => rows.map((e) => e.year).sort((a, b) => a - b)[0] ?? currentYear;
+  const hazardous = entries.filter((e) => e.hazardous && e.year === currentYear).length;
+  return {
+    bsd: missing.length
+      ? { label: plural(missing.length, 'enlèvement de déchets dangereux sans BSD', 'enlèvements de déchets dangereux sans BSD'), tone: 'danger', gap: true, href: registerHref(yearOf(missing), currentYear, 'bsd-manquants') }
+      : stale.length
+        ? { label: `Aucun BSD manquant · ${plural(stale.length, `bordereau non finalisé après ${BSD_STALE_DAYS} j`, `bordereaux non finalisés après ${BSD_STALE_DAYS} j`)}`, tone: 'warn', gap: false, href: registerHref(yearOf(stale), currentYear, 'bsd-en-attente') }
+        : { label: `Aucun BSD manquant · ${plural(hazardous, `enlèvement de déchets dangereux en ${currentYear}`, `enlèvements de déchets dangereux en ${currentYear}`)}`, tone: 'ok', gap: false, href: '/environnement' },
+    register: incomplete.length
+      ? { label: plural(incomplete.length, 'enlèvement aux mentions incomplètes (arrêté du 31 mai 2021)', 'enlèvements aux mentions incomplètes (arrêté du 31 mai 2021)'), tone: 'danger', gap: true, href: registerHref(yearOf(incomplete), currentYear, 'mentions-incompletes') }
+      : { label: `Registre tenu · ${plural(entries.filter((e) => e.year === currentYear).length, `enlèvement inscrit en ${currentYear}`, `enlèvements inscrits en ${currentYear}`)}, mentions complètes`, tone: 'ok', gap: false, href: '/environnement' },
+  };
 });
 
 // ─── Export du registre (CSV) ───────────────────────────────────────────────

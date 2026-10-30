@@ -8,9 +8,15 @@ export const LEFT_SUFFIX = " — sorti de l'effectif";
 /** Libellé d'une valeur enregistrée absente des listes de choix : site archivé. */
 export const ARCHIVED_SITE_SUFFIX = ' (archivé)';
 
-/** Ajoute à une liste de choix la valeur déjà enregistrée si elle n'y figure plus (personne sortie, site archivé…). */
-export const withCurrent = (options: readonly Option[], value: string | null | undefined, label: string | undefined) =>
-  value && !options.some(([v]) => v === value) ? [...options, [value, label ?? value] as Option] : options;
+/**
+ * Ajoute à une liste de choix la valeur déjà enregistrée si elle n'y figure plus (personne sortie, site archivé, projet
+ * Keystone clos…), avec son libellé (la valeur à défaut), en fin de liste ou en tête (`at: 'start'`). Seule copie (QUA-25).
+ */
+export const withCurrent = (options: readonly Option[], value: string | null | undefined, label?: string | null, at: 'end' | 'start' = 'end') => {
+  if (!value || options.some(([v]) => v === value)) return options;
+  const current: Option = [value, label ?? value];
+  return at === 'start' ? [current, ...options] : [...options, current];
+};
 
 /**
  * Valeur proposée par défaut pour un nouveau choix : `value` si la liste la propose encore, sinon `fallback` — jamais une

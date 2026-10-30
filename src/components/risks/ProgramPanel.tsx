@@ -14,7 +14,7 @@ import {
   addProgramAction, createPreventionProgram, freezePreventionProgram, removeProgramAction, reopenPreventionProgram,
   saveProgramAction, updatePreventionProgram,
 } from '@/server/risks';
-import { fmtEuro } from './format';
+import { fmtEuro } from '@/lib/rules/risk-format';
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 const lineTone = (l: ProgramLineView) => (l.cancelled ? 'var(--color-neutral-500)' : TONE[l.tone].fg);

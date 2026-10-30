@@ -6,7 +6,9 @@ import { currentSiteId, getSession } from '../session';
 import { visibleTodo, type VisibleTodo } from '../todo-visibility';
 import { loadActionSignals } from './actions';
 import { loadAuditSignals } from './audits';
+import { loadChangeSignals } from './changes';
 import { loadDocumentSignals } from './documents';
+import { loadEmergencySignals } from './emergencies';
 import { loadEnvironmentSignals } from './environment';
 import { loadEventSignals } from './events';
 import { loadPreventionSignals } from './prevention-signals';
@@ -32,6 +34,8 @@ export const loadTodo = cache(async (): Promise<TodoItem[]> => {
     loadEventSignals(), loadActionSignals(), loadWatchSignals(), loadSkillSignals(), loadRiskSignals(),
     loadAuditSignals(), loadReviewSignals(), loadPreventionSignals(), loadCoactivitySignals(),
     loadDocumentSignals(), loadEnvironmentSignals(), loadSiteSignals(), loadReportPostSignals(),
+    // Paquet 13, seconde moitié : exercices des situations d'urgence (CNF-08), demandes de changement (CNF-11).
+    loadEmergencySignals(), loadChangeSignals(),
   ]);
   return signals.flatMap((s) => s.todo).sort(byUrgency);
 });

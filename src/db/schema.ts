@@ -6,8 +6,10 @@ import {
   type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type ReminderSendStatus, type SourceKey, type VerifyMethod,
 } from '../lib/action-keys';
 import {
-  BSD_STATUS_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_STATUS_CODES,
-  REQUIREMENT_LINK_CODES, REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, VERSION_STATUS_CODES,
+  BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EFFECTIVENESS_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
+  MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
+  REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
+  CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -148,7 +150,7 @@ export const events = pgTable('events', {
   lostDays: integer('lost_days'),
   // AT : date de déclaration à la CPAM (sous 48 h, sauf soins inscrits au registre des accidents bénins).
   cpamDeclaredOn: date('cpam_declared_on', { mode: 'string' }),
-  // AT — rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463). Données de santé : HEALTH_LABELS (src/components/events/shared.ts).
+  // AT — rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463). Données de santé : HEALTH_LABELS (src/lib/rules/events.ts).
   victimKind: text('victim_kind'), // salarie | interimaire | externe (VICTIM_KINDS)
   victimId: text('victim_id').references(() => people.id), // victime de l'effectif
   victimName: text('victim_name'), // intérimaire ou personne extérieure : nom déclaré
@@ -481,6 +483,74 @@ export const riskActions = pgTable('risk_actions', {
   actionId: text('action_id').notNull().references(() => actions.id),
 }, (t) => [primaryKey({ columns: [t.riskId, t.actionId] }), index('risk_actions_action_idx').on(t.actionId)]);
 
+// DUE-19 (migration 0020) : mesures de maîtrise d'un risque liées à un élément de Vigie — contrôle périodique, document
+// maîtrisé ou titre d'habilitation (une seule cible par ligne, celle de `kind`). La validité est calculée à l'affichage
+// (riskMeasureState, src/lib/risk-measures.ts), jamais stockée : une mesure qui n'est plus valide (contrôle dépassé ou
+// défavorable, document sans version approuvée ou à revoir, habilitation expirée sur le site) est signalée. Retrait motivé
+// (removed_*), jamais supprimé ; une seule liaison en cours par risque et par élément. Journal du risque (`risk`).
+export const riskMeasureLinks = pgTable('risk_measure_links', {
+  id: serial('id').primaryKey(),
+  riskId: integer('risk_id').notNull().references(() => risks.id),
+  kind: text('kind').notNull(), // MEASURE_LINK_KINDS : control | document | title
+  controlId: integer('control_id').references((): AnyPgColumn => controls.id),
+  documentId: text('document_id').references((): AnyPgColumn => documents.id),
+  titleId: text('title_id').references((): AnyPgColumn => trainingTitles.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+  removedById: text('removed_by_id').references(() => people.id),
+  removeReason: text('remove_reason'),
+}, (t) => [
+  check('risk_measure_links_kind_check', inList(t.kind, MEASURE_LINK_KIND_CODES)),
+  check('risk_measure_links_target_check', sql`(${t.kind} = 'control') = (${t.controlId} is not null) and (${t.kind} = 'document') = (${t.documentId} is not null) and (${t.kind} = 'title') = (${t.titleId} is not null)`),
+  archiveState('risk_measure_links_remove_check', t.removedAt, t.removedById, t.removeReason),
+  index('risk_measure_links_risk_idx').on(t.riskId),
+  uniqueIndex('risk_measure_links_control_active').on(t.riskId, t.controlId).where(sql`${t.removedAt} is null and ${t.controlId} is not null`),
+  uniqueIndex('risk_measure_links_document_active').on(t.riskId, t.documentId).where(sql`${t.removedAt} is null and ${t.documentId} is not null`),
+  uniqueIndex('risk_measure_links_title_active').on(t.riskId, t.titleId).where(sql`${t.removedAt} is null and ${t.titleId} is not null`),
+]);
+
+// Situations d'urgence (CNF-08, migration 0021, ISO 45001 §8.2, ISO 14001 §8.2) : situation identifiée par site (incendie,
+// déversement, accident grave…), scénario, moyens et consignes, périodicité des exercices et responsable ; prochain exercice
+// planifié facultatif. Archivage motivé (jamais supprimée). Journal `emergency_situation`. Échéance : exercice à organiser
+// (loadEmergencySignals).
+export const emergencySituations = pgTable('emergency_situations', {
+  id: serial('id').primaryKey(),
+  siteId: text('site_id').notNull().references(() => sites.id),
+  label: text('label').notNull(),
+  scenario: text('scenario').notNull().default(''),
+  response: text('response').notNull().default(''), // moyens d'intervention et consignes
+  drillMonths: integer('drill_months').notNull(), // périodicité des exercices (mois)
+  nextDrillOn: date('next_drill_on', { mode: 'string' }), // exercice planifié le (facultatif)
+  ownerId: text('owner_id').references(() => people.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
+}, (t) => [
+  check('emergency_situations_drill_months_check', sql`${t.drillMonths} between 1 and 60`),
+  archiveState('emergency_situations_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+  index('emergency_situations_site_idx').on(t.siteId),
+]);
+
+// Exercices d'une situation d'urgence (CNF-08) : date, participants, déroulement et enseignements. Annulation motivée.
+export const emergencyDrills = pgTable('emergency_drills', {
+  id: serial('id').primaryKey(),
+  situationId: integer('situation_id').notNull().references(() => emergencySituations.id),
+  heldOn: date('held_on', { mode: 'string' }).notNull(),
+  participants: text('participants').notNull().default(''),
+  findings: text('findings').notNull().default(''), // déroulement, écarts et enseignements
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  index('emergency_drills_situation_idx').on(t.situationId, t.heldOn),
+  archiveState('emergency_drills_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
 // Registre des mises à disposition du DUERP (R. 4121-4, DUE-01) : demandes d'accès des salariés, anciens salariés, CSE,
 // médecin du travail, inspection du travail, CARSAT…, avec la version communiquée. Jamais supprimée : annulation motivée.
 export const duerpAccessRequests = pgTable('duerp_access_requests', {
@@ -551,6 +621,11 @@ export const requirements = pgTable('requirements', {
   legifranceUrl: text('legifrance_url'),
   actionId: text('action_id').references(() => actions.id),
   sort: integer('sort').notNull().default(0),
+  // VEI-18 (migration 0020) : périodicité de réévaluation de la conformité propre à l'exigence (mois) ; null = 12 mois
+  // (REQUIREMENT_REVIEW_MONTHS, requirementReviewMonths de src/lib/domain.ts).
+  reviewMonths: integer('review_months'),
+  // VEI-12 (migration 0020) : certification dont l'exigence reprend l'état (linkedTo 'certification' seulement).
+  certificationId: text('certification_id').references((): AnyPgColumn => certifications.id),
   // Archivage (« texte abrogé ») : jamais de suppression, motif conservé.
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
@@ -559,6 +634,8 @@ export const requirements = pgTable('requirements', {
   archiveState('requirements_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
   check('requirements_evaluation_check', inList(t.evaluation, EVALUATION_CODES)),
   check('requirements_linked_to_check', sql`${t.linkedTo} is null or ${inList(t.linkedTo, REQUIREMENT_LINK_CODES)}`),
+  check('requirements_review_months_check', sql`${t.reviewMonths} is null or ${t.reviewMonths} between 1 and 60`),
+  check('requirements_certification_check', sql`(${t.certificationId} is null) = (${t.linkedTo} is null or ${t.linkedTo} <> 'certification')`),
 ]);
 
 export const controls = pgTable('controls', {
@@ -582,10 +659,16 @@ export const controls = pgTable('controls', {
   // Code commun de l'équipement avec les moyens d'essais de Crucible (ex. PDE-PIL), publié par la vue pub_controles
   // (migration 0014) ; facultatif, plusieurs contrôles d'un même équipement portent le même code (equipmentCodeError).
   equipmentCode: text('equipment_code'),
+  // VEI-14 (migration 0020) : nature du contrôle (CONTROL_CATEGORIES) — vérification réglementaire, ou étalonnage d'un
+  // équipement de mesure (métrologie, ISO 9001 §7.1.5) ; tolérance (erreur maximale tolérée) saisie librement. Hors de la
+  // vue pub_controles (contrat Crucible v1 inchangé).
+  category: text('category').notNull().default('reglementaire'),
+  tolerance: text('tolerance'),
 }, (t) => [
   // QUA-17 (migration 0018) : chargements filtrés par site (loadControls, siteWhere).
   index('controls_site_idx').on(t.siteId),
   archiveState('controls_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+  check('controls_category_check', inList(t.category, CONTROL_CATEGORY_CODES)),
 ]);
 
 // Historique des contrôles réalisés (le dernier met à jour controls.lastOn / nextOn / reserves).
@@ -604,6 +687,8 @@ export const controlRecords = pgTable('control_records', {
   prevLastOn: date('prev_last_on', { mode: 'string' }),
   prevNextOn: date('prev_next_on', { mode: 'string' }),
   prevReserves: text('prev_reserves'),
+  // VEI-14 (migration 0020) : non-conformité ouverte par un étalonnage hors tolérance (événement NC créé avec l'enregistrement).
+  eventId: text('event_id').references((): AnyPgColumn => events.id),
   // Annulation d'une saisie erronée (motif obligatoire), à la place d'une suppression.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
@@ -632,6 +717,35 @@ export const requirementEvaluations = pgTable('requirement_evaluations', {
   archiveState('requirement_evaluations_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
+// Registre de sécurité (VEI-15, L. 4711-1 et L. 4711-2, migration 0020) : observations et mises en demeure reçues de
+// l'inspection du travail, de la CARSAT ou d'un organisme de contrôle, par site, avec le délai de mise en conformité et la
+// réponse apportée (date et texte). Imprimé avec les vérifications du site (/veille/registre-securite). Jamais supprimée :
+// annulation motivée (saisie erronée). Journal : `safety_notice`. Échéance : réponse attendue (loadWatchSignals).
+export const safetyNotices = pgTable('safety_notices', {
+  id: serial('id').primaryKey(),
+  siteId: text('site_id').notNull().references(() => sites.id),
+  kind: text('kind').notNull(), // SAFETY_NOTICE_KINDS : observation | mise_en_demeure
+  receivedOn: date('received_on', { mode: 'string' }).notNull(),
+  authority: text('authority').notNull(), // inspection du travail, CARSAT, organisme agréé…
+  reference: text('reference'), // référence du courrier ou du rapport
+  text: text('text').notNull(), // objet : observations ou prescriptions
+  dueOn: date('due_on', { mode: 'string' }), // délai de mise en conformité ou de réponse
+  controlId: integer('control_id').references((): AnyPgColumn => controls.id), // équipement concerné (facultatif)
+  answeredOn: date('answered_on', { mode: 'string' }), // réponse apportée (mise en conformité, courrier) le
+  answer: text('answer'),
+  answeredById: text('answered_by_id').references(() => people.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  check('safety_notices_kind_check', inList(t.kind, SAFETY_NOTICE_KIND_CODES)),
+  check('safety_notices_answer_check', sql`(${t.answeredOn} is null) = (${t.answer} is null)`),
+  archiveState('safety_notices_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  index('safety_notices_site_idx').on(t.siteId, t.receivedOn),
+]);
+
 // ─── Habilitations et formations ────────────────────────────────────────────
 
 export const trainingTitles = pgTable('training_titles', {
@@ -645,6 +759,12 @@ export const trainingTitles = pgTable('training_titles', {
   // champ « portée » de ses formations (catégories CACES, indices d'habilitation électrique).
   prerequisiteIds: jsonb('prerequisite_ids').$type<string[]>().notNull().default([]),
   scopeLabel: text('scope_label'),
+  // HAB-13 (migration 0020) : action de sensibilisation (ISO 45001 §7.3 : accueil sécurité, causerie, consignes) plutôt
+  // qu'une formation qualifiante ; suivie et évaluée comme une formation.
+  awareness: boolean('awareness').notNull().default(false),
+  // AUD-27 (migration 0021) : titre qui qualifie un auditeur interne (formation d'auditeur ISO 19011…) ; l'auditeur interne
+  // d'un audit du programme sans titre valide de ce type est signalé (jamais refusé).
+  internalAuditor: boolean('internal_auditor').notNull().default(false),
   // Titre retiré du suivi (historique conservé).
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
@@ -671,6 +791,12 @@ export const qualifications = pgTable('qualifications', {
   scope: text('scope'), // HAB-10 : catégories ou niveaux obtenus (« 1A, 3, 5 », « B1V, BR »)
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   recordedById: text('recorded_by_id').references(() => people.id),
+  // HAB-13 (migration 0020) : évaluation à froid de l'efficacité (ISO 45001 §7.2 d, ISO 9001 §7.2 c) — résultat
+  // (TRAINING_EFFECTIVENESS), date, constat et auteur ; modifiable (journal de la formation), jamais sur une formation annulée.
+  effectiveness: text('effectiveness'),
+  effectivenessOn: date('effectiveness_on', { mode: 'string' }),
+  effectivenessNote: text('effectiveness_note'),
+  effectivenessById: text('effectiveness_by_id').references(() => people.id),
   // Formation enregistrée par erreur : annulée avec un motif (jamais supprimée) et exclue du calcul de l'état.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledById: text('cancelled_by_id').references(() => people.id),
@@ -678,6 +804,7 @@ export const qualifications = pgTable('qualifications', {
 }, (t) => [
   index('qualifications_person_title_idx').on(t.personId, t.titleId),
   archiveState('qualifications_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('qualifications_effectiveness_check', sql`(${t.effectiveness} is null and ${t.effectivenessOn} is null) or (${inList(t.effectiveness, EFFECTIVENESS_CODES)} and ${t.effectivenessOn} is not null)`),
 ]);
 
 // Affectations lues depuis le planning Keystone.
@@ -707,6 +834,8 @@ export const certifications = pgTable('certifications', {
   suspendedOn: date('suspended_on', { mode: 'string' }),
   suspendedById: text('suspended_by_id').references(() => people.id),
   suspendReason: text('suspend_reason'),
+  // AUD-22 (migration 0021) : site couvert par le certificat ; null = commun à l'entreprise (certificat multisite).
+  siteId: text('site_id').references((): AnyPgColumn => sites.id),
 });
 // Le prochain audit de suivi n'est pas stocké : élément du programme rattaché (certificationId) non réalisé le plus proche.
 
@@ -722,8 +851,15 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   actionId: text('action_id').references(() => actions.id), // échéance portée par l'action
   done: boolean('done').notNull().default(false),
   doneOn: date('done_on', { mode: 'string' }), // date de réalisation
-  auditor: text('auditor'), // auditeur ou organisme (texte libre, peut être externe)
+  auditor: text('auditor'), // auditeur ou organisme externe (texte libre) ; auditeur interne : auditorId
+  // AUD-27 (migration 0021) : auditeur interne (personne de l'annuaire) ; `auditor` reste le texte d'un auditeur externe.
+  auditorId: text('auditor_id').references(() => people.id),
   scope: text('scope'), // périmètre audité
+  // AUD-22 (migration 0021) : site audité ; null = commun à l'entreprise (lu et écrit selon la règle de site, requireInSite).
+  siteId: text('site_id').references(() => sites.id),
+  // AUD-20 (migration 0021) : audit hors programme (non planifié : audit client, inopiné…) enregistré comme un vrai audit,
+  // déjà réalisé (date, auditeur, rapport, constats) ; hors échéances du programme.
+  unplanned: boolean('unplanned').notNull().default(false),
   certificationId: text('certification_id').references(() => certifications.id), // référentiel (audit de certification / de suivi)
   // Revue de direction portée par l'élément (AUD-01) : sa date, sa réalisation et son annulation suivent la revue ; l'élément
   // est verrouillé dans le programme (« Ouvrir la revue »). Au plus un élément par revue.
@@ -737,6 +873,22 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   cancelReason: text('cancel_reason'),
 }, (t) => [
   archiveState('audit_plan_items_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('audit_plan_items_unplanned_check', sql`not ${t.unplanned} or (${t.done} and ${t.doneOn} is not null and ${t.reviewId} is null)`),
+]);
+
+// AUD-24 (migration 0021) : ligne du programme masquée pour une année (ligne reprise de l'année précédente, sans élément en
+// vigueur cette année) ; motif obligatoire, « Afficher à nouveau » motivé (journal `audit_plan_track`). Les lignes restent
+// déduites des éléments (audit_plan_items.track) ; une ligne renommée l'est sur les éléments de l'année.
+export const auditPlanTracks = pgTable('audit_plan_tracks', {
+  id: serial('id').primaryKey(),
+  year: integer('year').notNull(),
+  track: text('track').notNull(),
+  hiddenAt: timestamp('hidden_at', { withTimezone: true }),
+  hiddenById: text('hidden_by_id').references(() => people.id),
+  hideReason: text('hide_reason'),
+}, (t) => [
+  uniqueIndex('audit_plan_tracks_year_track').on(t.year, t.track),
+  archiveState('audit_plan_tracks_hide_check', t.hiddenAt, t.hiddenById, t.hideReason),
 ]);
 
 export const auditFindings = pgTable('audit_findings', {
@@ -748,6 +900,9 @@ export const auditFindings = pgTable('audit_findings', {
   kind: text('kind').notNull(), // FINDING_KINDS : ecart_majeur | ecart_mineur | observation | piste | point_fort
   text: text('text').notNull(),
   responseDueOn: date('response_due_on', { mode: 'string' }), // AUD-09 : réponse attendue (plan d'actions) au plus tard le
+  // AUD-22 (migration 0021) : site du constat — celui de son audit (imposé quand planItemId est renseigné), sinon choisi ;
+  // null = commun à l'entreprise.
+  siteId: text('site_id').references(() => sites.id),
   sort: integer('sort').notNull().default(0),
   // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, les actions liées restent au plan.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
@@ -885,6 +1040,39 @@ export const contextItems = pgTable('context_items', {
   archiveState('context_items_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
 ]);
 
+// Gestion des changements (CNF-11, migration 0021, ISO 9001 §6.3 et §8.5.6, ISO 45001 §8.1.3) : demande de changement
+// (organisation, procédé, équipement, produit, exigence), motif, effets évalués (risques, ressources, exigences), décision
+// motivée du service QHSE (acceptée ou refusée), puis mise en œuvre constatée. Site concerné, ou null pour l'entreprise.
+// Jamais supprimée : annulation motivée. Journal `change_request` ; échéances (loadChangeSignals).
+export const changeRequests = pgTable('change_requests', {
+  id: text('id').primaryKey(), // MC-001 (nextEntityReference, portée « ref:MC- »)
+  siteId: text('site_id').references(() => sites.id),
+  kind: text('kind').notNull(), // CHANGE_KINDS
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  rationale: text('rationale').notNull().default(''), // motif du changement
+  impacts: text('impacts').notNull().default(''), // effets évalués : risques et opportunités, ressources, exigences, documents
+  pilotId: text('pilot_id').references(() => people.id),
+  plannedOn: date('planned_on', { mode: 'string' }), // mise en œuvre prévue le
+  status: text('status').notNull().default('demandee'), // CHANGE_STATUS : demandee | acceptee | refusee | realisee
+  decidedOn: date('decided_on', { mode: 'string' }),
+  decidedById: text('decided_by_id').references(() => people.id),
+  decisionNote: text('decision_note'),
+  doneOn: date('done_on', { mode: 'string' }),
+  doneNote: text('done_note'),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  check('change_requests_kind_check', inList(t.kind, CHANGE_KIND_CODES)),
+  check('change_requests_status_check', inList(t.status, CHANGE_STATUS_CODES)),
+  check('change_requests_decision_check', sql`(${t.status} = 'demandee') = (${t.decidedOn} is null)`),
+  check('change_requests_done_check', sql`(${t.status} = 'realisee') = (${t.doneOn} is not null)`),
+  archiveState('change_requests_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
 // ─── Plans de prévention et permis ──────────────────────────────────────────
 
 export const contractors = pgTable('contractors', {
@@ -953,11 +1141,36 @@ export const preventionPlans = pgTable('prevention_plans', {
   cancelReason: text('cancel_reason'),
   // D02 (Matrix partage/50-vigie.sql) : code projet Keystone, lu par vigie.pub_hse_projet ; sans saisie dans Vigie à ce jour.
   keystoneProjectCode: text('keystone_project_code'),
+  // PRV-17 (migration 0020) : périodicité (jours) des inspections et réunions de coordination pendant l'intervention
+  // (R. 4513-2) ; null = non fixée. Séances : prevention_plan_meetings.
+  meetingPeriodDays: integer('meeting_period_days'),
 }, (t) => [
   index('prevention_plans_keystone_project_code_idx').on(t.keystoneProjectCode),
+  check('prevention_plans_meeting_period_check', sql`${t.meetingPeriodDays} is null or ${t.meetingPeriodDays} between 1 and 365`),
   archiveState('prevention_plans_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
   check('prevention_plans_status_check', inList(t.status, PLAN_STATUS_CODES)),
   check('prevention_plans_cancel_status_check', sql`(${t.status} = 'annule') = (${t.cancelledAt} is not null)`),
+]);
+
+// PRV-17 (migration 0020) : inspections et réunions périodiques de coordination tenues pendant l'intervention (R. 4513-2),
+// pour les interventions longues (contrat annuel). Annulation motivée d'une saisie erronée, jamais supprimée ; journal du
+// plan (`prevention_plan`). Prochaine séance due : nextPeriodicMeeting (src/lib/rules/prevention.ts), calculée.
+export const preventionPlanMeetings = pgTable('prevention_plan_meetings', {
+  id: serial('id').primaryKey(),
+  planId: text('plan_id').notNull().references(() => preventionPlans.id),
+  kind: text('kind').notNull(), // PLAN_MEETING_KINDS : inspection | reunion
+  heldOn: date('held_on', { mode: 'string' }).notNull(),
+  participants: text('participants').notNull().default(''), // participants des deux entreprises (texte libre)
+  notes: text('notes').notNull().default(''), // constats, mesures décidées
+  recordedById: text('recorded_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  check('prevention_plan_meetings_kind_check', inList(t.kind, PLAN_MEETING_KIND_CODES)),
+  archiveState('prevention_plan_meetings_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  index('prevention_plan_meetings_plan_idx').on(t.planId, t.heldOn),
 ]);
 
 // Modèles d'import du formulaire de plan de prévention : correspondance entre les champs
@@ -1033,7 +1246,35 @@ export const documents = pgTable('documents', {
   distribution: text('distribution').notNull().default(''), // services / postes destinataires
   siteId: text('site_id').references(() => sites.id), // null = tous sites
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  // DOC-17 (migration 0021, ISO 9001 §7.5.3.2) : origine (interne | externe : norme, document client ou fournisseur,
+  // texte d'un organisme), émetteur d'un document externe, durée de conservation (texte : « 5 ans après la fin du
+  // contrat », « 10 ans ») des enregistrements et des versions archivées.
+  origin: text('origin').notNull().default('interne'),
+  issuer: text('issuer'),
+  retention: text('retention'),
+}, (t) => [
+  check('documents_origin_check', inList(t.origin, DOC_ORIGIN_CODES)),
+]);
+
+// DOC-15 (migration 0021) : revue périodique d'un document sans modification (document toujours adapté) : date, auteur et
+// conclusion ; la prochaine revue repart de la plus récente (approbation de la version en vigueur ou revue). Jamais
+// supprimée : annulation motivée (revue saisie par erreur). Journal du document (`document`, action `review`).
+export const documentReviews = pgTable('document_reviews', {
+  id: serial('id').primaryKey(),
+  documentId: text('document_id').notNull().references(() => documents.id),
+  version: text('version').notNull(), // version en vigueur revue
+  reviewedOn: date('reviewed_on', { mode: 'string' }).notNull(),
+  reviewerId: text('reviewer_id').references(() => people.id),
+  conclusion: text('conclusion').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  index('document_reviews_document_idx').on(t.documentId, t.reviewedOn),
+  check('document_reviews_conclusion_check', sql`btrim(${t.conclusion}) <> ''`),
+  archiveState('document_reviews_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
 
 export const documentVersions = pgTable('document_versions', {
   id: serial('id').primaryKey(),
@@ -1158,6 +1399,9 @@ export const mapZones = pgTable('map_zones', {
   notes: text('notes'),
   // Version du QR code de poste (signée dans le jeton) : l'incrémenter révoque les QR codes déjà imprimés.
   qrVersion: integer('qr_version').notNull().default(1),
+  // DUE-20 (migration 0020) : unité de travail du DUERP couverte par la zone (une unité par zone, plusieurs zones par unité) ;
+  // ses risques sont proposés au signalement par le QR code du poste. Choisie dans la fiche de l'unité (/risques).
+  workUnitId: text('work_unit_id').references((): AnyPgColumn => workUnits.id),
   // EVT-19 : zone archivée (jamais supprimée : ses événements la gardent, son QR code imprimé ouvre le formulaire terrain
   // avec « ce poste n'existe plus, choisissez le lieu »). Retirée de la carte, des postes et de la coactivité ; journal
   // de la carte du site (`site_map`).

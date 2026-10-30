@@ -15,7 +15,7 @@ import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
 /** Période d'une affectation (règle partagée avec le serveur, voir rules.ts). */
-export { period } from './rules';
+export { period } from '@/lib/rules/skills';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
 export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');
@@ -105,7 +105,7 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12 }}>
             <thead>
-              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Saisie</th><th aria-label="Attestations" /></tr>
+              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Efficacité</th><th>Saisie</th><th aria-label="Attestations" /></tr>
             </thead>
             <tbody>
               {entries.map((e) => {
@@ -115,6 +115,10 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
                     <td style={{ whiteSpace: 'nowrap', ...struck }}>{fmtDate(e.obtainedOn)}</td>
                     <td style={{ whiteSpace: 'nowrap', ...struck }}>{e.expiresOn ? fmtDate(e.expiresOn) : 'Sans échéance'}</td>
                     <td style={struck}>{e.provider ?? '—'}</td>
+                    {/* HAB-13 : évaluation à froid de l'efficacité. */}
+                    <td style={{ whiteSpace: 'nowrap', ...struck }}>
+                      {e.effectiveness ? <><ToneTag tone={e.cancelled ? 'neutral' : e.effectiveness.tone}>{e.effectiveness.label}</ToneTag><span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>le {fmtDate(e.effectiveness.on)}</span></> : <span style={{ color: 'var(--vg-text-muted)' }}>Non évaluée</span>}
+                    </td>
                     <td>
                       <span style={{ display: 'block', ...struck }}>{isoDay(e.recordedAt)} · {e.recordedBy}</span>
                       {e.cancelled && (

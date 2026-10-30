@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { hrefWith } from '@/components/ui';
 import { DocumentRegister } from '@/components/documents/DocumentRegister';
 import { FilterMenu } from '@/components/documents/FilterMenu';
-import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/components/documents/meta';
+import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/lib/rules/documents';
 import { canCreateAction } from '@/lib/action-rules';
 import { SCREENS, TONE, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -32,7 +32,7 @@ function matchesStatus(d: DocumentRow, s: StatusFilter) {
 }
 
 export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
-  const { role } = await guard('docs');
+  const { role, user } = await guard('docs');
   const sp = await searchParams;
   // Rôles en consultation seule : documents en vigueur, sans cycle de vie ni brouillons.
   const manager = canEdit(role, 'docs');
@@ -140,6 +140,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
             actionForm: qhse ? { people: formOptions.people, sites: formOptions.sites, today: data.now } : null,
           } : READER_OPTIONS}
           existingIds={data.allIds}
+          userId={user.id}
           elsewhere={data.elsewhere}
           unavailable={data.unavailable}
           siteId={siteId}

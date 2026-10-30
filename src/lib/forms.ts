@@ -97,6 +97,10 @@ export function formReader(fd: FormData) {
       if (!ISO_DATE.test(v)) { fail(name, 'Date invalide.'); return null; }
       return v;
     },
+    /** Champ présent dans le formulaire (un champ absent garde la valeur enregistrée : formulaire antérieur, autre écran). */
+    has(name: string) {
+      return fd.has(name);
+    },
     bool(name: string) {
       const v = fd.get(name);
       return v === 'on' || v === 'true' || v === '1';

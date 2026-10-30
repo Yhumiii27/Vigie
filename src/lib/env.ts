@@ -117,7 +117,16 @@ export type VigieConfig = {
    * 0 = sans plafond).
    */
   aiLimits: { dailyScansPerPerson: number; monthlyTokens: number };
+  /**
+   * Appel de lecture des scans (INT-13) : modèle Claude (VIGIE_AI_MODEL, claude-opus-5-5 par défaut) et délai total de
+   * l'appel en flux (VIGIE_AI_TIMEOUT, en secondes, 600 par défaut, de 30 à 3 600).
+   */
+  aiScan: { model: string; timeoutMs: number };
 };
+
+/** Modèle de la lecture des scans par défaut (INT-13) ; VIGIE_AI_MODEL le remplace. */
+export const DEFAULT_AI_MODEL = 'claude-opus-5-5';
+const AI_MODEL_ID = /^[a-z0-9][a-z0-9.:@_-]{2,99}$/i;
 
 /** Niveaux du journal du serveur, du plus bavard au plus sobre. */
 export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
@@ -331,10 +340,15 @@ export function parseConfig(env: Env): VigieConfig {
     dailyScansPerPerson: read('VIGIE_AI_DAILY_SCANS', count(1000)) ?? 20,
     monthlyTokens: read('VIGIE_AI_MONTHLY_TOKENS', count(1_000_000_000)) ?? 2_000_000,
   };
+  // Appel de lecture des scans (INT-13) : identifiant de modèle tel que l'API l'attend (sans espace ni guillemet).
+  const aiScan = {
+    model: read('VIGIE_AI_MODEL', z.string().regex(AI_MODEL_ID, { error: 'identifiant de modèle Claude attendu (ex. claude-opus-5-5)' })) ?? DEFAULT_AI_MODEL,
+    timeoutMs: (read('VIGIE_AI_TIMEOUT', count(3600).refine((n) => n >= 30, { error: 'au moins 30 secondes' })) ?? 600) * 1000,
+  };
 
   if (problems.length) throw new ConfigError(problems);
   return {
-    demo, today, ...storage, log, clamav, aiLimits,
+    demo, today, ...storage, log, clamav, aiLimits, aiScan,
     publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
     scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };

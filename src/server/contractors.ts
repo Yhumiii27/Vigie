@@ -2,7 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { isPlanEnded } from '@/components/prevention/model';
+import { isPlanEnded } from '@/lib/rules/prevention';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';

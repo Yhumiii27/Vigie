@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PERMIT_FILTERS, REGISTER_FILTERS, inPeriod, pickFilter, pickPeriod } from './filters';
+import { PERMIT_FILTERS, REGISTER_FILTERS, inPeriod, interventionFilters, matchesIntervention, pickFilter, pickPeriod } from './filters';
 
 // Registre imprimable des permis (PRV-03) : période par année ou par mois, filtre « Tous, annulés compris ».
 
@@ -48,5 +48,31 @@ describe('REGISTER_FILTERS : filtres de l’onglet Permis et « Tous, annulés c
     expect(PERMIT_FILTERS.some((f) => f.key === 'registre')).toBe(false);
     expect(pickFilter(REGISTER_FILTERS, 'registre')).toBe(all);
     expect(pickFilter(REGISTER_FILTERS, undefined).key).toBe('ouverts');
+  });
+});
+
+// PRV-14 : filtres par entreprise extérieure et par projet Keystone.
+describe('interventionFilters (PRV-14)', () => {
+  const rows = [
+    { id: 'PP-1', contractorId: 'e2', contractor: 'Zeta', keystoneProject: 'HLT-026' },
+    { id: 'PP-2', contractorId: 'e1', contractor: 'Alpha', keystoneProject: null },
+    { id: 'PF-3', contractorId: null, contractor: null, keystoneProject: 'NDC-031' },
+  ];
+
+  it('choix tirés de la liste (triés), valeurs inconnues ignorées', () => {
+    const r = interventionFilters(rows, { entreprise: 'e1', projet: 'INCONNU' });
+    expect(r.contractors).toEqual([['e1', 'Alpha'], ['e2', 'Zeta']]);
+    expect(r.projects).toEqual([['HLT-026', 'HLT-026'], ['NDC-031', 'NDC-031']]);
+    expect(r.filters).toEqual({ entreprise: 'e1', projet: undefined });
+    expect(rows.filter((x) => matchesIntervention(x, r.filters)).map((x) => x.id)).toEqual(['PP-2']);
+  });
+
+  it('entreprise d’un autre site (absente de la liste) : filtre ignoré, rien n’est révélé', () => {
+    expect(interventionFilters(rows, { entreprise: 'e9' }).filters).toEqual({ entreprise: undefined, projet: undefined });
+  });
+
+  it('fiche ouverte par lien direct cachée par les filtres : filtres retirés', () => {
+    expect(interventionFilters(rows, { entreprise: 'e1' }, rows[0]).filters).toEqual({});
+    expect(interventionFilters(rows, { projet: 'HLT-026' }, rows[0]).filters).toEqual({ entreprise: undefined, projet: 'HLT-026' });
   });
 });

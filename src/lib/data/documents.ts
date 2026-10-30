@@ -3,9 +3,9 @@ import { cache } from 'react';
 import { asc, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
-  DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
-  type DocStatus, type DocType, type VersionStatus,
-} from '@/components/documents/meta';
+  DOC_ORIGINS, DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
+  type DocOrigin, type DocStatus, type DocType, type VersionStatus,
+} from '@/lib/rules/documents';
 import { addDays, addMonths, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import { TODO_HORIZON_DAYS, canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';
@@ -45,6 +45,12 @@ export type VersionView = {
   action: LinkedAction | null;
 };
 
+/** Revue périodique sans modification (DOC-15) : date, version maintenue, auteur, conclusion ; annulée (motif) le cas échéant. */
+export type DocReviewView = {
+  id: number; version: string; reviewedOn: string; reviewer: string; conclusion: string;
+  cancelled: { on: string; by: string; reason: string } | null;
+};
+
 export type DocumentRow = {
   id: string;
   title: string;
@@ -72,6 +78,12 @@ export type DocumentRow = {
   pending: VersionView | null;
   /** Historique, de la plus récente à la plus ancienne. */
   versions: VersionView[];
+  /** DOC-17 : origine (interne, externe), émetteur d'un document externe, durée de conservation. */
+  origin: DocOrigin; originLabel: string; issuer: string | null; retention: string | null;
+  /** DOC-15 : revues périodiques sans modification, la plus récente d'abord (annulées comprises, barrées). */
+  reviews: DocReviewView[];
+  /** Dernière revue (approbation de la version en vigueur ou revue sans modification) dont repart la prochaine revue. */
+  lastReviewedOn: string | null;
   nextReviewOn: string | null;
   /** Jours avant la prochaine revue (négatif si dépassée). */
   reviewDays: number | null;
@@ -111,10 +123,12 @@ type RawDocumentData = {
   retirements?: Map<string, Retirement>;
   /** Événements rattachés par document (loadLinkedEvents). */
   events?: Map<string, LinkedEvent[]>;
+  /** DOC-15 : revues périodiques sans modification. */
+  reviews?: (typeof t.documentReviews.$inferSelect)[];
 };
 
 /** Construit les lignes du registre à partir des tables (règles de statut, version en vigueur, prochaine revue). */
-export function buildDocumentRows({ people, docs, versions, files, actions, sites, retirements, events }: RawDocumentData, site: string | null, now: string): DocumentRow[] {
+export function buildDocumentRows({ people, docs, versions, files, actions, sites, retirements, events, reviews = [] }: RawDocumentData, site: string | null, now: string): DocumentRow[] {
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '—' : '—');
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
   const fileOf = new Map(files.map((f) => [f.entityId, { id: f.id, name: f.fileName, size: f.size }])); // le dernier dépôt l'emporte
@@ -148,7 +162,12 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
     const current = vs.find((v) => v.status === 'approuve') ?? null;
     const pending = vs.find((v) => v.status === 'brouillon' || v.status === 'en_revue') ?? null;
     const status: DocStatus = current ? 'vigueur' : pending?.status === 'en_revue' ? 'revue' : pending ? 'brouillon' : 'obsolete';
-    const nextReviewOn = current?.approvedOn ? addMonths(current.approvedOn, d.reviewMonths) : null;
+    // DOC-15 : la prochaine revue repart de la plus récente de l'approbation de la version en vigueur et des revues sans
+    // modification de cette version (non annulées).
+    const docReviews = reviews.filter((r) => r.documentId === d.id).sort((a, b) => b.reviewedOn.localeCompare(a.reviewedOn) || b.id - a.id);
+    const lastReview = current ? docReviews.find((r) => !r.cancelledAt && r.version === current.version && (!current.approvedOn || r.reviewedOn >= current.approvedOn)) : undefined;
+    const lastReviewedOn = lastReview?.reviewedOn ?? current?.approvedOn ?? null;
+    const nextReviewOn = lastReviewedOn ? addMonths(lastReviewedOn, d.reviewMonths) : null;
     const reviewDays = nextReviewOn ? daysBetween(now, nextReviewOn) : null;
     const type = DOC_TYPES[d.type as DocType];
     const neverApproved = !vs.some((v) => v.approvedOn);
@@ -164,6 +183,15 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
       owner: name(d.ownerId),
       reviewMonths: d.reviewMonths,
       distribution: d.distribution,
+      origin: (d.origin === 'externe' ? 'externe' : 'interne') as DocOrigin,
+      originLabel: DOC_ORIGINS[d.origin as DocOrigin] ?? d.origin,
+      issuer: d.issuer,
+      retention: d.retention,
+      reviews: docReviews.map((r) => ({
+        id: r.id, version: r.version, reviewedOn: r.reviewedOn, reviewer: name(r.reviewerId), conclusion: r.conclusion,
+        cancelled: r.cancelledAt ? { on: parisDay(r.cancelledAt), by: name(r.cancelledById), reason: r.cancelReason ?? '' } : null,
+      })),
+      lastReviewedOn,
       siteId: d.siteId,
       siteLabel: d.siteId ? siteLabel.get(d.siteId) ?? d.siteId : 'Tous les sites',
       status,
@@ -196,7 +224,7 @@ export function buildDocumentRows({ people, docs, versions, files, actions, site
 const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [site, keep, perimeter, people, docs, versions, files, actions, sites] = await Promise.all([
+  const [site, keep, perimeter, people, docs, versions, files, actions, sites, reviews] = await Promise.all([
     currentSiteId(),
     siteFilter(scope),
     siteFilter('perimeter'),
@@ -207,6 +235,7 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
       .from(t.attachments).where(eq(t.attachments.entityType, 'document_version')).orderBy(asc(t.attachments.createdAt)),
     loadActionRows().then((rows) => rows.filter((a) => a.status !== 'abandonnee')),
     loadSiteRows(),
+    db.select().from(t.documentReviews).orderBy(asc(t.documentReviews.id)),
   ]);
   // Retraits tracés (motif obligatoire) : l'entrée « archive » la plus récente de chaque document.
   const logs = await loadChangeLogs('document', docs.map((d) => d.id));
@@ -217,7 +246,7 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   const kept = docs.filter((d) => keep(d.siteId));
   // EVT-14 : événements rattachés (périmètre, jamais une maladie professionnelle hors rôles habilités ; rien pour le Salarié).
   const events = await loadLinkedEvents('document', kept.map((d) => d.id));
-  const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events }, null, now);
+  const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events, reviews }, null, now);
   // Documents rattachés à un autre site du périmètre : la fiche ouverte par ?doc= (après création ou changement de site)
   // l'explique. Hors du périmètre : rien n'est révélé (bandeau « introuvable », UX-13).
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));

@@ -13,7 +13,7 @@ import {
   targetSiteId,
 } from '@/components/actions/detail/form-helpers';
 import { DialogButton } from '@/components/Dialog';
-import { mentionsInjury } from '@/components/events/shared';
+import { mentionsInjury } from '@/lib/rules/events';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { NON_QSE_LINK_MESSAGE } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';

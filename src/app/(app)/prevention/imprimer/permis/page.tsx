@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { PrintButton } from '@/components/PrintButton';
 import { PERMIT_FILTERS, PERMIT_TYPE_FILTERS, REGISTER_FILTERS, filterParam, inPeriod, pickFilter, pickPeriod, pickType } from '@/components/prevention/filters';
-import { PERMIT_TYPES } from '@/components/prevention/model';
+import { PERMIT_TYPES } from '@/lib/rules/prevention';
 import { hrefWith } from '@/components/ui';
 import { fmtDate, monthName } from '@/lib/dates';
 import { today } from '@/lib/today';
