@@ -24,7 +24,9 @@ env:
 jobs:
   verification:
     name: Types, lint, tests, migrations, construction
-    runs-on: ubuntu-latest
+    # Version fixée : Playwright (package-lock.json) ne prend pas en charge ubuntu-latest passé en 26.04 (30/10/2026), et le
+    # client PostgreSQL du système suit la version d'Ubuntu ; à faire évoluer avec la version de @playwright/test.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       # Même version majeure que docker-compose.yml : tests d'intégration en mode PostgreSQL (test/setup-postgres.ts).
@@ -114,7 +116,7 @@ jobs:
 
   image:
     name: Image Docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
