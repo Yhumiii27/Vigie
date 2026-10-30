@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { addMonths, daysBetween, fmtDayMonth, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {

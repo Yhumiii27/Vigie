@@ -3,20 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, canEdit, contextNeedsTreatment, type ContextKind } from '@/lib/domain';
+import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, contextNeedsTreatment, type ContextKind } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireManager } from '@/lib/guard';
+import { requireEditor } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';
 
 // Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1) : enjeux, parties intéressées, risques et
 // opportunités. Élément commun à l'entreprise (sans site), saisi par les rôles qui saisissent sur l'écran « Audits »
 // (animateur QHSE, direction) ; jamais supprimé (archivage motivé), chaque écriture au journal (context_item).
 
-async function requireContextEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireContextEditor = () => requireEditor('audits');
 
 const LABELS = { kind: 'Nature', label: 'Intitulé', detail: 'Description, attentes', treatment: 'Traitement' } as const;
 

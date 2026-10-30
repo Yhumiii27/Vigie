@@ -18,13 +18,14 @@ import { addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSign
 import {
   DANGEROUS_WORK_HINT, EE_HEADCOUNT, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS,
   lcfirst, ruleBasis, type PlanContentField, type PlanContentGroup,
-} from './model';
+} from '@/lib/rules/prevention';
 import { TipButton } from '@/components/Tip';
 import { PlanMeetings } from './PlanMeetings';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
   contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
+import { withCurrent } from '@/lib/form-options';
 
 /** Pièces jointes acceptées sur un plan : PDF, images, Word. */
 const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
@@ -82,9 +83,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
   const signed = !!(plan?.signedEuOn || plan?.signedEeOn);
   // Intervention commencée : déplacer la date de début exige un motif (un écart R. 4512-6 ne s'efface pas sans trace).
   const startMoved = !!plan && plan.startOn <= options.today && start !== plan.startOn;
-  const projects = plan?.keystoneProject && !options.projects.some(([v]) => v === plan.keystoneProject)
-    ? [[plan.keystoneProject, plan.keystoneProject] as const, ...options.projects]
-    : options.projects;
+  const projects = withCurrent(options.projects, plan?.keystoneProject, null, 'start');
 
   return (
     <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id, version: plan?.version }}>

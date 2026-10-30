@@ -85,13 +85,14 @@ jobs:
       - name: Navigateur des parcours (Playwright)
         run: npx playwright install --with-deps chromium
 
-      - name: Cloisonnement Salarié et parcours dans le navigateur (serveur construit)
+      - name: Cloisonnement Salarié (serveur construit)
         env:
           VIGIE_TODAY: '2026-10-09'
           VIGIE_DATA_DIR: ${{ runner.temp }}/vigie-demo
           VIGIE_UPLOAD_DIR: ${{ runner.temp }}/vigie-uploads
           VIGIE_SCHEDULER: '0'
         run: |
+          # Serveur laissé en marche pour les étapes suivantes (arrêté avec la tâche).
           npm run start:demo > "$RUNNER_TEMP/vigie-server.log" 2>&1 &
           for i in $(seq 1 60); do
             [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3200/api/sante)" = 200 ] && break
@@ -99,7 +100,19 @@ jobs:
           done
           # Charge des pages du Salarié d'abord, sur le jeu intact ; les parcours Playwright écrivent ensuite dans la base.
           VIGIE_E2E_URL=http://localhost:3200 npx vitest run test/e2e
-          VIGIE_E2E_URL=http://localhost:3200 npm run test:pw
+
+      # Recette visuelle (QUA-16) : captures comparées à celles du dépôt, sur le jeu encore intact. Non bloquante : le rendu
+      # des polices dépend de la machine ; un écart se relit dans le rapport (captures « actual » et « diff »).
+      - name: Recette visuelle (non bloquante)
+        continue-on-error: true
+        env:
+          VIGIE_E2E_URL: http://localhost:3200
+        run: npm run test:visual
+
+      - name: Parcours dans le navigateur (serveur construit)
+        env:
+          VIGIE_E2E_URL: http://localhost:3200
+        run: npm run test:pw
 
       - name: Rapport des parcours
         if: failure()

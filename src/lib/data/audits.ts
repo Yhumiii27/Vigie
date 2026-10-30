@@ -2,8 +2,8 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { REVIEW_TRACK, isReviewPlanItem } from '@/components/audits/shared';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import { REVIEW_TRACK, isReviewPlanItem } from '@/lib/rules/audits';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { isLate } from '../action-rules';
 import { hasLeft } from '../people';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, monthName, monthOf, yearOf, parisDay } from '../dates';
@@ -153,7 +153,7 @@ export function reviewSlot(items: SlotItem[], reviewOn: string): { adopt: number
 /** Libellé d'audit repris par les constats rattachés à un élément du programme (« Processus Production · juin 2026 »). */
 export const planItemAuditLabel = (p: Pick<PlanLike, 'year' | 'month' | 'label' | 'detail'>) => `${p.detail ?? p.label} · ${monthName(p.month)} ${p.year}`;
 
-// isReviewPlanItem : règle partagée avec le formulaire du programme (src/components/audits/shared.ts).
+// isReviewPlanItem : règle partagée avec le formulaire du programme (src/lib/rules/audits.ts).
 export { isReviewPlanItem };
 
 /** Date de référence d'un élément du programme (tri, constats) : réalisation, date prévue, sinon fin du mois. */

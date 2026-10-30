@@ -16,7 +16,7 @@ import type { CertView } from '@/lib/data/audits';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { deleteCertification, reinstateCertification, removeCertificationFile, renewCertification, saveCertification, suspendCertification } from '@/server/audits';
 import { DeleteButton, DialogFooter, FileList, RadioSeg, fileUrl } from './parts';
-import { CERT_TONES, CERT_TONE_LABELS, certDot } from './shared';
+import { CERT_TONES, CERT_TONE_LABELS, certDot } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Editing = { id: string | null } | null;

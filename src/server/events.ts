@@ -10,7 +10,7 @@ import {
   advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
   MP_DENIED, MP_TITLE, hasNcDisposition,
-} from '@/components/events/shared';
+} from '@/lib/rules/events';
 import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';

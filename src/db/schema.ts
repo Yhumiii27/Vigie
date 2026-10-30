@@ -150,7 +150,7 @@ export const events = pgTable('events', {
   lostDays: integer('lost_days'),
   // AT : date de déclaration à la CPAM (sous 48 h, sauf soins inscrits au registre des accidents bénins).
   cpamDeclaredOn: date('cpam_declared_on', { mode: 'string' }),
-  // AT — rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463). Données de santé : HEALTH_LABELS (src/components/events/shared.ts).
+  // AT — rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463). Données de santé : HEALTH_LABELS (src/lib/rules/events.ts).
   victimKind: text('victim_kind'), // salarie | interimaire | externe (VICTIM_KINDS)
   victimId: text('victim_id').references(() => people.id), // victime de l'effectif
   victimName: text('victim_name'), // intérimaire ou personne extérieure : nom déclaré
@@ -1154,7 +1154,7 @@ export const preventionPlans = pgTable('prevention_plans', {
 
 // PRV-17 (migration 0020) : inspections et réunions périodiques de coordination tenues pendant l'intervention (R. 4513-2),
 // pour les interventions longues (contrat annuel). Annulation motivée d'une saisie erronée, jamais supprimée ; journal du
-// plan (`prevention_plan`). Prochaine séance due : nextPeriodicMeeting (src/components/prevention/model.ts), calculée.
+// plan (`prevention_plan`). Prochaine séance due : nextPeriodicMeeting (src/lib/rules/prevention.ts), calculée.
 export const preventionPlanMeetings = pgTable('prevention_plan_meetings', {
   id: serial('id').primaryKey(),
   planId: text('plan_id').notNull().references(() => preventionPlans.id),

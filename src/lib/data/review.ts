@@ -32,7 +32,7 @@ import { loadPrevention } from './prevention';
 import { loadPreventionSignals } from './prevention-signals';
 import { loadRisks } from './risks';
 import { loadSkillMatrix, type SkillAlert } from './skills';
-import { skillIndicators } from '@/components/skills/rules';
+import { skillIndicators } from '@/lib/rules/skills';
 
 // ─── Revue de direction (ISO 9001 §9.3) ─────────────────────────────────────
 

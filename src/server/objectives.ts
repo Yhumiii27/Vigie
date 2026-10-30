@@ -3,9 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { canEdit } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import { OBJECTIVE_INDICATORS, OBJECTIVE_INDICATOR_KEYS, OBJECTIVE_LABEL_MAX, fmtObjectiveTarget, type ObjectiveIndicator } from '@/lib/objectives';
 import { ALL_SITES } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
@@ -13,11 +12,7 @@ import { diffFields, logChange } from './changelog';
 // Objectifs QHSE mesurables (AUD-13) : saisis sur l'écran « Audits et certifications » par les rôles qui y saisissent
 // (canEdit : animateur QHSE, direction) ; jamais supprimés (archivage motivé) ; chaque écriture au journal (qhse_objective).
 
-async function requireObjectiveEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireObjectiveEditor = () => requireEditor('audits');
 
 const LABELS = { year: 'Année', label: 'Objectif', indicator: 'Indicateur', target: 'Cible', siteId: 'Site', pilotId: 'Pilote', reviewDecisionId: 'Décision de revue' } as const;
 

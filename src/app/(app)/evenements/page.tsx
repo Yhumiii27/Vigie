@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
+import { ChangeLogList } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { EventAccessLog } from '@/components/events/AccessLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { BackToList, DetailFocus } from '@/components/ListDetail';
@@ -16,7 +17,7 @@ import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { EventFilterBar } from '@/components/events/EventFilters';
 import { NewEventButton } from '@/components/events/NewEventButton';
 import { OccupationalSection } from '@/components/events/OccupationalSection';
-import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
+import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/lib/rules/events';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { admissibleSources, canCreateAction } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
@@ -34,6 +35,8 @@ import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
 import { NEW_EVENT_SOURCES, prefillKey, prefillType, sourceParam } from '@/lib/event-prefill';
 import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
+import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination';
+import { Pagination } from '@/components/Pagination';
 
 export const metadata: Metadata = { title: SCREENS.events.title };
 
@@ -72,8 +75,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const found = events.filter(matches);
   const inTab = { ouverts: found.filter(isOpen), tous: found.filter((e) => !e.dismissedAt), classes: found.filter((e) => !!e.dismissedAt) };
   const searched = inTab[tab];
-  const list = searched.filter((e) => !types.length || (types as string[]).includes(e.type)).map((e) => eventView(e, people, now));
   const selParam = str(sp.sel);
+  // QUA-21 : liste paginée (?page=, ?taille=) ; sans ?page=, la page de la fiche demandée (?sel=, liens d'échéance).
+  const pageSize = parsePageSize(sp.taille);
+  const paged = paginate(searched.filter((e) => !types.length || (types as string[]).includes(e.type)), {
+    page: parsePage(sp.page), size: pageSize, selected: selParam ? (e) => e.id === selParam : undefined,
+  });
+  const list = paged.items.map((e) => eventView(e, people, now));
   // Lien vers un événement non visible (autre site, signalement d'un autre déclarant) : avis « introuvable », pas un autre événement.
   const selId = selParam ? (events.some((e) => e.id === selParam) ? selParam : undefined) : list[0]?.id;
   const [detail, closures, newDefaults] = await Promise.all([
@@ -85,8 +93,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
       : null,
   ]);
   const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
-  const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined };
-  const params = { ...baseParams, ...eventFilterParams(urlFilters), sel: selParam };
+  const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, taille: pageParams(1, pageSize).taille };
+  const params = { ...baseParams, ...eventFilterParams(urlFilters), page: pageParams(paged.page, pageSize).page, sel: selParam };
 
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
@@ -108,7 +116,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const emptyText = hasEventFilters(urlFilters) || q || type || origin ? 'Aucun événement ne correspond.'
     : tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
   const tabLink = (etat: Tab, label: string, n: number) => ({
-    href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, sel: undefined }),
+    href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, page: undefined, sel: undefined }),
     label: <>{label}<span style={{ opacity: 0.6 }}>{n}</span></>, on: tab === etat,
   });
 
@@ -141,6 +149,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {tab !== 'ouverts' && <input type="hidden" name="etat" value={tab} />}
             {type && <input type="hidden" name="type" value={type} />}
             {origin && <input type="hidden" name="origine" value={origin} />}
+            {baseParams.taille && <input type="hidden" name="taille" value={baseParams.taille} />}
             {Object.entries(eventFilterParams(urlFilters)).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
             <input className="input" name="q" defaultValue={q} placeholder="Référence, lieu, équipement…" style={{ fontSize: 12.5, paddingLeft: 32 }} />
           </form>
@@ -154,12 +163,12 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           <EventFilterBar filters={urlFilters} base={baseParams} people={employee ? [] : options.people} health={health} pilots={!employee} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {origin && (
-              <Link href={hrefWith('/evenements', params, { origine: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
+              <Link href={hrefWith('/evenements', params, { origine: undefined, page: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
                 Origine : {origin === NC_ORIGIN_NONE ? 'non renseignée' : origin}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
               </Link>
             )}
             {filters.map((f) => (
-              <Link key={f.label} href={hrefWith('/evenements', params, { type: f.key, sel: undefined })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
+              <Link key={f.label} href={hrefWith('/evenements', params, { type: f.key, page: undefined, sel: undefined })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
                 {f.label}<span style={{ opacity: 0.6 }}>{f.n}</span>
               </Link>
             ))}
@@ -185,6 +194,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
               );
             })}
           </div>
+          <Pagination path="/evenements" params={params} page={paged} label="Pages des événements" clear={['sel']} />
         </div>
 
         <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>

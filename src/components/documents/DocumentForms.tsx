@@ -10,7 +10,7 @@ import type { FormOptions } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import { nextRef, type FormState } from '@/lib/forms';
 import { createDocument, recordDocumentReview, reviseDocument, updateDocument, updateDraft } from '@/server/documents';
-import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocOrigin, type DocType } from './meta';
+import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocOrigin, type DocType } from '@/lib/rules/documents';
 
 type Option = readonly [string, string];
 

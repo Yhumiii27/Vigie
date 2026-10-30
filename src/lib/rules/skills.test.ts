@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillIndicators, skillLinkTarget } from './rules';
+import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillIndicators, skillLinkTarget } from './skills';
 
 // Règles des habilitations (QUA-03) : manque au regard d'une affectation Keystone, recyclage à planifier.
 

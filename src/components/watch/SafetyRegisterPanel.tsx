@@ -10,7 +10,7 @@ import { ReasonButton } from '@/components/ReasonDialog';
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { SAFETY_NOTICE_KINDS, SAFETY_NOTICE_KIND_KEYS } from '@/lib/domain';
-import type { Option } from '@/lib/form-options';
+import { type Option, withCurrent } from '@/lib/form-options';
 import type { SafetyNoticeView } from '@/lib/data/watch';
 import { answerSafetyNotice, cancelSafetyNotice, saveSafetyNotice } from '@/server/watch';
 import { Facts, Notice, muted, rowOpener } from './parts';
@@ -158,7 +158,7 @@ function NoticeForm({ n, options, defaultSite, today, onDone, onCancel }: {
 }) {
   const [siteId, setSiteId] = useState(n?.siteId ?? defaultSite);
   // Site archivé encore porté par l'observation : conservé comme choix.
-  const sites = n && !options.sites.some(([v]) => v === n.siteId) ? [...options.sites, [n.siteId, n.siteLabel] as const] : options.sites;
+  const sites = withCurrent(options.sites, n?.siteId, n?.siteLabel);
   const controls = options.controls.filter(([, , s]) => !s || s === siteId).map(([v, l]) => [v, l] as const);
   return (
     <ActionForm action={saveSafetyNotice} hidden={{ id: n?.id }} onDone={onDone} onCancel={onCancel} submitLabel={n ? 'Enregistrer' : "Inscrire au registre"}>

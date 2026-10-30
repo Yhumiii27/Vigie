@@ -4,7 +4,7 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast, skillLinkTarget } from '@/components/skills/rules';
+import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
 import { today } from '@/lib/today';
 import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';

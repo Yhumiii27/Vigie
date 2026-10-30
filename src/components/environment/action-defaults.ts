@@ -10,7 +10,7 @@
 import type { ActionDefaults } from '@/lib/action-view';
 import { addDays, fmtDate } from '@/lib/dates';
 import { ORIGIN_REF_MAX } from '@/lib/domain';
-import { fmtQty } from './model';
+import { fmtQty } from '@/lib/rules/environment';
 
 /** Délai proposé entre la date cible et la vérification d'efficacité planifiée. */
 export const VERIFY_AFTER_DAYS = 30;

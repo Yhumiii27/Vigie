@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
-import { CERT_TONE_LABELS, certDot, type CertTone } from '@/components/audits/shared';
+import { CERT_TONE_LABELS, certDot, type CertTone } from '@/lib/rules/audits';
 import { Dot, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
 import { TONE, type Role } from '@/lib/domain';

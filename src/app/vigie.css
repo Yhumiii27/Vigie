@@ -407,3 +407,8 @@ a.vg-risk-cell:focus-visible { outline: 2px solid var(--color-accent); outline-o
 /* ─── Habilitations : colonne « Salarié » figée au défilement horizontal (HAB-16) ─── */
 .vg-sticky-table .vg-sticky-col { position: sticky; left: 0; z-index: 1; background: var(--color-surface); box-shadow: 1px 0 0 var(--color-divider); }
 .vg-sticky-table thead .vg-sticky-col { z-index: 2; }
+
+/* Pagination d'une liste (QUA-21, src/components/Pagination.tsx). */
+.vg-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 11.5px; color: var(--vg-text-muted); padding: 4px 2px; }
+.vg-pager-steps, .vg-pager-sizes { display: inline-flex; align-items: center; gap: 6px; }
+.vg-pager [aria-disabled='true'] { opacity: 0.45; pointer-events: none; }

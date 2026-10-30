@@ -11,10 +11,10 @@ import { NewEntryButton, WasteRegister, type StreamOption } from '@/components/e
 import { SiteSiretButton } from '@/components/environment/SiteSiret';
 import { Note } from '@/components/environment/parts';
 import type { Carrier, Installation } from '@/components/environment/parts';
-import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/components/environment/model';
+import { fmtDelta, fmtNum, fmtPct, lcfirst, shiftMonth } from '@/lib/rules/environment';
 import styles from '@/components/environment/environment.module.css';
 import { fmtDate, fmtDayMonth } from '@/lib/dates';
-import { BSD_STALE_DAYS } from '@/components/environment/model';
+import { BSD_STALE_DAYS } from '@/lib/rules/environment';
 import { SCREENS, TONE, canApprove, canEdit, canSee, type Tone } from '@/lib/domain';
 import { fmtSiret } from '@/lib/siret';
 import { guard } from '@/lib/guard';

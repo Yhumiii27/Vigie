@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { injuryLabel } from '@/components/events/shared';
+import { injuryLabel } from '@/lib/rules/events';
 import { EVENT_TYPES, type EventType } from '../domain';
 import { fmtParisDateTime, parisDay } from '../dates';
 import { getSession, inPerimeter } from '../session';

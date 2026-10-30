@@ -2,14 +2,14 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { fmtQty, wasteEntryHref } from '@/components/environment/model';
-import type { ChangeEntry } from '@/components/ChangeLog';
-import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/components/events/deadlines';
+import { fmtQty, wasteEntryHref } from '@/lib/rules/environment';
+import type { ChangeEntry } from '@/lib/change-entry';
+import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/lib/rules/event-deadlines';
 import {
   BENIGN_REGISTER_PATH, FIRST_AID_TITLE_FALLBACK, HEALTH_FILE_FIELD, HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending,
   declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
   type AttachmentItem, type DeclarationDuty,
-} from '@/components/events/shared';
+} from '@/lib/rules/events';
 import { addDays, fmtDate, parisDay, toParisLocal } from '../dates';
 import { today } from '@/lib/today';
 import {

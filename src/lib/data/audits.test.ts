@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REVIEW_TRACK } from '@/components/audits/shared';
+import { REVIEW_TRACK } from '@/lib/rules/audits';
 import { planItemState, planStart, relabelDay, reviewSlot } from './audits';
 
 // Règles du programme annuel (QUA-03) : état calculé d'un élément (annulé, reporté, AUD-03), première planification d'un

@@ -13,7 +13,7 @@ import { createPlanFromImport, detectPpImport, savePpTemplate } from '@/server/p
 // (droits, site, journal, fichier joint) ; lecture d'un scan par l'API Claude simulée (INT-06 : consommation journalisée,
 // cache d'un même fichier, plafonds). Aucun appel réel à l'API.
 
-const api = vi.hoisted(() => ({ calls: 0, response: null as unknown }));
+const api = vi.hoisted(() => ({ calls: 0, response: null as unknown, last: null as null | Record<string, unknown> }));
 vi.mock('@anthropic-ai/sdk', () => {
   class AnthropicError extends Error {}
   class APIError extends AnthropicError { status?: number }
@@ -29,7 +29,8 @@ vi.mock('@anthropic-ai/sdk', () => {
     static APIConnectionError = sub();
     static APIConnectionTimeoutError = sub();
     static InternalServerError = sub();
-    beta = { messages: { create: async () => { api.calls++; return api.response; } } };
+    // INT-13 : appel en flux (stream puis finalMessage).
+    beta = { messages: { stream: (params: Record<string, unknown>) => { api.calls++; api.last = params; return { finalMessage: async () => api.response }; } } };
   }
   return { default: Anthropic };
 });
@@ -165,5 +166,90 @@ describe('lecture d’un scan par l’API Claude (INT-06)', () => {
     expect(aiQuotaProblem({ monthTokens: 0, personDay: 3 }, limits)).toMatch(/Plafond de 3/);
     expect(aiQuotaProblem({ monthTokens: 1000, personDay: 0 }, limits)).toMatch(/mensuel/);
     expect(aiQuotaProblem({ monthTokens: 10 ** 9, personDay: 0 }, { ...limits, monthlyTokens: 0 })).toBeNull();
+  });
+});
+
+describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)', () => {
+  beforeAll(() => {
+    Object.assign(process.env, { VIGIE_AI_IMPORT: '1', ANTHROPIC_API_KEY: 'cle-de-test' });
+    resetConfig();
+    clearScanCache();
+  });
+  afterAll(() => {
+    for (const k of ['VIGIE_AI_IMPORT', 'ANTHROPIC_API_KEY', 'VIGIE_AI_MODEL', 'VIGIE_AI_TIMEOUT']) delete process.env[k];
+    resetConfig();
+  });
+  const detectAll = (files: File[]) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append('file', f, f.name));
+    return detectPpImport(fd);
+  };
+  const heic = () => new File([Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic'), Buffer.alloc(100)])], 'IMG_0001.jpg', { type: 'image/jpeg' });
+
+  it('plusieurs photos : lues en une fois, pages dans l’ordre, appel en flux avec repli côté serveur', async () => {
+    actAs('Animateur QHSE', 'ville-a');
+    api.response = scanResponse();
+    const before = api.calls;
+    const r = await detectAll([photo(21), photo(22), photo(23)]);
+    expect(r).toMatchObject({ ok: true, format: 'scan', pageCount: 3, fileName: 'scan-21.jpg (+ 2 pages)', ai: { used: true } });
+    expect(api.calls).toBe(before + 1);
+    const params = api.last as { model: string; max_tokens: number; fallbacks?: string; betas: string[]; messages: { content: { type: string; text?: string }[] }[] };
+    expect(params).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 64_000, fallbacks: 'default' });
+    expect(params.betas).toContain('server-side-fallback-2026-07-01');
+    const content = params.messages[0].content;
+    expect(content.map((b) => b.type)).toEqual(['image', 'image', 'image', 'text']);
+    expect(content[3].text).toMatch(/fourni en 3 images/);
+  });
+
+  it('plusieurs fichiers : photos seulement, 8 pages au plus ; HEIC refusé d’après son contenu, sans appel', async () => {
+    actAs('Animateur QHSE', 'ville-a');
+    const calls = api.calls;
+    expect(await detectAll([photo(31), sample('plan-de-prevention-vierge.pdf', PDF)])).toMatchObject({ ok: false, error: expect.stringMatching(/photos des pages/) });
+    expect(await detectAll(Array.from({ length: 9 }, (_, i) => photo(40 + i)))).toMatchObject({ ok: false, error: expect.stringMatching(/8 pages au plus/) });
+    expect(await detectAll([heic()])).toMatchObject({ ok: false, error: expect.stringMatching(/HEIC/) });
+    expect(await detectAll([new File(['x'], 'IMG.HEIC', { type: 'image/heic' })])).toMatchObject({ ok: false, error: expect.stringMatching(/HEIC/) });
+    expect(api.calls).toBe(calls);
+  });
+
+  it('modèle configuré (VIGIE_AI_MODEL) : journalisé, sans repli s’il ne l’accepte pas', async () => {
+    Object.assign(process.env, { VIGIE_AI_MODEL: 'claude-haiku-5-5', VIGIE_AI_TIMEOUT: '900' });
+    resetConfig();
+    actAs('Animateur QHSE', 'ville-a');
+    api.response = { ...scanResponse(), model: 'claude-haiku-5-5' };
+    expect(await detectAll([photo(61)])).toMatchObject({ ok: true, ai: { used: true } });
+    expect(api.last).toMatchObject({ model: 'claude-haiku-5-5' });
+    expect(api.last).not.toHaveProperty('fallbacks');
+    expect((api.last as { betas: string[] }).betas).toEqual(['structured-outputs-2025-12-15']);
+    const db = await getDb();
+    const [last] = (await db.select().from(t.aiUsage)).slice(-1);
+    expect(last).toMatchObject({ model: 'claude-haiku-5-5', outcome: 'ok' });
+    delete process.env.VIGIE_AI_MODEL;
+    delete process.env.VIGIE_AI_TIMEOUT;
+    resetConfig();
+  });
+
+  it('création depuis plusieurs pages : première page source du plan, autres pages jointes, journal', async () => {
+    actAs('Animateur QHSE', 'ville-a');
+    const fd = new FormData();
+    [photo(71), photo(72)].forEach((f) => fd.append('file', f, f.name));
+    Object.entries({
+      format: 'scan', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: 'Peinture du hall',
+      location: 'Hall 2', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '30',
+    }).forEach(([k, v]) => fd.set(k, v));
+    const r = await createPlanFromImport({}, fd);
+    expect(r).toMatchObject({ ok: true });
+    const db = await getDb();
+    const [plan] = await db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, r.id!));
+    const atts = await db.select().from(t.attachments).where(eq(t.attachments.entityId, r.id!));
+    expect(atts.map((a) => a.fileName).sort()).toEqual(['scan-71.jpg', 'scan-72.jpg']);
+    expect(atts.find((a) => a.id === plan.importedFromId)?.fileName).toBe('scan-71.jpg');
+    expect((plan.formData as { source: { fileName: string } }).source.fileName).toBe('scan-71.jpg (+ 1 page)');
+    expect((await changeLog('prevention_plan', r.id!)).map((e) => e.action)).toEqual(['create']);
+    // Plusieurs fichiers hors scan : refusé.
+    const bad = new FormData();
+    [photo(73), photo(74)].forEach((f) => bad.append('file', f, f.name));
+    Object.entries({ format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: 'x', location: 'y', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '10' })
+      .forEach(([k, v]) => bad.set(k, v));
+    expect(await createPlanFromImport({}, bad)).toMatchObject({ error: expect.stringMatching(/Plusieurs pages/) });
   });
 });

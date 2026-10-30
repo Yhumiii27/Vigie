@@ -20,7 +20,7 @@ import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { cancelPlanItem, hideTrack, removePlanItemReport, renameTrack, renewProgram, reschedulePlanItem, savePlanItem, showTrack } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
 import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
-import { MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from './shared';
+import { MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Opts = ActionFormOptions;

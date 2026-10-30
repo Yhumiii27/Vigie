@@ -2,7 +2,7 @@
 // (qui ajoute la période ?annee=, ?mois= et le filtre « Tous, annulés compris »).
 
 import { addDays, addMonths, monthName } from '@/lib/dates';
-import type { PermitState, PermitType, PlanPhase } from './model';
+import type { PermitState, PermitType, PlanPhase } from '@/lib/rules/prevention';
 
 export type ListFilter<S extends string> = {
   /** Valeur de ?filtre= (le premier filtre de la liste est celui par défaut, sans paramètre). */

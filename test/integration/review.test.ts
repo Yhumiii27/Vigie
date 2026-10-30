@@ -3,7 +3,7 @@ import { form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { REVIEW_TRACK } from '@/components/audits/shared';
+import { REVIEW_TRACK } from '@/lib/rules/audits';
 import { buildReviewDossier, loadMyContributions, loadReviewCard, type Review } from '@/lib/data/review';
 import { loadVisibleTodo } from '@/lib/data/todo';
 import type { Role } from '@/lib/domain';

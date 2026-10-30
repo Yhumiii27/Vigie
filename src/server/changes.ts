@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fmtDate } from '@/lib/dates';
-import { CHANGE_KINDS, CHANGE_KIND_KEYS, CHANGE_STATUS, canEdit, type ChangeKind, type ChangeStatus } from '@/lib/domain';
+import { CHANGE_KINDS, CHANGE_KIND_KEYS, CHANGE_STATUS, type ChangeKind, type ChangeStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
@@ -22,11 +22,7 @@ import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
 const ENTITY = 'change_request';
 const NOT_FOUND = 'Demande de changement introuvable.';
 
-async function requireChangeEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireChangeEditor = () => requireEditor('audits');
 
 /** Demande chargée pour une écriture : existante, du site sélectionné et du périmètre, non annulée. */
 async function loadForWrite(id: string) {

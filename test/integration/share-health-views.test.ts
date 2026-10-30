@@ -4,7 +4,7 @@ import { actAs, file, formWith, freshDemoDatabase } from '../helpers';
 import { actionRow, NEW_ACTION } from './actions-helpers';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { MP_TITLE } from '@/components/events/shared';
+import { MP_TITLE } from '@/lib/rules/events';
 import { HEALTH_EVENT_TYPES } from '@/lib/domain';
 import { addEventFiles } from '@/server/events';
 import { saveAction } from '@/server/plan';

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import {
   DECLARANT_MAX, MAX_BATCH_BYTES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, REPORT_TRAP_FIELD,
-} from '@/components/events/shared';
+} from '@/lib/rules/events';
 import { createReport } from '@/server/events';
 import { EVENT_TYPES, REPORT_TYPE_KEYS } from '@/lib/domain';
 

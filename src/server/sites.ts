@@ -3,13 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { SEVESO_LEVELS } from '@/components/prevention/model';
+import { SEVESO_LEVELS } from '@/lib/rules/prevention';
 import { ALL_SITES } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { today } from '@/lib/today';
 import { logChange } from './changelog';
+import { nextSort } from '@/lib/sort-order';
 
 // Administration des sites (fenêtre « Gérer les sites… » du sélecteur de site) : animateur QHSE et direction.
 // Un site n'est jamais supprimé : archivé avec motif, il disparaît des sélecteurs et ses données restent consultables.
@@ -61,7 +62,7 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
     let newId = base;
     // L'identifiant réservé de « Tous les sites » (« all ») n'est jamais attribué à un site.
     for (let i = 2; newId === ALL_SITES || sites.some((s) => s.id === newId); i++) newId = `${base}-${i}`;
-    const order = sort ?? Math.max(-1, ...sites.map((s) => s.sort)) + 1;
+    const order = sort ?? nextSort(sites);
     await db.transaction(async (tx) => {
       await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId, alsaceMoselle });
       if (!sites.length) {

@@ -8,6 +8,7 @@ import { ToneTag } from '@/components/ui';
 import { TONE, type Tone } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { LinkedEvent, PlanChoice, ProcedureLink, SiteRuleView } from '@/lib/data/prevention';
+import { withCurrent } from '@/lib/form-options';
 
 // Éléments partagés par les fenêtres de l'écran « Plans de prévention et permis ».
 
@@ -36,9 +37,8 @@ export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as cons
 export const ruleOf = (options: Pick<PreventionOptions, 'siteRules'>, siteId: string) => options.siteRules.find((r) => r.id === siteId);
 
 /** Entreprises proposées dans un formulaire : actives, plus l'entreprise déjà choisie si elle a été archivée depuis. */
-export function contractorChoices(options: Pick<PreventionOptions, 'contractors'>, current?: { id: string | null; name: string | null }): Option[] {
-  if (!current?.id || options.contractors.some(([v]) => v === current.id)) return options.contractors;
-  return [[current.id, `${current.name ?? current.id} (archivée)`], ...options.contractors];
+export function contractorChoices(options: Pick<PreventionOptions, 'contractors'>, current?: { id: string | null; name: string | null }): readonly Option[] {
+  return withCurrent(options.contractors, current?.id, `${current?.name ?? current?.id} (archivée)`, 'start');
 }
 
 /** Lien vers la procédure de référence de l'écran (gestion documentaire). */

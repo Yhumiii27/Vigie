@@ -5,7 +5,7 @@ import { Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/
 import type { Option } from '@/lib/form-options';
 import { VICTIM_KINDS, VICTIM_KIND_KEYS } from '@/lib/domain';
 import { RestrictedNote } from './FieldGrid';
-import { INJURIES, declarationDuty } from './shared';
+import { INJURIES, declarationDuty } from '@/lib/rules/events';
 
 /** Rubriques de la déclaration d'un AT transmises au formulaire (données de santé à null pour un rôle non habilité). */
 export type AccidentValues = {

@@ -7,12 +7,12 @@ import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
   CONTROL_CATEGORIES, CONTROL_CATEGORY_KEYS, CONTROL_RESULTS, CONTROL_RESULT_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINKS, REQUIREMENT_LINK_KEYS,
-  REQUIREMENT_REVIEW_MAX, REQUIREMENT_REVIEW_MONTHS, SAFETY_NOTICE_KINDS, SAFETY_NOTICE_KIND_KEYS, canSee, controlResultsFor,
+  REQUIREMENT_REVIEW_MAX, REQUIREMENT_REVIEW_MONTHS, SAFETY_NOTICE_KINDS, SAFETY_NOTICE_KIND_KEYS, controlResultsFor,
 } from '@/lib/domain';
 import { nextEntityReference } from './references';
 import { currentEvaluation, equipmentCodeError, legalTextUrlError, normalizeEquipmentCode } from '@/lib/watch-rules';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
@@ -23,12 +23,7 @@ const ARCHIVED_REQ = 'Exigence archivée : restaurez-la pour la modifier.';
 const ARCHIVED_CTRL = 'Contrôle archivé : restaurez-le pour le modifier.';
 
 /** Saisie réservée aux rôles qui modifient et ont accès à l'écran « Veille et contrôles ». */
-async function requireWatchManager() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  if (!canSee(session.role, 'watch')) return { session, error: 'Votre rôle ne permet pas cette modification.' };
-  return { session, error: null };
-}
+const requireWatchManager = () => requireEditor('watch');
 
 /** Personne choisie (pilote, responsable) : présente ou sortie de l'effectif (`leftOn`), undefined si inconnue. */
 async function findPerson(id: string) {

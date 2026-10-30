@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, asc, eq, gt, isNull, ne, or } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { REVIEW_TRACK } from '@/components/audits/shared';
+import { REVIEW_TRACK } from '@/lib/rules/audits';
 import { planStart, relabelDay, reviewSlot } from '@/lib/data/audits';
 import { fmtDate, fmtDayMonth, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -12,13 +12,14 @@ import {
   type ReviewKind, type ReviewSource,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireManager } from '@/lib/guard';
+import { requireEditor } from '@/lib/guard';
 import { ALL_SITES, getSession } from '@/lib/session';
 import {
   buildReviewDossier, followingReview, isEditableReview, parseReviewSnapshot, reviewRecordParts, withRecordParts, type Review, type ReviewSnapshot,
 } from '@/lib/data/review';
 import { decisionDueError, duplicateLabel, plannedReviewTwin, reviewCloseBlockers, reviewItemDueError } from '@/lib/review-rules';
 import { diffFields, logChange } from './changelog';
+import { nextSort } from '@/lib/sort-order';
 
 type Result = { error?: string };
 type PlanRow = typeof t.auditPlanItems.$inferSelect;
@@ -32,29 +33,19 @@ const SEANCE_ALL_SITES = 'Sélectionnez « Tous les sites » : le dossier de sé
 // Le journal reçoit l'auteur explicitement (byId) : sans cela, logChange relit la session hors de la transaction.
 
 /** Préparation et compte rendu : rôles qui saisissent sur l'écran « Audits » (canEdit ; consultation seule pour l'encadrement, AUD-02). */
-async function requireReviewEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: DENIED };
-}
+const requireReviewEditor = () => requireEditor('audits', { denied: DENIED });
 
 /** Visa de la direction (clôture, dossier figé) : la direction seulement (AUD-15). */
 async function requireReviewSigner() {
-  const r = await requireApprover();
-  if (r.error) return r;
-  return canSignReview(r.session.role) && canEdit(r.session.role, 'audits') ? r : { ...r, error: SIGNER_ONLY };
+  const r = await requireEditor('audits', { approver: true, denied: SIGNER_ONLY });
+  return r.error || canSignReview(r.session.role) ? r : { ...r, error: SIGNER_ONLY };
 }
 
 /** Annulation d'une revue planifiée : animateur QHSE et direction. */
-async function requireReviewApprover() {
-  const r = await requireApprover();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: DENIED };
-}
+const requireReviewApprover = () => requireEditor('audits', { approver: true, denied: DENIED });
 
 /** Identifiant numérique reçu du client (les server actions sont appelables avec n'importe quelle valeur). */
 const validId = (id: unknown): id is number => typeof id === 'number' && Number.isInteger(id) && id > 0;
-const nextSort = (rows: { sort: number }[]) => Math.max(-1, ...rows.map((r) => r.sort)) + 1;
 const done = () => revalidatePath('/', 'layout');
 const kindKey = (k: string): ReviewKind => (k in REVIEW_KINDS ? (k as ReviewKind) : 'ordinaire');
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fmtEuro } from './format';
+import { fmtEuro } from './risk-format';
 
 // Montants du programme annuel de prévention : même rendu côté serveur et navigateur (pas d'Intl).
 describe('fmtEuro', () => {

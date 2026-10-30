@@ -7,7 +7,7 @@ import {
   FIRE_WATCH_HOURS, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, activityLinkIssues, addHoursLocal, firstMinuteReason,
   firstMinuteRule, fmtPeriod, fromParisLocal, isPlanEnded, lcfirst, missingPresets, parseChecklist, permitDays, permitPlanIssue,
   planCovers, referenceNow, validityOver, type ChecklistItem,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';

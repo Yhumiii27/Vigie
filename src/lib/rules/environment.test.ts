@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   QUALIFICATION_KEYS, REGISTER_MENTIONS, TRANSIT_CODES, TREATMENT_KEYS, defaultQualification, isQualification, isTransitCode,
   qualificationError, qualificationLabel, registerGaps, resolveMentions, streamGaps, toRegisterQuantity,
-} from './model';
+} from './environment';
 
 // Mentions du registre chronologique des déchets (arrêté du 31 mai 2021, DOC-02) : règles pures.
 

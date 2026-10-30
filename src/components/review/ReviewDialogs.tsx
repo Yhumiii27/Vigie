@@ -13,14 +13,12 @@ import {
   saveReviewDecision, saveReviewItem,
 } from '@/server/review';
 import styles from './review.module.css';
+import { withCurrent } from '@/lib/form-options';
 
 const SOURCE_OPTIONS = REVIEW_SOURCE_KEYS.map((k) => [k, REVIEW_SOURCES[k].label] as const);
 const KIND_OPTIONS = REVIEW_KIND_KEYS.map((k) => [k, REVIEW_KINDS[k].label] as const);
 const DECISION_OPTIONS = REVIEW_DECISION_KEYS.map((k) => [k, REVIEW_DECISION_KINDS[k].label] as const);
 
-/** Ajoute à une liste de personnes celle déjà choisie si elle n'y figure plus (personne sortie). */
-const withValue = (options: readonly Option[], value: string | null | undefined, label?: string) =>
-  value && !options.some(([v]) => v === value) ? [...options, [value, label ?? value] as const] : options;
 
 function Footer({ children }: { children: ReactNode }) {
   return <div className={styles.footer}>{children}</div>;
@@ -48,7 +46,7 @@ export function ItemForm({ reviewId, item, people, canDelete, onClose }: {
           <>
             <FormRow>
               <Field name="ownerId" label="Fourni par">
-                <Select name="ownerId" options={withValue(people, item?.ownerId)} defaultValue={item?.ownerId ?? ''} placeholder="Hors annuaire / Vigie" />
+                <Select name="ownerId" options={withCurrent(people, item?.ownerId)} defaultValue={item?.ownerId ?? ''} placeholder="Hors annuaire / Vigie" />
               </Field>
               <Field name="dueOn" label="Attendu le">
                 <Input name="dueOn" type="date" defaultValue={item?.dueOn ?? ''} />
@@ -87,7 +85,7 @@ export function DecisionForm({ reviewId, decision, people, canDelete, onClose }:
         </Field>
         <FormRow>
           <Field name="pilotId" label="Pilote">
-            <Select name="pilotId" options={withValue(people, decision?.pilotId, decision?.pilot)} defaultValue={decision?.pilotId ?? ''} placeholder="À désigner" />
+            <Select name="pilotId" options={withCurrent(people, decision?.pilotId, decision?.pilot)} defaultValue={decision?.pilotId ?? ''} placeholder="À désigner" />
           </Field>
           <Field name="dueOn" label="Échéance">
             <Input name="dueOn" type="date" defaultValue={decision?.dueOn ?? ''} />

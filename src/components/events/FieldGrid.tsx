@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT } from './shared';
+import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT } from '@/lib/rules/events';
 
 // Grille « libellé / valeur » des fiches événement (fiche complète, fiche déclarant, accident du travail). Sans état :
 // utilisable par les composants serveur et client.

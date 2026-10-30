@@ -6,7 +6,7 @@ import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, MAX_PLAN_FILES, MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_CONTENT, PLAN_CONTENT_KEYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,
   permitDays, planEndIssue, planSignIssue, planStatus, signedBeforeStart, type PlanContentKey,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';

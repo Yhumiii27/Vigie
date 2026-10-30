@@ -7,7 +7,7 @@ import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import type { PlanView } from '@/lib/data/prevention';
 import { cancelPlanMeeting, recordPlanMeeting, setPlanMeetingPeriod } from '@/server/prevention';
-import { MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS } from './model';
+import { MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS } from '@/lib/rules/prevention';
 import { SectionTitle, muted } from './parts';
 
 const KIND_OPTIONS = PLAN_MEETING_KIND_KEYS.map((k) => [k, PLAN_MEETING_KINDS[k]] as const);

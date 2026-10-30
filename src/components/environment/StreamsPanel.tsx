@@ -15,7 +15,7 @@ import { archiveWasteStream, restoreWasteStream, saveWasteStream } from '@/serve
 import {
   QUALIFICATION_KEYS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS, WASTE_UNITS, defaultQualification, fmtDelta, fmtQty, isHazardousCode, isRecovery,
   isTransitCode, normalizeEwc, qualificationError, treatmentLabel,
-} from './model';
+} from '@/lib/rules/environment';
 import {
   CompanyIdField, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
 } from './parts';

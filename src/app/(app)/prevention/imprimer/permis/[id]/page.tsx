@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
-import { FIRE_WATCH_HOURS, fmtLocalLong } from '@/components/prevention/model';
+import { FIRE_WATCH_HOURS, fmtLocalLong } from '@/lib/rules/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { guard } from '@/lib/guard';

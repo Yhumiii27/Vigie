@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { hrefWith } from '@/components/ui';
 import { DocumentRegister } from '@/components/documents/DocumentRegister';
 import { FilterMenu } from '@/components/documents/FilterMenu';
-import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/components/documents/meta';
+import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, STATUS_FILTERS, processLabel, type StatusFilter } from '@/lib/rules/documents';
 import { canCreateAction } from '@/lib/action-rules';
 import { SCREENS, TONE, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';

@@ -407,9 +407,7 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
 }) {
   const uid = useId();
   // Exigence archivée encore rattachée : conservée comme choix (la modification renvoie toujours une valeur).
-  const reqs = c?.requirement && !requirementOptions.some(([v]) => v === String(c.requirement!.id))
-    ? [...requirementOptions, [String(c.requirement.id), `${c.requirement.text} (archivée)`] as const]
-    : requirementOptions;
+  const reqs = withCurrent(requirementOptions, c?.requirement ? String(c.requirement.id) : null, c?.requirement ? `${c.requirement.text} (archivée)` : null);
   // Responsable sorti de l'effectif, site archivé : conservés comme choix tant qu'un autre n'est pas fait (VEI-01).
   const responsibles = withCurrent(options.people, c?.responsibleId, c ? `${c.responsible || c.responsibleId}${LEFT_SUFFIX}` : undefined);
   const sites = withCurrent(options.sites, c?.siteId, c ? `${c.siteLabel}${ARCHIVED_SITE_SUFFIX}` : undefined);

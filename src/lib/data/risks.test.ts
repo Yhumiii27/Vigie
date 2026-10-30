@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextVersion } from '@/components/documents/meta';
+import { nextVersion } from '@/lib/rules/documents';
 import { RISK_TODO_KIND, VACANT_QHSE_LEAD, type Avancement, type RiskFlag } from '@/lib/domain';
 import type { Recipients } from './leads';
 import {

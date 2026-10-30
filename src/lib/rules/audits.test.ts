@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REVIEW_TRACK, auditActionSource, isReviewPlanItem } from './shared';
+import { REVIEW_TRACK, auditActionSource, isReviewPlanItem } from './audits';
 
 // Source d'une action créée depuis l'écran Audits (D20, amendement A4) : imposée par la ligne du programme ; constat hors
 // programme ou ligne libre : choix parmi les quatre sources d'audit, Audit interne proposé.

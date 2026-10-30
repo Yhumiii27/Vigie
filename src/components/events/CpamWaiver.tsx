@@ -2,7 +2,7 @@
 
 import { ReasonButton } from '@/components/ReasonDialog';
 import { cancelCpamWaiver, waiveCpamDeclaration } from '@/server/events';
-import type { DeclarationDuty } from './shared';
+import type { DeclarationDuty } from '@/lib/rules/events';
 
 // Absence de déclaration CPAM d'un AT motivée (EVT-02) : animateur QHSE et direction, motif conservé au journal (réservé).
 // Libellés selon la victime (declarationDuty) : intérimaire, information de l'ETT (R. 412-2 CSS) ; victime extérieure,

@@ -3,14 +3,14 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocOrigin, type DocType } from '@/components/documents/meta';
+import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocOrigin, type DocType } from '@/lib/rules/documents';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { checkLinkChange } from '@/lib/action-links';
 import { isQhse } from '@/lib/action-rules';
-import { canApprove, canEdit, type Role } from '@/lib/domain';
+import { canApprove, type Role } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
@@ -136,11 +136,7 @@ async function replaceFile(versionId: number, file: File, userId: string) {
 }
 
 /** Rédaction réservée aux rôles qui ne sont pas en consultation seule sur l'écran « Documents ». */
-async function requireDocEditor() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  return canEdit(session.role, 'docs') ? { session, error: null } : { session, error: 'Consultation seule : votre rôle ne permet pas de modifier les documents maîtrisés.' };
-}
+const requireDocEditor = () => requireEditor('docs', { denied: 'Consultation seule : votre rôle ne permet pas de modifier les documents maîtrisés.' });
 
 /** Contrôle du site sélectionné pour un document existant (un document sans site vaut pour toute l'entreprise). */
 async function documentSiteError(documentId: string): Promise<string | null> {

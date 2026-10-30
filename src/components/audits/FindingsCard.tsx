@@ -16,9 +16,10 @@ import type { AuditGroup, CancelledFindingView, FindingView } from '@/lib/data/a
 import type { Option } from '@/lib/data/options';
 import { cancelFinding, convertFreeAudit, restoreFinding, saveFinding } from '@/server/audits';
 import { ActionLink, ActionLinks, DialogFooter, RadioSeg, fileUrl } from './parts';
-import { FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, auditActionSource, isReviewPlanItem } from './shared';
+import { FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, auditActionSource, isReviewPlanItem } from '@/lib/rules/audits';
 import type { PlanFormOptions } from './ProgramTimeline';
 import styles from './audits.module.css';
+import { withCurrent } from '@/lib/form-options';
 
 type Opts = ActionFormOptions;
 type Editing = { id: number | null } | null;
@@ -306,8 +307,7 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
 }) {
   const initialPlan = finding ? finding.planItemId : defaultPlanItemId;
   // L'audit d'un constat existant reste proposé, même s'il n'est plus dans la liste (AUD-11 : audits réalisés seulement).
-  const options: Option[] = finding?.planItemId != null && !auditOptions.some(([v]) => v === String(finding.planItemId))
-    ? [[String(finding.planItemId), finding.audit], ...auditOptions] : auditOptions;
+  const options = withCurrent(auditOptions, finding?.planItemId != null ? String(finding.planItemId) : null, finding?.audit, 'start');
   const known = initialPlan != null && options.some(([v]) => v === String(initialPlan));
   // AUD-20 : libellé d'audit libre pour un constat antérieur seulement ; un nouveau constat se rattache à un audit enregistré.
   const legacy = !!finding && finding.planItemId == null;

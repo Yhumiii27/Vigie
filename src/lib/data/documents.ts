@@ -5,7 +5,7 @@ import { getDb, schema as t } from '@/db';
 import {
   DOC_ORIGINS, DOC_STATUS, DOC_TYPES, DOC_TYPE_KEYS, compareVersions, processLabel, versionStatus,
   type DocOrigin, type DocStatus, type DocType, type VersionStatus,
-} from '@/components/documents/meta';
+} from '@/lib/rules/documents';
 import { addDays, addMonths, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import { TODO_HORIZON_DAYS, canApprove, isClosedActionStatus, type TodoItem, type Tone } from '../domain';

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Attachments } from '@/components/Attachments';
 import { addEventFiles, classifyEventFileAsMedical, removeEventFile } from '@/server/events';
-import type { AttachmentItem } from './shared';
+import type { AttachmentItem } from '@/lib/rules/events';
 
 /**
  * Pièces médicales d'un AT (certificat médical, avis d'arrêt, réserves… ; SEC-06) : animateur QHSE et direction seulement,

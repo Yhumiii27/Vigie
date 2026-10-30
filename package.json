@@ -15,6 +15,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:pw": "playwright test",
+    "test:visual": "VIGIE_VISUAL=1 playwright test --project=recette-bureau --project=recette-telephone",
     "db:generate": "drizzle-kit generate",
     "db:reset": "rm -rf .data",
     "db:backup": "tsx --conditions=react-server scripts/vigie-db.ts backup",

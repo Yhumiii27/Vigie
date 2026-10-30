@@ -3,7 +3,7 @@ import { form } from '../next-mocks';
 import { actAs, changeLog, file, formWith, freshDemoDatabase, lastLog } from '../helpers';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { MP_DENIED, MP_TITLE } from '@/components/events/shared';
+import { MP_DENIED, MP_TITLE } from '@/lib/rules/events';
 import { loadAudits, loadAuditSignals } from '@/lib/data/audits';
 import { loadContext } from '@/lib/data/context';
 import { loadDashboard } from '@/lib/data/dashboard';

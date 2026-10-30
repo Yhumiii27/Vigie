@@ -16,11 +16,12 @@ import { SaveStatus, safeCall } from '@/components/feedback';
 import {
   FIRE_WATCH_HOURS, PERMIT_TYPES, PERMIT_TYPE_KEYS, addHoursLocal, fmtLocalLong, lcfirst, missingPresets, permitNeedsSignedPlan, planCovers, ruleBasis,
   type ChecklistItem, type PermitType,
-} from './model';
+} from '@/lib/rules/prevention';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle,
   contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
+import { withCurrent } from '@/lib/form-options';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -60,9 +61,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   const [watchTouched, setWatchTouched] = useState(!!permit?.watchUntil);
   const presets = PERMIT_TYPES[type].checklist;
   const checkedCount = items.filter((i) => i.checked).length;
-  const projects = permit?.keystoneProject && !options.projects.some(([v]) => v === permit.keystoneProject)
-    ? [[permit.keystoneProject, permit.keystoneProject] as const, ...options.projects]
-    : options.projects;
+  const projects = withCurrent(options.projects, permit?.keystoneProject, null, 'start');
 
   // Plan de prévention : plans de l'entreprise couvrant la validité, selon la règle du site.
   const rule = ruleOf(options, siteId);

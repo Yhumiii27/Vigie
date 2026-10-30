@@ -16,7 +16,7 @@
 // options: ActionFormOptions, defaults?: ActionDefaults) et ActionDetail (src/components/actions/ActionDetail.tsx,
 // { detail, rights, options, currentUserId, today, verifyDefault }).
 
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import type { ActionDomain, ActionPriority, Avancement, FollowReason, SourceKey, VerifyMethod } from './action-keys';
 import type { ActionRights, ComplementaryLinkKind, KanbanKey } from './action-rules';
 import type { AttachmentItem } from './attachments';

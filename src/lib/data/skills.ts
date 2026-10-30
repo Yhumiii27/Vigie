@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { lapseFor, missingPrerequisites, period, type Lapse } from '@/components/skills/rules';
+import { lapseFor, missingPrerequisites, period, type Lapse } from '@/lib/rules/skills';
 import { toAttachmentItem, type AttachmentItem } from '../attachments';
 import { addDays, fmtDayMonth } from '../dates';
 import { today } from '@/lib/today';

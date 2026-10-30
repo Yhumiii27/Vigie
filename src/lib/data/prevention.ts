@@ -1,7 +1,7 @@
 import 'server-only';
 import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
   fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded, legalMandatory,
@@ -9,7 +9,7 @@ import {
   PLAN_MEETING_KINDS, nextPeriodicMeeting, type PlanMeetingKind,
   planEndIssue, planPhase, planStatus, ruleBasis, sevesoLabel, startGap, toParisLocal, type ChecklistItem, type PermitPlanIssueKind,
   type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule, type StartGapKind,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { fmtDate, fmtDayMonth } from '../dates';
 import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOSED, type EventType, type Tone } from '../domain';

@@ -5,21 +5,22 @@ import { and, asc, eq, inArray, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { fmtEuro } from '@/components/risks/format';
+import { fmtEuro } from '@/lib/rules/risk-format';
 import {
   buildDuerpSnapshot, buildProgramSnapshot, DUERP_RETENTION, loadProgramSources, programDefaultIds, riskLinkedActionIds, versionComment, versionConflict,
 } from '@/lib/data/risks';
 import {
-  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, MEASURE_LINK_KINDS, MEASURE_LINK_KIND_KEYS, canEdit, isClosedActionStatus,
+  DUERP_ACCESS_CHANNEL_KEYS, DUERP_ACCESS_CHANNELS, DUERP_REQUESTER_KEYS, DUERP_REQUESTERS, MEASURE_LINK_KINDS, MEASURE_LINK_KIND_KEYS, isClosedActionStatus,
   type DuerpAccessChannel, type DuerpRequester,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import { loadPeople } from '@/lib/queries';
 import { hasLeft } from '@/lib/people';
 import { currentSiteId, inSite } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
 import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
+import { nextSort } from '@/lib/sort-order';
 
 const SCALE = { required: true, min: 1, max: 4 } as const;
 
@@ -27,20 +28,10 @@ const SCALE = { required: true, min: 1, max: 4 } as const;
  * Saisie du DUERP : rôle d'encadrement ET écran « Évaluation des risques » en saisie (canEdit) — le DUERP est consultable
  * par tous les rôles (DUE-01), le chef de projet et le salarié ne le modifient pas.
  */
-async function requireRiskEditor() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  if (!canEdit(session.role, 'risks')) return { session, error: 'Votre rôle ne permet pas cette modification.' };
-  return { session, error: null };
-}
+const requireRiskEditor = () => requireEditor('risks');
 
 /** Saisie réservée à l'animateur QHSE et à la direction (restauration d'un élément archivé, versions du DUERP). */
-async function requireRiskApprover() {
-  const { session, error } = await requireApprover();
-  if (error) return { session, error };
-  if (!canEdit(session.role, 'risks')) return { session, error: 'Votre rôle ne permet pas cette modification.' };
-  return { session, error: null };
-}
+const requireRiskApprover = () => requireEditor('risks', { approver: true });
 
 const ARCHIVED_RISK = 'Risque archivé : restaurez-le pour le modifier.';
 const ARCHIVED_UNIT = 'Unité de travail archivée : restaurez-la pour la modifier.';
@@ -462,7 +453,7 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
   const ids = new Set(units.map((u) => u.id));
   let newId = base;
   for (let n = 2; ids.has(newId); n++) newId = `${base}-${n}`;
-  const sort = Math.max(-1, ...units.map((u) => u.sort)) + 1;
+  const sort = nextSort(units);
   await db.transaction(async (tx) => {
     await tx.insert(t.workUnits).values({ id: newId, label, siteId, sort });
     await logChange(tx, { entityType: 'work_unit', entityId: newId, action: 'create', summary: `Unité de travail « ${label} » ajoutée` });

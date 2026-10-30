@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { francDaysDeadline, mpQuestionnaireDeadline } from '@/components/events/deadlines';
-import { HEALTH_FIELDS, HEALTH_FORM_FIELDS, MP_FIELDS, withoutHealth } from '@/components/events/shared';
-import { bsdRefusalErrors, BSD_STATUS } from '@/components/environment/model';
-import { missingPrerequisites, prerequisiteCycle } from '@/components/skills/rules';
+import { francDaysDeadline, mpQuestionnaireDeadline } from '@/lib/rules/event-deadlines';
+import { HEALTH_FIELDS, HEALTH_FORM_FIELDS, MP_FIELDS, withoutHealth } from '@/lib/rules/events';
+import { bsdRefusalErrors, BSD_STATUS } from '@/lib/rules/environment';
+import { missingPrerequisites, prerequisiteCycle } from '@/lib/rules/skills';
 import { CONTROL_RESULTS, FINDING_GAP_KINDS, FINDING_KINDS, REPORT_TYPE_KEYS, canSeeEventType, contextNeedsTreatment, isBlockingControlResult } from './domain';
 import { elapsedMonths, objectiveValue, type ObjectiveData } from './objective-values';
 import { OBJECTIVE_INDICATORS, fmtObjectiveTarget, fmtObjectiveValue, objectiveStatus } from './objectives';

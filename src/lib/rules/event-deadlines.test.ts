@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cpamBasis, cpamDeadline, easterSunday, ettDeadline, fmtDeadline, frenchHolidays, isExcludedDay, reservesDeadline } from './deadlines';
+import { cpamBasis, cpamDeadline, easterSunday, ettDeadline, fmtDeadline, frenchHolidays, isExcludedDay, reservesDeadline } from './event-deadlines';
 
 // Délais d'un accident du travail (EVT-03) : 48 h hors dimanches et jours fériés pour la déclaration CPAM (R. 441-3 CSS),
 // 10 jours francs pour les réserves motivées (R. 441-6), fériés d'Alsace-Moselle en option.

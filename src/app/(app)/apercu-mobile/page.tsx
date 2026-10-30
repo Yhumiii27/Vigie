@@ -7,7 +7,7 @@ import { ReportForm } from '@/components/ReportForm';
 import { MyReportDetail } from '@/components/events/MyReportDetail';
 import { MyReports } from '@/components/events/MyReports';
 import { QrCode } from '@/components/events/QrCode';
-import { MAX_PHOTOS } from '@/components/events/shared';
+import { MAX_PHOTOS } from '@/lib/rules/events';
 import { MissingNotice, SegLinks } from '@/components/ui';
 import { isDemo } from '@/lib/config';
 import { loadMyReport, loadMyReports } from '@/lib/data/events';

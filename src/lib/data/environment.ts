@@ -2,14 +2,14 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import {
   BSD_PENDING, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, READING_DUE_DAY, REGISTER_MENTIONS_FROM, entryRef, fmtQty, isBsdStatus,
   isHazardousCode, isRecovery, monthLong, monthShort, qualificationLabel, registerGaps, resolveMentions, shiftMonth, streamGaps, toRegisterQuantity, toTonnes,
   treatmentLabel, type BsdStatus, type ConsumptionKind,
   wasteEntryHref,
-} from '@/components/environment/model';
-import { hrefWith } from '@/components/ui';
+} from '@/lib/rules/environment';
+import { hrefWith } from '@/lib/url-state';
 import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { ActionDefaults } from '../action-view';

@@ -15,7 +15,7 @@ import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
 /** Période d'une affectation (règle partagée avec le serveur, voir rules.ts). */
-export { period } from './rules';
+export { period } from '@/lib/rules/skills';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
 export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');

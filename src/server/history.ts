@@ -2,7 +2,7 @@
 
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { loadChangeLog, loadChangeLogs } from '@/lib/data/changelog';
 import { canApprove, canEdit, canSee, type Role, type ScreenKey } from '@/lib/domain';
 import { getSession, siteFilter } from '@/lib/session';

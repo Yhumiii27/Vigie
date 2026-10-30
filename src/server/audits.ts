@@ -3,19 +3,20 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/components/audits/shared';
+import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/lib/rules/audits';
 import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
 import { addMonths, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS, canEdit } from '@/lib/domain';
+import { CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { ALL_SITES } from '@/lib/session';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
+import { nextSort } from '@/lib/sort-order';
 
 type Result = { error?: string };
 
@@ -28,13 +29,8 @@ type Result = { error?: string };
  * Programme et constats : rôles qui saisissent sur l'écran « Audits » (canEdit : animateur QHSE, direction).
  * Le chef de service et le chef de projet le consultent seulement (AUD-02) : ils ne modifient rien ici.
  */
-async function requireAuditEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireAuditEditor = () => requireEditor('audits');
 
-const nextSort = (rows: { sort: number }[]) => Math.max(-1, ...rows.map((r) => r.sort)) + 1;
 
 /** Champ Site d'un formulaire (AUD-22) : « Tous les sites » (élément commun à l'entreprise) = null. */
 const siteField = (f: ReturnType<typeof formReader>) => {

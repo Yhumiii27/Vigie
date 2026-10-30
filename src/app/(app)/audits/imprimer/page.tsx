@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { PrintButton } from '@/components/PrintButton';
-import { monthLabel } from '@/components/audits/shared';
+import { monthLabel } from '@/lib/rules/audits';
 import { fmtDate } from '@/lib/dates';
 import { PLAN_ITEM_STATES } from '@/lib/domain';
 import { guard } from '@/lib/guard';

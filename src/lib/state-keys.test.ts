@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BSD_STATUS_KEYS } from '@/components/environment/model';
-import { DOC_ORIGIN_KEYS, VERSION_STATUS_KEYS } from '@/components/documents/meta';
-import { PERMIT_STATE, PERMIT_TYPE_KEYS, PLAN_MEETING_KIND_KEYS, PLAN_STATUS } from '@/components/prevention/model';
+import { BSD_STATUS_KEYS } from '@/lib/rules/environment';
+import { DOC_ORIGIN_KEYS, VERSION_STATUS_KEYS } from '@/lib/rules/documents';
+import { PERMIT_STATE, PERMIT_TYPE_KEYS, PLAN_MEETING_KIND_KEYS, PLAN_STATUS } from '@/lib/rules/prevention';
 import {
   CHANGE_KIND_KEYS, CHANGE_STATUS_KEYS, CONTROL_CATEGORY_KEYS, EVENT_TYPE_KEYS, FINDING_KINDS, MEASURE_LINK_KIND_KEYS, REQUIREMENT_EVAL, REQUIREMENT_LINK_KEYS, REVIEW_DECISION_KEYS, REVIEW_KIND_KEYS,
   REVIEW_STATUS, SAFETY_NOTICE_KIND_KEYS, TRAINING_EFFECTIVENESS_KEYS, type EventTransition,

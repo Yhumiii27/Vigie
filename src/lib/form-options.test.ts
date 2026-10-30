@@ -13,6 +13,11 @@ describe('withCurrent : valeur enregistrée absente des listes de choix', () => 
     expect(withCurrent(options, null, 'x')).toBe(options);
     expect(withCurrent(options, '', 'x')).toBe(options);
   });
+  it('en tête de liste avec at: start (projet Keystone, entreprise archivée…), libellé vide = la valeur (QUA-25)', () => {
+    expect(withCurrent(options, 'p', null, 'start')).toEqual([['p', 'p'], ...options]);
+    expect(withCurrent(options, 'a', null, 'start')).toBe(options);
+    expect(withCurrent(options, 'e', 'E (archivée)', 'start')[0]).toEqual(['e', 'E (archivée)']);
+  });
 });
 
 describe('offeredOr : valeur par défaut d’un nouveau choix (DUE-15)', () => {

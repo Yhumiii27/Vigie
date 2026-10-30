@@ -15,7 +15,7 @@ import type { DocumentRow, LinkedAction, VersionView } from '@/lib/data/document
 import { abandonDraft, approveVersion, cancelDocumentReview, obsoleteDocument, returnToDraft, submitVersion } from '@/server/documents';
 import { ConfirmForm, DraftForm, MetadataForm, PeriodicReviewForm, RevisionForm, type DocFormOptions } from './DocumentForms';
 import { documentActionDefaults } from './action-defaults';
-import { nextVersion } from './meta';
+import { nextVersion } from '@/lib/rules/documents';
 
 type Mode = 'view' | 'edit' | 'revise' | 'draft' | 'submit' | 'approve' | 'return' | 'abandon' | 'obsolete' | 'action' | 'review';
 

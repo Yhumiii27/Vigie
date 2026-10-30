@@ -3,7 +3,7 @@ import { cache } from 'react';
 import {
   PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, nextPeriodicMeeting, permitDays, permitState, toParisLocal,
   type PermitType,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { addDays, fmtDate } from '../dates';
 import { byUrgency, type TodoItem, type Tone } from '../domain';
 import { TODO_HORIZON_DAYS } from '../horizons';

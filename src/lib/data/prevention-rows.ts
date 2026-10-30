@@ -4,7 +4,7 @@ import { desc, isNotNull, or } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   inGapWindow, lacksSignedPlan, permitLacksSignedPlan, referenceNow, startGap, type SiteRule, type StartGapKind,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { today } from '@/lib/today';
 import { loadPeople, loadSiteRows } from '../queries';
 import { currentSiteId, siteFilter, type SiteScope } from '../session';

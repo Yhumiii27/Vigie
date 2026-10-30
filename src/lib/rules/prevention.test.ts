@@ -5,7 +5,7 @@ import {
   lcfirst, legalReason, mandatoryReason, missingPlanContent, missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan,
   permitActivityBlocker, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
   nextPeriodicMeeting, toParisLocal, validityOver, type PlanContent, type SiteRule,
-} from './model';
+} from './prevention';
 
 // Règles des plans de prévention et des permis (QUA-03) : R. 4512-6 à R. 4512-12, règle « dès la première minute ».
 

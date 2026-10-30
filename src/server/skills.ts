@@ -6,12 +6,13 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, canApprove, canEdit, isClosedActionStatus } from '@/lib/domain';
+import { TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, canApprove, isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
-import { prerequisiteCycle } from '@/components/skills/rules';
+import { prerequisiteCycle } from '@/lib/rules/skills';
+import { nextSort } from '@/lib/sort-order';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
 // Plan d'actions : aucune formation ni aucun recyclage ne donne lieu à une action QSE (réponses du service QHSE du
@@ -39,11 +40,7 @@ const requirementKey = (personId: string, titleId: string) => `${personId}|${tit
  * Saisie réservée aux rôles qui ont accès à l'écran « Habilitations et formations » (hors salariés et lecture seule) :
  * le chef de projet saisit ailleurs mais n'a pas cet écran, il ne modifie rien ici.
  */
-async function requireSkillsEditor() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  return canEdit(session.role, 'skills') ? { session, error: null } : { session, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireSkillsEditor = () => requireEditor('skills');
 
 /** Refus d'une modification des titres suivis hors QHSE (HAB-12). */
 const TITLES_RESERVED = "Titres suivis communs à tous les sites : réservés à l'animateur QHSE et à la direction.";
@@ -408,7 +405,7 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
   const blocked = await requireInSite(siteId, { create: true });
   if (blocked) return { error: blocked };
   const newId = randomUUID();
-  const sort = Math.max(-1, ...people.map((p) => p.sort)) + 1;
+  const sort = nextSort(people);
   await db.transaction(async (tx) => {
     await tx.insert(t.people).values({ id: newId, ...values, sort });
     await logChange(tx, { entityType: 'person', entityId: newId, action: 'create', summary: 'Salarié ajouté' });
@@ -534,7 +531,7 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
     return { ok: true, id };
   }
   const newId = uniqueId(titleSlug(label), new Set(titles.map((x) => x.id)), '-');
-  const sort = Math.max(-1, ...titles.map((x) => x.sort)) + 1;
+  const sort = nextSort(titles);
   const firstAid = firstAidField && f.bool('firstAid');
   const awareness = awarenessField && f.bool('awareness');
   const internalAuditor = auditorField && f.bool('internalAuditor');

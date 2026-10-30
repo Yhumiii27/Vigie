@@ -4,9 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { fmtDate } from '@/lib/dates';
-import { canEdit } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { today } from '@/lib/today';
 import { diffFields, logChange } from './changelog';
@@ -21,11 +20,7 @@ const ENTITY = 'emergency_situation';
 const NOT_FOUND = "Situation d'urgence introuvable.";
 const ARCHIVED = "Situation archivée : elle reste consultable avec son historique.";
 
-async function requireRiskEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'risks') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireRiskEditor = () => requireEditor('risks');
 
 /** Situation chargée pour une écriture : existante, du site sélectionné et du périmètre (requireInSite). */
 async function loadForWrite(id: number) {

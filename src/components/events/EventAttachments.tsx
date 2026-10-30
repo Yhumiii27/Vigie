@@ -2,7 +2,7 @@
 
 import { Attachments } from '@/components/Attachments';
 import { addEventFiles, removeEventFile } from '@/server/events';
-import type { AttachmentItem } from './shared';
+import type { AttachmentItem } from '@/lib/rules/events';
 
 /** Photos et pièces jointes de la fiche événement (vignettes, ajout et suppression pour l'encadrement). */
 export function EventAttachments({ eventId, files, canManage }: { eventId: string; files: AttachmentItem[]; canManage: boolean }) {

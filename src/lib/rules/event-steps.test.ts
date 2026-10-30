@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   AT_CLOSE_RESTRICTED, LOCATION_UNSPECIFIED, addActionBlocker, advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty,
   eventLockReason, mentionsInjury, missingQualification, needsCpam, neutralAccidentTitle, normalizeTree, qualificationInput, readD8, victimLabel, type DeclarationDuty, type QualifiableEvent,
-} from './shared';
+} from './events';
 
-// Parcours d'un événement (règles de src/components/events/shared.ts, QUA-03) : passage d'étape, ajout d'action, verrou.
+// Parcours d'un événement (règles de src/lib/rules/events.ts, QUA-03) : passage d'étape, ajout d'action, verrou.
 
 const ctx = { pilotId: 'sbenali' as string | null, hasAnalysis: true, dismissed: false, methodLabel: 'Arbre des causes', missing: [] };
 // Avancements du plan d'actions QSE : Vérifiée (close), 40 % (ouverte), Abandonnée (non comptée), Terminée (à vérifier).

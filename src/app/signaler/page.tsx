@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ReportForm } from '@/components/ReportForm';
-import { reportQuery } from '@/components/events/shared';
+import { reportQuery } from '@/lib/rules/events';
 import { LOGIN_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { ARCHIVED_POST_NOTICE, loadSiteZones, loadZoneRisks, resolveReportPost, resolveReportToken } from '@/lib/data/report-posts';
 import { REPORT_TYPE_KEYS } from '@/lib/domain';

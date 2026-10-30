@@ -1,5 +1,5 @@
 import 'server-only';
-import { PERMIT_TYPES, type PermitType } from '@/components/prevention/model';
+import { PERMIT_TYPES, type PermitType } from '@/lib/rules/prevention';
 import * as t from '../schema';
 import type { SeedTx } from './types';
 import { rel } from './dates';

@@ -17,7 +17,7 @@ import { addQualificationFiles, cancelQualification, evaluateTrainingEffectivene
 import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { PersonForm } from './PersonForm';
-import { lapseFor } from './rules';
+import { lapseFor } from '@/lib/rules/skills';
 import { TitlesButton } from './TitlesManager';
 import { TrainingForm } from './TrainingForm';
 import { TipButton } from '@/components/Tip';
