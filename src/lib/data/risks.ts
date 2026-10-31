@@ -16,7 +16,7 @@ import { actionLabel, canCreateAction, isLate } from '../action-rules';
 import { lcfirst, loadActionRows, loadPeople, loadSiteRows, type ActionRow } from '../queries';
 import { loadQhseLeads, type Recipients } from './leads';
 import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite, siteFilter, type SiteScope } from '../session';
-import { loadChangeLog, loadChangeLogs } from './changelog';
+import { loadChangeLog } from './changelog';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
 import { fileSlug as slug, toCsv } from '@/lib/csv';
@@ -98,7 +98,6 @@ export type RiskView = {
   lastClosedOn: string | null;
   /** Risque archivé (retiré du document unique en vigueur, filtre « Archivés ») ; null = en vigueur. */
   archived: ArchiveInfo | null;
-  history: ChangeEntry[];
   /** Justificatifs du risque (DUE-09, pièces jointes 'risk'). */
   files: AttachmentItem[];
   /** Version de la fiche (QUA-12), pour qui la modifie. */
@@ -123,10 +122,12 @@ export type WorkUnitView = {
   toReview: number;
   /** DUE-20 : zones du plan de site couvertes par l'unité (en service). */
   zones: { id: number; name: string }[];
+  /** QUA-12 : version de la fiche à son ouverture, pour qui modifie le DUERP. */
+  version?: string;
 };
 
 /** Unité de travail archivée (filtre « Archivés ») ; `count` = risques archivés qui y restent rattachés. */
-export type ArchivedUnitView = Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'originRef' | 'count'> & { archived: ArchiveInfo; history: ChangeEntry[] };
+export type ArchivedUnitView = Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'originRef' | 'count'> & { archived: ArchiveInfo };
 
 export type DuerpVersionView = {
   version: string;
@@ -372,7 +373,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
   const unitIds = new Set(siteUnits.map((u) => u.id));
   const shownRisks = allRisks.filter((r) => unitIds.has(r.unitId));
   const measures = await loadRiskMeasures(shownRisks, new Map(siteUnits.map((u) => [u.id, u.siteId])), session.role, now);
-  const views: Omit<RiskView, 'history' | 'files'>[] = shownRisks.map((r) => {
+  const views: Omit<RiskView, 'files'>[] = shownRisks.map((r) => {
     const actions = linked(r.id);
     return {
       measures: measures.get(r.id) ?? [],
@@ -447,22 +448,18 @@ export async function loadRisks() {
   const edit = canEdit(role, 'risks');
   const qhse = edit && canCreateAction(role);
   const employee = isEmployee(role);
-  const [history, unitHistory] = edit
-    ? await Promise.all([
-      loadChangeLogs('risk', [...base.risks, ...base.archivedRisks].map((r) => r.id)),
-      loadChangeLogs('work_unit', base.archivedUnits.map((u) => u.id)),
-    ])
-    : [new Map<string, ChangeEntry[]>(), new Map<string, ChangeEntry[]>()];
+  // Historique d'un risque ou d'une unité archivée : chargé à l'ouverture de sa fiche (QUA-11, LazyChangeLog), pour qui
+  // modifie le DUERP (src/server/history.ts).
   // DUE-09 : DUERP signé par version et justificatifs des risques, lisibles par tous les rôles de l'écran (Salarié compris).
-  const [versionFiles, riskFiles, riskVersions] = await Promise.all([
+  const [versionFiles, riskFiles, riskVersions, unitVersions] = await Promise.all([
     loadEntityFiles('duerp_version', versionViews.map((v) => v.version)),
     loadEntityFiles('risk', [...base.risks, ...(edit ? base.archivedRisks : [])].map((r) => r.id)),
     edit ? entityVersions(await getDb(), 'risk', base.risks.map((r) => r.id)) : new Map<string, string>(),
+    edit ? entityVersions(await getDb(), 'work_unit', base.units.map((u) => u.id)) : new Map<string, string>(),
   ]);
-  const view = (r: Omit<RiskView, 'history' | 'files'>): RiskView => ({
+  const view = (r: Omit<RiskView, 'files'>): RiskView => ({
     ...r,
     ...(employee ? { events: [], actions: r.actions.map((a) => ({ ...a, pilot: '' })) } : {}),
-    history: history.get(String(r.id)) ?? [],
     files: riskFiles.get(String(r.id)) ?? [],
     ...(edit ? { version: riskVersions.get(String(r.id)) } : {}),
   });
@@ -486,10 +483,10 @@ export async function loadRisks() {
     nextVersion: suggestNextVersion(versions.map((v) => v.version), now),
     nextUpdateOn: addMonths(now, 12),
     totals: base.totals,
-    units: base.units,
+    units: edit ? base.units.map((u) => ({ ...u, version: unitVersions.get(u.id) ?? '0' })) : base.units,
     risks: base.risks.map(view),
     archivedRisks: edit ? base.archivedRisks.map(view) : [],
-    archivedUnits: edit ? base.archivedUnits.map((u): ArchivedUnitView => ({ ...u, history: unitHistory.get(u.id) ?? [] })) : [],
+    archivedUnits: edit ? base.archivedUnits.map((u): ArchivedUnitView => ({ ...u })) : [],
     linkableActions: qhse ? base.linkableActions : [],
     /** Service QHSE : crée les actions du DUERP et y rattache des actions existantes (ACT-22). */
     actionsQhse: qhse,
@@ -677,7 +674,6 @@ export type DuerpAccessRequestView = {
   /** Non communiquée et non annulée. */
   pending: boolean;
   cancelled: ArchiveInfo | null;
-  history: ChangeEntry[];
 };
 
 /**
@@ -700,7 +696,6 @@ export async function loadDuerpAccessRegister(): Promise<{ requests: DuerpAccess
   const kept = rows
     .filter((r) => inPerimeter(session.allowedSiteIds, r.siteId) && inSite(site, r.siteId))
     .sort((a, b) => b.requestedOn.localeCompare(a.requestedOn) || b.id - a.id);
-  const history = await loadChangeLogs('duerp_access_request', kept.map((r) => r.id));
   const requests = kept.map((r): DuerpAccessRequestView => ({
     id: r.id, requestedOn: r.requestedOn, requesterKind: r.requesterKind,
     requesterKindLabel: DUERP_REQUESTERS[r.requesterKind as DuerpRequester] ?? r.requesterKind, requesterName: r.requesterName,
@@ -709,7 +704,6 @@ export async function loadDuerpAccessRegister(): Promise<{ requests: DuerpAccess
     channelLabel: r.channel ? DUERP_ACCESS_CHANNELS[r.channel as DuerpAccessChannel] ?? r.channel : '', note: r.note,
     pending: !r.cancelledAt && !r.communicatedOn,
     cancelled: r.cancelledAt ? { on: dayOf(r.cancelledAt), by: r.cancelledById ? people.get(r.cancelledById)?.name ?? '' : '', reason: r.cancelReason } : null,
-    history: history.get(String(r.id)) ?? [],
   }));
   return {
     requests,

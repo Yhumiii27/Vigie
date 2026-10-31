@@ -53,6 +53,8 @@ export type DocReviewView = {
 
 export type DocumentRow = {
   id: string;
+  /** QUA-12 : version de la fiche à son ouverture (dernière entrée du journal du document), renvoyée par ses formulaires. */
+  version?: string;
   title: string;
   type: string;
   typeLabel: string;
@@ -246,7 +248,9 @@ const loadDocumentBase = cache(async (scope: SiteScope = 'site') => {
   const kept = docs.filter((d) => keep(d.siteId));
   // EVT-14 : événements rattachés (périmètre, jamais une maladie professionnelle hors rôles habilités ; rien pour le Salarié).
   const events = await loadLinkedEvents('document', kept.map((d) => d.id));
-  const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events, reviews }, null, now);
+  // QUA-12 : version de chaque document = numéro de sa dernière entrée du journal (déjà lu pour les retraits).
+  const rows = buildDocumentRows({ people, docs: kept, versions, files, actions, sites, retirements, events, reviews }, null, now)
+    .map((r) => ({ ...r, version: String(Math.max(0, ...(logs.get(r.id) ?? []).map((e) => e.id))) }));
   // Documents rattachés à un autre site du périmètre : la fiche ouverte par ?doc= (après création ou changement de site)
   // l'explique. Hors du périmètre : rien n'est révélé (bandeau « introuvable », UX-13).
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));

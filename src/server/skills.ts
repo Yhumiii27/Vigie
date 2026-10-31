@@ -11,6 +11,7 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireEditor, requireInSite } from '@/lib/guard';
 import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { prerequisiteCycle } from '@/lib/rules/skills';
 import { nextSort } from '@/lib/sort-order';
 
@@ -138,13 +139,16 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
 
   const values = { obtainedOn: obtainedOn!, expiresOn, provider, scope: title.scopeLabel ? scopeRaw : null };
   const summary = `Formation du ${fmtDate(values.obtainedOn)}${expiresOn ? ` (échéance ${fmtDate(expiresOn)})` : ''}${values.scope ? ` · ${values.scope}` : ''}`;
-  const result = await db.transaction(async (tx): Promise<{ error: string } | { id: number }> => {
+  let result = { error: 'Formation introuvable.' } as { error: string } | { id: number };
+  const stale = await freshWrite(async () => { result = await db.transaction(async (tx): Promise<{ error: string } | { id: number }> => {
     let id: number;
     if (qualificationId) {
       // Correction d'une saisie : la ligne doit appartenir à la case et ne pas être annulée.
       const [prev] = await tx.select().from(t.qualifications).where(eq(t.qualifications.id, qualificationId));
       if (!prev || prev.personId !== personId || prev.titleId !== titleId) return { error: 'Formation introuvable.' };
       if (prev.cancelledAt) return { error: 'Formation annulée : elle ne peut plus être corrigée.' };
+      // QUA-12 : formation corrigée, annulée ou complétée entre-temps (attestation, efficacité) : rien n'est écrasé.
+      await assertFresh(tx, 'qualification', qualificationId, fd.get(VERSION_FIELD));
       await tx.update(t.qualifications).set(values).where(eq(t.qualifications.id, qualificationId));
       id = qualificationId;
       await logChange(tx, { entityType: 'qualification', entityId: id, action: 'update', summary: `${summary} corrigée` });
@@ -158,7 +162,8 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
       await logChange(tx, { entityType: 'qualification_requirement', entityId: requirementKey(personId, titleId), action: 'create', summary: `Titre « ${title.label} » requis (formation enregistrée)` });
     }
     return { id };
-  });
+  }); });
+  if (stale) return { error: stale };
   if ('error' in result) return { error: result.error };
   await saveAttestations(files, result.id, session.user.id);
   done();
@@ -395,10 +400,12 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
     const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
     const fmt = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
     const details = diffFields({ ...prev, siteId: siteLabel(prev.siteId) }, { ...values, siteId: siteLabel(values.siteId) }, PERSON_LABELS, fmt);
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'person', id, fd.get(VERSION_FIELD));
       await tx.update(t.people).set(values).where(eq(t.people.id, id));
       if (details.length) await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée', details });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id };
   }
@@ -523,10 +530,12 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
       ...(prev.awareness !== awareness ? [{ field: 'Sensibilisation', from: prev.awareness ? 'oui' : 'non', to: awareness ? 'oui' : 'non' }] : []),
       ...(prev.internalAuditor !== internalAuditor ? [{ field: 'Auditeur interne', from: prev.internalAuditor ? 'oui' : 'non', to: internalAuditor ? 'oui' : 'non' }] : []),
     ];
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'training_title', id, fd.get(VERSION_FIELD));
       await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope, awareness, internalAuditor }).where(eq(t.trainingTitles.id, id));
       await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id };
   }

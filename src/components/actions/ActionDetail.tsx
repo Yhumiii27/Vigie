@@ -15,7 +15,7 @@ import { ChangeLogList } from '@/components/ChangeLog';
 import { FORM_SAVED_EVENT } from '@/components/form';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { Icon, ToneTag } from '@/components/ui';
-import { actionHref, canRemoveProof, type ActionRights } from '@/lib/action-rules';
+import { actionHref, actionPrintHref, canRemoveProof, type ActionRights } from '@/lib/action-rules';
 import type { ActionDetailView, ActionFormOptions } from '@/lib/action-view';
 import { fmtDate } from '@/lib/dates';
 import { ACTION_PRIORITIES, AVANCEMENT, FOLLOW_REASONS, TONE } from '@/lib/domain';
@@ -158,6 +158,12 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
         </div>
       )}
       {notice && <Notice icon={d.status === 'abandonnee' ? 'ph-prohibit' : 'ph-lock-simple'}>{notice}</Notice>}
+      {/* IMP-07 : fiche imprimable (mêmes droits que la fiche) ; lien HTML simple (print.css). */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <a href={actionPrintHref(d.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+          <Icon name="ph-printer" size={13} />Imprimer la fiche
+        </a>
+      </div>
 
       <Block title="Problème"><Text value={d.problem} empty="À compléter." /></Block>
       <Block title="Action"><Text value={d.detail} empty="Aucun détail saisi." /></Block>

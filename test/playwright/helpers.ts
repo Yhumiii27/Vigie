@@ -70,9 +70,12 @@ export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
     '/habilitations', '/habilitations?vue=a-prevoir', '/audits', '/environnement', '/environnement?onglet=filieres', '/prevention',
     '/prevention?onglet=permis', '/prevention?onglet=entreprises', '/prevention/carte', '/prevention/import', '/signaler/postes',
     '/evenements/registre-benin?site=ville-a', '/habilitations/donnees-personnelles?salarie=tnguyen', '/veille/registre-securite',
+    // IMP-07 : fiches imprimables d'un événement (accident du travail) et d'une action.
+    '/evenements/fiche/EV-2026-127', '/actions/fiche/A-214',
   ].map((url) => ({ role: 'Animateur QHSE' as Role, site: 'ville-a', url })),
   ...['/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
-  ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits'].map((url) => ({ role: 'Chef de service' as Role, site: 'ville-a', url })),
+  ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits', '/evenements/fiche/EV-2026-127'].map((url) => ({ role: 'Chef de service' as Role, site: 'ville-a', url })),
   ...['/', '/prevention', '/risques'].map((url) => ({ role: 'Chef de projet' as Role, site: 'ville-a', url })),
-  ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements'].map((url) => ({ role: 'Salarié' as Role, site: 'all', url })),
+  ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215']
+    .map((url) => ({ role: 'Salarié' as Role, site: 'all', url })),
 ];

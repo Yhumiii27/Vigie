@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
@@ -213,7 +213,7 @@ export function ProgramTimeline({
                 )}
               </DialogFooter>
             )}
-            {item && <ChangeLogList entries={item.log} />}
+            {item && <LazyChangeLog entity="audit_plan_item" id={item.id} />}
           </>
         )}
       </Dialog>
@@ -370,7 +370,7 @@ function CancelledList({ items, open, onToggle, onOpen }: { items: PlanItemView[
               Annulé le {fmtDate(p.cancelled.on)}{p.cancelled.by ? ` par ${p.cancelled.by}` : ''} · Motif : {p.cancelled.reason || '—'}
             </div>
           )}
-          <ChangeLogList entries={p.log} />
+          <LazyChangeLog entity="audit_plan_item" id={p.id} />
         </div>
       ))}
     </div>
@@ -399,7 +399,7 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
   const lines = outOfPlan ? auditLines : trackOptions;
   return (
     <ActionForm action={savePlanItem} onDone={onDone} onCancel={onDone} submitLabel={item ? 'Enregistrer' : unplanned ? "Enregistrer l'audit" : 'Ajouter au programme'}
-      hidden={{ id: item?.id, year: item || unplanned ? undefined : year, unplanned: unplanned ? '1' : undefined }} encType="multipart/form-data">
+      hidden={{ id: item?.id, version: item?.version, year: item || unplanned ? undefined : year, unplanned: unplanned ? '1' : undefined }} encType="multipart/form-data">
       {outOfPlan && (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
           <i className="ph ph-info" style={{ fontSize: 13, marginRight: 4, verticalAlign: '-2px' }} aria-hidden />
@@ -653,7 +653,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
           <FindingList findings={findings} year={item.year} onLeave={onLeave} />
         </div>
       )}
-      <ChangeLogList entries={item.log} />
+      <LazyChangeLog entity="audit_plan_item" id={item.id} />
     </div>
   );
 }

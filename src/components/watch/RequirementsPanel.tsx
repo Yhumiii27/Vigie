@@ -234,7 +234,8 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
       )}
 
       <LinkedAction r={r} actions={linkActions && !r.archived ? linkActions : undefined} canUnlink={!!linkActions} showQhseNotice={editable && !creatable}
-        onCreate={creatable && !creating ? () => { setNotice(null); setCreating(true); } : undefined} />
+        onCreate={creatable && !creating ? () => { setNotice(null); setCreating(true); } : undefined}
+        onEvaluate={editable && !creating ? () => { setNotice(null); setView('evaluer'); } : undefined} />
 
       {creatable && creating ? (
         <>
@@ -401,8 +402,10 @@ function EvaluationHistory({ r, editable, canCancel }: { r: RequirementView; edi
  * Action liée (lecture seule ; détachable par le QHSE) ou, pour un écart ou une analyse d'écart sans action, « Créer
  * l'action » / « Rattacher » (QHSE seulement, ACT-22) ; l'encadrement qui saisit la veille lit QHSE_ONLY_CREATE_MESSAGE.
  */
-function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate }: {
+function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate, onEvaluate }: {
   r: RequirementView; actions?: readonly Option[]; canUnlink: boolean; showQhseNotice: boolean; onCreate?: () => void;
+  /** VEI-05 : « Réévaluer » (vue « Évaluer »), pour qui saisit la veille. */
+  onEvaluate?: () => void;
 }) {
   const box = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 12px', fontSize: 12.5 } as const;
   const link = `requirement:${r.id}`;
@@ -418,6 +421,21 @@ function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate }: {
         </span>
         {r.action && <ToneTag tone={r.action.tone} style={{ whiteSpace: 'nowrap' }}>{r.action.statusLabel}</ToneTag>}
         {canUnlink && !r.archived && <LinkActionButton link={link} current={r.actionId} />}
+        {/* VEI-05 : action close, exigence toujours en écart : boucler par une nouvelle évaluation. */}
+        {r.loopBack && (
+          <span role="status" style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
+            <Icon name="ph-arrows-clockwise" size={15} style={{ color: TONE.warn.dot }} />
+            <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
+              Action {r.loopBack.abandoned ? 'abandonnée' : 'vérifiée'}, exigence toujours {r.evaluation === 'analyse' ? "en analyse d'écart" : 'en écart'} : réévaluez la conformité
+              {canUnlink ? ', ou détachez l’action pour en créer une nouvelle.' : '.'}
+            </span>
+            {onEvaluate && (
+              <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEvaluate}>
+                <Icon name="ph-seal-check" size={13} />Réévaluer
+              </button>
+            )}
+          </span>
+        )}
       </div>
     );
   }
@@ -454,7 +472,7 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
   // VEI-12 : la certification n'est demandée que pour l'indicateur « certification ».
   const [linkedTo, setLinkedTo] = useState(r?.linkedTo ?? '');
   return (
-    <ActionForm action={saveRequirement} hidden={{ id: r?.id, siteIdsField: applicable.length ? '1' : undefined, linkedToField: '1' }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
+    <ActionForm action={saveRequirement} hidden={{ id: r?.id, version: r?.version, siteIdsField: applicable.length ? '1' : undefined, linkedToField: '1' }} onDone={onDone} onCancel={onCancel} submitLabel={r ? 'Enregistrer' : "Ajouter l'exigence"}>
       <FormRow>
         <Field name="text" label="Texte">
           <Input name="text" defaultValue={r?.text} placeholder="Ex. Code du travail — R. 4512-6" maxLength={120} autoFocus={!r} />

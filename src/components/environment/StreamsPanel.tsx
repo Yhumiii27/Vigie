@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
@@ -169,7 +169,7 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
                 </div>
               </>
             )}
-            <div style={{ marginTop: 12 }}><ChangeLogList entries={stream.history} /></div>
+            <div style={{ marginTop: 12 }}><LazyChangeLog entity="waste_stream" id={stream.id} /></div>
           </>
         )}
       </Dialog>
@@ -227,7 +227,7 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
   const lockHint = locked ? 'Verrouillé.' : undefined;
 
   return (
-    <ActionForm action={saveWasteStream} hidden={{ id: stream?.id }} onDone={onDone} onCancel={onCancel} submitLabel={stream ? 'Enregistrer' : 'Créer la filière'}>
+    <ActionForm action={saveWasteStream} hidden={{ id: stream?.id, version: stream?.version }} onDone={onDone} onCancel={onCancel} submitLabel={stream ? 'Enregistrer' : 'Créer la filière'}>
       <Field name="label" label="Libellé">
         <Input name="label" defaultValue={stream?.label} placeholder="Ex. Huiles hydrauliques usagées" maxLength={120} autoFocus={!stream} />
       </Field>

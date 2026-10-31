@@ -7,6 +7,7 @@ import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, contextNeedsTreatment, type ContextKi
 import { formReader, type FormState } from '@/lib/forms';
 import { requireEditor } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 
 // Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1) : enjeux, parties intéressées, risques et
 // opportunités. Élément commun à l'entreprise (sans site), saisi par les rôles qui saisissent sur l'écran « Audits »
@@ -40,10 +41,13 @@ export async function saveContextItem(_prev: FormState, fd: FormData): Promise<F
   const shown = (v: typeof values) => ({ ...v, kind: CONTEXT_KINDS[v.kind as ContextKind]?.label ?? v.kind });
   if (current) {
     const details = diffFields(shown(current), shown(values), LABELS);
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : élément modifié depuis l'ouverture du formulaire : rien n'est écrasé.
+      await assertFresh(tx, 'context_item', current.id, fd.get(VERSION_FIELD));
       await tx.update(t.contextItems).set(values).where(eq(t.contextItems.id, current.id));
       if (details.length) await logChange(tx, { entityType: 'context_item', entityId: current.id, action: 'update', summary: 'Élément du contexte modifié', details, byId });
-    });
+    }));
+    if (stale) return { error: stale };
     revalidatePath('/', 'layout');
     return { ok: true, id: String(current.id) };
   }

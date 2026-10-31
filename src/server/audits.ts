@@ -15,6 +15,7 @@ import { loadPeople } from '@/lib/queries';
 import { ALL_SITES } from '@/lib/session';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 import { nextSort } from '@/lib/sort-order';
 
@@ -122,14 +123,18 @@ export async function saveCertification(_prev: FormState, fd: FormData): Promise
   const values = { domain, standard, status, tone: tone!, note, organization, issuedOn, validUntil, siteId };
   let certId = id;
   if (id) {
-    const ok = await db.transaction(async (tx) => {
+    let ok = false;
+    const stale = await freshWrite(async () => { ok = await db.transaction(async (tx) => {
       const [before] = await tx.select().from(t.certifications).where(eq(t.certifications.id, id));
       if (!before) return false;
+      // QUA-12 : référentiel modifié depuis l'ouverture du formulaire (autre saisie, cycle, certificat) : rien n'est écrasé.
+      await assertFresh(tx, 'certification', id, fd.get(VERSION_FIELD));
       await tx.update(t.certifications).set(values).where(eq(t.certifications.id, id));
       const details = diffFields(certShown(before, site), certShown(values, site), CERT_FIELDS);
       if (details.length) await logChange(tx, { entityType: 'certification', entityId: id, action: 'update', summary: 'Référentiel modifié', details, byId });
       return true;
-    });
+    }); });
+    if (stale) return { error: stale };
     if (!ok) return { error: 'Référentiel introuvable.' };
   } else {
     // Référence tirée sous verrou dans la transaction (PRD-08) ; jamais celle d'un référentiel retiré : son journal la suit.
@@ -407,7 +412,9 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
       certification: p.certificationId ? certs.find((c) => c.id === p.certificationId)?.standard ?? p.certificationId : null,
       site: site(p.siteId),
     });
-    const saved = await db.transaction(async (tx) => {
+    let saved = false;
+    const stale = await freshWrite(async () => { saved = await db.transaction(async (tx) => {
+      await assertFresh(tx, 'audit_plan_item', before.id, fd.get(VERSION_FIELD));
       const rows = await tx.update(t.auditPlanItems).set(values)
         .where(and(eq(t.auditPlanItems.id, before.id), isNull(t.auditPlanItems.cancelledAt), isNull(t.auditPlanItems.reviewId)))
         .returning({ id: t.auditPlanItems.id });
@@ -426,7 +433,8 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
         await logChange(tx, { entityType: 'audit_plan_item', entityId: before.id, action: 'update', summary, details, byId });
       }
       return true;
-    });
+    }); });
+    if (stale) return { error: stale };
     if (!saved) return { error: 'Élément annulé ou rattaché à une revue entre-temps : rechargez la page.' };
   } else {
     const [row] = await db.insert(t.auditPlanItems).values(values).returning({ id: t.auditPlanItems.id });
@@ -862,11 +870,13 @@ export async function saveFinding(_prev: FormState, fd: FormData): Promise<FormS
   if (responseDueOn && foundOn && responseDueOn < foundOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { responseDueOn: 'La réponse ne peut pas être attendue avant le constat.' } };
   const values = { audit, planItemId, clause, foundOn, kind: kind!, text, responseDueOn, siteId };
   if (before) {
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'audit_finding', before.id, fd.get(VERSION_FIELD));
       await tx.update(t.auditFindings).set(values).where(eq(t.auditFindings.id, before.id));
       const details = diffFields(findingShown(before), findingShown(values), FINDING_FIELDS);
       if (details.length) await logChange(tx, { entityType: 'audit_finding', entityId: before.id, action: 'update', summary: 'Constat modifié', details, byId });
-    });
+    }));
+    if (stale) return { error: stale };
     revalidatePath('/', 'layout');
     return { ok: true, id: String(before.id) };
   }

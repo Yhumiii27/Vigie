@@ -24,7 +24,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   const sp = await searchParams;
   // Bandeaux : titres manquants ou expirés, mais aussi expirant avant ou pendant une affectation Keystone (`lapses`).
   // Rôle Salarié : sa seule ligne, ses échéances et ses affectations (filtrées par loadSkillMatrix).
-  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, self }, { sites }, allSites] =
+  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, versions, self }, { sites }, allSites] =
     await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin()]);
   // Même règle que les server actions du domaine (requireSkillsEditor).
   const manage = canEdit(session.role, 'skills');
@@ -101,7 +101,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
             <ForecastView forecast={forecast} />
           </div>
         ) : (
-          <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
+          <SkillMatrix titles={titles} versions={versions} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
             canManage={manage} canManageTitles={manageTitles} options={options} today={now} defaultSiteId={defaultSiteId}
             initialSel={initialSel} closeHref="/habilitations" siteLabels={siteLabels} />

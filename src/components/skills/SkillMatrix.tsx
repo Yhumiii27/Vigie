@@ -11,7 +11,7 @@ import { fmtDate } from '@/lib/dates';
 import { legacySkillFilters, parseSkillFilters, parseSkillTitle, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
 import { SKILL_FILTERS, SKILL_STATES, TONE, TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, type SkillFilter, type SkillState } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
-import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
+import type { ArchivedRecord, SkillCell, SkillRow, SkillVersions, TrainingTitle } from '@/lib/data/skills';
 import type { Person } from '@/lib/queries';
 import { addQualificationFiles, cancelQualification, evaluateTrainingEffectiveness, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
 import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
@@ -27,6 +27,8 @@ type Opts = Pick<FormOptions, 'sites'>;
 
 type Props = {
   titles: TrainingTitle[];
+  /** QUA-12 : versions des fiches (salarié, titre, formation en cours) à l'ouverture de la page. */
+  versions?: SkillVersions;
   /** Titres archivés (liste « Titres suivis », restauration). */
   archivedTitles: TrainingTitle[];
   rows: SkillRow[];
@@ -328,7 +330,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 }
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
-export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
+export function SkillMatrix({ titles, versions, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
   const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel'>('view');
@@ -417,7 +419,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   const cellName = row && cell ? `${cell.title.label} — ${row.person.name}` : '';
   // Correction de la formation en cours (même ligne de l'historique) ; sinon nouvelle formation datée du jour.
   const initial = cell?.qualificationId && cell.obtainedOn
-    ? { qualificationId: cell.qualificationId, obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider, scope: cell.scope }
+    ? { qualificationId: cell.qualificationId, version: versions?.qualification[String(cell.qualificationId)], obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider, scope: cell.scope }
     : undefined;
   // Recherchée même annulée : la fenêtre reste montée le temps que l'annulation réussie la referme.
   const toCancel = cell?.history.find((e) => e.id === cancelId);
@@ -440,7 +442,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Soon label="Importer le personnel (Lucca · CSV)" icon="ph-upload-simple" tip="Import à venir" />
             <Soon label="Connecteur Cursus · à venir" icon="ph-plugs-connected" tip="Cursus est propriétaire des données personnelles des salariés" />
-            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} />
+            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} versions={versions?.title} />
             {canManage && (
               <DialogButton label="Ajouter un salarié" icon="ph-user-plus" title="Ajouter un salarié" kicker="Personnel" width={540}>
                 {(close) => <PersonForm sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={close} onCancel={close} />}
@@ -585,7 +587,7 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
       </Dialog>
 
       <Dialog open={!!editPerson} onClose={closeEdit} title={editPerson ? `Modifier ${editPerson.name}` : ''} kicker="Personnel" width={540}>
-        {editPerson && <PersonForm key={editPerson.id} person={editPerson} sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={closeEdit} onCancel={closeEdit} />}
+        {editPerson && <PersonForm key={editPerson.id} person={editPerson} version={versions?.person[editPerson.id]} sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={closeEdit} onCancel={closeEdit} />}
       </Dialog>
     </>
   );

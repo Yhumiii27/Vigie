@@ -60,6 +60,9 @@ export const parseActionNumber = (id: string): number | null => {
 };
 /** Lien vers la fiche d'une action (plan d'actions, ?action=) : notifications, échéances, écrans sources. */
 export const actionHref = (id: string) => `/actions?action=${encodeURIComponent(id)}`;
+/** Fiche imprimable d'une action (IMP-07) : mêmes droits que la fiche (loadActionDetail). */
+export const ACTION_PRINT_PATH = '/actions/fiche';
+export const actionPrintHref = (id: string) => `${ACTION_PRINT_PATH}/${encodeURIComponent(id)}`;
 /** Source vide (« à compléter » : reprise) : libellé et icône des listes, de la fiche et des filtres. */
 export const SOURCE_TO_COMPLETE = { label: 'À compléter', icon: 'ph-question' } as const;
 /** Site vide (reprise d'une action « Tous les sites ») : libellé des listes et de la fiche. */

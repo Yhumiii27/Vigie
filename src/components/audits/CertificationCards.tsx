@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { withCurrent, type Option } from '@/lib/form-options';
@@ -166,7 +166,7 @@ export function CertificationCards({ certs, canApprove, sites = [], initialId, c
       <Dialog open={!!editing} onClose={close} kicker="Certifications" title={cert ? `Modifier ${cert.standard}` : 'Nouveau référentiel'} width={540}>
         {editing && (
           <>
-            <ActionForm action={saveCertification} onDone={close} onCancel={close} hidden={{ id: cert?.id }} encType="multipart/form-data">
+            <ActionForm action={saveCertification} onDone={close} onCancel={close} hidden={{ id: cert?.id, version: cert?.version }} encType="multipart/form-data">
               <FormRow>
                 <Field name="standard" label="Référentiel">
                   <Input name="standard" defaultValue={cert?.standard} placeholder="Ex. ISO 9001:2015, MASE, ISO 3834-2" autoFocus />
@@ -224,7 +224,7 @@ export function CertificationCards({ certs, canApprove, sites = [], initialId, c
               </DialogFooter>
             )}
             {cert && cert.tone === 'ok' && cert.issuedOn && <CertificationCycle cert={cert} onDone={close} />}
-            {cert && <ChangeLogList entries={cert.log} />}
+            {cert && <LazyChangeLog entity="certification" id={cert.id} />}
           </>
         )}
       </Dialog>

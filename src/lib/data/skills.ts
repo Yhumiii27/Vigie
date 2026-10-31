@@ -12,6 +12,7 @@ import { canReadAction } from '../action-rules';
 import { actionView, lcfirst, loadPeople, skillState, type Person } from '../queries';
 import { loadQhseLeads } from './leads';
 import { getSession, siteFilter, type SiteScope } from '../session';
+import { entityVersions } from '@/server/versions';
 
 // ─── Habilitations ──────────────────────────────────────────────────────────
 
@@ -275,11 +276,30 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
  */
 export const loadSkillMatrix = cache(async () => {
   const session = await getSession();
-  if (!isEmployee(session.role)) return { ...(await loadSkillData()), self: false };
+  if (!isEmployee(session.role)) {
+    const data = await loadSkillData();
+    return { ...data, versions: await skillVersions(data), self: false };
+  }
   const data = await loadSkillData('perimeter');
   const mine = <T extends { person: Person }>(list: T[]) => list.filter((x) => x.person.id === session.user.id);
-  return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], self: true };
+  return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], versions: NO_VERSIONS, self: true };
 });
+
+/** Versions des fiches à leur ouverture (QUA-12) : salarié, titre suivi, formation en cours de chaque case. */
+export type SkillVersions = { person: Record<string, string>; title: Record<string, string>; qualification: Record<string, string> };
+const NO_VERSIONS: SkillVersions = { person: {}, title: {}, qualification: {} };
+
+async function skillVersions(data: Awaited<ReturnType<typeof loadSkillData>>): Promise<SkillVersions> {
+  const db = await getDb();
+  const people = [...data.rows.map((r) => r.person.id), ...data.others.map((p) => p.id)];
+  const quals = data.rows.flatMap((r) => r.cells.flatMap((c) => (c.qualificationId ? [c.qualificationId] : [])));
+  const [person, title, qualification] = await Promise.all([
+    entityVersions(db, 'person', people),
+    entityVersions(db, 'training_title', data.titles.map((ti) => ti.id)),
+    entityVersions(db, 'qualification', quals),
+  ]);
+  return { person: Object.fromEntries(person), title: Object.fromEntries(title), qualification: Object.fromEntries(qualification) };
+}
 
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──

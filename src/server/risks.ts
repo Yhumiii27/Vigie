@@ -19,7 +19,7 @@ import { loadPeople } from '@/lib/queries';
 import { hasLeft } from '@/lib/people';
 import { currentSiteId, inSite } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
-import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
+import { STALE_EDIT, VERSION_FIELD, assertFresh, freshWrite, staleEditError } from './versions';
 import { nextSort } from '@/lib/sort-order';
 
 const SCALE = { required: true, min: 1, max: 4 } as const;
@@ -434,7 +434,10 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
   }
 
   if (id && before) {
-    const ok = await db.transaction(async (tx) => {
+    let ok = false;
+    const stale = await freshWrite(async () => { ok = await db.transaction(async (tx) => {
+      // QUA-12 : unité modifiée depuis l'ouverture du formulaire : rien n'est écrasé.
+      await assertFresh(tx, 'work_unit', id, fd.get(VERSION_FIELD));
       const [row] = await tx.update(t.workUnits).set({ label, siteId }).where(eq(t.workUnits.id, id)).returning({ id: t.workUnits.id });
       if (!row) return false;
       const site = (sid: unknown) => (sid ? sites.find((s) => s.id === sid)?.label ?? String(sid) : 'Tous les sites');
@@ -443,7 +446,8 @@ export async function saveWorkUnit(_prev: FormState, fd: FormData): Promise<Form
       if (details.length || zoneIds === null) await logChange(tx, { entityType: 'work_unit', entityId: id, action: 'update', summary: 'Unité de travail modifiée', details });
       await applyUnitZones(tx, { id, label }, siteId, zoneIds);
       return true;
-    });
+    }); });
+    if (stale) return { error: stale };
     if (!ok) return { error: 'Unité de travail introuvable.' };
     revalidatePath('/', 'layout');
     return { ok: true, id };

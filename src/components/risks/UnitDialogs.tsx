@@ -29,7 +29,7 @@ type ViewSite = { id: string; label: string } | null;
 const hiddenFrom = (viewSite: ViewSite, siteId: string) => !!viewSite && siteId !== viewSite.id;
 
 function UnitFields({ unit, sites, zones = [], unitLabels = {}, defaultSiteId, viewSite, onDone, onCancel }: {
-  unit?: Pick<WorkUnitView, 'id' | 'label' | 'siteId'>;
+  unit?: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'version'>;
   sites: readonly Option[];
   /** DUE-20 : zones en service du plan de site (avec l'unité qui les couvre) ; libellés des unités. */
   zones?: readonly ZoneOption[];
@@ -47,7 +47,7 @@ function UnitFields({ unit, sites, zones = [], unitLabels = {}, defaultSiteId, v
     : "L'unité apparaît sur ce site et dans « Tous les sites ».";
   const siteZones = zones.filter((z) => z.siteId === siteId);
   return (
-    <ActionForm action={saveWorkUnit} onDone={(state) => onDone(state, siteId)} onCancel={onCancel} submitLabel={unit ? 'Enregistrer' : "Ajouter l'unité"} hidden={{ id: unit?.id, zonesField: '1' }}>
+    <ActionForm action={saveWorkUnit} onDone={(state) => onDone(state, siteId)} onCancel={onCancel} submitLabel={unit ? 'Enregistrer' : "Ajouter l'unité"} hidden={{ id: unit?.id, version: unit?.version, zonesField: '1' }}>
       <Field name="label" label="Libellé" hint="Poste, atelier, zone ou activité regroupant des salariés exposés aux mêmes risques.">
         <Input name="label" defaultValue={unit?.label} maxLength={80} autoFocus placeholder="Ex. Atelier peinture" />
       </Field>
@@ -87,7 +87,7 @@ export function AddUnitButton({ sites, zones, unitLabels, defaultSiteId, viewSit
 type Position = { isFirst: boolean; isLast: boolean };
 
 /** Crayon à côté du nom de l'unité : renomme l'unité, change son site, la déplace dans la liste ou l'archive si elle n'a plus de risque en vigueur. */
-export function EditUnitButton({ unit, sites, zones, unitLabels, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>; sites: readonly Option[]; zones?: readonly ZoneOption[]; unitLabels?: Record<string, string>; viewSite: ViewSite; residual: boolean } & Position) {
+export function EditUnitButton({ unit, sites, zones, unitLabels, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count' | 'version'>; sites: readonly Option[]; zones?: readonly ZoneOption[]; unitLabels?: Record<string, string>; viewSite: ViewSite; residual: boolean } & Position) {
   return (
     <DialogButton label="" icon="ph-pencil-simple" className="btn btn-ghost btn-icon" tooltip="Modifier l'unité de travail"
       style={{ width: 22, height: 22, color: 'var(--color-neutral-500)' }} title={unit.label} kicker="Modifier l'unité de travail" width={480}>
@@ -97,7 +97,7 @@ export function EditUnitButton({ unit, sites, zones, unitLabels, viewSite, resid
 }
 
 function UnitEditor({ unit, sites: activeSites, zones, unitLabels, viewSite, residual, isFirst, isLast, onClose }: {
-  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>;
+  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count' | 'version'>;
   sites: readonly Option[];
   zones?: readonly ZoneOption[];
   unitLabels?: Record<string, string>;

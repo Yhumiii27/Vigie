@@ -17,6 +17,7 @@ import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 
 const EVALUATIONS = Object.keys(REQUIREMENT_EVAL);
 const ARCHIVED_REQ = 'Exigence archivée : restaurez-la pour la modifier.';
@@ -153,12 +154,15 @@ export async function saveRequirement(_prev: FormState, fd: FormData): Promise<F
       { ...(await withNames(current, ['pilotId'])), siteIds: showSites(current.siteIds), linkedTo: linkLabel(current.linkedTo), certificationId: certLabel(current.certificationId), reviewMonths: months(current.reviewMonths) },
       { ...(await withNames({ ...current, ...values }, ['pilotId'])), siteIds: showSites(values.siteIds), linkedTo: linkLabel(values.linkedTo), certificationId: certLabel(values.certificationId), reviewMonths: months(values.reviewMonths) }, REQ_LABELS, fmtLog,
     );
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : fiche modifiée depuis l'ouverture du formulaire (autre modification, évaluation, pièce jointe) : rien n'est écrasé.
+      await assertFresh(tx, 'requirement', current.id, fd.get(VERSION_FIELD));
       if (featured) await tx.update(t.requirements).set({ featured: false }).where(and(eq(t.requirements.featured, true), ne(t.requirements.id, current.id)));
       await tx.update(t.requirements).set({ ...values, lastEvaluatedOn: reevaluated ? now : current.lastEvaluatedOn }).where(eq(t.requirements.id, current.id));
       if (reevaluated) await tx.insert(t.requirementEvaluations).values(evalRow(current.id));
       if (details.length) await logChange(tx, { entityType: 'requirement', entityId: current.id, action: 'update', summary: 'Exigence modifiée', details });
-    });
+    }));
+    if (stale) return { error: stale };
   } else {
     savedId = await db.transaction(async (tx) => {
       if (featured) await tx.update(t.requirements).set({ featured: false }).where(eq(t.requirements.featured, true));
@@ -404,10 +408,12 @@ export async function saveControl(_prev: FormState, fd: FormData): Promise<FormS
       { ...(await withNames(before, ['responsibleId'])), category: cat(before.category) },
       { ...(await withNames({ ...before, ...values }, ['responsibleId'])), category: cat(values.category) }, CTRL_LABELS, fmtLog,
     );
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'control', before.id, fd.get(VERSION_FIELD));
       await tx.update(t.controls).set(values).where(eq(t.controls.id, before.id));
       if (details.length) await logChange(tx, { entityType: 'control', entityId: before.id, action: 'update', summary: 'Contrôle modifié', details });
-    });
+    }));
+    if (stale) return { error: stale };
   } else {
     savedId = await db.transaction(async (tx) => {
       const [{ m }] = await tx.select({ m: max(t.controls.sort) }).from(t.controls);
@@ -715,10 +721,12 @@ export async function saveSafetyNotice(_prev: FormState, fd: FormData): Promise<
   if (current) {
     const label = (k: string) => SAFETY_NOTICE_KINDS[k as keyof typeof SAFETY_NOTICE_KINDS]?.label ?? k;
     const details = diffFields({ ...current, kind: label(current.kind) }, { ...current, ...values, kind: label(values.kind) }, NOTICE_LABELS, fmtLog);
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'safety_notice', current.id, fd.get(VERSION_FIELD));
       await tx.update(t.safetyNotices).set(values).where(eq(t.safetyNotices.id, current.id));
       if (details.length) await logChange(tx, { entityType: 'safety_notice', entityId: current.id, action: 'update', byId: session.user.id, summary: `${kindLabel} modifiée`, details });
-    });
+    }));
+    if (stale) return { error: stale };
   } else {
     savedId = await db.transaction(async (tx) => {
       const [row] = await tx.insert(t.safetyNotices).values({ ...values, createdById: session.user.id }).returning({ id: t.safetyNotices.id });

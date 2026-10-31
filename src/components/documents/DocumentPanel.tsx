@@ -290,7 +290,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           {mode === 'edit' && <MetadataForm doc={doc} options={options} onDone={back} onCancel={back} />}
           {mode === 'review' && <PeriodicReviewForm doc={doc} onDone={back} onCancel={back} />}
           {mode === 'revise' && <RevisionForm doc={doc} version={next} options={options} onDone={back} onCancel={back} />}
-          {mode === 'draft' && pending && <DraftForm version={pending} options={options} onDone={back} onCancel={back} />}
+          {mode === 'draft' && pending && <DraftForm version={pending} docVersion={doc.version} options={options} onDone={back} onCancel={back} />}
           {mode === 'submit' && pending && (
             <ConfirmForm action={submitVersion} hidden={{ versionId: pending.id }} submitLabel="Soumettre en revue" submitIcon="ph-paper-plane-tilt" onDone={back} onCancel={back}
               message={<>La version {pending.version} est transmise pour approbation à l&apos;animateur QHSE ou à la direction. Elle n&apos;est plus modifiable, sauf renvoi en brouillon.</>} />

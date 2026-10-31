@@ -227,6 +227,12 @@ export const FIRST_AID_TITLE_FALLBACK = /\b(sst|sauveteurs?[\s-]+secouristes?)\b
 export const BENIGN_REGISTER_PATH = '/evenements/registre-benin';
 /** Synthèse imprimable de la déclaration d'un AT et feuille d'accident (EVT-10) : `${DAT_PRINT_PATH}/<id>`. */
 export const DAT_PRINT_PATH = '/evenements/imprimer';
+/**
+ * Fiche imprimable d'un événement (IMP-07) : `${EVENT_PRINT_PATH}/<id>`, mêmes droits que la fiche (loadEventDetail) ;
+ * données de santé pour les seuls rôles habilités (« Données restreintes » sinon), jamais dans HEALTH_PAGES.
+ */
+export const EVENT_PRINT_PATH = '/evenements/fiche';
+export const eventPrintHref = (id: string) => `${EVENT_PRINT_PATH}/${encodeURIComponent(id)}`;
 
 /**
  * Pourquoi l'AT ne peut pas être inscrit au registre des accidents bénins (null si possible) : accident du travail sans

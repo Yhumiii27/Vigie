@@ -15,6 +15,8 @@ import { ROLE_KEYS, SCREENS, canManage, canSee, canSeeHealth, homeOf, type Role,
 export const ROLE_ROUTES: readonly { path: string; screen: ScreenKey; subpaths: boolean; except?: readonly string[] }[] = [
   { path: '/', screen: 'dashboard', subpaths: false },
   { path: '/a-faire', screen: 'todo', subpaths: true },
+  // Fiches imprimables (IMP-07) : /evenements/fiche/<id> et /actions/fiche/<id>, mêmes droits que la fiche ; la fiche
+  // d'événement retire elle-même les données de santé (hors HEALTH_PAGES, contrairement à la synthèse de la DAT).
   { path: '/evenements', screen: 'events', subpaths: true },
   { path: '/actions', screen: 'actions', subpaths: true },
   { path: '/prevention', screen: 'prevention', subpaths: true },

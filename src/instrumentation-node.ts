@@ -1,6 +1,7 @@
 import type { Instrumentation } from 'next';
 import { ConfigError, nextRuntime, readConfig } from './lib/env';
 import { errorFields, log, pathOnly } from './lib/log';
+import { markServerRuntime } from './lib/server-runtime';
 
 /**
  * La configuration (src/lib/env.ts) est validée dès le démarrage : une variable manquante ou invalide arrête le serveur
@@ -16,6 +17,8 @@ export async function registerNode() {
     log.error('config.invalid', err.message);
     process.exit(1);
   }
+  // Tâches planifiées propres au serveur (PRD-12 : échéances par personne) et contexte racine de leurs passages.
+  markServerRuntime();
   log.info('server.start', 'Serveur Vigie démarré', { demo: readConfig().demo, node: process.version });
 }
 

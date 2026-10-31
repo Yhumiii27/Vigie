@@ -363,7 +363,7 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   };
   const history = reviews.map(historyRow);
   if (!current) {
-    return { now, review: null, reviewFiles: [], corrections: [] as ReviewCorrectionView[], reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
+    return { now, review: null, version: '0', reviewFiles: [], corrections: [] as ReviewCorrectionView[], reviews: history, items: [], decisions: [], extraActions: [], previous: null, changes: [], options: opts, people, linkable, programme: null,
       defaults: { nextOn: addMonths(now, 1), holdNext: { on: addMonths(now, 1), kind: 'ordinaire' as ReviewKind }, originRef: '', copyFrom: null },
       flags: { ...flags, editable: false, mine: false, closeBlockers: [] as string[] } };
   }
@@ -389,6 +389,8 @@ export async function loadReviewCard({ revue }: { revue?: string | string[] }) {
   return {
     now,
     review: rec.view,
+    /** QUA-12 : version de la revue à l'ouverture (dernière entrée de son journal), renvoyée par ses formulaires. */
+    version: String(Math.max(0, ...changes.map((e) => e.id))),
     /** Pièces jointes de la revue (AUD-17). */
     reviewFiles: reviewFiles.get(String(current.id)) ?? [],
     /** Rectificatifs signés après le visa (AUD-34). */
