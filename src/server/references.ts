@@ -38,6 +38,8 @@ export async function nextReference(tx: DbOrTx, o: { prefix: string; pad?: numbe
 const REF_TABLES = {
   contractor: t.contractors, prevention_plan: t.preventionPlans, permit: t.permits, document: t.documents,
   waste_stream: t.wasteStreams, certification: t.certifications, event: t.events,
+  // CNF-11 (paquet 13) : demandes de changement « MC-001 ».
+  change_request: t.changeRequests,
 } as const;
 export type RefEntity = keyof typeof REF_TABLES;
 

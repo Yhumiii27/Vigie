@@ -71,6 +71,8 @@ button { font: inherit; }
 }
 .vg-mobile-link:hover { border-color: var(--color-accent); color: var(--color-neutral-400); }
 .vg-mobile-link.is-on, .vg-mobile-link.is-on:hover { color: var(--color-accent); }
+/* UX-16 : entrée « Aide et glossaire » (bouton au style du lien de l'aperçu mobile). */
+.vg-help-link { width: 100%; background: none; font: inherit; font-size: 12px; text-align: left; }
 
 .vg-user { display: flex; align-items: center; gap: 9px; padding: 12px 10px 0; margin-top: 4px; width: 100%; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
 .vg-avatar { flex: none; border-radius: 50%; background: var(--color-accent-900); color: var(--color-accent-200); display: grid; place-items: center; font-weight: 500; }
@@ -391,3 +393,22 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-target-links > a, .vg-kcard-sub { display: inline-flex; align-items: center; min-height: 24px; }
 /* Ligne archivée, annulée ou obsolète (data-obsolete) : texte atténué sans opacité (les étiquettes gardent leur contraste). */
 .table tbody tr[data-obsolete] > td { color: var(--vg-text-muted); }
+
+/* ─── DUERP : matrice gravité × probabilité (DUE-16) ────────────────────── */
+.vg-risk-matrix { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 12px; table-layout: fixed; margin: -4px; width: calc(100% + 8px); }
+.vg-risk-matrix th { font-weight: 400; font-size: 11px; color: var(--vg-text-muted); text-align: center; padding: 0 4px; }
+.vg-risk-matrix thead td, .vg-risk-matrix tbody th { width: 34px; }
+.vg-risk-matrix tbody td { height: 40px; border-radius: 4px; padding: 0; text-align: center; }
+.vg-risk-matrix tbody td[data-on] { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.vg-risk-cell { display: grid; place-items: center; width: 100%; height: 100%; min-height: 40px; font-size: 13px; color: var(--color-text); border-radius: 4px; text-decoration: none; }
+a.vg-risk-cell:hover { color: var(--color-text); background: color-mix(in srgb, var(--color-text) 10%, transparent); }
+a.vg-risk-cell:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* ─── Habilitations : colonne « Salarié » figée au défilement horizontal (HAB-16) ─── */
+.vg-sticky-table .vg-sticky-col { position: sticky; left: 0; z-index: 1; background: var(--color-surface); box-shadow: 1px 0 0 var(--color-divider); }
+.vg-sticky-table thead .vg-sticky-col { z-index: 2; }
+
+/* Pagination d'une liste (QUA-21, src/components/Pagination.tsx). */
+.vg-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 11.5px; color: var(--vg-text-muted); padding: 4px 2px; }
+.vg-pager-steps, .vg-pager-sizes { display: inline-flex; align-items: center; gap: 6px; }
+.vg-pager [aria-disabled='true'] { opacity: 0.45; pointer-events: none; }

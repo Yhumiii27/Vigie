@@ -9,10 +9,37 @@ import type { ActionFormOptions } from '@/lib/action-view';
 import type { FormOptions } from '@/lib/data/options';
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import { nextRef, type FormState } from '@/lib/forms';
-import { createDocument, reviseDocument, updateDocument, updateDraft } from '@/server/documents';
-import { DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocType } from './meta';
+import { createDocument, recordDocumentReview, reviseDocument, updateDocument, updateDraft } from '@/server/documents';
+import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESSES, refPrefix, type DocOrigin, type DocType } from '@/lib/rules/documents';
 
 type Option = readonly [string, string];
+
+const ORIGIN_OPTIONS = DOC_ORIGIN_KEYS.map((k) => [k, DOC_ORIGINS[k]] as const);
+
+/**
+ * DOC-17 (ISO 9001 §7.5.3.2) : origine du document (interne, externe : norme, document client ou fournisseur), émetteur d'un
+ * document externe, durée de conservation (enregistrements et versions archivées).
+ */
+function OriginFields({ origin: initial = 'interne', issuer, retention }: { origin?: DocOrigin; issuer?: string | null; retention?: string | null }) {
+  const [origin, setOrigin] = useState<DocOrigin>(initial);
+  return (
+    <>
+      <FormRow>
+        <Field name="origin" label="Origine">
+          <Select name="origin" options={ORIGIN_OPTIONS} value={origin} onChange={(e) => setOrigin(e.target.value as DocOrigin)} />
+        </Field>
+        {origin === 'externe' && (
+          <Field name="issuer" label="Émetteur" hint="Organisme, client ou fournisseur qui publie le document.">
+            <Input name="issuer" defaultValue={issuer ?? ''} maxLength={120} placeholder="Ex. AFNOR, [Client A]" />
+          </Field>
+        )}
+      </FormRow>
+      <Field name="retention" label="Durée de conservation" hint="Enregistrements et versions archivées (ex. 10 ans, durée du contrat + 5 ans).">
+        <Input name="retention" defaultValue={retention ?? ''} maxLength={120} />
+      </Field>
+    </>
+  );
+}
 /**
  * Listes des formulaires du domaine. `actions` (actions à rattacher à une version) et `actionForm` (formulaire d'action)
  * ne sont fournis qu'au service QHSE, seul à créer une action et à modifier ses rattachements (ACT-22) : sans elles, le
@@ -89,6 +116,7 @@ function NewDocumentForm({ options, existingIds, defaultSiteId, onDone, onCancel
       <Field name="distribution" label="Diffusion" hint="Services, postes ou affichages qui reçoivent la version en vigueur.">
         <Input name="distribution" placeholder="Ex. Atelier montage · chefs d'équipe, affichage poste M3" />
       </Field>
+      <OriginFields />
       <Field name="summary" label="Objet de la version A">
         <Input name="summary" defaultValue="Création du document" />
       </Field>
@@ -143,6 +171,7 @@ export function MetadataForm({ doc, options, onDone, onCancel }: { doc: Document
           <Select name="siteId" options={sites} placeholder="Tous les sites" defaultValue={doc.siteId ?? ''} />
         </Field>
       </FormRow>
+      <OriginFields origin={doc.origin} issuer={doc.issuer} retention={doc.retention} />
     </ActionForm>
   );
 }
@@ -207,6 +236,23 @@ export function ConfirmForm({ action, hidden, message, submitLabel, submitIcon, 
   return (
     <ActionForm action={action} hidden={hidden} onDone={onDone} onCancel={onCancel} submitLabel={submitLabel} submitIcon={submitIcon}>
       <Note>{message}</Note>
+    </ActionForm>
+  );
+}
+
+/** DOC-15 : revue périodique sans modification de la version en vigueur (date et conclusion). */
+export function PeriodicReviewForm({ doc, onDone, onCancel }: { doc: DocumentRow; onDone: () => void; onCancel: () => void }) {
+  return (
+    <ActionForm action={recordDocumentReview} hidden={{ documentId: doc.id }} submitLabel="Enregistrer la revue" submitIcon="ph-seal-check" onDone={onDone} onCancel={onCancel}>
+      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+        La version {doc.current?.version} reste en vigueur, sans nouvelle révision ni changement d&apos;indice ; la prochaine revue repart de cette date ({doc.reviewMonths} mois).
+      </p>
+      <Field name="reviewedOn" label="Revu le">
+        <Input name="reviewedOn" type="date" autoFocus />
+      </Field>
+      <Field name="conclusion" label="Conclusion de la revue" hint="Ex. Document toujours adapté : exigences, organisation et pratiques inchangées.">
+        <TextArea name="conclusion" rows={3} maxLength={1000} />
+      </Field>
     </ActionForm>
   );
 }

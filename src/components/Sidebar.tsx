@@ -8,6 +8,7 @@ import { LOGOUT_PATH } from '@/lib/auth/paths';
 import { SaveStatus, useActionRunner } from './feedback';
 import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
+import { HelpButton } from './HelpDialog';
 import { Icon } from './ui';
 
 export type NavSection = { label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
@@ -117,6 +118,9 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
             </div>
           ))}
         </nav>
+
+        {/* UX-16 : aide de l'écran affiché et glossaire des indicateurs. */}
+        <HelpButton pathname={pathname} />
 
         {demo && (
           <Link href="/apercu-mobile" className={`vg-mobile-link${isActive(pathname, '/apercu-mobile') ? ' is-on' : ''}`}

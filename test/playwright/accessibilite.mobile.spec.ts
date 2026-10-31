@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { asRole } from './helpers';
+import { AXE_SCREENS, asRole, axeViolations } from './helpers';
 
 // Paquet 9 (UX-11) sur téléphone : tiroir de navigation au clavier (ouverture, menu du site dans le tiroir, Échap, focus
 // rendu au bouton) et lien d'évitement.
@@ -32,4 +32,17 @@ test('lien d’évitement sur téléphone', async ({ page, context, baseURL }) =
   await expect(page.getByRole('link', { name: 'Aller au contenu' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
+});
+
+// QUA-16 : contrôle axe-core (WCAG A et AA) des mêmes écrans sur téléphone (tiroir, liste puis fiche, cibles tactiles).
+test.describe('axe-core (WCAG A et AA) · téléphone', () => {
+  test.use({ bypassCSP: true });
+  for (const { role, site, url } of AXE_SCREENS) {
+    test(`${role} · ${url}`, async ({ page, context, baseURL }) => {
+      await asRole(context, baseURL!, role, site);
+      await page.goto(url);
+      await page.waitForLoadState('networkidle');
+      expect(await axeViolations(page)).toEqual([]);
+    });
+  }
 });

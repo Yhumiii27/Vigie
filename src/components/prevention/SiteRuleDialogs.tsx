@@ -6,7 +6,7 @@ import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ActionForm, Field, Select } from '@/components/form';
 import type { SiteRuleView } from '@/lib/data/prevention';
 import { saveSiteRule } from '@/server/sites';
-import { MANDATORY_HOURS, SEVESO_LEVELS } from './model';
+import { MANDATORY_HOURS, SEVESO_LEVELS } from '@/lib/rules/prevention';
 import { Notice } from './parts';
 
 // Règle de prévention d'un site : classement Seveso et plan de prévention « dès la première minute ».

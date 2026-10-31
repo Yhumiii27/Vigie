@@ -61,7 +61,7 @@ export function ObjectivesCard({ data, canEdit, options }: { data: ObjectivesDat
       <CardHead title={`Objectifs QHSE ${year}`} aside={<Aside>ISO 9001 §6.2 · valeurs calculées</Aside>} />
       {objectives.length === 0 && <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun objectif mesurable pour {year}.</div>}
       {objectives.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Objectifs, défilement horizontal sur petit écran">
           <table className="table" style={{ fontSize: 12.5, minWidth: 560 }}>
             <thead><tr><th>Objectif</th><th>Indicateur</th><th style={{ textAlign: 'right' }}>Cible</th><th style={{ textAlign: 'right' }}>Atteint</th><th>État</th></tr></thead>
             <tbody>

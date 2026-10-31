@@ -6,7 +6,7 @@ import { daysBetween, fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { SkillAlert } from '@/lib/data/skills';
 import { Fact, RenewalTag, SkillDot, lcfirst, period, stateDetail } from './common';
-import { isBlocking, lapseFor, type Lapse } from './rules';
+import { isBlocking, lapseFor, type Lapse } from '@/lib/rules/skills';
 
 const HEADLINE: Record<Lapse, string> = {
   missing: 'Salarié au titre manquant affecté à une activité Keystone',

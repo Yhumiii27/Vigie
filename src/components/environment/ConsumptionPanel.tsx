@@ -8,7 +8,7 @@ import { TONE } from '@/lib/domain';
 import type { ConsumptionRecord, EnvironmentData } from '@/lib/data/environment';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { saveConsumptionMonth } from '@/server/environment';
-import { CONSUMPTION_KINDS, fmtDelta, fmtNum, monthInitial, monthLong, monthShort, type ConsumptionKind } from './model';
+import { CONSUMPTION_KINDS, fmtDelta, fmtNum, monthInitial, monthLong, monthShort, type ConsumptionKind } from '@/lib/rules/environment';
 import { Note, muted, rowOpener, shortSite } from './parts';
 
 type Consumption = EnvironmentData['consumption'];

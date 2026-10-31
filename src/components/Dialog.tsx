@@ -57,8 +57,9 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
       onClose={(e) => { if (e.target === e.currentTarget && openRef.current) { openRef.current = false; onClose(); } }}
       onPointerDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget; }}
       onClick={(e) => { if (e.target === e.currentTarget && downOnBackdrop.current && !dirty.current) onClose(); }}
-      onInputCapture={() => { dirty.current = true; }}
-      onChangeCapture={() => { dirty.current = true; }}>
+      // Champ de consultation (recherche dans l'aide en ligne…, `data-vg-no-dirty`) : pas une saisie à protéger.
+      onInputCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}
+      onChangeCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}>
       {open && (
         <div className="dialog" style={{ width: `min(${width}px, calc(100vw - 32px))` }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>

@@ -2,15 +2,15 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, count, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
-import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/components/prevention/model';
+import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/lib/rules/prevention';
 import {
   activeOn, containingZone, detectConflicts, parseGeometry, parseIds, parsePoints,
   type CoInput, type Conflict,
-} from '@/components/sitemap/coactivity';
+} from '@/lib/rules/coactivity';
 import {
   DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KINDS, SITE_MAP_ATTACHMENT, ZONE_KINDS,
   type ActivityView, type Choice, type CoactivityControlView, type CoPermit, type MapConfig, type PositionCandidate, type RouteKind, type RouteView, type SitemapChoices, type ZoneKind, type ZoneView,
-} from '@/components/sitemap/model';
+} from '@/lib/rules/sitemap';
 import { addDays, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { TodoItem } from '../domain';

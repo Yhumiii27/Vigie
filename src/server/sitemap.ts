@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { isPlanEnded, permitActivityBlocker, planCovers, planStatus } from '@/components/prevention/model';
-import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/components/sitemap/coactivity';
-import { DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KIND_KEYS, SITE_MAP_ATTACHMENT, ZONE_KIND_KEYS, isRealDate } from '@/components/sitemap/model';
+import { isPlanEnded, permitActivityBlocker, planCovers, planStatus } from '@/lib/rules/prevention';
+import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/lib/rules/coactivity';
+import { DEFAULT_PLANS, DEFAULT_PROXIMITY_METERS, ROUTE_KIND_KEYS, SITE_MAP_ATTACHMENT, ZONE_KIND_KEYS, isRealDate } from '@/lib/rules/sitemap';
 import { findConflict, zoneAt } from '@/lib/data/sitemap';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';

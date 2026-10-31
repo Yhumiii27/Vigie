@@ -20,6 +20,8 @@ import { seedRisks } from './seeds/risks';
 import { seedSitemap } from './seeds/sitemap';
 import { FIRST_AID_TITLE, seedSkills } from './seeds/skills';
 import { seedWatch } from './seeds/watch';
+import { seedComplianceFunctions } from './seeds/paquet13';
+import { seedManagementSystem } from './seeds/paquet13b';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -52,6 +54,10 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedFieldMobile(tx));
   // Vue pub_controles (migration 0014) : code commun d'équipement du banc BE-1, une seule fois (src/db/seeds/controls-share.ts).
   await db.transaction((tx) => seedControlCodes(tx));
+  // Paquet 13 (migration 0020) : conformité et fonctions métier, une seule fois (src/db/seeds/paquet13.ts).
+  await db.transaction((tx) => seedComplianceFunctions(tx));
+  // Paquet 13, seconde moitié (migration 0021), une seule fois (src/db/seeds/paquet13b.ts).
+  await db.transaction((tx) => seedManagementSystem(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -206,6 +212,10 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedFieldMobile(tx);
     // Vue pub_controles (demande de Crucible) : code commun d'équipement du banc BE-1.
     await seedControlCodes(tx);
+    // Paquet 13 (conformité et fonctions métier) : registre de sécurité, métrologie, mesures liées, zones des unités…
+    await seedComplianceFunctions(tx);
+    // Paquet 13, seconde moitié : audits hors programme et par site, situations d'urgence, changements, revue documentaire.
+    await seedManagementSystem(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REVIEW_TRACK } from '@/components/audits/shared';
+import { REVIEW_TRACK } from '@/lib/rules/audits';
 import { planItemState, planStart, relabelDay, reviewSlot } from './audits';
 
 // Règles du programme annuel (QUA-03) : état calculé d'un élément (annulé, reporté, AUD-03), première planification d'un
@@ -58,10 +58,11 @@ describe('reviewSlot : place d’une revue de direction au programme annuel', ()
     expect(reviewSlot([other, own], '2027-03-18')).toEqual({ adopt: own.id });
     expect(reviewSlot([other], '2027-03-18')).toEqual({ adopt: other.id });
   });
-  it('éléments annulés ignorés ; échéance réalisée ou déjà rattachée : mois pris sur la ligne des revues', () => {
+  it('éléments annulés ignorés ; échéance réalisée ou déjà rattachée : nouvelle échéance sur la ligne des revues (AUD-21)', () => {
     expect(reviewSlot([slot({ cancelledAt: new Date() })], '2027-03-18')).toEqual({ create: true });
-    expect(reviewSlot([slot({ done: true, label: 'Interm. 04/03' })], '2027-03-18')).toEqual({ taken: 'Interm. 04/03' });
-    expect(reviewSlot([slot({ reviewId: 99, label: 'Annuelle 04/03' })], '2027-03-18')).toEqual({ taken: 'Annuelle 04/03' });
+    // AUD-21 (paquet 13) : plusieurs éléments par ligne et par mois — le mois occupé ne laisse plus la revue hors programme.
+    expect(reviewSlot([slot({ done: true, label: 'Interm. 04/03' })], '2027-03-18')).toEqual({ create: true });
+    expect(reviewSlot([slot({ reviewId: 99, label: 'Annuelle 04/03' })], '2027-03-18')).toEqual({ create: true });
   });
   it('sur la ligne des revues, tout élément libre est une échéance de revue (isReviewPlanItem) : repris', () => {
     const prep = slot({ label: 'Préparation', detail: null });

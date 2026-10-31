@@ -38,7 +38,7 @@ export const NOT_FOUND_PATH = '/_introuvable';
 const REPORT_PATH = '/signaler';
 /**
  * Pages d'un écran ouvert réservées aux rôles habilités aux données de santé (canSeeHealth) : vers la page de l'écran.
- * Registre des accidents bénins (EVT-04, BENIGN_REGISTER_PATH de src/components/events/shared.ts), synthèse de la DAT
+ * Registre des accidents bénins (EVT-04, BENIGN_REGISTER_PATH de src/lib/rules/events.ts), synthèse de la DAT
  * (EVT-10) et bilan annuel SSCT (CNF-03).
  */
 export const HEALTH_PAGES: readonly { path: string; back: string }[] = [
@@ -47,6 +47,8 @@ export const HEALTH_PAGES: readonly { path: string; back: string }[] = [
   { path: '/evenements/imprimer', back: '/evenements' },
   // Bilan annuel santé, sécurité et conditions de travail (CNF-03, BILAN_SSCT_PATH) : accidents, maladies professionnelles.
   { path: '/risques/bilan-ssct', back: '/risques' },
+  // Données d'une personne (SEC-13, droit d'accès RGPD) : accidents dont elle est victime compris.
+  { path: '/habilitations/donnees-personnelles', back: '/habilitations' },
 ];
 
 const under = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);

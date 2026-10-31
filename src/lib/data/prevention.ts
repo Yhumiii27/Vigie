@@ -1,14 +1,15 @@
 import 'server-only';
 import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { schema as t } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
   fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded, legalMandatory,
   legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
+  PLAN_MEETING_KINDS, nextPeriodicMeeting, type PlanMeetingKind,
   planEndIssue, planPhase, planStatus, ruleBasis, sevesoLabel, startGap, toParisLocal, type ChecklistItem, type PermitPlanIssueKind,
   type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule, type StartGapKind,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { fmtDate, fmtDayMonth } from '../dates';
 import { EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SCREEN_PROCEDURES, STEP_CLOSED, type EventType, type Tone } from '../domain';
@@ -144,6 +145,10 @@ export type PlanView = {
   contentMissing: string[];
   /** Sections du contenu réglementaire renseignées (8 sections et l'effectif prévisible). */
   contentStats: { filled: number; total: number };
+  /** PRV-17 : périodicité (jours) des inspections et réunions de coordination, séances tenues et prochaine séance due. */
+  meetingPeriodDays: number | null;
+  meetings: { id: number; kind: PlanMeetingKind; kindLabel: string; heldOn: string; participants: string; notes: string; by: string | null; cancelled: CancelInfo | null }[];
+  nextMeeting: { dueOn: string; late: boolean } | null;
 } & PlanContent;
 
 export type PermitView = {
@@ -313,7 +318,7 @@ async function loadProcedure(db: Rows['db']): Promise<ProcedureLink | null> {
 /** Écran Plans de prévention et permis : vues sérialisables, indicateurs, écarts et règle des sites. */
 export async function loadPrevention() {
   const rows = await loadRows();
-  const { db, now, nowMs, people, contractors, sites, selectedSite, ruleOf, allPlans, allPermits, activities, eventPlanIds, linkedEvents, plans, permits } = rows;
+  const { db, now, nowMs, people, contractors, sites, selectedSite, ruleOf, allPlans, allPermits, activities, eventPlanIds, linkedEvents, plans, permits, meetingsOf } = rows;
   const { gaps, pastGaps } = gapSummary(rows);
   const name = (id: string | null) => (id ? people.get(id)?.name ?? null : null);
   const contractorOf = new Map(contractors.map((c) => [c.id, c]));
@@ -434,7 +439,16 @@ export async function loadPrevention() {
     const liveActivities = activities.filter((a) => a.planId === p.id && !a.cancelled && a.endOn >= now).length;
     const form = parseFormData(p.formData);
     const gapKind = startGap(p, now, rule);
+    const meetings = meetingsOf(p.id);
+    const next = nextPeriodicMeeting(p, meetings.map((m) => ({ heldOn: m.heldOn, cancelled: !!m.cancelledAt })), now);
     return {
+      meetingPeriodDays: p.meetingPeriodDays,
+      meetings: meetings.map((m) => ({
+        id: m.id, kind: m.kind as PlanMeetingKind, kindLabel: PLAN_MEETING_KINDS[m.kind as PlanMeetingKind] ?? m.kind, heldOn: m.heldOn,
+        participants: m.participants, notes: m.notes, by: name(m.recordedById),
+        cancelled: m.cancelledAt ? { on: fmtInstant(m.cancelledAt), by: name(m.cancelledById), reason: m.cancelReason ?? '' } : null,
+      })),
+      nextMeeting: next && { dueOn: next.dueOn, late: next.late },
       id: p.id, version: planVersions.get(p.id) ?? '0',
       siteId: p.siteId,
       site: siteOf.get(p.siteId) ?? p.siteId,

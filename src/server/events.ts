@@ -10,12 +10,12 @@ import {
   advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
   MP_DENIED, MP_TITLE, hasNcDisposition,
-} from '@/components/events/shared';
+} from '@/lib/rules/events';
 import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';
 import { loadFirstAiders } from '@/lib/data/events';
-import { ARCHIVED_POST_NOTICE, loadSiteZones, resolveReportToken } from '@/lib/data/report-posts';
+import { ARCHIVED_POST_NOTICE, loadSiteZones, loadZoneRisks, resolveReportToken } from '@/lib/data/report-posts';
 import { fmtDate, fromParisLocal, parisDay, referenceNow, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
@@ -1141,6 +1141,10 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
     };
   }
 
+  // DUE-20 : risque du DUERP proposé pour la zone (unité de travail couverte par la zone) ; une valeur hors de la zone du
+  // signalement (autre zone, risque archivé, saisie forgée) est ignorée, le signalement reste enregistré.
+  const rawRisk = f.int('riskId', { min: 1 });
+  const riskId = rawRisk && report.zoneId != null && (await loadZoneRisks([report.zoneId]))[String(report.zoneId)]?.some((r) => r.id === rawRisk) ? rawRisk : null;
   // Accident : intitulé neutre (la description peut décrire la lésion ; l'intitulé paraît dans les listes et les échéances, SEC-06).
   const firstSentence = description.split(/(?<=[.!?])\s/)[0];
   const title = type === 'AT' ? neutralAccidentTitle(report.location) : firstSentence.length > 90 ? `${firstSentence.slice(0, 87)}…` : firstSentence;
@@ -1180,6 +1184,7 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
         severity,
         step: 0,
         description,
+        riskId,
       });
       // EVT-12 : réception journalisée. Auteur : le déclarant connecté, jamais pour un signalement anonyme ni sans compte
       // (byId null, « Vigie ») ; le canal seul, sans nom ni adresse.

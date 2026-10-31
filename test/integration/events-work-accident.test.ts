@@ -3,7 +3,7 @@ import { form } from '../next-mocks';
 import { actAs, file, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { AT_CLOSE_RESTRICTED, HEALTH_DENIED, LOCATION_UNSPECIFIED } from '@/components/events/shared';
+import { AT_CLOSE_RESTRICTED, HEALTH_DENIED, LOCATION_UNSPECIFIED } from '@/lib/rules/events';
 import { fromParisLocal, toParisLocal } from '@/lib/dates';
 import { loadEventChangeLog, loadEventDetail } from '@/lib/data/events';
 import { loadVisibleTodo } from '@/lib/data/todo';

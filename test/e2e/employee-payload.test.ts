@@ -121,6 +121,8 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
       for (const path of [
         '/', '/prevention', '/prevention/carte', '/veille', '/audits', '/environnement', '/revue-de-direction',
         '/prevention/imprimer/permis', '/prevention/imprimer/permis/PF-2026-031', '/prevention/imprimer/plan/PP-2026-013',
+        // Paquet 13 : impression du programme d'audit (AUD-26), demande de changement (CNF-11).
+        '/audits/imprimer?annee=2026', '/audits?changement=MC-001',
       ]) {
         const { status, location, body } = await load(path, rsc);
         // Renvoi par une redirection HTTP, ou dans la page déjà commencée (contrôle du rôle pendant le rendu, SEC-14).
@@ -142,10 +144,11 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
     });
 
     it('synthèse de la DAT et bilan SSCT (paquet 5, données de santé) : renvoi, aucune donnée transmise', async () => {
-      for (const [path, back] of [['/evenements/imprimer/EV-2026-119', '/evenements'], ['/risques/bilan-ssct?annee=2026', '/risques']] as const) {
+      // SEC-13 (paquet 13) : données personnelles d'une personne (accidents dont elle est victime compris).
+      for (const [path, back] of [['/evenements/imprimer/EV-2026-119', '/evenements'], ['/risques/bilan-ssct?annee=2026', '/risques'], ['/habilitations/donnees-personnelles?salarie=sbenali', '/habilitations']] as const) {
         const { status, location, body } = await load(path, rsc);
         expect(status === 307 ? location : body, path).toContain(back);
-        expect(body, path).not.toMatch(/Feuille d.accident|Bilan annuel santé|Maladies professionnelles déclarées|Entorse|Tendinopathie/);
+        expect(body, path).not.toMatch(/Feuille d.accident|Bilan annuel santé|Maladies professionnelles déclarées|Entorse|Tendinopathie|Données personnelles ·|\[S\. Benali\]/);
         expect(found(body, EVENT_REF), path).toEqual([]);
       }
       // Maladie professionnelle du jeu (EV-2026-134, dont il est la victime) : jamais dans ses écrans.
