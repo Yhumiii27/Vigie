@@ -6,6 +6,7 @@ import {
   DECLARANT_MAX, MAX_BATCH_BYTES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, REPORT_TRAP_FIELD,
 } from '@/lib/rules/events';
 import { createReport } from '@/server/events';
+import { shrinkPhoto } from '@/lib/photo-shrink';
 import { EVENT_TYPES, REPORT_TYPE_KEYS } from '@/lib/domain';
 
 type Props = {
@@ -44,13 +45,11 @@ type Props = {
 type Recognition = { lang: string; interimResults: boolean; onresult: (e: { results: { 0: { transcript: string } }[] }) => void; onend: () => void; start: () => void; stop: () => void };
 /** `cleaned` : photo réencodée sur le téléphone, donc sans métadonnées (position GPS, appareil). */
 type Photo = { key: number; file: File; url: string; cleaned: boolean };
-type Shrunk = { file: File; cleaned: boolean };
 type Sent = { id: string; anonymous: boolean; warning?: string };
 
 const DECLARED_IDENTITY_NOTE = 'Sans compte Vigie : votre nom et votre entreprise sont transmis tels que vous les saisissez.';
 
 const GRAVES = ['Non', 'Peut-être', 'Oui'];
-const MAX_EDGE = 1920;
 const MB = 1024 * 1024;
 
 const isImage = (f: File) => f.type.startsWith('image/') || (!f.type && /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
@@ -64,35 +63,6 @@ const hasDictation = () => {
   const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
   return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
 };
-
-/**
- * Réduit la photo (1920 px au plus, JPEG) avant l'envoi : l'envoi reste léger sur réseau mobile et le
- * réencodage retire les métadonnées (position GPS, appareil). Si le navigateur ne sait pas décoder la photo
- * (HEIC hors Safari, mémoire insuffisante…), le fichier d'origine est rendu tel quel, avec `cleaned: false`.
- */
-async function shrinkPhoto(file: File): Promise<Shrunk> {
-  const raw = { file, cleaned: false };
-  try {
-    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
-    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { bmp.close(); return raw; }
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(bmp, 0, 0, w, h);
-    bmp.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-    if (!blob) return raw;
-    const base = file.name.replace(/\.[^.]+$/, '') || 'photo';
-    return { file: new File([blob], `${base}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified }), cleaned: true };
-  } catch {
-    return raw;
-  }
-}
 
 /** Formulaire de signalement terrain (mobile) — crée l'événement à l'étape « Déclaré ». */
 export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62, myReportsHref, defaultType, token, publicMode = false, loginHref, zones = [], defaultZoneId, notice, postZoneId, zoneRisks = {} }: Props) {
@@ -169,7 +139,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       return false;
     });
     setPreparing(true);
-    const shrunk = await Promise.all(images.map(shrinkPhoto));
+    const shrunk = await Promise.all(images.map((f) => shrinkPhoto(f)));
     setPreparing(false);
     const kept = shrunk.filter(({ file, cleaned }) => {
       if (file.size > maxFileBytes) {
@@ -191,6 +161,15 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
     const skipped = picked.length - accepted.length;
     if (skipped > 0) notes.add(`${maxPhotos} photos au maximum : ${skipped} photo${skipped > 1 ? 's' : ''} non ajoutée${skipped > 1 ? 's' : ''}.`);
     setError(notes.size ? [...notes].join(' ') : null);
+  };
+
+  // Appareil photo (attribut capture) ou galerie du téléphone (sans capture), même champ de fichier.
+  const pickPhotos = (camera: boolean) => {
+    const input = fileInput.current;
+    if (!input) return;
+    if (camera) input.setAttribute('capture', 'environment');
+    else input.removeAttribute('capture');
+    input.click();
   };
 
   const removePhoto = (key: number) => {
@@ -362,13 +341,20 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
       </div>
 
       <div style={{ display: 'grid', gap: 8 }}>
-        <input ref={fileInput} type="file" accept="image/*" capture="environment" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
-        <button type="button" className="btn btn-secondary" onClick={() => fileInput.current?.click()} disabled={preparing || full}
-          style={{ justifyContent: 'flex-start', minHeight: 44, fontSize: 13.5 }}>
-          <i className="ph ph-camera" style={{ fontSize: 18 }} aria-hidden />
-          {preparing ? 'Préparation de la photo…' : full ? `${maxPhotos} photos au maximum` : photos.length ? 'Ajouter une autre photo' : 'Ajouter une photo'}
-          {photos.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-neutral-500)' }}>{photos.length}/{maxPhotos}</span>}
-        </button>
+        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
+        {/* UX-05 : appareil photo (capture) ou photos déjà prises (galerie du téléphone) ; un seul champ de fichier. */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn btn-secondary" onClick={() => pickPhotos(true)} disabled={preparing || full}
+            style={{ flex: 1, justifyContent: 'flex-start', minHeight: 44, fontSize: 13.5 }}>
+            <i className="ph ph-camera" style={{ fontSize: 18 }} aria-hidden />
+            {preparing ? 'Préparation de la photo…' : full ? `${maxPhotos} photos au maximum` : photos.length ? 'Ajouter une autre photo' : 'Ajouter une photo'}
+            {photos.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-neutral-500)' }}>{photos.length}/{maxPhotos}</span>}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => pickPhotos(false)} disabled={preparing || full}
+            style={{ minHeight: 44, fontSize: 13.5 }}>
+            <i className="ph ph-images" style={{ fontSize: 18 }} aria-hidden />Galerie
+          </button>
+        </div>
         {photos.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MAX_PHOTOS}, minmax(0, 1fr))`, gap: 8 }}>
             {photos.map((p, i) => (

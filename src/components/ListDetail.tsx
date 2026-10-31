@@ -5,10 +5,10 @@ import { useEffect } from 'react';
 
 // Liste puis fiche sur petit écran (UX-07) : conteneur `.vg-md` (data-focus="detail" quand une fiche est demandée par
 // l'URL), colonnes `.vg-md-list` et `.vg-md-detail` (src/app/vigie.css). Sur téléphone, la fiche remplace la liste, avec
-// « Retour à la liste » ; sur grand écran, rien ne change (deux colonnes, bouton masqué).
+// « Retour à la liste » (aussi sur tablette en portrait, UX-06) ; sur grand écran, rien ne change (deux colonnes, bouton masqué).
 
-/** Même seuil que la navigation mobile (vigie.css). */
-const NARROW = '(max-width: 760px)';
+/** Téléphone et tablette en portrait (UX-06) : liste puis fiche (vigie.css). */
+const NARROW = '(max-width: 1023px)';
 
 /**
  * Remonte en haut de la page à l'ouverture d'une fiche sur téléphone (la liste, masquée, laissait la page défilée) ;

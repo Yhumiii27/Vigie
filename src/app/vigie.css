@@ -412,3 +412,23 @@ a.vg-risk-cell:focus-visible { outline: 2px solid var(--color-accent); outline-o
 .vg-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 11.5px; color: var(--vg-text-muted); padding: 4px 2px; }
 .vg-pager-steps, .vg-pager-sizes { display: inline-flex; align-items: center; gap: 6px; }
 .vg-pager [aria-disabled='true'] { opacity: 0.45; pointer-events: none; }
+/* ─── Tablette (UX-06) : 761–1180 px, bureau (> 1180 px) et téléphone (≤ 760 px) inchangés ─────────────── */
+/* Barre latérale resserrée, marges réduites ; Kanban des actions sur deux rangées de trois colonnes (sans défilement
+   horizontal) ; liste puis fiche (UX-07) en portrait (761–1023 px), deux colonnes plus étroites en paysage. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .vg-side { width: 204px; }
+  .vg-header, .vg-page { padding-left: 20px; padding-right: 20px; }
+  .vg-kanban-scroll { overflow-x: visible !important; }
+  .vg-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; min-width: 0 !important; row-gap: 18px !important; }
+  .vg-md > .vg-md-list { max-width: none !important; }
+  .vg-dialog .input { font-size: 16px; }
+}
+@media (min-width: 761px) and (max-width: 1023px) {
+  .vg-md { grid-template-columns: minmax(0, 1fr) !important; }
+  .vg-md[data-focus='detail'] > .vg-md-list { display: none !important; }
+  .vg-md:not([data-focus='detail']) > .vg-md-detail { display: none !important; }
+  .vg-md-back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; justify-self: start; font-size: 13px; }
+}
+@media (min-width: 1024px) and (max-width: 1180px) {
+  .vg-md:not(.vg-split) { grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) !important; }
+}

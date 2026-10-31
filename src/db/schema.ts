@@ -791,6 +791,8 @@ export const qualifications = pgTable('qualifications', {
   scope: text('scope'), // HAB-10 : catégories ou niveaux obtenus (« 1A, 3, 5 », « B1V, BR »)
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   recordedById: text('recorded_by_id').references(() => people.id),
+  // HAB-06 (migration 0022) : session de formation collective qui a créé cette formation (null : saisie individuelle).
+  sessionId: integer('session_id').references(() => trainingSessions.id),
   // HAB-13 (migration 0020) : évaluation à froid de l'efficacité (ISO 45001 §7.2 d, ISO 9001 §7.2 c) — résultat
   // (TRAINING_EFFECTIVENESS), date, constat et auteur ; modifiable (journal de la formation), jamais sur une formation annulée.
   effectiveness: text('effectiveness'),
@@ -805,6 +807,25 @@ export const qualifications = pgTable('qualifications', {
   index('qualifications_person_title_idx').on(t.personId, t.titleId),
   archiveState('qualifications_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
   check('qualifications_effectiveness_check', sql`(${t.effectiveness} is null and ${t.effectivenessOn} is null) or (${inList(t.effectiveness, EFFECTIVENESS_CODES)} and ${t.effectivenessOn} is not null)`),
+]);
+
+// HAB-06 (migration 0022) : session de formation collective ou recyclage groupé — un titre, une date, un organisme ; elle
+// crée une formation par participant (qualifications.session_id) dans la même transaction. Jamais supprimée : annulée avec
+// un motif, ce qui annule ses formations encore en vigueur (chacune journalisée).
+export const trainingSessions = pgTable('training_sessions', {
+  id: serial('id').primaryKey(),
+  titleId: text('title_id').notNull().references(() => trainingTitles.id),
+  heldOn: date('held_on', { mode: 'string' }).notNull(),
+  expiresOn: date('expires_on', { mode: 'string' }),
+  provider: text('provider'),
+  scope: text('scope'),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  recordedById: text('recorded_by_id').references(() => people.id),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  archiveState('training_sessions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // Affectations lues depuis le planning Keystone.

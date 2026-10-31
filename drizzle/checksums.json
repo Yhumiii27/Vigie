@@ -110,6 +110,11 @@
       "when": 1793292192167,
       "sql": "f32c0a5342d055253851c3124b054c3eb36826cf31209a27d0e2fd92286d71db",
       "snapshot": "b7fece1591343bb2799d9cc022187d3ea5c2da68154a213fdb26aa3b7f73dc96"
+    },
+    "0022_training_sessions": {
+      "when": 1793483668384,
+      "sql": "1141c9bc6b49517135bea1ef61d7447cbb38420d1fcf3e3b5d220034f519ae22",
+      "snapshot": "738e666ce2b52db808675b7db5de39f9b1cd28e93002d72c565284d3284059dd"
     }
   }
 }

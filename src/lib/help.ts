@@ -69,6 +69,8 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Filtrez par service, par titre suivi ou sur les salariés « À traiter » ; la colonne des salariés reste visible en faisant défiler.',
       'Une case ouvre la formation en cours, ses attestations et son historique.',
       'L’ordre des colonnes se règle dans « Titres suivis » (service QHSE et direction).',
+      '« Session collective » enregistre une formation pour chaque participant en une fois ; « Recycler », dans « À prévoir », propose les salariés dont le titre est à renouveler.',
+      'Sur téléphone, « Mon espace » (menu) rassemble vos actions, vos habilitations et vos signalements.',
     ],
   },
   watch: {

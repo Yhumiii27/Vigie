@@ -93,8 +93,10 @@ const isoDay = (iso: string) => fmtDate(iso.slice(0, 10));
  * Historique des formations d'une case (annulées barrées, avec motif) ; attestations en lien.
  * `onCancel` : bouton « Annuler » sur chaque formation non annulée (case de la matrice, encadrement) ; absent en consultation seule.
  */
-export function HistoryTable({ entries, title = 'Historique des formations', onCancel }: {
+export function HistoryTable({ entries, title = 'Historique des formations', onCancel, onCancelSession }: {
   entries: QualificationEntry[]; title?: ReactNode; onCancel?: (e: QualificationEntry) => void;
+  /** HAB-06 : « Annuler la session » sur une formation issue d'une session collective encore en vigueur. */
+  onCancelSession?: (e: QualificationEntry) => void;
 }) {
   return (
     <div style={{ display: 'grid', gap: 6 }}>
@@ -121,6 +123,11 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
                     </td>
                     <td>
                       <span style={{ display: 'block', ...struck }}>{isoDay(e.recordedAt)} · {e.recordedBy}</span>
+                      {e.session && (
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>
+                          Session collective n° {e.session.id} · {e.session.participants} participant{e.session.participants > 1 ? 's' : ''}{e.session.cancelled ? ' · annulée' : ''}
+                        </span>
+                      )}
                       {e.cancelled && (
                         <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
                           Annulée le {isoDay(e.cancelled.at)} par {e.cancelled.by} — {e.cancelled.reason}
@@ -134,6 +141,12 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
                             <Icon name={fileIcon(f.mime)} size={15} />
                           </a>
                         ))}
+                        {onCancelSession && e.session && !e.session.cancelled && !e.cancelled && (
+                          <button type="button" className="btn btn-ghost btn-icon" aria-label={`Annuler la session collective n° ${e.session.id}`}
+                            onClick={() => onCancelSession(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>
+                            <Icon name="ph-users-three" size={14} />
+                          </button>
+                        )}
                         {onCancel && !e.cancelled && (
                           <button type="button" className="btn btn-ghost btn-icon" title="Annuler cette formation" aria-label={`Annuler la formation du ${fmtDate(e.obtainedOn)}`}
                             onClick={() => onCancel(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>

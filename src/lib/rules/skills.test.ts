@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SKILL_LINK_MISSING, coversNeed, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, skillIndicators, skillLinkTarget } from './skills';
+import { SESSION_MAX_PARTICIPANTS, SKILL_LINK_MISSING, coversNeed, groupRenewalCandidates, heldState, isBlocking, lapseFor, period, renewalDue, renewalForecast, sessionParticipantsError, skillIndicators, skillLinkTarget } from './skills';
 
 // Règles des habilitations (QUA-03) : manque au regard d'une affectation Keystone, recyclage à planifier.
 
@@ -155,5 +155,31 @@ describe('skillIndicators : indicateurs de compétences de la revue (HAB-18)', (
   });
   it('sans titre requis : taux non calculé', () => {
     expect(skillIndicators([], '2026-10-09')).toMatchObject({ required: 0, rate: null, trainings12: 0 });
+  });
+});
+
+describe('session collective et recyclage groupé (HAB-06)', () => {
+  it('participants : au moins un, sans doublon, plafond', () => {
+    expect(sessionParticipantsError([])).toBe('Choisissez au moins un participant.');
+    expect(sessionParticipantsError(['a', 'a'])).toBe('Un participant est choisi deux fois.');
+    expect(sessionParticipantsError(Array.from({ length: SESSION_MAX_PARTICIPANTS + 1 }, (_, i) => `p${i}`))).toMatch(/au plus/);
+    expect(sessionParticipantsError(['a', 'b'])).toBeNull();
+  });
+
+  it('candidats : à rattraper puis par échéance, cochés jusqu’à 3 mois, sans doublon', () => {
+    const cell = (expiresOn: string | null, state: 'v' | 's' | 'x' | 'r') => ({ title: { id: 'sst', label: 'SST' }, state, expiresOn, required: true });
+    const forecast = renewalForecast([
+      { person: { id: 'a', name: 'A' }, cells: [cell('2026-09-01', 'x')] },
+      { person: { id: 'b', name: 'B' }, cells: [cell('2026-11-20', 's')] },
+      { person: { id: 'c', name: 'C' }, cells: [cell('2027-06-15', 'v')] },
+      { person: { id: 'd', name: 'D' }, cells: [cell(null, 'r')] },
+    ], '2026-10-09');
+    expect(groupRenewalCandidates(forecast, 'sst')).toEqual([
+      { personId: 'd', person: 'D', expiresOn: null, preselected: true },
+      { personId: 'a', person: 'A', expiresOn: '2026-09-01', preselected: true },
+      { personId: 'b', person: 'B', expiresOn: '2026-11-20', preselected: true },
+      { personId: 'c', person: 'C', expiresOn: '2027-06-15', preselected: false },
+    ]);
+    expect(groupRenewalCandidates(forecast, 'elec')).toEqual([]);
   });
 });

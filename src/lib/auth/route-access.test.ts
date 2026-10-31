@@ -5,6 +5,7 @@ import { ROLE_KEYS, SCREENS, canSee, homeOf } from '../domain';
 import { HEALTH_PAGES, ROLE_ROUTES, demoRoleOf, routeDecision, screenOfPath } from './route-access';
 import { ACTION_PRINT_PATH } from '../action-rules';
 import { EVENT_PRINT_PATH } from '../rules/events';
+import { MY_SPACE_PATH } from './paths';
 
 // Redirections de rôle avant le rendu (SEC-14) : décision du proxy, et concordance de ROLE_ROUTES avec les gardes des
 // pages (guard('<écran>')), qui font foi. Un nouvel écran, une page déplacée ou un droit modifié dans domain.ts doit
@@ -50,6 +51,11 @@ describe('décision du proxy (SEC-14)', () => {
     expect(routeDecision('/signaler/postes', 'Chef de projet', false)).toEqual({ kind: 'pass' });
     expect(routeDecision('/signaler', 'Salarié', false)).toEqual({ kind: 'pass' });
     expect(routeDecision('/signaler/mes-signalements', 'Salarié', false)).toEqual({ kind: 'pass' });
+  });
+
+  it('espace salarié mobile (EVT-22) : ouvert à tout rôle connecté (ses seules données), hors écran gardé', () => {
+    expect(screenOfPath(MY_SPACE_PATH)).toBeNull();
+    for (const role of ROLE_KEYS) expect(routeDecision(MY_SPACE_PATH, role, false), role).toEqual({ kind: 'pass' });
   });
 
   it('registre des accidents bénins (données de santé) : animateur QHSE et direction seulement', () => {

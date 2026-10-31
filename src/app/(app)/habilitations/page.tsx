@@ -4,7 +4,8 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
+import { GroupRenewalButton } from '@/components/skills/GroupRenewalButton';
+import { groupRenewalCandidates, renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
 import { today } from '@/lib/today';
 import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -89,10 +90,15 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         {forecast ? (
           <div className="card" style={{ gap: 12 }}>
             <CardHead title="Recyclages et formations à prévoir" aside={(
-              // Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application.
-              <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-                <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
-              </a>
+              <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                {/* HAB-06 : recyclage groupé (session collective) sur un titre de la prévision. */}
+                {manage && <GroupRenewalButton titles={titles} today={now}
+                  renewals={Object.fromEntries(forecast.titles.map((ti) => [ti.id, groupRenewalCandidates(forecast, ti.id)]))} />}
+                {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
+                <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+                  <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
+                </a>
+              </span>
             )} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
               Titres requis expirés, jamais suivis ou expirant d&apos;ici 12 mois, par mois d&apos;échéance. Plan de formation géré par le service RH :

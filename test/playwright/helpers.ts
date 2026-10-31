@@ -76,6 +76,8 @@ export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
   ...['/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
   ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits', '/evenements/fiche/EV-2026-127'].map((url) => ({ role: 'Chef de service' as Role, site: 'ville-a', url })),
   ...['/', '/prevention', '/risques'].map((url) => ({ role: 'Chef de projet' as Role, site: 'ville-a', url })),
-  ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215']
+  ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215',
+    // EVT-22 : espace salarié mobile.
+    '/signaler/mon-espace']
     .map((url) => ({ role: 'Salarié' as Role, site: 'all', url })),
 ];
