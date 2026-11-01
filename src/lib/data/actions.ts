@@ -4,6 +4,7 @@ import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef } from '@/lib/rules/environment';
+import { studyLabel, type StudyType } from '@/lib/rules/process-safety';
 import { ACTION_LINKS, loadActionSources } from '../action-links';
 import {
   SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, isComplementaryLinkKind, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
@@ -177,7 +178,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   const active = new Set(session.siteOptions.map((s) => s.id));
   const keep = (siteId: string | null) => inScope(siteId) && (!siteId || active.has(siteId));
   const year = Number(today().slice(0, 4));
-  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses] = await Promise.all([
+  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses, studies] = await Promise.all([
     db.select({ id: t.events.id, title: t.events.title, type: t.events.type, step: t.events.step, dismissedAt: t.events.dismissedAt, siteId: t.events.siteId, occurredOn: t.events.occurredOn }).from(t.events),
     db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
     db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, track: t.auditPlanItems.track, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, month: t.auditPlanItems.month, actionId: t.auditPlanItems.actionId, cancelledAt: t.auditPlanItems.cancelledAt }).from(t.auditPlanItems),
@@ -191,6 +192,8 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     db.select({ id: t.wasteStreams.id, label: t.wasteStreams.label, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).orderBy(asc(t.wasteStreams.id)),
     db.select({ id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, siteId: t.wasteEntries.siteId, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries),
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
+    db.select({ id: t.processSafetyStudies.id, siteId: t.processSafetyStudies.siteId, type: t.processSafetyStudies.type, capexCode: t.processSafetyStudies.capexCode, projectCode: t.processSafetyStudies.keystoneProjectCode, cancelledAt: t.processSafetyStudies.cancelledAt })
+      .from(t.processSafetyStudies).orderBy(asc(t.processSafetyStudies.id)),
   ]);
   const openActions = new Set(statuses.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id));
   /** Élément à action unique encore libre (l'action qui le porte est close, ou aucune). */
@@ -237,6 +240,10 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     .filter((e) => !e.cancelledAt && recent(Number(e.removedOn.slice(0, 4))) && keep(e.siteId))
     .sort((a, b) => b.removedOn.localeCompare(a.removedOn) || b.id - a.id)
     .forEach((e) => add('wasteentry', e.id, `${entryRef(e.streamId, e.removedOn)} · ${streamLabels.get(e.streamId) ?? e.streamId}`, e.siteId));
+  // VG-02 : études de sécurité des procédés non annulées (plusieurs recommandations par étude).
+  studies
+    .filter((st) => !st.cancelledAt && keep(st.siteId))
+    .forEach((st) => add('safetystudy', st.id, `${st.id} · ${studyLabel({ type: st.type as StudyType, capexCode: st.capexCode, projectCode: st.projectCode })}`, st.siteId));
   return out;
 });
 
@@ -274,7 +281,8 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
   // L'événement lié (type « event » du registre) est celui de event_id, déjà listé.
   for (const s of links) {
     if (s.kind === 'event') continue;
-    const readable = !reader.restricted && canOpen(reader.role, s.href);
+    // VG-04 : études de sécurité des procédés fermées au Salarié (vue masquée) : référence seule.
+    const readable = !reader.restricted && canOpen(reader.role, s.href) && !(employee && s.kind === 'safetystudy');
     list.push({
       kind: s.kind, label: s.label, href: readable ? s.href : null, ...(readable && s.detail ? { detail: s.detail } : {}),
       detachOnAbandon: !ACTION_LINKS[s.kind]?.keptOnCancel,

@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { ChangeEntry } from '@/lib/change-entry';
 import { loadChangeLog, loadChangeLogs } from '@/lib/data/changelog';
-import { canApprove, canEdit, canSee, type Role, type ScreenKey } from '@/lib/domain';
+import { canApprove, canEdit, canSee, isEmployee, type Role, type ScreenKey } from '@/lib/domain';
 import { getSession, siteFilter } from '@/lib/session';
 
 // Historique d'une fiche chargé à son ouverture (QUA-11 ; composant LazyChangeLog) plutôt qu'avec toute la liste de
@@ -23,6 +23,8 @@ export type HistoryEntity =
   | 'qhse_objective' | 'context_item'
   // Paquet 13 : registre de sécurité (VEI-15), situations d'urgence (CNF-08), demandes de changement (CNF-11).
   | 'safety_notice' | 'emergency_situation' | 'change_request'
+  // VG-01 : études de sécurité des procédés.
+  | 'process_safety_study'
   // Classe 1, lot A (fin de QUA-11) : risques et demandes d'accès au DUERP, audits, environnement.
   | 'risk' | 'duerp_access_request' | 'audit_plan_item' | 'audit_finding' | 'certification' | 'waste_stream' | 'waste_entry';
 
@@ -204,6 +206,15 @@ const RULES: Record<HistoryEntity, Rule> = {
       const n = num(id);
       if (n === null) return undefined;
       const [o] = await (await db()).select({ siteId: t.emergencySituations.siteId }).from(t.emergencySituations).where(eq(t.emergencySituations.id, n));
+      return o;
+    },
+  },
+  // Étude de sécurité des procédés (VG-01) : lecteurs de la vue « Études » (écran « Évaluation des risques », sauf le Salarié).
+  process_safety_study: {
+    screen: 'risks',
+    allow: (role) => !isEmployee(role),
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.processSafetyStudies.siteId }).from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
       return o;
     },
   },

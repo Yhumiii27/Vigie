@@ -59,6 +59,18 @@ describe.skipIf(!base)('Salarié : DUERP en consultation (serveur construit)', (
       }
     });
 
+    it('études de sécurité des procédés (VG-04) : vue fermée au Salarié, lien profond « introuvable », rien de l’étude', async () => {
+      for (const path of ['/risques?vue=etudes', '/risques?vue=etudes&etude=ES-002', '/risques?etude=ES-001']) {
+        const { status, body } = await load(path, rsc);
+        expect(status, path).toBe(200);
+        expect(body, path).not.toContain('CPX-APM-2026-01');
+        expect(body, path).not.toContain('Bureau d’études procédés');
+        expect(body, path).not.toContain('NOT-CPX-APM');
+        expect(body, path).not.toMatch(/A-19[123]/);
+      }
+      expect((await load('/risques?vue=etudes&etude=ES-002', rsc)).body).toContain('Étude de sécurité introuvable ou hors du site sélectionné.');
+    });
+
     it('consultation : actions de prévention du DUERP et mention de mise à disposition', async () => {
       const { body } = await load('/risques', rsc);
       expect(body).toContain('A-214');

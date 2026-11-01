@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { actionLinks, checkActionLink, linkFacts, parseActionLink } from '@/lib/action-links';
+import { STUDY_BLOCKING_ARG, actionLinks, checkActionLink, linkFacts, parseActionLink } from '@/lib/action-links';
 import {
   NON_QSE_LINK_MESSAGE, QHSE_ONLY_CREATE_MESSAGE, actionDateErrors, actionHref, actionRights, admissibleSources, canCreateAction, canRemoveProof,
   isNonQseLinkKind, missingFields, sourceEditable, textTooLong, type ActionCompletion, type MissingField,
@@ -78,6 +78,8 @@ async function createAction(fd: FormData): Promise<FormState> {
   const parsed = link ? parseActionLink(link) : null;
   if (link && !parsed) f.fail('link', 'Type de rattachement inconnu.');
   if (parsed && isNonQseLinkKind(parsed.kind)) f.fail('link', NON_QSE_LINK_MESSAGE);
+  // VG-02 : recommandation d'une étude de sécurité des procédés marquée « réserve bloquante » à la création (case de la fiche).
+  const blocking = parsed?.kind === 'safetystudy' && f.bool('safetyBlocking') && parsed.args.length === 1;
   if (!f.ok) return f.state();
 
   const db = await getDb();
@@ -108,7 +110,7 @@ async function createAction(fd: FormData): Promise<FormState> {
   try {
     created = await db.transaction(async (tx) => (await createActionRecord(tx, {
       source: source!, originRef, pilotId: v.pilotId, priority: v.priority!, dueOn: v.dueOn!, domain: v.domain!, problem: v.problem, detail: v.detail,
-      verifyDueOn: v.verifyDueOn!, riskLevel: v.riskLevel, estimatedCost, actualCost, siteId: v.siteId, links: link ? [link] : [], strictLinks: true,
+      verifyDueOn: v.verifyDueOn!, riskLevel: v.riskLevel, estimatedCost, actualCost, siteId: v.siteId, links: link ? [blocking ? `${link}:${STUDY_BLOCKING_ARG}` : link] : [], strictLinks: true,
     }, { byId: session.user.id, byName: session.user.name, today: now })).id);
   } catch (e) {
     if (e instanceof ActionLinkError) return { error: e.message, fieldErrors: { link: e.message } };

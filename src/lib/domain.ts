@@ -163,7 +163,7 @@ export const VERIFY_METHODS: Record<VerifyMethod, string> = { audit_visite: 'Aud
 export const FOLLOW_REASONS: Record<FollowReason, string> = { non_efficace: 'Non efficace', nouveau_risque: 'Nouveau risque' };
 
 /** Cible d'une source (§ 12) : type d'élément Vigie qui peut lui être lié (free : référence d'origine seulement). */
-export type SourceTarget = 'event' | 'audit' | 'risk' | 'control' | 'requirement' | 'review' | 'objective' | 'document' | 'environment' | 'free';
+export type SourceTarget = 'event' | 'audit' | 'risk' | 'control' | 'requirement' | 'review' | 'objective' | 'document' | 'environment' | 'safetystudy' | 'free';
 /**
  * 24 sources (§ 12) dans l'ordre de la liste du QHSE : ses 22 sources, plus « Audit fournisseur » et « Déchets » (réponses
  * du service QHSE du 15/10/2026, ACT-37). `path` : écran d'arrivée sans élément lié (null : source libre, sans élément
@@ -194,7 +194,12 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
   revue_documentaire: { label: 'Revue documentaire', icon: 'ph-files', target: 'document', path: '/documents' },
   revue_processus: { label: 'Revue de processus', icon: 'ph-flow-arrow', target: 'free', path: null },
   veille: { label: 'Veille réglementaire', icon: 'ph-scales', target: 'requirement', path: '/veille' },
-  hazop: { label: 'HAZOP', icon: 'ph-pipe', target: 'free', path: null },
+  // VG-02 : recommandations des études de sécurité des procédés (HazID, HazOp / AMDEC, contrôle chantier, PSSR / RSPDI,
+  // ASPD) — source « HAZOP » pour tous les types tant que le service QHSE n'a pas décidé d'autres sources (à confirmer).
+  hazop: {
+    label: 'HAZOP', icon: 'ph-pipe', target: 'safetystudy', path: '/risques?vue=etudes',
+    hint: 'Recommandation d’une étude de sécurité des procédés (HazID, HazOp / AMDEC, contrôle chantier, PSSR, ASPD).',
+  },
   reserves: {
     label: 'Réserves', icon: 'ph-list-checks', target: 'free', path: null,
     hint: 'Réserves de réception d\'un chantier ou d\'une installation.',
@@ -209,7 +214,7 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
 export const SOURCE_LINK_KINDS: Record<SourceTarget, readonly string[]> = {
   event: ['event'], audit: ['finding', 'plan'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
   review: ['review', 'reviewdecision', 'plan'], objective: ['reviewdecision'], document: ['document', 'docversion'],
-  environment: ['wastestream', 'wasteentry', 'requirement'], free: [],
+  environment: ['wastestream', 'wasteentry', 'requirement'], safetystudy: ['safetystudy'], free: [],
 };
 /** L'unique événement ou audit d'une action : posé à la création seulement, jamais rattaché ni détaché ensuite (§ 12, D15). */
 export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan'] as const;

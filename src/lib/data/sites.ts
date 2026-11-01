@@ -14,6 +14,8 @@ import { parisDay } from '@/lib/dates';
 /** Site tel que la fenêtre « Gérer les sites » l'affiche (actifs et archivés). */
 export type SiteAdminRow = {
   id: string; label: string; sort: number; seveso: string | null;
+  /** Code commun du site (matrix.sites.code, D14, VG-05) ; null tant qu'il n'est pas renseigné. */
+  code: string | null;
   /** Responsable QHSE (people.id) ; null = poste vacant. */
   qhseLeadId: string | null;
   /** Droit local d'Alsace-Moselle : Vendredi saint et 26 décembre fériés (délai de déclaration CPAM, EVT-03). */
@@ -35,7 +37,7 @@ export const loadSiteAdmin = cache(async (): Promise<SiteAdminRow[]> => {
   return sites.map((s) => {
     const lead = s.qhseLeadId ? people.get(s.qhseLeadId) : undefined;
     return {
-      id: s.id, label: s.label, sort: s.sort, seveso: s.seveso,
+      id: s.id, label: s.label, sort: s.sort, seveso: s.seveso, code: s.code,
       qhseLeadId: s.qhseLeadId,
       alsaceMoselle: s.alsaceMoselle,
       qhseLead: lead ? `${lead.name}${hasLeft(lead, now) ? " (sorti de l'effectif)" : ''}` : null,

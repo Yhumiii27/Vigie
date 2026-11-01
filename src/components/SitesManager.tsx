@@ -54,6 +54,7 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                   {s.label}
                   <span className="vg-muted" style={{ fontSize: 11 }}>ordre {s.sort}</span>
+                  {s.code && <span className="tag tag-outline" style={{ fontSize: 11 }} title="Code commun (Matrix)">{s.code}</span>}
                   {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 11 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
                   {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 11 }} title="Droit local d'Alsace-Moselle">Alsace-Moselle</span>}
                   <span className="vg-muted" style={{ fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
@@ -102,6 +103,9 @@ export function SitesManager({ sites, leadOptions, onClose }: SiteAdmin & { onCl
               <Input name="sort" type="number" min={0} max={9999} step={1} defaultValue={view.edit?.sort} />
             </Field>
           </FormRow>
+          <Field name="code" label="Code commun (Matrix)" hint="Clé matrix.sites.code partagée avec Arche et les autres outils : minuscules, chiffres et soulignés (ex. kenitra). Facultatif.">
+            <Input name="code" defaultValue={view.edit?.code ?? ''} maxLength={32} pattern="[a-z][a-z0-9_]{1,31}" />
+          </Field>
           <QhseLeadField options={leadOptions} current={view.edit ?? undefined} />
           <Field name="alsaceMoselle" label="Calendrier" hint="Délai de déclaration d'un accident du travail : le Vendredi saint et le 26 décembre y sont aussi fériés.">
             <Checkbox name="alsaceMoselle" label="Droit local d'Alsace-Moselle (Bas-Rhin, Haut-Rhin, Moselle)" defaultChecked={view.edit?.alsaceMoselle ?? false} />

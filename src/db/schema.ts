@@ -9,7 +9,7 @@ import {
   BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EFFECTIVENESS_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
-  CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES,
+  CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -50,8 +50,14 @@ export const sites = pgTable('sites', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
   archiveReason: text('archive_reason'),
+  // VG-05 (migration 0023) : code commun du site, clé de matrix.sites.code (décision D14 de Matrix) ; facultatif tant que
+  // la liste de Matrix n'est pas reprise (les identifiants de Vigie, « ville-a », ne suivent pas son format). Unique quand
+  // il est renseigné ; saisi dans « Gérer les sites » par le périmètre complet (src/server/sites.ts), journalisé. Les usines
+  // des filiales (sites des CAPEX d'Arche, matrix.pub_sites.filiale_code) sont des sites de Vigie portant ce code.
+  code: text('code').unique('sites_code_unique'),
 }, (t) => [
   archiveState('sites_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+  check('sites_code_check', sql`${t.code} is null or (${t.code} ~ '^[a-z][a-z0-9_]{1,31}$' and ${t.code} <> 'all')`),
 ]);
 
 // Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
@@ -314,6 +320,11 @@ export const actions = pgTable('actions', {
   documentId: text('document_id').references((): AnyPgColumn => documents.id),
   wasteStreamId: text('waste_stream_id').references((): AnyPgColumn => wasteStreams.id),
   wasteEntryId: integer('waste_entry_id').references((): AnyPgColumn => wasteEntries.id), // enlèvement du registre des déchets
+  // VG-02 (migration 0023) : étude de sécurité des procédés dont l'action est une recommandation (source « HAZOP »), posée à
+  // la création seulement, comme les autres sources d'origine ; réserve bloquante du jalon (modifiable par le QHSE depuis la
+  // fiche de l'étude, journalisée sur l'étude et l'action). Une réserve bloquante ouverte empêche le franchissement du jalon.
+  safetyStudyId: text('safety_study_id').references((): AnyPgColumn => processSafetyStudies.id),
+  safetyStudyBlocking: boolean('safety_study_blocking').notNull().default(false),
   // Habilitation d'une action de recyclage reprise (HAB-04, 0007 : reprise de qualification_requirements.renewal_action_id) :
   // case de la matrice (salarié × titre), conservée sur l'action close ou abandonnée et quand le titre n'est plus requis ;
   // jamais posée par Vigie (aucune action QSE pour un recyclage, 15/10/2026).
@@ -359,6 +370,8 @@ export const actions = pgTable('actions', {
   index('actions_site_idx').on(t.siteId),
   index('actions_follows_idx').on(t.followsActionId),
   archiveState('actions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  index('actions_safety_study_idx').on(t.safetyStudyId),
+  check('actions_safety_study_blocking_check', sql`not ${t.safetyStudyBlocking} or ${t.safetyStudyId} is not null`),
 ]);
 
 // Fil de commentaires daté et signé (ACT-24) : jamais modifié ; retrait motivé, texte conservé en base mais jamais envoyé
@@ -532,6 +545,51 @@ export const emergencySituations = pgTable('emergency_situations', {
   check('emergency_situations_drill_months_check', sql`${t.drillMonths} between 1 and 60`),
   archiveState('emergency_situations_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
   index('emergency_situations_site_idx').on(t.siteId),
+]);
+
+// Études de sécurité des procédés (VG-01 à VG-05, demande d'Arche du 01/11/2026, migration 0023 ; CNF-12 à CNF-14) : une
+// étude par jalon DIG-PRODI d'un CAPEX de filiale (code « CPX-… » d'Arche) ou d'un projet EPC2i (code Keystone), sur le site
+// de l'usine. Référence « ES-001 » (nextEntityReference). Statut stocké planifiee | realisee | validee ; « annulee » calculé
+// (annulation motivée, jamais supprimée). Validée : date de validation et conclusion obligatoires (contrainte). Animateur :
+// une personne (facilitator_id) ou un intervenant extérieur (facilitator_external). Rapport : référence Codex (texte).
+// Recommandations : actions QSE rattachées (actions.safety_study_id). Journal `process_safety_study`. Aucune vue `pub_` ici :
+// Matrix définit `vigie.pub_etudes_securite` sur ces tables (décision M-18), d'après la requête de référence de
+// docs/specs/etudes-securite.md. Échéance : séance passée d'une étude encore planifiée (loadProcessSafetySignals).
+export const processSafetyStudies = pgTable('process_safety_studies', {
+  id: text('id').primaryKey(), // « ES-001 », jamais réattribué
+  siteId: text('site_id').notNull().references(() => sites.id),
+  capexCode: text('capex_code'), // code CAPEX d'Arche (arche.pub_capex.code), saisi
+  keystoneProjectCode: text('keystone_project_code'), // code projet Keystone (keystone.pub_projets.code), saisi
+  milestone: text('milestone').notNull(),
+  type: text('type').notNull(),
+  status: text('status').notNull().default('planifiee'),
+  sessionOn: date('session_on', { mode: 'string' }).notNull(), // séance prévue (planifiée) ou tenue
+  validatedOn: date('validated_on', { mode: 'string' }),
+  conclusion: text('conclusion'),
+  facilitatorId: text('facilitator_id').references(() => people.id),
+  facilitatorExternal: text('facilitator_external'),
+  reportRef: text('report_ref'), // référence Codex du rapport
+  scope: text('scope').notNull().default(''), // périmètre et objet de l'étude
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  check('process_safety_studies_milestone_check', inList(t.milestone, STUDY_MILESTONE_CODES)),
+  check('process_safety_studies_type_check', inList(t.type, STUDY_TYPE_CODES)),
+  check('process_safety_studies_status_check', inList(t.status, STUDY_STATUS_CODES)),
+  check('process_safety_studies_conclusion_check', sql`${t.conclusion} is null or ${inList(t.conclusion, STUDY_CONCLUSION_CODES)}`),
+  // Un type → un jalon (studyTypeError, src/lib/rules/process-safety.ts).
+  check('process_safety_studies_type_milestone_check', sql`(${t.type} = 'hazid' and ${t.milestone} = 'HS2') or (${t.type} in ('hazop', 'amdec') and ${t.milestone} = 'HS3') or (${t.type} = 'controle_chantier' and ${t.milestone} = 'HS4') or (${t.type} in ('pssr', 'rspdi') and ${t.milestone} = 'PSSR') or (${t.type} = 'aspd' and ${t.milestone} = 'HS6')`),
+  check('process_safety_studies_link_check', sql`${t.capexCode} is not null or ${t.keystoneProjectCode} is not null`),
+  check('process_safety_studies_capex_code_check', sql`${t.capexCode} is null or ${t.capexCode} ~ '^CPX-[A-Z0-9][A-Z0-9-]{0,39}$'`),
+  check('process_safety_studies_validated_check', sql`(${t.status} = 'validee' and ${t.validatedOn} is not null and ${t.conclusion} is not null) or (${t.status} <> 'validee' and ${t.validatedOn} is null and ${t.conclusion} is null)`),
+  check('process_safety_studies_facilitator_check', sql`${t.facilitatorId} is null or ${t.facilitatorExternal} is null`),
+  archiveState('process_safety_studies_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  index('process_safety_studies_site_idx').on(t.siteId),
+  index('process_safety_studies_capex_idx').on(t.capexCode),
+  index('process_safety_studies_project_idx').on(t.keystoneProjectCode),
 ]);
 
 // Exercices d'une situation d'urgence (CNF-08) : date, participants, déroulement et enseignements. Annulation motivée.

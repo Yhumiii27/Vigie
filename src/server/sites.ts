@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { SEVESO_LEVELS } from '@/lib/rules/prevention';
+import { siteCodeError } from '@/lib/rules/process-safety';
 import { ALL_SITES } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover } from '@/lib/guard';
@@ -51,7 +52,16 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   const leadChoices = people.filter((p) => !hasLeft(p, now) || p.id === before?.qhseLeadId).map((p) => p.id);
   const qhseLeadId = leadField ? f.oneOf('qhseLeadId', leadChoices) : before?.qhseLeadId ?? null;
   const alsaceMoselle = fd.has('alsaceMoselleField') ? f.bool('alsaceMoselle') : before?.alsaceMoselle ?? false;
+  // VG-05 : code commun du site (matrix.sites.code, D14) — absent du formulaire : inchangé ; vide : aucun code.
+  const code = f.has('code') ? f.str('code', { max: 32 }).toLowerCase() || null : before?.code ?? null;
+  const codeError = siteCodeError(code);
+  if (codeError) f.fail('code', codeError);
   if (!f.ok) return f.state();
+  if (code !== (before?.code ?? null)) {
+    // Clé partagée avec les autres outils (Arche, Matrix) : fixée par le périmètre complet seulement.
+    if (session.allowedSiteIds) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: 'Code commun du site : réservé à la direction et à l’animateur QHSE du périmètre complet.' } };
+    if (code && sites.some((s) => s.id !== id && s.code === code)) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: 'Un autre site porte déjà ce code.' } };
+  }
   if (sites.some((s) => s.id !== id && s.label.toLowerCase() === label.toLowerCase())) {
     return { error: 'Certains champs sont à corriger.', fieldErrors: { label: 'Un site porte déjà ce nom.' } };
   }
@@ -64,13 +74,13 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
     for (let i = 2; newId === ALL_SITES || sites.some((s) => s.id === newId); i++) newId = `${base}-${i}`;
     const order = sort ?? nextSort(sites);
     await db.transaction(async (tx) => {
-      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId, alsaceMoselle });
+      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId, alsaceMoselle, code });
       if (!sites.length) {
         await tx.update(t.people).set({ siteId: newId }).where(and(eq(t.people.id, session.user.id), isNull(t.people.siteId)));
       }
       await logChange(tx, {
         byId: session.user.id, entityType: 'site', entityId: newId, action: 'create',
-        summary: `Site « ${label} » créé${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}${alsaceMoselle ? ' · droit local d’Alsace-Moselle' : ''}`,
+        summary: `Site « ${label} » créé${code ? ` · code ${code}` : ''}${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}${alsaceMoselle ? ' · droit local d’Alsace-Moselle' : ''}`,
       });
     });
     revalidatePath('/', 'layout');
@@ -80,12 +90,13 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   if (!before) return { error: 'Site inconnu.' };
   const order = sort ?? before.sort;
   await db.transaction(async (tx) => {
-    await tx.update(t.sites).set({ label, sort: order, qhseLeadId, alsaceMoselle }).where(eq(t.sites.id, id));
+    await tx.update(t.sites).set({ label, sort: order, qhseLeadId, alsaceMoselle, code }).where(eq(t.sites.id, id));
     const details = [
       ...(before.label !== label ? [{ field: 'Libellé', from: before.label, to: label }] : []),
       ...(before.sort !== order ? [{ field: 'Ordre', from: String(before.sort), to: String(order) }] : []),
       ...(before.qhseLeadId !== qhseLeadId ? [{ field: 'Responsable QHSE', from: leadName(before.qhseLeadId), to: leadName(qhseLeadId) }] : []),
       ...(before.alsaceMoselle !== alsaceMoselle ? [{ field: 'Droit local d’Alsace-Moselle', from: before.alsaceMoselle ? 'oui' : 'non', to: alsaceMoselle ? 'oui' : 'non' }] : []),
+      ...(before.code !== code ? [{ field: 'Code commun (Matrix)', from: before.code, to: code }] : []),
     ];
     if (details.length) await logChange(tx, { byId: session.user.id, entityType: 'site', entityId: id, action: 'update', summary: 'Site modifié', details });
   });
