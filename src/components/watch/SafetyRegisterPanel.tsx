@@ -161,7 +161,7 @@ function NoticeForm({ n, options, defaultSite, today, onDone, onCancel }: {
   const sites = withCurrent(options.sites, n?.siteId, n?.siteLabel);
   const controls = options.controls.filter(([, , s]) => !s || s === siteId).map(([v, l]) => [v, l] as const);
   return (
-    <ActionForm action={saveSafetyNotice} hidden={{ id: n?.id }} onDone={onDone} onCancel={onCancel} submitLabel={n ? 'Enregistrer' : "Inscrire au registre"}>
+    <ActionForm action={saveSafetyNotice} hidden={{ id: n?.id, version: n?.version }} onDone={onDone} onCancel={onCancel} submitLabel={n ? 'Enregistrer' : "Inscrire au registre"}>
       <FormRow>
         <Field name="kind" label="Nature">
           <Select name="kind" options={KIND_OPTIONS} defaultValue={n?.kind ?? 'observation'} />

@@ -12,6 +12,8 @@ import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
 
 type Props = {
   person?: Person;
+  /** QUA-12 : version de la fiche à son ouverture (modification). */
+  version?: string;
   /** Sites actifs (seuls proposés pour un nouveau salarié ou un changement de site). */
   sites: readonly Option[];
   /** Sites archivés : le site actuel d'un salarié qui y est encore rattaché reste proposé (pas de changement implicite). */
@@ -69,13 +71,13 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
 }
 
 /** Fiche salarié (saisie provisoire : Cursus deviendra la source de vérité des données personnelles). */
-export function PersonForm({ person, sites, archivedSites, services, defaultSiteId, today, onDone, onCancel }: Props) {
+export function PersonForm({ person, version, sites, archivedSites, services, defaultSiteId, today, onDone, onCancel }: Props) {
   const siteId = person ? person.siteId ?? '' : defaultSiteId;
   const current = siteId && !sites.some(([v]) => v === siteId) ? archivedSites.find(([v]) => v === siteId) ?? ([siteId, siteId] as const) : null;
   const siteOptions = current ? [...sites, current] : sites;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel={person ? 'Enregistrer' : 'Ajouter le salarié'} hidden={{ id: person?.id }}>
+      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel={person ? 'Enregistrer' : 'Ajouter le salarié'} hidden={{ id: person?.id, version: person ? version : undefined }}>
         <FormRow>
           <Field name="name" label="Nom">
             <Input name="name" defaultValue={person?.name} placeholder="Ex. [J. Dupont]" maxLength={80} autoFocus />

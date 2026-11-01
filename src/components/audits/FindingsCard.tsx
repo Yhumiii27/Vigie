@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { NewActionButton } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
@@ -210,7 +210,7 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
                   placeholder="Ex. doublon du constat saisi le …" onDone={close} />
               </DialogFooter>
             )}
-            {finding && <ChangeLogList entries={finding.log} />}
+            {finding && <LazyChangeLog entity="audit_finding" id={finding.id} />}
           </>
         )}
       </Dialog>
@@ -238,7 +238,7 @@ function CancelledRow({ finding: f, canEdit, flash }: { finding: CancelledFindin
             submitIcon="ph-arrow-counter-clockwise" placeholder="Ex. annulé par erreur, le constat figure au rapport"
             message="Le constat revient dans les constats de son audit, ses échéances et le dossier des revues à venir ; un dossier de revue déjà figé ne change pas. L'annulation reste à l'historique." />
         )}
-        <ChangeLogList entries={f.log} />
+        <LazyChangeLog entity="audit_finding" id={f.id} />
       </div>
       <div style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
         <ActionLinks actions={f.actions} compact />
@@ -316,7 +316,7 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
   const other = choice === OTHER_AUDIT;
   return (
     <ActionForm action={saveFinding} onDone={() => onDone(other ? groupKey(null, audit.trim()) : groupKey(+choice, ''))} onCancel={onCancel}
-      submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'} hidden={{ id: finding?.id }}>
+      submitLabel={finding ? 'Enregistrer' : 'Ajouter le constat'} hidden={{ id: finding?.id, version: finding?.version }}>
       <Field name="planItemId" label="Audit" hint={other && !legacy
         ? "Aucun audit réalisé : déclarez l'audit réalisé au programme, ou enregistrez un « Audit hors programme » (date, auditeur, rapport)."
         : other ? undefined : "Le libellé et la date par défaut viennent de l'élément du programme (audit hors programme compris)."}>

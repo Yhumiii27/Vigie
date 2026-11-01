@@ -11,11 +11,11 @@ import { SaveStatus, useActionRunner } from '@/components/feedback';
 import { TipButton } from '@/components/Tip';
 import { HistoryTable } from './common';
 
-function TitleForm({ title, titles, onDone }: { title?: TrainingTitle; titles: TrainingTitle[]; onDone: () => void }) {
+function TitleForm({ title, titles, version, onDone }: { title?: TrainingTitle; titles: TrainingTitle[]; version?: string; onDone: () => void }) {
   const others = titles.filter((x) => x.id !== title?.id);
   const prereq = new Set(title?.prerequisiteIds ?? []);
   return (
-    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, firstAidField: '1', prerequisitesField: '1', awarenessField: '1', internalAuditorField: '1' }}>
+    <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel={title ? 'Enregistrer' : 'Ajouter le titre'} hidden={{ id: title?.id, version: title ? version : undefined, firstAidField: '1', prerequisitesField: '1', awarenessField: '1', internalAuditorField: '1' }}>
       <FormRow>
         <Field name="label" label="Intitulé">
           <Input name="label" defaultValue={title?.label} placeholder="Ex. Habilitation soudure" maxLength={60} autoFocus />
@@ -99,7 +99,7 @@ function ArchivedRow({ title, records, canManage }: { title: TrainingTitle; reco
 }
 
 /** Liste des titres suivis dans la matrice, avec leur durée de validité ; archivage avec motif et restauration. */
-function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles: TrainingTitle[]; archivedTitles: TrainingTitle[]; archive: ArchivedRecord[]; canManage: boolean }) {
+function TitlesManager({ titles, archivedTitles, archive, canManage, versions }: { titles: TrainingTitle[]; archivedTitles: TrainingTitle[]; archive: ArchivedRecord[]; canManage: boolean; versions?: Record<string, string> }) {
   // Titre en cours de modification (`id`), d'archivage (`archive:id`) ou d'ajout (`new`).
   const [editing, setEditing] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -113,7 +113,7 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
         </thead>
         <tbody>
           {titles.map((t, i) => editing === t.id ? (
-            <tr key={t.id}><td colSpan={3} style={{ padding: '10px 4px' }}><TitleForm title={t} titles={titles} onDone={close} /></td></tr>
+            <tr key={t.id}><td colSpan={3} style={{ padding: '10px 4px' }}><TitleForm title={t} titles={titles} version={versions?.[t.id]} onDone={close} /></td></tr>
           ) : editing === `archive:${t.id}` ? (
             <tr key={t.id}>
               <td colSpan={3} style={{ padding: '10px 4px' }}>
@@ -179,12 +179,14 @@ function TitlesManager({ titles, archivedTitles, archive, canManage }: { titles:
 }
 
 /** Bouton « Titres suivis » ouvrant la liste des titres. */
-export function TitlesButton({ titles, archivedTitles, archive, canManage }: {
+export function TitlesButton({ titles, archivedTitles, archive, canManage, versions }: {
   titles: TrainingTitle[]; archivedTitles: TrainingTitle[]; archive: ArchivedRecord[]; canManage: boolean;
+  /** QUA-12 : version de chaque titre à l'ouverture de la page. */
+  versions?: Record<string, string>;
 }) {
   return (
     <DialogButton label="Titres suivis" icon="ph-list-checks" title="Titres suivis" kicker="Habilitations et formations" width={600}>
-      {() => <TitlesManager titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManage} />}
+      {() => <TitlesManager titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManage} versions={versions} />}
     </DialogButton>
   );
 }

@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -11,7 +11,8 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireEditor, requireInSite } from '@/lib/guard';
 import { checkUploadBatch, deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
-import { prerequisiteCycle } from '@/lib/rules/skills';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
+import { missingPrerequisites, prerequisiteCycle, sessionParticipantsError } from '@/lib/rules/skills';
 import { nextSort } from '@/lib/sort-order';
 
 // Habilitations et formations : formations suivies, exigences par salarié, personnel et titres suivis.
@@ -138,13 +139,16 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
 
   const values = { obtainedOn: obtainedOn!, expiresOn, provider, scope: title.scopeLabel ? scopeRaw : null };
   const summary = `Formation du ${fmtDate(values.obtainedOn)}${expiresOn ? ` (échéance ${fmtDate(expiresOn)})` : ''}${values.scope ? ` · ${values.scope}` : ''}`;
-  const result = await db.transaction(async (tx): Promise<{ error: string } | { id: number }> => {
+  let result = { error: 'Formation introuvable.' } as { error: string } | { id: number };
+  const stale = await freshWrite(async () => { result = await db.transaction(async (tx): Promise<{ error: string } | { id: number }> => {
     let id: number;
     if (qualificationId) {
       // Correction d'une saisie : la ligne doit appartenir à la case et ne pas être annulée.
       const [prev] = await tx.select().from(t.qualifications).where(eq(t.qualifications.id, qualificationId));
       if (!prev || prev.personId !== personId || prev.titleId !== titleId) return { error: 'Formation introuvable.' };
       if (prev.cancelledAt) return { error: 'Formation annulée : elle ne peut plus être corrigée.' };
+      // QUA-12 : formation corrigée, annulée ou complétée entre-temps (attestation, efficacité) : rien n'est écrasé.
+      await assertFresh(tx, 'qualification', qualificationId, fd.get(VERSION_FIELD));
       await tx.update(t.qualifications).set(values).where(eq(t.qualifications.id, qualificationId));
       id = qualificationId;
       await logChange(tx, { entityType: 'qualification', entityId: id, action: 'update', summary: `${summary} corrigée` });
@@ -158,7 +162,8 @@ export async function saveQualification(_prev: FormState, fd: FormData): Promise
       await logChange(tx, { entityType: 'qualification_requirement', entityId: requirementKey(personId, titleId), action: 'create', summary: `Titre « ${title.label} » requis (formation enregistrée)` });
     }
     return { id };
-  });
+  }); });
+  if (stale) return { error: stale };
   if ('error' in result) return { error: result.error };
   await saveAttestations(files, result.id, session.user.id);
   done();
@@ -231,6 +236,134 @@ export async function evaluateTrainingEffectiveness(_prev: FormState, fd: FormDa
   });
   done();
   return { ok: true, id: String(row.q.id) };
+}
+
+/**
+ * HAB-06 : session de formation collective, ou recyclage groupé depuis la prévision (HAB-09) — un titre, une date, un
+ * organisme, des participants (`participants`, cases à cocher). Une formation par participant (même règles que
+ * saveQualification : obtention jamais future, échéance = obtention + validité du titre si elle est laissée vide, titre
+ * rendu requis), créées avec la session dans une seule transaction et journalisées (session, chaque formation, chaque
+ * exigence ajoutée). Chaque participant : présent, du site sélectionné (requireInSite). Prérequis (HAB-10) : jamais refusés,
+ * signalés dans la confirmation (la case sera « Prérequis non valide »). Attestations : ajoutées ensuite à chaque formation.
+ */
+export async function saveTrainingSession(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireSkillsEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const titleId = f.str('titleId', { required: true });
+  const heldOn = f.date('heldOn', { required: true });
+  let expiresOn = f.date('expiresOn');
+  const provider = f.str('provider', { max: 120 }) || null;
+  const scopeRaw = f.str('scope', { max: 120 }) || null;
+  const participants = f.list('participants');
+  const now = today();
+  if (heldOn && heldOn > now) f.fail('heldOn', "La date de la session ne peut pas être postérieure à aujourd'hui.");
+  if (heldOn && expiresOn && expiresOn <= heldOn) f.fail('expiresOn', "L'échéance doit suivre la date de la session.");
+  const listError = sessionParticipantsError(participants);
+  if (listError) f.fail('participants', listError);
+  if (!f.ok) return f.state();
+
+  const db = await getDb();
+  const [[title], people, titles] = await Promise.all([
+    db.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, titleId)),
+    db.select({ id: t.people.id, name: t.people.name, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(inArray(t.people.id, participants)),
+    db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, archivedAt: t.trainingTitles.archivedAt }).from(t.trainingTitles),
+  ]);
+  if (!title) return { error: 'Titre introuvable.', fieldErrors: { titleId: 'Titre introuvable.' } };
+  if (title.archivedAt) return { error: 'Titre archivé.', fieldErrors: { titleId: 'Titre archivé.' } };
+  const byId = new Map(people.map((p) => [p.id, p]));
+  for (const id of participants) {
+    const p = byId.get(id);
+    if (!p) return { error: 'Participant introuvable.', fieldErrors: { participants: 'Participant introuvable.' } };
+    if (hasLeft(p)) return { error: `${p.name} est sorti de l'effectif.`, fieldErrors: { participants: `${p.name} est sorti de l'effectif.` } };
+    const blocked = await requireInSite(p.siteId);
+    if (blocked) return { error: blocked };
+  }
+  if (!expiresOn && title.validityMonths > 0) expiresOn = addMonths(heldOn!, title.validityMonths);
+  const scope = title.scopeLabel ? scopeRaw : null;
+  const label = `Session « ${title.label} » du ${fmtDate(heldOn!)}`;
+  const summary = `Formation du ${fmtDate(heldOn!)}${expiresOn ? ` (échéance ${fmtDate(expiresOn)})` : ''}${scope ? ` · ${scope}` : ''}`;
+  const names = participants.map((id) => byId.get(id)!.name);
+
+  const sessionId = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(t.trainingSessions)
+      .values({ titleId, heldOn: heldOn!, expiresOn, provider, scope, recordedById: session.user.id })
+      .returning({ id: t.trainingSessions.id });
+    await logChange(tx, {
+      entityType: 'training_session', entityId: row.id, action: 'create',
+      summary: `${label} enregistrée : ${participants.length} participant${participants.length > 1 ? 's' : ''}`,
+      details: [{ field: 'Participants', from: null, to: names.join(', ') }, ...(provider ? [{ field: 'Organisme', from: null, to: provider }] : [])],
+    });
+    for (const personId of participants) {
+      const [q] = await tx.insert(t.qualifications)
+        .values({ personId, titleId, obtainedOn: heldOn!, expiresOn, provider, scope, recordedById: session.user.id, sessionId: row.id })
+        .returning({ id: t.qualifications.id });
+      await logChange(tx, { entityType: 'qualification', entityId: q.id, action: 'create', summary: `${summary} enregistrée (session collective n° ${row.id})` });
+      const added = await tx.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing().returning({ personId: t.qualificationRequirements.personId });
+      if (added.length) {
+        await logChange(tx, { entityType: 'qualification_requirement', entityId: requirementKey(personId, titleId), action: 'create', summary: `Titre « ${title.label} » requis (session collective n° ${row.id})` });
+      }
+    }
+    return row.id;
+  });
+
+  // HAB-10 : prérequis non valides après la session (signalés, jamais refusés).
+  const prereqs = title.prerequisiteIds ?? [];
+  let warning = '';
+  if (prereqs.length) {
+    const held = await db.select({ personId: t.qualifications.personId, titleId: t.qualifications.titleId, expiresOn: t.qualifications.expiresOn })
+      .from(t.qualifications)
+      .where(and(inArray(t.qualifications.personId, participants), inArray(t.qualifications.titleId, prereqs), isNull(t.qualifications.cancelledAt)))
+      .orderBy(desc(t.qualifications.obtainedOn), desc(t.qualifications.id));
+    const active = new Set(titles.filter((ti) => !ti.archivedAt).map((ti) => ti.id));
+    const lacking = participants.filter((pid) => {
+      const mine = new Map<string, { expiresOn: string | null }>();
+      held.filter((h) => h.personId === pid).forEach((h) => { if (!mine.has(h.titleId)) mine.set(h.titleId, h); });
+      return missingPrerequisites(prereqs, mine, active, now).length > 0;
+    });
+    if (lacking.length) {
+      const prereqLabels = prereqs.filter((id) => active.has(id)).map((id) => titles.find((ti) => ti.id === id)?.label ?? id).join(' ou ');
+      warning = ` Prérequis non valide (${prereqLabels}) pour ${lacking.map((id) => byId.get(id)!.name).join(', ')} : titre inopérant tant qu'il n'est pas régularisé.`;
+    }
+  }
+  done();
+  return { ok: true, id: String(sessionId), message: `Session enregistrée : ${participants.length} formation${participants.length > 1 ? 's' : ''} créée${participants.length > 1 ? 's' : ''}.${warning}` };
+}
+
+/**
+ * Annule une session saisie par erreur (jamais supprimée) : motif obligatoire ; ses formations encore en vigueur sont
+ * annulées avec le même motif, chacune journalisée, dans la même transaction. Refusée si une formation de la session est
+ * figée (salarié sorti, titre archivé) ou d'un autre site que celui sélectionné.
+ */
+export async function cancelTrainingSession(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireSkillsEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select().from(t.trainingSessions).where(eq(t.trainingSessions.id, id!));
+  if (!row) return { error: 'Session introuvable.' };
+  if (row.cancelledAt) return { error: 'Cette session est déjà annulée.' };
+  const quals = await db.select({ id: t.qualifications.id }).from(t.qualifications)
+    .where(and(eq(t.qualifications.sessionId, row.id), isNull(t.qualifications.cancelledAt)));
+  for (const q of quals) {
+    const found = await findQualification(db, q.id);
+    const blocked = found ? await frozenReason(found) : 'Formation introuvable.';
+    if (blocked) return { error: blocked };
+  }
+  const at = new Date();
+  await db.transaction(async (tx) => {
+    await tx.update(t.trainingSessions).set({ cancelledAt: at, cancelledById: session.user.id, cancelReason: reason }).where(eq(t.trainingSessions.id, row.id));
+    await logChange(tx, { entityType: 'training_session', entityId: row.id, action: 'cancel', summary: `Session du ${fmtDate(row.heldOn)} annulée (${quals.length} formation${quals.length > 1 ? 's' : ''})`, reason });
+    for (const q of quals) {
+      await tx.update(t.qualifications).set({ cancelledAt: at, cancelledById: session.user.id, cancelReason: reason }).where(eq(t.qualifications.id, q.id));
+      await logChange(tx, { entityType: 'qualification', entityId: q.id, action: 'cancel', summary: `Formation du ${fmtDate(row.heldOn)} annulée (session collective n° ${row.id} annulée)`, reason });
+    }
+  });
+  done();
+  return { ok: true };
 }
 
 /** Ajoute des attestations à une formation (non annulée, salarié présent, titre actif). */
@@ -395,10 +528,12 @@ export async function savePerson(_prev: FormState, fd: FormData): Promise<FormSt
     const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
     const fmt = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
     const details = diffFields({ ...prev, siteId: siteLabel(prev.siteId) }, { ...values, siteId: siteLabel(values.siteId) }, PERSON_LABELS, fmt);
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'person', id, fd.get(VERSION_FIELD));
       await tx.update(t.people).set(values).where(eq(t.people.id, id));
       if (details.length) await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée', details });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id };
   }
@@ -523,10 +658,12 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
       ...(prev.awareness !== awareness ? [{ field: 'Sensibilisation', from: prev.awareness ? 'oui' : 'non', to: awareness ? 'oui' : 'non' }] : []),
       ...(prev.internalAuditor !== internalAuditor ? [{ field: 'Auditeur interne', from: prev.internalAuditor ? 'oui' : 'non', to: internalAuditor ? 'oui' : 'non' }] : []),
     ];
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'training_title', id, fd.get(VERSION_FIELD));
       await tx.update(t.trainingTitles).set({ label, validityMonths: validityMonths!, firstAid, prerequisiteIds: prereq, scopeLabel: scope, awareness, internalAuditor }).where(eq(t.trainingTitles.id, id));
       await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${label} » modifié`, details });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id };
   }

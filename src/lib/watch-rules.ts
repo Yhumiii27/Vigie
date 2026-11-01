@@ -1,5 +1,7 @@
 // Règles pures de la veille réglementaire (client et serveur).
 
+import { REQUIREMENT_NEEDS_ACTION, isClosedActionStatus } from './domain';
+
 /** Sites officiels de publication des textes cités par une exigence de veille (VEI-10). */
 export const LEGAL_TEXT_HOSTS = ['legifrance.gouv.fr', 'eur-lex.europa.eu'] as const;
 
@@ -56,4 +58,34 @@ export function currentEvaluation(entries: readonly EvaluationEntry[]): { evalua
   const [last] = entries.filter((e) => !e.cancelled)
     .sort((a, b) => b.evaluatedOn.localeCompare(a.evaluatedOn) || b.id - a.id);
   return last ? { evaluation: last.evaluation, evaluationNote: last.note, lastEvaluatedOn: last.evaluatedOn } : { evaluation: 'a_evaluer', evaluationNote: null, lastEvaluatedOn: null };
+}
+
+/**
+ * Boucle à fermer (VEI-05) : l'action du plan d'actions liée à un écart ou à des réserves est close alors que l'écart ou
+ * les réserves restent ouverts — vérifiée « Efficace » (une vérification « Non efficace » ouvre une action de suite, qui
+ * prend le relais du lien), ou abandonnée. L'écart se ferme par une nouvelle évaluation de l'exigence (« Réévaluer »),
+ * les réserves par un nouveau contrôle sans réserve (« Enregistrer le contrôle ») ou par une nouvelle action ; rien n'est
+ * modifié d'office.
+ */
+export type LoopBack = { actionId: string; abandoned: boolean };
+
+/** Action liée : avancement et résultat de la vérification (null : action introuvable). */
+type LinkedAction = { status: string; effective?: boolean | null } | null | undefined;
+
+const loopBack = (open: boolean, actionId: string | null, action: LinkedAction): LoopBack | null => {
+  if (!open || !actionId || !action || !isClosedActionStatus(action.status)) return null;
+  const abandoned = action.status === 'abandonnee';
+  // Vérifiée non efficace (ou sans résultat, reprise) : l'action de suite prend le relais, pas de relance.
+  if (!abandoned && action.effective !== true) return null;
+  return { actionId, abandoned };
+};
+
+/** Exigence en vigueur évaluée en écart (ou analyse d'écart) dont l'action liée est close. */
+export function requirementLoopBack(r: { evaluation: string; actionId: string | null; archived: boolean }, action: LinkedAction): LoopBack | null {
+  return loopBack(!r.archived && (REQUIREMENT_NEEDS_ACTION as readonly string[]).includes(r.evaluation), r.actionId, action);
+}
+
+/** Équipement en service dont les réserves restent inscrites alors que l'action de levée est close. */
+export function controlLoopBack(c: { reserves: string | null; actionId: string | null; archived: boolean }, action: LinkedAction): LoopBack | null {
+  return loopBack(!c.archived && !!c.reserves, c.actionId, action);
 }

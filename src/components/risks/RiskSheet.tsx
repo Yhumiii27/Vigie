@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { newEventHref } from '@/lib/event-prefill';
 import { ActionFields } from '@/components/ActionFormDialog';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { EntityFiles } from '@/components/EntityFiles';
 import { LinkActionButton, LinkActionForm } from '@/components/LinkActionButton';
 import { ReasonForm } from '@/components/ReasonDialog';
@@ -254,7 +254,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
       <EntityFiles kind="risk" entityId={risk.id} title="Justificatifs" kicker={`${unit.label} · ${risk.hazard}`} files={risk.files}
         canAdd={canManage && !risk.archived && !unitArchived} emptyText="Aucun justificatif joint." />
 
-      {showHistory && <ChangeLogList entries={risk.history} />}
+      {showHistory && <LazyChangeLog entity="risk" id={risk.id} />}
 
       {error && <div role="alert" className="vg-form-error">{error}</div>}
       {archived && canApprove && (

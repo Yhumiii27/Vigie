@@ -108,6 +108,21 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
       }
     });
 
+    it('espace salarié mobile (EVT-22) : ses actions, sa ligne d’habilitations, ses signalements ; rien d’autrui ni de santé', async () => {
+      const path = '/signaler/mon-espace';
+      const { status, body } = await load(path, rsc);
+      expect(status, path).toBe(200);
+      expect(body).toContain('Mon espace');
+      expect(body).toContain('A-215');
+      expect(found(body, ACTION_REF).filter((id) => !OWN_ACTIONS.includes(id)), path).toEqual([]);
+      expect(found(body, EVENT_REF), path).toEqual([]); // décompte seulement, aucun signalement listé
+      expect(body).toContain('Travail en hauteur'); // son titre expiré
+      OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
+      expect(body, path).not.toMatch(/\\?"(mgirard|proux|amartin|jpetit|rfontaine|kbernard|ylambert)\\?"/);
+      expect(body, path).not.toMatch(/Tendinopathie|Maladie professionnelle|Entorse|Données restreintes/);
+      expect(body, path).not.toContain('Remplacer les élingues textiles'); // A-214, autre responsable
+    });
+
     it('documents en consultation : ni liste du personnel ni données de formulaire', async () => {
       const { status, body } = await load('/documents', rsc);
       expect(status).toBe(200);

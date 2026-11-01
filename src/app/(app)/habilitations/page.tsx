@@ -4,7 +4,8 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
+import { GroupRenewalButton } from '@/components/skills/GroupRenewalButton';
+import { groupRenewalCandidates, renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
 import { today } from '@/lib/today';
 import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -24,7 +25,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   const sp = await searchParams;
   // Bandeaux : titres manquants ou expirés, mais aussi expirant avant ou pendant une affectation Keystone (`lapses`).
   // Rôle Salarié : sa seule ligne, ses échéances et ses affectations (filtrées par loadSkillMatrix).
-  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, self }, { sites }, allSites] =
+  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, versions, self }, { sites }, allSites] =
     await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin()]);
   // Même règle que les server actions du domaine (requireSkillsEditor).
   const manage = canEdit(session.role, 'skills');
@@ -89,10 +90,15 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         {forecast ? (
           <div className="card" style={{ gap: 12 }}>
             <CardHead title="Recyclages et formations à prévoir" aside={(
-              // Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application.
-              <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-                <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
-              </a>
+              <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                {/* HAB-06 : recyclage groupé (session collective) sur un titre de la prévision. */}
+                {manage && <GroupRenewalButton titles={titles} today={now}
+                  renewals={Object.fromEntries(forecast.titles.map((ti) => [ti.id, groupRenewalCandidates(forecast, ti.id)]))} />}
+                {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
+                <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+                  <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
+                </a>
+              </span>
             )} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
               Titres requis expirés, jamais suivis ou expirant d&apos;ici 12 mois, par mois d&apos;échéance. Plan de formation géré par le service RH :
@@ -101,7 +107,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
             <ForecastView forecast={forecast} />
           </div>
         ) : (
-          <SkillMatrix titles={titles} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
+          <SkillMatrix titles={titles} versions={versions} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
             canManage={manage} canManageTitles={manageTitles} options={options} today={now} defaultSiteId={defaultSiteId}
             initialSel={initialSel} closeHref="/habilitations" siteLabels={siteLabels} />

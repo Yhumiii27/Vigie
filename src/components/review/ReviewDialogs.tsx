@@ -26,15 +26,17 @@ function Footer({ children }: { children: ReactNode }) {
 
 // ─── Élément d'entrée de la check-list ──────────────────────────────────────
 
-export function ItemForm({ reviewId, item, people, canDelete, onClose }: {
+export function ItemForm({ reviewId, version, item, people, canDelete, onClose }: {
   reviewId: number; item?: ReviewItemView; people: readonly Option[]; canDelete: boolean; onClose: () => void;
+  /** QUA-12 : version de la revue à l'ouverture de la page. */
+  version?: string;
 }) {
   const [source, setSource] = useState<string>(item?.source ?? 'manuel');
   const auto = REVIEW_SOURCES[source as keyof typeof REVIEW_SOURCES]?.auto ?? false;
   return (
     <>
       <ActionForm action={saveReviewItem} onDone={onClose} onCancel={onClose} submitLabel={item ? 'Enregistrer' : 'Ajouter'}
-        hidden={{ id: item?.id, reviewId: item ? undefined : reviewId }}>
+        hidden={{ id: item?.id, reviewId: item ? undefined : reviewId, version: item ? version : undefined }}>
         <Field name="label" label="Élément d'entrée de la revue" hint="Ex. Performance des fournisseurs, Résultats des audits internes.">
           <Input name="label" defaultValue={item?.label} maxLength={160} autoFocus />
         </Field>
@@ -70,13 +72,14 @@ export function ItemForm({ reviewId, item, people, canDelete, onClose }: {
 
 // ─── Décision, objectif ou besoin en ressources ─────────────────────────────
 
-export function DecisionForm({ reviewId, decision, people, canDelete, onClose }: {
+export function DecisionForm({ reviewId, version, decision, people, canDelete, onClose }: {
   reviewId: number; decision?: DecisionView; people: readonly Option[]; canDelete: boolean; onClose: () => void;
+  version?: string;
 }) {
   return (
     <>
       <ActionForm action={saveReviewDecision} onDone={onClose} onCancel={onClose} submitLabel={decision ? 'Enregistrer' : 'Ajouter'}
-        hidden={{ id: decision?.id, reviewId: decision ? undefined : reviewId }}>
+        hidden={{ id: decision?.id, reviewId: decision ? undefined : reviewId, version: decision ? version : undefined }}>
         <Field name="kind" label="Nature">
           <Select name="kind" options={DECISION_OPTIONS} defaultValue={decision?.kind ?? 'decision'} />
         </Field>
@@ -103,15 +106,15 @@ export function DecisionForm({ reviewId, decision, people, canDelete, onClose }:
 
 // ─── Compte rendu de la séance ──────────────────────────────────────────────
 
-export function HoldForm({ review, people, now, next, allSites, onClose }: {
-  review: ReviewView; people: readonly Option[]; now: string; next: { on: string; kind: ReviewKind }; allSites: boolean; onClose: () => void;
+export function HoldForm({ review, version, people, now, next, allSites, onClose }: {
+  review: ReviewView; version?: string; people: readonly Option[]; now: string; next: { on: string; kind: ReviewKind }; allSites: boolean; onClose: () => void;
 }) {
   const chosen = new Set(review.participantIds);
   // Participants déjà enregistrés mais sortis de l'effectif : conservés dans la liste.
   const departed = review.participantIds.filter((id) => !people.some(([v]) => v === id)).map((id) => [id, review.participants[review.participantIds.indexOf(id)] ?? id] as const);
   const list = [...people, ...departed].map(([v, l]) => [v, l.split(' — ')[0]] as const);
   return (
-    <ActionForm action={holdReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }}
+    <ActionForm action={holdReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id, version }}
       submitLabel={review.status === 'tenue' ? 'Enregistrer le compte rendu' : 'Enregistrer · revue tenue'}>
       {/* Première saisie : le dossier de séance est figé (indicateurs arrêtés à la date de la séance, AUD-06) sur tout le périmètre. */}
       <p style={{ margin: 0, fontSize: 12, color: !allSites && !review.seanceFrozen ? 'var(--tone-warn-fg)' : 'var(--color-neutral-500)', textWrap: 'pretty' }}>

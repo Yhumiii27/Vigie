@@ -3,14 +3,14 @@ import { cache } from 'react';
 import { and, asc, desc, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { toAttachmentItem } from '../attachments';
-import { appliesToSite } from '../watch-rules';
+import { appliesToSite, controlLoopBack, requirementLoopBack, type LoopBack } from '../watch-rules';
 import { addDays, addMonths, fmtDate, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
   CONTROL_HORIZON_DAYS, CONTROL_RESULTS, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   SAFETY_NOTICE_KINDS, isBlockingControlResult, requirementReviewMonths, type ControlResult, type SafetyNoticeKind, type TodoItem, type Tone,
 } from '../domain';
-import { actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, lcfirst, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
+import { actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, lcfirst, loadActionRows, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
 import { currentSiteId, getSession, inPerimeter, inSite, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
@@ -18,6 +18,7 @@ import { loadLinkedEvents } from './linked-events';
 import { loadPreventionCompliance } from './prevention-signals';
 import { loadDuerpStatus, type DuerpStatus } from './risks';
 import { loadWasteIndicators } from './environment';
+import { entityVersions } from '@/server/versions';
 
 // ─── Veille et contrôles ────────────────────────────────────────────────────
 
@@ -34,6 +35,9 @@ export const CONTROL_FILTERS: { key: ControlFilter; label: string }[] = [
 const NEEDS_ACTION = new Set<string>(REQUIREMENT_NEEDS_ACTION);
 
 const equipShort = (e: string) => e.split(' — ')[0];
+
+/** VEI-05 : « action A-12 vérifiée » / « action A-12 abandonnée » (intitulé d'une boucle à fermer). */
+const loopLabel = (l: LoopBack) => `action ${l.actionId} ${l.abandoned ? 'abandonnée' : 'vérifiée'}`;
 
 /** Jour (AAAA-MM-JJ, heure de Paris) d'un horodatage d'archivage ou d'annulation. */
 const dayOf = parisDay;
@@ -171,6 +175,13 @@ export async function loadWatch() {
   // exigence vaut pour toute l'entreprise, son action peut appartenir à un site hors du périmètre : numéro seul.
   const readable = actions.filter((a) => canReadAction(session.role, session.user.id, a, session.allowedSiteIds));
   const actionById = new Map(readable.map((a) => [a.id, actionView(a, people, now)]));
+  // QUA-12 : version de chaque fiche à son ouverture, renvoyée par le formulaire de modification.
+  const [reqVersions, controlVersions] = await Promise.all([
+    entityVersions(db, 'requirement', reqs.map((r) => r.id)),
+    entityVersions(db, 'control', controls.map((c) => c.id)),
+  ]);
+  // VEI-05 : statut des actions liées (lisibles ou non : seul le numéro est cité) — écart ou réserves dont l'action est close.
+  const linkedStatus = new Map(actions.map((a) => [a.id, a]));
   const actionOf = (id: string | null) => {
     const a = id ? actionById.get(id) : undefined;
     return a ? { id: a.id, label: a.label, statusLabel: a.statusLabel, tone: a.tone, due: fmtDate(a.dueOn), late: a.late } : null;
@@ -217,6 +228,10 @@ export async function loadWatch() {
       pilot: name(r.pilotId),
       lastEvaluated: r.lastEvaluatedOn ? fmtDate(r.lastEvaluatedOn) : null,
       needsAction: !archived && NEEDS_ACTION.has(r.evaluation) && !r.actionId,
+      /** VEI-05 : action liée close alors que l'exigence reste en écart (« Réévaluer »). */
+      /** QUA-12 : version de la fiche à son ouverture. */
+      version: reqVersions.get(String(r.id)) ?? '0',
+      loopBack: requirementLoopBack({ evaluation: r.evaluation, actionId: r.actionId, archived }, r.actionId ? linkedStatus.get(r.actionId) : null),
       action: actionOf(r.actionId),
       projects: projectsOf(r, projects),
       controls: linked,
@@ -294,6 +309,10 @@ export async function loadWatch() {
         siteLabel: c.siteId ? siteLabel.get(c.siteId) ?? c.siteId : 'Tous les sites',
         requirement: c.requirementId ? reqBrief.get(c.requirementId) ?? null : null,
         action: actionOf(c.actionId),
+        /** VEI-05 : action de levée close alors que les réserves restent inscrites (« Enregistrer un contrôle »). */
+        /** QUA-12 : version de la fiche à son ouverture. */
+        version: controlVersions.get(String(c.id)) ?? '0',
+        loopBack: controlLoopBack({ reserves: c.reserves, actionId: c.actionId, archived }, c.actionId ? linkedStatus.get(c.actionId) : null),
         records: recs,
         events: linkedEvents.get(String(c.id)) ?? [],
       };
@@ -311,8 +330,9 @@ export type ControlView = WatchData['controls'][number];
  * Échéances de la veille :
  * - contrôles périodiques actifs des sites du périmètre (TDB-05) dépassés ou sous CONTROL_HORIZON_DAYS, et réserves en
  *   cours sans action de levée (VEI-02) ;
+ * - réserves inscrites dont l'action de levée est close (VEI-05 : « contrôle de levée à enregistrer ») ;
  * - exigences actives (toute l'entreprise), au plus une échéance chacune, par priorité : écart ou analyse sans action,
- *   conformité à évaluer, date d'application dépassée ou proche sans conformité, réévaluation annuelle due.
+ *   écart ou analyse dont l'action est close (VEI-05 : « à réévaluer »), conformité à évaluer, date d'application dépassée ou proche sans conformité, réévaluation annuelle due.
  * Badge (count) : contrôles sous 30 j + réserves sans action + exigences à évaluer ou en écart sans action ; les autres échéances d'exigence
  * apparaissent dans « À traiter » sans compter dans le badge (count = 0).
  */
@@ -320,11 +340,15 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
   const now = today();
   const db = await getDb();
   // Liens toujours renseignés : loadVisibleTodo écarte les échéances des rôles sans accès à la veille.
-  const [controls, people, reqs] = await Promise.all([
+  const [controls, people, reqs, actionRows, leads] = await Promise.all([
     loadControls('perimeter'),
     loadPeople(),
     db.select().from(t.requirements).where(isNull(t.requirements.archivedAt)).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
+    loadActionRows(),
+    loadQhseLeads(),
   ]);
+  // VEI-05 : statut des actions liées (écart ou réserves dont l'action est close).
+  const actionStatus = new Map(actionRows.map((a) => [a.id, a]));
   // VEI-11 : résultat du dernier contrôle réalisé (le plus récent non annulé à la date du dernier contrôle).
   const records = controls.length
     ? await db.select({ controlId: t.controlRecords.controlId, performedOn: t.controlRecords.performedOn, result: t.controlRecords.result }).from(t.controlRecords)
@@ -354,6 +378,17 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     if (c.reserves && !c.actionId) {
       todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — réserves « ${c.reserves} » sans action de levée` });
     }
+    // VEI-05 : action de levée close, réserves toujours inscrites : enregistrer le contrôle de levée (ou une nouvelle
+    // action) ; au responsable de l'équipement, à défaut au responsable QHSE du site.
+    const loop = controlLoopBack({ reserves: c.reserves, actionId: c.actionId, archived: !!c.archivedAt }, c.actionId ? actionStatus.get(c.actionId) : null);
+    if (loop) {
+      const to = c.responsibleId ? null : leads.forSite(c.siteId);
+      todo.push({
+        ...base, ...(to ? { who: [c.organization, to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds } : {}),
+        date: now, tone: 'warn', key: `veille-boucle|controle|${c.id}|${loop.actionId}`,
+        title: `${title} — ${loopLabel(loop)} : réserves « ${c.reserves} » à lever`,
+      });
+    }
   });
 
   const horizon = addDays(now, TODO_HORIZON_DAYS);
@@ -370,8 +405,18 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const compliant = r.evaluation === 'conforme';
     // Exigence DUERP : l'échéance de mise à jour est celle de la version en vigueur, signalée par l'écran Risques.
     const dated = r.linkedTo !== 'duerp' && !followed.has(r.id);
+    const loop = requirementLoopBack({ evaluation: r.evaluation, actionId: r.actionId, archived: false }, r.actionId ? actionStatus.get(r.actionId) : null);
     if (NEEDS_ACTION.has(r.evaluation) && !r.actionId) {
       todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${r.text} — ${r.evaluation === 'analyse' ? "analyse d'écart sans action" : 'écart sans action'}` });
+    } else if (loop) {
+      // VEI-05 : action liée close, exigence toujours en écart : réévaluer (ou ouvrir une nouvelle action) ; au pilote de
+      // l'exigence, à défaut au responsable QHSE (site de l'exigence, sinon responsables des sites).
+      const to = r.pilotId ? null : leads.forSite(base.siteId);
+      todo.push({
+        ...base, ...(to ? { who: to.who, ownerIds: to.ownerIds } : {}),
+        date: now, tone: 'warn', key: `veille-boucle|exigence|${r.id}|${loop.actionId}`,
+        title: `${r.text} — ${loopLabel(loop)} : ${r.evaluation === 'analyse' ? "analyse d'écart" : 'écart'} à réévaluer`,
+      });
     } else if (r.evaluation === 'a_evaluer') {
       todo.push({ ...base, date: now, tone: 'warn', title: `${r.text} — conformité à évaluer` });
     } else if (dated && r.dueOn && r.dueOn < now && !compliant) {
@@ -394,9 +439,9 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
 
   // VEI-15 : observations et mises en demeure du registre de sécurité sans réponse, sur les sites du périmètre, au
   // responsable QHSE du site ; délai fixé : échéance (badge) sous l'horizon ou dépassée ; sans délai : à traiter (count 0).
-  const [notices, keep, leads] = await Promise.all([
+  const [notices, keep] = await Promise.all([
     db.select().from(t.safetyNotices).where(and(isNull(t.safetyNotices.cancelledAt), isNull(t.safetyNotices.answeredOn))),
-    siteFilter('perimeter'), loadQhseLeads(),
+    siteFilter('perimeter'),
   ]);
   let noticeBadge = 0;
   notices.filter((n) => keep(n.siteId)).forEach((n) => {
@@ -436,6 +481,8 @@ export type SafetyNoticeView = {
   /** Réponse attendue (non répondue, non annulée) : en retard après le délai. */
   state: { label: string; tone: Tone };
   cancelled: { on: string; by: string; reason: string } | null;
+  /** QUA-12 : version de la fiche à son ouverture. */
+  version: string;
 };
 
 const noticeState = (n: { answeredOn: string | null; dueOn: string | null; cancelledAt: Date | null }, now: string): { label: string; tone: Tone } =>
@@ -458,6 +505,7 @@ export const loadSafetyNotices = cache(async (): Promise<{ notices: SafetyNotice
   ]);
   const siteLabel = new Map(sites.map((s) => [s.id, s.label.split(' — ')[0]]));
   const name = (id: string | null) => (id ? people.get(id)?.name ?? '' : '');
+  const versions = await entityVersions(db, 'safety_notice', rows.filter((r) => keep(r.siteId)).map((r) => r.id));
   const allControls = rows.some((r) => r.controlId)
     ? new Map((await db.select({ id: t.controls.id, equipment: t.controls.equipment }).from(t.controls)).map((c) => [c.id, c.equipment]))
     : new Map<number, string>();
@@ -470,6 +518,7 @@ export const loadSafetyNotices = cache(async (): Promise<{ notices: SafetyNotice
       answeredOn: r.answeredOn, answer: r.answer, answeredBy: name(r.answeredById),
       state: noticeState(r, now),
       cancelled: r.cancelledAt ? { on: fmtDate(parisDay(r.cancelledAt)), by: name(r.cancelledById), reason: r.cancelReason ?? '' } : null,
+      version: versions.get(String(r.id)) ?? '0',
     })),
     // [identifiant, équipement, site] : la liste du formulaire garde les contrôles du site choisi (ou communs).
     controlOptions: controls.map((c) => [String(c.id), `${c.equipment} · ${c.controlType}`, c.siteId] as const),

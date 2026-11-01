@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog } from '@/components/Dialog';
 import type { ActionFormOptions } from '@/lib/action-view';
 import type { ArchivedUnitView, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
@@ -61,7 +61,7 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
                   <span style={{ ...muted, flex: 1, minWidth: 200 }}>{archivedLabel(u.archived, 'Archivée')}{u.archived.reason ? ` · ${u.archived.reason}` : ''}</span>
                   {canApprove && <RestoreUnitButton unit={u} residual={residual} />}
                 </div>
-                <ChangeLogList entries={u.history} />
+                <LazyChangeLog entity="work_unit" id={u.id} />
               </li>
             ))}
           </ul>

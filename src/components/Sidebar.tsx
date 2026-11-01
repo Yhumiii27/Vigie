@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { setRole, setSite } from '@/app/actions';
-import { LOGOUT_PATH } from '@/lib/auth/paths';
+import { LOGOUT_PATH, MY_SPACE_PATH } from '@/lib/auth/paths';
 import { SaveStatus, useActionRunner } from './feedback';
 import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
@@ -121,6 +121,12 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
 
         {/* UX-16 : aide de l'écran affiché et glossaire des indicateurs. */}
         <HelpButton pathname={pathname} />
+
+        {/* EVT-22 : espace salarié mobile, sur téléphone (tiroir de navigation) seulement. */}
+        <Link href={MY_SPACE_PATH} className="vg-mobile-link vg-narrow-only" onClick={onNavigate}>
+          <Icon name="ph-user-circle" size={15} />
+          <span style={{ flex: 1 }}>Mon espace · actions, habilitations</span>
+        </Link>
 
         {demo && (
           <Link href="/apercu-mobile" className={`vg-mobile-link${isActive(pathname, '/apercu-mobile') ? ' is-on' : ''}`}

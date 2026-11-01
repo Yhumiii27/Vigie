@@ -14,6 +14,7 @@ import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 
 // Documents maîtrisés : création, métadonnées et cycle de vie des versions
@@ -239,12 +240,16 @@ export async function updateDocument(_prev: FormState, fd: FormData): Promise<Fo
     distribution: meta.distribution, siteId: meta.siteId, origin: meta.origin, issuer: meta.issuer, retention: meta.retention,
   };
   const details = diffFields(await metadataView(db, before), await metadataView(db, after), METADATA_LABELS);
-  const updated = await db.transaction(async (tx) => {
+  let updated = false;
+  const stale = await freshWrite(async () => { updated = await db.transaction(async (tx) => {
+    // QUA-12 : document modifié depuis l'ouverture du formulaire (informations, version, revue, fichier) : rien n'est écrasé.
+    await assertFresh(tx, 'document', id, fd.get(VERSION_FIELD));
     const [row] = await tx.update(t.documents).set(after).where(eq(t.documents.id, id)).returning({ id: t.documents.id });
     if (!row) return false;
     if (details.length) await logChange(tx, { entityType: 'document', entityId: id, action: 'update', summary: 'Informations du document modifiées', details });
     return true;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (!updated) return { error: 'Document introuvable.' };
   return done(id);
 }
@@ -369,7 +374,10 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
 
   // Écriture conditionnelle d'abord : le fichier d'une version soumise entre-temps reste intact. Changement d'action liée
   // journalisé sur les actions dans la même transaction.
-  const row = await db.transaction(async (tx) => {
+  let row: { id: number } | undefined;
+  const stale = await freshWrite(async () => { row = await db.transaction(async (tx) => {
+    // QUA-12 : journal du document (brouillon, fichier, autre version) modifié depuis l'ouverture du formulaire.
+    await assertFresh(tx, 'document', v.documentId, fd.get(VERSION_FIELD));
     const [updated] = await tx.update(t.documentVersions).set({ summary, actionId })
       .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
     if (updated) {
@@ -379,7 +387,8 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
       await logVersionLink(tx, v.actionId, actionId, `${v.documentId} · version ${v.version}`, session.user.id, v.documentId);
     }
     return updated;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (!row) return STALE;
 
   const previous = file || removeFile ? await listAttachments(ENTITY, String(v.id)) : [];

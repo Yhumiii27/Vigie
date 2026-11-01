@@ -9,6 +9,8 @@ import {
 import { TONE } from '@/lib/domain';
 import type { FormState } from '@/lib/forms';
 import { ReasonForm } from '@/components/ReasonDialog';
+import { PhotoGallery } from '@/components/PhotoGallery';
+import { ATTACHMENT_PHOTO_EDGE, photosToShrink, shrinkPhoto } from '@/lib/photo-shrink';
 
 type Result = { error?: string };
 
@@ -46,17 +48,31 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
   // Images que le navigateur ne sait pas afficher (HEIC hors Safari…) : vignette fichier à la place.
   const [broken, setBroken] = useState<string[]>([]);
   const [uploading, startUpload] = useTransition();
+  // UX-05 : galerie des photos de la fiche (indice de la photo agrandie) ; photos allégées du dernier envoi.
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const photos = files.filter((f) => f.isImage && !broken.includes(f.id));
   const [deleting, startDelete] = useTransition();
 
   const upload = (list: FileList | null) => {
     const picked = Array.from(list ?? []);
     if (input.current) input.current.value = '';
     if (!picked.length) return;
-    const issue = fileBatchError(picked);
-    if (issue) { setError(issue); return; }
+    setNote(null);
     startUpload(async () => {
+      // UX-05 : originaux envoyés tels quels tant que l'envoi respecte les limites ; sinon, les photos d'appareil sont
+      // réduites (ATTACHMENT_PHOTO_EDGE, réencodage sans métadonnées) avant le contrôle commun.
+      const shrinkable = photosToShrink(picked);
+      let reduced = 0;
+      for (const i of shrinkable) {
+        const out = await shrinkPhoto(picked[i], { maxEdge: ATTACHMENT_PHOTO_EDGE, quality: 0.85, keepIfLarger: true });
+        if (out.file !== picked[i]) { picked[i] = out.file; reduced++; }
+      }
+      const issue = fileBatchError(picked);
+      if (issue) { setError(issue); return; }
       try {
         const r = await onAdd(picked);
+        if (!r.error && reduced) setNote(`${reduced} photo${reduced > 1 ? 's' : ''} allégée${reduced > 1 ? 's' : ''} avant l'envoi pour respecter la limite (${ATTACHMENT_PHOTO_EDGE} px au plus).`);
         setError(r.error ?? null);
       } catch {
         setError("L'envoi a échoué. Vérifiez la connexion puis réessayez.");
@@ -101,17 +117,21 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
         <div className="vg-thumbs">
           {files.map((f) => (
             <div key={f.id} style={{ position: 'relative' }}>
+              {f.isImage && !broken.includes(f.id) ? (
+                // UX-05 : une photo s'ouvre dans la galerie de la fiche (précédente / suivante, lien vers l'original).
+                <button type="button" className="vg-thumb" onClick={() => setViewing(photos.findIndex((p) => p.id === f.id))}
+                  aria-label={`Voir la photo ${f.name}`} style={{ border: 0, padding: 0, cursor: 'zoom-in' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- fichier servi par /fichiers/[id], pas d'optimisation */}
+                  <img src={f.url} alt="" loading="lazy" onError={() => setBroken((b) => [...b, f.id])} />
+                </button>
+              ) : (
               <a href={f.url} target="_blank" rel="noopener" className="vg-thumb" title={`${f.name} · ${fmtSize(f.size)}`}>
-                {f.isImage && !broken.includes(f.id) ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- fichier servi par /fichiers/[id], pas d'optimisation
-                  <img src={f.url} alt={f.name} loading="lazy" onError={() => setBroken((b) => [...b, f.id])} />
-                ) : (
-                  <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: '0 6px', maxWidth: '100%' }}>
-                    <i className={`ph ${fileIcon(f.mime)}`} style={{ fontSize: 24, color: 'var(--color-neutral-400)' }} aria-hidden />
-                    <span style={{ fontSize: 11, lineHeight: 1.25, color: 'var(--color-neutral-300)', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{f.name}</span>
-                  </span>
-                )}
+                <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: '0 6px', maxWidth: '100%' }}>
+                  <i className={`ph ${fileIcon(f.mime)}`} style={{ fontSize: 24, color: 'var(--color-neutral-400)' }} aria-hidden />
+                  <span style={{ fontSize: 11, lineHeight: 1.25, color: 'var(--color-neutral-300)', textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{f.name}</span>
+                </span>
               </a>
+              )}
               {canRemove(f) && (
                 <button type="button" aria-label={`Supprimer ${f.name}`} title="Supprimer" onClick={() => askRemove(f)}
                   style={{ position: 'absolute', top: 3, right: 3, width: 24, height: 24, borderRadius: '50%', display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', color: 'var(--color-neutral-100)', background: 'color-mix(in srgb, var(--color-bg) 75%, transparent)' }}>
@@ -137,6 +157,8 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
       )}
       {canManage && hint && <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{hint}</span>}
       {error && <div role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{error}</div>}
+      {note && <div role="status" style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{note}</div>}
+      <PhotoGallery photos={photos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} kicker={kicker ? `${kicker} · photo ${(viewing ?? 0) + 1} sur ${photos.length}` : undefined} />
 
       <Dialog open={!!removing} onClose={() => askRemove(null)} title="Supprimer la pièce jointe ?" kicker={kicker} width={420}>
         {removing && (

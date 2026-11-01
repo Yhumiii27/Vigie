@@ -19,6 +19,7 @@ import {
 } from '@/lib/data/review';
 import { decisionDueError, duplicateLabel, plannedReviewTwin, reviewCloseBlockers, reviewItemDueError } from '@/lib/review-rules';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextSort } from '@/lib/sort-order';
 
 type Result = { error?: string };
@@ -292,7 +293,10 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
   }
   const byId = session.user.id;
   const firstHold = review.status !== 'tenue';
-  const saved = await db.transaction(async (tx) => {
+  let saved = false;
+  const stale = await freshWrite(async () => { saved = await db.transaction(async (tx) => {
+    // QUA-12 : revue modifiée depuis l'ouverture du compte rendu (check-list, décision, autre saisie) : rien n'est écrasé.
+    await assertFresh(tx, 'review', review.id, fd.get(VERSION_FIELD));
     const rows = await tx.update(t.reviews).set({ ...values, ...(seance ? { snapshot: seance } : {}) })
       .where(and(eq(t.reviews.id, review.id), eq(t.reviews.status, review.status))).returning({ id: t.reviews.id });
     if (!rows.length) return false;
@@ -323,7 +327,8 @@ export async function holdReview(_prev: FormState, fd: FormData): Promise<FormSt
     await logChange(tx, { byId, entityType: 'review', entityId: next.id, action: 'create', summary: `${REVIEW_KINDS[nextKind].label} planifiée le ${fmtDate(nextReviewOn)} (compte rendu du ${fmtDate(reviewOn!)})` });
     await ensurePlanItem(tx, { id: next.id, reviewOn: nextReviewOn, kind: nextKind }, byId);
     return true;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (!saved) return { error: 'Revue modifiée entre-temps : rechargez la page.' };
   done();
   return { ok: true };
@@ -510,10 +515,13 @@ export async function saveReviewItem(_prev: FormState, fd: FormData): Promise<Fo
   if (!f.ok) return f.state();
 
   if (row) {
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : journal de la revue (check-list, décisions, compte rendu) modifié depuis l'ouverture du formulaire.
+      await assertFresh(tx, 'review', review.id, fd.get(VERSION_FIELD));
       await tx.update(t.reviewItems).set(values).where(eq(t.reviewItems.id, row.item.id));
       await logChange(tx, { byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', summary: `Élément « ${label} » modifié` });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id: String(row.item.id) };
   }
@@ -599,7 +607,8 @@ export async function saveReviewDecision(_prev: FormState, fd: FormData): Promis
     });
     const details = diffFields(shown(row.d), shown(values), DECISION_FIELDS);
     if (!details.length) return { ok: true, id: String(row.d.id) };
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      await assertFresh(tx, 'review', review.id, fd.get(VERSION_FIELD));
       await tx.update(t.reviewDecisions).set(values).where(eq(t.reviewDecisions.id, row.d.id));
       // Reformulation après la séance : l'ancien libellé reste au journal (AUD-36).
       const reworded = row.d.text !== text && review.status !== 'planifiee';
@@ -607,7 +616,8 @@ export async function saveReviewDecision(_prev: FormState, fd: FormData): Promis
         byId: session.user.id, entityType: 'review', entityId: review.id, action: 'update', details,
         summary: reworded ? `${label} reformulé(e) après la séance : ${text.slice(0, 80)}` : `${label} modifié(e) : ${text.slice(0, 80)}`,
       });
-    });
+    }));
+    if (stale) return { error: stale };
     done();
     return { ok: true, id: String(row.d.id) };
   }

@@ -17,7 +17,7 @@ import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { EventFilterBar } from '@/components/events/EventFilters';
 import { NewEventButton } from '@/components/events/NewEventButton';
 import { OccupationalSection } from '@/components/events/OccupationalSection';
-import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/lib/rules/events';
+import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, eventPrintHref, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/lib/rules/events';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { admissibleSources, canCreateAction } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
@@ -264,6 +264,10 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
+        {/* IMP-07 : fiche imprimable du déclarant (sans pilote, analyse ni historique). */}
+        <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
+          <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+        </a>
       </div>
       <h2 style={{ fontSize: 18, margin: 0, letterSpacing: '-.01em' }}>{e.title}</h2>
 
@@ -454,6 +458,10 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+          {/* IMP-07 : fiche imprimable (mêmes droits que la fiche) ; lien HTML simple (print.css). */}
+          <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+            <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+          </a>
           {/* EVT-10 : synthèse imprimable de la DAT et feuille d'accident (données de santé) ; lien HTML simple (print.css). */}
           {health && e.type === 'AT' && (
             <a href={`${DAT_PRINT_PATH}/${encodeURIComponent(e.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">

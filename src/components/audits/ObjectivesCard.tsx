@@ -20,7 +20,7 @@ function ObjectiveForm({ o, year, options, decisions, onDone }: { o?: ObjectiveV
   const siteChoices = o ? withCurrent(sites, o.siteId ?? ALL_SITES, o.site) : sites;
   const people = o ? withCurrent(options.people, o.pilotId, o.pilot) : options.people;
   return (
-    <ActionForm action={saveObjective} hidden={{ id: o?.id }} onDone={onDone} onCancel={onDone} submitLabel={o ? 'Enregistrer' : "Ajouter l'objectif"}>
+    <ActionForm action={saveObjective} hidden={{ id: o?.id, version: o?.version }} onDone={onDone} onCancel={onDone} submitLabel={o ? 'Enregistrer' : "Ajouter l'objectif"}>
       <Field name="label" label="Objectif" hint="Formulation retenue par la direction, ex. « Réduire les accidents avec arrêt ».">
         <Input name="label" defaultValue={o?.label ?? ''} maxLength={200} autoFocus />
       </Field>

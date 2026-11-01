@@ -1,4 +1,5 @@
 import 'server-only';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -37,8 +38,21 @@ export type Session = {
 
 type Resolved = { session: Session; denied?: never } | { session: null; denied: string };
 
+/**
+ * Session d'un calcul planifié, hors requête (PRD-12, src/lib/data/person-todo.ts) : posée par runAsBackground pour la
+ * durée du calcul, elle remplace l'identité de la requête (cookies) ; jamais posée par une requête d'utilisateur.
+ */
+const background = new AsyncLocalStorage<Session>();
+
+/** Exécute `fn` avec la session `session` (calcul planifié, hors requête : aucun cookie n'est lu). */
+export function runAsBackground<T>(session: Session, fn: () => Promise<T>): Promise<T> {
+  return background.run(session, fn);
+}
+
 // Identité : fournisseur de démonstration ou Entra ID (src/lib/auth). Jamais de rôle par défaut hors démonstration.
 const resolveSession = cache(async (): Promise<Resolved> => {
+  const scheduled = background.getStore();
+  if (scheduled) return { session: scheduled };
   const auth = await getAuthState();
   if (auth.status !== 'authenticated') return { session: null, denied: authFailureHref(auth) };
   const { role, personId, siteIds } = auth.identity;
@@ -85,6 +99,8 @@ export const getOptionalSession = cache(async (): Promise<Session | null> => (aw
  * (Dans une server action, `cache()` ne mémorise pas : relire la session y attendrait la fin de la transaction.)
  */
 export async function currentPersonId(): Promise<string> {
+  const scheduled = background.getStore();
+  if (scheduled) return scheduled.user.id;
   const auth = await getAuthState();
   if (auth.status !== 'authenticated') redirect(authFailureHref(auth));
   return auth.identity.personId;

@@ -12,6 +12,7 @@ import { canReadAction } from '../action-rules';
 import { actionView, lcfirst, loadPeople, skillState, type Person } from '../queries';
 import { loadQhseLeads } from './leads';
 import { getSession, siteFilter, type SiteScope } from '../session';
+import { entityVersions } from '@/server/versions';
 
 // ─── Habilitations ──────────────────────────────────────────────────────────
 
@@ -57,6 +58,8 @@ export type QualificationEntry = {
   cancelled: { at: string; by: string; reason: string } | null;
   /** Attestations jointes. */
   files: AttachmentItem[];
+  /** HAB-06 : session collective qui a créé la formation (participants : formations de la session, annulées comprises). */
+  session: { id: number; participants: number; cancelled: boolean } | null;
   /** HAB-13 : évaluation à froid de l'efficacité (null : non évaluée). */
   effectiveness: { key: TrainingEffectiveness; label: string; tone: Tone; on: string; note: string | null; by: string } | null;
 };
@@ -126,7 +129,7 @@ export { hasLeft };
 export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
   const now = today();
-  const [people, allTitles, reqs, quals, assignments, keep, session] = await Promise.all([
+  const [people, allTitles, reqs, quals, assignments, keep, session, sessions] = await Promise.all([
     loadPeople(),
     db.select().from(t.trainingTitles).orderBy(asc(t.trainingTitles.sort)),
     db.select().from(t.qualificationRequirements),
@@ -134,7 +137,12 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
     db.select().from(t.keystoneAssignments).orderBy(asc(t.keystoneAssignments.startOn)),
     siteFilter(scope),
     getSession(),
+    db.select({ id: t.trainingSessions.id, cancelledAt: t.trainingSessions.cancelledAt }).from(t.trainingSessions),
   ]);
+  // HAB-06 : sessions collectives (participants comptés d'après leurs formations).
+  const sessionSize = new Map<number, number>();
+  quals.forEach((q) => { if (q.sessionId) sessionSize.set(q.sessionId, (sessionSize.get(q.sessionId) ?? 0) + 1); });
+  const sessionCancelled = new Map(sessions.map((x) => [x.id, !!x.cancelledAt]));
   // Titres archivés : hors matrice, formulaires et échéances ; listés dans « Titres suivis » (restauration).
   const titles = allTitles.filter((ti) => !ti.archivedAt);
   const archivedTitles = allTitles.filter((ti) => ti.archivedAt);
@@ -185,6 +193,7 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
       recordedAt: q.recordedAt.toISOString(), recordedBy: name(q.recordedById),
       cancelled: q.cancelledAt ? { at: q.cancelledAt.toISOString(), by: name(q.cancelledById), reason: q.cancelReason ?? '' } : null,
       files: filesOf.get(String(q.id)) ?? [],
+      session: q.sessionId ? { id: q.sessionId, participants: sessionSize.get(q.sessionId) ?? 1, cancelled: sessionCancelled.get(q.sessionId) ?? false } : null,
       effectiveness: q.effectiveness && q.effectivenessOn && q.effectiveness in TRAINING_EFFECTIVENESS
         ? { key: q.effectiveness as TrainingEffectiveness, ...TRAINING_EFFECTIVENESS[q.effectiveness as TrainingEffectiveness], on: q.effectivenessOn, note: q.effectivenessNote, by: name(q.effectivenessById) }
         : null,
@@ -275,11 +284,30 @@ export const loadSkillData = cache(async (scope: SiteScope = 'site') => {
  */
 export const loadSkillMatrix = cache(async () => {
   const session = await getSession();
-  if (!isEmployee(session.role)) return { ...(await loadSkillData()), self: false };
+  if (!isEmployee(session.role)) {
+    const data = await loadSkillData();
+    return { ...data, versions: await skillVersions(data), self: false };
+  }
   const data = await loadSkillData('perimeter');
   const mine = <T extends { person: Person }>(list: T[]) => list.filter((x) => x.person.id === session.user.id);
-  return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], self: true };
+  return { ...data, rows: mine(data.rows), alerts: mine(data.alerts), lapses: mine(data.lapses), archive: mine(data.archive), others: [], departed: [], versions: NO_VERSIONS, self: true };
 });
+
+/** Versions des fiches à leur ouverture (QUA-12) : salarié, titre suivi, formation en cours de chaque case. */
+export type SkillVersions = { person: Record<string, string>; title: Record<string, string>; qualification: Record<string, string> };
+const NO_VERSIONS: SkillVersions = { person: {}, title: {}, qualification: {} };
+
+async function skillVersions(data: Awaited<ReturnType<typeof loadSkillData>>): Promise<SkillVersions> {
+  const db = await getDb();
+  const people = [...data.rows.map((r) => r.person.id), ...data.others.map((p) => p.id)];
+  const quals = data.rows.flatMap((r) => r.cells.flatMap((c) => (c.qualificationId ? [c.qualificationId] : [])));
+  const [person, title, qualification] = await Promise.all([
+    entityVersions(db, 'person', people),
+    entityVersions(db, 'training_title', data.titles.map((ti) => ti.id)),
+    entityVersions(db, 'qualification', quals),
+  ]);
+  return { person: Object.fromEntries(person), title: Object.fromEntries(title), qualification: Object.fromEntries(qualification) };
+}
 
 
 // ─── Échéances du domaine (tableau de bord, À faire, notifications, badge) ──

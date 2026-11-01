@@ -15,7 +15,7 @@ import { TipButton } from '@/components/Tip';
 
 function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
   return (
-    <ActionForm action={saveContractor} onDone={onDone} onCancel={onCancel} submitLabel={contractor ? 'Enregistrer' : "Ajouter l'entreprise"} hidden={{ id: contractor?.id }}>
+    <ActionForm action={saveContractor} onDone={onDone} onCancel={onCancel} submitLabel={contractor ? 'Enregistrer' : "Ajouter l'entreprise"} hidden={{ id: contractor?.id, version: contractor?.version }}>
       <FormRow>
         <Field name="name" label="Raison sociale">
           <Input name="name" defaultValue={contractor?.name} placeholder="Ex. [Entreprise Levage Ouest]" autoFocus />

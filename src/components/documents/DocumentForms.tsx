@@ -143,7 +143,7 @@ export function MetadataForm({ doc, options, onDone, onCancel }: { doc: Document
   const ownerLeft = owners !== options.people;
   const siteArchived = sites !== options.sites;
   return (
-    <ActionForm action={updateDocument} hidden={{ id: doc.id }} onDone={onDone} onCancel={onCancel}>
+    <ActionForm action={updateDocument} hidden={{ id: doc.id, version: doc.version }} onDone={onDone} onCancel={onCancel}>
       <Field name="title" label="Titre">
         <Input name="title" defaultValue={doc.title} autoFocus />
       </Field>
@@ -206,10 +206,14 @@ export function RevisionForm({ doc, version, options, onDone, onCancel }: { doc:
 }
 
 /** Brouillon en cours : objet, action liée, dépôt ou remplacement du fichier. */
-export function DraftForm({ version, options, onDone, onCancel }: { version: VersionView; options: DocFormOptions; onDone: () => void; onCancel: () => void }) {
+export function DraftForm({ version, docVersion, options, onDone, onCancel }: {
+  version: VersionView; options: DocFormOptions; onDone: () => void; onCancel: () => void;
+  /** QUA-12 : version du document à l'ouverture de la fiche. */
+  docVersion?: string;
+}) {
   const [fileError, setFileError] = useState<string | null>(null);
   return (
-    <ActionForm action={updateDraft} hidden={{ versionId: version.id }} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer le brouillon" encType="multipart/form-data">
+    <ActionForm action={updateDraft} hidden={{ versionId: version.id, version: docVersion }} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer le brouillon" encType="multipart/form-data">
       <Field name="summary" label="Objet de la modification">
         <TextArea name="summary" rows={3} defaultValue={version.summary} autoFocus />
       </Field>

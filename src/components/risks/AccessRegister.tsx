@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { ReasonButton } from '@/components/ReasonDialog';
@@ -155,7 +155,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
                   <span style={{ display: 'inline-flex', gap: 10 }}>
                     {r.cancelled ? (
                       <DialogButton label="Historique" className="vg-text-btn" title={r.requesterName} kicker={`Demande annulée · ${r.requesterKindLabel}`} width={560}>
-                        {() => <ChangeLogList entries={r.history} open />}
+                        {() => <LazyChangeLog entity="duerp_access_request" id={r.id} />}
                       </DialogButton>
                     ) : (
                       <>
@@ -163,7 +163,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
                           {(close) => (
                             <div style={{ display: 'grid', gap: 12 }}>
                               <RequestFields {...fieldProps} request={r} onDone={close} onCancel={close} />
-                              <ChangeLogList entries={r.history} />
+                              <LazyChangeLog entity="duerp_access_request" id={r.id} />
                             </div>
                           )}
                         </DialogButton>

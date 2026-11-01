@@ -3,7 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ReportForm } from '@/components/ReportForm';
 import { reportQuery } from '@/lib/rules/events';
-import { LOGIN_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
+import { LOGIN_PATH, MY_SPACE_PATH, REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { ARCHIVED_POST_NOTICE, loadSiteZones, loadZoneRisks, resolveReportPost, resolveReportToken } from '@/lib/data/report-posts';
 import { REPORT_TYPE_KEYS } from '@/lib/domain';
 import { ALL_SITES, getOptionalSession } from '@/lib/session';
@@ -65,9 +65,15 @@ export default async function ReportPage({ searchParams }: PageProps<'/signaler'
   return (
     <Frame>
       <div style={{ padding: '14px 18px 0', display: 'grid', gap: 10 }}>
-        <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5, justifySelf: 'start' }}>
-          <i className="ph ph-caret-left" aria-hidden />Retour à Vigie
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5 }}>
+            <i className="ph ph-caret-left" aria-hidden />Retour à Vigie
+          </Link>
+          {/* EVT-22 : espace salarié mobile (mes actions, mes habilitations, mes signalements). */}
+          <Link href={`${MY_SPACE_PATH}${qs}`} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5 }}>
+            <i className="ph ph-user-circle" aria-hidden />Mon espace
+          </Link>
+        </div>
         {check && !('post' in check) && (
           <div role="status" className="card" style={{ gap: 4, fontSize: 12.5 }}>
             <span style={{ color: 'var(--tone-warn-fg)' }}>{check.status === 'revoked' ? 'QR code remplacé' : 'QR code non reconnu'}</span>

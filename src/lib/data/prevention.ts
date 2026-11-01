@@ -153,6 +153,8 @@ export type PlanView = {
 
 export type PermitView = {
   id: string;
+  /** QUA-12 : version de la fiche à son ouverture (dernière entrée de son journal, déjà lu pour la délivrance). */
+  version: string;
   type: PermitType;
   typeLabel: string;
   icon: string;
@@ -221,6 +223,8 @@ export type LinkedEvent = { id: string; title: string; typeLabel: string; date: 
 
 export type ContractorView = {
   id: string;
+  /** QUA-12 : version de la fiche à son ouverture. */
+  version: string;
   name: string;
   trade: string;
   contactName: string | null;
@@ -375,6 +379,7 @@ export async function loadPrevention() {
     const deliveredAt = delivery ? toParisLocal(new Date(delivery.at)) : null;
     return {
       id: p.id,
+      version: String(Math.max(0, ...history.map((e) => e.id))),
       type,
       typeLabel: PERMIT_TYPES[type].label,
       icon: PERMIT_TYPES[type].icon,
@@ -537,6 +542,7 @@ export async function loadPrevention() {
     || Number(b.missingSignature) - Number(a.missingSignature)
     || (a.phase === 'clos' || a.phase === 'annule' ? b.endOn.localeCompare(a.endOn) : a.startOn.localeCompare(b.startOn)));
 
+  const contractorVersions = await entityVersions(db, 'contractor', contractors.map((c) => c.id));
   const contractorViews: ContractorView[] = contractors.map((c) => {
     const cp = planViews.filter((p) => p.contractorId === c.id);
     const cr = permitViews.filter((p) => p.contractorId === c.id);
@@ -548,6 +554,7 @@ export async function loadPrevention() {
     const archivedBy = name(c.archivedById);
     return {
       id: c.id,
+      version: contractorVersions.get(c.id) ?? '0',
       name: c.name,
       trade: c.trade,
       contactName: c.contactName,

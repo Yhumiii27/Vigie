@@ -109,7 +109,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   };
 
   return (
-    <ActionForm action={savePermit} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={permit ? 'Enregistrer' : 'Enregistrer la demande'} hidden={{ id: permit?.id }}>
+    <ActionForm action={savePermit} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={permit ? 'Enregistrer' : 'Enregistrer la demande'} hidden={{ id: permit?.id, version: permit?.version }}>
       <Field name="type" label="Type de permis">
         <div className="seg" role="radiogroup" style={{ justifySelf: 'start' }}>
           {PERMIT_TYPE_KEYS.map((k) => (

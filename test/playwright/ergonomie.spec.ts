@@ -124,6 +124,9 @@ test('Habilitations : filtre par titre suivi et réordonnancement des colonnes',
   await dialog.getByRole('button', { name: 'Fermer' }).click();
   await expect.poll(async () => (await headers.allTextContents())[2]?.startsWith(first)).toBe(true);
   await page.getByRole('button', { name: 'Titres suivis' }).click();
+  // Pointeur écarté : resté sur « Titres suivis », il peut survoler un bouton de la fenêtre et afficher son infobulle
+  // par-dessus le bouton visé (barre d'outils décalée par « Session collective », HAB-06).
+  await page.mouse.move(0, 0);
   await page.getByRole('dialog').getByRole('button', { name: `Monter « ${first} »` }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Fermer' }).click();
   await expect.poll(async () => (await headers.allTextContents())[1]?.startsWith(first)).toBe(true);

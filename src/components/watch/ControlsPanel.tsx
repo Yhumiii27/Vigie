@@ -222,7 +222,8 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
 
       <FollowUp c={c} today={today} actionOptions={c.archived ? null : actionOptions} linkActions={c.archived ? undefined : linkActions} editable={editable}
         creating={creating} setCreating={setCreating}
-        onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }} />
+        onCreated={() => { setCreating(false); setNotice('Action créée et rattachée au contrôle.'); }}
+        onRecord={editable && !c.archived ? () => show('realise') : undefined} />
 
       {/* EVT-14 : événements rattachés à l'équipement (pannes, presque-accidents, non-conformités). */}
       {!creating && <LinkedEvents events={c.events} reportHref={canManage && !c.archived ? newEventHref('controle', c.id) : null} />}
@@ -265,8 +266,10 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
  * dépassé, avec « Lever les réserves » / « Créer une action » ou le rattachement d'une action existante (service QHSE
  * seulement, ACT-22 ; l'encadrement qui suit le contrôle lit QHSE_ONLY_CREATE_MESSAGE).
  */
-function FollowUp({ c, today, actionOptions, linkActions, editable, creating, setCreating, onCreated }: ActionProps & {
+function FollowUp({ c, today, actionOptions, linkActions, editable, creating, setCreating, onCreated, onRecord }: ActionProps & {
   c: ControlView; today: string; editable: boolean; creating: boolean; setCreating: (v: boolean) => void; onCreated: () => void;
+  /** VEI-05 : « Enregistrer le contrôle de levée » (vue « Contrôle réalisé »), pour qui saisit les contrôles. */
+  onRecord?: () => void;
 }) {
   const qhse = !!actionOptions;
   const overdue = c.days < 0 && !c.archived;
@@ -285,6 +288,21 @@ function FollowUp({ c, today, actionOptions, linkActions, editable, creating, se
         </span>
         {c.action && <ToneTag tone={c.action.tone} style={{ whiteSpace: 'nowrap' }}>{c.action.statusLabel}</ToneTag>}
         {linkActions && <LinkActionButton link={link} current={c.actionId} />}
+        {/* VEI-05 : action de levée close, réserves toujours inscrites : boucler par un contrôle sans réserve. */}
+        {c.loopBack && (
+          <span role="status" style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
+            <Icon name="ph-arrows-clockwise" size={15} style={{ color: TONE.warn.dot }} />
+            <span style={{ flex: 1, minWidth: 180, textWrap: 'pretty' }}>
+              Action {c.loopBack.abandoned ? 'abandonnée' : 'vérifiée'}, réserves toujours inscrites : enregistrez le contrôle de levée des réserves
+              {qhse ? ', ou détachez l’action pour en créer une nouvelle.' : '.'}
+            </span>
+            {onRecord && (
+              <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onRecord}>
+                <Icon name="ph-check-square-offset" size={13} />Enregistrer le contrôle
+              </button>
+            )}
+          </span>
+        )}
       </div>
     );
   }
@@ -419,7 +437,7 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
   const nextOn = manualNext ?? computed;
 
   return (
-    <ActionForm action={saveControl} hidden={{ id: c?.id }} onDone={onDone} onCancel={onCancel} submitLabel={c ? 'Enregistrer' : 'Ajouter le contrôle'}>
+    <ActionForm action={saveControl} hidden={{ id: c?.id, version: c?.version }} onDone={onDone} onCancel={onCancel} submitLabel={c ? 'Enregistrer' : 'Ajouter le contrôle'}>
       <Field name="equipment" label="Équipement">
         <Input name="equipment" defaultValue={c?.equipment} placeholder="Ex. Pont roulant 10 t — atelier montage" maxLength={160} autoFocus={!c} />
       </Field>

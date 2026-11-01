@@ -15,6 +15,7 @@ import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { currentPersonId } from '@/lib/session';
 import { fmtSiret, isEuVatNumber, isSiret, normalizeSiret } from '@/lib/siret';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 
 const MAX_QUANTITY = 9_999_999_999;
@@ -183,8 +184,11 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
     bsdNumber, bsdStatus: bsdNumber ? bsdStatus : null, bsdRefusedQuantity, bsdRefusalReason, notes, eventId, ...copies,
   };
   const label = `${stream!.label} du ${fmtDate(removedOn!)}`;
-  const savedId = await db.transaction(async (tx) => {
+  let savedId: number | null = null;
+  const stale = await freshWrite(async () => { savedId = await db.transaction(async (tx) => {
     if (current) {
+      // QUA-12 : enlèvement modifié depuis l'ouverture du formulaire (autre saisie, pièce jointe) : rien n'est écrasé.
+      await assertFresh(tx, 'waste_entry', current.id, fd.get(VERSION_FIELD));
       const [row] = await tx.update(t.wasteEntries).set(values).where(and(eq(t.wasteEntries.id, current.id), isNull(t.wasteEntries.cancelledAt)))
         .returning({ id: t.wasteEntries.id });
       if (!row) return null;
@@ -195,7 +199,8 @@ export async function saveWasteEntry(_prev: FormState, fd: FormData): Promise<Fo
     const [row] = await tx.insert(t.wasteEntries).values(values).returning({ id: t.wasteEntries.id });
     await logChange(tx, { entityType: 'waste_entry', entityId: row.id, action: 'create', summary: `Inscription au registre : ${label}` });
     return row.id;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (savedId == null) return { error: 'Enlèvement annulé entre-temps : rouvrez le registre.' };
   revalidatePath('/', 'layout');
   return { ok: true, id: String(savedId) };
@@ -294,8 +299,10 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
     label, ewcCode: ewcCode!, hazardous: isHazardousCode(ewcCode!), treatmentCode: treatmentCode!, channel, collector, destination,
     siteId: siteId!, unit: unit!, pop, qualification, collectorSiret, collectorAddress, collectorReceipt, destinationSiret, destinationAddress,
   };
-  const savedId = await db.transaction(async (tx) => {
+  let savedId = '';
+  const stale = await freshWrite(async () => { savedId = await db.transaction(async (tx) => {
     if (current) {
+      await assertFresh(tx, 'waste_stream', current.id, fd.get(VERSION_FIELD));
       const siteLabels = new Map((await tx.select({ id: t.sites.id, label: t.sites.label }).from(t.sites)).map((s) => [s.id, s.label]));
       const view = <T extends { siteId: string }>(row: T) => ({ ...forLog(row, ['collectorSiret', 'destinationSiret'] as (keyof T)[]), siteId: siteLabels.get(row.siteId) ?? row.siteId });
       const details = diffFields(view(current), view({ ...current, ...values }), STREAM_LABELS, fmtLog);
@@ -307,7 +314,8 @@ export async function saveWasteStream(_prev: FormState, fd: FormData): Promise<F
     await tx.insert(t.wasteStreams).values({ id: newId, ...values });
     await logChange(tx, { entityType: 'waste_stream', entityId: newId, action: 'create', summary: `Filière créée : ${label}` });
     return newId;
-  });
+  }); });
+  if (stale) return { error: stale };
   revalidatePath('/', 'layout');
   return { ok: true, id: savedId };
 }

@@ -11,15 +11,16 @@ import { fmtDate } from '@/lib/dates';
 import { legacySkillFilters, parseSkillFilters, parseSkillTitle, searchWith, skillFiltersParams, type SkillFilters, type SkillScope } from '@/lib/url-state';
 import { SKILL_FILTERS, SKILL_STATES, TONE, TRAINING_EFFECTIVENESS, TRAINING_EFFECTIVENESS_KEYS, type SkillFilter, type SkillState } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
-import type { ArchivedRecord, SkillCell, SkillRow, TrainingTitle } from '@/lib/data/skills';
+import type { ArchivedRecord, SkillCell, SkillRow, SkillVersions, TrainingTitle } from '@/lib/data/skills';
 import type { Person } from '@/lib/queries';
-import { addQualificationFiles, cancelQualification, evaluateTrainingEffectiveness, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
+import { addQualificationFiles, cancelQualification, cancelTrainingSession, evaluateTrainingEffectiveness, reinstatePerson, removeQualificationFile, setRequirement } from '@/server/skills';
 import { Fact, HistoryTable, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { PersonForm } from './PersonForm';
 import { lapseFor } from '@/lib/rules/skills';
 import { TitlesButton } from './TitlesManager';
 import { TrainingForm } from './TrainingForm';
+import { SessionForm } from './SessionForm';
 import { TipButton } from '@/components/Tip';
 
 /** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
@@ -27,6 +28,8 @@ type Opts = Pick<FormOptions, 'sites'>;
 
 type Props = {
   titles: TrainingTitle[];
+  /** QUA-12 : versions des fiches (salarié, titre, formation en cours) à l'ouverture de la page. */
+  versions?: SkillVersions;
   /** Titres archivés (liste « Titres suivis », restauration). */
   archivedTitles: TrainingTitle[];
   rows: SkillRow[];
@@ -111,11 +114,13 @@ function Soon({ label, icon, tip }: { label: string; icon: string; tip: string }
 }
 
 /** Contenu de la fenêtre d'une case : état, dates, organisme, recyclage, exigence, attestations, historique. */
-function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTraining }: {
+function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTraining, onCancelSession }: {
   row: SkillRow; cell: SkillCell; canManage: boolean; today: string;
   onRecord: () => void; onCorrect: () => void;
   /** Annulation d'une formation de l'historique (la formation en cours ou une plus ancienne saisie par erreur). */
   onCancelTraining: (id: number) => void;
+  /** HAB-06 : annulation de toute la session collective d'une formation (formations de tous ses participants). */
+  onCancelSession: (formationId: number) => void;
 }) {
   const [pending, start] = useTransition();
   const [required, setRequired] = useOptimistic(cell.required);
@@ -206,7 +211,8 @@ function CellView({ row, cell, canManage, today, onRecord, onCorrect, onCancelTr
 
       {qid !== null && <Effectiveness cell={cell} canManage={canManage} today={today} />}
 
-      <HistoryTable entries={cell.history} onCancel={canManage ? (e) => onCancelTraining(e.id) : undefined} />
+      <HistoryTable entries={cell.history} onCancel={canManage ? (e) => onCancelTraining(e.id) : undefined}
+        onCancelSession={canManage ? (e) => onCancelSession(e.id) : undefined} />
       {/* Journal de la case (HAB-03) : formations, attestations, exigence — à la saisie seulement, chargé à l'ouverture. */}
       {canManage && <LazyChangeLog entity="skill_cell" id={`${row.person.id}|${cell.title.id}`} title="Historique des modifications" />}
 
@@ -328,10 +334,10 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 }
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
-export function SkillMatrix({ titles, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
+export function SkillMatrix({ titles, versions, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
-  const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel'>('view');
+  const [mode, setMode] = useState<'view' | 'record' | 'correct' | 'cancel' | 'cancelSession'>('view');
   // Formation de l'historique à annuler (mode 'cancel').
   const [cancelId, setCancelId] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -417,12 +423,12 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
   const cellName = row && cell ? `${cell.title.label} — ${row.person.name}` : '';
   // Correction de la formation en cours (même ligne de l'historique) ; sinon nouvelle formation datée du jour.
   const initial = cell?.qualificationId && cell.obtainedOn
-    ? { qualificationId: cell.qualificationId, obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider, scope: cell.scope }
+    ? { qualificationId: cell.qualificationId, version: versions?.qualification[String(cell.qualificationId)], obtainedOn: cell.obtainedOn, expiresOn: cell.expiresOn, provider: cell.provider, scope: cell.scope }
     : undefined;
   // Recherchée même annulée : la fenêtre reste montée le temps que l'annulation réussie la referme.
   const toCancel = cell?.history.find((e) => e.id === cancelId);
-  const KICKER = { view: 'Habilitations et formations', record: cellName, correct: cellName, cancel: cellName } as const;
-  const TITLE = { view: cellName, record: 'Enregistrer une formation', correct: 'Corriger la formation', cancel: 'Annuler cette formation' } as const;
+  const KICKER = { view: 'Habilitations et formations', record: cellName, correct: cellName, cancel: cellName, cancelSession: cellName } as const;
+  const TITLE = { view: cellName, record: 'Enregistrer une formation', correct: 'Corriger la formation', cancel: 'Annuler cette formation', cancelSession: 'Annuler la session collective' } as const;
 
   return (
     <>
@@ -440,10 +446,16 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Soon label="Importer le personnel (Lucca · CSV)" icon="ph-upload-simple" tip="Import à venir" />
             <Soon label="Connecteur Cursus · à venir" icon="ph-plugs-connected" tip="Cursus est propriétaire des données personnelles des salariés" />
-            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} />
+            <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} versions={versions?.title} />
             {canManage && (
               <DialogButton label="Ajouter un salarié" icon="ph-user-plus" title="Ajouter un salarié" kicker="Personnel" width={540}>
                 {(close) => <PersonForm sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={close} onCancel={close} />}
+              </DialogButton>
+            )}
+            {canManage && (
+              // HAB-06 : session de formation collective (une formation par participant, en une fois).
+              <DialogButton label="Session collective" icon="ph-users-three" title="Session de formation collective" kicker="Habilitations et formations" width={560}>
+                {(close) => <SessionForm rows={rows} titles={titles} today={today} onDone={close} onCancel={close} />}
               </DialogButton>
             )}
             {canManage && (
@@ -569,7 +581,8 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
         {row && cell && mode === 'view' && (
           <CellView key={`${row.person.id}:${cell.title.id}`} row={row} cell={cell} canManage={canManage} today={today}
             onRecord={() => setMode('record')} onCorrect={() => setMode('correct')}
-            onCancelTraining={(id) => { setCancelId(id); setMode('cancel'); }} />
+            onCancelTraining={(id) => { setCancelId(id); setMode('cancel'); }}
+            onCancelSession={(id) => { setCancelId(id); setMode('cancelSession'); }} />
         )}
         {row && cell && mode === 'record' && (
           <TrainingForm rows={rows} titles={titles} today={today} fixed={{ personId: row.person.id, titleId: cell.title.id }} onDone={back} onCancel={back} />
@@ -582,10 +595,15 @@ export function SkillMatrix({ titles, archivedTitles, rows, others, departed, ar
             submitLabel="Annuler la formation" submitIcon="ph-prohibit" placeholder="Ex. saisie sur le mauvais salarié"
             message={<>La formation du {fmtDate(toCancel.obtainedOn)} sort du calcul de l&apos;état ; elle reste visible, barrée, dans l&apos;historique avec ce motif. Aucune suppression.</>} />
         )}
+        {row && cell && mode === 'cancelSession' && toCancel?.session && (
+          <ReasonForm action={cancelTrainingSession} hidden={{ id: toCancel.session.id }} onDone={back} onCancel={back}
+            submitLabel="Annuler la session" submitIcon="ph-prohibit" placeholder="Ex. session saisie sur le mauvais titre"
+            message={<>La session du {fmtDate(toCancel.obtainedOn)} et les formations encore en vigueur de ses {toCancel.session.participants} participants sortent du calcul de l&apos;état ; elles restent visibles, barrées, avec ce motif. Aucune suppression.</>} />
+        )}
       </Dialog>
 
       <Dialog open={!!editPerson} onClose={closeEdit} title={editPerson ? `Modifier ${editPerson.name}` : ''} kicker="Personnel" width={540}>
-        {editPerson && <PersonForm key={editPerson.id} person={editPerson} sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={closeEdit} onCancel={closeEdit} />}
+        {editPerson && <PersonForm key={editPerson.id} person={editPerson} version={versions?.person[editPerson.id]} sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={closeEdit} onCancel={closeEdit} />}
       </Dialog>
     </>
   );

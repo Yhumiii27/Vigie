@@ -241,3 +241,35 @@ export function skillIndicators(
     lateRenewals: required.filter((c) => c.state === 'x').length,
   };
 }
+
+// ─── Session de formation collective et recyclage groupé (HAB-06) ──────────
+
+/** Participants d'une session au plus (une formation par participant, en une transaction). */
+export const SESSION_MAX_PARTICIPANTS = 50;
+
+/** Contrôle de la liste des participants d'une session : au moins un, sans doublon, au plus SESSION_MAX_PARTICIPANTS. */
+export function sessionParticipantsError(ids: readonly string[]): string | null {
+  if (!ids.length) return 'Choisissez au moins un participant.';
+  if (new Set(ids).size !== ids.length) return 'Un participant est choisi deux fois.';
+  if (ids.length > SESSION_MAX_PARTICIPANTS) return `${SESSION_MAX_PARTICIPANTS} participants au plus par session.`;
+  return null;
+}
+
+/**
+ * Recyclage groupé depuis la prévision (HAB-09) : salariés à recycler pour un titre, à rattraper d'abord puis par échéance,
+ * sans doublon. `preselected` : à rattraper ou expirant dans les `months` mois (3 par défaut, le mois en cours compris) —
+ * cochés d'office ; les échéances plus lointaines sont proposées, décochées (un recyclage trop tôt avance l'échéance).
+ */
+export function groupRenewalCandidates(forecast: RenewalForecast, titleId: string, months = 3): { personId: string; person: string; expiresOn: string | null; preselected: boolean }[] {
+  const soon = new Set(forecast.months.slice(0, months).map((m) => m.month));
+  const seen = new Set<string>();
+  const out: { personId: string; person: string; expiresOn: string | null; preselected: boolean }[] = [];
+  const add = (i: ForecastItem, preselected: boolean) => {
+    if (i.titleId !== titleId || seen.has(i.personId)) return;
+    seen.add(i.personId);
+    out.push({ personId: i.personId, person: i.person, expiresOn: i.expiresOn, preselected });
+  };
+  forecast.overdue.forEach((i) => add(i, true));
+  forecast.months.forEach((m) => m.items.forEach((i) => add(i, soon.has(m.month))));
+  return out;
+}

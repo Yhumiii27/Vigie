@@ -8,13 +8,17 @@
 // requête ou sonde de santé (HEALTHCHECK de l'image : 30 s après le démarrage).
 //
 // Tâches inscrites (scheduledTasks) : rappel du mercredi par e-mail (ACT-33), seulement quand un transport d'e-mail existe
-// (VIGIE_MAIL_TRANSPORT ≠ aucun). Les futures tâches PRD-12 s'ajoutent au registre.
+// (VIGIE_MAIL_TRANSPORT ≠ aucun) ; échéances par personne (PRD-12, src/lib/data/person-todo.ts), calculées toutes les heures
+// hors requête et gardées en mémoire pour un futur canal sortant, dans le serveur Next.js seulement (instrumentation :
+// src/lib/server-runtime.ts ; jamais dans les scripts ni les tests). Les passages s'exécutent dans le contexte racine du
+// serveur, jamais dans celui de la requête qui a ouvert la base.
 
 import { runWeeklyReminder, reminderClock } from '@/lib/action-reminder-job';
 import type { VigieConfig } from '@/lib/env';
 import { createTransport } from '@/lib/mail/transport';
 import type { Db } from './types';
 import { log } from '../lib/log';
+import { inRootContext, serverRuntime } from '../lib/server-runtime';
 
 /** Intervalle des passages du planificateur. */
 export const SCHEDULER_INTERVAL_MS = 10 * 60_000;
@@ -25,6 +29,35 @@ export type ScheduledTask = { name: string; run(db: Db, now: Date): Promise<void
 /** Nom de la tâche du rappel du mercredi (journal du serveur). */
 export const WEEKLY_REMINDER_TASK = 'Rappel du mercredi';
 
+/** Nom de la tâche des échéances par personne (PRD-12, journal du serveur). */
+export const PERSON_TODO_TASK = 'Échéances par personne';
+/** Intervalle minimal entre deux calculs des échéances par personne. */
+export const PERSON_TODO_INTERVAL_MS = 60 * 60_000;
+
+/**
+ * Échéances par personne (PRD-12) : calculées hors requête au premier passage, puis au plus une fois par heure ; lecture
+ * seule, rien n'est envoyé ni écrit en base. Journal du serveur : nombres seulement (personnes, échéances, retards).
+ */
+export function personTodoTask(intervalMs = PERSON_TODO_INTERVAL_MS): ScheduledTask {
+  let last = 0;
+  return {
+    name: PERSON_TODO_TASK,
+    async run(_db, now) {
+      if (last && now.getTime() - last < intervalMs) return;
+      last = now.getTime();
+      const started = Date.now();
+      const { computePersonTodo } = await import('@/lib/data/person-todo');
+      const digest = await computePersonTodo(now);
+      log.info('scheduler.person-todo', 'Échéances par personne calculées', {
+        people: digest.people.length,
+        items: digest.people.reduce((n, p) => n + p.items.length, 0),
+        late: digest.people.reduce((n, p) => n + p.late, 0),
+        ms: Date.now() - started,
+      });
+    },
+  };
+}
+
 type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | 'reminderTime' | 'publicUrl' | 'demo' | 'today'>;
 
 /**
@@ -33,6 +66,8 @@ type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | '
  */
 export function scheduledTasks(c: TaskConfig): ScheduledTask[] {
   const tasks: ScheduledTask[] = [];
+  // Serveur Next.js seulement (sessions et chargements des écrans) : ni scripts (vigie-db), ni tests.
+  if (serverRuntime()) tasks.push(personTodoTask());
   const transport = createTransport(c);
   if (transport) {
     tasks.push({
@@ -70,8 +105,11 @@ export function startScheduler(db: Db, tasks: readonly ScheduledTask[], interval
       }
     })().finally(() => { running = false; });
   };
-  pass();
-  const timer = setInterval(pass, intervalMs);
+  // Contexte racine du serveur (hors requête) : ni cookies, ni session, ni mémoïsation de la requête qui a ouvert la base.
+  const timer = inRootContext(() => {
+    pass();
+    return setInterval(pass, intervalMs);
+  });
   timer.unref();
   return async () => {
     stopped = true;
