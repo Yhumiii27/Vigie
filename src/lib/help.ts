@@ -61,6 +61,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Une case de la matrice filtre le tableau des risques sur cette cotation ; un second clic retire le filtre.',
       'Le champ « Danger » propose les familles usuelles de l’INRS ; un autre libellé reste possible.',
       'Sous « Tous les sites », le site est indiqué sous le nom de chaque unité.',
+      'La vue « Études de sécurité des procédés » (hors Salarié) suit les HazID, HazOp / AMDEC, contrôles chantier, PSSR et audits ASPD des CAPEX et projets ; leurs recommandations sont des actions QSE (source « HAZOP »), dont les réserves bloquantes du jalon.',
     ],
   },
   skills: {
@@ -119,6 +120,8 @@ export const GLOSSARY: readonly { term: string; definition: string }[] = [
   { term: 'TG', definition: 'Taux de gravité : nombre de jours d’arrêt × 1 000 / heures travaillées, sur la même période.' },
   { term: 'AT', definition: 'Accident du travail : déclaration à la CPAM sous 48 h (dimanches et jours fériés non compris) ; par l’entreprise de travail temporaire pour un intérimaire.' },
   { term: 'MP', definition: 'Maladie professionnelle : dossier réservé à l’animation QHSE et à la direction (données de santé).' },
+  { term: 'PSSR', definition: 'Revue de sécurité avant démarrage (Pre-Startup Safety Review) d’une installation, avec la RSPDI ; jalon de la méthode DIG-PRODI avant la mise en service.' },
+  { term: 'HazOp', definition: 'Étude de dangers et d’opérabilité d’un procédé (jalon HS 3) ; ses recommandations sont suivies comme actions QSE.' },
   { term: 'DUERP', definition: 'Document unique d’évaluation des risques professionnels (R. 4121-1), mis à jour au moins chaque année.' },
   { term: 'G × P', definition: 'Cotation d’un risque : gravité (1 à 4) multipliée par la probabilité (1 à 4) ; brute avant mesures, résiduelle après.' },
   { term: 'PP', definition: 'Plan de prévention : document établi avec une entreprise extérieure après l’inspection commune préalable (R. 4512-6).' },

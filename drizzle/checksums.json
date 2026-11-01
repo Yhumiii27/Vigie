@@ -115,6 +115,11 @@
       "when": 1793483668384,
       "sql": "1141c9bc6b49517135bea1ef61d7447cbb38420d1fcf3e3b5d220034f519ae22",
       "snapshot": "738e666ce2b52db808675b7db5de39f9b1cd28e93002d72c565284d3284059dd"
+    },
+    "0023_process_safety_studies": {
+      "when": 1793548921610,
+      "sql": "ea5784c6cc9945335067a0becc85aa231c8851508eeca034972568608ab2695a",
+      "snapshot": "6128bec8aebb380dad5221ae9f17519e8d283d8ad4fb13f2648835d79ac19e87"
     }
   }
 }

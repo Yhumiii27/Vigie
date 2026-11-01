@@ -1,7 +1,7 @@
 import 'server-only';
 import { eq } from 'drizzle-orm';
 import { schema as t, type DbOrTx } from '@/db';
-import { applyActionLink, applyCreationLink, linkLogEntity } from '@/lib/action-links';
+import { STUDY_BLOCKING_ARG, applyActionLink, applyCreationLink, linkLogEntity } from '@/lib/action-links';
 import { actionHref, actionLabel } from '@/lib/action-rules';
 import { fmtDate } from '@/lib/dates';
 import {
@@ -151,13 +151,17 @@ export async function createActionRecord(tx: DbOrTx, input: NewActionInput, ctx:
   // recopié, l'historique part au navigateur et la fiche réduit les sources de certains lecteurs, flux C), puis celui des
   // sources qui en ont un (logAs). Liens posés avant le journal : une création stricte refusée n'écrit rien.
   const names = await nameBook(tx);
+  // VG-02 : recommandation d'une étude de sécurité des procédés marquée réserve bloquante (`safetystudy:<étude>:bloquante`).
+  const blocking = links.some((l) => l.startsWith('safetystudy:') && l.endsWith(`:${STUDY_BLOCKING_ARG}`));
   await logChange(tx, {
     entityType: 'action', entityId: id, action: 'create', byId: ctx.byId,
-    summary: ctx.summary ?? 'Action créée', details: actionFieldDetails({}, values, names),
+    summary: ctx.summary ?? 'Action créée',
+    details: [...actionFieldDetails({}, values, names), ...(blocking ? [{ field: 'Réserve bloquante', from: null, to: 'oui' }] : [])],
   });
   for (const link of links) {
     const source = linkLogEntity(link);
-    if (source) await logChange(tx, { ...source, action: 'link', summary: `Action ${id} créée et rattachée`, byId: ctx.byId });
+    const reserve = link.startsWith('safetystudy:') && link.endsWith(`:${STUDY_BLOCKING_ARG}`) ? ' (réserve bloquante)' : '';
+    if (source) await logChange(tx, { ...source, action: 'link', summary: `Action ${id} créée et rattachée${reserve}`, byId: ctx.byId });
   }
   if (ctx.notify !== false) {
     await notify(tx, {

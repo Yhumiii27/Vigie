@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef, wasteEntryHref, wasteStreamHref } from '@/lib/rules/environment';
+import { STUDY_MILESTONES, STUDY_TYPES, studyHref, studyLabel, type StudyMilestone, type StudyType } from '@/lib/rules/process-safety';
 import { NON_QSE_LINK_MESSAGE, actionRights, isNonQseLinkKind, type LinkFacts } from './action-rules';
 import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
 import { requireInSite } from './guard';
@@ -56,7 +57,7 @@ type LinkKind = {
   /** Toutes les sources de ce type, par action (fiche action), avec le lien qui désigne chacune. */
   sources(db: DbOrTx, actionIds?: string[]): Promise<SourceRow[]>;
   /** Source d'origine portée par cette colonne de l'action : fixée à la création, jamais rattachée ni détachée ensuite. */
-  origin?: OriginColumn;
+  origin?: OriginColumn | 'safetyStudyId';
   /** Faits de l'élément (référence d'origine par défaut, site, faits de la source admise) ; null : élément introuvable. */
   facts(db: DbOrTx, args: string[]): Promise<ElementFacts | null>;
   /** Écriture propre à la création d'une action depuis cet élément (après attach), ex. document de la version. */
@@ -549,8 +550,55 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     },
   },
 
+  // VG-02 : recommandation d'une étude de sécurité des procédés (actions.safety_study_id, source « HAZOP ») — source
+  // d'origine, posée à la création seulement (ORIGIN_LOCKED ensuite), conservée sur une action abandonnée ; une étude porte
+  // plusieurs recommandations (reprise par une action de suite : followUpLinkMode 'multi'). Second argument « bloquante » :
+  // réserve bloquante du jalon (actions.safety_study_blocking), reprise par l'action de suite d'une réserve non efficace.
+  safetystudy: {
+    screen: 'risks',
+    origin: 'safetyStudyId',
+    keptOnCancel: true,
+    async attach(tx, [id = '', flag], actionId) {
+      const [st] = await tx.select({ id: t.processSafetyStudies.id, cancelledAt: t.processSafetyStudies.cancelledAt }).from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
+      if (!st) return NOT_FOUND;
+      if (st.cancelledAt) return 'Étude de sécurité annulée : rattachement impossible.';
+      const [a] = await tx.select({ current: t.actions.safetyStudyId }).from(t.actions).where(eq(t.actions.id, actionId));
+      if (!a) return 'Action introuvable.';
+      if (a.current != null && a.current !== st.id) return ORIGIN_LOCKED;
+      await tx.update(t.actions).set({ safetyStudyId: st.id, safetyStudyBlocking: flag === STUDY_BLOCKING_ARG }).where(eq(t.actions.id, actionId));
+      return null;
+    },
+    async detach() { /* origine verrouillée */ },
+    async detachAll() { /* l'étude reste lisible sur une recommandation abandonnée (réserve levée) */ },
+    async siteOf(tx, [id = '']) {
+      const [st] = await tx.select({ siteId: t.processSafetyStudies.siteId }).from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
+      return st?.siteId;
+    },
+    async facts(db, [id = '']) {
+      const [st] = await db.select({ id: t.processSafetyStudies.id, siteId: t.processSafetyStudies.siteId, type: t.processSafetyStudies.type, capexCode: t.processSafetyStudies.capexCode, projectCode: t.processSafetyStudies.keystoneProjectCode })
+        .from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
+      return st ? { reference: ref(`${st.id} · ${studyLabel({ type: st.type as StudyType, capexCode: st.capexCode, projectCode: st.projectCode })}`), siteId: st.siteId, facts: {} } : null;
+    },
+    logAs: ([id]) => (id ? { entityType: 'process_safety_study', entityId: id } : null),
+    async sources(db, ids) {
+      const rows = await db.select({
+        actionId: t.actions.id, blocking: t.actions.safetyStudyBlocking, id: t.processSafetyStudies.id, type: t.processSafetyStudies.type, milestone: t.processSafetyStudies.milestone,
+        capexCode: t.processSafetyStudies.capexCode, projectCode: t.processSafetyStudies.keystoneProjectCode,
+      }).from(t.actions).innerJoin(t.processSafetyStudies, eq(t.actions.safetyStudyId, t.processSafetyStudies.id));
+      return only(ids)(rows).map((r) => ({
+        actionId: r.actionId, link: `safetystudy:${r.id}${r.blocking ? `:${STUDY_BLOCKING_ARG}` : ''}`, kind: 'safetystudy',
+        label: `${r.id} · ${studyLabel({ type: r.type as StudyType, capexCode: r.capexCode, projectCode: r.projectCode })}`,
+        detail: `Jalon ${STUDY_MILESTONES[r.milestone as StudyMilestone]?.label ?? r.milestone} · ${STUDY_TYPES[r.type as StudyType]?.label ?? r.type}${r.blocking ? ' · réserve bloquante' : ''}`,
+        href: studyHref(r.id),
+      }));
+    },
+  },
+
   ...ORIGIN_KINDS,
 };
+
+/** Second argument d'un lien `safetystudy:<étude>:bloquante` : recommandation marquée réserve bloquante (VG-02). */
+export const STUDY_BLOCKING_ARG = 'bloquante';
 
 /**
  * AUD-12 : une action relève d'une seule revue de direction — sa revue (`review_id`) ou celle d'une décision qu'elle porte

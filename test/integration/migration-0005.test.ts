@@ -1,7 +1,7 @@
 import '../next-mocks';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeDb, getDb } from '@/db';
 import { readJournal } from '@/db/migrations';
@@ -441,7 +441,9 @@ describe('migration 0005 — mise à niveau d’une base de démonstration 0004 
     Object.assign(process.env, { VIGIE_DEMO: '1', VIGIE_TODAY: '2026-10-09' });
     resetConfig();
     const db = await getDb();
-    rows = new Map((await db.select().from(t.actions)).map((a) => [a.id, a]));
+    // Recommandations des études de sécurité des procédés (VG-02, migration 0023, src/db/seeds/process-safety.ts) : jeu à
+    // part, ajouté à l'identique aux deux bases, hors de la comparaison du plan d'actions.
+    rows = new Map((await db.select().from(t.actions)).filter((a) => !a.safetyStudyId).map((a) => [a.id, a]));
     const [counter] = await db.select().from(t.actionCounters);
     upgraded = {
       actions: rows, counter,
@@ -493,7 +495,8 @@ describe('migration 0005 — mise à niveau d’une base de démonstration 0004 
 
   it('aucun journal écrit par la mise à niveau des champs ; ni fil, ni preuves, ni notifications, ni actions de suite ; compteur à 220', async () => {
     const db = await getDb();
-    const actionLogs = await db.select().from(t.changeLog).where(eq(t.changeLog.entityType, 'action'));
+    const studyActions = new Set((await db.select({ id: t.actions.id }).from(t.actions).where(isNotNull(t.actions.safetyStudyId))).map((a) => a.id));
+    const actionLogs = (await db.select().from(t.changeLog).where(eq(t.changeLog.entityType, 'action'))).filter((l) => !studyActions.has(l.entityId));
     const legacyLogs = (fixture.tables.change_log as Row[]).filter((l) => l.entity_type === 'action').length;
     // Entrées d'avant + une reprise par action (33) + la reprise du lien de A-219.
     expect(actionLogs).toHaveLength(legacyLogs + legacyActions.length + 1);
@@ -543,7 +546,7 @@ describe('migration 0005 — base mise à niveau comparée à une base de démon
     process.env.VIGIE_DATA_DIR = 'memory://';
     resetConfig();
     freshDb = await getDb();
-    fresh = new Map((await freshDb.select().from(t.actions)).map((a) => [a.id, a]));
+    fresh = new Map((await freshDb.select().from(t.actions)).filter((a) => !a.safetyStudyId).map((a) => [a.id, a]));
   });
   afterAll(async () => {
     await closeDb();

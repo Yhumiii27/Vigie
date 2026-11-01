@@ -51,7 +51,7 @@ type DemoAction = {
 
 /** Date de référence du jeu (VIGIE_TODAY de la démonstration). */
 const DEMO_DAY = DEMO_REFERENCE_DAY;
-const paris = (iso: string, time = '10:00') => new Date(`${iso}T${time}:00${iso >= '2026-10-25' || iso < '2026-03-29' ? '+01:00' : '+02:00'}`);
+export const paris = (iso: string, time = '10:00') => new Date(`${iso}T${time}:00${iso >= '2026-10-25' || iso < '2026-03-29' ? '+01:00' : '+02:00'}`);
 
 const A170_NOTE = 'Abri extérieur saturé : trois bouteilles vides retrouvées au poste soudure le 29/09.';
 
@@ -456,7 +456,7 @@ type LogSeed = typeof t.changeLog.$inferInsert;
 /** Détail d'une entrée (même forme que ChangeDetail de src/server/changelog.ts, que le jeu n'importe pas). */
 type DetailSeed = { field: string; from: string | null; to: string | null; fromKey?: string | null; toKey?: string | null };
 const av = (from: Avancement, to: Avancement): DetailSeed => ({ field: 'Avancement', from: AVANCEMENT[from].label, to: AVANCEMENT[to].label, fromKey: from, toKey: to });
-const status = (
+export const status = (
   id: string, kind: TransitionKind, from: Avancement, to: Avancement, at: Date, byId: string,
   extra: Omit<Partial<LogSeed>, 'details'> & { details?: DetailSeed[]; doneOn?: string; effective?: boolean } = {},
 ): LogSeed => {

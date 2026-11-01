@@ -22,7 +22,7 @@ describe('dates du jeu de démonstration (QUA-20)', () => {
       const code = line.replace(/\/\/.*$/, '');
       if (/^\s*\*/.test(line)) return [];
       // Bascules d'heure d'été 2026 (calcul du décalage horaire de paris(), src/db/seeds/actions.ts) : des repères, pas des dates du jeu.
-      if (/^const paris = /.test(line)) return [];
+      if (/^(export )?const paris = /.test(line)) return [];
       return /'20\d\d-\d\d-\d\d/.test(code) ? [`${f}:${i + 1}`] : [];
     }));
     expect(hits).toEqual([]);
