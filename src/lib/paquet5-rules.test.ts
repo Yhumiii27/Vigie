@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { francDaysDeadline, mpQuestionnaireDeadline } from '@/components/events/deadlines';
-import { HEALTH_FIELDS, HEALTH_FORM_FIELDS, MP_FIELDS, withoutHealth } from '@/components/events/shared';
-import { bsdRefusalErrors, BSD_STATUS } from '@/components/environment/model';
-import { missingPrerequisites, prerequisiteCycle } from '@/components/skills/rules';
+import { francDaysDeadline, mpQuestionnaireDeadline } from '@/lib/rules/event-deadlines';
+import { HEALTH_FIELDS, HEALTH_FORM_FIELDS, MP_FIELDS, withoutHealth } from '@/lib/rules/events';
+import { bsdRefusalErrors, BSD_STATUS } from '@/lib/rules/environment';
+import { missingPrerequisites, prerequisiteCycle } from '@/lib/rules/skills';
 import { CONTROL_RESULTS, FINDING_GAP_KINDS, FINDING_KINDS, REPORT_TYPE_KEYS, canSeeEventType, contextNeedsTreatment, isBlockingControlResult } from './domain';
 import { elapsedMonths, objectiveValue, type ObjectiveData } from './objective-values';
 import { OBJECTIVE_INDICATORS, fmtObjectiveTarget, fmtObjectiveValue, objectiveStatus } from './objectives';
@@ -81,7 +81,9 @@ describe('VEI-10 et VEI-11 : exigences et contrôles', () => {
     expect(appliesToSite(['ville-b'], null)).toBe(true);
   });
   it('résultats de contrôle : défavorable et mise à l’arrêt bloquent l’équipement', () => {
-    expect(Object.keys(CONTROL_RESULTS)).toEqual(['favorable', 'reserves', 'defavorable', 'arret']);
+    // VEI-14 (paquet 13) : « hors tolérance » ajouté pour l'étalonnage d'un équipement de mesure, bloquant lui aussi.
+    expect(Object.keys(CONTROL_RESULTS)).toEqual(['favorable', 'reserves', 'defavorable', 'arret', 'hors_tolerance']);
+    expect(isBlockingControlResult('hors_tolerance')).toBe(true);
     expect(isBlockingControlResult('defavorable')).toBe(true);
     expect(isBlockingControlResult('arret')).toBe(true);
     expect(isBlockingControlResult('reserves')).toBe(false);

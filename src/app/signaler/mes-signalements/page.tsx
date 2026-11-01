@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { MyReports } from '@/components/events/MyReports';
-import { reportQuery } from '@/components/events/shared';
+import { reportQuery } from '@/lib/rules/events';
 import { loadMyReports } from '@/lib/data/events';
 import { ALL_SITES, getSession } from '@/lib/session';
 

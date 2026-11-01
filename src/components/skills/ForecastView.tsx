@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ToneTag } from '@/components/ui';
 import { fmtDate, fmtMonthAbbr, monthName } from '@/lib/dates';
-import type { ForecastItem, RenewalForecast } from './rules';
+import type { ForecastItem, RenewalForecast } from '@/lib/rules/skills';
 
 const STATE_LABEL: Record<string, { label: string; tone: 'danger' | 'warn' | 'neutral' }> = {
   r: { label: 'Jamais suivi', tone: 'danger' },
@@ -28,7 +28,7 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
   ];
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Tableau, défilement horizontal sur petit écran">
         <table className={`${tableClass} vg-forecast`} style={{ fontSize: 12, minWidth: 720 }}>
           <thead>
             <tr>
@@ -66,7 +66,7 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
               return (
                 <li key={`${i.personId}:${i.titleId}`} style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                   {links
-                    ? <Link href={`/habilitations?salarie=${encodeURIComponent(i.personId)}&titre=${encodeURIComponent(i.titleId)}`} className="vg-link" style={{ fontSize: 12.5, minWidth: 150 }}>{i.person}</Link>
+                    ? <Link href={`/habilitations?salarie=${encodeURIComponent(i.personId)}&titre=${encodeURIComponent(i.titleId)}`} className="vg-link" style={{ fontSize: 12.5, minWidth: 150, display: 'inline-block', minHeight: 24, lineHeight: '24px' }}>{i.person}</Link>
                     : <span style={{ minWidth: 150 }}>{i.person}</span>}
                   <span style={{ flex: 1, minWidth: 140 }}>{i.title}</span>
                   <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{i.expiresOn ? `échéance ${fmtDate(i.expiresOn)}` : 'aucune formation enregistrée'}</span>

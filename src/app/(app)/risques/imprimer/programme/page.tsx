@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
-import { fmtEuro } from '@/components/risks/format';
+import { fmtEuro } from '@/lib/rules/risk-format';
 import { fmtDate, yearOf } from '@/lib/dates';
 import { PROGRAM_SHORT, PROGRAM_STATES } from '@/lib/domain';
 import { guard } from '@/lib/guard';

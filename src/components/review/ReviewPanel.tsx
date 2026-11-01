@@ -183,6 +183,9 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           <div style={{ display: 'grid', gap: 4, fontSize: 12.5 }}>
             <div><span style={muted}>Participants · </span>{[...review.participants, review.externalParticipants].filter(Boolean).join(', ') || '—'}</div>
             {review.minutes && <div style={{ color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{review.minutes}</div>}
+            {/* AUD-35 : perception des clients (§9.3.2 c1) et besoins en ressources (§9.3.3 c) saisis au compte rendu. */}
+            {review.customerPerception && <div style={{ whiteSpace: 'pre-line', textWrap: 'pretty' }}><span style={muted}>Perception des clients · </span>{review.customerPerception}</div>}
+            {review.resourceNeeds && <div style={{ whiteSpace: 'pre-line', textWrap: 'pretty' }}><span style={muted}>Besoins en ressources · </span>{review.resourceNeeds}</div>}
             {review.closedOn && <div style={muted}>Visa de la direction : {review.closedBy ?? '—'} le {fmtDate(review.closedOn)}</div>}
           </div>
         )}
@@ -328,7 +331,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
       <Dialog open={!!editing} onClose={close} kicker={kicker} width={editing?.kind === 'hold' ? 620 : 500} title={title}>
         {editing?.kind === 'item' && review && (
           <>
-            <ItemForm reviewId={review.id} item={item} people={people} canDelete={review.status === 'planifiee' && !item?.files.length} onClose={close} />
+            <ItemForm reviewId={review.id} version={data.version} item={item} people={people} canDelete={review.status === 'planifiee' && !item?.files.length} onClose={close} />
             {/* AUD-17 : pièces de l'élément d'entrée (rapport, tableau de bord fourni par le contributeur). */}
             {item && !item.auto && (
               <EntityFiles kind="review_item" entityId={item.id} title="Pièces de l'élément" kicker={item.label} files={item.files}
@@ -337,9 +340,9 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           </>
         )}
         {editing?.kind === 'decision' && review && (
-          <DecisionForm reviewId={review.id} decision={decision} people={people} canDelete={review.status === 'planifiee'} onClose={close} />
+          <DecisionForm reviewId={review.id} version={data.version} decision={decision} people={people} canDelete={review.status === 'planifiee'} onClose={close} />
         )}
-        {editing?.kind === 'hold' && review && <HoldForm review={review} people={people} now={now} next={defaults.holdNext} allSites={allSites} onClose={close} />}
+        {editing?.kind === 'hold' && review && <HoldForm review={review} version={data.version} people={people} now={now} next={defaults.holdNext} allSites={allSites} onClose={close} />}
         {editing?.kind === 'reschedule' && review && <RescheduleForm review={review} onClose={close} />}
         {editing?.kind === 'create' && (
           <CreateReviewForm nextOn={defaults.nextOn} kind={review?.kind === 'ordinaire' ? 'intermediaire' : 'ordinaire'} copyFrom={defaults.copyFrom}

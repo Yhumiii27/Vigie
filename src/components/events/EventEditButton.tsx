@@ -12,7 +12,8 @@ import type { FormState } from '@/lib/forms';
 import { createEvent, saveEvent } from '@/server/events';
 import { AccidentFields, requiredHint, type AccidentValues } from './AccidentFields';
 import { MpFields, type MpValues } from './MpFields';
-import { MP_TITLE, hasNcDisposition, hasNcOrigin, mentionsInjury } from './shared';
+import { MP_TITLE, hasNcDisposition, hasNcOrigin, mentionsInjury } from '@/lib/rules/events';
+import { withCurrent } from '@/lib/form-options';
 
 /** Champs modifiables d'un événement (données simples transmises par la page serveur ; `knownAt` à l'heure de Paris). */
 export type EditableEvent = {
@@ -136,9 +137,7 @@ export function EventFields(props: FieldsProps) {
   // Un projet saisi avant la synchronisation Keystone reste proposé tel quel.
   // Origine NC : celle de la fiche tant que le type n'a pas changé ; sinon repartir de la valeur par défaut du nouveau type.
   const ncDefault = type === e.type && e.ncOrigin ? e.ncOrigin : type === 'RC' ? 'Réclamation client' : '';
-  const projects = e.keystoneProject && !options.projects.some(([v]) => v === e.keystoneProject)
-    ? [[e.keystoneProject, e.keystoneProject] as const, ...options.projects]
-    : options.projects;
+  const projects = withCurrent(options.projects, e.keystoneProject, null, 'start');
   const str = (v: string | number | null | undefined) => (v == null ? '' : String(v));
   // Rôle non habilité : un accident du travail enregistré garde son type (requalification par l'animateur QHSE ou la direction).
   // Maladie professionnelle (EVT-09) : proposée aux rôles habilités à la création seulement ; elle garde ensuite son type.

@@ -61,15 +61,14 @@ describe('AUD-03 : reporter un élément du programme', () => {
     expect(await cancelPlanItem({}, form({ id: String(g.id) }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
   });
 
-  it('[Fourn. G] en retard : novembre occupé, reporté en février 2027 puis au 10/03/2027 (première planification conservée)', async () => {
+  it('[Fourn. G] en retard : reporté en février 2027 puis au 10/03/2027 (première planification conservée)', async () => {
     actAs('Animateur QHSE');
     const g = await planItem('[Fourn. G]');
     const late = (await loadAuditSignals()).todo.filter((x) => x.href?.endsWith(`element=${g.id}`));
     expect(late).toEqual([expect.objectContaining({ title: '[Fourn. G] — prévu en septembre 2026, à confirmer', overdue: true })]);
 
-    const clash = await reschedulePlanItem({}, form({ id: String(g.id), year: '2026', month: '11', reason: 'Auditeur indisponible' }));
-    expect(clash.error).toContain('« [Fourn. F] · NC »');
-    expect(clash.fieldErrors).toEqual({ month: 'Mois déjà occupé sur cette ligne.' });
+    // AUD-21 (paquet 13) : novembre porte déjà « [Fourn. F] · NC » sur la ligne ; le report n'y est plus refusé (vérifié
+    // dans test/integration/audits-paquet13.test.ts), ce test reporte directement en février 2027.
     expect(await reschedulePlanItem({}, form({ id: String(g.id), year: '2026', month: '9', reason: 'x' }))).toMatchObject({ error: 'Choisissez une autre date ou un autre mois.' });
     expect(await reschedulePlanItem({}, form({ id: String(g.id), year: '2027', month: '2', plannedOn: '2027-03-01', reason: 'x' })))
       .toMatchObject({ fieldErrors: { plannedOn: 'La date prévue doit tomber en février 2027.' } });

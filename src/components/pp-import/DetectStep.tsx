@@ -11,8 +11,8 @@ import { fileSize, plural } from './parts';
 import s from './pp-import.module.css';
 
 /** Étape 2 : résultat de la détection (format, champs et cases, modèle reconnu, avertissements). */
-export function DetectStep({ file, det, templates, appliedTemplateId, onApplyTemplate, onRedetected, onBack, onContinue }: {
-  file: File;
+export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTemplate, onRedetected, onBack, onContinue }: {
+  files: File[];
   det: DetectOk;
   templates: TemplateView[];
   appliedTemplateId: number | null;
@@ -28,7 +28,7 @@ export function DetectStep({ file, det, templates, appliedTemplateId, onApplyTem
   const retry = () => startRetry(async () => {
     setRetryError(null);
     try {
-      const res = await detectFile(file, det.matchedTemplateId, true);
+      const res = await detectFile(files, det.matchedTemplateId, true);
       if (res.ok) onRedetected(res);
       else setRetryError(res.error);
     } catch {
@@ -57,7 +57,7 @@ export function DetectStep({ file, det, templates, appliedTemplateId, onApplyTem
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Icon name={FORMAT_ICONS[det.format]} size={18} style={{ color: 'var(--color-neutral-400)' }} />
           <span className="card-title" style={{ fontSize: 15, wordBreak: 'break-word' }}>{det.fileName}</span>
-          <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fileSize(file.size)}{det.pageCount ? ` · ${plural(det.pageCount, 'page', 'pages')}` : ''}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fileSize(files.reduce((n, f) => n + f.size, 0))}{det.pageCount ? ` · ${plural(det.pageCount, 'page', 'pages')}` : ''}</span>
           <ToneTag tone="accent">{FORMAT_LABELS[det.format]}</ToneTag>
           {det.ai.used && <ToneTag tone="neutral"><Icon name="ph-sparkle" size={11} style={{ marginRight: 4 }} />Lu par l&apos;API Claude</ToneTag>}
         </div>

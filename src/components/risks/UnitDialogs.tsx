@@ -4,11 +4,11 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { DialogButton } from '@/components/Dialog';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
-import { ActionForm, Field, Input, Select } from '@/components/form';
+import { ActionForm, Checkbox, Field, Input, Select } from '@/components/form';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { TONE } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
-import type { ArchivedUnitView, WorkUnitView } from '@/lib/data/risks';
+import type { ArchivedUnitView, WorkUnitView, ZoneOption } from '@/lib/data/risks';
 import type { FormState } from '@/lib/forms';
 import { ARCHIVED_SITE_SUFFIX, withCurrent } from '@/lib/form-options';
 import { archiveWorkUnit, moveWorkUnit, restoreWorkUnit, saveWorkUnit } from '@/server/risks';
@@ -28,9 +28,12 @@ type ViewSite = { id: string; label: string } | null;
 /** Vrai si une unité rattachée à `siteId` n'apparaît pas dans la liste du site affiché. */
 const hiddenFrom = (viewSite: ViewSite, siteId: string) => !!viewSite && siteId !== viewSite.id;
 
-function UnitFields({ unit, sites, defaultSiteId, viewSite, onDone, onCancel }: {
-  unit?: Pick<WorkUnitView, 'id' | 'label' | 'siteId'>;
+function UnitFields({ unit, sites, zones = [], unitLabels = {}, defaultSiteId, viewSite, onDone, onCancel }: {
+  unit?: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'version'>;
   sites: readonly Option[];
+  /** DUE-20 : zones en service du plan de site (avec l'unité qui les couvre) ; libellés des unités. */
+  zones?: readonly ZoneOption[];
+  unitLabels?: Record<string, string>;
   defaultSiteId: string;
   viewSite: ViewSite;
   /** `siteId` : site enregistré pour l'unité. */
@@ -42,26 +45,39 @@ function UnitFields({ unit, sites, defaultSiteId, viewSite, onDone, onCancel }: 
   const hint = viewSite && hiddenFrom(viewSite, siteId)
     ? <span style={{ color: TONE.warn.fg }}>L&apos;unité n&apos;apparaîtra pas dans la liste de « {viewSite.label} » : elle sera visible sur « {siteLabel} » et dans « Tous les sites ».</span>
     : "L'unité apparaît sur ce site et dans « Tous les sites ».";
+  const siteZones = zones.filter((z) => z.siteId === siteId);
   return (
-    <ActionForm action={saveWorkUnit} onDone={(state) => onDone(state, siteId)} onCancel={onCancel} submitLabel={unit ? 'Enregistrer' : "Ajouter l'unité"} hidden={{ id: unit?.id }}>
+    <ActionForm action={saveWorkUnit} onDone={(state) => onDone(state, siteId)} onCancel={onCancel} submitLabel={unit ? 'Enregistrer' : "Ajouter l'unité"} hidden={{ id: unit?.id, version: unit?.version, zonesField: '1' }}>
       <Field name="label" label="Libellé" hint="Poste, atelier, zone ou activité regroupant des salariés exposés aux mêmes risques.">
         <Input name="label" defaultValue={unit?.label} maxLength={80} autoFocus placeholder="Ex. Atelier peinture" />
       </Field>
       <Field name="siteId" label="Site" hint={hint}>
         <Select name="siteId" options={sites} value={siteId} onChange={(e) => setSiteId(e.target.value)} />
       </Field>
+      {/* DUE-20 : zones du plan de site couvertes par l'unité ; leurs risques sont proposés au signalement par QR code. */}
+      <Field name="zoneIds" group label="Zones du plan de site"
+        hint={siteZones.length ? "Une zone n'appartient qu'à une unité : la cocher la retire de l'unité qui la couvrait. Les risques de l'unité sont proposés au signalement par le QR code du poste." : 'Aucune zone en service sur le plan de ce site (Prévention › Carte du site).'}>
+        {siteZones.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+            {siteZones.map((z) => (
+              <Checkbox key={z.id} name="zoneIds" value={String(z.id)} defaultChecked={!!unit && z.unitId === unit.id}
+                label={z.unitId && z.unitId !== unit?.id ? `${z.name} (${unitLabels[z.unitId] ?? 'autre unité'})` : z.name} />
+            ))}
+          </div>
+        )}
+      </Field>
     </ActionForm>
   );
 }
 
 /** Petit bouton sous la liste des unités : ajoute une unité de travail puis l'affiche (si elle relève du site affiché). */
-export function AddUnitButton({ sites, defaultSiteId, viewSite, residual }: { sites: readonly Option[]; defaultSiteId: string; viewSite: ViewSite; residual: boolean }) {
+export function AddUnitButton({ sites, zones, unitLabels, defaultSiteId, viewSite, residual }: { sites: readonly Option[]; zones?: readonly ZoneOption[]; unitLabels?: Record<string, string>; defaultSiteId: string; viewSite: ViewSite; residual: boolean }) {
   const router = useRouter();
   return (
     <DialogButton label="Ajouter une unité de travail" icon="ph-plus" className="btn btn-ghost" style={{ fontSize: 12, justifySelf: 'start', marginTop: 4 }}
       title="Ajouter une unité de travail" kicker="Document unique" width={480}>
       {(close) => (
-        <UnitFields sites={sites} defaultSiteId={defaultSiteId} viewSite={viewSite} onCancel={close}
+        <UnitFields sites={sites} zones={zones} unitLabels={unitLabels} defaultSiteId={defaultSiteId} viewSite={viewSite} onCancel={close}
           onDone={(s, siteId) => { close(); if (s.id && !hiddenFrom(viewSite, siteId)) router.push(unitHref(s.id, residual), { scroll: false }); }} />
       )}
     </DialogButton>
@@ -71,18 +87,20 @@ export function AddUnitButton({ sites, defaultSiteId, viewSite, residual }: { si
 type Position = { isFirst: boolean; isLast: boolean };
 
 /** Crayon à côté du nom de l'unité : renomme l'unité, change son site, la déplace dans la liste ou l'archive si elle n'a plus de risque en vigueur. */
-export function EditUnitButton({ unit, sites, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>; sites: readonly Option[]; viewSite: ViewSite; residual: boolean } & Position) {
+export function EditUnitButton({ unit, sites, zones, unitLabels, viewSite, residual, isFirst, isLast }: { unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count' | 'version'>; sites: readonly Option[]; zones?: readonly ZoneOption[]; unitLabels?: Record<string, string>; viewSite: ViewSite; residual: boolean } & Position) {
   return (
     <DialogButton label="" icon="ph-pencil-simple" className="btn btn-ghost btn-icon" tooltip="Modifier l'unité de travail"
       style={{ width: 22, height: 22, color: 'var(--color-neutral-500)' }} title={unit.label} kicker="Modifier l'unité de travail" width={480}>
-      {(close) => <UnitEditor unit={unit} sites={sites} viewSite={viewSite} residual={residual} isFirst={isFirst} isLast={isLast} onClose={close} />}
+      {(close) => <UnitEditor unit={unit} sites={sites} zones={zones} unitLabels={unitLabels} viewSite={viewSite} residual={residual} isFirst={isFirst} isLast={isLast} onClose={close} />}
     </DialogButton>
   );
 }
 
-function UnitEditor({ unit, sites: activeSites, viewSite, residual, isFirst, isLast, onClose }: {
-  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count'>;
+function UnitEditor({ unit, sites: activeSites, zones, unitLabels, viewSite, residual, isFirst, isLast, onClose }: {
+  unit: Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'count' | 'version'>;
   sites: readonly Option[];
+  zones?: readonly ZoneOption[];
+  unitLabels?: Record<string, string>;
   viewSite: ViewSite;
   residual: boolean;
   onClose: () => void;
@@ -107,7 +125,7 @@ function UnitEditor({ unit, sites: activeSites, viewSite, residual, isFirst, isL
     <>
       <div style={{ position: 'relative' }}>
         {error && <div role="alert" className="vg-form-error" style={{ marginBottom: 8 }}>{error}</div>}
-        <UnitFields unit={unit} sites={sites} defaultSiteId={unit.siteId ?? sites[0]?.[0] ?? ''} viewSite={viewSite} onCancel={onClose}
+        <UnitFields unit={unit} sites={sites} zones={zones} unitLabels={unitLabels} defaultSiteId={unit.siteId ?? sites[0]?.[0] ?? ''} viewSite={viewSite} onCancel={onClose}
           onDone={(_, siteId) => {
             onClose();
             // Unité déplacée vers un autre site : elle quitte la liste affichée, on revient à la première unité.

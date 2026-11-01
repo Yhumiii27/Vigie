@@ -2,10 +2,11 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { isPlanEnded } from '@/components/prevention/model';
+import { isPlanEnded } from '@/lib/rules/prevention';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 import { done, isOpenPermit } from './prevention-shared';
 
@@ -40,10 +41,13 @@ export async function saveContractor(_prev: FormState, fd: FormData): Promise<Fo
     const before = all.find((c) => c.id === id);
     if (!before) return { error: 'Entreprise introuvable.' };
     const details = diffFields(before, values, { name: 'Raison sociale', trade: 'Corps de métier', contactName: 'Interlocuteur', contactPhone: 'Téléphone', contactEmail: 'E-mail' });
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : fiche modifiée depuis l'ouverture du formulaire (autre saisie, archivage) : rien n'est écrasé.
+      await assertFresh(tx, 'contractor', id, fd.get(VERSION_FIELD));
       await tx.update(t.contractors).set(values).where(eq(t.contractors.id, id));
       if (details.length) await logChange(tx, { entityType: 'contractor', entityId: id, action: 'update', summary: 'Fiche modifiée', details });
-    });
+    }));
+    if (stale) return { error: stale };
     return done(id);
   }
   // Référence tirée sous verrou dans la transaction de création (PRD-08).

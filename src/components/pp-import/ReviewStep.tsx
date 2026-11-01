@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
-import { DANGEROUS_WORK_HINT, MANDATORY_HOURS, PLAN_STATUS, lcfirst, planStatus, ruleBasis } from '@/components/prevention/model';
+import { DANGEROUS_WORK_HINT, MANDATORY_HOURS, PLAN_STATUS, lcfirst, planStatus, ruleBasis } from '@/lib/rules/prevention';
 import { Notice, SITE_LOCK_HINT, SectionTitle } from '@/components/prevention/parts';
 import { Icon, ToneTag } from '@/components/ui';
 import type { FormState } from '@/lib/forms';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { NEW_CONTRACTOR, type PlanDraft } from '@/lib/pp-import/draft';
+import { importName } from '@/lib/pp-import/files';
 import { FORMAT_LABELS, type ImportScreenData } from '@/lib/pp-import/types';
 import { createPlanFromImport } from '@/server/pp-import';
 import { CheckMark, fileSize, muted, plural } from './parts';
@@ -18,7 +19,7 @@ type Props = {
   data: ImportScreenData;
   draft: PlanDraft;
   sections: PpFormData['sections'];
-  file: File;
+  files: File[];
   format: PpImportFormat;
   templateId: number | null;
   templateName: string | null;
@@ -26,7 +27,7 @@ type Props = {
 };
 
 /** Étape 4 : plan prérempli à vérifier, aperçu de la grille conservée, création du plan avec le fichier source joint. */
-export function ReviewStep({ data, draft, sections, file, format, templateId, templateName, onBack }: Props) {
+export function ReviewStep({ data, draft, sections, files, format, templateId, templateName, onBack }: Props) {
   const router = useRouter();
   const [contractorId, setContractorId] = useState(draft.contractorId);
   const [siteId, setSiteId] = useState(data.sites.some((x) => x.id === data.defaultSiteId) ? data.defaultSiteId : data.sites[0]?.id ?? '');
@@ -36,9 +37,11 @@ export function ReviewStep({ data, draft, sections, file, format, templateId, te
   const [signedEuOn, setSignedEuOn] = useState(draft.signedEuOn);
   const [signedEeOn, setSignedEeOn] = useState(draft.signedEeOn);
 
-  // Le fichier déposé à l'étape 1 est renvoyé avec le formulaire : il devient la pièce jointe source du plan.
+  // Le fichier déposé à l'étape 1 (ou ses pages, INT-14) est renvoyé avec le formulaire : il devient la pièce jointe
+  // source du plan, les pages suivantes sont jointes au plan.
   const action = async (prev: FormState, fd: FormData) => {
-    fd.set('file', file);
+    fd.delete('file');
+    files.forEach((f) => fd.append('file', f, f.name));
     return createPlanFromImport(prev, fd);
   };
 
@@ -188,9 +191,9 @@ export function ReviewStep({ data, draft, sections, file, format, templateId, te
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5 }}>
             <Icon name="ph-paperclip" size={15} style={{ color: 'var(--color-neutral-400)', marginTop: 1 }} />
             <span style={{ minWidth: 0, wordBreak: 'break-word' }}>
-              {file.name}
+              {importName(files.map((f) => f.name))}
               <span style={{ display: 'block', ...muted }}>
-                {FORMAT_LABELS[format]} · {fileSize(file.size)}{templateName ? ` · modèle « ${templateName} »` : ''} — joint au plan
+                {FORMAT_LABELS[format]} · {fileSize(files.reduce((n, f) => n + f.size, 0))}{templateName ? ` · modèle « ${templateName} »` : ''} — joint au plan
               </span>
             </span>
           </div>

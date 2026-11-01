@@ -7,12 +7,13 @@ import { log } from '@/lib/log';
 // journal des modifications (change_log). Pas de 'use server' : aucune action appelable depuis le navigateur.
 // - `fichier` : pièce servie par /fichiers/[id] (toute pièce ; `health` pour une pièce médicale) ;
 // - `sante` : fiche d'un accident du travail ouverte avec ses données de santé (rôles canSeeHealth) ;
-// - `registre_benin` : registre des accidents bénins d'un site ouvert.
+// - `registre_benin` : registre des accidents bénins d'un site ouvert ;
+// - `donnees_personnelles` : vue des données d'une personne (SEC-13, droit d'accès), entité `person`.
 // Une consultation répétée par la même personne dans la fenêtre DEDUP_MINUTES (rechargements, rafraîchissements après
 // une écriture) n'ajoute pas d'entrée. Une erreur d'écriture n'empêche jamais la consultation (journalisée en console).
 // Conservation : à fixer avec le DPO (SEC-10) ; aucune purge pour l'instant.
 
-export type AccessKind = 'fichier' | 'sante' | 'registre_benin';
+export type AccessKind = 'fichier' | 'sante' | 'registre_benin' | 'donnees_personnelles';
 
 export const DEDUP_MINUTES = 10;
 

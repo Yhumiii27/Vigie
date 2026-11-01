@@ -3,21 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { canEdit } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import { OBJECTIVE_INDICATORS, OBJECTIVE_INDICATOR_KEYS, OBJECTIVE_LABEL_MAX, fmtObjectiveTarget, type ObjectiveIndicator } from '@/lib/objectives';
 import { ALL_SITES } from '@/lib/session';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 
 // Objectifs QHSE mesurables (AUD-13) : saisis sur l'écran « Audits et certifications » par les rôles qui y saisissent
 // (canEdit : animateur QHSE, direction) ; jamais supprimés (archivage motivé) ; chaque écriture au journal (qhse_objective).
 
-async function requireObjectiveEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireObjectiveEditor = () => requireEditor('audits');
 
 const LABELS = { year: 'Année', label: 'Objectif', indicator: 'Indicateur', target: 'Cible', siteId: 'Site', pilotId: 'Pilote', reviewDecisionId: 'Décision de revue' } as const;
 
@@ -74,10 +70,13 @@ export async function saveObjective(_prev: FormState, fd: FormData): Promise<For
       pilotId: o.pilotId ? people.get(o.pilotId) ?? o.pilotId : null, reviewDecisionId: o.reviewDecisionId ? `n° ${o.reviewDecisionId}` : null,
     });
     const details = diffFields(shown(current), shown(values), LABELS, (v) => (v == null || v === '' ? null : String(v)));
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : objectif modifié depuis l'ouverture du formulaire : rien n'est écrasé.
+      await assertFresh(tx, 'qhse_objective', current.id, fd.get(VERSION_FIELD));
       await tx.update(t.qhseObjectives).set(values).where(eq(t.qhseObjectives.id, current.id));
       if (details.length) await logChange(tx, { entityType: 'qhse_objective', entityId: current.id, action: 'update', summary: 'Objectif modifié', details, byId });
-    });
+    }));
+    if (stale) return { error: stale };
     revalidatePath('/', 'layout');
     return { ok: true, id: String(current.id) };
   }

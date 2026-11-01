@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
-import { firstMinuteReason, sevesoLabel } from '@/components/prevention/model';
+import { firstMinuteReason, sevesoLabel } from '@/lib/rules/prevention';
 import { SiteMapScreen } from '@/components/sitemap/SiteMapScreen';
-import { isRealDate } from '@/components/sitemap/model';
+import { isRealDate } from '@/lib/rules/sitemap';
 import { Icon, ToneTag } from '@/components/ui';
 import { canManage } from '@/lib/domain';
 import { guard } from '@/lib/guard';

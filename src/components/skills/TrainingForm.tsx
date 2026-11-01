@@ -8,7 +8,7 @@ import { addMonths, fmtDate } from '@/lib/dates';
 import type { SkillRow, TrainingTitle } from '@/lib/data/skills';
 import { saveQualification } from '@/server/skills';
 import { period } from './common';
-import { coversNeed, heldState, lapseFor, type Span } from './rules';
+import { coversNeed, heldState, lapseFor, type Span } from '@/lib/rules/skills';
 
 type Props = {
   rows: SkillRow[];
@@ -18,7 +18,7 @@ type Props = {
   /** Salarié et titre imposés (ouverture depuis une case de la matrice). */
   fixed?: { personId: string; titleId: string };
   /** Valeurs initiales (correction de la formation `qualificationId`, la ligne de l'historique est modifiée). */
-  initial?: { qualificationId: number; obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null; scope?: string | null };
+  initial?: { qualificationId: number; version?: string; obtainedOn?: string | null; expiresOn?: string | null; provider?: string | null; scope?: string | null };
   onDone: () => void;
   onCancel?: () => void;
 };
@@ -93,7 +93,7 @@ export function TrainingForm({ rows, titles, today, fixed, initial, onDone, onCa
 
   return (
     <ActionForm action={saveQualification} onDone={onDone} onCancel={onCancel} submitLabel={initial ? 'Enregistrer la correction' : 'Enregistrer la formation'}
-      encType="multipart/form-data" hidden={{ personId: fixed?.personId, titleId: fixed?.titleId, qualificationId: initial?.qualificationId }}>
+      encType="multipart/form-data" hidden={{ personId: fixed?.personId, titleId: fixed?.titleId, qualificationId: initial?.qualificationId, version: initial?.version }}>
       {!fixed && (
         <FormRow>
           <Field name="personId" label="Salarié">

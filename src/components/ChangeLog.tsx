@@ -1,16 +1,6 @@
 // Historique des modifications d'une fiche (journal change_log). Sans état : utilisable côté serveur comme côté client.
 
-/** Entrée du journal, sérialisable (voir loadChangeLogs, src/lib/data/changelog.ts). */
-export type ChangeEntry = {
-  id: number;
-  /** Horodatage ISO. */
-  at: string;
-  who: string;
-  action: string;
-  summary: string;
-  reason: string | null;
-  details: { field: string; from: string | null; to: string | null }[];
-};
+import type { ChangeEntry } from '@/lib/change-entry';
 
 const fmtAt = (iso: string) => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 

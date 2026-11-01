@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { and, eq, gte, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
-  EE_HEADCOUNT_MAX, MAX_PLAN_FILES, PLAN_CONTENT, PLAN_CONTENT_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,
+  EE_HEADCOUNT_MAX, MAX_PLAN_FILES, MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_CONTENT, PLAN_CONTENT_KEYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,
   permitDays, planEndIssue, planSignIssue, planStatus, signedBeforeStart, type PlanContentKey,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
@@ -427,3 +427,87 @@ export async function removePlanAttachment(attachmentId: string): Promise<Result
   return ok();
 }
 
+
+// ─── Inspections et réunions périodiques (PRV-17) ───────────────────────────
+
+/**
+ * Fixe (ou retire) la périodicité des inspections et réunions de coordination d'un plan (R. 4513-2 : selon une périodicité
+ * définie par l'entreprise utilisatrice), en jours ; vide = non fixée. Plan du site, ni clos ni annulé ; journal du plan.
+ */
+export async function setPlanMeetingPeriod(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.str('id', { required: true });
+  const days = f.int('meetingPeriodDays', { min: MEETING_PERIOD_MIN_DAYS, max: MEETING_PERIOD_MAX_DAYS });
+  if (!f.ok) return f.state();
+  const { db, plan } = await loadPlan(id);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  if ((plan.meetingPeriodDays ?? null) === days) return done(plan.id);
+  const show = (n: number | null) => (n == null ? null : `${n} j`);
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlans).set({ meetingPeriodDays: days }).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, {
+      entityType: 'prevention_plan', entityId: plan.id, action: 'update', byId: session.user.id,
+      summary: days ? `Inspections et réunions périodiques : tous les ${days} jours` : 'Périodicité des inspections et réunions retirée',
+      details: [{ field: 'Périodicité des inspections et réunions', from: show(plan.meetingPeriodDays), to: show(days) }],
+    });
+  });
+  return done(plan.id);
+}
+
+/**
+ * Enregistre une inspection commune ou une réunion de coordination tenue pendant l'intervention (PRV-17) : nature, date
+ * (entre le début de l'intervention et aujourd'hui), participants, constats et mesures. Plan du site, signé ou en cours,
+ * ni clos ni annulé ; journal du plan.
+ */
+export async function recordPlanMeeting(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const planId = f.str('planId', { required: true });
+  const kind = f.oneOf('kind', PLAN_MEETING_KIND_KEYS, { required: true });
+  const heldOn = f.date('heldOn', { required: true });
+  const participants = f.str('participants', { required: true, max: 500 });
+  const notes = f.str('notes', { max: 4000 });
+  if (heldOn && heldOn > today()) f.fail('heldOn', "Enregistrez la séance une fois tenue (date future).");
+  if (!f.ok) return f.state();
+  const { db, plan } = await loadPlan(planId);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  if (heldOn! < plan.startOn) return { error: 'Certains champs sont à corriger.', fieldErrors: { heldOn: `Séance antérieure au début de l'intervention (${fmtDate(plan.startOn)}) : l'inspection commune préalable se renseigne dans le plan.` } };
+  const id = await db.transaction(async (tx) => {
+    const [row] = await tx.insert(t.preventionPlanMeetings).values({ planId: plan.id, kind: kind!, heldOn: heldOn!, participants, notes, recordedById: session.user.id })
+      .returning({ id: t.preventionPlanMeetings.id });
+    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'meeting', byId: session.user.id, summary: `${PLAN_MEETING_KINDS[kind!]} du ${fmtDate(heldOn!)} enregistrée` });
+    return row.id;
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: String(id) };
+}
+
+/** Annule une séance enregistrée par erreur (motif obligatoire, jamais supprimée) ; plan ni clos ni annulé, du site. */
+export async function cancelPlanMeeting(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireManager();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [meeting] = await db.select().from(t.preventionPlanMeetings).where(eq(t.preventionPlanMeetings.id, id!));
+  if (!meeting) return { error: 'Séance introuvable.' };
+  if (meeting.cancelledAt) return { error: 'Séance déjà annulée.' };
+  const { plan } = await loadPlan(meeting.planId);
+  const blocked = await editablePlanError(plan);
+  if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
+  await db.transaction(async (tx) => {
+    await tx.update(t.preventionPlanMeetings).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.preventionPlanMeetings.id, meeting.id));
+    await logChange(tx, {
+      entityType: 'prevention_plan', entityId: plan.id, action: 'cancel_meeting', byId: session.user.id, reason,
+      summary: `${PLAN_MEETING_KINDS[meeting.kind as keyof typeof PLAN_MEETING_KINDS] ?? 'Séance'} du ${fmtDate(meeting.heldOn)} annulée`,
+    });
+  });
+  return done(plan.id);
+}

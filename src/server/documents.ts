@@ -3,16 +3,18 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocType } from '@/components/documents/meta';
+import { DOC_ORIGINS, DOC_ORIGIN_KEYS, DOC_TYPES, DOC_TYPE_KEYS, PROCESS_KEYS, REF_PATTERN, nextVersion, refPrefix, type DocOrigin, type DocType } from '@/lib/rules/documents';
+import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { checkLinkChange } from '@/lib/action-links';
 import { isQhse } from '@/lib/action-rules';
-import { canApprove, canEdit, type Role } from '@/lib/domain';
+import { canApprove, type Role } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { checkUploadBatch, deleteAttachment, listAttachments, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 
 // Documents maîtrisés : création, métadonnées et cycle de vie des versions
@@ -28,7 +30,7 @@ type Db = Awaited<ReturnType<typeof getDb>>;
  * son propriétaire sorti de l'effectif reste admis tant qu'il n'est pas remplacé (DOC-01), un nouveau choix doit viser
  * une personne présente.
  */
-async function readMetadata(f: Reader, db: Db, current: { ownerId: string } | null) {
+async function readMetadata(f: Reader, db: Db, current: { ownerId: string; origin?: string; issuer?: string | null; retention?: string | null } | null) {
   const title = f.str('title', { required: true, max: 200 });
   const type = f.oneOf('type', DOC_TYPE_KEYS, { required: true });
   const processCode = f.oneOf('process', PROCESS_KEYS, { required: true });
@@ -36,6 +38,13 @@ async function readMetadata(f: Reader, db: Db, current: { ownerId: string } | nu
   const reviewMonths = f.int('reviewMonths', { required: true, min: 1, max: 120 });
   const distribution = f.str('distribution', { required: true, max: 300 });
   const siteId = f.opt('siteId');
+  // DOC-17 : origine (interne, externe), émetteur d'un document externe, durée de conservation (texte libre).
+  // Champs absents du formulaire (appel antérieur au paquet 13) : valeurs enregistrées conservées.
+  const keep = !f.has('origin');
+  const origin = keep ? (current?.origin === 'externe' ? 'externe' : 'interne') : f.oneOf('origin', DOC_ORIGIN_KEYS) ?? 'interne';
+  const issuer = origin !== 'externe' ? null : keep ? current?.issuer ?? null : f.str('issuer', { max: 120 }) || null;
+  const retention = keep && !f.has('retention') ? current?.retention ?? null : f.str('retention', { max: 120 }) || null;
+  if (origin === 'externe' && !issuer && !f.fieldErrors.issuer) f.fail('issuer', "Indiquez l'émetteur du document externe (organisme, client, fournisseur).");
   if (ownerId) {
     const [p] = await db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, ownerId));
     if (!p) f.fail('ownerId', 'Personne inconnue.');
@@ -45,7 +54,7 @@ async function readMetadata(f: Reader, db: Db, current: { ownerId: string } | nu
     const [s] = await db.select({ id: t.sites.id }).from(t.sites).where(eq(t.sites.id, siteId));
     if (!s) f.fail('siteId', 'Site inconnu.');
   }
-  return { title, type, process: processCode, ownerId, reviewMonths, distribution, siteId };
+  return { title, type, process: processCode, ownerId, reviewMonths, distribution, siteId, origin, issuer, retention };
 }
 
 /** Rattachement d'une action à une version : réservé au service QHSE (ACT-22, réponses du 15/10/2026). */
@@ -128,11 +137,7 @@ async function replaceFile(versionId: number, file: File, userId: string) {
 }
 
 /** Rédaction réservée aux rôles qui ne sont pas en consultation seule sur l'écran « Documents ». */
-async function requireDocEditor() {
-  const { session, error } = await requireManager();
-  if (error) return { session, error };
-  return canEdit(session.role, 'docs') ? { session, error: null } : { session, error: 'Consultation seule : votre rôle ne permet pas de modifier les documents maîtrisés.' };
-}
+const requireDocEditor = () => requireEditor('docs', { denied: 'Consultation seule : votre rôle ne permet pas de modifier les documents maîtrisés.' });
 
 /** Contrôle du site sélectionné pour un document existant (un document sans site vaut pour toute l'entreprise). */
 async function documentSiteError(documentId: string): Promise<string | null> {
@@ -185,7 +190,7 @@ export async function createDocument(_prev: FormState, fd: FormData): Promise<Fo
       if (!id) id = await nextEntityReference(tx, 'document', refPrefix(meta.type as DocType, meta.process!), 3);
       await tx.insert(t.documents).values({
         id, title: meta.title, type: meta.type!, process: meta.process!, ownerId: meta.ownerId, reviewMonths: meta.reviewMonths!,
-        distribution: meta.distribution, siteId: meta.siteId,
+        distribution: meta.distribution, siteId: meta.siteId, origin: meta.origin, issuer: meta.issuer, retention: meta.retention,
       });
       const [v] = await tx.insert(t.documentVersions).values({
         documentId: id, version: 'A', status: 'brouillon', summary, authorId: session.user.id, actionId,
@@ -232,15 +237,19 @@ export async function updateDocument(_prev: FormState, fd: FormData): Promise<Fo
   if (versions.every((v) => v.status === 'archive')) return { error: 'Document obsolète : ses informations ne sont plus modifiables.' };
   const after = {
     title: meta.title, type: meta.type!, process: meta.process!, ownerId: meta.ownerId, reviewMonths: meta.reviewMonths!,
-    distribution: meta.distribution, siteId: meta.siteId,
+    distribution: meta.distribution, siteId: meta.siteId, origin: meta.origin, issuer: meta.issuer, retention: meta.retention,
   };
   const details = diffFields(await metadataView(db, before), await metadataView(db, after), METADATA_LABELS);
-  const updated = await db.transaction(async (tx) => {
+  let updated = false;
+  const stale = await freshWrite(async () => { updated = await db.transaction(async (tx) => {
+    // QUA-12 : document modifié depuis l'ouverture du formulaire (informations, version, revue, fichier) : rien n'est écrasé.
+    await assertFresh(tx, 'document', id, fd.get(VERSION_FIELD));
     const [row] = await tx.update(t.documents).set(after).where(eq(t.documents.id, id)).returning({ id: t.documents.id });
     if (!row) return false;
     if (details.length) await logChange(tx, { entityType: 'document', entityId: id, action: 'update', summary: 'Informations du document modifiées', details });
     return true;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (!updated) return { error: 'Document introuvable.' };
   return done(id);
 }
@@ -248,10 +257,13 @@ export async function updateDocument(_prev: FormState, fd: FormData): Promise<Fo
 /** Champs suivis par le journal de modification des informations d'un document. */
 const METADATA_LABELS = {
   title: 'Titre', type: 'Type', process: 'Processus', ownerId: 'Propriétaire', reviewMonths: 'Périodicité de revue (mois)',
-  distribution: 'Diffusion', siteId: 'Site',
+  distribution: 'Diffusion', siteId: 'Site', origin: 'Origine', issuer: 'Émetteur', retention: 'Durée de conservation',
 } as const;
 
-type Metadata = { title: string; type: string; process: string; ownerId: string; reviewMonths: number; distribution: string; siteId: string | null };
+type Metadata = {
+  title: string; type: string; process: string; ownerId: string; reviewMonths: number; distribution: string; siteId: string | null;
+  origin: string; issuer: string | null; retention: string | null;
+};
 
 /** Informations d'un document telles que le journal les affiche (personne, site et type par leur libellé). */
 async function metadataView(db: Db, m: Metadata): Promise<Record<keyof typeof METADATA_LABELS, string>> {
@@ -267,6 +279,9 @@ async function metadataView(db: Db, m: Metadata): Promise<Record<keyof typeof ME
     reviewMonths: String(m.reviewMonths),
     distribution: m.distribution,
     siteId: m.siteId ? site?.label ?? m.siteId : 'Tous les sites',
+    origin: DOC_ORIGINS[m.origin as DocOrigin] ?? m.origin,
+    issuer: m.issuer ?? '',
+    retention: m.retention ?? '',
   };
 }
 
@@ -359,7 +374,10 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
 
   // Écriture conditionnelle d'abord : le fichier d'une version soumise entre-temps reste intact. Changement d'action liée
   // journalisé sur les actions dans la même transaction.
-  const row = await db.transaction(async (tx) => {
+  let row: { id: number } | undefined;
+  const stale = await freshWrite(async () => { row = await db.transaction(async (tx) => {
+    // QUA-12 : journal du document (brouillon, fichier, autre version) modifié depuis l'ouverture du formulaire.
+    await assertFresh(tx, 'document', v.documentId, fd.get(VERSION_FIELD));
     const [updated] = await tx.update(t.documentVersions).set({ summary, actionId })
       .where(and(eq(t.documentVersions.id, v.id), eq(t.documentVersions.status, 'brouillon'))).returning({ id: t.documentVersions.id });
     if (updated) {
@@ -369,7 +387,8 @@ export async function updateDraft(_prev: FormState, fd: FormData): Promise<FormS
       await logVersionLink(tx, v.actionId, actionId, `${v.documentId} · version ${v.version}`, session.user.id, v.documentId);
     }
     return updated;
-  });
+  }); });
+  if (stale) return { error: stale };
   if (!row) return STALE;
 
   const previous = file || removeFile ? await listAttachments(ENTITY, String(v.id)) : [];
@@ -539,4 +558,68 @@ export async function obsoleteDocument(_prev: FormState, fd: FormData): Promise<
   });
   if (retired) return retired;
   return done(documentId);
+}
+
+// ─── Revue périodique sans modification (DOC-15) ────────────────────────────
+
+/**
+ * Revue périodique d'un document en vigueur sans modification (DOC-15, ISO 9001 §7.5.2) : le document reste adapté, sans
+ * nouvelle révision ni changement d'indice ; la prochaine revue repart de cette date. Propriétaire du document ou
+ * approbateurs (animateur QHSE, direction), rôle qui rédige sur l'écran Documents ; document du site sélectionné ; refusée
+ * pendant une révision en cours (la révision tient lieu de revue). Journal du document dans la transaction.
+ */
+export async function recordDocumentReview(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireDocEditor();
+  if (error) return { error };
+  const f = formReader(fd);
+  const documentId = f.str('documentId', { required: true });
+  const reviewedOn = f.date('reviewedOn', { required: true });
+  const conclusion = f.str('conclusion', { required: true, max: 1000 });
+  if (reviewedOn && reviewedOn > today()) f.fail('reviewedOn', 'Date postérieure à aujourd’hui.');
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [doc] = await db.select().from(t.documents).where(eq(t.documents.id, documentId));
+  if (!doc) return { error: 'Document introuvable.' };
+  const siteError = await requireInSite(doc.siteId);
+  if (siteError) return { error: siteError };
+  if (doc.ownerId !== session.user.id && !canApprove(session.role)) return { error: 'Revue périodique : propriétaire du document, animateur QHSE ou direction.' };
+  const saved = await db.transaction(async (tx): Promise<string | null> => {
+    const versions = await tx.select().from(t.documentVersions).where(eq(t.documentVersions.documentId, documentId));
+    const current = versions.find((v) => v.status === 'approuve');
+    if (!current) return "Aucune version en vigueur : la revue porte sur la version approuvée.";
+    const pending = versions.find((v) => v.status === 'brouillon' || v.status === 'en_revue');
+    if (pending) return `Révision ${pending.version} en cours : son approbation tiendra lieu de revue.`;
+    if (current.approvedOn && reviewedOn! < current.approvedOn) return `La revue suit l'approbation de la version ${current.version} (${fmtDate(current.approvedOn)}).`;
+    await tx.insert(t.documentReviews).values({ documentId, version: current.version, reviewedOn: reviewedOn!, reviewerId: session.user.id, conclusion });
+    await logDoc(tx, documentId, {
+      action: 'review', byId: session.user.id,
+      summary: `Revue périodique sans modification · version ${current.version} maintenue (${fmtDate(reviewedOn!)})`,
+      details: [{ field: 'Conclusion', from: null, to: conclusion }],
+    });
+    return null;
+  });
+  if (saved) return { error: saved };
+  return done(documentId);
+}
+
+/** Annule une revue périodique saisie par erreur (motif obligatoire, jamais supprimée) : animateur QHSE et direction. */
+export async function cancelDocumentReview(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const id = f.int('id', { required: true, min: 1 });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select({ review: t.documentReviews, siteId: t.documents.siteId }).from(t.documentReviews)
+    .innerJoin(t.documents, eq(t.documents.id, t.documentReviews.documentId)).where(eq(t.documentReviews.id, id!));
+  if (!row) return { error: 'Revue introuvable.' };
+  const siteError = await requireInSite(row.siteId);
+  if (siteError) return { error: siteError };
+  if (row.review.cancelledAt) return { error: 'Revue déjà annulée.' };
+  await db.transaction(async (tx) => {
+    await tx.update(t.documentReviews).set({ cancelledAt: new Date(), cancelledById: session.user.id, cancelReason: reason }).where(eq(t.documentReviews.id, row.review.id));
+    await logDoc(tx, row.review.documentId, { action: 'cancel', reason, byId: session.user.id, summary: `Revue périodique du ${fmtDate(row.review.reviewedOn)} annulée` });
+  });
+  return done(row.review.documentId);
 }

@@ -2,8 +2,8 @@ import 'server-only';
 import { cache } from 'react';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { addActionBlocker } from '@/components/events/shared';
-import { entryRef } from '@/components/environment/model';
+import { addActionBlocker } from '@/lib/rules/events';
+import { entryRef } from '@/lib/rules/environment';
 import { ACTION_LINKS, loadActionSources } from '../action-links';
 import {
   SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, isComplementaryLinkKind, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,

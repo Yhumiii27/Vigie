@@ -10,6 +10,7 @@ import { objectiveValue, type ObjectiveData } from '../objective-values';
 import { loadPeople } from '../queries';
 import { getSession, inPerimeter } from '../session';
 import type { Option } from './options';
+import { entityVersions } from '@/server/versions';
 
 // ─── Objectifs QHSE mesurables (AUD-13) ─────────────────────────────────────
 
@@ -19,6 +20,8 @@ export type ObjectiveView = {
   reviewDecisionId: number | null; reviewDecision: string | null;
   value: number | null; status: { key: string; label: string; tone: Tone };
   archived: { on: string; by: string; reason: string } | null;
+  /** QUA-12 : version de la fiche à son ouverture. */
+  version: string;
 };
 
 /**
@@ -64,6 +67,7 @@ export const loadObjectives = cache(async (year?: number) => {
   const siteLabel = new Map(sites.map((s) => [s.id, s.label.split(' — ')[0]]));
   const decisionText = new Map(decisions.map((d) => [d.id, d.text]));
   const name = (id: string | null) => (id ? people.get(id)?.name ?? id : '—');
+  const versions = await entityVersions(db, 'qhse_objective', rows.filter((o) => o.year === y).map((o) => o.id));
   const views: ObjectiveView[] = rows
     .filter((o) => o.year === y && inPerimeter(allowedSiteIds, o.siteId) && isObjectiveIndicator(o.indicator))
     .map((o) => {
@@ -77,6 +81,7 @@ export const loadObjectives = cache(async (year?: number) => {
         reviewDecisionId: o.reviewDecisionId, reviewDecision: o.reviewDecisionId ? decisionText.get(o.reviewDecisionId) ?? null : null,
         value, status: objectiveStatus(value, o.target, def.sense, final),
         archived: o.archivedAt ? { on: toParisLocal(o.archivedAt).slice(0, 10), by: name(o.archivedById), reason: o.archiveReason ?? '' } : null,
+        version: versions.get(String(o.id)) ?? '0',
       };
     });
   const years = [...new Set([...rows.map((o) => o.year), +now.slice(0, 4), +now.slice(0, 4) + 1])].sort((a, b) => a - b);

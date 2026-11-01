@@ -2,7 +2,7 @@ import 'server-only';
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import type { SiteRule } from '@/components/prevention/model';
+import type { SiteRule } from '@/lib/rules/prevention';
 import type { FormState } from '@/lib/forms';
 
 // Aides communes des server actions de la prévention (QUA-26 : entreprises extérieures src/server/contractors.ts, plans

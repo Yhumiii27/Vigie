@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChangeLogList } from '@/components/ChangeLog';
+import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { EntityFiles } from '@/components/EntityFiles';
 import { ReasonButton } from '@/components/ReasonDialog';
@@ -17,9 +17,10 @@ import { fmtSiret } from '@/lib/siret';
 import {
   BSD_PLACEHOLDER, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, QUALIFICATION_KEYS, REGISTER_MENTIONS, TREATMENT_QUALIFICATIONS, fmtQty, isTransitCode, lcfirst,
   qualificationError, qualificationLabel, treatmentLabel,
-} from './model';
+} from '@/lib/rules/environment';
 import { CompanyIdField, LinkedActions, Note, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier } from './parts';
 import { entryActionDefaults } from './action-defaults';
+import { withCurrent } from '@/lib/form-options';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
@@ -204,7 +205,7 @@ function EntryPanel({ entry, streams, today, showSite, transporters, carriers, e
           <EntryForm entry={entry} streams={streams} today={today} showSite={showSite} transporters={transporters} carriers={carriers} events={events} onDone={onClose} onCancel={onClose} />
         </section>
       )}
-      <ChangeLogList entries={entry.history} />
+      <LazyChangeLog entity="waste_entry" id={entry.id} />
       {!entry.cancelled && (
         <div style={{ display: 'flex', justifyContent: 'flex-start', paddingTop: 10, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
           <ReasonButton label="Annuler l'enlèvement" icon="ph-prohibit" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)' }}
@@ -235,7 +236,7 @@ export function NewEntryButton({ streams, today, showSite, transporters, carrier
 // ─── Formulaire d'enlèvement ────────────────────────────────────────────────
 
 function EntryForm({ entry, streams: allStreams, today, showSite, transporters, carriers, defaultStreamId, events, onDone, onCancel }: {
-  entry?: EntryView; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string;
+  entry?: EntryView & { version?: string }; streams: StreamOption[]; today: string; showSite: boolean; transporters: string[]; carriers: Record<string, Carrier>; defaultStreamId?: string;
   events: readonly EventOption[]; onDone: () => void; onCancel: () => void;
 }) {
   const uid = useId();
@@ -267,7 +268,7 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
 
   // Événements du site de la filière choisie ; un événement déjà lié mais clôturé depuis reste proposé.
   const siteEvents = events.filter((e) => !stream || e.siteId === stream.siteId).map((e) => [e.id, e.label] as const);
-  const eventOptions = entry?.eventId && !siteEvents.some(([v]) => v === entry.eventId) ? [[entry.eventId, entry.eventId] as const, ...siteEvents] : siteEvents;
+  const eventOptions = withCurrent(siteEvents, entry?.eventId, null, 'start');
   const options = streams.map((s) => [s.id, `${s.label} · ${s.ewcCode}${showSite ? ` — ${shortSite(s.site)}` : ''}`] as const);
   const bsdHint = !info
     ? `Format Trackdéchets : ${BSD_PLACEHOLDER}.`
@@ -276,7 +277,7 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
       : 'Facultatif pour un déchet non dangereux.';
 
   return (
-    <ActionForm action={saveWasteEntry} hidden={{ id: entry?.id }} onDone={onDone} onCancel={onCancel} submitLabel={entry ? 'Enregistrer' : "Inscrire l'enlèvement"}>
+    <ActionForm action={saveWasteEntry} hidden={{ id: entry?.id, version: entry?.version }} onDone={onDone} onCancel={onCancel} submitLabel={entry ? 'Enregistrer' : "Inscrire l'enlèvement"}>
       <Field name="streamId" label="Filière">
         <Select name="streamId" options={options} placeholder="Choisir la filière…" value={streamId} autoFocus={!entry}
           onChange={(e) => {

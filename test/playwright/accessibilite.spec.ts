@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { asRole } from './helpers';
+import { AXE_SCREENS, asRole, axeViolations } from './helpers';
 
 // Paquet 9 — UX et accessibilité : clavier de la coque (lien d'évitement, menus du site et du rôle), erreurs de formulaire
 // (focus sur le premier champ en erreur, message relié), bandeau des liens profonds inconnus, convention d'URL des filtres,
@@ -151,23 +149,19 @@ test.describe('convention d’URL (UX-12)', () => {
 });
 
 // Contrôle automatique axe-core (dépendance de développement, injectée dans la page : la CSP à nonce est contournée pour
-// ce seul parcours). Règles WCAG 2.0 / 2.1 / 2.2 niveaux A et AA.
-test.describe('axe-core (WCAG A et AA)', () => {
-  test.use({ bypassCSP: true });
-  const axeSource = readFileSync(path.join(process.cwd(), 'node_modules/axe-core/axe.min.js'), 'utf8');
-  const pages = ['/', '/a-faire', '/actions', '/evenements', '/risques', '/veille', '/documents', '/habilitations', '/audits', '/environnement', '/prevention'];
-  for (const url of pages) {
-    test(url, async ({ page, context, baseURL }) => {
-      await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
-      await page.goto(url);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-      await page.addScriptTag({ content: axeSource });
-      const violations = await page.evaluate(async () => {
-        const axe = (window as unknown as { axe: { run: (ctx: unknown, opts: unknown) => Promise<{ violations: { id: string; impact: string; nodes: { target: string[] }[] }[] }> } }).axe;
-        const r = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } });
-        return r.violations.map((v) => `${v.id} (${v.impact}) : ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`);
+// ce seul parcours). Règles WCAG 2.0 / 2.1 / 2.2 niveaux A et AA. QUA-16 : tous les écrans et leurs vues principales, par
+// rôle (AXE_SCREENS), sur bureau et sur tablette ; téléphone : accessibilite.mobile.spec.ts.
+for (const [size, viewport] of [['bureau', null], ['tablette', { width: 820, height: 1180 }]] as const) {
+  test.describe(`axe-core (WCAG A et AA) · ${size}`, () => {
+    test.use({ bypassCSP: true, ...(viewport ? { viewport } : {}) });
+    for (const { role, site, url } of AXE_SCREENS) {
+      test(`${role} · ${url}`, async ({ page, context, baseURL }) => {
+        await asRole(context, baseURL!, role, site);
+        await page.goto(url);
+        await expect(page.locator('main, body').first()).toBeVisible();
+        await page.waitForLoadState('networkidle');
+        expect(await axeViolations(page)).toEqual([]);
       });
-      expect(violations).toEqual([]);
-    });
-  }
-});
+    }
+  });
+}

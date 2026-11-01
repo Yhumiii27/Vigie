@@ -3,20 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, canEdit, contextNeedsTreatment, type ContextKind } from '@/lib/domain';
+import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, contextNeedsTreatment, type ContextKind } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireManager } from '@/lib/guard';
+import { requireEditor } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 
 // Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1) : enjeux, parties intéressées, risques et
 // opportunités. Élément commun à l'entreprise (sans site), saisi par les rôles qui saisissent sur l'écran « Audits »
 // (animateur QHSE, direction) ; jamais supprimé (archivage motivé), chaque écriture au journal (context_item).
 
-async function requireContextEditor() {
-  const r = await requireManager();
-  if (r.error) return r;
-  return canEdit(r.session.role, 'audits') ? r : { ...r, error: 'Votre rôle ne permet pas cette modification.' };
-}
+const requireContextEditor = () => requireEditor('audits');
 
 const LABELS = { kind: 'Nature', label: 'Intitulé', detail: 'Description, attentes', treatment: 'Traitement' } as const;
 
@@ -44,10 +41,13 @@ export async function saveContextItem(_prev: FormState, fd: FormData): Promise<F
   const shown = (v: typeof values) => ({ ...v, kind: CONTEXT_KINDS[v.kind as ContextKind]?.label ?? v.kind });
   if (current) {
     const details = diffFields(shown(current), shown(values), LABELS);
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : élément modifié depuis l'ouverture du formulaire : rien n'est écrasé.
+      await assertFresh(tx, 'context_item', current.id, fd.get(VERSION_FIELD));
       await tx.update(t.contextItems).set(values).where(eq(t.contextItems.id, current.id));
       if (details.length) await logChange(tx, { entityType: 'context_item', entityId: current.id, action: 'update', summary: 'Élément du contexte modifié', details, byId });
-    });
+    }));
+    if (stale) return { error: stale };
     revalidatePath('/', 'layout');
     return { ok: true, id: String(current.id) };
   }

@@ -7,11 +7,12 @@ import {
   FIRE_WATCH_HOURS, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, activityLinkIssues, addHoursLocal, firstMinuteReason,
   firstMinuteRule, fmtPeriod, fromParisLocal, isPlanEnded, lcfirst, missingPresets, parseChecklist, permitDays, permitPlanIssue,
   planCovers, referenceNow, validityOver, type ChecklistItem,
-} from '@/components/prevention/model';
+} from '@/lib/rules/prevention';
 import { today } from '@/lib/today';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import { diffFields, logChange } from './changelog';
+import { VERSION_FIELD, assertFresh, freshWrite } from './versions';
 import { nextEntityReference } from './references';
 import { ARCHIVED_CONTRACTOR, done, isOpenPermit, linkedActivities, ok, siteRule, type Result } from './prevention-shared';
 
@@ -116,12 +117,15 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   if (existing) {
     const details = diffFields(existing, values, { location: 'Lieu', description: 'Travaux', contractorId: 'Entreprise', performer: 'Intervenant(s)', preventionPlanId: 'Plan de prévention', keystoneProject: 'Projet Keystone' });
     const moved = existing.validFrom.getTime() !== validFrom!.getTime() || existing.validTo.getTime() !== validTo!.getTime();
-    await db.transaction(async (tx) => {
+    const stale = await freshWrite(() => db.transaction(async (tx) => {
+      // QUA-12 : demande modifiée ou délivrée depuis l'ouverture du formulaire : rien n'est écrasé.
+      await assertFresh(tx, 'permit', existing.id, fd.get(VERSION_FIELD));
       await tx.update(t.permits).set(values).where(eq(t.permits.id, existing.id));
       if (details.length || moved) {
         await logChange(tx, { entityType: 'permit', entityId: existing.id, action: 'update', summary: moved ? 'Demande modifiée (validité)' : 'Demande modifiée', details });
       }
-    });
+    }));
+    if (stale) return { error: stale };
     return done(existing.id);
   }
   const newId = await db.transaction(async (tx) => {

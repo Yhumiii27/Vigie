@@ -7,7 +7,8 @@ import { EventFields, type EventDefaults, type EventFieldOptions } from './Event
 
 /**
  * « Nouvel événement » (encadrement, bureau) : formulaire complet, ouvert d'emblée quand la page est appelée
- * avec ?nouveau=1 (signalement depuis un plan de prévention ou un permis). Ouvre la fiche créée.
+ * avec ?nouveau=1 (signalement prérempli depuis un plan de prévention, un permis, un contrôle, un risque, un document ou
+ * l'écran Environnement, EVT-24 : src/lib/event-prefill.ts). Ouvre la fiche créée.
  * `health` : données de santé d'un AT saisissables (animateur QHSE, direction ; SEC-06).
  */
 export function NewEventButton({ options, defaults, today, health, initialOpen = false }: { options: EventFieldOptions; defaults?: EventDefaults; today: string; health: boolean; initialOpen?: boolean }) {

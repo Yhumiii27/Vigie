@@ -13,7 +13,7 @@ import { desc, eq } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { getDb, schema as t } from '@/db';
-import { planStatus } from '@/components/prevention/model';
+import { planStatus } from '@/lib/rules/prevention';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -21,7 +21,9 @@ import { formReader, type FormState } from '@/lib/forms';
 import { requireInSite, requireManager } from '@/lib/guard';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { config } from '@/lib/config';
-import { aiStatus } from '@/lib/pp-import/ai';
+import { SCAN_MAX_TOKENS, acceptsServerFallback, aiStatus } from '@/lib/pp-import/ai';
+import { HEIC_MESSAGE, MAX_SCAN_PAGES, importFilesError, importName } from '@/lib/pp-import/files';
+import { sniffImage } from '@/lib/file-type';
 import { parseDocx } from '@/lib/pp-import/docx';
 import { NEW_CONTRACTOR } from '@/lib/pp-import/draft';
 import { TARGET_LABELS, keyOverlap, matchTemplate, signatureSource } from '@/lib/pp-import/mapping';
@@ -34,7 +36,7 @@ import {
   ACCEPTED_TYPES, AI_DISABLED_MESSAGE, AI_NO_CREDENTIALS_MESSAGE, ImportError, importMimeOf,
   type DetectResponse, type ImportField, type ParseResult,
 } from '@/lib/pp-import/types';
-import { UploadRefusedError, checkUpload, deleteAttachment, saveUpload } from '@/lib/uploads';
+import { UploadRefusedError, checkUpload, checkUploadBatch, deleteAttachment, saveUpload, type Attachment } from '@/lib/uploads';
 import { UserLimitError, consumeUserLimit } from '@/lib/rate-limit';
 import { aiQuotaProblem, cachedScan, finishAiCall, loadAiUsage, recordAiCacheHit, rememberScan, startAiCall } from './ai-usage';
 import { log } from '@/lib/log';
@@ -43,8 +45,6 @@ import { nextEntityReference } from './references';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ARCHIVED_CONTRACTOR = 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.';
-/** Modèle Claude utilisé pour la lecture des scans. */
-const SCAN_MODEL = 'claude-opus-5-5';
 /** Taille maximale d'une image acceptée par l'API pour la lecture. */
 const MAX_AI_IMAGE_BYTES = 5 * 1024 * 1024;
 /** Pages d'un PDF protégé parcourues pour en lire les champs. */
@@ -57,14 +57,41 @@ const done = (id?: string | number): FormState => {
   return { ok: true, id: id == null ? undefined : String(id) };
 };
 
-/** Fichier reçu, avec un type MIME fiable (certains navigateurs n'en donnent pas pour .docx). */
-function receivedFile(value: FormDataEntryValue | null): { file: File; mime: string } | { error: string } {
-  if (!(value instanceof File) || !value.size) return { error: 'Choisissez un fichier à importer.' };
-  const mime = importMimeOf(value.name, value.type);
-  if (!mime) return { error: `Format non accepté pour « ${value.name} » : PDF, Word (.docx), JPG, PNG ou WEBP.` };
-  const file = value.type === mime ? value : new File([value], value.name, { type: mime, lastModified: value.lastModified });
-  const err = checkUpload(file);
-  return err ? { error: err } : { file, mime };
+type Received = { file: File; mime: string };
+
+/**
+ * Fichiers reçus, avec un type MIME fiable (certains navigateurs n'en donnent pas pour .docx) : un fichier, ou les photos
+ * des pages d'un même formulaire (INT-14, importFilesError : règle commune avec le navigateur).
+ */
+function receivedFiles(values: FormDataEntryValue[]): { files: Received[] } | { error: string } {
+  const sent = values.filter((v): v is File => v instanceof File && v.size > 0);
+  if (!sent.length) return { error: 'Choisissez un fichier à importer.' };
+  const problem = importFilesError(sent);
+  if (problem) return { error: problem };
+  const files: Received[] = [];
+  for (const value of sent) {
+    const mime = importMimeOf(value.name, value.type)!;
+    const file = value.type === mime ? value : new File([value], value.name, { type: mime, lastModified: value.lastModified });
+    const err = checkUpload(file);
+    if (err) return { error: err };
+    files.push({ file, mime });
+  }
+  return { files };
+}
+
+/**
+ * Octets d'une page photographiée et son type réel (signature, src/lib/file-type.ts) : HEIC/HEIF refusé avec la marche à
+ * suivre (l'API ne le lit pas), contenu qui n'est pas une image admise refusé ; PDF et Word : tels quels.
+ */
+async function pageOf({ file, mime }: Received): Promise<{ bytes: Uint8Array; mime: string }> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!mime.startsWith('image/')) return { bytes, mime };
+  const real = sniffImage(bytes);
+  if (real === 'image/heic' || real === 'image/heif') throw new ImportError(HEIC_MESSAGE);
+  if (real !== ACCEPTED_TYPES.jpeg && real !== ACCEPTED_TYPES.png && real !== ACCEPTED_TYPES.webp) {
+    throw new ImportError(`« ${file.name} » ne correspond pas à une photo JPG, PNG ou WEBP : exportez-la de nouveau.`);
+  }
+  return { bytes, mime: real };
 }
 
 /** Modèles enregistrés, le plus récemment mis à jour en premier (il l'emporte si deux modèles ont la même empreinte). */
@@ -102,27 +129,33 @@ const usageOf = (u: Anthropic.Beta.BetaUsage | undefined) => ({
   cacheCreation: u?.cache_creation_input_tokens ?? 0, cacheRead: u?.cache_read_input_tokens ?? 0,
 });
 
+type Page = { bytes: Uint8Array; mime: string };
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
 /**
- * Lit un scan (PDF ou image) avec Claude ; `expected` = champs d'un modèle choisi, pour réutiliser ses clés.
- * Coût (INT-06) : même fichier relu dans l'heure → résultat du cache, sans appel ; sinon plafonds vérifiés (lectures de la
+ * Lit un scan (PDF, image, ou photos des pages d'un formulaire, INT-14) avec Claude ; `expected` = champs d'un modèle
+ * choisi, pour réutiliser ses clés. Modèle et délai : VIGIE_AI_MODEL, VIGIE_AI_TIMEOUT (INT-13).
+ * Coût (INT-06) : mêmes fichiers relus dans l'heure → résultat du cache, sans appel ; sinon plafonds vérifiés (lectures de la
  * personne sur 24 h, jetons du mois), appel journalisé dans ai_usage avec la consommation lue dans la réponse.
  */
-async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField[], personId: string): Promise<ScanResult> {
-  if (mime !== ACCEPTED_TYPES.pdf && bytes.length > MAX_AI_IMAGE_BYTES) {
+async function readScan(pages: Page[], expected: ExpectedField[], personId: string): Promise<ScanResult> {
+  if (pages.some((p) => p.mime !== ACCEPTED_TYPES.pdf && p.bytes.length > MAX_AI_IMAGE_BYTES)) {
     throw new ImportError('Image trop lourde pour la lecture automatique (5 Mo au maximum) : réduisez sa résolution ou numérisez-la en PDF.');
   }
-  const fileHash = createHash('sha256').update(bytes).digest('hex');
-  const cacheKey = `${SCAN_MODEL}|${fileHash}|${JSON.stringify(expected)}`;
+  const { model } = config().aiScan;
+  // Un fichier : son empreinte ; plusieurs pages : empreinte de la suite des empreintes (ordre des pages compris).
+  const fileHash = pages.length === 1 ? sha256(pages[0].bytes) : sha256(new TextEncoder().encode(pages.map((p) => sha256(p.bytes)).join('|')));
+  const cacheKey = `${model}|${fileHash}|${JSON.stringify(expected)}`;
   const cached = cachedScan<ScanResult>(cacheKey);
   if (cached) {
-    await recordAiCacheHit(personId, SCAN_MODEL, fileHash);
+    await recordAiCacheHit(personId, model, fileHash);
     return { fields: cached.fields.map((f) => ({ ...f })), warnings: [...cached.warnings] };
   }
   const quota = aiQuotaProblem(await loadAiUsage(personId), config().aiLimits);
   if (quota) throw new ImportError(quota);
-  const usageId = await startAiCall(personId, SCAN_MODEL, fileHash);
+  const usageId = await startAiCall(personId, model, fileHash);
   const started = Date.now();
-  const result = await callScan(bytes, mime, expected, async (outcome, response) => {
+  const result = await callScan(pages, expected, async (outcome, response) => {
     await finishAiCall(usageId, { outcome, usage: usageOf(response?.usage), servedModel: response?.model ?? null, durationMs: Date.now() - started });
   });
   rememberScan(cacheKey, result);
@@ -131,30 +164,36 @@ async function readScan(bytes: Uint8Array, mime: string, expected: ExpectedField
 
 /** Appel de l'API Claude ; `settle` journalise le résultat de l'appel (une fois). */
 async function callScan(
-  bytes: Uint8Array, mime: string, expected: ExpectedField[],
+  pages: Page[], expected: ExpectedField[],
   settle: (outcome: 'ok' | 'refus' | 'erreur', response?: Anthropic.Beta.BetaMessage) => Promise<void>,
 ): Promise<ScanResult> {
-  const data = Buffer.from(bytes).toString('base64');
-  const media: Anthropic.Beta.BetaContentBlockParam = mime === ACCEPTED_TYPES.pdf
-    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
-    : { type: 'image', source: { type: 'base64', media_type: mime as 'image/jpeg' | 'image/png' | 'image/webp', data } };
+  const media = pages.map(({ bytes, mime }): Anthropic.Beta.BetaContentBlockParam => {
+    const data = Buffer.from(bytes).toString('base64');
+    return mime === ACCEPTED_TYPES.pdf
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
+      : { type: 'image', source: { type: 'base64', media_type: mime as 'image/jpeg' | 'image/png' | 'image/webp', data } };
+  });
 
   const schema = scanSchema(expected);
-  const client = new Anthropic({ timeout: 5 * 60_000, maxRetries: 1 });
+  const { model, timeoutMs } = config().aiScan;
+  const client = new Anthropic({ timeout: timeoutMs, maxRetries: 1 });
+  // Repli côté serveur si le modèle décline la lecture (classificateurs de sécurité), pour les modèles qui l'acceptent.
+  const fallback = acceptsServerFallback(model);
   let response: Anthropic.Beta.BetaMessage;
   try {
-    // create() et non parse() : parse() analyse la réponse avant que la raison d'arrêt puisse être lue
-    // (un refus après une sortie partielle ou une sortie tronquée lèverait une erreur de format).
-    response = await client.beta.messages.create({
-      model: SCAN_MODEL,
-      max_tokens: 16000,
-      // Repli côté serveur si le modèle décline la lecture (classificateurs de sécurité) ; sorties structurées.
-      betas: ['server-side-fallback-2026-07-01', 'structured-outputs-2025-12-15'],
-      fallbacks: 'default',
+    // INT-13 : appel en flux (stream + finalMessage) : ni délai HTTP d'une requête longue, ni plafond de sortie réduit.
+    // Format de sortie sans fonction d'analyse : la réponse est lue après la raison d'arrêt (un refus après une sortie
+    // partielle ou une sortie tronquée lèverait sinon une erreur de format).
+    const { schema: jsonSchema } = betaZodOutputFormat(schema);
+    response = await client.beta.messages.stream({
+      model,
+      max_tokens: SCAN_MAX_TOKENS,
+      betas: [...(fallback ? ['server-side-fallback-2026-07-01'] : []), 'structured-outputs-2025-12-15'],
+      ...(fallback ? { fallbacks: 'default' as const } : {}),
       system: SCAN_SYSTEM,
-      output_config: { effort: 'high', format: betaZodOutputFormat(schema) },
-      messages: [{ role: 'user', content: [media, { type: 'text', text: scanPrompt(expected) }] }],
-    });
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: jsonSchema } },
+      messages: [{ role: 'user', content: [...media, { type: 'text', text: scanPrompt(expected, pages.length) }] }],
+    }).finalMessage();
   } catch (e) {
     log.error('pp-import.error', 'lecture du scan', { error: e });
     await settle('erreur');
@@ -298,24 +337,28 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
     if (e instanceof UserLimitError) return { ok: false, error: e.message };
     throw e;
   }
-  const received = receivedFile(fd.get('file'));
+  const received = receivedFiles(fd.getAll('file'));
   if ('error' in received) return { ok: false, error: received.error };
-  const { file, mime } = received;
+  const [{ mime }] = received.files;
   const chosenId = Number(fd.get('templateId')) || null;
 
   const templates = await loadTemplates();
   const chosen = chosenId ? templates.find((x) => x.id === chosenId) : undefined;
   if (chosenId && !chosen) return { ok: false, error: "Modèle d'import introuvable : il a peut-être été supprimé." };
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const ai = aiStatus(config());
   let result: ParseResult;
   let used = false;
   let aiError: { error: string; retryable: boolean } | undefined;
   // PDF à mot de passe d'ouverture : illisible aussi pour l'API Claude, il n'est pas envoyé.
   let locked = false;
+  let pages: Page[];
   try {
-    if (mime === ACCEPTED_TYPES.pdf) {
+    pages = await Promise.all(received.files.map(pageOf));
+    const { bytes } = pages[0];
+    // Plusieurs pages photographiées (INT-14) : un scan, lu en une fois.
+    if (pages.length > 1) result = { format: 'scan', fields: [], warnings: [], pageCount: pages.length };
+    else if (mime === ACCEPTED_TYPES.pdf) {
       let pdf = await parsePdfForm(bytes);
       if (pdf.encrypted) pdf = await readEncryptedPdf(bytes, pdf);
       locked = pdf.warnings.includes(PASSWORD_WARNING);
@@ -340,7 +383,7 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
         }))
         : [];
       try {
-        const scan = await readScan(bytes, mime, expected, session.user.id);
+        const scan = await readScan(pages, expected, session.user.id);
         result = { ...result, fields: scan.fields, warnings: [...result.warnings, ...scan.warnings] };
         used = true;
       } catch (e) {
@@ -375,7 +418,7 @@ export async function detectPpImport(fd: FormData): Promise<DetectResponse> {
 
   return {
     ok: true,
-    fileName: file.name,
+    fileName: importName(received.files.map((x) => x.file.name)),
     format: result.format,
     fields: result.fields,
     signature,
@@ -486,8 +529,9 @@ export async function deletePpTemplate(id: number): Promise<{ error?: string }> 
 export async function createPlanFromImport(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireManager();
   if (error) return { error };
-  const received = receivedFile(fd.get('file'));
+  const received = receivedFiles(fd.getAll('file'));
   if ('error' in received) return { error: fd.get('file') instanceof File ? received.error : 'Fichier importé manquant : recommencez l’import.' };
+  const files = received.files.map((x) => x.file);
   // « 1 200 » : séparateur de milliers usuel en français.
   const hoursRaw = fd.get('estimatedHours');
   if (typeof hoursRaw === 'string') fd.set('estimatedHours', hoursRaw.replace(/\s/g, ''));
@@ -496,6 +540,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   const templateId = f.int('templateId', { min: 1 });
   const sections = readSections(f.str('sections') || '[]');
   if (!sections) return { error: 'Grille du formulaire invalide : recommencez l’import.' };
+  if (files.length > 1 && format !== 'scan') return { error: 'Plusieurs pages : import d’un scan seulement, recommencez l’import.' };
 
   const contractorChoice = f.str('contractorId', { required: true });
   const isNew = contractorChoice === NEW_CONTRACTOR;
@@ -552,6 +597,9 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   if (!f.ok) return f.state();
   const siteError = await requireInSite(siteId, { create: true });
   if (siteError) return { error: siteError };
+  // Contenu, antivirus et limites de la personne contrôlés avant de réserver la référence (pages jointes au plan, INT-14).
+  const uploadError = await checkUploadBatch(files, session.user.id, { maxFiles: MAX_SCAN_PAGES });
+  if (uploadError) return { error: uploadError };
 
   // Référence du plan réservée sous verrou avant l'enregistrement du fichier source, qui la porte (PRD-08) : jamais
   // réattribuée, même si la création échoue ensuite (brouillons supprimés compris). Celle d'une nouvelle entreprise est
@@ -560,7 +608,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   const createContractor = isNew && !existingByName;
   const formData: PpFormData = {
     source: {
-      fileName: received.file.name.slice(0, 200),
+      fileName: importName(files.map((x) => x.name)).slice(0, 200),
       format: format!,
       templateId: templateId && templates.some((x) => x.id === templateId) ? templateId : null,
       importedOn: now,
@@ -574,15 +622,19 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   };
   const status = planStatus({ ...values, status: 'brouillon' }, now);
 
-  // Fichier source d'abord (clé étrangère importedFromId), retiré si le plan ne peut pas être créé.
-  let attachmentId: string;
+  // Fichier source d'abord (clé étrangère importedFromId : la première page), pages suivantes jointes au plan ; tous retirés
+  // si le plan ne peut pas être créé.
+  const saved: Attachment[] = [];
+  const removeSaved = async () => { for (const a of saved) await deleteAttachment(a.id); };
   try {
-    attachmentId = (await saveUpload(received.file, PLAN_ATTACHMENT, planId, session.user.id)).id;
+    for (const file of files) saved.push(await saveUpload(file, PLAN_ATTACHMENT, planId, session.user.id));
   } catch (e) {
+    await removeSaved();
     if (e instanceof UploadRefusedError) return { error: e.message };
     log.error('pp-import.error', 'enregistrement du fichier', { error: e });
     return { error: "Le fichier importé n'a pas pu être enregistré : réessayez." };
   }
+  const attachmentId = saved[0].id;
   try {
     await db.transaction(async (tx) => {
       const newContractorId = createContractor ? await nextEntityReference(tx, 'contractor', 'EE-', 3) : null;
@@ -596,7 +648,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
     });
   } catch (e) {
     log.error('pp-import.error', 'création du plan', { error: e });
-    await deleteAttachment(attachmentId);
+    await removeSaved();
     return { error: "Le plan n'a pas pu être créé (enregistrement concurrent ?) : réessayez." };
   }
   return done(planId);

@@ -13,7 +13,7 @@ const KIND_OPTIONS = CONTEXT_KIND_KEYS.map((k) => [k, `${CONTEXT_KINDS[k].label}
 
 function ContextForm({ item, kind, onDone }: { item?: ContextItemView; kind?: ContextKind; onDone: () => void }) {
   return (
-    <ActionForm action={saveContextItem} hidden={{ id: item?.id }} onDone={onDone} onCancel={onDone} submitLabel={item ? 'Enregistrer' : 'Ajouter'}>
+    <ActionForm action={saveContextItem} hidden={{ id: item?.id, version: item?.version }} onDone={onDone} onCancel={onDone} submitLabel={item ? 'Enregistrer' : 'Ajouter'}>
       <Field name="kind" label="Nature">
         <Select name="kind" options={KIND_OPTIONS} defaultValue={item?.kind ?? kind ?? ''} placeholder="Choisir…" />
       </Field>

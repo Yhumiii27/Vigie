@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
-import { EE_HEADCOUNT, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS } from '@/components/prevention/model';
+import { EE_HEADCOUNT, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS } from '@/lib/rules/prevention';
 import { fmtDate } from '@/lib/dates';
 import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import { today } from '@/lib/today';

@@ -52,3 +52,17 @@ export class StaleEditError extends Error {
 export async function assertFresh(tx: DbOrTx, entityType: string, entityId: string | number, submitted: FormDataEntryValue | null) {
   if (await staleEditError(tx, entityType, entityId, submitted)) throw new StaleEditError();
 }
+
+/**
+ * Écriture d'une fiche existante dont la transaction appelle assertFresh : STALE_EDIT si la fiche a changé depuis
+ * l'ouverture du formulaire (rien n'est écrit), sinon null ; toute autre erreur est relancée.
+ */
+export async function freshWrite(write: () => Promise<unknown>): Promise<string | null> {
+  try {
+    await write();
+    return null;
+  } catch (err) {
+    if (err instanceof StaleEditError) return STALE_EDIT;
+    throw err;
+  }
+}

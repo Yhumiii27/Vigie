@@ -9,7 +9,7 @@ import { fmtDate } from '@/lib/dates';
 import type { Option } from '@/lib/form-options';
 import { BENIGN_CAREGIVER_KEYS, BENIGN_CAREGIVER_KINDS } from '@/lib/domain';
 import { cancelBenignAccident, escalateBenignAccident, registerBenignAccident, signBenignAccident } from '@/server/events';
-import { INJURIES } from './shared';
+import { INJURIES } from '@/lib/rules/events';
 
 // Registre des accidents bénins (EVT-04) sur la fiche d'un AT : inscription, visas, bascule en déclaration CPAM, annulation.
 // Animateur QHSE et direction seulement (données de santé).

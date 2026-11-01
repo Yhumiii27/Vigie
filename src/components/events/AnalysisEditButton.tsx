@@ -8,7 +8,7 @@ import { saveAnalysis } from '@/server/events';
 import {
   FIVE_M, FIVE_M_HINTS, MAX_TREE_LEVEL, MAX_TREE_LINES, MAX_WHYS,
   normalizeTree, readD8, readFiveM, readTree, readWhys, type TreeLine,
-} from './shared';
+} from '@/lib/rules/events';
 
 const WIDTH: Record<AnalysisMethod, number> = { '5m': 640, tree: 680, why: 600, '8d': 680 };
 

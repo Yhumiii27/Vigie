@@ -20,8 +20,9 @@ const NOTE = { fontSize: 11, color: 'var(--color-neutral-500)', padding: '8px 10
  */
 export function KanbanBoard({ columns }: { columns: KanbanColumnData[] }) {
   return (
-    <div style={{ overflowX: 'auto', paddingBottom: 4, maxWidth: '100%' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(190px, 1fr))`, gap: 10, minWidth: columns.length * 200 }}>
+    <div className="vg-kanban-scroll" style={{ overflowX: 'auto', paddingBottom: 4, maxWidth: '100%' }}>
+      {/* UX-06 : sur tablette, deux rangées de trois colonnes (.vg-kanban, src/app/vigie.css). */}
+      <div className="vg-kanban" style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(190px, 1fr))`, gap: 10, minWidth: columns.length * 200 }}>
         {columns.map((c) => <KanbanColumn key={c.key} column={c} />)}
       </div>
     </div>

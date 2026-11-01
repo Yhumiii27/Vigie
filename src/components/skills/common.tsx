@@ -15,7 +15,7 @@ import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '
 export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
 /** Période d'une affectation (règle partagée avec le serveur, voir rules.ts). */
-export { period } from './rules';
+export { period } from '@/lib/rules/skills';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
 export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');
@@ -93,8 +93,10 @@ const isoDay = (iso: string) => fmtDate(iso.slice(0, 10));
  * Historique des formations d'une case (annulées barrées, avec motif) ; attestations en lien.
  * `onCancel` : bouton « Annuler » sur chaque formation non annulée (case de la matrice, encadrement) ; absent en consultation seule.
  */
-export function HistoryTable({ entries, title = 'Historique des formations', onCancel }: {
+export function HistoryTable({ entries, title = 'Historique des formations', onCancel, onCancelSession }: {
   entries: QualificationEntry[]; title?: ReactNode; onCancel?: (e: QualificationEntry) => void;
+  /** HAB-06 : « Annuler la session » sur une formation issue d'une session collective encore en vigueur. */
+  onCancelSession?: (e: QualificationEntry) => void;
 }) {
   return (
     <div style={{ display: 'grid', gap: 6 }}>
@@ -105,7 +107,7 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12 }}>
             <thead>
-              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Saisie</th><th aria-label="Attestations" /></tr>
+              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Efficacité</th><th>Saisie</th><th aria-label="Attestations" /></tr>
             </thead>
             <tbody>
               {entries.map((e) => {
@@ -115,8 +117,17 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
                     <td style={{ whiteSpace: 'nowrap', ...struck }}>{fmtDate(e.obtainedOn)}</td>
                     <td style={{ whiteSpace: 'nowrap', ...struck }}>{e.expiresOn ? fmtDate(e.expiresOn) : 'Sans échéance'}</td>
                     <td style={struck}>{e.provider ?? '—'}</td>
+                    {/* HAB-13 : évaluation à froid de l'efficacité. */}
+                    <td style={{ whiteSpace: 'nowrap', ...struck }}>
+                      {e.effectiveness ? <><ToneTag tone={e.cancelled ? 'neutral' : e.effectiveness.tone}>{e.effectiveness.label}</ToneTag><span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>le {fmtDate(e.effectiveness.on)}</span></> : <span style={{ color: 'var(--vg-text-muted)' }}>Non évaluée</span>}
+                    </td>
                     <td>
                       <span style={{ display: 'block', ...struck }}>{isoDay(e.recordedAt)} · {e.recordedBy}</span>
+                      {e.session && (
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>
+                          Session collective n° {e.session.id} · {e.session.participants} participant{e.session.participants > 1 ? 's' : ''}{e.session.cancelled ? ' · annulée' : ''}
+                        </span>
+                      )}
                       {e.cancelled && (
                         <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
                           Annulée le {isoDay(e.cancelled.at)} par {e.cancelled.by} — {e.cancelled.reason}
@@ -130,6 +141,12 @@ export function HistoryTable({ entries, title = 'Historique des formations', onC
                             <Icon name={fileIcon(f.mime)} size={15} />
                           </a>
                         ))}
+                        {onCancelSession && e.session && !e.session.cancelled && !e.cancelled && (
+                          <button type="button" className="btn btn-ghost btn-icon" aria-label={`Annuler la session collective n° ${e.session.id}`}
+                            onClick={() => onCancelSession(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>
+                            <Icon name="ph-users-three" size={14} />
+                          </button>
+                        )}
                         {onCancel && !e.cancelled && (
                           <button type="button" className="btn btn-ghost btn-icon" title="Annuler cette formation" aria-label={`Annuler la formation du ${fmtDate(e.obtainedOn)}`}
                             onClick={() => onCancel(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>

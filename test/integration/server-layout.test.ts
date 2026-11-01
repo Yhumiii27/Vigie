@@ -8,7 +8,7 @@ import {
   DB_LAYOUT, MIGRATIONS_DIR, SERVER_SCHEMA, hasLegacyServerLayout, migrateServer, migrationState, readJournal, refuseNewerDatabase, toServerSchema, type Query,
 } from '@/db/migrations';
 import * as schema from '@/db/schema';
-import { HEALTH_FIELDS } from '@/components/events/shared';
+import { HEALTH_FIELDS } from '@/lib/rules/events';
 import { HEALTH_EVENT_TYPES } from '@/lib/domain';
 import { closeDb, getDb } from '@/db';
 import { resetConfig } from '@/lib/env';

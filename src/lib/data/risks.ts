@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
-import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
-import type { ChangeEntry } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { addMonths, daysBetween, fmtDayMonth, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import {
@@ -16,11 +16,14 @@ import { actionLabel, canCreateAction, isLate } from '../action-rules';
 import { lcfirst, loadActionRows, loadPeople, loadSiteRows, type ActionRow } from '../queries';
 import { loadQhseLeads, type Recipients } from './leads';
 import { ALL_SITES, allowedSiteIds, currentSiteId, getSession, inPerimeter, inSite, siteFilter, type SiteScope } from '../session';
-import { loadChangeLog, loadChangeLogs } from './changelog';
+import { loadChangeLog } from './changelog';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
 import { fileSlug as slug, toCsv } from '@/lib/csv';
 import { entityVersions } from '@/server/versions';
+import { measureState, type MeasureView } from '../risk-measures';
+import { canSee, type Role } from '../domain';
+import { loadSkillData } from './skills';
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
 
@@ -95,11 +98,12 @@ export type RiskView = {
   lastClosedOn: string | null;
   /** Risque archivé (retiré du document unique en vigueur, filtre « Archivés ») ; null = en vigueur. */
   archived: ArchiveInfo | null;
-  history: ChangeEntry[];
   /** Justificatifs du risque (DUE-09, pièces jointes 'risk'). */
   files: AttachmentItem[];
   /** Version de la fiche (QUA-12), pour qui la modifie. */
   version?: string;
+  /** DUE-19 : mesures de maîtrise liées (contrôle, document, habilitation), validité calculée. */
+  measures: MeasureView[];
 };
 
 export type WorkUnitView = {
@@ -116,10 +120,14 @@ export type WorkUnitView = {
   alerts: number;
   /** Risques au résiduel à recoter. */
   toReview: number;
+  /** DUE-20 : zones du plan de site couvertes par l'unité (en service). */
+  zones: { id: number; name: string }[];
+  /** QUA-12 : version de la fiche à son ouverture, pour qui modifie le DUERP. */
+  version?: string;
 };
 
 /** Unité de travail archivée (filtre « Archivés ») ; `count` = risques archivés qui y restent rattachés. */
-export type ArchivedUnitView = Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'originRef' | 'count'> & { archived: ArchiveInfo; history: ChangeEntry[] };
+export type ArchivedUnitView = Pick<WorkUnitView, 'id' | 'label' | 'siteId' | 'site' | 'originRef' | 'count'> & { archived: ArchiveInfo };
 
 export type DuerpVersionView = {
   version: string;
@@ -248,12 +256,70 @@ function actionState(a: Pick<ActionRow, 'status' | 'dueOn'>, now: string) {
 }
 
 /**
+ * DUE-19 : mesures de maîtrise en cours (non retirées) des risques donnés, avec leur validité calculée (measureState) :
+ * contrôle (réformé, dépassé, dernier résultat bloquant), document (version en vigueur, revue), habilitation (titre requis
+ * valide chez les salariés suivis du site de l'unité, sur le périmètre de la personne). Lien vers l'élément seulement si
+ * l'écran est ouvert au rôle. Lectures faites seulement s'il existe des liaisons.
+ */
+async function loadRiskMeasures(risks: { id: number; unitId: string }[], unitSite: Map<string, string | null>, role: Role, now: string): Promise<Map<number, MeasureView[]>> {
+  const out = new Map<number, MeasureView[]>();
+  if (!risks.length) return out;
+  const db = await getDb();
+  const links = await db.select().from(t.riskMeasureLinks)
+    .where(and(inArray(t.riskMeasureLinks.riskId, risks.map((r) => r.id)), isNull(t.riskMeasureLinks.removedAt)))
+    .orderBy(asc(t.riskMeasureLinks.id));
+  if (!links.length) return out;
+  const controlIds = [...new Set(links.map((l) => l.controlId).filter((x): x is number => x != null))];
+  const documentIds = [...new Set(links.map((l) => l.documentId).filter((x): x is string => !!x))];
+  const titleIds = [...new Set(links.map((l) => l.titleId).filter((x): x is string => !!x))];
+  const [controls, records, docs, versions, titles, skills] = await Promise.all([
+    controlIds.length ? db.select().from(t.controls).where(inArray(t.controls.id, controlIds)) : [],
+    controlIds.length
+      ? db.select({ controlId: t.controlRecords.controlId, performedOn: t.controlRecords.performedOn, result: t.controlRecords.result }).from(t.controlRecords)
+        .where(and(inArray(t.controlRecords.controlId, controlIds), isNull(t.controlRecords.cancelledAt))).orderBy(desc(t.controlRecords.performedOn), desc(t.controlRecords.id))
+      : [],
+    documentIds.length ? db.select().from(t.documents).where(inArray(t.documents.id, documentIds)) : [],
+    documentIds.length ? db.select().from(t.documentVersions).where(and(inArray(t.documentVersions.documentId, documentIds), eq(t.documentVersions.status, 'approuve'))) : [],
+    titleIds.length ? db.select().from(t.trainingTitles).where(inArray(t.trainingTitles.id, titleIds)) : [],
+    titleIds.length ? loadSkillData('perimeter') : null,
+  ]);
+  const unitOf = new Map(risks.map((r) => [r.id, r.unitId]));
+  for (const l of links) {
+    const siteId = unitSite.get(unitOf.get(l.riskId) ?? '') ?? null;
+    let view: MeasureView | null = null;
+    if (l.kind === 'control' && l.controlId != null) {
+      const c = controls.find((x) => x.id === l.controlId);
+      if (!c) continue;
+      const last = records.find((r) => r.controlId === c.id);
+      const st = measureState({ kind: 'control', archived: !!c.archivedAt, nextOn: c.nextOn, lastResult: last && last.performedOn === c.lastOn ? last.result : null }, now);
+      view = { id: l.id, kind: 'control', targetId: String(c.id), label: `${c.controlType} · ${c.equipment}`, href: canSee(role, 'watch') ? `/veille?onglet=controles&controle=${c.id}` : null, valid: st.valid, state: st.label, tone: st.tone };
+    } else if (l.kind === 'document' && l.documentId) {
+      const d = docs.find((x) => x.id === l.documentId);
+      if (!d) continue;
+      const current = versions.filter((v) => v.documentId === d.id).sort((a, b) => (b.approvedOn ?? '').localeCompare(a.approvedOn ?? ''))[0];
+      const st = measureState({ kind: 'document', inForce: !!current, nextReviewOn: current?.approvedOn ? addMonths(current.approvedOn, d.reviewMonths) : null }, now);
+      view = { id: l.id, kind: 'document', targetId: d.id, label: `${d.id} · ${d.title}`, href: canSee(role, 'docs') ? `/documents?doc=${encodeURIComponent(d.id)}` : null, valid: st.valid, state: st.label, tone: st.tone };
+    } else if (l.kind === 'title' && l.titleId) {
+      const ti = titles.find((x) => x.id === l.titleId);
+      if (!ti) continue;
+      // Salariés suivis du site de l'unité (unité commune : tous les sites du périmètre) pour qui le titre est requis.
+      const cells = (skills?.rows ?? []).filter((row) => !siteId || row.person.siteId === siteId)
+        .flatMap((row) => row.cells.filter((c) => c.title.id === ti.id && c.state !== 'n'));
+      const st = measureState({ kind: 'title', archived: !!ti.archivedAt, required: cells.length, lapsed: cells.filter((c) => c.state === 'x' || c.state === 'r' || c.state === 'p').length }, now);
+      view = { id: l.id, kind: 'title', targetId: ti.id, label: ti.label, href: canSee(role, 'skills') ? '/habilitations' : null, valid: st.valid, state: st.label, tone: st.tone };
+    }
+    if (view) out.set(l.riskId, [...(out.get(l.riskId) ?? []), view]);
+  }
+  return out;
+}
+
+/**
  * Lectures du DUERP communes à l'écran, aux échéances et aux listes de choix : une seule fois par requête et par portée.
  * Unités du site sélectionné (scope 'site') ou de tout le périmètre (scope 'perimeter' : échéances, TDB-05).
  */
 const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
   const db = await getDb();
-  const [people, versions, allUnits, allRisks, links, actions, sites, site, events, requirements, allowed, keep] = await Promise.all([
+  const [people, versions, allUnits, allRisks, links, actions, sites, site, events, requirements, allowed, keep, session, zones] = await Promise.all([
     loadPeople(),
     db.select().from(t.duerpVersions),
     db.select().from(t.workUnits).orderBy(asc(t.workUnits.sort), asc(t.workUnits.label)),
@@ -267,6 +333,10 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
     db.select({ id: t.requirements.id, archivedAt: t.requirements.archivedAt }).from(t.requirements).where(eq(t.requirements.linkedTo, DUERP_REQUIREMENT_LINK)),
     allowedSiteIds(),
     siteFilter(scope),
+    getSession(),
+    // DUE-20 : zones en service du plan de site rattachées à une unité.
+    db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, workUnitId: t.mapZones.workUnitId })
+      .from(t.mapZones).where(and(isNull(t.mapZones.archivedAt), isNotNull(t.mapZones.workUnitId))).orderBy(asc(t.mapZones.name)),
   ]);
   const now = today();
   const siteLabel = new Map(sites.map((s) => [s.id, s.label]));
@@ -301,9 +371,12 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
   const siteUnits = allUnits.filter((u) => keep(u.siteId));
   const units = siteUnits.filter((u) => !u.archivedAt);
   const unitIds = new Set(siteUnits.map((u) => u.id));
-  const views: Omit<RiskView, 'history' | 'files'>[] = allRisks.filter((r) => unitIds.has(r.unitId)).map((r) => {
+  const shownRisks = allRisks.filter((r) => unitIds.has(r.unitId));
+  const measures = await loadRiskMeasures(shownRisks, new Map(siteUnits.map((u) => [u.id, u.siteId])), session.role, now);
+  const views: Omit<RiskView, 'files'>[] = shownRisks.map((r) => {
     const actions = linked(r.id);
     return {
+      measures: measures.get(r.id) ?? [],
       id: r.id, unitId: r.unitId, hazard: r.hazard, situation: r.situation,
       gravity: r.gravity, probability: r.probability, existingMeasures: r.existingMeasures,
       residualGravity: r.residualGravity, residualProbability: r.residualProbability, residualReviewedOn: r.residualReviewedOn,
@@ -322,6 +395,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
       top: Math.max(0, ...ur.map((r) => riskLevel(r.gravity * r.probability))),
       alerts: ur.filter((r) => r.flag === 'toDefine' || r.flag === 'residualHigh').length,
       toReview: ur.filter((r) => r.flag === 'toReview').length,
+      zones: zones.filter((z) => z.workUnitId === u.id && (!u.siteId || z.siteId === u.siteId)).map((z) => ({ id: z.id, name: z.name })),
     };
   });
 
@@ -374,27 +448,25 @@ export async function loadRisks() {
   const edit = canEdit(role, 'risks');
   const qhse = edit && canCreateAction(role);
   const employee = isEmployee(role);
-  const [history, unitHistory] = edit
-    ? await Promise.all([
-      loadChangeLogs('risk', [...base.risks, ...base.archivedRisks].map((r) => r.id)),
-      loadChangeLogs('work_unit', base.archivedUnits.map((u) => u.id)),
-    ])
-    : [new Map<string, ChangeEntry[]>(), new Map<string, ChangeEntry[]>()];
+  // Historique d'un risque ou d'une unité archivée : chargé à l'ouverture de sa fiche (QUA-11, LazyChangeLog), pour qui
+  // modifie le DUERP (src/server/history.ts).
   // DUE-09 : DUERP signé par version et justificatifs des risques, lisibles par tous les rôles de l'écran (Salarié compris).
-  const [versionFiles, riskFiles, riskVersions] = await Promise.all([
+  const [versionFiles, riskFiles, riskVersions, unitVersions] = await Promise.all([
     loadEntityFiles('duerp_version', versionViews.map((v) => v.version)),
     loadEntityFiles('risk', [...base.risks, ...(edit ? base.archivedRisks : [])].map((r) => r.id)),
     edit ? entityVersions(await getDb(), 'risk', base.risks.map((r) => r.id)) : new Map<string, string>(),
+    edit ? entityVersions(await getDb(), 'work_unit', base.units.map((u) => u.id)) : new Map<string, string>(),
   ]);
-  const view = (r: Omit<RiskView, 'history' | 'files'>): RiskView => ({
+  const view = (r: Omit<RiskView, 'files'>): RiskView => ({
     ...r,
     ...(employee ? { events: [], actions: r.actions.map((a) => ({ ...a, pilot: '' })) } : {}),
-    history: history.get(String(r.id)) ?? [],
     files: riskFiles.get(String(r.id)) ?? [],
     ...(edit ? { version: riskVersions.get(String(r.id)) } : {}),
   });
   const archived = versionViews.filter((v) => !v.current);
   const since = archived.length ? Math.min(...archived.map((v) => yearOf(v.updatedOn))) : null;
+  // DUE-19 et DUE-20 : listes de choix des rôles qui modifient le DUERP (éléments à lier, zones du plan de site).
+  const { measureOptions, zoneOptions } = edit ? await loadMeasureAndZoneOptions() : { measureOptions: NO_MEASURE_OPTIONS, zoneOptions: [] };
   // Couleur d'alerte dès 30 jours avant l'échéance ; rouge une fois la mise à jour annuelle dépassée.
   const updateTone: Tone | null = daysToUpdate == null ? null : daysToUpdate < 0 ? 'danger' : daysToUpdate <= 30 ? 'warn' : null;
 
@@ -411,10 +483,10 @@ export async function loadRisks() {
     nextVersion: suggestNextVersion(versions.map((v) => v.version), now),
     nextUpdateOn: addMonths(now, 12),
     totals: base.totals,
-    units: base.units,
+    units: edit ? base.units.map((u) => ({ ...u, version: unitVersions.get(u.id) ?? '0' })) : base.units,
     risks: base.risks.map(view),
     archivedRisks: edit ? base.archivedRisks.map(view) : [],
-    archivedUnits: edit ? base.archivedUnits.map((u): ArchivedUnitView => ({ ...u, history: unitHistory.get(u.id) ?? [] })) : [],
+    archivedUnits: edit ? base.archivedUnits.map((u): ArchivedUnitView => ({ ...u })) : [],
     linkableActions: qhse ? base.linkableActions : [],
     /** Service QHSE : crée les actions du DUERP et y rattache des actions existantes (ACT-22). */
     actionsQhse: qhse,
@@ -423,6 +495,39 @@ export async function loadRisks() {
     readOnly: !edit,
     /** Salarié : ni pilotes ni événements liés. */
     employee,
+    measureOptions,
+    zoneOptions,
+  };
+}
+
+/** Éléments proposés comme mesure de maîtrise d'un risque (DUE-19) : [identifiant, libellé, site (null : tous)]. */
+export type MeasureOptions = { control: (readonly [string, string, string | null])[]; document: (readonly [string, string, string | null])[]; title: (readonly [string, string, string | null])[] };
+const NO_MEASURE_OPTIONS: MeasureOptions = { control: [], document: [], title: [] };
+/** Zone en service du plan de site, avec l'unité qui la couvre (DUE-20). */
+export type ZoneOption = { id: number; name: string; siteId: string; unitId: string | null };
+
+async function loadMeasureAndZoneOptions(): Promise<{ measureOptions: MeasureOptions; zoneOptions: ZoneOption[] }> {
+  const db = await getDb();
+  const keep = await siteFilter('perimeter');
+  const [controls, docs, approved, titles, zones] = await Promise.all([
+    db.select({ id: t.controls.id, equipment: t.controls.equipment, controlType: t.controls.controlType, siteId: t.controls.siteId })
+      .from(t.controls).where(isNull(t.controls.archivedAt)).orderBy(asc(t.controls.sort), asc(t.controls.id)),
+    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
+    db.select({ documentId: t.documentVersions.documentId }).from(t.documentVersions).where(eq(t.documentVersions.status, 'approuve')),
+    db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label }).from(t.trainingTitles).where(isNull(t.trainingTitles.archivedAt)).orderBy(asc(t.trainingTitles.sort)),
+    db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, unitId: t.mapZones.workUnitId })
+      .from(t.mapZones).innerJoin(t.sites, eq(t.mapZones.siteId, t.sites.id))
+      .where(and(isNull(t.mapZones.archivedAt), isNull(t.sites.archivedAt))).orderBy(asc(t.mapZones.name)),
+  ]);
+  const inForce = new Set(approved.map((v) => v.documentId));
+  return {
+    measureOptions: {
+      control: controls.filter((c) => keep(c.siteId)).map((c) => [String(c.id), `${c.controlType} · ${c.equipment}`, c.siteId] as const),
+      // Documents en vigueur seulement : une mesure liée à un document jamais approuvé ne serait pas valide.
+      document: docs.filter((d) => keep(d.siteId) && inForce.has(d.id)).map((d) => [d.id, `${d.id} · ${d.title}`, d.siteId] as const),
+      title: titles.map((ti) => [ti.id, ti.label, null] as const),
+    },
+    zoneOptions: zones.filter((z) => keep(z.siteId)),
   };
 }
 export type RisksData = Awaited<ReturnType<typeof loadRisks>>;
@@ -569,7 +674,6 @@ export type DuerpAccessRequestView = {
   /** Non communiquée et non annulée. */
   pending: boolean;
   cancelled: ArchiveInfo | null;
-  history: ChangeEntry[];
 };
 
 /**
@@ -592,7 +696,6 @@ export async function loadDuerpAccessRegister(): Promise<{ requests: DuerpAccess
   const kept = rows
     .filter((r) => inPerimeter(session.allowedSiteIds, r.siteId) && inSite(site, r.siteId))
     .sort((a, b) => b.requestedOn.localeCompare(a.requestedOn) || b.id - a.id);
-  const history = await loadChangeLogs('duerp_access_request', kept.map((r) => r.id));
   const requests = kept.map((r): DuerpAccessRequestView => ({
     id: r.id, requestedOn: r.requestedOn, requesterKind: r.requesterKind,
     requesterKindLabel: DUERP_REQUESTERS[r.requesterKind as DuerpRequester] ?? r.requesterKind, requesterName: r.requesterName,
@@ -601,7 +704,6 @@ export async function loadDuerpAccessRegister(): Promise<{ requests: DuerpAccess
     channelLabel: r.channel ? DUERP_ACCESS_CHANNELS[r.channel as DuerpAccessChannel] ?? r.channel : '', note: r.note,
     pending: !r.cancelledAt && !r.communicatedOn,
     cancelled: r.cancelledAt ? { on: dayOf(r.cancelledAt), by: r.cancelledById ? people.get(r.cancelledById)?.name ?? '' : '', reason: r.cancelReason } : null,
-    history: history.get(String(r.id)) ?? [],
   }));
   return {
     requests,
@@ -990,6 +1092,20 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
   }
 
   todo.push(...unitRiskTodos(units, risks, leads.forSite, now));
+
+  // DUE-19 : mesure de maîtrise liée qui n'est plus valide (contrôle dépassé ou défavorable, document sans version en
+  // vigueur, habilitation expirée sur le site) : une échéance par risque, au responsable QHSE du site de l'unité.
+  for (const r of risks) {
+    const bad = r.measures.filter((m) => !m.valid);
+    const u = units.find((x) => x.id === r.unitId);
+    if (!bad.length || !u) continue;
+    const to = leads.forSite(u.siteId);
+    todo.push({
+      kind: RISK_TODO_KIND, who: to.who, ownerIds: to.ownerIds, siteId: u.siteId, date: now, tone: 'warn', key: `duerp-mesure|${r.id}`,
+      title: `${u.label} · ${r.hazard} — mesure de maîtrise non valide : ${bad.map((m) => `${m.label} (${lcfirst(m.state)})`).join(' ; ')}`,
+      href: `/risques?risque=${r.id}`,
+    });
+  }
 
   for (const r of requests.filter((x) => inPerimeter(allowed, x.siteId))) {
     const site = leads.forSite(r.siteId);

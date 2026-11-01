@@ -1,6 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { SCREENS, canApprove, canManage, canSee, homeOf, type ScreenKey } from './domain';
+import { APPROVER_ONLY, EDIT_DENIED, editorError, type EditorOptions } from './edit-rights';
 import { ALL_SITES as ALL_SITES_ID, activeSiteIds, getSession, inPerimeter, inSite, type SiteOption } from './session';
 
 /**
@@ -17,13 +18,23 @@ export async function guard(screen: ScreenKey) {
 /** Pour les server actions : renvoie la session si le rôle peut saisir/modifier, sinon un message d'erreur. */
 export async function requireManager() {
   const session = await getSession();
-  return canManage(session.role) ? { session, error: null } : { session, error: 'Votre rôle ne permet pas cette modification.' };
+  return canManage(session.role) ? { session, error: null } : { session, error: EDIT_DENIED };
 }
 
 /** Pour les server actions de validation (animateur QHSE, direction). */
 export async function requireApprover() {
   const session = await getSession();
-  return canApprove(session.role) ? { session, error: null } : { session, error: "Réservé à l'animateur QHSE et à la direction." };
+  return canApprove(session.role) ? { session, error: null } : { session, error: APPROVER_ONLY };
+}
+
+/**
+ * Garde commune des server actions d'un écran (QUA-18) : encadrement (ou validation avec `approver`) et écran modifiable
+ * par le rôle (canEdit : ouvert et non limité à la consultation). Renvoie la session et le message de refus (editorError,
+ * src/lib/edit-rights.ts), ou null.
+ */
+export async function requireEditor(screen: ScreenKey, opts: EditorOptions = {}) {
+  const session = await getSession();
+  return { session, error: editorError(session.role, screen, opts) };
 }
 
 /**

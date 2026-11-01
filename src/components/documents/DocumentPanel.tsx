@@ -4,19 +4,20 @@ import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import { ActionFields } from '@/components/ActionFormDialog';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
-import { ReasonForm } from '@/components/ReasonDialog';
+import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { Dot, Icon, ToneTag } from '@/components/ui';
 import { LinkedEvents } from '@/components/LinkedEvents';
+import { newEventHref } from '@/lib/event-prefill';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import type { DocumentRow, LinkedAction, VersionView } from '@/lib/data/documents';
-import { abandonDraft, approveVersion, obsoleteDocument, returnToDraft, submitVersion } from '@/server/documents';
-import { ConfirmForm, DraftForm, MetadataForm, RevisionForm, type DocFormOptions } from './DocumentForms';
+import { abandonDraft, approveVersion, cancelDocumentReview, obsoleteDocument, returnToDraft, submitVersion } from '@/server/documents';
+import { ConfirmForm, DraftForm, MetadataForm, PeriodicReviewForm, RevisionForm, type DocFormOptions } from './DocumentForms';
 import { documentActionDefaults } from './action-defaults';
-import { nextVersion } from './meta';
+import { nextVersion } from '@/lib/rules/documents';
 
-type Mode = 'view' | 'edit' | 'revise' | 'draft' | 'submit' | 'approve' | 'return' | 'abandon' | 'obsolete' | 'action';
+type Mode = 'view' | 'edit' | 'revise' | 'draft' | 'submit' | 'approve' | 'return' | 'abandon' | 'obsolete' | 'action' | 'review';
 
 const APPROVER_ONLY = "Réservé à l'animateur QHSE et à la direction.";
 /** DOC-05 : une version ne part en revue ni n'est approuvée sans son fichier. */
@@ -60,8 +61,10 @@ const reviewText = (doc: DocumentRow) => {
 };
 
 /** Contenu de la fiche d'un document : informations, cycle de vie de la version en cours et historique. */
-export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDueOn }: {
+export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDueOn, userId }: {
   doc: DocumentRow; canManage: boolean; canApprove: boolean; options: DocFormOptions; suggestedDueOn: string;
+  /** Personne connectée : la revue périodique sans modification revient au propriétaire du document ou aux approbateurs (DOC-15). */
+  userId?: string;
 }) {
   const [mode, setMode] = useState<Mode>('view');
   // Création d'action : service QHSE seulement (ACT-22), qui reçoit seul le formulaire d'action.
@@ -72,6 +75,8 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
   const back = () => setMode('view');
   const { current, pending } = doc;
   const obsolete = doc.status === 'obsolete';
+  // DOC-15 : revue sans modification de la version en vigueur, hors révision en cours (propriétaire ou approbateurs).
+  const canReviewDoc = canManage && !!doc.current && !doc.pending && (canApprove || (!!userId && doc.ownerId === userId));
   const next = nextVersion(doc.versions.map((v) => v.version));
   const approveHint = canApprove ? undefined : APPROVER_ONLY;
   // Sans version en vigueur, abandonner le brouillon retire le document : même droit que « Rendre obsolète ».
@@ -158,9 +163,12 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
           <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 220 }}>
             <span style={{ fontSize: 12.5 }}>{review}</span>
             <span style={{ fontSize: 11, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-              Une revue sans modification se trace aussi par une nouvelle révision (objet « Revue périodique sans modification »).
+              {canReviewDoc ? 'Document toujours adapté : enregistrez une revue sans modification ; sinon, ouvrez une révision.' : 'Revue sans modification : propriétaire du document, animateur QHSE ou direction.'}
             </span>
           </div>
+          {canReviewDoc && (
+            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setMode('review')}><Icon name="ph-seal-check" size={13} />Revue sans modification</button>
+          )}
           {doc.reviewActions.length > 0 ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-neutral-400)' }}>
               Action{doc.reviewActions.length > 1 ? 's' : ''} {doc.reviewActions.map((a) => <ActionLink key={a.id} action={a} />)}
@@ -195,9 +203,37 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
                 <span style={{ color: doc.overdue ? TONE.danger.dot : doc.dueSoon ? TONE.warn.dot : undefined }}>{doc.nextReviewOn ? fmtDate(doc.nextReviewOn) : '—'}</span>
               </Meta>
               <Meta label="Site">{doc.siteLabel}</Meta>
+              {/* DOC-17 : origine, émetteur d'un document externe et durée de conservation. */}
+              <Meta label="Origine">{doc.origin === 'externe' ? `${doc.originLabel}${doc.issuer ? ` · ${doc.issuer}` : ''}` : doc.originLabel}</Meta>
+              <Meta label="Conservation">{doc.retention || '—'}</Meta>
               <Meta label="Diffusion" wide>{doc.distribution || '—'}</Meta>
             </div>
           </section>
+
+          {/* DOC-15 : revues périodiques sans modification (annulées barrées, motif). */}
+          {(doc.reviews.length > 0 || canReviewDoc) && (
+            <section style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <H6>Revues périodiques</H6>
+                {canReviewDoc && !showReview && <button type="button" className="vg-text-btn" onClick={() => setMode('review')}>Revue sans modification</button>}
+              </div>
+              {doc.reviews.length === 0 && <span style={{ fontSize: 12, color: 'var(--vg-text-muted)' }}>Aucune revue sans modification depuis l&apos;approbation.</span>}
+              {doc.reviews.map((r) => (
+                <div key={r.id} style={{ display: 'grid', gap: 2, fontSize: 12.5 }}>
+                  <span style={r.cancelled ? { textDecoration: 'line-through', color: 'var(--color-neutral-400)' } : undefined}>
+                    {fmtDate(r.reviewedOn)} · version {r.version} maintenue · {r.reviewer} — {r.conclusion}
+                  </span>
+                  {r.cancelled ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>Annulée le {fmtDate(r.cancelled.on)} par {r.cancelled.by} · Motif : {r.cancelled.reason}</span>
+                  ) : canApprove && (
+                    <ReasonButton label="Annuler la revue" className="vg-text-btn" style={{ justifySelf: 'start' }} title="Annuler la revue périodique" kicker={doc.id}
+                      action={cancelDocumentReview} hidden={{ id: r.id }} submitLabel="Annuler la revue" placeholder="Ex. revue saisie sur le mauvais document"
+                      message="La revue reste à l'historique, barrée ; la prochaine revue est recalculée." />
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
 
           {!showReview && doc.reviewActions.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--color-neutral-400)' }}>
@@ -212,7 +248,7 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
               {doc.closedActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
             </div>
           )}
-          {canManage && <LinkedEvents events={doc.events} />}
+          {canManage && <LinkedEvents events={doc.events} reportHref={newEventHref('document', doc.id)} />}
 
           <section style={{ display: 'grid', gap: 8 }}>
             {/* Consultation seule : la version en vigueur, sans l'historique ni les actions liées. */}
@@ -252,8 +288,9 @@ export function DocumentPanel({ doc, canManage, canApprove, options, suggestedDu
         <section style={{ display: 'grid', gap: 10 }}>
           <H6>{MODE_TITLE[mode](doc, next)}</H6>
           {mode === 'edit' && <MetadataForm doc={doc} options={options} onDone={back} onCancel={back} />}
+          {mode === 'review' && <PeriodicReviewForm doc={doc} onDone={back} onCancel={back} />}
           {mode === 'revise' && <RevisionForm doc={doc} version={next} options={options} onDone={back} onCancel={back} />}
-          {mode === 'draft' && pending && <DraftForm version={pending} options={options} onDone={back} onCancel={back} />}
+          {mode === 'draft' && pending && <DraftForm version={pending} docVersion={doc.version} options={options} onDone={back} onCancel={back} />}
           {mode === 'submit' && pending && (
             <ConfirmForm action={submitVersion} hidden={{ versionId: pending.id }} submitLabel="Soumettre en revue" submitIcon="ph-paper-plane-tilt" onDone={back} onCancel={back}
               message={<>La version {pending.version} est transmise pour approbation à l&apos;animateur QHSE ou à la direction. Elle n&apos;est plus modifiable, sauf renvoi en brouillon.</>} />
@@ -301,4 +338,5 @@ const MODE_TITLE: Record<Exclude<Mode, 'view'>, (doc: DocumentRow, next: string)
   abandon: (d) => `Abandonner le brouillon ${d.pending?.version ?? ''}`,
   obsolete: (d) => `Rendre obsolète ${d.id}`,
   action: () => "Nouvelle action · plan d'actions unique",
+  review: (d) => `Revue périodique sans modification · version ${d.current?.version ?? ''}`,
 };

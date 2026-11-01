@@ -1,6 +1,6 @@
 import 'server-only';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
-import { entryRef } from '../components/environment/model';
+import { entryRef } from '@/lib/rules/environment';
 import * as t from '../db/schema';
 import type { DbOrTx } from '../db/types';
 
@@ -73,7 +73,7 @@ export type OriginResolution =
   | { column: OriginColumn; target: string | number; note?: string }
   | { column: null; reason: string };
 
-/** « FD-11 · 19/08/2026 » ou « FD-11 · 19/08/2026 · n° 42 » (entryRef, src/components/environment/model.ts). */
+/** « FD-11 · 19/08/2026 » ou « FD-11 · 19/08/2026 · n° 42 » (entryRef, src/lib/rules/environment.ts). */
 const ENTRY_REF = /^(\S+) · (\d{2})\/(\d{2})\/(\d{4})(?: · n° (\d+))?$/;
 /** Premier mot d'une référence (« PP-2026-012 · relance » → « PP-2026-012 »). */
 const firstToken = (ref: string) => ref.split(/[\s·,]+/)[0] ?? '';

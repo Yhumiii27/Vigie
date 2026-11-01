@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ChangeLogList, type ChangeEntry } from '@/components/ChangeLog';
+import { ChangeLogList } from '@/components/ChangeLog';
+import type { ChangeEntry } from '@/lib/change-entry';
 import { EventAccessLog } from '@/components/events/AccessLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { BackToList, DetailFocus } from '@/components/ListDetail';
@@ -16,7 +17,7 @@ import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { EventFilterBar } from '@/components/events/EventFilters';
 import { NewEventButton } from '@/components/events/NewEventButton';
 import { OccupationalSection } from '@/components/events/OccupationalSection';
-import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/components/events/shared';
+import { BENIGN_REGISTER_PATH, DAT_PRINT_PATH, addActionBlocker, eventPrintHref, hasNcDisposition, hasNcOrigin, readD8, readTree, readWhys } from '@/lib/rules/events';
 import { Dot, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { admissibleSources, canCreateAction } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
@@ -31,8 +32,11 @@ import { guard } from '@/lib/guard';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
 import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
+import { NEW_EVENT_SOURCES, prefillKey, prefillType, sourceParam } from '@/lib/event-prefill';
 import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
+import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination';
+import { Pagination } from '@/components/Pagination';
 
 export const metadata: Metadata = { title: SCREENS.events.title };
 
@@ -58,7 +62,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const now = today();
   const manager = canManage(role);
   const employee = isEmployee(role);
-  // Salarié : ses propres signalements uniquement (filtre dans loadVisibleEvents).
+  // Salarié : ses propres signalements uniquement, sur tout son périmètre (filtre dans loadVisibleEvents, EVT-27).
   const [events, people, options, linkOptions] = await Promise.all([loadVisibleEvents(), loadPeople(), loadFormOptions(), loadEventLinkOptions()]);
 
   // EVT-13 : filtres d'URL (étape, pilote, période, gravité, ancienneté ; blessure pour les seuls rôles habilités aux
@@ -71,18 +75,26 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const found = events.filter(matches);
   const inTab = { ouverts: found.filter(isOpen), tous: found.filter((e) => !e.dismissedAt), classes: found.filter((e) => !!e.dismissedAt) };
   const searched = inTab[tab];
-  const list = searched.filter((e) => !types.length || (types as string[]).includes(e.type)).map((e) => eventView(e, people, now));
   const selParam = str(sp.sel);
+  // QUA-21 : liste paginée (?page=, ?taille=) ; sans ?page=, la page de la fiche demandée (?sel=, liens d'échéance).
+  const pageSize = parsePageSize(sp.taille);
+  const paged = paginate(searched.filter((e) => !types.length || (types as string[]).includes(e.type)), {
+    page: parsePage(sp.page), size: pageSize, selected: selParam ? (e) => e.id === selParam : undefined,
+  });
+  const list = paged.items.map((e) => eventView(e, people, now));
   // Lien vers un événement non visible (autre site, signalement d'un autre déclarant) : avis « introuvable », pas un autre événement.
   const selId = selParam ? (events.some((e) => e.id === selParam) ? selParam : undefined) : list[0]?.id;
   const [detail, closures, newDefaults] = await Promise.all([
     selId ? loadEventDetail(selId) : null,
     loadEventClosures(list.filter((e) => e.step >= STEP_CLOSED).map((e) => e.id)),
-    manager && sp.nouveau === '1' ? loadNewEventDefaults(str(sp.plan), str(sp.permis)) : null,
+    // EVT-24 : formulaire prérempli depuis la fiche d'un autre écran (src/lib/event-prefill.ts).
+    manager && sp.nouveau === '1'
+      ? loadNewEventDefaults({ ...Object.fromEntries(NEW_EVENT_SOURCES.map((k) => [k, sourceParam(sp, k)])), type: prefillType(str(sp.type)) })
+      : null,
   ]);
   const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
-  const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined };
-  const params = { ...baseParams, ...eventFilterParams(urlFilters), sel: selParam };
+  const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, taille: pageParams(1, pageSize).taille };
+  const params = { ...baseParams, ...eventFilterParams(urlFilters), page: pageParams(paged.page, pageSize).page, sel: selParam };
 
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
@@ -104,13 +116,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const emptyText = hasEventFilters(urlFilters) || q || type || origin ? 'Aucun événement ne correspond.'
     : tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
   const tabLink = (etat: Tab, label: string, n: number) => ({
-    href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, sel: undefined }),
+    href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, page: undefined, sel: undefined }),
     label: <>{label}<span style={{ opacity: 0.6 }}>{n}</span></>, on: tab === etat,
   });
 
   return (
     <>
-      <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · tous types`}
+      <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · ${employee ? 'vos signalements, tous vos sites' : 'tous types'}`}
         actions={manager && (
           <>
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
@@ -119,9 +131,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
                 <i className="ph ph-notebook" style={{ fontSize: 14 }} aria-hidden />Registre des accidents bénins
               </a>
             )}
-            <NewEventButton key={sp.nouveau === '1' ? `new-${str(sp.plan) ?? ''}-${str(sp.permis) ?? ''}` : 'new'} options={fieldOptions} today={now}
+            <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
               health={health} initialOpen={sp.nouveau === '1'}
-              defaults={{ siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, declarantId: user.id }} />
+              defaults={{
+                siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, equipment: newDefaults?.equipment, type: newDefaults?.type,
+                preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, controlId: newDefaults?.controlId,
+                riskId: newDefaults?.riskId, documentId: newDefaults?.documentId, declarantId: user.id,
+              }} />
           </>
         )} />
       {/* UX-07 : sur téléphone, la fiche demandée (?sel=) remplace la liste, avec « Retour à la liste ». */}
@@ -133,6 +149,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {tab !== 'ouverts' && <input type="hidden" name="etat" value={tab} />}
             {type && <input type="hidden" name="type" value={type} />}
             {origin && <input type="hidden" name="origine" value={origin} />}
+            {baseParams.taille && <input type="hidden" name="taille" value={baseParams.taille} />}
             {Object.entries(eventFilterParams(urlFilters)).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
             <input className="input" name="q" defaultValue={q} placeholder="Référence, lieu, équipement…" style={{ fontSize: 12.5, paddingLeft: 32 }} />
           </form>
@@ -146,12 +163,12 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           <EventFilterBar filters={urlFilters} base={baseParams} people={employee ? [] : options.people} health={health} pilots={!employee} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {origin && (
-              <Link href={hrefWith('/evenements', params, { origine: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
+              <Link href={hrefWith('/evenements', params, { origine: undefined, page: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
                 Origine : {origin === NC_ORIGIN_NONE ? 'non renseignée' : origin}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
               </Link>
             )}
             {filters.map((f) => (
-              <Link key={f.label} href={hrefWith('/evenements', params, { type: f.key, sel: undefined })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
+              <Link key={f.label} href={hrefWith('/evenements', params, { type: f.key, page: undefined, sel: undefined })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
                 {f.label}<span style={{ opacity: 0.6 }}>{f.n}</span>
               </Link>
             ))}
@@ -177,6 +194,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
               );
             })}
           </div>
+          <Pagination path="/evenements" params={params} page={paged} label="Pages des événements" clear={['sel']} />
         </div>
 
         <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
@@ -246,6 +264,10 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
+        {/* IMP-07 : fiche imprimable du déclarant (sans pilote, analyse ni historique). */}
+        <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
+          <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+        </a>
       </div>
       <h2 style={{ fontSize: 18, margin: 0, letterSpacing: '-.01em' }}>{e.title}</h2>
 
@@ -436,6 +458,10 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+          {/* IMP-07 : fiche imprimable (mêmes droits que la fiche) ; lien HTML simple (print.css). */}
+          <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
+            <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+          </a>
           {/* EVT-10 : synthèse imprimable de la DAT et feuille d'accident (données de santé) ; lien HTML simple (print.css). */}
           {health && e.type === 'AT' && (
             <a href={`${DAT_PRINT_PATH}/${encodeURIComponent(e.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">

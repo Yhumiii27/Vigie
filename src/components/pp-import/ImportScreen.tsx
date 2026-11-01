@@ -19,13 +19,14 @@ export type ImportTab = 'import' | 'modeles';
 
 type Flow = {
   stage: Stage;
-  file: File | null;
+  /** Fichier déposé, ou photos des pages d'un même formulaire (INT-14). */
+  files: File[] | null;
   det: DetectOk | null;
   mapping: PpImportMapping;
   templateId: number | null;
   review: { draft: PlanDraft; sections: PpFormData['sections']; version: number } | null;
 };
-const START: Flow = { stage: 'drop', file: null, det: null, mapping: {}, templateId: null, review: null };
+const START: Flow = { stage: 'drop', files: null, det: null, mapping: {}, templateId: null, review: null };
 
 /** Écran d'import : déroulé en quatre étapes et gestion des modèles d'import. */
 export function ImportScreen({ data, canManage, initialTab }: { data: ImportScreenData; canManage: boolean; initialTab: ImportTab }) {
@@ -44,9 +45,9 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
     window.history.replaceState(null, '', `${url.pathname}${url.search}`);
   };
 
-  const onDetected = (file: File, det: DetectOk) => {
+  const onDetected = (files: File[], det: DetectOk) => {
     const tpl = templateOf(det.matchedTemplateId);
-    setFlow({ stage: 'detect', file, det, templateId: tpl?.id ?? null, mapping: initialMapping(det.fields, tpl?.mapping), review: null });
+    setFlow({ stage: 'detect', files, det, templateId: tpl?.id ?? null, mapping: initialMapping(det.fields, tpl?.mapping), review: null });
   };
   const applyTemplate = (id: number | null) => setFlow((f) => {
     if (!f.det) return f;
@@ -103,9 +104,9 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
         <>
           <Stepper stage={flow.stage} reachable={reachable} onGo={go} />
           {flow.stage === 'drop' && <DropStep templates={data.templates} aiStatus={data.aiStatus} aiUsage={data.aiUsage} onDetected={onDetected} />}
-          {flow.stage === 'detect' && flow.file && flow.det && (
-            <DetectStep file={flow.file} det={flow.det} templates={data.templates} appliedTemplateId={flow.templateId}
-              onApplyTemplate={applyTemplate} onRedetected={(det) => onDetected(flow.file!, det)} onBack={() => go('drop')}
+          {flow.stage === 'detect' && flow.files && flow.det && (
+            <DetectStep files={flow.files} det={flow.det} templates={data.templates} appliedTemplateId={flow.templateId}
+              onApplyTemplate={applyTemplate} onRedetected={(det) => onDetected(flow.files!, det)} onBack={() => go('drop')}
               onContinue={() => (flow.det!.fields.length ? setFlow((f) => ({ ...f, stage: 'map' })) : toReview())} />
           )}
           {flow.stage === 'map' && flow.det && (
@@ -114,9 +115,9 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
               onTemplateSaved={(id) => setFlow((f) => ({ ...f, templateId: id }))}
               onBack={() => go('detect')} onContinue={toReview} />
           )}
-          {flow.stage === 'review' && flow.file && flow.det && flow.review && (
+          {flow.stage === 'review' && flow.files && flow.det && flow.review && (
             <ReviewStep key={flow.review.version} data={data} draft={flow.review.draft} sections={flow.review.sections}
-              file={flow.file} format={flow.det.format} templateId={flow.templateId} templateName={templateOf(flow.templateId)?.name ?? null}
+              files={flow.files} format={flow.det.format} templateId={flow.templateId} templateName={templateOf(flow.templateId)?.name ?? null}
               onBack={() => go(flow.det!.fields.length ? 'map' : 'detect')} />
           )}
         </>

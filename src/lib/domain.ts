@@ -312,8 +312,11 @@ export const DUERP_REQUIREMENT_LINK = 'duerp';
 export const REQUIREMENT_LINKS = {
   duerp: { label: 'Document unique (DUERP) — version en vigueur', hint: 'Échéance et état repris de la version en vigueur du DUERP (écran Risques).' },
   prevention: { label: 'Plans de prévention (R. 4512-6) — interventions sans plan signé', hint: 'Écarts calculés des plans de prévention, sur tout le périmètre.' },
-  waste_register: { label: 'Registre des déchets (R. 541-43)', hint: 'Exigence affichée sur l’écran Environnement (registre chronologique).' },
-  waste_bsd: { label: 'Bordereaux de déchets dangereux (R. 541-45, Trackdéchets)', hint: 'Exigence de l’action « BSD manquants » et pilote des échéances du registre.' },
+  waste_register: { label: 'Registre des déchets (R. 541-43)', hint: 'Exigence affichée sur l’écran Environnement (registre chronologique) ; indicateur : enlèvements aux mentions incomplètes (VEI-12).' },
+  waste_bsd: { label: 'Bordereaux de déchets dangereux (R. 541-45, Trackdéchets)', hint: 'Exigence de l’action « BSD manquants » et pilote des échéances du registre ; indicateur : enlèvements de déchets dangereux sans bordereau (VEI-12).' },
+  // VEI-12 (migration 0020) : certification choisie dans la fiche (requirements.certification_id), une exigence en vigueur
+  // par certification ; état repris du statut calculé du certificat (certificationStatus, écran Audits).
+  certification: { label: 'Certification (ISO 9001…) — validité du certificat', hint: 'Certification choisie ci-dessous : état repris du statut calculé du certificat (écran Audits).' },
 } as const satisfies Record<string, { label: string; hint: string }>;
 export type RequirementLink = keyof typeof REQUIREMENT_LINKS;
 export const REQUIREMENT_LINK_KEYS = Object.keys(REQUIREMENT_LINKS) as RequirementLink[];
@@ -363,16 +366,88 @@ export const REQUIREMENT_EVAL: Record<string, { label: string; tone: Tone }> = {
  * Résultat d'un contrôle réalisé (VEI-11) : avis de l'organisme. Défavorable ou mise à l'arrêt : l'équipement est signalé
  * jusqu'à un nouveau contrôle favorable ; « avec réserves » exige les réserves.
  */
-export type ControlResult = 'favorable' | 'reserves' | 'defavorable' | 'arret';
+export type ControlResult = 'favorable' | 'reserves' | 'defavorable' | 'arret' | 'hors_tolerance';
 export const CONTROL_RESULTS: Record<ControlResult, { label: string; tone: Tone }> = {
   favorable: { label: 'Favorable', tone: 'ok' },
   reserves: { label: 'Favorable avec réserves', tone: 'warn' },
   defavorable: { label: 'Défavorable', tone: 'danger' },
   arret: { label: "Mise à l'arrêt", tone: 'danger' },
+  // VEI-14 : étalonnage ou vérification métrologique hors de l'erreur maximale tolérée (ISO 9001 §7.1.5.2) — ouvre une NC.
+  hors_tolerance: { label: 'Hors tolérance', tone: 'danger' },
 };
 export const CONTROL_RESULT_KEYS = Object.keys(CONTROL_RESULTS) as ControlResult[];
 /** Résultats qui interdisent l'usage de l'équipement tant qu'un nouveau contrôle n'est pas favorable. */
-export const isBlockingControlResult = (r: string | null | undefined) => r === 'defavorable' || r === 'arret';
+export const isBlockingControlResult = (r: string | null | undefined) => r === 'defavorable' || r === 'arret' || r === 'hors_tolerance';
+
+/**
+ * Nature d'un contrôle périodique (VEI-14, controls.category, migration 0020) : vérification réglementaire (organisme agréé,
+ * VGP…) ou étalonnage d'un équipement de surveillance et de mesure (métrologie, ISO 9001 §7.1.5). Un étalonnage hors
+ * tolérance ouvre une non-conformité (événement NC rattaché à l'équipement).
+ */
+export type ControlCategory = 'reglementaire' | 'metrologie';
+export const CONTROL_CATEGORIES: Record<ControlCategory, { label: string; short: string; results: readonly ControlResult[] }> = {
+  reglementaire: { label: 'Vérification réglementaire', short: 'Réglementaire', results: ['favorable', 'reserves', 'defavorable', 'arret'] },
+  metrologie: { label: 'Étalonnage · équipement de mesure (métrologie)', short: 'Métrologie', results: ['favorable', 'reserves', 'hors_tolerance', 'arret'] },
+};
+export const CONTROL_CATEGORY_KEYS = Object.keys(CONTROL_CATEGORIES) as ControlCategory[];
+export const isControlCategory = (v: unknown): v is ControlCategory => typeof v === 'string' && v in CONTROL_CATEGORIES;
+/** Résultats proposés pour un contrôle de cette nature (hors tolérance : métrologie seulement). */
+export const controlResultsFor = (category: string): readonly ControlResult[] => CONTROL_CATEGORIES[isControlCategory(category) ? category : 'reglementaire'].results;
+
+/**
+ * Registre de sécurité (VEI-15, L. 4711-1 et L. 4711-2) : observations et mises en demeure de l'inspection du travail, de
+ * la CARSAT ou d'un organisme (safety_notices, migration 0020), avec le délai de réponse et la réponse apportée.
+ */
+export type SafetyNoticeKind = 'observation' | 'mise_en_demeure';
+export const SAFETY_NOTICE_KINDS: Record<SafetyNoticeKind, { label: string; tone: Tone }> = {
+  observation: { label: 'Observation', tone: 'warn' },
+  mise_en_demeure: { label: 'Mise en demeure', tone: 'danger' },
+};
+export const SAFETY_NOTICE_KIND_KEYS = Object.keys(SAFETY_NOTICE_KINDS) as SafetyNoticeKind[];
+
+/**
+ * Gestion des changements (CNF-11, change_requests, migration 0021, ISO 9001 §6.3 et §8.5.6, ISO 45001 §8.1.3) : nature du
+ * changement et état de la demande (décision du service QHSE, puis mise en œuvre constatée).
+ */
+export type ChangeKind = 'organisation' | 'procede' | 'equipement' | 'produit' | 'exigence' | 'autre';
+export const CHANGE_KINDS: Record<ChangeKind, { label: string }> = {
+  organisation: { label: 'Organisation, responsabilités' },
+  procede: { label: 'Procédé, méthode de travail' },
+  equipement: { label: 'Équipement, installation, local' },
+  produit: { label: 'Produit, service' },
+  exigence: { label: 'Exigence légale ou client' },
+  autre: { label: 'Autre' },
+};
+export const CHANGE_KIND_KEYS = Object.keys(CHANGE_KINDS) as ChangeKind[];
+export type ChangeStatus = 'demandee' | 'acceptee' | 'refusee' | 'realisee';
+export const CHANGE_STATUS: Record<ChangeStatus, { label: string; tone: Tone }> = {
+  demandee: { label: 'À évaluer', tone: 'warn' },
+  acceptee: { label: 'Acceptée · à mettre en œuvre', tone: 'accent' },
+  refusee: { label: 'Refusée', tone: 'neutral' },
+  realisee: { label: 'Mise en œuvre', tone: 'ok' },
+};
+export const CHANGE_STATUS_KEYS = Object.keys(CHANGE_STATUS) as ChangeStatus[];
+
+/**
+ * Mesure de maîtrise d'un risque du DUERP liée à un élément de Vigie (DUE-19, risk_measure_links, migration 0020) : un
+ * contrôle périodique, un document maîtrisé ou un titre d'habilitation ; signalée quand elle n'est plus valide.
+ */
+export type MeasureLinkKind = 'control' | 'document' | 'title';
+export const MEASURE_LINK_KINDS: Record<MeasureLinkKind, { label: string; icon: string }> = {
+  control: { label: 'Contrôle périodique', icon: 'ph-calendar-check' },
+  document: { label: 'Document maîtrisé', icon: 'ph-file-text' },
+  title: { label: 'Habilitation ou formation', icon: 'ph-identification-badge' },
+};
+export const MEASURE_LINK_KIND_KEYS = Object.keys(MEASURE_LINK_KINDS) as MeasureLinkKind[];
+
+/** Efficacité d'une formation évaluée à froid (HAB-13, ISO 45001 §7.2, qualifications.effectiveness, migration 0020). */
+export type TrainingEffectiveness = 'efficace' | 'partielle' | 'non_efficace';
+export const TRAINING_EFFECTIVENESS: Record<TrainingEffectiveness, { label: string; tone: Tone }> = {
+  efficace: { label: 'Efficace', tone: 'ok' },
+  partielle: { label: 'Partiellement efficace', tone: 'warn' },
+  non_efficace: { label: 'Non efficace', tone: 'danger' },
+};
+export const TRAINING_EFFECTIVENESS_KEYS = Object.keys(TRAINING_EFFECTIVENESS) as TrainingEffectiveness[];
 
 /** Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1). */
 export type ContextKind = 'enjeu_interne' | 'enjeu_externe' | 'partie_interessee' | 'risque' | 'opportunite';
@@ -389,8 +464,14 @@ export const contextNeedsTreatment = (k: string) => k === 'risque' || k === 'opp
 
 /** Évaluations qui appellent une action dans le plan d'actions unique. */
 export const REQUIREMENT_NEEDS_ACTION = ['ecart', 'analyse'] as const;
-/** Périodicité de réévaluation de la conformité d'une exigence (alerte dans les échéances). */
+/**
+ * Périodicité de réévaluation de la conformité d'une exigence par défaut (alerte dans les échéances) ; VEI-18 : une exigence
+ * peut porter la sienne (requirements.review_months, 1 à REQUIREMENT_REVIEW_MAX mois), lue par requirementReviewMonths.
+ */
 export const REQUIREMENT_REVIEW_MONTHS = 12;
+export const REQUIREMENT_REVIEW_MAX = 60;
+/** Périodicité de réévaluation d'une exigence (VEI-18) : la sienne, sinon REQUIREMENT_REVIEW_MONTHS. */
+export const requirementReviewMonths = (r: { reviewMonths?: number | null }) => r.reviewMonths ?? REQUIREMENT_REVIEW_MONTHS;
 
 export type SkillState = 'v' | 's' | 'x' | 'r' | 'p' | 'n';
 export const SKILL_STATES: Record<SkillState, { label: string; icon: string; bg: string; fg: string; border: string }> = {

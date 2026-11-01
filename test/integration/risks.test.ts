@@ -4,7 +4,8 @@ import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { AuthState } from '@/lib/auth';
-import { fmtEuro } from '@/components/risks/format';
+import { fmtEuro } from '@/lib/rules/risk-format';
+import { loadEntityHistory, type HistoryEntity } from '@/server/history';
 import { VACANT_QHSE_LEAD, isMine, type Role, type TodoItem } from '@/lib/domain';
 import {
   loadDuerpAccessRegister, loadDuerpPrint, loadDuerpVersion, loadPreventionProgram, loadProgramSources, loadRiskSignals, loadRisks,
@@ -22,6 +23,14 @@ import {
 
 // Identité de la requête : démonstration (rôle choisi), ou identité imposée par un test (périmètre restreint).
 const auth = vi.hoisted(() => ({ override: null as AuthState | null }));
+
+/** Actions de l'historique d'une fiche, chargé à son ouverture (QUA-11) par la personne de la requête. */
+async function historyActions(entity: HistoryEntity, id: string | number) {
+  const r = await loadEntityHistory(entity, String(id));
+  if ('error' in r) throw new Error(r.error);
+  return r.entries.map((e) => e.action);
+}
+
 vi.mock('@/lib/auth', async (orig) => {
   const real = await orig<typeof import('@/lib/auth')>();
   return { ...real, getAuthState: async () => auth.override ?? real.getAuthState() };
@@ -118,13 +127,15 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
     actAs('Chef de service', 'all');
     const cs = await loadRisks();
     expect(cs).toMatchObject({ readOnly: false, actionsQhse: false, linkableActions: [] });
-    expect(full.archivedRisks.find((r) => r.id === noise.id)!.history.map((h) => h.action)).toEqual(['archive', 'create']);
+    // Historique chargé à l'ouverture de la fiche (QUA-11), pour qui modifie le DUERP.
+    expect(full.archivedRisks.some((r) => r.id === noise.id)).toBe(true);
+    expect(await historyActions('risk', noise.id)).toEqual(['archive', 'create']);
 
     actAs('Chef de projet', 'all');
     const cp = await loadRisks();
     expect(cp).toMatchObject({ readOnly: true, employee: false, archivedRisks: [], archivedUnits: [], linkableActions: [] });
     expect(cp.risks.length).toBe(full.risks.length);
-    expect(cp.risks.every((r) => r.history.length === 0)).toBe(true);
+    expect(await loadEntityHistory('risk', String(cp.risks[0].id))).toEqual({ error: 'Historique introuvable.' });
     expect(cp.risks.some((r) => r.events.length > 0)).toBe(true);
     expect(cp.risks.flatMap((r) => r.actions).some((a) => a.pilot)).toBe(true);
 
@@ -132,7 +143,8 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
     const emp = await loadRisks();
     expect(emp).toMatchObject({ readOnly: true, employee: true, archivedRisks: [], archivedUnits: [], linkableActions: [] });
     expect(emp.risks.length).toBe(full.risks.length);
-    expect(emp.risks.every((r) => r.events.length === 0 && r.history.length === 0)).toBe(true);
+    expect(emp.risks.every((r) => r.events.length === 0)).toBe(true);
+    expect(await loadEntityHistory('risk', String(emp.risks[0].id))).toEqual({ error: 'Historique introuvable.' });
     const actions = emp.risks.flatMap((r) => r.actions);
     expect(actions.length).toBeGreaterThan(0);
     expect(actions.every((a) => a.pilot === '' && !!a.title && !!a.dueOn)).toBe(true);
@@ -255,7 +267,7 @@ describe('DUE-01 : registre des mises à disposition', () => {
 
     const row = (await loadDuerpAccessRegister()).requests.find((r) => r.id === Number(id));
     expect(row).toMatchObject({ pending: false, cancelled: { by: '[C. Lefèvre]', reason: 'Saisie en double' } });
-    expect(row!.history.map((h) => h.action)).toEqual(['cancel', 'update', 'update', 'create']);
+    expect(await historyActions('duerp_access_request', id)).toEqual(['cancel', 'update', 'update', 'create']);
   });
 
   it('échéance : demande en attente pour l’animateur QHSE et la direction, sans le nom du demandeur', async () => {

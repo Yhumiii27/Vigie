@@ -20,13 +20,21 @@ export default defineConfig({
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
   timeout: 60_000,
-  expect: { timeout: 10_000 },
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   outputDir: path.join(tmpdir(), 'vigie-pw-resultats'),
   use: { baseURL: url, locale: 'fr-FR', timezoneId: 'Europe/Paris', trace: 'retain-on-failure' },
+  // Recette visuelle (QUA-16, *.visual.spec.ts) : captures comparées, sans animation ni curseur ; une capture de
+  // référence par écran et par taille, sans suffixe de plateforme (relue à la main après --update-snapshots).
+  snapshotPathTemplate: '{testDir}/__captures__/{projectName}/{arg}{ext}',
+  expect: { timeout: 10_000, toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css', maxDiffPixelRatio: 0.002 } },
   projects: [
-    { name: 'bureau', use: { ...devices['Desktop Chrome'] }, testIgnore: '**/*.mobile.spec.ts' },
+    { name: 'bureau', use: { ...devices['Desktop Chrome'] }, testIgnore: ['**/*.mobile.spec.ts', '**/*.visual.spec.ts'] },
     { name: 'téléphone', use: { ...devices['Pixel 7'] }, testMatch: '**/*.mobile.spec.ts' },
+    // Projets de la recette visuelle : `npm run test:visual` seulement (VIGIE_VISUAL=1), jamais dans `npm run test:pw`.
+    ...(process.env.VIGIE_VISUAL === '1' ? [
+      { name: 'recette-bureau', use: { ...devices['Desktop Chrome'] }, testMatch: '**/*.visual.spec.ts' },
+      { name: 'recette-telephone', use: { ...devices['Pixel 7'] }, testMatch: '**/*.visual.spec.ts' },
+    ] : []),
   ],
   webServer: process.env.VIGIE_E2E_URL ? undefined : {
     command: 'npm run start:demo',

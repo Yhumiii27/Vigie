@@ -36,9 +36,10 @@ export type ScanOutput = z.infer<ReturnType<typeof scanSchema>>;
 
 export const SCAN_SYSTEM = 'Tu lis des formulaires de plan de prévention (Code du travail, articles R. 4512-6 à R. 4512-12) remplis à la main ou à l’ordinateur, numérisés ou photographiés, pour les importer dans un logiciel QHSE. Tu restitues fidèlement ce qui est imprimé, écrit et coché, sans rien inventer ni corriger.';
 
-/** Consigne placée après le document. */
-export function scanPrompt(expected: ExpectedField[] = []): string {
+/** Consigne placée après le document ; `pages` : nombre d'images d'un formulaire photographié page par page (INT-14). */
+export function scanPrompt(expected: ExpectedField[] = [], pages = 1): string {
   const lines = [
+    ...(pages > 1 ? [`Ce formulaire est fourni en ${pages} images : les pages 1 à ${pages}, dans l’ordre. Le numéro de page d’un élément est le rang de son image ; une page manquante ou en double est signalée dans warnings.`, ''] : []),
     'Relève tous les éléments de ce formulaire, dans l’ordre de lecture :',
     '- chaque case à cocher, y compris les cases vides : libellé exact tel qu’imprimé, titre de la section, état coché ou non ;',
     '- dans un tableau à colonnes « Oui / Non » (ou équivalent), une case par colonne, libellée « <libellé de la ligne> — <titre de la colonne> » ;',

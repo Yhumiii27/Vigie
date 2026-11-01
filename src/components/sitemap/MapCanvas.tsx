@@ -5,9 +5,9 @@ import {
   type PointerEvent as ReactPointerEvent, type ReactNode, type Ref,
 } from 'react';
 import { TONE } from '@/lib/domain';
-import { centroid, dist, polylineSegments, type Conflict, type Pt } from './coactivity';
+import { centroid, dist, polylineSegments, type Conflict, type Pt } from '@/lib/rules/coactivity';
 import { pinchView, tapSlop, type ScreenPt } from './gestures';
-import { ROUTE_KINDS, TEAMS, ZONE_KINDS, type ActivityView, type MapConfig, type RouteView, type ZoneView } from './model';
+import { ROUTE_KINDS, TEAMS, ZONE_KINDS, type ActivityView, type MapConfig, type RouteView, type ZoneView } from '@/lib/rules/sitemap';
 import styles from './sitemap.module.css';
 
 // Carte : plan de fond + surcouche SVG en coordonnées normalisées (viewBox 0 0 1 aspect),

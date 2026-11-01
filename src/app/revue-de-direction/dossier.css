@@ -28,15 +28,20 @@
 .rd-text { margin: 0; font-size: 12.5px; white-space: pre-line; text-wrap: pretty; }
 .rd-link { color: inherit; text-decoration: underline dotted color-mix(in srgb, var(--color-text) 40%, transparent); text-underline-offset: 2px; }
 .rd-link:hover { color: var(--color-accent); }
-.rd-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; align-items: start; }
+.rd-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; align-items: start; }
 .rd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
 .rd-list li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+/* Liens rapprochés d'une liste : cible d'au moins 24 px à l'écran (WCAG 2.5.8, axe target-size) ; l'impression reste compacte. */
+@media screen { .rd-list li a { display: inline-block; min-height: 24px; line-height: 24px; } }
 
 .rd-doc .rd-table { font-size: 12px; }
 .rd-doc .rd-table td { vertical-align: top; }
 .rd-doc .rd-table th { white-space: nowrap; }
 .rd-doc .rd-table .rd-total td { font-weight: 600; }
 .rd-num-cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* UX-15 : tableaux du dossier défilant horizontalement sur téléphone, plutôt que des colonnes écrasées. */
+.rd-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rd-scroll:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
 
 .rd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .rd-kpi { background: var(--color-bg); border-radius: var(--radius-md); padding: 10px 12px; display: grid; gap: 2px; }
@@ -60,12 +65,16 @@
   .rd-meta { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .rd-meta dd { margin-bottom: 6px; }
   .rd-pyramid { grid-template-columns: 120px minmax(0, 1fr) 28px; }
+  .rd-scroll > .rd-table { min-width: 560px; }
+  .rd-head, .rd-section { padding: 12px; }
+  .rd-toolbar { gap: 6px; }
 }
 
 @media print {
   @page { size: A4; margin: 14mm 12mm 16mm; }
   html:has(.rd-doc), body:has(.rd-doc) { background: #fff !important; color: #000 !important; }
   .rd-noprint { display: none !important; }
+  .rd-scroll { overflow: visible; }
   .rd-doc { max-width: none; padding: 0; gap: 14px; font-size: 10pt; }
   .rd-doc, .rd-doc * { color: #000 !important; }
   .rd-doc .rd-muted, .rd-doc .rd-muted *, .rd-doc .rd-kpi-note, .rd-doc .rd-kpi-label, .rd-doc .rd-h3, .rd-doc .rd-meta dt, .rd-doc .rd-foot { color: #444 !important; }

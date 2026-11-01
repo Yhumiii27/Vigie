@@ -35,3 +35,13 @@ export function aiStatus({ aiImport, anthropicEnv }: { aiImport: boolean; anthro
   if (!aiImport) return 'off';
   return hasAnthropicCredentials(anthropicEnv) ? 'ready' : 'no_credentials';
 }
+
+/**
+ * Modèles qui acceptent le repli côté serveur `fallbacks: "default"` (en-tête server-side-fallback-2026-07-01) : sur un
+ * autre modèle configuré (VIGIE_AI_MODEL, INT-13), la requête est envoyée sans repli, qu'il refuserait.
+ */
+const SERVER_FALLBACK_MODELS = ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5'];
+export const acceptsServerFallback = (model: string) => SERVER_FALLBACK_MODELS.includes(model);
+
+/** Jetons de sortie au plus d'une lecture (appel en flux : pas de délai HTTP, formulaire de plusieurs pages). */
+export const SCAN_MAX_TOKENS = 64_000;
