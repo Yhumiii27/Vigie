@@ -17,7 +17,7 @@ Format d'une entrée :
 
 
 ## [2026-10-30] Matrix → Vigie — M-17 : accès entre outils décidés par Matrix (plus de copie de vue, écritures par API ou fonction `pub_`)
-- Statut : OUVERTE
+- Statut : FAITE
 - Demande : appliquer dans Vigie la décision M-17 de Matrix (`docs/decisions.md` et `docs/architecture-postgres.md` § 8 sexies du dépôt Matrix) :
   1. **Lire** les données d'un autre outil uniquement par ses vues `pub_` (R2), jamais par ses tables ;
   2. **Écrire** chez un autre outil uniquement par son API ou par une fonction `pub_` qu'il fournit (R4), jamais par `INSERT` / `UPDATE` / `DELETE` dans son schéma ;
@@ -27,6 +27,7 @@ Format d'une entrée :
 - Justification : décision du responsable produit du 30/10/2026 (M-17) : Matrix décide de chaque accès d'un outil aux données d'un autre, PostgreSQL l'applique. Les vues `pub_` restent les contrats de lecture, mais leur copie par Matrix (quatre étapes par échange, dont deux à la main) disparaît, et l'écriture entre outils devient possible sous le contrôle de Matrix sans contourner les règles métier du propriétaire.
 - Détails techniques : relevé du 30/10/2026 sur `main` de Vigie (requêtes SQL vers d'autres schémas) : `keystone.pub_projets`, `pub_livrables`, `pub_fournisseurs`, `pub_articles`, `pub_activites`. Toutes ces lectures passent déjà par des vues `pub_` et aucune écriture directe dans un autre schéma n'a été trouvée : aucune correction urgente. Les vues, droits et fichiers de partage actuels restent en place pendant la transition (lots M17-1 à M17-5 côté Matrix) ; une vue `pub_` existante ne change pas.
 - Validé par Guillaume le : 2026-10-30
+- Traitement (01/11/2026, avec la décision M-18 de Matrix qui remplace la règle R3) : règles reprises dans `CLAUDE.md` (convention « Serveur PostgreSQL commun ») et `docs/EXPLOITATION.md` § 2 — lecture par vues `pub_` seulement, écriture par API ou fonction `pub_` du propriétaire, plus de nouvelle vue `pub_` dans les migrations de Vigie (Matrix les définit), besoins déclarés comme liens du registre, modèle des fonctions `vigie.pub_<verbe>_<objet>` pour les écritures reçues. Inventaire : Vigie ne lit aucune table ni vue d'un autre outil — les mentions `keystone.pub_projets`, `pub_livrables`, `pub_fournisseurs`, `pub_articles`, `pub_activites` du relevé sont des commentaires de `src/db/schema.ts` sur des colonnes de références saisies (`events.keystone_project_code`…), sans requête — et n'écrit dans aucun autre schéma ; aucun outil n'écrit chez Vigie (aucune fonction `pub_` à fournir). Rien de non conforme à signaler. Vues publiées par les migrations de Vigie, à reprendre par Matrix : `pub_non_conformites`, `pub_hse_projet`, `pub_journal` (0009, 0010, 0013), `pub_controles` (0014).
 
 ## [2026-11-01] Arche → Vigie — VG-01 à VG-05 : études de sécurité des procédés DIG-PRODI et vue `pub_etudes_securite`
 - Statut : OUVERTE
