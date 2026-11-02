@@ -11,7 +11,7 @@ const NOW = '2026-10-09';
 const action = (over: Partial<ActionRow> = {}): ActionRow => ({
   id: 'A-1', openedOn: '2026-09-01', pilotId: 'p1', status: 'a_faire', priority: 'urgent', dueOn: '2026-10-20', initialDueOn: '2026-10-20',
   doneOn: null, source: 'evenement', originRef: 'EV-2026-131', eventId: null, reviewId: null, preventionPlanId: null, permitId: null,
-  documentId: null, wasteStreamId: null, wasteEntryId: null, qualificationPersonId: null, qualificationTitleId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
+  documentId: null, wasteStreamId: null, wasteEntryId: null, safetyStudyId: null, safetyStudyBlocking: false, qualificationPersonId: null, qualificationTitleId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
   detail: 'Poser un garde-corps\nSelon la norme NF E85-015.', verifyDueOn: '2026-11-15', closedOn: null, verifyMethod: null,
   efficacyNote: null, effective: null, newRisk: false, verifiedById: null, riskLevel: null, hours: null, estimatedCost: null,
   actualCost: null, followsActionId: null, followReason: null, siteId: 'ville-a', legacyOrigin: null, cancelledAt: null,

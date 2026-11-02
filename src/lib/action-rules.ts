@@ -332,7 +332,7 @@ export const isNonQseLinkKind = (kind: string) => (NON_QSE_LINK_KINDS as readonl
  * direction ; sans ligne ou ligne inconnue : les quatre sources d'audit) ; risque : DUERP ; exigence : Veille
  * réglementaire ou Déchets (action BSD de l'écran Environnement) ; contrôle : Contrôle réglementaire ; document ou
  * version : Revue documentaire ; revue : Revue de direction ; décision : Objectif QSE (nature « objectif ») ou Revue de
- * direction ; filière ou enlèvement de déchets : Déchets. Il n'y a plus de source libre pour un élément lié. Cohérence
+ * direction ; filière ou enlèvement de déchets : Déchets ; étude de sécurité des procédés : HAZOP (VG-02). Il n'y a plus de source libre pour un élément lié. Cohérence
  * (testée) : pour toute source admise, `kind` ∈ SOURCE_LINK_KINDS de sa cible. Utilisée par saveAction, les sélecteurs
  * du plan et les écrans.
  */
@@ -348,6 +348,8 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
     case 'review': return ['revue_direction'];
     case 'reviewdecision': return facts.decisionKind === 'objectif' ? ['objectif'] : ['revue_direction'];
     case 'wastestream': case 'wasteentry': return ['dechets'];
+    // VG-02 : recommandation d'une étude de sécurité des procédés (tous types : source « HAZOP », à confirmer par le QHSE).
+    case 'safetystudy': return ['hazop'];
     default: return [];
   }
 }
@@ -358,8 +360,8 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
  *     vérifiée (SOURCE_LINK_KINDS de sa cible) : l'événement et le constat (plusieurs actions par constat, AUD-28) sont
  *     rattachés aussi à la suite, l'élément du programme lui est déplacé ; sinon (ligne reprise à plusieurs éléments, D22)
  *     ni copié ni déplacé ;
- *   - 'multi' : risque, revue, document, filière, enlèvement (plusieurs actions possibles) : rattaché aussi à la suite,
- *     l'action vérifiée le garde ;
+ *   - 'multi' : risque, revue, document, filière, enlèvement, étude de sécurité des procédés (plusieurs actions possibles) :
+ *     rattaché aussi à la suite, l'action vérifiée le garde (réserve bloquante reprise : VG-02) ;
  *   - 'single' : exigence, contrôle, version de document, décision de revue (une action à la fois) : déplacé vers la
  *     première suite (non efficace d'abord) ;
  *   - 'none' : habilitation, plan de prévention, permis (NON_QSE_LINK_KINDS) et type inconnu : jamais repris — ni déplacé
@@ -368,7 +370,7 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
 export type FollowUpLinkMode = 'source' | 'multi' | 'single' | 'none';
 const FOLLOW_UP_LINK_MODES: Record<string, FollowUpLinkMode> = {
   event: 'source', finding: 'source', plan: 'source',
-  risk: 'multi', review: 'multi', document: 'multi', wastestream: 'multi', wasteentry: 'multi',
+  risk: 'multi', review: 'multi', document: 'multi', wastestream: 'multi', wasteentry: 'multi', safetystudy: 'multi',
   requirement: 'single', control: 'single', docversion: 'single', reviewdecision: 'single',
 };
 export const followUpLinkMode = (kind: string): FollowUpLinkMode =>

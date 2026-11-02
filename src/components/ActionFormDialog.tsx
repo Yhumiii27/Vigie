@@ -14,7 +14,7 @@ import {
 } from '@/components/actions/detail/form-helpers';
 import { DialogButton } from '@/components/Dialog';
 import { mentionsInjury } from '@/lib/rules/events';
-import { ActionForm, Field, FormRow, Input, Select, TextArea } from '@/components/form';
+import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
 import { NON_QSE_LINK_MESSAGE } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { fmtDate } from '@/lib/dates';
@@ -178,6 +178,13 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
         <Field name="link" label="Élément lié" hint={choices.length ? 'Fixé à la création ; propose le site de l’élément.' : 'Aucun élément ouvert aux actions pour cette source.'}>
           <Select name="link" options={choices.map((t) => [t.value, t.label] as const)} value={link} placeholder={NO_ELEMENT}
             onChange={(e) => changeLink(e.target.value)} />
+        </Field>
+      )}
+
+      {/* VG-02 : recommandation d'une étude de sécurité des procédés — réserve bloquante du jalon (modifiable ensuite par le QHSE depuis la fiche de l'étude). */}
+      {!editing && (imposedLink ?? link).startsWith('safetystudy:') && (
+        <Field name="safetyBlocking" label="Jalon de sécurité" hint="Une réserve bloquante ouverte empêche le franchissement du jalon de l’étude (lu par Arche).">
+          <Checkbox name="safetyBlocking" label="Réserve bloquante" />
         </Field>
       )}
 

@@ -16,6 +16,7 @@ import { AccessRegister } from '@/components/risks/AccessRegister';
 import { ProgramPanel } from '@/components/risks/ProgramPanel';
 import { OverviewPanel } from '@/components/risks/OverviewPanel';
 import { EmergencyPanel } from '@/components/risks/EmergencyPanel';
+import { ProcessSafetyPanel } from '@/components/risks/ProcessSafetyPanel';
 import { duerpOverview } from '@/components/risks/overview';
 import { NewVersionButton, VersionsButton } from '@/components/risks/VersionDialogs';
 import { fmtDate, yearOf } from '@/lib/dates';
@@ -25,6 +26,8 @@ import { loadFormOptions, type FormOptions } from '@/lib/data/options';
 import { offeredOr } from '@/lib/form-options';
 import { loadDuerpAccessRegister, loadPreventionProgram, loadRisks } from '@/lib/data/risks';
 import { loadEmergencies } from '@/lib/data/emergencies';
+import { loadProcessSafetyStudies } from '@/lib/data/process-safety';
+import { STUDY_REF } from '@/lib/rules/process-safety';
 import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
 import type { ActionFormOptions } from '@/lib/action-view';
@@ -54,20 +57,26 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   // CNF-08 : situations d'urgence et exercices (?vue=urgences, fiche ?situation=<id>), tous les rôles de l'écran.
   const situationParam = typeof sp.situation === 'string' && /^\d{1,9}$/.test(sp.situation) ? Number(sp.situation) : null;
   const emergencyOn = (sp.vue === 'urgences' || situationParam != null) && programYear == null && !registerOn;
-  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, actionsQhse, duerpRequirement, measureOptions, zoneOptions }, options, register, program, emergencies] =
+  // VG-01 à VG-05 : études de sécurité des procédés (?vue=etudes, fiche ?etude=<référence>), tous les rôles de l'écran sauf
+  // le Salarié (vue masquée ; lien profond : MissingNotice).
+  const studyParam = typeof sp.etude === 'string' && STUDY_REF.test(sp.etude) ? sp.etude : null;
+  const studiesAsked = (sp.vue === 'etudes' || sp.etude !== undefined) && programYear == null && !registerOn && !emergencyOn;
+  const studiesOn = studiesAsked && !employee;
+  const [{ version, versions, nextVersion, nextUpdateOn, totals, units, risks, archivedRisks, archivedUnits, linkableActions, actionsQhse, duerpRequirement, measureOptions, zoneOptions }, options, register, program, emergencies, studies] =
     await Promise.all([
       loadRisks(),
       edit ? loadFormOptions() : Promise.resolve(NO_OPTIONS),
       approve ? loadDuerpAccessRegister() : Promise.resolve(null),
       programYear != null ? loadPreventionProgram(programYear) : Promise.resolve(null),
       emergencyOn ? loadEmergencies({ employee }) : Promise.resolve(null),
+      studiesOn ? loadProcessSafetyStudies() : Promise.resolve(null),
     ]);
   // Lien profond ?risque=<id> (échéances, plan d'actions, événement) : ouvre la fiche du risque dans son unité,
   // ou dans le filtre « Archivés » pour un risque archivé (rôles qui modifient le DUERP).
   const riskParam = typeof sp.risque === 'string' ? Number(sp.risque) : null;
   const deepRisk = riskParam == null ? undefined : risks.find((r) => r.id === riskParam);
   const deepArchived = riskParam == null || deepRisk ? undefined : archivedRisks.find((r) => r.id === riskParam);
-  const archives = edit && !program && !registerOn && !overviewOn && !emergencyOn && (wantsArchives(sp) || !!deepArchived);
+  const archives = edit && !program && !registerOn && !overviewOn && !emergencyOn && !studiesOn && (wantsArchives(sp) || !!deepArchived);
   const archivedCount = archivedRisks.length + archivedUnits.length;
   const askedUnit = typeof sp.unite === 'string' && units.some((u) => u.id === sp.unite) ? sp.unite : undefined;
   const unitId = deepRisk?.unitId ?? askedUnit ?? units[0]?.id;
@@ -78,14 +87,16 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const overview = overviewOn && !deepRisk && !askedUnit;
   const emergency = emergencyOn && !deepRisk && !askedUnit && !!emergencies;
   const deepSituation = situationParam != null && emergencies ? [...emergencies.situations, ...emergencies.archived].find((x) => x.id === situationParam) : undefined;
+  const study = studiesOn && !deepRisk && !askedUnit && !!studies;
+  const deepStudy = studyParam != null && studies ? [...studies.studies, ...studies.cancelled].find((x) => x.id === studyParam) : undefined;
   const params = {
     unite: explicitUnit ? unitId : undefined, mode: residual ? 'residuel' : undefined, etat: archives ? ARCHIVES : undefined,
-    programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined, vue: overview ? 'ensemble' : emergency ? 'urgences' : undefined,
+    programme: program ? String(program.year) : undefined, registre: registerOn ? '1' : undefined, vue: overview ? 'ensemble' : emergency ? 'urgences' : study ? 'etudes' : undefined,
   };
   // Panneau de droite : une unité, ou la vue d'ensemble, « Archivés », le programme annuel, le registre (les autres
   // paramètres sont remis à zéro).
   const panel = { etat: undefined, programme: undefined, registre: undefined, vue: undefined };
-  const unitPanel = !archives && !program && !registerOn && !overview && !emergency;
+  const unitPanel = !archives && !program && !registerOn && !overview && !emergency && !study;
   const rows = risks.filter((r) => r.unitId === unitId);
   const unit = units.find((u) => u.id === unitId);
   // Site affiché (null = « Tous les sites ») : une unité rattachée à un autre site n'apparaît pas dans la liste.
@@ -170,6 +181,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
         {missingDetail(sp.risque, !!deepRisk || !!deepArchived) && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
         {emergencyOn && missingDetail(sp.situation, !!deepSituation) && <MissingNotice text="Situation d'urgence introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
+        {studiesAsked && missingDetail(sp.etude, !!deepStudy) && <MissingNotice text="Étude de sécurité introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
 
         <div className="vg-split vg-md" data-focus={explicitUnit || !unitPanel ? 'detail' : 'list'} style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
           <div className="vg-md-list" style={{ display: 'grid', gap: 2 }}>
@@ -223,6 +235,14 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               <Icon name="ph-siren" size={13} />
               <span style={{ flex: 1, fontSize: 12.5 }}>Situations d&apos;urgence</span>
             </Link>
+            {!employee && (
+              <Link href={hrefWith('/risques', params, { ...panel, unite: undefined, vue: study ? undefined : 'etudes' })} scroll={false} className={`vg-item${study ? ' is-on' : ''}`}
+                style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} aria-current={study ? 'page' : undefined}
+                title="HazID, HazOp / AMDEC, contrôle chantier, PSSR et audit ASPD des CAPEX et projets (méthode DIG-PRODI)">
+                <Icon name="ph-flask" size={13} />
+                <span style={{ flex: 1, fontSize: 12.5 }}>Études de sécurité des procédés</span>
+              </Link>
+            )}
             {approve && register && (
               <Link href={hrefWith('/risques', params, { ...panel, registre: registerOn ? undefined : '1' })} scroll={false} className={`vg-item${registerOn ? ' is-on' : ''}`}
                 style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} title="Registre des demandes d'accès au DUERP (R. 4121-4)">
@@ -239,8 +259,12 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
 
           <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           <BackToList href={hrefWith('/risques', { mode: params.mode }, {})} label="Retour aux unités de travail" />
-          {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}:${overview}:${emergency}`} />}
-          {emergency && emergencies ? (
+          {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}:${overview}:${emergency}:${study}`} />}
+          {study && studies ? (
+            <ProcessSafetyPanel key={deepStudy?.id ?? 'etudes'} rows={studies.studies} cancelled={studies.cancelled} canManage={approve}
+              options={approve ? { sites: options.sites, people: options.people } : { sites: [], people: [] }} actionOptions={actionOptions} today={today()} showSite={!viewSite}
+              versions={studies.versions} defaultSite={defaultSiteId} initialId={deepStudy?.id} closeHref={hrefWith('/risques', params, {})} />
+          ) : emergency && emergencies ? (
             <EmergencyPanel key={deepSituation?.id ?? 'urgences'} rows={emergencies.situations} archived={emergencies.archived} canManage={edit} canApprove={approve}
               options={edit ? { sites: options.sites, people: options.people } : { sites: [], people: [] }} today={today()} showSite={!viewSite}
               versions={emergencies.versions} defaultSite={defaultSiteId} initialId={deepSituation?.id} closeHref={hrefWith('/risques', params, {})} />

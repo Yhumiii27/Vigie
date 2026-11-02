@@ -15,13 +15,16 @@ import { DEMO_TODAY, freshDemoDatabase } from '../helpers';
 // base neuve ouverte par getDb() (seed avec fichiers), puis jeu chargé sans fichiers (db:check).
 
 const uploads = freshDemoDatabase();
+/** Recommandations des études de sécurité des procédés (VG-02), jeu à part : src/db/seeds/process-safety.ts. */
+const STUDY_RECOMMENDATIONS = ['A-191', 'A-192', 'A-193'];
 
 /** Personnes de l'effectif que la charge de la page du Salarié ne doit jamais citer (test/e2e/employee-payload.test.ts). */
 const OTHER_PEOPLE = ['[M. Girard]', '[P. Roux]', '[A. Martin]', '[J. Petit]', '[R. Fontaine]', '[K. Bernard]', '[Y. Lambert]'];
 
+/** Actions du plan d'actions de démonstration, hors recommandations des études de sécurité des procédés (VG-02, src/db/seeds/process-safety.ts). */
 async function load() {
   const db = await getDb();
-  const actions = await db.select().from(t.actions).orderBy(asc(t.actions.id));
+  const actions = (await db.select().from(t.actions).orderBy(asc(t.actions.id))).filter((a) => !a.safetyStudyId);
   return { db, actions, byId: new Map(actions.map((a) => [a.id, a])) };
 }
 
@@ -242,7 +245,7 @@ describe('jeu de démonstration du plan d’actions QSE (base neuve)', () => {
       ['A-176', 'Action de suite A-222 créée (nouveau risque)'],
     ]);
     const created = new Set(journal.filter((l) => l.action === 'create').map((l) => l.entityId));
-    expect(created).toEqual(new Set(Object.keys(DEMO_ACTIONS).filter((id) => id !== 'A-150')));
+    expect(created).toEqual(new Set([...Object.keys(DEMO_ACTIONS).filter((id) => id !== 'A-150'), ...STUDY_RECOMMENDATIONS]));
   });
 });
 
@@ -261,7 +264,7 @@ describe('jeu de démonstration chargé sans fichiers (db:check)', () => {
       await seed(db as unknown as Parameters<typeof seed>[0]);
       expect(await db.select().from(t.attachments).where(eq(t.attachments.entityType, 'action'))).toEqual([]);
       expect(await db.select().from(t.changeLog).where(eq(t.changeLog.action, 'attach'))).toEqual([]);
-      expect(await db.select().from(t.actions)).toHaveLength(31);
+      expect(await db.select().from(t.actions)).toHaveLength(31 + STUDY_RECOMMENDATIONS.length);
       expect((await db.select().from(t.actionComments)).length).toBeGreaterThanOrEqual(5);
       expect(await db.select().from(t.actionCounters)).toEqual([{ scope: 'A', last: 222 }]);
       // Notifications sans les preuves : ni « Preuve ajoutée », ni fichier nommé dans le titre d'un commentaire.

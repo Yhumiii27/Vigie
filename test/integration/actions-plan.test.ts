@@ -40,7 +40,8 @@ describe('filtres de la vue générale (URL)', () => {
     expect(open.every((a) => isOpenAvancement(a.status))).toBe(true);
     expect(open.length).toBe(all.filter((a) => isOpenAvancement(a.status)).length);
     const late = await ids({ avancement: 'en_retard' });
-    expect(late).toEqual(['A-203', 'A-198', 'A-201', 'A-205']);
+    // A-192 : recommandation en retard de l'étude HazOp ES-002 (VG-02, src/db/seeds/process-safety.ts).
+    expect(late).toEqual(['A-203', 'A-198', 'A-201', 'A-205', 'A-192']);
     expect(await ids({ retard: '1' })).toEqual(late);
     const done = (await plan({ avancement: 'terminee' })).items;
     expect(done.map((a) => a.id).sort()).toEqual(['A-172', 'A-178', 'A-186', 'A-190']);

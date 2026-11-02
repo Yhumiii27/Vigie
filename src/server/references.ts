@@ -40,6 +40,8 @@ const REF_TABLES = {
   waste_stream: t.wasteStreams, certification: t.certifications, event: t.events,
   // CNF-11 (paquet 13) : demandes de changement « MC-001 ».
   change_request: t.changeRequests,
+  // VG-01 : études de sécurité des procédés « ES-001 ».
+  process_safety_study: t.processSafetyStudies,
 } as const;
 export type RefEntity = keyof typeof REF_TABLES;
 

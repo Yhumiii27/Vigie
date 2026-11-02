@@ -373,6 +373,7 @@ describe('source imposée par l’élément lié (D20 révisée)', () => {
     expect(admissibleSources('reviewdecision', {})).toEqual(['revue_direction']);
     expect(admissibleSources('wastestream', {})).toEqual(['dechets']);
     expect(admissibleSources('wasteentry', {})).toEqual(['dechets']);
+    expect(admissibleSources('safetystudy', {})).toEqual(['hazop']); // VG-02
   });
   it('constat ou élément du programme : selon la ligne ; sans ligne connue, les quatre sources d’audit', () => {
     for (const kind of ['finding', 'plan']) {
@@ -401,7 +402,7 @@ describe('source imposée par l’élément lié (D20 révisée)', () => {
       {}, { eventType: 'RC' }, { eventType: 'AT' }, { decisionKind: 'objectif' }, { decisionKind: 'amelioration' },
       ...['Certification', 'Visites sécurité', 'Audits internes', 'Fournisseurs', 'Revues de direction', 'Autre'].map((track) => ({ track })),
     ];
-    const kinds = ['event', 'finding', 'plan', 'risk', 'requirement', 'control', 'document', 'docversion', 'review', 'reviewdecision', 'wastestream', 'wasteentry'];
+    const kinds = ['event', 'finding', 'plan', 'risk', 'requirement', 'control', 'document', 'docversion', 'review', 'reviewdecision', 'wastestream', 'wasteentry', 'safetystudy'];
     const incoherent: string[] = [];
     for (const kind of kinds) {
       for (const f of facts) {
@@ -436,7 +437,7 @@ describe('source imposée par l’élément lié (D20 révisée)', () => {
 describe('liens repris par une action de suite (D21, réponses du 15/10/2026)', () => {
   it('élément de la source, liens à plusieurs porteurs, liens à place unique ; jamais habilitation, plan de prévention, permis', () => {
     expect(['event', 'finding', 'plan'].map(followUpLinkMode)).toEqual(['source', 'source', 'source']);
-    expect(['risk', 'review', 'document', 'wastestream', 'wasteentry'].map(followUpLinkMode)).toEqual(Array(5).fill('multi'));
+    expect(['risk', 'review', 'document', 'wastestream', 'wasteentry', 'safetystudy'].map(followUpLinkMode)).toEqual(Array(6).fill('multi'));
     expect(['requirement', 'control', 'docversion', 'reviewdecision'].map(followUpLinkMode)).toEqual(Array(4).fill('single'));
     expect([...NON_QSE_LINK_KINDS, 'papripact', 'constructor', ''].map(followUpLinkMode)).toEqual(Array(6).fill('none'));
   });

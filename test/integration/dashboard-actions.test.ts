@@ -23,7 +23,8 @@ describe('KPI « Actions en retard »', () => {
   it('site A : retards des ouvertes, dénominateur = ouvertes, actions liées à un événement, lien filtré', async () => {
     actAs('Animateur QHSE', 'ville-a');
     const want = await expected('ville-a');
-    expect(want.late.map((a) => a.id).sort()).toEqual(['A-198', 'A-201', 'A-205']);
+    // A-192 : recommandation en retard de l'étude HazOp ES-002 (VG-02, src/db/seeds/process-safety.ts).
+    expect(want.late.map((a) => a.id).sort()).toEqual(['A-192', 'A-198', 'A-201', 'A-205']);
     expect(await kpi()).toMatchObject({
       value: String(want.late.length), sub: `sur ${want.open} ouvertes`,
       note: `${want.late.filter((a) => a.eventId).length} liées à des événements`, tone: 'danger', href: '/actions?retard=1',

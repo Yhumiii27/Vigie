@@ -66,7 +66,7 @@ export async function axeViolations(page: Page): Promise<string[]> {
  */
 export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
   ...['/', '/a-faire', '/actions', '/actions?vue=kanban', '/actions?vue=statistiques', '/evenements', '/evenements?etat=tous', '/risques',
-    '/risques?vue=ensemble', '/risques?vue=urgences', '/veille', '/veille?onglet=controles', '/veille?onglet=registre', '/documents',
+    '/risques?vue=ensemble', '/risques?vue=urgences', '/risques?vue=etudes', '/risques?vue=etudes&etude=ES-002', '/veille', '/veille?onglet=controles', '/veille?onglet=registre', '/documents',
     '/habilitations', '/habilitations?vue=a-prevoir', '/audits', '/environnement', '/environnement?onglet=filieres', '/prevention',
     '/prevention?onglet=permis', '/prevention?onglet=entreprises', '/prevention/carte', '/prevention/import', '/signaler/postes',
     '/evenements/registre-benin?site=ville-a', '/habilitations/donnees-personnelles?salarie=tnguyen', '/veille/registre-securite',
@@ -75,7 +75,7 @@ export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
   ].map((url) => ({ role: 'Animateur QHSE' as Role, site: 'ville-a', url })),
   ...['/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
   ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits', '/evenements/fiche/EV-2026-127'].map((url) => ({ role: 'Chef de service' as Role, site: 'ville-a', url })),
-  ...['/', '/prevention', '/risques'].map((url) => ({ role: 'Chef de projet' as Role, site: 'ville-a', url })),
+  ...['/', '/prevention', '/risques', '/risques?vue=etudes'].map((url) => ({ role: 'Chef de projet' as Role, site: 'ville-a', url })),
   ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215',
     // EVT-22 : espace salarié mobile.
     '/signaler/mon-espace']

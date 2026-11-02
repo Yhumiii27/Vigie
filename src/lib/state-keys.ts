@@ -44,3 +44,11 @@ export const DOC_ORIGIN_CODES = ['interne', 'externe'] as const;
 export const CHANGE_KIND_CODES = ['organisation', 'procede', 'equipement', 'produit', 'exigence', 'autre'] as const;
 /** change_requests.status : CHANGE_STATUS (src/lib/domain.ts) — CNF-11. */
 export const CHANGE_STATUS_CODES = ['demandee', 'acceptee', 'refusee', 'realisee'] as const;
+/** process_safety_studies.milestone : STUDY_MILESTONES (src/lib/rules/process-safety.ts) — VG-01, migration 0023. */
+export const STUDY_MILESTONE_CODES = ['HS2', 'HS3', 'HS4', 'PSSR', 'HS6'] as const;
+/** process_safety_studies.type : STUDY_TYPES. */
+export const STUDY_TYPE_CODES = ['hazid', 'hazop', 'amdec', 'controle_chantier', 'pssr', 'rspdi', 'aspd'] as const;
+/** process_safety_studies.status (stocké ; « annulee » est calculé d'après le triplet cancelled_*) : STORED_STUDY_STATUS_KEYS. */
+export const STUDY_STATUS_CODES = ['planifiee', 'realisee', 'validee'] as const;
+/** process_safety_studies.conclusion : STUDY_CONCLUSIONS, ou vide. */
+export const STUDY_CONCLUSION_CODES = ['favorable', 'reserves', 'defavorable'] as const;

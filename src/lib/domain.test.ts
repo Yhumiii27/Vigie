@@ -66,14 +66,14 @@ describe('sources des actions (§ 12)', () => {
       analyse_risque: 'free', analyse_chimique: 'free', analyse_environnementale: 'free', audit_certification: 'audit', audit_fournisseur: 'audit',
       audit_interne: 'audit', audit_terrain: 'audit', autorite_publique: 'free', causerie: 'free', comex: 'free', controle_reglementaire: 'control',
       dechets: 'environment', duerp: 'risk', evenement: 'event', objectif: 'objective', reclamation_client: 'event', reunion_operationnelle: 'free',
-      revue_direction: 'review', revue_documentaire: 'document', revue_processus: 'free', veille: 'requirement', hazop: 'free', reserves: 'free', rex: 'free',
+      revue_direction: 'review', revue_documentaire: 'document', revue_processus: 'free', veille: 'requirement', hazop: 'safetystudy', reserves: 'free', rex: 'free',
     });
     for (const k of SOURCE_KEYS) expect(ACTION_SOURCES[k].path === null).toBe(ACTION_SOURCES[k].target === 'free');
     expect(ACTION_SOURCES.audit_fournisseur).toEqual({ label: 'Audit fournisseur', icon: 'ph-truck', target: 'audit', path: '/audits' });
     expect(ACTION_SOURCES.dechets).toEqual({ label: 'Déchets', icon: 'ph-recycle', target: 'environment', path: '/environnement' });
   });
-  it('précisions affichées sous la liste des sources : AST-EST et Réserves seulement', () => {
-    expect(SOURCE_KEYS.filter((k) => ACTION_SOURCES[k].hint)).toEqual(['analyse_risque', 'reserves']);
+  it('précisions affichées sous la liste des sources : AST-EST, HAZOP (études de sécurité des procédés, VG-02) et Réserves', () => {
+    expect(SOURCE_KEYS.filter((k) => ACTION_SOURCES[k].hint)).toEqual(['analyse_risque', 'hazop', 'reserves']);
     expect(ACTION_SOURCES.analyse_risque.hint).toBe('AST : analyse de sécurité des tâches en contexte pyrotechnique ; EST : étude de sécurité technique.');
     expect(ACTION_SOURCES.reserves.hint).toBe("Réserves de réception d'un chantier ou d'une installation.");
   });
@@ -81,6 +81,7 @@ describe('sources des actions (§ 12)', () => {
     expect(SOURCE_LINK_KINDS.event).toEqual(['event']);
     expect(SOURCE_LINK_KINDS.audit).toEqual(['finding', 'plan']);
     expect(SOURCE_LINK_KINDS.free).toEqual([]);
+    expect(SOURCE_LINK_KINDS.safetystudy).toEqual(['safetystudy']); // VG-02 : recommandation d'une étude de sécurité des procédés
     expect(SOURCE_LINK_KINDS.environment).toEqual(['wastestream', 'wasteentry', 'requirement']); // action BSD (Déchets + exigence)
     expect(EVENT_AUDIT_LINK_KINDS).toEqual(['event', 'finding', 'plan']);
     expect(Object.keys(LEGACY_ORIGIN_LABELS).sort()).toEqual(['audit', 'client', 'docs', 'env', 'ev', 'prevention', 'rev', 'risk', 'skills', 'watch']);

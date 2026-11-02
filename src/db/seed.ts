@@ -22,6 +22,7 @@ import { FIRST_AID_TITLE, seedSkills } from './seeds/skills';
 import { seedWatch } from './seeds/watch';
 import { seedComplianceFunctions } from './seeds/paquet13';
 import { seedManagementSystem } from './seeds/paquet13b';
+import { seedProcessSafety } from './seeds/process-safety';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -58,6 +59,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedComplianceFunctions(tx));
   // Paquet 13, seconde moitié (migration 0021), une seule fois (src/db/seeds/paquet13b.ts).
   await db.transaction((tx) => seedManagementSystem(tx));
+  // Études de sécurité des procédés (migration 0023), une seule fois (src/db/seeds/process-safety.ts).
+  await db.transaction((tx) => seedProcessSafety(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -216,6 +219,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedComplianceFunctions(tx);
     // Paquet 13, seconde moitié : audits hors programme et par site, situations d'urgence, changements, revue documentaire.
     await seedManagementSystem(tx);
+    // Études de sécurité des procédés (VG-01 à VG-05) : HazID, HazOp et ses recommandations, PSSR planifiée.
+    await seedProcessSafety(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

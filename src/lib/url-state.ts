@@ -40,7 +40,7 @@ export const DETAIL_PARAMS = {
   '/evenements': { evenement: 'sel' },
   '/actions': { action: 'action' },
   '/veille': { exigence: 'exigence', controle: 'controle', observation: 'observation' },
-  '/risques': { risque: 'risque', situation: 'situation' },
+  '/risques': { risque: 'risque', situation: 'situation', etude: 'etude' },
   '/documents': { document: 'doc' },
   '/prevention': { plan: 'plan', permis: 'permis', entreprise: 'entreprise' },
   '/environnement': { enlevement: 'enlevement', filiere: 'filiere' },

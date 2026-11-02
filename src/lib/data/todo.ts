@@ -12,6 +12,7 @@ import { loadEmergencySignals } from './emergencies';
 import { loadEnvironmentSignals } from './environment';
 import { loadEventSignals } from './events';
 import { loadPreventionSignals } from './prevention-signals';
+import { loadProcessSafetySignals } from './process-safety';
 import { loadReportPostSignals } from './report-posts';
 import { loadReviewSignals } from './review';
 import { loadRiskSignals } from './risks';
@@ -36,6 +37,8 @@ export const loadTodo = cache(async (): Promise<TodoItem[]> => {
     loadDocumentSignals(), loadEnvironmentSignals(), loadSiteSignals(), loadReportPostSignals(),
     // Paquet 13, seconde moitié : exercices des situations d'urgence (CNF-08), demandes de changement (CNF-11).
     loadEmergencySignals(), loadChangeSignals(),
+    // VG-01 : séance passée d'une étude de sécurité des procédés encore planifiée.
+    loadProcessSafetySignals(),
   ]);
   return signals.flatMap((s) => s.todo).sort(byUrgency);
 });
