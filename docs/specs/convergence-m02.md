@@ -143,7 +143,8 @@ démonstration · charge révisée. Les références `HAB-…`, `DOC-…` renvoi
 - **Cible.** Matrix fait foi (`matrix.sites`) ; Vigie lit `matrix.pub_sites` (`code`, `libelle`, `ville`, `pays_iso2`,
   `ordre`, `actif`, `filiale_code`, `latitude`, `longitude`). `vigie.sites` reste un cache : une ligne = un site suivi
   par Vigie.
-- **Méthode révisée (proposée, CV-09).** Le plan réécrit les identifiants (`ville-a` → `lyon`) dans toutes les tables.
+- **Décision CV-09 (responsable produit, 03/11/2026) : réécrire les identifiants** — « sinon on doublonne de l'information ». L'identifiant d'un site de Vigie est son code de Matrix (`matrix.sites.code`) ; plus de colonne `sites.code` distincte à terme. Avec P-03 (aucune donnée en production), seuls le jeu de démonstration et les tests sont repris.
+- *Proposition initiale, écartée :* Le plan réécrit les identifiants (`ville-a` → `lyon`) dans toutes les tables.
   Proposé : **garder `sites.id`** (27 clés étrangères, `pub_controles.site_code` publie `controls.site_id`) et faire de
   `sites.code` (VG-05, déjà unique et au format de Matrix) la clé du cache, obligatoire hors démonstration. Avec P-03, le
   serveur part sans site : chaque site est créé en choisissant un code de `pub_sites`.
@@ -553,7 +554,7 @@ Questions nouvelles (CV : convergence de Vigie) :
 | CV-06 | D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
 | CV-07 | Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
 | CV-08 | Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
-| CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache (proposé), plutôt que réécrire les identifiants de 27 clés comme le prévoit le plan ? | responsable produit | lot 1 |
+| CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache, ou réécrire les identifiants ? **Tranché le 03/11/2026 : réécrire les identifiants (identifiant de site = code de Matrix), pour ne rien doublonner.** | responsable produit | lot 1 |
 | CV-10 | D01 : personnes sans matricule (comptes Entra hors Cursus, intérimaires, extérieurs) gardées comme fiches locales ? Lien compte Entra ↔ matricule : rattachement manuel par le QHSE, ou correspondance tenue par Matrix (`pub_correspondances`), ou e-mail publié par Cursus ? | responsable produit, RH | lot 1 |
 | CV-11 | Veille : « projets concernés » d'une exigence d'après une date de livraison que `pub_projets` ne publie pas. Lire `pub_jalons_projets` (PV de réception) ou `pub_avancement_projets` (fin prévue), ou ne garder que la surcharge manuelle ? | QHSE | lot 1 (D02) |
 
