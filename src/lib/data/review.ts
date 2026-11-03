@@ -1,6 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { asc, desc, inArray, isNull } from 'drizzle-orm';
+import { loadProjectIndex } from '@/lib/foreign/keystone';
+import { projectText } from '@/lib/foreign/labels';
 import { getDb, schema as t } from '@/db';
 import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';
@@ -597,7 +599,7 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
   const plan = allPlan.filter((p) => inSite(site, p.siteId));
   const findings = allFindings.filter((f) => inSite(site, f.siteId));
   // AUD-13 et CNF-05 : objectifs de l'année de la date d'arrêt (cible TF1 comprise), contexte du système de management.
-  const [objectiveData, contextData, target] = await Promise.all([loadObjectives(yearOf(asOf)), loadContext(), tf1Target(yearOf(asOf), site)]);
+  const [objectiveData, contextData, target, projectIndex] = await Promise.all([loadObjectives(yearOf(asOf)), loadContext(), tf1Target(yearOf(asOf), site), loadProjectIndex()]);
   const { now, people, prior } = rec;
   const from = header.from;
   const name = (id: string | null | undefined) => (id ? people.get(id)?.name ?? '—' : '—');
@@ -660,7 +662,7 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
 
   // 4. Réclamations clients
   const complaints = last12.filter((e) => e.type === 'RC').map((e) => ({
-    id: e.id, occurredOn: e.occurredOn, title: e.title, project: e.keystoneProject, step: EVENT_STEPS[e.step], open: isOpen(e), pilot: name(e.pilotId),
+    id: e.id, occurredOn: e.occurredOn, title: e.title, project: projectText(e.keystoneProjectCode, e.keystoneProject, projectIndex), step: EVENT_STEPS[e.step], open: isOpen(e), pilot: name(e.pilotId),
     actions: eventActions(e.id), href: eventHref(e.id),
   }));
 

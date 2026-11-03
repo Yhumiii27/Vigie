@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import {
   FIRE_WATCH_HOURS, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, activityLinkIssues, addHoursLocal, firstMinuteReason,
@@ -45,7 +46,7 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   let contractorId = f.opt('contractorId');
   const performer = f.str('performer', { required: true, max: 200 });
   const preventionPlanId = f.opt('preventionPlanId');
-  const keystoneProject = f.opt('keystoneProject');
+  const projectInput = f.opt('keystoneProjectCode'); // D02 : code de keystone.pub_projets (absent du formulaire : inchangé)
   const fromLocal = f.str('validFrom', { required: true });
   const toLocal = f.str('validTo', { required: true });
   const watchLocal = f.opt('watchUntil');
@@ -69,11 +70,10 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   }
 
   const db = await getDb();
-  const [sites, contractors, plans, projects] = await Promise.all([
+  const [sites, contractors, plans] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select().from(t.preventionPlans),
-    db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
   ]);
   if (siteId && !sites.some((s) => s.id === siteId)) f.fail('siteId', 'Site inconnu.');
   const [existing] = id ? await db.select().from(t.permits).where(eq(t.permits.id, id)) : [];
@@ -96,8 +96,9 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
       f.fail('preventionPlanId', `Ce plan (${fmtPeriod(plan.startOn, plan.endOn)}) ne couvre pas la validité du permis.`);
     } else contractorId = plan.contractorId;
   }
-  const knownProject = !keystoneProject || keystoneProject === existing?.keystoneProject || projects.some((p) => `${p.id} · ${p.client}` === keystoneProject);
-  if (!knownProject) f.fail('keystoneProject', 'Projet Keystone inconnu.');
+  const keystoneProjectCode = fd.has('keystoneProjectCode') ? projectInput : existing?.keystoneProjectCode ?? null;
+  const projectError = await unknownProjectError(db, keystoneProjectCode, existing?.keystoneProjectCode);
+  if (projectError) f.fail('keystoneProjectCode', projectError);
   // PRV-11 : les activités de la carte rattachées (non annulées) restent sur le site et l'entreprise du permis, et
   // sa validité recoupe chacune d'elles.
   if (existing && siteId && validFrom && validTo && validTo > validFrom) {
@@ -111,11 +112,11 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   if (!f.ok) return f.state();
 
   const values = {
-    type: type!, siteId, location, description, contractorId, performer, preventionPlanId, keystoneProject,
+    type: type!, siteId, location, description, contractorId, performer, preventionPlanId, keystoneProjectCode,
     validFrom: validFrom!, validTo: validTo!, watchUntil, checklist: checklist!,
   };
   if (existing) {
-    const details = diffFields(existing, values, { location: 'Lieu', description: 'Travaux', contractorId: 'Entreprise', performer: 'Intervenant(s)', preventionPlanId: 'Plan de prévention', keystoneProject: 'Projet Keystone' });
+    const details = diffFields(existing, values, { location: 'Lieu', description: 'Travaux', contractorId: 'Entreprise', performer: 'Intervenant(s)', preventionPlanId: 'Plan de prévention', keystoneProjectCode: 'Projet Keystone' });
     const moved = existing.validFrom.getTime() !== validFrom!.getTime() || existing.validTo.getTime() !== validTo!.getTime();
     const stale = await freshWrite(() => db.transaction(async (tx) => {
       // QUA-12 : demande modifiée ou délivrée depuis l'ouverture du formulaire : rien n'est écrasé.

@@ -30,7 +30,7 @@ async function heavyJpeg(page: Page, w: number, h: number): Promise<Buffer> {
 }
 
 test('galerie des photos d’une fiche événement : agrandie, suivante, original', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   const errors = consoleErrors(page);
   await page.goto('/evenements?sel=EV-2026-130');
   const jpeg = await jpegWithExif(page);
@@ -58,7 +58,7 @@ test('galerie des photos d’une fiche événement : agrandie, suivante, origina
 });
 
 test('allègement : photo au-delà de la limite par fichier réduite avant l’envoi, acceptée', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/evenements?sel=EV-2026-130');
   const big = await heavyJpeg(page, 3400, 2550);
   expect(big.length).toBeGreaterThan(10 * 1024 * 1024);

@@ -15,7 +15,7 @@ import { archiveRequirement } from '@/server/watch';
 // Changements volontaires : restaurations et réintégration avec motif (site, entreprise extérieure, titre, salarié),
 // report d'une revue avec motif ; plus de règle locale (3 caractères au moins pour la veille, 300 au plus pour l'annulation
 // d'une revue, 500 au plus pour l'archivage d'un site, 200 au plus pour une sortie de l'effectif). Jeu de démonstration au
-// 09/10/2026 : EE-007 archivée ; site ville-c archivé ; revue annuelle planifiée le 10/12/2026.
+// 09/10/2026 : EE-007 archivée ; site site_c archivé ; revue annuelle planifiée le 10/12/2026.
 
 freshDemoDatabase();
 
@@ -39,25 +39,25 @@ describe('règle commune du motif', () => {
     const db = await getDb();
     const [planned] = await db.select().from(t.reviews).where(eq(t.reviews.status, 'planifiee'));
     expect(await cancelReview({}, form({ id: String(planned.id), reason: LONG }))).toMatchObject({ fieldErrors: { reason: `${REASON_MAX} caractères au maximum.` } });
-    expect(await archiveSite({}, form({ siteId: 'ville-b', reason: 'z'.repeat(800) }))).toMatchObject({ ok: true });
-    expect((await db.select().from(t.sites).where(eq(t.sites.id, 'ville-b')))[0].archiveReason).toHaveLength(800);
+    expect(await archiveSite({}, form({ siteId: 'site_b', reason: 'z'.repeat(800) }))).toMatchObject({ ok: true });
+    expect((await db.select().from(t.sites).where(eq(t.sites.id, 'site_b')))[0].archiveReason).toHaveLength(800);
   });
 });
 
 describe('restaurations et réintégration avec motif', () => {
   it('site : droits, motif obligatoire, journal avec motif', async () => {
     actAs('Chef de service', 'all');
-    expect(await restoreSite({}, form({ siteId: 'ville-b', reason: 'Reprise' }))).toEqual({ error: "Réservé à l'animateur QHSE et à la direction." });
+    expect(await restoreSite({}, form({ siteId: 'site_b', reason: 'Reprise' }))).toEqual({ error: "Réservé à l'animateur QHSE et à la direction." });
     actAs('Animateur QHSE', 'all');
-    expect(await restoreSite({}, form({ siteId: 'ville-b', reason: ' ' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
-    expect(await restoreSite({}, form({ siteId: 'ville-b', reason: 'Archivé par erreur' }))).toEqual({ ok: true, id: 'ville-b' });
-    expect(await lastLog('site', 'ville-b')).toMatchObject({ action: 'restore', reason: 'Archivé par erreur' });
+    expect(await restoreSite({}, form({ siteId: 'site_b', reason: ' ' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
+    expect(await restoreSite({}, form({ siteId: 'site_b', reason: 'Archivé par erreur' }))).toEqual({ ok: true, id: 'site_b' });
+    expect(await lastLog('site', 'site_b')).toMatchObject({ action: 'restore', reason: 'Archivé par erreur' });
   });
 
   it('entreprise extérieure : droits, motif obligatoire, journal avec motif', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect((await restoreContractor({}, form({ id: 'EE-007', reason: 'Retour' }))).error).toBeDefined();
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await restoreContractor({}, form({ id: 'EE-007', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     expect(await restoreContractor({}, form({ id: 'EE-007', reason: 'Nouveau contrat d’entretien' }))).toEqual({ ok: true, id: 'EE-007' });
     expect(await lastLog('contractor', 'EE-007')).toMatchObject({ action: 'restore', reason: 'Nouveau contrat d’entretien', byId: 'sbenali' });
@@ -65,13 +65,13 @@ describe('restaurations et réintégration avec motif', () => {
   });
 
   it('salarié : sortie (motif commun) puis réintégration avec motif, site contrôlé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: '' }))).toMatchObject({ fieldErrors: { leftReason: 'Motif obligatoire.' } });
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'w'.repeat(300) }))).toEqual({ ok: true, id: 'mgirard' });
     expect(await reinstatePerson({}, form({ id: 'mgirard', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await reinstatePerson({}, form({ id: 'mgirard', reason: 'Retour' }))).error).toMatch(/autre site/);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await reinstatePerson({}, form({ id: 'mgirard', reason: 'Sortie saisie par erreur' }))).toEqual({ ok: true, id: 'mgirard' });
     expect(await lastLog('person', 'mgirard')).toMatchObject({ action: 'restore', reason: 'Sortie saisie par erreur' });
   });

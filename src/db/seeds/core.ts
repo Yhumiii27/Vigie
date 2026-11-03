@@ -3,9 +3,10 @@ import { DEMO_QHSE_LEAD, DEMO_ROLE_PEOPLE } from '../../lib/demo';
 import type { Role } from '../../lib/domain';
 import * as t from '../schema';
 import { iso, rel } from './dates';
+import { DEMO_MATRICULES } from './foreign';
 import type { SeedTx } from './types';
 
-// Jeu de démonstration : sites, personnes, projets Keystone et heures travaillées (QUA-26 : extrait de src/db/seed.ts).
+// Jeu de démonstration : sites, personnes (matricules : jointure des affectations de Keystone, D04) et heures travaillées (QUA-26 : extrait de src/db/seed.ts).
 // Les noms entre crochets sont des placeholders à remplacer par l'import du personnel.
 
 // Site B = zone d'essais ; tous les autres salariés sont rattachés au site A.
@@ -35,23 +36,9 @@ export const pid = (name: string) => {
   return p[0];
 };
 
-// Projets Keystone référencés : les 7 livrés après le 20/01/2027 sont concernés par le règlement 2023/1230 (calcul automatique,
-// requirements.affectsProjects).
-export const PROJECTS: [id: string, client: string, title: string, deliveryOn: string][] = [
-  ['K-2024-097', '[Client C]', 'Presse à cartoucher PC-400', rel(-119)],
-  ['K-2024-118', '[Client B]', "Ligne de convoyage et banc d'essais", rel(49)],
-  ['K-2025-042', '[Client A]', 'Malaxeur et poste de retournement', rel(8)],
-  ['K-2025-061', '[Client E]', 'Cellule de remplissage automatisée', rel(140)],
-  ['K-2025-077', '[Client A]', 'Malaxeur MX-2 — seconde ligne', rel(161)],
-  ['K-2026-003', '[Client F]', 'Presse hydraulique 400 t', rel(182)],
-  ['K-2026-007', '[Client D]', 'Machine spéciale de sertissage', rel(224)],
-  ['K-2026-012', '[Client B]', 'Convoyeur à rouleaux CV-20', rel(252)],
-  ['K-2026-019', '[Client G]', 'Banc de test hydraulique', rel(336)],
-  ['K-2026-024', '[Client C]', 'Rétrofit presse PC-400', rel(392)],
-];
 
 /** SIRET fictifs des sites de démonstration (clé de Luhn valide, jamais un SIRET réel). */
-export const DEMO_SIRET: Record<string, string> = { 'ville-a': '00000000000018', 'ville-b': '00000000000026' };
+export const DEMO_SIRET: Record<string, string> = { 'site_a': '00000000000018', 'site_b': '00000000000026' };
 
 /** Dernier rôle connu des personnes de démonstration (destinataires par rôle : animateurs QHSE, direction). */
 export const DEMO_LAST_ROLES = new Map(Object.entries(DEMO_ROLE_PEOPLE).map(([role, id]) => [id, role as Role]));
@@ -60,31 +47,33 @@ export const DEMO_LAST_ROLES = new Map(Object.entries(DEMO_ROLE_PEOPLE).map(([ro
 export const demoEmail = (name: string) =>
   `${name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '')}@epc2i.example`;
 
-/** Sites (deux actifs, un archivé), personnes, responsable QHSE des sites, projets Keystone, heures travaillées sur 12 mois. */
+/**
+ * Sites (deux actifs, un archivé ; identifiants = codes de matrix.pub_sites, décision CV-09, substitut src/db/seeds/foreign.ts),
+ * personnes, responsable QHSE des sites, heures travaillées sur 12 mois. Projets et affectations : vues de Keystone (D02, D04).
+ */
 export async function seedCore(tx: SeedTx) {
   await tx.insert(t.sites).values([
     // Établissement Seveso seuil haut : plan de prévention écrit dès la première minute d'intervention.
     // SIRET fictifs (clé de Luhn valide) : registre des déchets (DOC-02).
-    { id: 'ville-a', label: 'Site de [Ville A] — siège et ateliers', seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 1, siret: DEMO_SIRET['ville-a'] },
-    { id: 'ville-b', label: "Site de [Ville B] — zone d'essais", seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 2, siret: DEMO_SIRET['ville-b'] },
+    { id: 'site_a', label: 'Site de [Ville A] — siège et ateliers', seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 1, siret: DEMO_SIRET['site_a'] },
+    { id: 'site_b', label: "Site de [Ville B] — zone d'essais", seveso: 'seuil_haut', ppFromFirstMinute: true, sort: 2, siret: DEMO_SIRET['site_b'] },
   ]);
   await tx.insert(t.people).values(PEOPLE.map(([id, name, job, inSkillsMatrix, service], sort) => ({
-    id, name, job, inSkillsMatrix, service, sort, siteId: SITE_B_PEOPLE.has(id) ? 'ville-b' : 'ville-a', ...LEFT[id],
-    email: demoEmail(name), lastRole: DEMO_LAST_ROLES.get(id) ?? null,
+    id, name, job, inSkillsMatrix, service, sort, siteId: SITE_B_PEOPLE.has(id) ? 'site_b' : 'site_a', ...LEFT[id],
+    email: demoEmail(name), lastRole: DEMO_LAST_ROLES.get(id) ?? null, matricule: DEMO_MATRICULES[id] ?? null,
   })));
   // Responsable QHSE des deux sites actifs : l'animatrice QHSE de démonstration.
-  await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD }).where(inArray(t.sites.id, ['ville-a', 'ville-b']));
+  await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD }).where(inArray(t.sites.id, ['site_a', 'site_b']));
   // Site archivé (fermé) : absent des sélecteurs, sans autre donnée rattachée.
   await tx.insert(t.sites).values({
-    id: 'ville-c', label: 'Site de [Ville C] — ancien dépôt logistique', seveso: null, ppFromFirstMinute: false, sort: 3,
+    id: 'site_c', label: 'Site de [Ville C] — ancien dépôt logistique', seveso: null, ppFromFirstMinute: false, sort: 3,
     archivedAt: new Date(`${rel(-192)}T16:00:00Z`), archivedById: 'hmarchand', archiveReason: 'Dépôt fermé fin mars 2026 : activité regroupée sur le site de [Ville A].',
   });
-  await tx.insert(t.keystoneProjects).values(PROJECTS.map(([id, client, title, deliveryOn]) => ({ id, client, title, deliveryOn })));
 
   // Heures travaillées sur 12 mois (≈ 200 ETP, dont ~10 % sur le site B) — à remplacer par la source RH.
   await tx.insert(t.hoursWorked).values(Array.from({ length: 12 }, (_, i) => {
     const m = ((8 + i) % 12) + 1, y = m >= 10 ? 2025 : 2026;
     const total = m === 8 ? 19_600 : 27_800, b = Math.round(total * 0.1);
-    return [{ month: iso(y, m, 1), siteId: 'ville-a', hours: total - b }, { month: iso(y, m, 1), siteId: 'ville-b', hours: b }];
+    return [{ month: iso(y, m, 1), siteId: 'site_a', hours: total - b }, { month: iso(y, m, 1), siteId: 'site_b', hours: b }];
   }).flat());
 }

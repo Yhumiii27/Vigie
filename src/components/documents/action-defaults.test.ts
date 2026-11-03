@@ -7,7 +7,7 @@ import { documentActionDefaults } from './action-defaults';
 
 const kindOf = (link: string | undefined) => link?.split(':')[0] ?? null;
 const doc = {
-  id: 'PR-QHSE-003', title: 'Gestion des déchets', ownerId: 'clefevre', siteId: 'ville-a', actionTitle: 'Revue périodique de PR-QHSE-003 — gestion des déchets',
+  id: 'PR-QHSE-003', title: 'Gestion des déchets', ownerId: 'clefevre', siteId: 'site_a', actionTitle: 'Revue périodique de PR-QHSE-003 — gestion des déchets',
   dueSoon: false, overdue: true, nextReviewOn: '2026-09-30', pending: null,
 };
 
@@ -16,7 +16,7 @@ describe('action de revue documentaire', () => {
     const d = documentActionDefaults(doc, { review: true, suggestedDueOn: '2026-11-08' });
     expect(d).toMatchObject({
       source: 'revue_documentaire', lockSource: true, link: 'document:PR-QHSE-003', linkLabel: 'Document · PR-QHSE-003', originRef: 'PR-QHSE-003',
-      domain: 'qualite', pilotId: 'clefevre', siteId: 'ville-a', dueOn: '2026-11-08', verifyDueOn: '2026-12-08',
+      domain: 'qualite', pilotId: 'clefevre', siteId: 'site_a', dueOn: '2026-11-08', verifyDueOn: '2026-12-08',
       detail: 'Revue périodique de PR-QHSE-003 — gestion des déchets',
       problem: 'Revue périodique de PR-QHSE-003 « Gestion des déchets » dépassée (prévue le 30/09/2026).',
     });

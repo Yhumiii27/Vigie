@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, eq, gte, isNull } from 'drizzle-orm';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, MAX_PLAN_FILES, MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_CONTENT, PLAN_CONTENT_KEYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,
@@ -61,7 +62,7 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   const endOn = f.date('endOn', { required: true });
   const estimatedHours = f.int('estimatedHours', { required: true, min: 0, max: 100_000 });
   const dangerousWork = f.bool('dangerousWork');
-  const keystoneProject = f.opt('keystoneProject');
+  const projectInput = f.opt('keystoneProjectCode'); // D02 : code de keystone.pub_projets (absent du formulaire : inchangé)
   const inspectionOn = f.date('inspectionOn');
   const interferenceRisks = f.str('interferenceRisks', { max: 4000 });
   const measures = f.str('measures', { max: 4000 });
@@ -72,11 +73,10 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   if (inspectionOn && endOn && inspectionOn > endOn) f.fail('inspectionOn', "L'inspection commune doit avoir lieu au plus tard le dernier jour de l'intervention.");
 
   const db = await getDb();
-  const [contractors, sites, people, projects] = await Promise.all([
+  const [contractors, sites, people] = await Promise.all([
     db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.people.id }).from(t.people),
-    db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
   ]);
   if (siteId && !sites.some((s) => s.id === siteId)) f.fail('siteId', 'Site inconnu.');
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
@@ -90,8 +90,9 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   const contractor = contractors.find((c) => c.id === contractorId);
   if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
   else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', ARCHIVED_CONTRACTOR);
-  const knownProject = !keystoneProject || keystoneProject === existing?.keystoneProject || projects.some((p) => `${p.id} · ${p.client}` === keystoneProject);
-  if (!knownProject) f.fail('keystoneProject', 'Projet Keystone inconnu.');
+  const keystoneProjectCode = fd.has('keystoneProjectCode') ? projectInput : existing?.keystoneProjectCode ?? null;
+  const projectError = await unknownProjectError(db, keystoneProjectCode, existing?.keystoneProjectCode);
+  if (projectError) f.fail('keystoneProjectCode', projectError);
   if (existing) {
     // Les permis actifs rattachés restent sur le site et l'entreprise du plan.
     const linked = (await db.select().from(t.permits).where(eq(t.permits.preventionPlanId, existing.id))).filter(isOpenPermit);
@@ -128,7 +129,7 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
 
   const values = {
     siteId, contractorId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
-    keystoneProject, inspectionOn, interferenceRisks, measures, eeHeadcount, ...content, ownerId,
+    keystoneProjectCode, inspectionOn, interferenceRisks, measures, eeHeadcount, ...content, ownerId,
   };
 
   if (existing) {
@@ -180,7 +181,7 @@ const fmtValue = (v: unknown) => (v == null || v === '' ? null : typeof v === 'b
 /** Libellés des champs suivis dans l'historique d'un plan. */
 const PLAN_LABELS = {
   siteId: 'Site', contractorId: 'Entreprise', title: 'Nature des travaux', location: 'Lieu', startOn: 'Début', endOn: 'Fin',
-  estimatedHours: 'Heures sur 12 mois', dangerousWork: 'Travaux dangereux', keystoneProject: 'Projet Keystone', inspectionOn: 'Inspection commune',
+  estimatedHours: 'Heures sur 12 mois', dangerousWork: 'Travaux dangereux', keystoneProjectCode: 'Projet Keystone', inspectionOn: 'Inspection commune',
   interferenceRisks: "Risques d'interférence", measures: 'Mesures de prévention', ownerId: 'Responsable',
   eeHeadcount: 'Effectif prévisible', eeSupervisor: "Responsable de l'intervention (entreprise extérieure)", subcontracting: 'Sous-traitance',
   dangerousPhases: 'Phases dangereuses', equipment: 'Matériels et installations', workerInstructions: 'Instructions aux travailleurs',

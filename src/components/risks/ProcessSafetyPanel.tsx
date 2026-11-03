@@ -28,7 +28,8 @@ import {
 // fiche ?etude=<référence> (VG-04) avec ses recommandations (actions QSE). Lecture : rôles de l'écran sauf le Salarié ;
 // saisie, validation, réouverture et annulation (motif), réserves bloquantes : animateur QHSE et direction.
 
-type Opts = { sites: readonly Option[]; people: readonly Option[] };
+/** Listes du formulaire ; projets : keystone.pub_projets (D02), `projectsMessage` si la source est indisponible. */
+type Opts = { sites: readonly Option[]; people: readonly Option[]; projects: readonly Option[]; projectsMessage: string | null };
 
 const MILESTONE_OPTIONS = STUDY_MILESTONE_KEYS.map((m) => [m, `${STUDY_MILESTONES[m].label} — ${STUDY_MILESTONES[m].hint}`] as const);
 const CONCLUSION_OPTIONS = STUDY_CONCLUSION_KEYS.map((c) => [c, STUDY_CONCLUSIONS[c].label] as const);
@@ -252,8 +253,8 @@ function StudyForm({ s, options, defaultSite, today, version, onDone, onCancel }
         <Field name="capexCode" label="Code CAPEX" hint="Ex. CPX-APM-2026-01 (Arche). Au moins le CAPEX ou le projet.">
           <Input name="capexCode" defaultValue={s?.capexCode ?? ''} maxLength={44} autoFocus={!s} />
         </Field>
-        <Field name="keystoneProjectCode" label="Projet EPC2i" hint="Code du projet Keystone, facultatif.">
-          <Input name="keystoneProjectCode" defaultValue={s?.projectCode ?? ''} maxLength={40} />
+        <Field name="keystoneProjectCode" label="Projet EPC2i" hint={options.projectsMessage ?? 'Projet Keystone, facultatif.'}>
+          <Select name="keystoneProjectCode" options={withCurrent(options.projects, s?.projectCode, s?.projectCode, 'start')} defaultValue={s?.projectCode ?? ''} placeholder="Aucun projet" />
         </Field>
       </FormRow>
       <FormRow>

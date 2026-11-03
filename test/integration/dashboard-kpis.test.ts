@@ -18,10 +18,10 @@ const recentCount = (note: string) => Number(/^(\d+) déclaré/.exec(note)?.[1])
 
 describe('KPI (TDB-13)', () => {
   it('« déclarés sur les 7 derniers jours » : date de déclaration, et non date des faits', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = recentCount((await kpi('Événements ouverts')).note);
     const db = await getDb();
-    const base = { siteId: 'ville-a', type: 'SD', location: 'Atelier', severity: 2, description: 'x' };
+    const base = { siteId: 'site_a', type: 'SD', location: 'Atelier', severity: 2, description: 'x' };
     // Faits anciens, déclarés aujourd'hui : compté ; faits d'hier, saisis il y a un mois : non compté.
     await db.insert(t.events).values([
       { ...base, id: 'EV-T1', title: 'Déclaré aujourd’hui', occurredOn: '2026-08-01', createdAt: new Date('2026-10-09T07:00:00Z') },
@@ -31,7 +31,7 @@ describe('KPI (TDB-13)', () => {
   });
 
   it('note des contrôles : le contrôle le plus en retard', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const ctrl = (await loadControls()).map((c) => ({ c, s: controlStatus(c, '2026-10-09') })).filter((x) => x.s.days < 0);
     expect(ctrl.length).toBeGreaterThan(0);
     const worst = Math.min(...ctrl.map((x) => x.s.days));
@@ -41,7 +41,7 @@ describe('KPI (TDB-13)', () => {
   it('NC sans origine : barre « Origine non renseignée » ; NC d’origine client distincte des réclamations client', async () => {
     actAs('Animateur QHSE', 'all');
     const db = await getDb();
-    const base = { siteId: 'ville-a', location: 'Atelier', severity: 2, description: 'x', occurredOn: '2026-10-01' };
+    const base = { siteId: 'site_a', location: 'Atelier', severity: 2, description: 'x', occurredOn: '2026-10-01' };
     await db.insert(t.events).values([
       { ...base, id: 'EV-T3', type: 'NC', title: 'NC sans origine', ncOrigin: null },
       { ...base, id: 'EV-T4', type: 'NC', title: 'NC origine client', ncOrigin: 'Réclamation client' },
@@ -59,7 +59,7 @@ describe('KPI (TDB-13)', () => {
 
 describe('carte « Veille réglementaire » (TDB-14)', () => {
   it('avant la date : « Applicable au », sans état ; après : « Applicable depuis le » et état de conformité', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await loadDashboard()).featured!;
     expect(before.daysLeft).toBeGreaterThan(0);
     expect(before).toMatchObject({ prefix: 'Applicable au', state: null });
@@ -74,23 +74,23 @@ describe('site en vue « Tous les sites » (TDB-15)', () => {
     actAs('Animateur QHSE', 'all');
     const all = await loadDashboard();
     expect(all.latest.length).toBeGreaterThan(0);
-    for (const e of all.latest) expect(e.siteLabel).toBe(e.siteId === 'ville-a' ? 'Site de [Ville A]' : 'Site de [Ville B]');
+    for (const e of all.latest) expect(e.siteLabel).toBe(e.siteId === 'site_a' ? 'Site de [Ville A]' : 'Site de [Ville B]');
     for (const x of all.todo) if (x.siteId) expect(x.siteLabel).toMatch(/^Site de/);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     for (const e of (await loadDashboard()).latest) expect(e.siteLabel).toBeNull();
   });
 });
 
 describe('état lu depuis le tableau de bord et la page À faire (TDB-11)', () => {
   it('échéance ouverte marquée lue (même action que la cloche), état repris par la carte et la page', async () => {
-    actAs('Direction', 'ville-a');
+    actAs('Direction', 'site_a');
     const item = (await loadDashboard()).todo.find((x) => !x.read)!;
     expect(item).toBeDefined();
     await markNotificationsRead([item.key]);
     expect((await loadDashboard()).todo.find((x) => x.key === item.key)?.read).toBe(true);
     expect((await loadTodoPage({ mine: false })).items.find((x) => x.key === item.key)?.read).toBe(true);
     // État personnel : pas lu pour une autre personne.
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadTodoPage({ mine: false })).items.find((x) => x.key === item.key)?.read ?? false).toBe(false);
   });
 });

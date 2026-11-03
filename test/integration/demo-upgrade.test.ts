@@ -45,12 +45,12 @@ describe('mise à niveau d’une base de démonstration antérieure', () => {
     // État d'une base remplie par une version antérieure, après la migration 0003 : colonnes ajoutées vides.
     await db.update(t.sites).set({ qhseLeadId: null });
     await db.update(t.people).set({ lastRole: null, email: null });
-    expect((await loadQhseLeads()).forSite('ville-a')).toMatchObject({ ownerIds: [], vacant: true });
+    expect((await loadQhseLeads()).forSite('site_a')).toMatchObject({ ownerIds: [], vacant: true });
 
     await reopen();
     const leads = await loadQhseLeads();
-    expect(leads.forSite('ville-a')).toEqual({ ownerIds: ['clefevre'], who: '[C. Lefèvre]', vacant: false });
-    expect(leads.forSite('ville-b')).toMatchObject({ ownerIds: ['clefevre'], vacant: false });
+    expect(leads.forSite('site_a')).toEqual({ ownerIds: ['clefevre'], who: '[C. Lefèvre]', vacant: false });
+    expect(leads.forSite('site_b')).toMatchObject({ ownerIds: ['clefevre'], vacant: false });
     expect(leads.directors.map((p) => p.id)).toEqual(['hmarchand']);
     expect(leads.approvers.map((p) => p.id)).toEqual(['clefevre', 'hmarchand']);
     const [lead] = await (await getDb()).select({ email: t.people.email }).from(t.people).where(eq(t.people.id, 'clefevre'));
@@ -79,7 +79,7 @@ describe('mise à niveau d’une base de démonstration antérieure', () => {
     expect(e127).toMatchObject({ victimKind: 'salarie', title: 'Intitulé modifié par un utilisateur' }); // saisie conservée
     expect((await after.select().from(t.benignAccidents)).map((b) => b.eventId).sort()).toEqual(['EV-2026-118', 'EV-2026-120']);
     expect((await after.select().from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true))).map((ti) => ti.id)).toEqual(['sst']);
-    const [siteA] = await after.select().from(t.sites).where(eq(t.sites.id, 'ville-a'));
+    const [siteA] = await after.select().from(t.sites).where(eq(t.sites.id, 'site_a'));
     expect(siteA.siret).toBe('00000000000018');
     const [fd01] = await after.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, 'FD-01'));
     expect(fd01).toMatchObject({ qualification: 'recyclage', collectorSiret: '00000000000034', destinationSiret: '00000000000075' });
@@ -98,6 +98,6 @@ describe('mise à niveau d’une base de démonstration antérieure', () => {
     const { loadQhseLeads } = await import('@/lib/data/leads');
     await (await getDb()).update(t.sites).set({ qhseLeadId: null });
     await reopen();
-    expect((await loadQhseLeads()).forSite('ville-a')).toMatchObject({ vacant: true });
+    expect((await loadQhseLeads()).forSite('site_a')).toMatchObject({ vacant: true });
   });
 });

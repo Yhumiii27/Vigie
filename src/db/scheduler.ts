@@ -7,7 +7,8 @@
 // au-delà (rappel du mercredi : pas de rattrapage le jeudi, D13). La base, et donc le planificateur, s'ouvre à la première
 // requête ou sonde de santé (HEALTHCHECK de l'image : 30 s après le démarrage).
 //
-// Tâches inscrites (scheduledTasks) : rappel du mercredi par e-mail (ACT-33), seulement quand un transport d'e-mail existe
+// Tâches inscrites (scheduledTasks) : référentiels partagés (lot 0 de M-02, une fois par nuit, serveur Next.js seulement) ;
+// rappel du mercredi par e-mail (ACT-33), seulement quand un transport d'e-mail existe
 // (VIGIE_MAIL_TRANSPORT ≠ aucun) ; échéances par personne (PRD-12, src/lib/data/person-todo.ts), calculées toutes les heures
 // hors requête et gardées en mémoire pour un futur canal sortant, dans le serveur Next.js seulement (instrumentation :
 // src/lib/server-runtime.ts ; jamais dans les scripts ni les tests). Les passages s'exécutent dans le contexte racine du
@@ -58,6 +59,36 @@ export function personTodoTask(intervalMs = PERSON_TODO_INTERVAL_MS): ScheduledT
   };
 }
 
+/** Nom de la tâche des référentiels partagés (lot 0 de M-02, journal du serveur). */
+export const SHARED_REFERENCES_TASK = 'Référentiels partagés';
+/** Heure de Paris à partir de laquelle le rafraîchissement de la nuit a lieu (une fois par jour). */
+export const SHARED_REFERENCES_HOUR = 2;
+
+const parisClock = (d: Date) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+    .formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: `${p.year}-${p.month}-${p.day}`, hour: Number(p.hour) % 24 };
+};
+
+/**
+ * Référentiels partagés (lot 0 de M-02) : caches des vues des autres outils (sites de Matrix, affectations de Keystone)
+ * rafraîchis une fois par nuit, à partir de 2 h (heure de Paris) ; l'ouverture de la base fait déjà le rafraîchissement du
+ * jour du démarrage. Passages : sync_runs (src/server/foreign-sync.ts).
+ */
+export function sharedReferencesTask(startedAt = new Date()): ScheduledTask {
+  let lastDay = parisClock(startedAt).day;
+  return {
+    name: SHARED_REFERENCES_TASK,
+    async run(db, now) {
+      const { day, hour } = parisClock(now);
+      if (day === lastDay || hour < SHARED_REFERENCES_HOUR) return;
+      lastDay = day;
+      const { refreshSharedReferences } = await import('@/server/foreign-sync');
+      await refreshSharedReferences(db);
+    },
+  };
+}
+
 type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | 'reminderTime' | 'publicUrl' | 'demo' | 'today'>;
 
 /**
@@ -67,7 +98,7 @@ type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | '
 export function scheduledTasks(c: TaskConfig): ScheduledTask[] {
   const tasks: ScheduledTask[] = [];
   // Serveur Next.js seulement (sessions et chargements des écrans) : ni scripts (vigie-db), ni tests.
-  if (serverRuntime()) tasks.push(personTodoTask());
+  if (serverRuntime()) tasks.push(personTodoTask(), sharedReferencesTask());
   const transport = createTransport(c);
   if (transport) {
     tasks.push({

@@ -62,7 +62,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     more: 'Retirer les élingues textiles du poste M3 et tenir le registre des accessoires de levage à jour.',
     row: {
       pilotId: 'sbenali', status: 'p40', priority: 'urgent', dueOn: rel(8), source: 'evenement', originRef: 'EV-2026-131', eventId: 'EV-2026-131',
-      siteId: 'ville-a', domain: 'securite', problem: "Chute de charge au retournement d'un bâti : élingue textile usée, sans étiquette de charge maximale d'utilisation.",
+      siteId: 'site_a', domain: 'securite', problem: "Chute de charge au retournement d'un bâti : élingue textile usée, sans étiquette de charge maximale d'utilisation.",
       verifyDueOn: rel(37), riskLevel: 3, estimatedCost: 950, createdAt: paris(rel(-6)),
     },
   },
@@ -71,7 +71,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     more: "Points d'élingage, angle d'élingage et périmètre de basculement par type de bâti.",
     row: {
       pilotId: 'tnguyen', status: 'a_faire', priority: 'moyen_terme', dueOn: rel(22), source: 'evenement', originRef: 'EV-2026-131', eventId: 'EV-2026-131',
-      siteId: 'ville-a', domain: 'securite', problem: "Aucun mode opératoire écrit pour le retournement des bâtis de plus d'une tonne au pont roulant.",
+      siteId: 'site_a', domain: 'securite', problem: "Aucun mode opératoire écrit pour le retournement des bâtis de plus d'une tonne au pont roulant.",
       verifyDueOn: rel(52), riskLevel: 3, createdAt: paris(rel(-6)),
     },
   },
@@ -79,7 +79,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Mettre à jour la gamme de contrôle de l'arbre de malaxeur (Ø45 h7)", origin: 'ev', stepOn: rel(-3),
     row: {
       pilotId: 'lmoreau', status: 'p60', priority: 'moyen_terme', dueOn: rel(1), source: 'evenement', originRef: 'EV-2026-130', eventId: 'EV-2026-130',
-      siteId: 'ville-a', domain: 'qualite', problem: "Cotes hors tolérance sur l'arbre de malaxeur : la gamme ne prévoit pas de contrôle intermédiaire de l'usure outil.",
+      siteId: 'site_a', domain: 'qualite', problem: "Cotes hors tolérance sur l'arbre de malaxeur : la gamme ne prévoit pas de contrôle intermédiaire de l'usure outil.",
       verifyDueOn: rel(32), createdAt: paris(rel(-7)),
     },
   },
@@ -87,7 +87,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Remplacer le flexible et contrôler les 12 flexibles du banc BE-1', origin: 'ev', stepOn: rel(-4),
     row: {
       pilotId: 'jpetit', status: 'p20', priority: 'urgent', dueOn: rel(-1), source: 'evenement', originRef: 'EV-2026-129', eventId: 'EV-2026-129',
-      siteId: 'ville-b', domain: 'securite', problem: "Flexible hydraulique endommagé sur le banc d'essais BE-1 : risque de rupture à 250 bar.",
+      siteId: 'site_b', domain: 'securite', problem: "Flexible hydraulique endommagé sur le banc d'essais BE-1 : risque de rupture à 250 bar.",
       verifyDueOn: rel(21), riskLevel: 3, estimatedCost: 680, createdAt: paris(rel(-8)),
     },
   },
@@ -95,7 +95,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Recyclage habilitation électrique BR pour 4 monteurs', origin: 'risk',
     row: {
       pilotId: 'clefevre', status: 'a_faire', priority: 'urgent', dueOn: rel(-9), source: 'duerp', originRef: 'DUERP · atelier montage',
-      siteId: 'ville-a', domain: 'securite', problem: "Essais sous tension des armoires : quatre monteurs sans habilitation BR à jour (unité de travail atelier montage).",
+      siteId: 'site_a', domain: 'securite', problem: "Essais sous tension des armoires : quatre monteurs sans habilitation BR à jour (unité de travail atelier montage).",
       verifyDueOn: rel(52), riskLevel: 3, estimatedCost: 2400, createdAt: paris(rel(-38)),
     },
   },
@@ -103,7 +103,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Mettre en conformité l'alimentation électrique de la zone ATEX", origin: 'ev', stepOn: rel(-14),
     row: {
       pilotId: 'clefevre', status: 'p80', priority: 'urgent', dueOn: rel(-24), source: 'evenement', originRef: 'EV-2026-109', eventId: 'EV-2026-109',
-      siteId: 'ville-b', domain: 'securite', problem: 'Prise électrique standard installée en zone ATEX 2 : source d’inflammation possible.',
+      siteId: 'site_b', domain: 'securite', problem: 'Prise électrique standard installée en zone ATEX 2 : source d’inflammation possible.',
       verifyDueOn: rel(21), riskLevel: 4, estimatedCost: 12000, createdAt: paris(rel(-59)),
     },
   },
@@ -111,7 +111,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Plan de circulation magasin : miroir et marquage au sol', origin: 'ev', stepOn: rel(-21),
     row: {
       pilotId: 'rfontaine', status: 'p20', priority: 'moyen_terme', dueOn: rel(-13), source: 'evenement', originRef: 'EV-2026-115', eventId: 'EV-2026-115',
-      siteId: 'ville-a', domain: 'securite', problem: 'Angle mort au croisement des allées du magasin : piéton surgi devant un chariot élévateur.',
+      siteId: 'site_a', domain: 'securite', problem: 'Angle mort au croisement des allées du magasin : piéton surgi devant un chariot élévateur.',
       verifyDueOn: rel(37), riskLevel: 3, estimatedCost: 1800, createdAt: paris(rel(-42)),
     },
   },
@@ -119,7 +119,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Remplacer les luminaires de l'allée centrale usinage", origin: 'ev', stepOn: rel(-25),
     row: {
       pilotId: 'proux', status: 'p40', priority: 'moyen_terme', dueOn: rel(-19), source: 'evenement', originRef: 'EV-2026-117', eventId: 'EV-2026-117',
-      siteId: 'ville-a', domain: 'securite', problem: "Trois luminaires hors service dans l'allée centrale de l'usinage : 90 lux mesurés.",
+      siteId: 'site_a', domain: 'securite', problem: "Trois luminaires hors service dans l'allée centrale de l'usinage : 90 lux mesurés.",
       verifyDueOn: rel(22), riskLevel: 2, estimatedCost: 1250, createdAt: paris(rel(-37)),
     },
   },
@@ -127,7 +127,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Analyse d'écart Règlement 2023/1230 sur les 7 projets concernés", origin: 'watch', stepOn: rel(-24),
     row: {
       pilotId: 'edubois', status: 'initiee', priority: 'moyen_terme', dueOn: rel(52), source: 'veille', originRef: 'Règlement (UE) 2023/1230',
-      siteId: 'ville-a', domain: 'securite', problem: 'Le règlement machines (UE) 2023/1230 s’applique aux machines mises sur le marché après le 20/01/2027 : 7 projets livrés après cette date.',
+      siteId: 'site_a', domain: 'securite', problem: 'Le règlement machines (UE) 2023/1230 s’applique aux machines mises sur le marché après le 20/01/2027 : 7 projets livrés après cette date.',
       verifyDueOn: rel(67), createdAt: paris(rel(-38)),
     },
   },
@@ -135,7 +135,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Contrôle du traitement de surface par lot à la réception', origin: 'ev', stepOn: rel(-8),
     row: {
       pilotId: 'lmoreau', status: 'p60', priority: 'moyen_terme', dueOn: rel(15), source: 'evenement', originRef: 'EV-2026-121', eventId: 'EV-2026-121',
-      siteId: 'ville-a', domain: 'qualite', problem: 'Traitement de surface non conforme sur un lot fournisseur, détecté au montage et non à la réception.',
+      siteId: 'site_a', domain: 'qualite', problem: 'Traitement de surface non conforme sur un lot fournisseur, détecté au montage et non à la réception.',
       verifyDueOn: rel(52), createdAt: paris(rel(-27)),
     },
   },
@@ -143,7 +143,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Corriger la fiche de réglage du réducteur RD-7 et former l'équipe", origin: 'ev',
     row: {
       pilotId: 'lmoreau', status: 'terminee', priority: 'moyen_terme', dueOn: rel(-34), doneOn: rel(-19), source: 'evenement', originRef: 'EV-2026-112',
-      eventId: 'EV-2026-112', siteId: 'ville-a', domain: 'qualite', problem: 'Jeu axial excessif après montage du réducteur RD-7 : couple de serrage erroné sur la fiche de réglage.',
+      eventId: 'EV-2026-112', siteId: 'site_a', domain: 'qualite', problem: 'Jeu axial excessif après montage du réducteur RD-7 : couple de serrage erroné sur la fiche de réglage.',
       verifyDueOn: rel(11), createdAt: paris(rel(-50)),
     },
   },
@@ -151,7 +151,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Formaliser la revue des exigences client (écart mineur §8.2.3)', origin: 'audit', stepOn: rel(-9),
     row: {
       pilotId: 'edubois', status: 'p80', priority: 'moyen_terme', dueOn: rel(6), source: 'audit_interne', originRef: 'Audit interne juin 2026',
-      siteId: 'ville-a', domain: 'qualite', problem: "Revue des exigences client non formalisée pour 2 affaires (écart mineur §8.2.3, audit interne de juin).",
+      siteId: 'site_a', domain: 'qualite', problem: "Revue des exigences client non formalisée pour 2 affaires (écart mineur §8.2.3, audit interne de juin).",
       verifyDueOn: rel(39), createdAt: paris(rel(-38)),
     },
   },
@@ -159,7 +159,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Remplacer les joints de la presse PC-400 sous garantie', origin: 'client',
     row: {
       pilotId: 'lmoreau', status: 'terminee', priority: 'urgent', dueOn: rel(-9), doneOn: rel(-3), source: 'reclamation_client', originRef: 'EV-2026-128 · [Client C]',
-      eventId: 'EV-2026-128', siteId: 'ville-a', domain: 'qualite', problem: 'Fuite sur la presse à cartoucher livrée en juin : joints du vérin principal défectueux (réclamation client).',
+      eventId: 'EV-2026-128', siteId: 'site_a', domain: 'qualite', problem: 'Fuite sur la presse à cartoucher livrée en juin : joints du vérin principal défectueux (réclamation client).',
       verifyDueOn: rel(21), actualCost: 430, createdAt: paris(rel(-10)),
     },
   },
@@ -167,7 +167,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Objectifs QHSE 2027 et indicateurs pour la revue de direction', origin: 'rev',
     row: {
       pilotId: 'clefevre', status: 'a_faire', priority: 'long_terme', dueOn: rel(42), source: 'revue_direction', originRef: 'Revue de direction 10/12',
-      siteId: 'ville-a', domain: 'qualite', problem: 'La revue de direction du 10/12/2026 doit arrêter les objectifs QHSE 2027 et leurs indicateurs.',
+      siteId: 'site_a', domain: 'qualite', problem: 'La revue de direction du 10/12/2026 doit arrêter les objectifs QHSE 2027 et leurs indicateurs.',
       verifyDueOn: rel(62), createdAt: paris(rel(-38)),
     },
   },
@@ -175,7 +175,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Visite sécurité trimestrielle zone d'essais", origin: 'audit',
     row: {
       pilotId: 'sbenali', status: 'a_faire', priority: 'moyen_terme', dueOn: rel(3), source: 'audit_terrain', originRef: 'Programme 2026',
-      siteId: 'ville-b', domain: 'securite', problem: "Visite sécurité trimestrielle de la zone d'essais inscrite au programme 2026.",
+      siteId: 'site_b', domain: 'securite', problem: "Visite sécurité trimestrielle de la zone d'essais inscrite au programme 2026.",
       verifyDueOn: rel(21), createdAt: paris(rel(-38)),
     },
   },
@@ -183,7 +183,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Remplacer le kit absorbant et former au déversement', origin: 'ev',
     row: {
       pilotId: 'rfontaine', status: 'verifiee', priority: 'moyen_terme', dueOn: rel(-9), doneOn: rel(-11), closedOn: rel(-7), source: 'evenement',
-      originRef: 'EV-2026-126', eventId: 'EV-2026-126', siteId: 'ville-a', domain: 'environnement',
+      originRef: 'EV-2026-126', eventId: 'EV-2026-126', siteId: 'site_a', domain: 'environnement',
       problem: "Déversement d'huile sur rétention au magasin : kit absorbant incomplet, consigne de déversement inconnue de l'équipe.",
       verifyDueOn: rel(-7), verifyMethod: 'visuelle', efficacyNote: 'Kit complet au magasin, exercice de déversement réussi par les 3 magasiniers.',
       effective: true, newRisk: true, verifiedById: 'clefevre', riskLevel: 1, hours: 6, estimatedCost: 300, actualCost: 320, createdAt: paris(rel(-15)),
@@ -193,7 +193,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Arrimer les bouteilles de gaz : râteliers et chaînes', origin: 'ev',
     row: {
       pilotId: 'sbenali', status: 'terminee', priority: 'urgent', dueOn: rel(-9), doneOn: rel(-10), source: 'evenement', originRef: 'EV-2026-124',
-      eventId: 'EV-2026-124', siteId: 'ville-a', domain: 'securite', problem: "Bouteilles d'argon stockées debout sans chaîne au poste soudure.",
+      eventId: 'EV-2026-124', siteId: 'site_a', domain: 'securite', problem: "Bouteilles d'argon stockées debout sans chaîne au poste soudure.",
       verifyDueOn: rel(19), riskLevel: 2, actualCost: 540, createdAt: paris(rel(-20)),
     },
   },
@@ -201,7 +201,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Ranger les bouteilles vides sous l'abri extérieur", origin: 'ev',
     row: {
       pilotId: 'sbenali', status: 'verifiee', priority: 'moyen_terme', dueOn: rel(-14), doneOn: rel(-15), closedOn: rel(-10), source: 'evenement',
-      originRef: 'EV-2026-124', eventId: 'EV-2026-124', siteId: 'ville-a', domain: 'securite', problem: "Bouteilles de gaz vides laissées dans l'atelier montage.",
+      originRef: 'EV-2026-124', eventId: 'EV-2026-124', siteId: 'site_a', domain: 'securite', problem: "Bouteilles de gaz vides laissées dans l'atelier montage.",
       verifyDueOn: rel(-10), verifyMethod: 'visuelle', efficacyNote: A170_NOTE, effective: false, verifiedById: 'clefevre', riskLevel: 2, hours: 2,
       createdAt: paris(rel(-20)),
     },
@@ -210,7 +210,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Ajouter un garde-corps sur la plateforme PIRL', origin: 'ev',
     row: {
       pilotId: 'sbenali', status: 'verifiee', priority: 'urgent', dueOn: rel(-14), doneOn: rel(-15), closedOn: rel(-13), source: 'evenement',
-      originRef: 'EV-2026-119', eventId: 'EV-2026-119', siteId: 'ville-b', domain: 'securite',
+      originRef: 'EV-2026-119', eventId: 'EV-2026-119', siteId: 'site_b', domain: 'securite',
       problem: 'Dernière marche de la plateforme PIRL sans garde-corps ni main courante : risque de chute en descente.',
       verifyDueOn: rel(-13), verifyMethod: 'audit_visite', efficacyNote: 'Garde-corps posé et réceptionné lors de la visite du 26/09.',
       effective: true, verifiedById: 'clefevre', riskLevel: 1, hours: 12, estimatedCost: 1500, actualCost: 1450, createdAt: paris(rel(-31)),
@@ -220,7 +220,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Afficher les consignes de tri au poste de lavage des pièces', origin: 'env',
     row: {
       pilotId: 'rfontaine', status: 'terminee', priority: 'long_terme', dueOn: rel(-27), doneOn: rel(-28), source: 'dechets', originRef: 'Registre des déchets 2026',
-      siteId: 'ville-a', domain: 'environnement', problem: 'Erreurs de tri au poste de lavage des pièces : chiffons souillés mélangés aux déchets non dangereux.',
+      siteId: 'site_a', domain: 'environnement', problem: 'Erreurs de tri au poste de lavage des pièces : chiffons souillés mélangés aux déchets non dangereux.',
       verifyDueOn: rel(-7), createdAt: paris(rel(-38)),
     },
   },
@@ -228,7 +228,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Acheter un second chariot élévateur pour le magasin', origin: 'ev',
     row: {
       pilotId: 'rfontaine', status: 'abandonnee', priority: 'long_terme', dueOn: rel(-4), source: 'evenement', originRef: 'EV-2026-115', eventId: 'EV-2026-115',
-      siteId: 'ville-a', domain: 'securite', problem: 'Chariot élévateur unique au magasin : manœuvres répétées au croisement des allées.',
+      siteId: 'site_a', domain: 'securite', problem: 'Chariot élévateur unique au magasin : manœuvres répétées au croisement des allées.',
       cancelledAt: paris(rel(-15), '11:00'), cancelledById: 'clefevre',
       cancelReason: 'Doublon de A-201 : le plan de circulation (miroir, marquage) couvre le besoin, validé avec le chef de service.', createdAt: paris(rel(-41)),
     },
@@ -248,7 +248,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Réviser PR-QHSE-002 après le retour d'expérience levage", origin: 'docs', stepOn: rel(-2),
     row: {
       pilotId: 'clefevre', status: 'initiee', priority: 'moyen_terme', dueOn: rel(37), source: 'revue_documentaire', originRef: 'PR-QHSE-002',
-      siteId: 'ville-a', domain: 'qualite', problem: 'La procédure PR-QHSE-002 ne tient pas compte du retour d’expérience des opérations de levage.',
+      siteId: 'site_a', domain: 'qualite', problem: 'La procédure PR-QHSE-002 ne tient pas compte du retour d’expérience des opérations de levage.',
       verifyDueOn: rel(67), createdAt: paris(rel(-4)),
     },
   },
@@ -256,7 +256,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Déployer la remontée des presque-accidents par QR code de poste', origin: 'rev',
     row: {
       pilotId: 'clefevre', status: 'verifiee', priority: 'moyen_terme', dueOn: rel(-192), doneOn: rel(-203), closedOn: rel(-196), source: 'revue_direction',
-      originRef: 'Revue de direction 11/12/2025', siteId: 'ville-a', domain: 'securite', problem: 'Presque-accidents trop peu remontés par les ateliers (décision de la revue de direction du 11/12/2025).',
+      originRef: 'Revue de direction 11/12/2025', siteId: 'site_a', domain: 'securite', problem: 'Presque-accidents trop peu remontés par les ateliers (décision de la revue de direction du 11/12/2025).',
       verifyDueOn: rel(-196), verifyMethod: 'reunion', efficacyNote: 'Remontée des presque-accidents ×2,4 sur 6 mois.', effective: true, verifiedById: 'hmarchand',
       hours: 40, createdAt: paris(rel(-295)),
     },
@@ -265,7 +265,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Étude d'opportunité de la certification ISO 45001", origin: 'rev',
     row: {
       pilotId: 'hmarchand', status: 'verifiee', priority: 'long_terme', dueOn: rel(-101), doneOn: rel(-121), closedOn: rel(-116), source: 'revue_direction',
-      originRef: 'Revue de direction 11/12/2025', siteId: 'ville-a', domain: 'securite', problem: "Opportunité d'une certification ISO 45001 à étudier (revue de direction du 11/12/2025).",
+      originRef: 'Revue de direction 11/12/2025', siteId: 'site_a', domain: 'securite', problem: "Opportunité d'une certification ISO 45001 à étudier (revue de direction du 11/12/2025).",
       verifyDueOn: rel(-116), verifyMethod: 'reunion', efficacyNote: 'Engagement ISO 45001 décidé pour le second semestre 2027.', effective: true, verifiedById: 'clefevre',
       hours: 24, createdAt: paris(rel(-295)),
     },
@@ -274,7 +274,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Former les chefs d'équipe à l'animation des quarts d'heure sécurité", origin: 'rev', stepOn: rel(-91),
     row: {
       pilotId: 'sbenali', status: 'reportee', priority: 'moyen_terme', initialDueOn: rel(-9), dueOn: rel(67), source: 'revue_direction',
-      originRef: 'Revue de direction 18/06/2026', siteId: 'ville-a', domain: 'securite', problem: "Animation sécurité terrain à renforcer (revue de direction intermédiaire du 18/06/2026).",
+      originRef: 'Revue de direction 18/06/2026', siteId: 'site_a', domain: 'securite', problem: "Animation sécurité terrain à renforcer (revue de direction intermédiaire du 18/06/2026).",
       verifyDueOn: rel(98), estimatedCost: 3200, createdAt: paris(rel(-106)),
     },
   },
@@ -282,7 +282,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Régler le fin de course du pont roulant 10 t (réserve VGP)', origin: 'watch',
     row: {
       pilotId: 'sbenali', status: 'a_faire', priority: 'urgent', dueOn: rel(11), source: 'controle_reglementaire', originRef: 'Pont roulant 10 t — atelier montage',
-      siteId: 'ville-a', domain: 'securite', problem: 'Réserve de la VGP levage du pont roulant 10 t : fin de course à régler.',
+      siteId: 'site_a', domain: 'securite', problem: 'Réserve de la VGP levage du pont roulant 10 t : fin de course à régler.',
       verifyDueOn: rel(21), riskLevel: 2, createdAt: paris(rel(-189)),
     },
   },
@@ -290,7 +290,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Relancer la raffinerie pour le certificat de traitement du BSD-20260818-M3QX7TBC', origin: 'env',
     row: {
       pilotId: 'rfontaine', status: 'a_faire', priority: 'moyen_terme', dueOn: rel(11), source: 'dechets', originRef: 'FD-11 · 19/08/2026',
-      siteId: 'ville-b', domain: 'environnement', problem: "Certificat de traitement de l'enlèvement du 19/08 non reçu : le bordereau reste ouvert.",
+      siteId: 'site_b', domain: 'environnement', problem: "Certificat de traitement de l'enlèvement du 19/08 non reçu : le bordereau reste ouvert.",
       verifyDueOn: rel(27), createdAt: paris(rel(-2)),
     },
   },
@@ -298,7 +298,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Contrôler l'habilitation ICPE de l'exutoire des fluides de coupe", origin: 'env',
     row: {
       pilotId: 'clefevre', status: 'a_faire', priority: 'long_terme', dueOn: rel(37), source: 'dechets', originRef: 'FD-04',
-      siteId: 'ville-a', domain: 'environnement', problem: "Autorisation ICPE de l'exutoire des fluides de coupe (filière FD-04) non vérifiée depuis le changement de prestataire.",
+      siteId: 'site_a', domain: 'environnement', problem: "Autorisation ICPE de l'exutoire des fluides de coupe (filière FD-04) non vérifiée depuis le changement de prestataire.",
       verifyDueOn: rel(67), createdAt: paris(rel(-2)),
     },
   },
@@ -309,7 +309,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: "Agrandir l'abri extérieur des bouteilles et afficher la consigne de retour des vides", origin: null,
     row: {
       pilotId: 'sbenali', status: 'a_faire', priority: 'moyen_terme', dueOn: rel(14), source: 'evenement', originRef: 'EV-2026-124',
-      siteId: 'ville-a', domain: 'securite', problem: followUpProblem('A-170', rel(-10), A170_NOTE), verifyDueOn: rel(42), riskLevel: 2,
+      siteId: 'site_a', domain: 'securite', problem: followUpProblem('A-170', rel(-10), A170_NOTE), verifyDueOn: rel(42), riskLevel: 2,
       followsActionId: 'A-170', followReason: 'non_efficace', createdAt: paris(rel(-10), '17:30'), // vérification de A-170
     },
   },
@@ -317,7 +317,7 @@ export const DEMO_ACTIONS: Record<string, DemoAction> = {
     title: 'Baliser la zone de stockage des absorbants usagés au magasin', origin: null,
     row: {
       pilotId: 'rfontaine', status: 'a_faire', priority: 'long_terme', dueOn: rel(21), source: 'evenement', originRef: 'EV-2026-126', eventId: 'EV-2026-126',
-      siteId: 'ville-a', domain: 'environnement', problem: "Absorbants usagés stockés en vrac près de la rétention après l'exercice : risque de mélange avec les déchets non dangereux.",
+      siteId: 'site_a', domain: 'environnement', problem: "Absorbants usagés stockés en vrac près de la rétention après l'exercice : risque de mélange avec les déchets non dangereux.",
       verifyDueOn: rel(42), riskLevel: 1, followsActionId: 'A-176', followReason: 'nouveau_risque', createdAt: paris(rel(-7), '17:30'), // vérification de A-176
     },
   },

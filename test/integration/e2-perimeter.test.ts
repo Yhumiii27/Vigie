@@ -35,8 +35,8 @@ beforeAll(async () => {
   delete process.env.VIGIE_TODAY;
   Object.assign(process.env, ENTRA_ENV);
   resetConfig();
-  await insertAction('A-T90', 'ville-b');
-  await insertAction('A-T91', 'ville-a');
+  await insertAction('A-T90', 'site_b');
+  await insertAction('A-T91', 'site_a');
 });
 afterAll(() => {
   for (const k of Object.keys(ENTRA_ENV)) delete process.env[k];
@@ -67,10 +67,10 @@ const draftOf = async (documentId: string) => (await (await getDb()).select().fr
 describe('Documents : action d’une version hors du périmètre', () => {
   it('rattachement à une révision refusé sans nommer le site, rien écrit', async () => {
     const doc = await commonDocument();
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const r = await reviseDocument({}, form({ documentId: doc, summary: 'Révision', actionId: 'A-T90' }));
     expect(r.fieldErrors?.actionId).toBe(OUTSIDE);
-    expect(JSON.stringify(r)).not.toMatch(/ville-b|Ville B/i);
+    expect(JSON.stringify(r)).not.toMatch(/site_b|Ville B/i);
     expect(await draftOf(doc)).toBeUndefined();
     expect(await lastLog('action', 'A-T90')).toBeUndefined();
   });
@@ -82,7 +82,7 @@ describe('Documents : action d’une version hors du périmètre', () => {
     expect(await reviseDocument({}, form({ documentId: doc, summary: 'Révision', actionId: 'A-T90' }))).toEqual({ ok: true, id: doc });
     const v = await draftOf(doc);
     expect(v.actionId).toBe('A-T90');
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const r = await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: 'A-T91' }));
     expect(r.fieldErrors?.actionId).toBe(OUTSIDE);
     expect((await draftOf(doc)).actionId).toBe('A-T90');
@@ -100,7 +100,7 @@ describe('Veille : action d’une exigence hors du périmètre', () => {
     const db = await getDb();
     const [req] = await db.select().from(t.requirements).limit(1);
     await db.update(t.requirements).set({ actionId: 'A-T90' }).where(eq(t.requirements.id, req.id));
-    await actAsEntra('sbenali', 'Chef de service', ['ville-a'], 'ville-a');
+    await actAsEntra('sbenali', 'Chef de service', ['site_a'], 'site_a');
     const restricted = (await loadWatch()).requirements.find((r) => r.id === req.id)!;
     expect(restricted.actionId).toBe('A-T90');
     expect(restricted.action).toBeNull();

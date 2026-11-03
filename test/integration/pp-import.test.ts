@@ -67,7 +67,7 @@ describe('détection et création du plan depuis les formulaires d’exemple', (
   });
 
   it('PDF vierge puis rempli : modèle enregistré et reconnu par son empreinte', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const blank = await detect(sample('plan-de-prevention-vierge.pdf', PDF));
     expect(blank).toMatchObject({ ok: true, format: 'pdf_form', matchedTemplateId: null, ai: { used: false } });
     if (!blank.ok) throw new Error();
@@ -84,12 +84,12 @@ describe('détection et création du plan depuis les formulaires d’exemple', (
   });
 
   it('création : plan « À signer », fichier source joint, entreprise existante, journal', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const fd = new FormData();
     const f = sample('plan-de-prevention-exemple.pdf', PDF);
     fd.append('file', f, f.name);
     Object.entries({
-      format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: "Remplacement d'un tronçon d'air comprimé",
+      format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'site_a', title: "Remplacement d'un tronçon d'air comprimé",
       location: 'Atelier usinage', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '60', dangerousWork: '1',
       inspectionOn: '2026-10-06', measures: 'Balisage, permis de feu, surveillance 2 h après les points chauds.', signedEuOn: '2026-10-07',
     }).forEach(([k, v]) => fd.set(k, v));
@@ -104,11 +104,11 @@ describe('détection et création du plan depuis les formulaires d’exemple', (
   });
 
   it('création : site hors du périmètre refusé, fichier non conforme refusé', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const fd = new FormData();
     const html = new File(['<html><script>alert(1)</script></html>'], 'plan.pdf', { type: PDF });
     fd.append('file', html, html.name);
-    Object.entries({ format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: 'x', location: 'y', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '10' })
+    Object.entries({ format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'site_a', title: 'x', location: 'y', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '10' })
       .forEach(([k, v]) => fd.set(k, v));
     expect(await createPlanFromImport({}, fd)).toMatchObject({ error: expect.stringMatching(/ne correspond pas à un format accepté/) });
   });
@@ -126,7 +126,7 @@ describe('lecture d’un scan par l’API Claude (INT-06)', () => {
   });
 
   it('consommation journalisée, même fichier servi par le cache, plafond par personne', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     api.response = scanResponse();
     const first = await detect(photo(1));
     expect(first).toMatchObject({ ok: true, format: 'scan', ai: { used: true, available: true } });
@@ -187,7 +187,7 @@ describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)
   const heic = () => new File([Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic'), Buffer.alloc(100)])], 'IMG_0001.jpg', { type: 'image/jpeg' });
 
   it('plusieurs photos : lues en une fois, pages dans l’ordre, appel en flux avec repli côté serveur', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     api.response = scanResponse();
     const before = api.calls;
     const r = await detectAll([photo(21), photo(22), photo(23)]);
@@ -202,7 +202,7 @@ describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)
   });
 
   it('plusieurs fichiers : photos seulement, 8 pages au plus ; HEIC refusé d’après son contenu, sans appel', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const calls = api.calls;
     expect(await detectAll([photo(31), sample('plan-de-prevention-vierge.pdf', PDF)])).toMatchObject({ ok: false, error: expect.stringMatching(/photos des pages/) });
     expect(await detectAll(Array.from({ length: 9 }, (_, i) => photo(40 + i)))).toMatchObject({ ok: false, error: expect.stringMatching(/8 pages au plus/) });
@@ -214,7 +214,7 @@ describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)
   it('modèle configuré (VIGIE_AI_MODEL) : journalisé, sans repli s’il ne l’accepte pas', async () => {
     Object.assign(process.env, { VIGIE_AI_MODEL: 'claude-haiku-5-5', VIGIE_AI_TIMEOUT: '900' });
     resetConfig();
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     api.response = { ...scanResponse(), model: 'claude-haiku-5-5' };
     expect(await detectAll([photo(61)])).toMatchObject({ ok: true, ai: { used: true } });
     expect(api.last).toMatchObject({ model: 'claude-haiku-5-5' });
@@ -229,11 +229,11 @@ describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)
   });
 
   it('création depuis plusieurs pages : première page source du plan, autres pages jointes, journal', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const fd = new FormData();
     [photo(71), photo(72)].forEach((f) => fd.append('file', f, f.name));
     Object.entries({
-      format: 'scan', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: 'Peinture du hall',
+      format: 'scan', sections: '[]', contractorId: 'EE-004', siteId: 'site_a', title: 'Peinture du hall',
       location: 'Hall 2', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '30',
     }).forEach(([k, v]) => fd.set(k, v));
     const r = await createPlanFromImport({}, fd);
@@ -248,7 +248,7 @@ describe('import de plusieurs pages, HEIC, modèle configurable (INT-13, INT-14)
     // Plusieurs fichiers hors scan : refusé.
     const bad = new FormData();
     [photo(73), photo(74)].forEach((f) => bad.append('file', f, f.name));
-    Object.entries({ format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'ville-a', title: 'x', location: 'y', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '10' })
+    Object.entries({ format: 'pdf_form', sections: '[]', contractorId: 'EE-004', siteId: 'site_a', title: 'x', location: 'y', startOn: '2026-10-12', endOn: '2026-10-16', estimatedHours: '10' })
       .forEach(([k, v]) => bad.set(k, v));
     expect(await createPlanFromImport({}, bad)).toMatchObject({ error: expect.stringMatching(/Plusieurs pages/) });
   });

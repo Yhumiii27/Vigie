@@ -3,6 +3,7 @@ import { PERMIT_TYPES, type PermitType } from '@/lib/rules/prevention';
 import * as t from '../schema';
 import type { SeedTx } from './types';
 import { rel } from './dates';
+import { DEMO_CONTRACTOR_SUPPLIERS } from './foreign';
 
 // Jeu de données initial du domaine « Plans de prévention et permis », relatif aux 07 et 08/10/2026.
 // Les deux sites sont Seveso seuil haut avec la règle interne « plan écrit et signé dès la première minute »
@@ -154,7 +155,7 @@ const CONTENT: Record<string, PlanContent> = {
 const PLANS: PlanSeed[] = [
   {
     // Écart passé (PRV-01) : plan signé par les deux entreprises le lendemain du démarrage (13/04) ; aucune action QSE.
-    id: 'PP-2026-008', siteId: 'ville-a', contractorId: 'EE-004',
+    id: 'PP-2026-008', siteId: 'site_a', contractorId: 'EE-004',
     title: 'Réparation par soudage de la trémie du poste de chargement',
     location: 'Atelier montage · poste de chargement', startOn: rel(-179), endOn: rel(-177), estimatedHours: 18, dangerousWork: true,
     inspectionOn: rel(-179), signedEuOn: rel(-178), signedEeOn: rel(-178), firstSignedOn: rel(-178), status: 'clos', ownerId: 'clefevre',
@@ -163,7 +164,7 @@ const PLANS: PlanSeed[] = [
   },
   {
     // Historique de l'entreprise archivée EE-007.
-    id: 'PP-2025-033', siteId: 'ville-a', contractorId: 'EE-007',
+    id: 'PP-2025-033', siteId: 'site_a', contractorId: 'EE-007',
     title: "Réfection de la résine de sol de l'atelier usinage",
     location: 'Atelier usinage', startOn: rel(-431), endOn: rel(-421), estimatedHours: 160, dangerousWork: false,
     inspectionOn: rel(-438), signedEuOn: rel(-437), signedEeOn: rel(-436), status: 'clos', ownerId: 'sbenali',
@@ -171,7 +172,7 @@ const PLANS: PlanSeed[] = [
     measures: "Atelier fermé pendant les travaux (congés d'été) ; ventilation forcée ; aucune source d'ignition ni point chaud dans la zone ; balisage des accès et circulation déviée.",
   },
   {
-    id: 'PP-2026-010', siteId: 'ville-b', contractorId: 'EE-003',
+    id: 'PP-2026-010', siteId: 'site_b', contractorId: 'EE-003',
     title: "Nettoyage haute pression des bacs de rétention de la zone d'essais",
     location: "Zone d'essais · bacs de rétention", startOn: rel(10), endOn: rel(11), estimatedHours: 14, dangerousWork: false,
     status: 'annule', ownerId: 'jpetit',
@@ -182,7 +183,7 @@ const PLANS: PlanSeed[] = [
   },
   {
     // Période d'intervention terminée, plan signé non clos : échéance « Plan à clore ».
-    id: 'PP-2026-011', siteId: 'ville-b', contractorId: 'EE-006',
+    id: 'PP-2026-011', siteId: 'site_b', contractorId: 'EE-006',
     title: "Vérification annuelle des extincteurs et RIA de la zone d'essais",
     location: "Zone d'essais et bureaux", startOn: rel(-9), endOn: rel(-7), estimatedHours: 5, dangerousWork: false,
     inspectionOn: rel(-14), signedEuOn: rel(-11), signedEeOn: rel(-11), status: 'signe', ownerId: 'jpetit',
@@ -191,7 +192,7 @@ const PLANS: PlanSeed[] = [
   },
   {
     // Inspection commune prévue le 15/10, démarrage au-delà de l'horizon des échéances.
-    id: 'PP-2026-018', siteId: 'ville-a', contractorId: 'EE-001',
+    id: 'PP-2026-018', siteId: 'site_a', contractorId: 'EE-001',
     title: 'Remplacement du moto-réducteur de translation du pont roulant 5 t',
     location: 'Atelier usinage · pont roulant 5 t', startOn: rel(17), endOn: rel(19), estimatedHours: 24, dangerousWork: true,
     inspectionOn: rel(6), status: 'brouillon', ownerId: 'sbenali',
@@ -199,7 +200,7 @@ const PLANS: PlanSeed[] = [
     measures: '',
   },
   {
-    id: 'PP-2025-041', siteId: 'ville-a', contractorId: 'EE-003',
+    id: 'PP-2025-041', siteId: 'site_a', contractorId: 'EE-003',
     title: 'Nettoyage industriel des ateliers, des fosses de rétention et des bacs à copeaux (contrat annuel)',
     location: 'Ateliers montage et usinage', startOn: rel(-277), endOn: rel(70), estimatedHours: 520, dangerousWork: false,
     inspectionOn: rel(-305), signedEuOn: rel(-303), signedEeOn: rel(-301), status: 'signe', ownerId: 'sbenali',
@@ -207,7 +208,7 @@ const PLANS: PlanSeed[] = [
     measures: "Interventions planifiées de 5 h à 8 h, hors présence des équipes ; zones lavées balisées ; convoyeurs à copeaux arrêtés et consignés ; fiches de données de sécurité des produits remises ; chaussures antidérapantes, gants nitrile et lunettes.",
   },
   {
-    id: 'PP-2026-009', siteId: 'ville-a', contractorId: 'EE-002',
+    id: 'PP-2026-009', siteId: 'site_a', contractorId: 'EE-002',
     title: 'Thermographie infrarouge et resserrage des armoires électriques',
     location: 'Ateliers montage et usinage · TGBT et armoires divisionnaires', startOn: rel(-116), endOn: rel(-112), estimatedHours: 32, dangerousWork: true,
     inspectionOn: rel(-123), signedEuOn: rel(-121), signedEeOn: rel(-120), status: 'clos', ownerId: 'clefevre',
@@ -215,7 +216,7 @@ const PLANS: PlanSeed[] = [
     measures: "Intervenants habilités BR et BC ; périmètre balisé devant les armoires ouvertes ; coupures programmées avec les chefs d'atelier ; EPI arc électrique ; consignation avant resserrage.",
   },
   {
-    id: 'PP-2026-012', siteId: 'ville-b', contractorId: 'EE-004',
+    id: 'PP-2026-012', siteId: 'site_b', contractorId: 'EE-004',
     title: "Fabrication et pose d'un garde-corps soudé sur la plateforme PIRL",
     location: "Zone d'essais · plateforme PIRL", startOn: rel(-18), endOn: rel(-14), estimatedHours: 24, dangerousWork: true,
     inspectionOn: rel(-23), signedEuOn: rel(-22), signedEeOn: rel(-21), status: 'clos', ownerId: 'jpetit',
@@ -223,7 +224,7 @@ const PLANS: PlanSeed[] = [
     measures: "Permis de feu journalier ; essais suspendus pendant les travaux par points chauds ; balisage au sol sous la plateforme ; harnais et ligne de vie provisoire.",
   },
   {
-    id: 'PP-2026-013', siteId: 'ville-a', contractorId: 'EE-001',
+    id: 'PP-2026-013', siteId: 'site_a', contractorId: 'EE-001',
     title: 'Maintenance du pont roulant 10 t : réglage des fins de course et remplacement du câble',
     location: 'Atelier montage · chemin de roulement du pont 10 t', startOn: rel(-4), endOn: rel(0), estimatedHours: 140, dangerousWork: true,
     inspectionOn: rel(-7), signedEuOn: rel(-7), status: 'a_signer', ownerId: 'sbenali',
@@ -231,7 +232,7 @@ const PLANS: PlanSeed[] = [
     measures: "Pont consigné pendant toute l'intervention ; nacelle conduite par un titulaire du CACES R486, harnais en nacelle ; zone balisée au sol sous la nacelle ; levages du poste M3 reportés sur le pont 5 t.",
   },
   {
-    id: 'PP-2026-014', siteId: 'ville-b', contractorId: 'EE-005',
+    id: 'PP-2026-014', siteId: 'site_b', contractorId: 'EE-005',
     title: "Inspection et maintenance du matériel ATEX de la zone d'essais (contrat annuel)",
     location: "Zone d'essais · bancs BE-1 et BE-2, local des simulants (zone 2)", startOn: rel(-270), endOn: rel(70), estimatedHours: 64, dangerousWork: true,
     keystoneProject: 'K-2024-118 · [Client B]',
@@ -240,7 +241,7 @@ const PLANS: PlanSeed[] = [
     measures: "Interventions sur banc arrêté, hors campagne d'essais ; mesure d'atmosphère avant ouverture des matériels ; outillage antiétincelles ; permis d'essai suspendu pendant l'intervention ; accueil sécurité de la zone d'essais.",
   },
   {
-    id: 'PP-2026-015', siteId: 'ville-a', contractorId: 'EE-004',
+    id: 'PP-2026-015', siteId: 'site_a', contractorId: 'EE-004',
     title: 'Renforcement de la charpente de la mezzanine de stockage (soudage de platines)',
     location: 'Magasin · mezzanine de stockage', startOn: rel(-3), endOn: rel(7), estimatedHours: 90, dangerousWork: true,
     status: 'brouillon', ownerId: 'clefevre',
@@ -248,7 +249,7 @@ const PLANS: PlanSeed[] = [
     measures: '',
   },
   {
-    id: 'PP-2026-016', siteId: 'ville-a', contractorId: 'EE-002',
+    id: 'PP-2026-016', siteId: 'site_a', contractorId: 'EE-002',
     title: "Extension du TGBT et raccordement du poste d'essais de la cellule de remplissage",
     location: "Atelier montage · TGBT et poste d'essais", startOn: rel(10), endOn: rel(14), estimatedHours: 60, dangerousWork: true,
     keystoneProject: 'K-2025-061 · [Client E]', inspectionOn: rel(-3), status: 'a_signer', ownerId: 'sbenali',
@@ -257,7 +258,7 @@ const PLANS: PlanSeed[] = [
   },
   {
     // 6 h sans travaux dangereux : plan non requis par R. 4512-7, exigé dès la première minute sur ce site Seveso seuil haut.
-    id: 'PP-2026-017', siteId: 'ville-a', contractorId: 'EE-006',
+    id: 'PP-2026-017', siteId: 'site_a', contractorId: 'EE-006',
     title: "Vérification annuelle des extincteurs et des robinets d'incendie armés",
     location: 'Ateliers, magasin et bureaux', startOn: rel(4), endOn: rel(4), estimatedHours: 6, dangerousWork: false,
     inspectionOn: rel(-3), signedEuOn: rel(-2), signedEeOn: rel(-2), status: 'signe', ownerId: 'clefevre',
@@ -274,37 +275,37 @@ type PermitSeed = {
 
 const PERMITS: PermitSeed[] = [
   {
-    id: 'PE-2026-007', type: 'essai', siteId: 'ville-b', location: "Zone d'essais · banc BE-1 (zone ATEX 2)",
+    id: 'PE-2026-007', type: 'essai', siteId: 'site_b', location: "Zone d'essais · banc BE-1 (zone ATEX 2)",
     description: "Essais de réception usine de la ligne de convoyage, première série, avec produit inerte simulant l'émulsion",
     performer: '[A. Martin], [J. Petit]', issuerId: 'clefevre', keystoneProject: 'K-2024-118 · [Client B]',
     validFrom: `${rel(-25)}T08:00`, validTo: `${rel(-21)}T18:00`, checked: 6, status: 'clos', closedAt: `${rel(-21)}T18:20`,
   },
   {
-    id: 'PF-2026-028', type: 'feu', siteId: 'ville-a', location: 'Atelier montage · poste M5',
+    id: 'PF-2026-028', type: 'feu', siteId: 'site_a', location: 'Atelier montage · poste M5',
     description: 'Soudure de reprise sur le châssis du malaxeur MX-2 (reportée en cabine de soudage)',
     performer: '[T. Nguyen]', keystoneProject: 'K-2025-077 · [Client A]',
     validFrom: `${rel(-9)}T08:00`, validTo: `${rel(-9)}T17:00`, watchUntil: `${rel(-9)}T19:00`, checked: 3, status: 'annule', closedAt: `${rel(-10)}T16:40`,
     cancelledById: 'sbenali', cancelReason: 'Soudure reportée en cabine de soudage : permis de feu inutile',
   },
   {
-    id: 'PF-2026-029', type: 'feu', siteId: 'ville-b', location: "Zone d'essais · plateforme PIRL",
+    id: 'PF-2026-029', type: 'feu', siteId: 'site_b', location: "Zone d'essais · plateforme PIRL",
     description: 'Soudage du garde-corps de la plateforme PIRL', contractorId: 'EE-004', performer: '[S. Garnier], [D. Leroy]',
     issuerId: 'jpetit', preventionPlanId: 'PP-2026-012',
     validFrom: `${rel(-17)}T08:00`, validTo: `${rel(-17)}T16:30`, watchUntil: `${rel(-17)}T18:30`, checked: 6, status: 'clos', closedAt: `${rel(-17)}T18:35`,
   },
   {
-    id: 'PF-2026-030', type: 'feu', siteId: 'ville-a', location: 'Atelier usinage · aire extérieure de découpe',
+    id: 'PF-2026-030', type: 'feu', siteId: 'site_a', location: 'Atelier usinage · aire extérieure de découpe',
     description: "Découpe au chalumeau d'un ancien support de convoyeur", performer: '[P. Roux]', issuerId: 'sbenali',
     validFrom: `${rel(-4)}T13:30`, validTo: `${rel(-4)}T17:00`, watchUntil: `${rel(-4)}T19:00`, checked: 6, status: 'delivre',
   },
   {
-    id: 'PE-2026-008', type: 'essai', siteId: 'ville-b', location: "Zone d'essais · banc BE-1 (zone ATEX 2)",
+    id: 'PE-2026-008', type: 'essai', siteId: 'site_b', location: "Zone d'essais · banc BE-1 (zone ATEX 2)",
     description: "Essais d'endurance de la ligne de convoyage avec produit inerte simulant l'émulsion (seconde série)",
     performer: '[A. Martin]', issuerId: 'jpetit', keystoneProject: 'K-2024-118 · [Client B]',
     validFrom: `${rel(-3)}T08:00`, validTo: `${rel(0)}T18:00`, checked: 6, status: 'delivre',
   },
   {
-    id: 'PF-2026-031', type: 'feu', siteId: 'ville-a', location: 'Atelier montage · poste M3',
+    id: 'PF-2026-031', type: 'feu', siteId: 'site_a', location: 'Atelier montage · poste M3',
     description: 'Meulage et soudure de reprise sur le bâti du poste de retournement (reprise sur 3 jours)', performer: '[T. Nguyen]', issuerId: 'sbenali',
     keystoneProject: 'K-2025-042 · [Client A]',
     // Validité couvrant toute la journée de référence : « en cours » le 07/10 quelle que soit l'heure.
@@ -312,13 +313,13 @@ const PERMITS: PermitSeed[] = [
   },
   {
     // Entreprise extérieure : plan PP-2026-014 signé, couvrant la validité ; délivrance possible une fois la check-list complète.
-    id: 'PE-2026-009', type: 'essai', siteId: 'ville-b', location: "Zone d'essais · banc BE-2 (zone ATEX 2)",
+    id: 'PE-2026-009', type: 'essai', siteId: 'site_b', location: "Zone d'essais · banc BE-2 (zone ATEX 2)",
     description: 'Essais de fonctionnement des matériels ATEX remis en état sur le banc BE-2, avec produit inerte', contractorId: 'EE-005',
     performer: '[V. Rousseau], [A. Martin]', preventionPlanId: 'PP-2026-014', keystoneProject: 'K-2024-118 · [Client B]',
     validFrom: `${rel(3)}T08:00`, validTo: `${rel(3)}T12:00`, checked: 4, status: 'demande',
   },
   {
-    id: 'PF-2026-032', type: 'feu', siteId: 'ville-a', location: 'Magasin · mezzanine de stockage',
+    id: 'PF-2026-032', type: 'feu', siteId: 'site_a', location: 'Magasin · mezzanine de stockage',
     description: 'Soudage de platines de renfort sur la charpente de la mezzanine', contractorId: 'EE-004', performer: '[S. Garnier], [D. Leroy]',
     preventionPlanId: 'PP-2026-015',
     validFrom: `${rel(-1)}T07:30`, validTo: `${rel(-1)}T17:00`, watchUntil: `${rel(-1)}T19:00`, checked: 3, status: 'demande',
@@ -331,7 +332,10 @@ const atWinter = (local: string) => new Date(`${local}:00+01:00`);
 const instant = (local: string) => (local < rel(-194) || local >= rel(16) ? atWinter(local) : at(local));
 
 export async function seedPrevention(tx: SeedTx) {
-  await tx.insert(t.contractors).values(CONTRACTORS.map(([id, name, trade, contactName, contactPhone, contactEmail]) => ({ id, name, trade, contactName, contactPhone, contactEmail, ...ARCHIVED[id] })));
+  // D16 : fournisseur Keystone rattaché (keystone.pub_fournisseurs, substitut de démonstration src/db/seeds/foreign.ts).
+  await tx.insert(t.contractors).values(CONTRACTORS.map(([id, name, trade, contactName, contactPhone, contactEmail]) => ({
+    id, name, trade, contactName, contactPhone, contactEmail, supplierId: DEMO_CONTRACTOR_SUPPLIERS[id] ?? null, ...ARCHIVED[id],
+  })));
   await tx.insert(t.preventionPlans).values(PLANS.map((p) => {
     const c = CONTENT[p.id] ?? {};
     return {
@@ -347,7 +351,7 @@ export async function seedPrevention(tx: SeedTx) {
       sirPosts: c.sirPosts ?? '',
       // Première signature complète (la plus tardive des deux), comme la reprise de la migration 0004.
       firstSignedOn: p.firstSignedOn ?? (p.signedEuOn && p.signedEeOn ? [p.signedEuOn, p.signedEeOn].sort()[1] : null),
-      keystoneProject: p.keystoneProject ?? null,
+      keystoneProjectCode: p.keystoneProject?.split(' · ')[0] ?? null, // D02 : code de keystone.pub_projets
       inspectionOn: p.inspectionOn ?? null,
       signedEuOn: p.signedEuOn ?? null,
       signedEeOn: p.signedEeOn ?? null,
@@ -366,7 +370,7 @@ export async function seedPrevention(tx: SeedTx) {
     performer: p.performer,
     issuerId: p.issuerId ?? null,
     preventionPlanId: p.preventionPlanId ?? null,
-    keystoneProject: p.keystoneProject ?? null,
+    keystoneProjectCode: p.keystoneProject?.split(' · ')[0] ?? null, // D02 : code de keystone.pub_projets
     validFrom: instant(p.validFrom),
     validTo: instant(p.validTo),
     watchUntil: p.watchUntil ? instant(p.watchUntil) : null,

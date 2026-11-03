@@ -50,15 +50,15 @@ async function siteOf(id: string) {
 
 describe('listes de choix des formulaires et périmètre', () => {
   it('chef de service restreint à son site : son site seulement, pas de « Tous les sites », rien d’un autre site', async () => {
-    await actAsEntra('sbenali', 'Chef de service', ['ville-a'], 'all');
+    await actAsEntra('sbenali', 'Chef de service', ['site_a'], 'all');
     const { loadFormOptions } = await import('@/lib/data/options');
     const options = await loadFormOptions();
-    expect(ids(options.sites)).toEqual(['ville-a']);
+    expect(ids(options.sites)).toEqual(['site_a']);
     expect(options.allSites).toBe(false);
     expect(options).not.toHaveProperty('events');
     expect(options).not.toHaveProperty('origins');
     expect(options.actions.length).toBeGreaterThan(0);
-    for (const [id] of options.actions) expect([null, 'ville-a']).toContain(await siteOf(id));
+    for (const [id] of options.actions) expect([null, 'site_a']).toContain(await siteOf(id));
   });
 
   it('actions liables : « A-n · libellé » (80 caractères au plus), ni Vérifiées ni Abandonnées, numéros décroissants', async () => {
@@ -81,45 +81,45 @@ describe('listes de choix des formulaires et périmètre', () => {
   });
 
   it('périmètre de deux sites : le site sélectionné seulement', async () => {
-    await actAsEntra('sbenali', 'Chef de service', ['ville-a', 'ville-b'], 'ville-b');
+    await actAsEntra('sbenali', 'Chef de service', ['site_a', 'site_b'], 'site_b');
     const { loadFormOptions } = await import('@/lib/data/options');
     const options = await loadFormOptions();
-    expect(ids(options.sites)).toEqual(['ville-b']);
+    expect(ids(options.sites)).toEqual(['site_b']);
     expect(options.allSites).toBe(false);
     expect(options.actions.length).toBeGreaterThan(0);
-    for (const [id] of options.actions) expect([null, 'ville-b']).toContain(await siteOf(id));
+    for (const [id] of options.actions) expect([null, 'site_b']).toContain(await siteOf(id));
   });
 
   it('direction : sites actifs sous « Tous les sites » (archivé exclu), « Tous les sites » admis ; site sélectionné sinon', async () => {
     await actAsEntra('hmarchand', 'Direction', null, 'all');
     const { loadFormOptions } = await import('@/lib/data/options');
     const all = await loadFormOptions();
-    expect(ids(all.sites)).toEqual(['ville-a', 'ville-b']);
-    expect(ids(all.sites)).not.toContain('ville-c');
+    expect(ids(all.sites)).toEqual(['site_a', 'site_b']);
+    expect(ids(all.sites)).not.toContain('site_c');
     expect(all.allSites).toBe(true);
     const sites = new Set(await Promise.all(all.actions.map(([id]) => siteOf(id))));
-    expect(sites.has('ville-a') && sites.has('ville-b')).toBe(true);
-    await actAsEntra('hmarchand', 'Direction', null, 'ville-a');
+    expect(sites.has('site_a') && sites.has('site_b')).toBe(true);
+    await actAsEntra('hmarchand', 'Direction', null, 'site_a');
     const a = await loadFormOptions();
-    expect(ids(a.sites)).toEqual(['ville-a']);
+    expect(ids(a.sites)).toEqual(['site_a']);
     expect(a.allSites).toBe(true);
   });
 
   it('writableSites et requireInSite(…, { create: true }) : mêmes sites admis', async () => {
     const { requireInSite, writableSites } = await import('@/lib/guard');
     const cases: [string, Role, string[] | null, string][] = [
-      ['sbenali', 'Chef de service', ['ville-a'], 'all'],
-      ['sbenali', 'Chef de service', ['ville-a'], 'ville-a'],
-      ['sbenali', 'Chef de service', ['ville-a', 'ville-b'], 'ville-a'],
-      ['sbenali', 'Chef de service', ['ville-a', 'ville-b'], 'ville-b'],
+      ['sbenali', 'Chef de service', ['site_a'], 'all'],
+      ['sbenali', 'Chef de service', ['site_a'], 'site_a'],
+      ['sbenali', 'Chef de service', ['site_a', 'site_b'], 'site_a'],
+      ['sbenali', 'Chef de service', ['site_a', 'site_b'], 'site_b'],
       ['hmarchand', 'Direction', null, 'all'],
-      ['hmarchand', 'Direction', null, 'ville-b'],
-      ['clefevre', 'Animateur QHSE', null, 'ville-a'],
+      ['hmarchand', 'Direction', null, 'site_b'],
+      ['clefevre', 'Animateur QHSE', null, 'site_a'],
     ];
     for (const [pid, role, sites, site] of cases) {
       await actAsEntra(pid, role, sites, site);
       const writable = await writableSites();
-      for (const s of ['ville-a', 'ville-b', 'ville-c', 'inconnu']) {
+      for (const s of ['site_a', 'site_b', 'site_c', 'inconnu']) {
         expect([pid, site, s, (await requireInSite(s, { create: true })) === null]).toEqual([pid, site, s, writable.sites.some((w) => w.id === s)]);
       }
       expect((await requireInSite(null, { create: true })) === null).toBe(writable.allSites);

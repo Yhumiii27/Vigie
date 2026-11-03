@@ -24,7 +24,7 @@ async function newAction(page: Page) {
 }
 
 test('Animateur QHSE : crée une action, la retrouve dans le plan et ouvre sa fiche', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   const errors = consoleErrors(page);
   await newAction(page);
   await page.goto('/actions');
@@ -40,7 +40,7 @@ test('Animateur QHSE : crée une action, la retrouve dans le plan et ouvre sa fi
 test('modifications simultanées : la seconde fenêtre est avertie au lieu d’écraser (QUA-12)', async ({ browser, baseURL }) => {
   const open = async () => {
     const context = await browser.newContext();
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     const page = await context.newPage();
     return { context, page };
   };

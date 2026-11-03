@@ -31,7 +31,7 @@ afterAll(async () => {
 
 describe('action reprise aux dates incohérentes (A-176)', () => {
   it('coûts modifiés après complétion des champs manquants : admis, seuls les champs changés au journal', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await actionRow('A-176');
     expect(a).toMatchObject({ status: 'verifiee', openedOn: '2026-09-24', dueOn: '2026-09-15', closedOn: '2026-09-18' });
     const missing = missingFields(a);
@@ -52,7 +52,7 @@ describe('action reprise aux dates incohérentes (A-176)', () => {
   });
 
   it('date cible changée avant la date d’ouverture : refusée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await actionRow('A-176');
     expect(await saveAction({}, form(editFields(a, { dueOn: '2026-09-20' })))).toMatchObject({ fieldErrors: { dueOn: expect.stringContaining("date d'ouverture") } });
     expect((await actionRow('A-176')).dueOn).toBe('2026-09-15');
@@ -61,7 +61,7 @@ describe('action reprise aux dates incohérentes (A-176)', () => {
 
 describe('détail repris de plus de 4 000 caractères', () => {
   it('modification d’un autre champ admise ; le détail modifié garde la limite', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const long = `Détail repris\n${'x'.repeat(5000)}`;
     const a = await insertAction('A-90', { detail: long, openedOn: '2026-05-02', dueOn: '2026-05-01', initialDueOn: '2026-05-01', verifyDueOn: '2026-04-30', legacyOrigin: 'ev' });
     expect(await saveAction({}, form(editFields(a, { priority: 'urgent' })))).toEqual({ ok: true, id: 'A-90' });
@@ -71,7 +71,7 @@ describe('détail repris de plus de 4 000 caractères', () => {
   });
 
   it('champ obligatoire manquant d’une ligne reprise : exigé à la modification', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await insertAction('A-91', { priority: null, domain: null, problem: null });
     const r = await saveAction({}, form(editFields(a, { estimatedCost: '5' })));
     expect(r).toMatchObject({ fieldErrors: { priority: 'Choix obligatoire.', domain: 'Choix obligatoire.', problem: 'Champ obligatoire.' } });

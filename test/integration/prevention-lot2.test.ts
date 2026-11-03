@@ -116,11 +116,11 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
 
   it('plan non obligatoire (site sans la règle « dès la première minute », 8 h, sans travaux dangereux) : signé sans les sections', async () => {
     const db = await getDb();
-    await db.update(t.sites).set({ ppFromFirstMinute: false }).where(eq(t.sites.id, 'ville-b'));
+    await db.update(t.sites).set({ ppFromFirstMinute: false }).where(eq(t.sites.id, 'site_b'));
     try {
-      actAs('Animateur QHSE', 'ville-b');
+      actAs('Animateur QHSE', 'site_b');
       const created = await savePlan({}, form({
-        contractorId: 'EE-006', siteId: 'ville-b', title: 'Contrôle des blocs autonomes d’éclairage de sécurité', location: 'Bureaux',
+        contractorId: 'EE-006', siteId: 'site_b', title: 'Contrôle des blocs autonomes d’éclairage de sécurité', location: 'Bureaux',
         startOn: '2026-10-20', endOn: '2026-10-20', estimatedHours: '8', inspectionOn: '2026-10-09', measures: 'Accompagnement par le chef de zone.',
       }));
       expect(created).toEqual({ ok: true, id: 'PP-2026-019' });
@@ -129,7 +129,7 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
       expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-019', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-019' });
       expect(await plan('PP-2026-019')).toMatchObject({ status: 'signe', firstSignedOn: '2026-10-09' });
     } finally {
-      await db.update(t.sites).set({ ppFromFirstMinute: true }).where(eq(t.sites.id, 'ville-b'));
+      await db.update(t.sites).set({ ppFromFirstMinute: true }).where(eq(t.sites.id, 'site_b'));
     }
   });
 
@@ -151,7 +151,7 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
 
 describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
   it('jeu de démonstration (site A) : 2 écarts en cours et PP-2026-008, signé le lendemain du démarrage', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await kpi(GAP_KPI)).toMatchObject({ value: '3', sub: 'dont 2 en cours', tone: 'danger', note: '1 plan signé après le démarrage (PP-2026-008)' });
     expect(await loadPreventionCompliance()).toEqual({
       gapCount: 3, currentGapCount: 2, pastGapCount: 1, tone: 'danger', href: '/prevention',
@@ -162,7 +162,7 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
   });
 
   it('plan clos signé après le démarrage (PP-2026-012, site B) : compté dans l’indicateur et la veille, pas dans le badge', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const badge = (await loadPreventionSignals()).badge;
     expect(await kpi(GAP_KPI)).toMatchObject({ value: '0', sub: 'conforme', tone: 'ok' });
     // VEI-06 : l'indicateur de la veille couvre tout le périmètre (site A compris), quel que soit le site sélectionné.
@@ -187,7 +187,7 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
   });
 
   it('signature tardive (PP-2026-015, commencée le 06/10) : tracée, puis clôture après les permis (aucune action QSE exigée)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     await setPlan('PP-2026-015', {
       inspectionOn: '2026-10-08', measures: 'Zone balisée sous la mezzanine ; permis de feu journalier.', subcontracting: 'Aucun sous-traitant',
       dangerousPhases: 'Soudage de platines en hauteur', equipment: "Postes de soudage de l'entreprise extérieure", workerInstructions: 'Permis de feu journalier',
@@ -216,7 +216,7 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
   });
 
   it('signatures effacées puis recueillies à nouveau (PP-2025-041) : première signature conservée, pas d’écart', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const row = await plan('PP-2025-041');
     expect(await savePlan({}, planForm(row, { measures: `${row.measures} Accès aux fosses par l'escalier nord.` }))).toEqual({ ok: true, id: 'PP-2025-041' });
     expect(await plan('PP-2025-041')).toMatchObject({ signedEuOn: null, signedEeOn: null, firstSignedOn: '2025-12-12' });
@@ -234,7 +234,7 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
   });
 
   it('date de début d’une intervention commencée : motif obligatoire, conservé dans le journal', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const row = await plan('PP-2026-013'); // commencée le 05/10
     const before = (await changeLog('prevention_plan', 'PP-2026-013')).length;
     expect(await savePlan({}, planForm(row, { startOn: '2026-10-06' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
@@ -243,13 +243,13 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
 
     // Droits et site : refusés avant toute écriture, motif fourni.
     const reason = 'Arrivée de la nacelle reportée : intervention commencée le 06/10';
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await savePlan({}, planForm(row, { startOn: '2026-10-06', reason }))).toEqual(DENIED);
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await savePlan({}, planForm(row, { startOn: '2026-10-06', reason }))).toEqual(OTHER_SITE);
     expect((await plan('PP-2026-013')).startOn).toBe('2026-10-05');
 
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     // PRV-11 : l'activité de la carte rattachée (début le 05/10) ne serait plus couverte par le plan.
     expect(await savePlan({}, planForm(row, { startOn: '2026-10-06', reason }))).toMatchObject({
       fieldErrors: { startOn: "Activités de la carte rattachées avant cette date (« Maintenance du pont roulant 10 t (fins de course, câble) ») : modifiez leurs dates avant de réduire la période." },
@@ -270,14 +270,14 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
 
 describe('PRV-03 : date de délivrance des permis', () => {
   it('permis délivrés du jeu de démonstration : date du journal ; demande : aucune', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const permits = (await loadPrevention()).permits;
     expect(permits.find((p) => p.id === 'PF-2026-031')).toMatchObject({ issuer: '[S. Benali]', deliveredAt: '2026-10-06T07:15', deliveredLabel: '06/10/2026 à 07:15' });
     expect(permits.find((p) => p.id === 'PF-2026-028')).toMatchObject({ deliveredAt: null, deliveredLabel: null }); // annulé avant délivrance
   });
 
   it('deliverPermit (PE-2026-009, site B) : délivrance journalisée, date et auteur sur la fiche', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect((await loadPrevention()).permits.find((p) => p.id === 'PE-2026-009')).toMatchObject({ status: 'demande', deliveredLabel: null });
     expect(await setPermitCheck('PE-2026-009', 4, true)).toEqual({});
     expect(await setPermitCheck('PE-2026-009', 5, true)).toEqual({});

@@ -11,34 +11,29 @@ import { requireApprover } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
 import { today } from '@/lib/today';
 import { logChange } from './changelog';
-import { nextSort } from '@/lib/sort-order';
+import { readMatrixSites } from '@/lib/foreign/matrix';
+import { unavailableMessage } from '@/lib/foreign/labels';
 
 // Administration des sites (fenêtre « Gérer les sites… » du sélecteur de site) : animateur QHSE et direction.
-// Un site n'est jamais supprimé : archivé avec motif, il disparaît des sélecteurs et ses données restent consultables.
-
-const LABEL_MAX = 120;
-/** Ordre d'affichage saisi (colonne int4). */
-const SORT_MAX = 9999;
-
-/** Identifiant lisible dérivé du libellé (« Site de Lyon » → « site-de-lyon »). */
-function slug(label: string) {
-  const s = label.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
-  return s || 'site';
-}
+// Sites suivis = cache de matrix.pub_sites (D14) : un site se suit en le choisissant dans la liste de Matrix, jamais créé
+// librement. Un site n'est jamais supprimé : « ne plus suivre » l'archive avec motif ; il disparaît des sélecteurs et ses
+// données restent consultables.
 
 /**
- * Création (id vide) ou modification d'un site : libellé, ordre d'affichage, responsable QHSE (champ `qhseLeadId`,
- * vide = poste vacant ; absent du formulaire = inchangé) et droit local d'Alsace-Moselle (case `alsaceMoselle`, lue
- * seulement si le formulaire porte `alsaceMoselleField` ; jours fériés du délai de déclaration CPAM, EVT-03). Le premier
- * site créé (amorçage d'une base vide) devient le site de rattachement de la personne qui le crée, si elle n'en a pas.
+ * Suivre un site de Matrix (id vide : création) ou modifier les attributs propres à Vigie d'un site suivi (D14, décision
+ * CV-09). L'identifiant d'un site est son code commun (matrix.pub_sites.code) : à la création, le site est choisi parmi les
+ * sites actifs de la vue non encore suivis (champ `code`) ; libellé et ordre viennent de Matrix (lecture seule, rafraîchis
+ * par src/server/foreign-sync.ts). Attributs locaux : responsable QHSE (champ `qhseLeadId`, vide = poste vacant ; absent du
+ * formulaire = inchangé) et droit local d'Alsace-Moselle (case `alsaceMoselle`, lue seulement si le formulaire porte
+ * `alsaceMoselleField` ; jours fériés du délai de déclaration CPAM, EVT-03) ; Seveso (saveSiteRule) et SIRET (écran
+ * Environnement) ailleurs. Sites de Matrix indisponibles : création refusée avec un message. Le premier site suivi
+ * (amorçage d'une base vide) devient le site de rattachement de la personne qui le crée, si elle n'en a pas.
  */
 export async function saveSite(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireApprover();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id');
-  const label = f.str('label', { required: true, max: LABEL_MAX });
-  const sort = f.int('sort', { min: 0, max: SORT_MAX });
 
   const db = await getDb();
   const [sites, people] = await Promise.all([
@@ -52,51 +47,43 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   const leadChoices = people.filter((p) => !hasLeft(p, now) || p.id === before?.qhseLeadId).map((p) => p.id);
   const qhseLeadId = leadField ? f.oneOf('qhseLeadId', leadChoices) : before?.qhseLeadId ?? null;
   const alsaceMoselle = fd.has('alsaceMoselleField') ? f.bool('alsaceMoselle') : before?.alsaceMoselle ?? false;
-  // VG-05 : code commun du site (matrix.sites.code, D14) — absent du formulaire : inchangé ; vide : aucun code.
-  const code = f.has('code') ? f.str('code', { max: 32 }).toLowerCase() || null : before?.code ?? null;
-  const codeError = siteCodeError(code);
-  if (codeError) f.fail('code', codeError);
-  if (!f.ok) return f.state();
-  if (code !== (before?.code ?? null)) {
-    // Clé partagée avec les autres outils (Arche, Matrix) : fixée par le périmètre complet seulement.
-    if (session.allowedSiteIds) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: 'Code commun du site : réservé à la direction et à l’animateur QHSE du périmètre complet.' } };
-    if (code && sites.some((s) => s.id !== id && s.code === code)) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: 'Un autre site porte déjà ce code.' } };
-  }
-  if (sites.some((s) => s.id !== id && s.label.toLowerCase() === label.toLowerCase())) {
-    return { error: 'Certains champs sont à corriger.', fieldErrors: { label: 'Un site porte déjà ce nom.' } };
-  }
   const leadName = (pid: string | null | undefined) => (pid ? people.find((p) => p.id === pid)?.name ?? pid : 'à désigner');
 
   if (!id) {
-    const base = slug(label);
-    let newId = base;
-    // L'identifiant réservé de « Tous les sites » (« all ») n'est jamais attribué à un site.
-    for (let i = 2; newId === ALL_SITES || sites.some((s) => s.id === newId); i++) newId = `${base}-${i}`;
-    const order = sort ?? nextSort(sites);
+    const code = f.str('code', { required: true, max: 32 });
+    if (!f.ok) return f.state();
+    // Un site de Matrix n'est suivi qu'une fois ; « all » (Tous les sites) et un code hors du format de Matrix, jamais.
+    const codeError = siteCodeError(code) ?? (code === ALL_SITES ? 'Identifiant réservé.' : null);
+    if (codeError) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: codeError } };
+    const followed = sites.find((s) => s.id === code);
+    if (followed) {
+      return { error: 'Certains champs sont à corriger.', fieldErrors: { code: followed.archivedAt ? 'Site déjà suivi, archivé : réactivez-le.' : 'Site déjà suivi par Vigie.' } };
+    }
+    const matrix = await readMatrixSites(db);
+    if (!matrix.ok) return { error: unavailableMessage('sites') };
+    const src = matrix.rows.find((s) => s.code === code);
+    if (!src || !src.active) return { error: 'Certains champs sont à corriger.', fieldErrors: { code: src ? 'Site fermé dans Matrix.' : 'Site inconnu de Matrix.' } };
     await db.transaction(async (tx) => {
-      await tx.insert(t.sites).values({ id: newId, label, sort: order, qhseLeadId, alsaceMoselle, code });
+      await tx.insert(t.sites).values({ id: code, label: src.label, sort: src.sort, qhseLeadId, alsaceMoselle, matrixState: 'actif' });
       if (!sites.length) {
-        await tx.update(t.people).set({ siteId: newId }).where(and(eq(t.people.id, session.user.id), isNull(t.people.siteId)));
+        await tx.update(t.people).set({ siteId: code }).where(and(eq(t.people.id, session.user.id), isNull(t.people.siteId)));
       }
       await logChange(tx, {
-        byId: session.user.id, entityType: 'site', entityId: newId, action: 'create',
-        summary: `Site « ${label} » créé${code ? ` · code ${code}` : ''}${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}${alsaceMoselle ? ' · droit local d’Alsace-Moselle' : ''}`,
+        byId: session.user.id, entityType: 'site', entityId: code, action: 'create',
+        summary: `Site « ${src.label} » suivi (Matrix : ${code})${qhseLeadId ? ` · responsable QHSE ${leadName(qhseLeadId)}` : ''}${alsaceMoselle ? ' · droit local d’Alsace-Moselle' : ''}`,
       });
     });
     revalidatePath('/', 'layout');
-    return { ok: true, id: newId };
+    return { ok: true, id: code };
   }
 
+  if (!f.ok) return f.state();
   if (!before) return { error: 'Site inconnu.' };
-  const order = sort ?? before.sort;
   await db.transaction(async (tx) => {
-    await tx.update(t.sites).set({ label, sort: order, qhseLeadId, alsaceMoselle, code }).where(eq(t.sites.id, id));
+    await tx.update(t.sites).set({ qhseLeadId, alsaceMoselle }).where(eq(t.sites.id, id));
     const details = [
-      ...(before.label !== label ? [{ field: 'Libellé', from: before.label, to: label }] : []),
-      ...(before.sort !== order ? [{ field: 'Ordre', from: String(before.sort), to: String(order) }] : []),
       ...(before.qhseLeadId !== qhseLeadId ? [{ field: 'Responsable QHSE', from: leadName(before.qhseLeadId), to: leadName(qhseLeadId) }] : []),
       ...(before.alsaceMoselle !== alsaceMoselle ? [{ field: 'Droit local d’Alsace-Moselle', from: before.alsaceMoselle ? 'oui' : 'non', to: alsaceMoselle ? 'oui' : 'non' }] : []),
-      ...(before.code !== code ? [{ field: 'Code commun (Matrix)', from: before.code, to: code }] : []),
     ];
     if (details.length) await logChange(tx, { byId: session.user.id, entityType: 'site', entityId: id, action: 'update', summary: 'Site modifié', details });
   });
@@ -104,7 +91,7 @@ export async function saveSite(_prev: FormState, fd: FormData): Promise<FormStat
   return { ok: true, id };
 }
 
-/** Archivage d'un site (fermé, cédé) avec motif ; au moins un site doit rester actif. */
+/** « Ne plus suivre » un site (archivage avec motif : site fermé, cédé, hors du périmètre QHSE) ; au moins un site doit rester actif. */
 export async function archiveSite(_prev: FormState, fd: FormData): Promise<FormState> {
   const { session, error } = await requireApprover();
   if (error) return { error };

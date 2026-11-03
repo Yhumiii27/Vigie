@@ -23,17 +23,17 @@ beforeAll(async () => {
   const base = { openedOn: '2026-10-01', initialDueOn: '2026-10-30', dueOn: '2026-10-30', verifyDueOn: '2026-11-30', status: 'a_faire' as const, priority: 'moyen_terme' as const, domain: 'securite' as const };
   await db.insert(t.actions).values([
     // Action du Salarié issue du signalement d'un collègue (EV-2026-130, [P. Roux]).
-    { ...base, id: 'A-950', detail: 'Contrôler la dérive outil au poste CU-2', problem: 'Dérive outil.', source: 'evenement', originRef: 'EV-2026-130', eventId: 'EV-2026-130', siteId: 'ville-a', pilotId: 'tnguyen' },
+    { ...base, id: 'A-950', detail: 'Contrôler la dérive outil au poste CU-2', problem: 'Dérive outil.', source: 'evenement', originRef: 'EV-2026-130', eventId: 'EV-2026-130', siteId: 'site_a', pilotId: 'tnguyen' },
     // Source sans fiche : référence seule.
-    { ...base, id: 'A-951', detail: 'Rappeler le port des lunettes au poste de meulage', problem: 'Lunettes non portées.', source: 'causerie', originRef: 'Causerie du 02/10', siteId: 'ville-a', pilotId: 'edubois' },
+    { ...base, id: 'A-951', detail: 'Rappeler le port des lunettes au poste de meulage', problem: 'Lunettes non portées.', source: 'causerie', originRef: 'Causerie du 02/10', siteId: 'site_a', pilotId: 'edubois' },
     // Événement cité par la référence seulement (pas d'event_id) : lien retrouvé par la référence.
-    { ...base, id: 'A-952', detail: 'Former les opérateurs à la mesure Ø45', problem: 'Mesure non maîtrisée.', source: 'evenement', originRef: 'EV-2026-130', siteId: 'ville-a', pilotId: 'lmoreau' },
+    { ...base, id: 'A-952', detail: 'Former les opérateurs à la mesure Ø45', problem: 'Mesure non maîtrisée.', source: 'evenement', originRef: 'EV-2026-130', siteId: 'site_a', pilotId: 'lmoreau' },
   ]);
 });
 
 describe('filtres de la vue générale (URL)', () => {
   it('avancement : ouvertes, en retard (et ?retard=1), une valeur', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const all = (await plan()).items;
     const open = (await plan({ avancement: 'ouvertes' })).items;
     expect(open.length).toBeGreaterThan(5);
@@ -49,7 +49,7 @@ describe('filtres de la vue générale (URL)', () => {
   });
 
   it('responsable (alias ?pilote=), « Mes actions », source, priorité', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const lmoreau = await ids({ responsable: 'lmoreau' });
     expect(lmoreau.length).toBeGreaterThan(2);
     expect(await ids({ pilote: 'lmoreau' })).toEqual(lmoreau);
@@ -64,7 +64,7 @@ describe('filtres de la vue générale (URL)', () => {
   });
 
   it('texte libre sans accents ni casse : numéro, problème, détail, référence d’origine', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await ids({ q: 'ELINGUES A œillets' })).toEqual(['A-214']);
     expect((await ids({ q: 'EV-2026-131' })).sort()).toEqual(['A-214', 'A-215']);
     expect(await ids({ q: 'a-217' })).toEqual(['A-217']);
@@ -83,7 +83,7 @@ describe('filtres de la vue générale (URL)', () => {
 
 describe('tri, affichages, totaux', () => {
   it('retards d’abord (jours de retard décroissants), puis date cible', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { items } = await plan();
     const late = items.filter((a) => isLate(a, TODAY));
     expect(items.slice(0, late.length)).toEqual(late);
@@ -125,38 +125,38 @@ describe('tri, affichages, totaux', () => {
 
 describe('lecteurs du plan', () => {
   it('Chef de service sur le site A : plan du site A, plus ses actions du site B, signalées', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const { items, responsables } = await plan();
     const a181 = items.find((a) => a.id === 'A-181');
-    expect(a181).toMatchObject({ siteId: 'ville-b', mine: true, elsewhere: true });
+    expect(a181).toMatchObject({ siteId: 'site_b', mine: true, elsewhere: true });
     expect(items.some((a) => a.id === 'A-209')).toBe(false); // site B, autre responsable
     expect(items.some((a) => a.id === 'A-214')).toBe(true);
     expect(responsables.map(([id]) => id)).toEqual(expect.arrayContaining(['sbenali', 'lmoreau']));
   });
 
   it('encadrement : droits de lecture seule, aucune liste de formulaire ni élément proposé', async () => {
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     expect(await loadActionFormOptions({ targets: true })).toEqual({ people: [], sites: [], today: TODAY });
     expect(await loadActionTargets()).toEqual([]);
     const { payload } = await loadActionDetail('A-214');
     expect(payload?.rights).toMatchObject({ qhse: false, responsible: false, canEdit: false, canMove: false, canVerify: false, canComment: false, canAttach: false, canLink: false });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const own = (await loadActionDetail('A-214')).payload!; // il en est responsable
     expect(own.rights).toMatchObject({ responsible: true, canEdit: false, canMove: false, canComment: true, canAttach: true });
   });
 
   it('QHSE : listes du formulaire, date du jour du serveur, éléments proposés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const options = await loadActionFormOptions({ targets: true });
     expect(options.today).toBe(TODAY);
     expect(options.people.length).toBeGreaterThan(5);
-    expect(options.sites.map(([id]) => id)).toEqual(['ville-a']);
+    expect(options.sites.map(([id]) => id)).toEqual(['site_a']);
     expect(options.targets?.length).toBeGreaterThan(10);
     expect(await loadActionFormOptions()).not.toHaveProperty('targets');
   });
 
   it('Salarié : ses actions seulement, sur tous les affichages ; responsables = lui-même ; autres fiches introuvables', async () => {
-    actAs('Salarié', 'ville-b');
+    actAs('Salarié', 'site_b');
     for (const etat of ['', 'historique', 'abandonnees']) {
       const p = await plan({ etat });
       expect(p.items.every((a) => a.pilotId === 'tnguyen'), etat).toBe(true);
@@ -174,7 +174,7 @@ describe('lecteurs du plan', () => {
   });
 
   it('autre site du périmètre (hors les siennes) : pas de fiche, site nommé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await loadActionDetail('A-209')).toEqual({ payload: null, elsewhere: 'Site de [Ville B] — zone d\'essais' });
     expect((await loadActionDetail('A-203')).payload?.rights.elsewhere).toBe('Site de [Ville B] — zone d\'essais'); // la sienne
   });
@@ -196,14 +196,14 @@ describe('fiche (?action=)', () => {
   });
 
   it('commentaire retiré : texte jamais renvoyé ; ses preuves au QHSE seulement, signalées', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const q = (await loadActionDetail('A-209')).payload!.detail;
     const withdrawn = q.comments.find((c) => c.withdrawn)!;
     expect(withdrawn.body).toBeNull();
     expect(withdrawn.withdrawn?.reason).toContain('joint par erreur');
     expect(withdrawn.files.map((f) => [f.name, f.commentWithdrawn])).toEqual([['releve-flexibles-be2.pdf', true]]);
     expect(JSON.stringify(q)).not.toContain('Relevé des flexibles joint.');
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     const c = (await loadActionDetail('A-209')).payload!.detail;
     expect(c.comments.find((x) => x.withdrawn)!.files).toEqual([]);
     expect(c.files.some((f) => f.name === 'releve-flexibles-be2.pdf')).toBe(false);
@@ -213,13 +213,13 @@ describe('fiche (?action=)', () => {
   });
 
   it('avertissement santé (événement lié de type AT) : QHSE seulement', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await loadActionDetail('A-165')).payload!.detail.healthWarning).toBe(true);
-    actAs('Chef de service', 'ville-a'); // responsable de A-165 (site B) : sa fiche, sans l'avertissement
+    actAs('Chef de service', 'site_a'); // responsable de A-165 (site B) : sa fiche, sans l'avertissement
     const own = (await loadActionDetail('A-165')).payload!;
     expect(own.detail.healthWarning).toBe(false);
     expect(own.rights.elsewhere).toBe('Site de [Ville B] — zone d\'essais');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadActionDetail('A-214')).payload!.detail.healthWarning).toBe(false);
   });
 
@@ -259,7 +259,7 @@ describe('fiche (?action=)', () => {
     expect(await sources('A-951')).toEqual([{ kind: 'reference', label: 'Causerie du 02/10', href: null }]);
     expect((await sources('A-952'))[0]).toMatchObject({ kind: 'event', label: 'EV-2026-130', href: '/evenements?sel=EV-2026-130' });
     // Action reprise sans site (« à compléter ») : lisible sur chaque site.
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a150 = (await loadActionDetail('A-150')).payload!.detail;
     expect(a150).toMatchObject({ siteId: null, site: 'Site à compléter', toComplete: true });
     expect(a150.missing).toContain('siteId');
@@ -268,15 +268,15 @@ describe('fiche (?action=)', () => {
 
 describe('éléments proposés par le sélecteur du formulaire (QHSE)', () => {
   it('événements ouverts aux actions du site, réclamations client sous leur seule source, site et avertissement AT', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const targets = await loadActionTargets();
     const ev = (id: string) => targets.find((x) => x.value === `event:${id}`);
     expect(ev('EV-2026-124')).toBeUndefined(); // « Efficacité vérifiée » : refuse toute action
     expect(ev('EV-2026-118')).toBeUndefined();
     expect(ev('EV-2026-123')).toBeUndefined(); // classé sans suite
     expect(ev('EV-2026-129')).toBeUndefined(); // site B
-    expect(ev('EV-2026-128')).toMatchObject({ siteId: 'ville-a', sources: ['reclamation_client'] });
-    expect(ev('EV-2026-131')).toMatchObject({ siteId: 'ville-a', sources: ['evenement'] });
+    expect(ev('EV-2026-128')).toMatchObject({ siteId: 'site_a', sources: ['reclamation_client'] });
+    expect(ev('EV-2026-131')).toMatchObject({ siteId: 'site_a', sources: ['evenement'] });
     expect(ev('EV-2026-131')?.healthWarning).toBeUndefined();
     expect(ev('EV-2026-127')).toMatchObject({ sources: ['evenement'], healthWarning: true });
     expect(targets.every((x) => x.label.length <= 80 && x.sources.length > 0)).toBe(true);
@@ -284,10 +284,10 @@ describe('éléments proposés par le sélecteur du formulaire (QHSE)', () => {
     const plan7 = targets.find((x) => x.value === 'plan:7');
     expect(plan7).toMatchObject({ siteId: null, sources: ['audit_fournisseur'] });
     expect(targets.find((x) => x.value.startsWith('requirement:'))?.sources).toEqual(['veille', 'dechets']);
-    expect(targets.find((x) => x.value.startsWith('wastestream:'))).toMatchObject({ siteId: 'ville-a', sources: ['dechets'] });
-    actAs('Animateur QHSE', 'ville-b');
+    expect(targets.find((x) => x.value.startsWith('wastestream:'))).toMatchObject({ siteId: 'site_a', sources: ['dechets'] });
+    actAs('Animateur QHSE', 'site_b');
     const b = await loadActionTargets();
-    expect(b.find((x) => x.value === 'event:EV-2026-129')).toMatchObject({ siteId: 'ville-b' });
+    expect(b.find((x) => x.value === 'event:EV-2026-129')).toMatchObject({ siteId: 'site_b' });
     expect(b.some((x) => x.value === 'event:EV-2026-131')).toBe(false);
   });
 
@@ -295,7 +295,7 @@ describe('éléments proposés par le sélecteur du formulaire (QHSE)', () => {
     actAs('Animateur QHSE', 'all');
     const db = await getDb();
     await db.insert(t.wasteStreams).values({
-      id: 'FD-99', siteId: 'ville-c', label: 'Cartons du dépôt fermé', ewcCode: '15 01 01', treatmentCode: 'R3', channel: 'Recyclage', collector: 'Collecteur', destination: 'Centre de tri',
+      id: 'FD-99', siteId: 'site_c', label: 'Cartons du dépôt fermé', ewcCode: '15 01 01', treatmentCode: 'R3', channel: 'Recyclage', collector: 'Collecteur', destination: 'Centre de tri',
     });
     const before = await loadActionTargets();
     const risk = before.find((x) => x.value.startsWith('risk:'))!;
@@ -304,7 +304,7 @@ describe('éléments proposés par le sélecteur du formulaire (QHSE)', () => {
     await db.update(t.workUnits).set({ archivedAt: new Date('2026-10-01T08:00:00Z'), archiveReason: 'Unité regroupée' }).where(eq(t.workUnits.id, r.unitId));
     try {
       const targets = await loadActionTargets();
-      expect(targets.some((x) => x.value === 'wastestream:FD-99' || x.siteId === 'ville-c')).toBe(false);
+      expect(targets.some((x) => x.value === 'wastestream:FD-99' || x.siteId === 'site_c')).toBe(false);
       expect(targets.some((x) => x.value === risk.value)).toBe(false);
     } finally {
       await db.update(t.workUnits).set({ archivedAt: null, archiveReason: null }).where(eq(t.workUnits.id, r.unitId));

@@ -14,7 +14,7 @@ import { currentSiteId, getSession, inPerimeter } from '../session';
 import { loadReadKeys } from './notifications';
 import { loadSiteDirectory, loadVisibleTodo, shortSiteLabel, type VisibleTodo } from './todo';
 import { tf1Target } from './objectives';
-import { requirementProjects } from './watch';
+import { projectsOf } from './watch';
 
 // ─── Tableau de bord ────────────────────────────────────────────────────────
 
@@ -168,8 +168,8 @@ export async function loadDashboard() {
   const siteNames = new Map(directory.map((s) => [s.id, s.label]));
   const featured = reqs.find((r) => r.featured && !r.archivedAt);
   const applicability = featured?.dueOn ? featuredApplicability(featured.dueOn, now, featured.evaluation) : null;
-  // Projets Keystone concernés : même calcul que la fiche de l'exigence sur /veille (surcharge manuelle comprise).
-  const keystone = featured?.dueOn ? await requirementProjects(featured) : null;
+  // Projets Keystone concernés : nombre saisi dans la fiche de l'exigence sur /veille (D02 : plus de calcul, CV-11).
+  const keystone = featured?.dueOn ? projectsOf(featured) : null;
 
   // Carte « À traiter dans les 15 jours » : dépassements et échéances de l'horizon commun (inTodoHorizon, TDB-16) ; les
   // contrôles et les certificats à 16-30 jours restent sur la page À faire (groupe « Au-delà de 15 jours »).
@@ -203,8 +203,6 @@ export async function loadDashboard() {
       state: applicability!.state,
       impact: featured.impact,
       projects: keystone?.count ?? null,
-      /** Identifiants des projets calculés ; vide si le nombre est saisi à la main (surcharge). */
-      projectIds: keystone && !keystone.manual ? keystone.list.map((p) => p.id) : [],
       actionId: featured.actionId,
       // Lecture seule pour les rôles sans accès à la veille (chef de projet).
       href: link(`/veille?exigence=${featured.id}`),

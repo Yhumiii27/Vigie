@@ -87,7 +87,7 @@ describe('motif obligatoire des annulations, archivages et restaurations', () =>
     ['obsoleteDocument', () => obsoleteDocument({}, form({ documentId: 'PR-QHSE-005', reason: '' }))],
     ['cancelWasteEntry', () => cancelWasteEntry({}, form({ id: '1', reason: '' }))],
     ['cancelReview', () => cancelReview({}, form({ id: '1', reason: '' }))],
-    ['archiveSite', () => archiveSite({}, form({ siteId: 'ville-b', reason: '' }))],
+    ['archiveSite', () => archiveSite({}, form({ siteId: 'site_b', reason: '' }))],
   ] as const)('%s', async (_name, call) => {
     actAs('Animateur QHSE', 'all');
     const r = await call();
@@ -119,28 +119,28 @@ describe('journal des modifications : auteur, motif, détail', () => {
 
 describe('périmètre de sites (SEC-02) et site sélectionné', () => {
   // Chef de service rattaché au site B ([J. Petit]), sites accordés : site B seulement.
-  const restricted = () => { auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['ville-b'] } }; };
+  const restricted = () => { auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['site_b'] } }; };
 
   it('session : site du périmètre seulement, ni « Tous les sites » ni autre site par cookie', async () => {
     restricted();
     cookieJar.set('vigie_site', 'all');
     const { getSession } = await import('@/lib/session');
-    expect(await getSession()).toMatchObject({ site: { id: 'ville-b' }, siteOptions: [{ id: 'ville-b' }], allowedSiteIds: ['ville-b'] });
+    expect(await getSession()).toMatchObject({ site: { id: 'site_b' }, siteOptions: [{ id: 'site_b' }], allowedSiteIds: ['site_b'] });
     cookieJar.delete('vigie_site');
-    await setSite('ville-a');
+    await setSite('site_a');
     expect(cookieJar.get('vigie_site')).toBeUndefined();
-    await setSite('ville-b');
-    expect(cookieJar.get('vigie_site')).toBe('ville-b');
+    await setSite('site_b');
+    expect(cookieJar.get('vigie_site')).toBe('site_b');
     auth.override = null;
   });
 
   it('server actions : élément ou création hors périmètre refusés, site du périmètre admis', async () => {
     restricted();
-    cookieJar.set('vigie_site', 'ville-b');
+    cookieJar.set('vigie_site', 'site_b');
     const outside = { error: 'Cet élément appartient à un site hors de votre périmètre.' };
     expect(await signEu('PP-2026-016')).toEqual(outside);
     expect(await savePlan({}, form({
-      contractorId: 'EE-001', siteId: 'ville-a', title: 'Hors périmètre', location: 'Atelier', startOn: '2026-11-02', endOn: '2026-11-03', estimatedHours: '8',
+      contractorId: 'EE-001', siteId: 'site_a', title: 'Hors périmètre', location: 'Atelier', startOn: '2026-11-02', endOn: '2026-11-03', estimatedHours: '8',
     }))).toEqual(outside);
     expect(await closePlan('PP-2026-011')).toEqual({});
     expect(await lastLog('prevention_plan', 'PP-2026-011')).toMatchObject({ action: 'status', summary: 'Plan clos', byId: 'jpetit' });
@@ -159,11 +159,11 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
     };
     actAs('Animateur QHSE', 'all');
     expect(await saveAction({}, form({ ...action, siteId: 'all' }))).toMatchObject({ fieldErrors: { siteId: expect.stringContaining('un seul site') } });
-    expect(await saveAction({}, form({ ...action, siteId: 'ville-b' }))).toMatchObject({ ok: true });
+    expect(await saveAction({}, form({ ...action, siteId: 'site_b' }))).toMatchObject({ ok: true });
 
     restricted();
-    cookieJar.set('vigie_site', 'ville-b');
-    expect(await saveAction({}, form({ ...action, siteId: 'ville-b' }))).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
+    cookieJar.set('vigie_site', 'site_b');
+    expect(await saveAction({}, form({ ...action, siteId: 'site_b' }))).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
     expect(await saveControl({}, form({
       equipment: 'Extincteurs', controlType: 'Vérification annuelle', periodMonths: '12', organization: 'Prestataire', lastOn: '2026-09-01', siteId: '',
     }))).toEqual({ error: ALL_SITES_RESERVED, fieldErrors: { siteId: 'Site non autorisé.' } });
@@ -177,14 +177,14 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
     actAs('Animateur QHSE', 'all');
     expect(await createDuerpVersion({}, form({ version: '2026.2', validatedById: 'hmarchand' }))).toMatchObject({ ok: true });
     const full = (await loadDuerpVersion('2026.1'))!.snapshot;
-    expect(new Set(full.risks!.map((r) => r.siteId))).toEqual(new Set(['ville-a', 'ville-b']));
+    expect(new Set(full.risks!.map((r) => r.siteId))).toEqual(new Set(['site_a', 'site_b']));
 
     restricted();
-    cookieJar.set('vigie_site', 'ville-b');
+    cookieJar.set('vigie_site', 'site_b');
     const own = (await loadDuerpVersion('2026.1'))!.snapshot;
     expect(own.risks!.length).toBeGreaterThan(0);
-    expect(own.risks!.every((r) => r.siteId === 'ville-b' || r.siteId === null)).toBe(true);
-    expect(own.units!.every((u) => u.siteId === 'ville-b' || u.siteId === null)).toBe(true);
+    expect(own.risks!.every((r) => r.siteId === 'site_b' || r.siteId === null)).toBe(true);
+    expect(own.units!.every((u) => u.siteId === 'site_b' || u.siteId === null)).toBe(true);
     expect(own.risks!.length).toBeLessThan(full.risks!.length);
     const { versions } = await loadRisks();
     expect(versions.find((v) => v.version === '2026.1')?.riskCount).toBe(own.risks!.length);
@@ -195,8 +195,8 @@ describe('périmètre de sites (SEC-02) et site sélectionné', () => {
   it('pièces jointes : lecture refusée hors périmètre', async () => {
     const { canReadAttachment } = await import('@/lib/uploads');
     const row = { id: 'x', entityType: 'prevention_plan', entityId: 'PP-2026-016', fileName: 'a.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy: null, createdAt: new Date(), health: false };
-    expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['ville-b'] })).toBe(false);
-    expect(await canReadAttachment({ ...row, entityId: 'PP-2026-014' }, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['ville-b'] })).toBe(true);
+    expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['site_b'] })).toBe(false);
+    expect(await canReadAttachment({ ...row, entityId: 'PP-2026-014' }, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['site_b'] })).toBe(true);
     expect(await canReadAttachment(row, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(true);
   });
 

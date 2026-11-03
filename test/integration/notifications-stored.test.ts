@@ -30,7 +30,7 @@ vi.mock('@/lib/data/dashboard', () => ({ loadTodoPage: async () => ({ items: tod
 freshDemoDatabase();
 
 const due = (key: string, date: string, extra: Partial<VisibleTodo> = {}): VisibleTodo => ({
-  key, date, kind: 'Échéance', tone: 'neutral', title: `Échéance ${key}`, who: '', siteId: 'ville-a', href: '/veille', source: 'watch', elsewhere: false, ...extra,
+  key, date, kind: 'Échéance', tone: 'neutral', title: `Échéance ${key}`, who: '', siteId: 'site_a', href: '/veille', source: 'watch', elsewhere: false, ...extra,
 });
 
 async function stored(personId: string) {
@@ -61,7 +61,7 @@ async function redirectOf(p: Promise<unknown>) {
 
 describe('notifications stockées dans la cloche', () => {
   it('jeu de démonstration : non lues et lues des 7 derniers jours, type, auteur, clé « notification:<id> »', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     todo.items = [];
     const rows = await stored('clefevre');
     const list = await loadNotifications();
@@ -86,23 +86,23 @@ describe('notifications stockées dans la cloche', () => {
   });
 
   it('notification écrite par notify() : listée non lue ; action d’un autre site : libellé du site, ouverture sur ce site', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    const [b] = await (await getDb()).select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.siteId, 'ville-b')).limit(1);
+    actAs('Animateur QHSE', 'site_a');
+    const [b] = await (await getDb()).select({ id: t.actions.id }).from(t.actions).where(eq(t.actions.siteId, 'site_b')).limit(1);
     const id = await confiee('clefevre', b.id);
     const item = (await loadNotifications()).find((n) => n.key === `notification:${id}`);
-    expect(item).toMatchObject({ read: false, elsewhere: true, siteLabel: 'Site de [Ville B]', siteId: 'ville-b', kind: 'Action confiée', family: 'action_confiee' });
+    expect(item).toMatchObject({ read: false, elsewhere: true, siteLabel: 'Site de [Ville B]', siteId: 'site_b', kind: 'Action confiée', family: 'action_confiee' });
     actAs('Animateur QHSE', 'all');
     expect((await loadNotifications()).find((n) => n.key === `notification:${id}`)).toMatchObject({ elsewhere: false, siteLabel: undefined });
 
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await redirectOf(openTodo(`notification:${id}`, { markRead: true }))).toBe(`/actions?action=${b.id}`);
-    expect(cookieJar.get('vigie_site')).toBe('ville-b');
+    expect(cookieJar.get('vigie_site')).toBe('site_b');
     expect((await stored('clefevre')).find((r) => r.id === id)!.readAt).toBeInstanceOf(Date);
     expect((await loadNotifications()).find((n) => n.key === `notification:${id}`)).toMatchObject({ read: true });
   });
 
   it('markNotificationsRead : seulement les notifications de la personne connectée ; date de lecture jamais déplacée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const mine = await confiee('clefevre', 'A-215');
     const theirs = await confiee('tnguyen', 'A-215');
     await markNotificationsRead([`notification:${mine}`, `notification:${theirs}`, 'notification:abc', 'notification:99999999999']);
@@ -118,19 +118,19 @@ describe('notifications stockées dans la cloche', () => {
   });
 
   it('openTodo : notification d’une autre personne ou clé inconnue → rien', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const theirs = await confiee('tnguyen', 'A-215');
     expect(await redirectOf(openTodo(`notification:${theirs}`, { markRead: true }))).toBeNull();
     expect(await redirectOf(openTodo('notification:0'))).toBeNull();
     expect((await stored('tnguyen')).find((r) => r.id === theirs)!.readAt).toBeNull();
     // Le responsable, lui, l'ouvre.
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await redirectOf(openTodo(`notification:${theirs}`, { markRead: true }))).toBe('/actions?action=A-215');
     expect((await stored('tnguyen')).find((r) => r.id === theirs)!.readAt).toBeInstanceOf(Date);
   });
 
   it('openTodo : une échéance calculée reste ouverte et marquée lue dans notification_reads', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     todo.items = [due('veille|x', '2026-10-12')];
     expect(await redirectOf(openTodo('veille|x', { markRead: true }))).toBe('/veille');
     const reads = await (await getDb()).select().from(t.notificationReads)
@@ -141,7 +141,7 @@ describe('notifications stockées dans la cloche', () => {
   });
 
   it('ordre : échéances urgentes, puis informations (plus récentes d’abord), puis autres échéances par date', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     todo.items = [
       due('b', '2026-10-15'), due('a', '2026-10-10'), due('urgent', '2026-10-01', { overdue: true, tone: 'danger' }),
       due('loin', '2026-10-30'), // hors des 7 jours : absente
@@ -161,7 +161,7 @@ describe('notifications stockées dans la cloche', () => {
   });
 
   it('« Tout marquer comme lu » : notifications stockées (au-delà des 50 affichées), échéances et rappel', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const db = await getDb();
     for (let i = 0; i < 55; i++) await confiee('sbenali', 'A-221');
     todo.items = [due('veille|y', '2026-10-12')];
@@ -195,7 +195,7 @@ function bellItems(node: unknown): Record<string, unknown>[] | null {
 
 describe('Salarié : sa cloche seulement, sans responsables ni site dans la charge', () => {
   it('notifications de tnguyen seulement ; projection de PageHeader limitée aux champs affichés', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     todo.items = [due('evenement|z', '2026-10-12', { ownerIds: ['tnguyen'] })];
     const mine = new Set((await stored('tnguyen')).map((r) => `notification:${r.id}`));
     const list = await loadNotifications();
@@ -213,7 +213,7 @@ describe('Salarié : sa cloche seulement, sans responsables ni site dans la char
 
 describe('lien d’une notification stockée : seulement vers une action que la personne peut lire', () => {
   it('ancien responsable (réaffectation) : la notification reste, sans lien ; openTodo → rien', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const db = await getDb();
     const id = await confiee('tnguyen', 'A-215');
     expect((await loadNotifications()).find((n) => n.key === `notification:${id}`)).toMatchObject({ href: '/actions?action=A-215' });
@@ -225,7 +225,7 @@ describe('lien d’une notification stockée : seulement vers une action que la 
       expect(item!.href).toBeUndefined();
       expect(await redirectOf(openTodo(`notification:${id}`, { markRead: true }))).toBeNull();
       // Le QHSE garde le lien (plan de son périmètre).
-      actAs('Animateur QHSE', 'ville-a');
+      actAs('Animateur QHSE', 'site_a');
       const qhse = await confiee('clefevre', 'A-215', 'tnguyen');
       expect((await loadNotifications()).find((n) => n.key === `notification:${qhse}`)).toMatchObject({ href: '/actions?action=A-215' });
     } finally {
@@ -266,22 +266,22 @@ describe('session Entra ID de périmètre restreint', () => {
 
   it('action dont il est responsable hors de son périmètre : lien gardé (D19), ouverte sans changer de site ; action d’autrui hors périmètre : sans lien', async () => {
     const db = await getDb();
-    const [own] = await db.select({ id: t.actions.id, pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.siteId, 'ville-b')).limit(1);
+    const [own] = await db.select({ id: t.actions.id, pilotId: t.actions.pilotId }).from(t.actions).where(eq(t.actions.siteId, 'site_b')).limit(1);
     const [other] = await db.select({ id: t.actions.id }).from(t.actions)
-      .where(and(eq(t.actions.siteId, 'ville-b'), eq(t.actions.pilotId, 'clefevre'))).limit(1);
+      .where(and(eq(t.actions.siteId, 'site_b'), eq(t.actions.pilotId, 'clefevre'))).limit(1);
     expect(other).toBeDefined();
     await db.update(t.actions).set({ pilotId: 'sbenali' }).where(eq(t.actions.id, own.id));
     try {
-      await actAsEntra('sbenali', 'Chef de service', ['ville-a'], 'ville-a');
+      await actAsEntra('sbenali', 'Chef de service', ['site_a'], 'site_a');
       const mine = await confiee('sbenali', own.id);
       const theirs = await confiee('sbenali', other.id);
       todo.items = [];
       const list = await loadNotifications();
-      expect(list.find((n) => n.key === `notification:${mine}`)).toMatchObject({ elsewhere: true, siteId: 'ville-b', href: `/actions?action=${own.id}` });
+      expect(list.find((n) => n.key === `notification:${mine}`)).toMatchObject({ elsewhere: true, siteId: 'site_b', href: `/actions?action=${own.id}` });
       expect(list.find((n) => n.key === `notification:${theirs}`)!.href).toBeUndefined();
       // Site hors des choix : ouverte sans sélectionner ce site (setSite le refuserait).
       expect(await redirectOf(openTodo(`notification:${mine}`, { markRead: true }))).toBe(`/actions?action=${own.id}`);
-      expect(cookieJar.get('vigie_site')).toBe('ville-a');
+      expect(cookieJar.get('vigie_site')).toBe('site_a');
       expect((await stored('sbenali')).find((r) => r.id === mine)!.readAt).toBeInstanceOf(Date);
       expect(await redirectOf(openTodo(`notification:${theirs}`, { markRead: true }))).toBeNull();
       expect((await stored('sbenali')).find((r) => r.id === theirs)!.readAt).toBeNull();

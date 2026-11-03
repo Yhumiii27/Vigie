@@ -6,14 +6,18 @@ import { useRouter } from 'next/navigation';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
-import { ActionForm, Field, FormRow, Input } from '@/components/form';
+import { ActionForm, Field, FormRow, Input, Select } from '@/components/form';
+import { withCurrent, type Option } from '@/lib/form-options';
 import { Icon, ToneTag } from '@/components/ui';
 import type { ContractorView } from '@/lib/data/prevention';
 import { archiveContractor, restoreContractor, saveContractor } from '@/server/contractors';
 import { Facts, Notice, SectionTitle, dropUrlParam, muted, rowOpener } from './parts';
 import { TipButton } from '@/components/Tip';
 
-function ContractorForm({ contractor, onDone, onCancel }: { contractor?: ContractorView; onDone: () => void; onCancel: () => void }) {
+/** D16 : fournisseurs de keystone.pub_fournisseurs proposés (sans les ateliers internes) ; `message` : source indisponible. */
+export type SupplierChoices = { options: Option[]; message: string | null };
+
+function ContractorForm({ contractor, suppliers, onDone, onCancel }: { contractor?: ContractorView; suppliers: SupplierChoices; onDone: () => void; onCancel: () => void }) {
   return (
     <ActionForm action={saveContractor} onDone={onDone} onCancel={onCancel} submitLabel={contractor ? 'Enregistrer' : "Ajouter l'entreprise"} hidden={{ id: contractor?.id, version: contractor?.version }}>
       <FormRow>
@@ -35,14 +39,17 @@ function ContractorForm({ contractor, onDone, onCancel }: { contractor?: Contrac
           <Input name="contactEmail" type="email" defaultValue={contractor?.contactEmail ?? ''} />
         </Field>
       </FormRow>
+      <Field name="supplierId" label="Fournisseur Keystone" hint={suppliers.message ?? 'Facultatif : rattache l’entreprise à sa fiche fournisseur de Keystone (achats, NC fournisseur).'}>
+        <Select name="supplierId" options={withCurrent(suppliers.options, contractor?.supplierId, contractor?.supplier)} defaultValue={contractor?.supplierId ?? ''} placeholder="Aucun" />
+      </Field>
     </ActionForm>
   );
 }
 
-export function NewContractorButton() {
+export function NewContractorButton({ suppliers }: { suppliers: SupplierChoices }) {
   return (
     <DialogButton label="Ajouter une entreprise" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvelle entreprise extérieure" kicker="Entreprises extérieures" width={600}>
-      {(close) => <ContractorForm onDone={close} onCancel={close} />}
+      {(close) => <ContractorForm suppliers={suppliers} onDone={close} onCancel={close} />}
     </DialogButton>
   );
 }
@@ -62,6 +69,7 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
       )}
       <Facts items={[
         ['Corps de métier', c.trade],
+        ['Fournisseur Keystone', c.supplier ?? '—'],
         ['Interlocuteur', c.contactName ?? '—'],
         ['Téléphone', c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : '—'],
         ['E-mail', c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>{c.contactEmail}</a> : '—'],
@@ -119,14 +127,14 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
 
 type Mode = 'view' | 'edit' | 'archive';
 
-function ContractorDialog({ contractor, onClose, canManage }: { contractor: ContractorView | null; onClose: () => void; canManage: boolean }) {
+function ContractorDialog({ contractor, suppliers, onClose, canManage }: { contractor: ContractorView | null; suppliers: SupplierChoices; onClose: () => void; canManage: boolean }) {
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
   const kicker = mode === 'edit' ? 'Modifier l’entreprise' : mode === 'archive' ? 'Archiver l’entreprise' : 'Entreprise extérieure';
   return (
     <Dialog open={!!contractor} onClose={close} title={contractor?.name ?? ''} kicker={kicker} width={640}>
-      {contractor && mode === 'edit' && <ContractorForm contractor={contractor} onDone={back} onCancel={back} />}
+      {contractor && mode === 'edit' && <ContractorForm contractor={contractor} suppliers={suppliers} onDone={back} onCancel={back} />}
       {contractor && mode === 'archive' && (
         <ReasonForm action={archiveContractor} hidden={{ id: contractor.id }} submitLabel="Archiver" submitIcon="ph-archive" onDone={back} onCancel={back}
           placeholder="Ex. Contrat terminé, entreprise plus référencée"
@@ -150,7 +158,9 @@ const count = (n: number, active: number, activeLabel: string) => (
  * Liste des entreprises extérieures ; un clic ouvre la fiche (tous rôles). `openId` (PRV-14) : fiche ouverte par lien direct
  * (?onglet=entreprises&entreprise=<id>, depuis un plan ou un permis), paramètre retiré de l'URL à la fermeture.
  */
-export function ContractorsTable({ contractors, canManage, emptyLabel, openId }: { contractors: ContractorView[]; canManage: boolean; emptyLabel: string; openId?: string }) {
+export function ContractorsTable({ contractors, suppliers, canManage, emptyLabel, openId }: {
+  contractors: ContractorView[]; suppliers: SupplierChoices; canManage: boolean; emptyLabel: string; openId?: string;
+}) {
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(openId ?? null);
   const sel = contractors.find((c) => c.id === selId) ?? null;
@@ -183,7 +193,7 @@ export function ContractorsTable({ contractors, canManage, emptyLabel, openId }:
           </table>
         </div>
       </div>
-      <ContractorDialog contractor={sel} onClose={close} canManage={canManage} />
+      <ContractorDialog contractor={sel} suppliers={suppliers} onClose={close} canManage={canManage} />
     </>
   );
 }

@@ -31,7 +31,7 @@ const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélecti
 const REASON_REQUIRED = { fieldErrors: { reason: expect.any(String) } };
 
 const STUDY = {
-  siteId: 'ville-a', capexCode: 'CPX-APM-2026-02', keystoneProjectCode: '', milestone: 'HS3', type: 'amdec', status: 'planifiee', sessionOn: '2026-10-20',
+  siteId: 'site_a', capexCode: 'CPX-APM-2026-02', keystoneProjectCode: '', milestone: 'HS3', type: 'amdec', status: 'planifiee', sessionOn: '2026-10-20',
   facilitatorId: 'clefevre', facilitatorExternal: '', reportRef: '', scope: 'Extension de l’entrepôt : convoyeurs.',
 };
 const study = async (id: string) => (await loadProcessSafetyStudies()).studies.concat((await loadProcessSafetyStudies()).cancelled).find((s) => s.id === id);
@@ -60,11 +60,11 @@ describe('jeu de démonstration (Arche CPX-APM-2026-01)', () => {
     const [es2] = await row;
     actAs('Animateur QHSE', 'all');
     expect(await saveProcessSafetyStudy({}, form({
-      ...STUDY, id: 'ES-002', version: v, siteId: 'ville-b', capexCode: es2.capexCode ?? '', milestone: es2.milestone, type: es2.type,
+      ...STUDY, id: 'ES-002', version: v, siteId: 'site_b', capexCode: es2.capexCode ?? '', milestone: es2.milestone, type: es2.type,
       status: 'realisee', sessionOn: es2.sessionOn, facilitatorId: es2.facilitatorId ?? '', facilitatorExternal: es2.facilitatorExternal ?? '',
     }))).toMatchObject({ fieldErrors: { siteId: 'L’étude porte des recommandations : elle ne change plus de site.' } });
     // Site B : aucune étude.
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await loadProcessSafetyStudies()).studies).toEqual([]);
   });
 
@@ -89,7 +89,7 @@ describe('saisie d’une étude (VG-01)', () => {
       actAs(role);
       expect(await saveProcessSafetyStudy({}, form(STUDY)), role).toEqual({ error: APPROVERS_ONLY });
     }
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await saveProcessSafetyStudy({}, form(STUDY))).toMatchObject({ error: OTHER_SITE });
     actAs('Animateur QHSE');
     expect(await saveProcessSafetyStudy({}, form({ ...STUDY, capexCode: '' }))).toMatchObject({ fieldErrors: { capexCode: expect.stringContaining('au moins un') } });
@@ -145,7 +145,7 @@ describe('recommandations (VG-02)', () => {
     expect(await saveAction({}, form(rec))).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
     actAs('Animateur QHSE');
     expect(await saveAction({}, form({ ...rec, source: 'comex' }))).toMatchObject({ fieldErrors: { source: expect.any(String) } });
-    expect(await saveAction({}, form({ ...rec, siteId: 'ville-b' }))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
+    expect(await saveAction({}, form({ ...rec, siteId: 'site_b' }))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
     const blocking = await saveAction({}, form({ ...rec, safetyBlocking: 'on' }));
     expect(blocking).toEqual({ ok: true, id: 'A-223' });
     expect(await actionRow('A-223')).toMatchObject({ source: 'hazop', safetyStudyId: 'ES-004', safetyStudyBlocking: true, originRef: 'ES-004 · AMDEC · CPX-APM-2026-02' });
@@ -163,7 +163,7 @@ describe('recommandations (VG-02)', () => {
   it('réserve bloquante posée ou levée (motif) par le QHSE, journal sur l’étude et l’action ; action close refusée', async () => {
     actAs('Chef de service');
     expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE');
     expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ ok: true, id: 'ES-004' });
@@ -187,7 +187,7 @@ describe('échéance, annulation (VG-01)', () => {
     actAs('Animateur QHSE');
     expect(await saveProcessSafetyStudy({}, form({ ...STUDY, milestone: 'HS4', type: 'controle_chantier', sessionOn: '2026-10-01', facilitatorId: 'sbenali' }))).toEqual({ ok: true, id: 'ES-005' });
     const sig = (await loadProcessSafetySignals()).todo.find((x) => x.key === 'etude-securite|ES-005')!;
-    expect(sig).toMatchObject({ dueOn: '2026-10-01', overdue: true, siteId: 'ville-a', ownerIds: ['sbenali'], who: '[S. Benali]', href: '/risques?vue=etudes&etude=ES-005', kind: 'Étude de sécurité' });
+    expect(sig).toMatchObject({ dueOn: '2026-10-01', overdue: true, siteId: 'site_a', ownerIds: ['sbenali'], who: '[S. Benali]', href: '/risques?vue=etudes&etude=ES-005', kind: 'Étude de sécurité' });
     expect((await loadVisibleTodo()).some((x) => x.href === '/risques?vue=etudes&etude=ES-005')).toBe(true);
     // Animateur (Chef de service de démonstration) : sa propre échéance ; Chef de projet : rien.
     actAs('Chef de service');
@@ -221,21 +221,13 @@ describe('échéance, annulation (VG-01)', () => {
   });
 });
 
-describe('code commun du site (VG-05, matrix.sites.code)', () => {
-  it('format de Matrix, unique, journalisé ; absent du formulaire : inchangé', async () => {
+describe('code commun du site (VG-05 remplacé par CV-09 : identifiant = code de Matrix)', () => {
+  it('libellé lu dans Matrix, jamais saisi ; champ « code » ignoré à la modification', async () => {
     actAs('Chef de service');
-    expect(await saveSite({}, form({ id: 'ville-a', label: 'Site de [Ville A]', code: 'kenitra' }))).toEqual({ error: APPROVERS_ONLY });
+    expect(await saveSite({}, form({ id: 'site_a', code: 'kenitra' }))).toEqual({ error: APPROVERS_ONLY });
     actAs('Direction', 'all');
-    const label = (await loadSiteAdmin()).find((s) => s.id === 'ville-a')!.label;
-    expect(await saveSite({}, form({ id: 'ville-a', label, code: 'ville-a' }))).toMatchObject({ fieldErrors: { code: expect.stringContaining('minuscules') } });
-    expect(await saveSite({}, form({ id: 'ville-a', label, code: 'all' }))).toMatchObject({ fieldErrors: { code: expect.stringContaining('réservé') } });
-    expect(await saveSite({}, form({ id: 'ville-a', label, code: 'Kenitra' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await loadSiteAdmin()).find((s) => s.id === 'ville-a')).toMatchObject({ code: 'kenitra' });
-    expect(await lastLog('site', 'ville-a')).toMatchObject({ details: expect.arrayContaining([{ field: 'Code commun (Matrix)', from: null, to: 'kenitra' }]) });
-    const labelB = (await loadSiteAdmin()).find((s) => s.id === 'ville-b')!.label;
-    expect(await saveSite({}, form({ id: 'ville-b', label: labelB, code: 'kenitra' }))).toMatchObject({ fieldErrors: { code: 'Un autre site porte déjà ce code.' } });
-    // Formulaire sans le champ (amorçage, ancien formulaire) : code conservé.
-    expect(await saveSite({}, form({ id: 'ville-a', label }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await loadSiteAdmin()).find((s) => s.id === 'ville-a')).toMatchObject({ code: 'kenitra' });
+    const before = (await loadSiteAdmin()).find((s) => s.id === 'site_a')!;
+    expect(await saveSite({}, form({ id: 'site_a', label: 'Autre', code: 'kenitra' }))).toEqual({ ok: true, id: 'site_a' });
+    expect((await loadSiteAdmin()).find((s) => s.id === 'site_a')).toMatchObject({ id: 'site_a', label: before.label, matrixState: 'actif' });
   });
-});
+});;

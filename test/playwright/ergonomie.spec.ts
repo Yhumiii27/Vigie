@@ -20,7 +20,7 @@ async function axeViolations(page: Page) {
 
 test('DUERP : une case de la matrice filtre les risques ; familles de dangers proposées', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/risques');
   const matrix = page.getByRole('table', { name: /Matrice de la cotation brute/ });
   await expect(matrix.getByRole('rowheader', { name: /G4/ })).toBeVisible();
@@ -46,7 +46,7 @@ test('DUERP : une case de la matrice filtre les risques ; familles de dangers pr
 });
 
 test('Chef de service : « Signaler un événement » depuis un contrôle ouvre le formulaire prérempli', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/veille?onglet=controles');
   await page.getByRole('table').first().getByRole('row').nth(1).click();
   const fiche = page.getByRole('dialog');
@@ -59,7 +59,7 @@ test('Chef de service : « Signaler un événement » depuis un contrôle ouvre 
 });
 
 test('Prévention : filtre par entreprise, fiche de l’entreprise ouverte depuis un plan', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/prevention?plan=PP-2025-041');
   const dialog = page.getByRole('dialog');
   const company = dialog.getByRole('link').filter({ hasText: /\S/ }).and(dialog.locator('a[href*="onglet=entreprises"]'));
@@ -80,7 +80,7 @@ test('Prévention : filtre par entreprise, fiche de l’entreprise ouverte depui
 });
 
 test('Veille : recherche et tri par échéance portés par l’URL', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/veille');
   await page.getByText('Filtres', { exact: true }).click();
   await page.getByRole('combobox', { name: 'Tri' }).selectOption({ label: 'Échéance la plus proche' });
@@ -133,7 +133,7 @@ test('Habilitations : filtre par titre suivi et réordonnancement des colonnes',
 });
 
 test('Aide en ligne : aide de l’écran et glossaire, au clavier', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/risques');
   const open = page.getByRole('button', { name: 'Aide et glossaire' });
   await open.focus();

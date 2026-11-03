@@ -21,32 +21,33 @@ describe('site : droit local d’Alsace-Moselle', () => {
   it('encadrement sans administration des sites : refusé', async () => {
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role);
-      expect(await saveSite({}, form({ id: 'ville-a', label: 'Site de [Ville A]', alsaceMoselleField: '1', alsaceMoselle: 'on' })), role).toEqual({ error: APPROVERS_ONLY });
+      expect(await saveSite({}, form({ id: 'site_a', label: 'Site de [Ville A]', alsaceMoselleField: '1', alsaceMoselle: 'on' })), role).toEqual({ error: APPROVERS_ONLY });
     }
-    expect((await site('ville-a')).alsaceMoselle).toBe(false);
+    expect((await site('site_a')).alsaceMoselle).toBe(false);
   });
 
   it('cochée, journalisée ; formulaire sans la case : inchangée ; décochée', async () => {
     actAs('Animateur QHSE');
-    const { label } = await site('ville-a');
-    expect(await saveSite({}, form({ id: 'ville-a', label, alsaceMoselleField: '1', alsaceMoselle: 'on' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await site('ville-a')).alsaceMoselle).toBe(true);
-    expect(await lastLog('site', 'ville-a')).toMatchObject({
+    const { label } = await site('site_a');
+    expect(await saveSite({}, form({ id: 'site_a', label, alsaceMoselleField: '1', alsaceMoselle: 'on' }))).toEqual({ ok: true, id: 'site_a' });
+    expect((await site('site_a')).alsaceMoselle).toBe(true);
+    expect(await lastLog('site', 'site_a')).toMatchObject({
       action: 'update', byId: 'clefevre', details: [{ field: 'Droit local d’Alsace-Moselle', from: 'non', to: 'oui' }],
     });
-    expect(await saveSite({}, form({ id: 'ville-a', label, sort: '1' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await site('ville-a')).alsaceMoselle).toBe(true);
-    expect(await saveSite({}, form({ id: 'ville-a', label, alsaceMoselleField: '1' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await site('ville-a')).alsaceMoselle).toBe(false);
-    expect((await lastLog('site', 'ville-a'))?.details).toEqual([{ field: 'Droit local d’Alsace-Moselle', from: 'oui', to: 'non' }]);
+    expect(await saveSite({}, form({ id: 'site_a', label, sort: '1' }))).toEqual({ ok: true, id: 'site_a' });
+    expect((await site('site_a')).alsaceMoselle).toBe(true);
+    expect(await saveSite({}, form({ id: 'site_a', label, alsaceMoselleField: '1' }))).toEqual({ ok: true, id: 'site_a' });
+    expect((await site('site_a')).alsaceMoselle).toBe(false);
+    expect((await lastLog('site', 'site_a'))?.details).toEqual([{ field: 'Droit local d’Alsace-Moselle', from: 'oui', to: 'non' }]);
   });
 
   it('création d’un site en Moselle', async () => {
     actAs('Direction');
-    const r = await saveSite({}, form({ id: '', label: 'Site de [Metz]', alsaceMoselleField: '1', alsaceMoselle: 'on' }));
-    expect(r).toMatchObject({ ok: true });
+    // D14 : site suivi choisi dans matrix.pub_sites (substitut de démonstration : site_d).
+    const r = await saveSite({}, form({ id: '', code: 'site_d', alsaceMoselleField: '1', alsaceMoselle: 'on' }));
+    expect(r).toMatchObject({ ok: true, id: 'site_d' });
     expect(await site(r.id!)).toMatchObject({ alsaceMoselle: true });
-    expect(await lastLog('site', r.id!)).toMatchObject({ action: 'create', summary: 'Site « Site de [Metz] » créé · droit local d’Alsace-Moselle' });
+    expect(await lastLog('site', r.id!)).toMatchObject({ action: 'create', summary: 'Site « Site de [Ville D] — atelier de maintenance » suivi (Matrix : site_d) · droit local d’Alsace-Moselle' });
   });
 });
 

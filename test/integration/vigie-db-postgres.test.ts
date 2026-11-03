@@ -49,7 +49,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     const client = new Client({ connectionString: env.DATABASE_URL, application_name: 'vigie-tests', options: `-c search_path=${SERVER_SCHEMA}` });
     await client.connect();
     await migrateServer((q, p) => client.query(q, p));
-    await client.query("insert into sites (id, label, sort) values ('ville-a', 'Site A', 1), ('ville-b', 'Site B', 2)");
+    await client.query("insert into sites (id, label, sort) values ('site_a', 'Site A', 1), ('site_b', 'Site B', 2)");
     // Compteurs du signalement sans compte (empreintes d'adresses IP) : jamais copiés dans une sauvegarde PostgreSQL.
     await client.query("insert into report_rate_limits (key, window_start, hits) values ('ip:empreinte', now(), 3)");
     await client.end();
@@ -74,19 +74,19 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
       { name: extracted.manifest.database.file, size: dump.length, body: () => dump },
     ])), createWriteStream(bad));
 
-    await sql("delete from sites where id = 'ville-b'");
+    await sql("delete from sites where id = 'site_b'");
     const tables = (await sql<{ n: number }>(`select count(*)::int as n from pg_tables where schemaname = '${SERVER_SCHEMA}'`))[0].n;
     const refused = vigieDb('restore', bad, '--remplacer');
     expect(refused.code).toBe(1);
     expect(refused.out).toMatch(/unsupported version|version/);
     expect(refused.out).toMatch(/base actuelle est inchangée/);
     expect((await sql<{ n: number }>(`select count(*)::int as n from pg_tables where schemaname = '${SERVER_SCHEMA}'`))[0].n).toBe(tables);
-    expect(await siteIds()).toEqual(['ville-a']);
+    expect(await siteIds()).toEqual(['site_a']);
 
     const restored = vigieDb('restore', path.join(dir, 'backups', good), '--remplacer');
     expect(restored.out).toMatch(/Base restaurée/);
     expect(restored.code).toBe(0);
-    expect(await siteIds()).toEqual(['ville-a', 'ville-b']);
+    expect(await siteIds()).toEqual(['site_a', 'site_b']);
     expect(await sql('select key from report_rate_limits')).toEqual([]);
     // Schéma vigie seulement (serveur commun EPC2I) : vues pub_ restaurées, rien dans public ni drizzle.
     expect((await sql<{ v: string }>(`select table_name as v from information_schema.views where table_schema = '${SERVER_SCHEMA}' order by 1`)).map((r) => r.v))

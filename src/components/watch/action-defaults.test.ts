@@ -39,14 +39,14 @@ describe('exigence de veille en écart', () => {
 describe('contrôle périodique', () => {
   const ctrl = {
     id: 3, equipment: 'Pont roulant 10 t — atelier montage', controlType: 'VGP levage', periodMonths: 12, organization: '[Organisme A]',
-    reserves: 'Fin de course à régler', responsibleId: 'sbenali', nextOn: '2026-10-20', siteId: 'ville-a',
+    reserves: 'Fin de course à régler', responsibleId: 'sbenali', nextOn: '2026-10-20', siteId: 'site_a',
   };
 
   it('réserves : source « Contrôle réglementaire » imposée, contrôle lié, site du contrôle', () => {
     const d = controlReserveDefaults(ctrl, TODAY);
     expect(d).toMatchObject({
       source: 'controle_reglementaire', lockSource: true, link: 'control:3', linkLabel: 'VGP levage · Pont roulant 10 t — atelier montage',
-      siteId: 'ville-a', pilotId: 'sbenali', dueOn: '2026-10-20', verifyDueOn: '2026-11-19',
+      siteId: 'site_a', pilotId: 'sbenali', dueOn: '2026-10-20', verifyDueOn: '2026-11-19',
       detail: 'Lever les réserves « Fin de course à régler » : Pont roulant 10 t',
       problem: 'Réserves du contrôle « VGP levage » ([Organisme A]) : Fin de course à régler.',
     });

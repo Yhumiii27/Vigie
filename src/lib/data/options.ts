@@ -7,11 +7,17 @@ import { actionLabel } from '../action-rules';
 import { isClosedActionStatus } from '../domain';
 import { writableSites } from '../guard';
 import { ALL_SITES, getSession, inPerimeter, inSite } from '../session';
+import { loadProjects } from '../foreign/keystone';
+import { unavailableMessage } from '../foreign/labels';
 
 import type { Option } from '../form-options';
 
 // Option et withCurrent vivent dans src/lib/form-options.ts (sans server-only, utilisables par les composants client).
 export { withCurrent, type Option } from '../form-options';
+
+/** Libellé d'un projet Keystone dans une liste de choix : « code · client — nom », « (clos) » s'il n'est plus imputable. */
+const projectOptionLabel = (p: { code: string; client: string | null; name: string; open: boolean }) =>
+  `${p.code}${p.client ? ` · ${p.client}` : ''} — ${p.name}${p.open ? '' : ' (clos)'}`;
 
 const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -34,7 +40,7 @@ export const loadFormOptions = cache(async () => {
   const [people, writable, projects, actions, session] = await Promise.all([
     db.select({ id: t.people.id, name: t.people.name, job: t.people.job, leftOn: t.people.leftOn }).from(t.people).orderBy(asc(t.people.sort)),
     writableSites(),
-    db.select().from(t.keystoneProjects).orderBy(asc(t.keystoneProjects.id)),
+    loadProjects(),
     db.select({ id: t.actions.id, detail: t.actions.detail, siteId: t.actions.siteId, status: t.actions.status }).from(t.actions),
     getSession(),
   ]);
@@ -45,7 +51,9 @@ export const loadFormOptions = cache(async () => {
     people: people.filter((p) => !p.leftOn || p.leftOn > now).map((p) => [p.id, `${p.name} — ${p.job}`] as Option),
     sites: writable.sites.map((s) => [s.id, s.label] as Option),
     allSites: writable.allSites,
-    projects: projects.map((p) => [`${p.id} · ${p.client}`, `${p.id} · ${p.client} — ${p.title}`] as Option),
+    // D02 : projets lus dans keystone.pub_projets (valeur = code) ; source indisponible : aucun choix et `projectsMessage`.
+    projects: projects.ok ? projects.rows.map((p) => [p.code, projectOptionLabel(p)] as Option) : [],
+    projectsMessage: projects.ok ? null : unavailableMessage('projects'),
     actions: actions
       .filter((a) => !isClosedActionStatus(a.status) && visible(a.siteId))
       .sort((a, b) => b.id.localeCompare(a.id, 'fr', { numeric: true }))

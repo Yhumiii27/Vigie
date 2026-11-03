@@ -22,7 +22,7 @@ const filesOf = async (actionId: string) => (await getDb()).select().from(t.atta
 
 describe('ajout', () => {
   it('responsable salarié : commentaire signé, preuves jointes, journal, une notification par animateur QHSE (ACT-31)', async () => {
-    actAs('Salarié', 'ville-b'); // site sélectionné sans effet pour le responsable (D19)
+    actAs('Salarié', 'site_b'); // site sélectionné sans effet pour le responsable (D19)
     const before = (await notificationsOf('clefevre')).length;
     const r = await comment('A-215', 'Mode opératoire rédigé, en relecture par le chef d’équipe.', [file('mode-operatoire.pdf'), file('photo.jpg', 'image/jpeg', 'jpg')]);
     expect(r).toEqual({ ok: true, id: 'A-215' });
@@ -45,27 +45,27 @@ describe('ajout', () => {
   });
 
   it('QHSE : commentaire sans notification, site sélectionné exigé ; encadrement non responsable refusé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await notificationsOf('clefevre')).length;
     expect(await comment('A-215', 'Relecture faite, à diffuser.')).toEqual({ ok: true, id: 'A-215' });
     expect((await commentsOf('A-215')).at(-1)).toMatchObject({ authorId: 'clefevre', authorRole: 'Animateur QHSE' });
     expect((await notificationsOf('clefevre')).length).toBe(before);
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await comment('A-215', 'Hors site')).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'ville-a'); // [S. Benali], pas responsable de A-215
+    actAs('Chef de service', 'site_a'); // [S. Benali], pas responsable de A-215
     expect(await comment('A-215', 'Lecture seule')).toEqual({ error: DENIED });
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     expect(await comment('A-215', 'Lecture seule')).toEqual({ error: DENIED });
   });
 
   it('responsable de l’encadrement (Chef de service) : notification des animateurs QHSE', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await comment('A-214', 'Élingues commandées.')).toEqual({ ok: true, id: 'A-214' });
     expect((await notificationsOf('clefevre')).at(-1)).toMatchObject({ type: 'action_commentaire', entityId: 'A-214', title: 'A-214 : commentaire de [S. Benali] — Élingues commandées.' });
   });
 
   it('texte obligatoire, 4 000 caractères ; action abandonnée : commentaire admis, preuve refusée ; fichiers contrôlés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await comment('A-215', '')).toMatchObject({ fieldErrors: { body: 'Champ obligatoire.' } });
     expect(await comment('A-215', 'x'.repeat(4001))).toMatchObject({ fieldErrors: { body: '4000 caractères au maximum.' } });
     expect(await comment('A-215', 'Format', [file('script.exe', 'application/x-msdownload')])).toMatchObject({ error: expect.stringContaining('Format non accepté') });
@@ -98,9 +98,9 @@ describe('retrait (motif obligatoire, D23)', () => {
     actAs('Salarié');
     expect(await withdrawActionComment({}, form({ id: String(qhse.id), reason: 'Test' }))).toEqual({ error: DENIED });
     const jpetit = (await commentsOf('A-209')).find((x) => x.authorId === 'jpetit' && !x.withdrawnAt)!;
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await withdrawActionComment({}, form({ id: String(jpetit.id), reason: 'Données personnelles' }))).toEqual({ error: OTHER_SITE });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await withdrawActionComment({}, form({ id: String(jpetit.id), reason: 'Données personnelles' }))).toEqual({ ok: true, id: 'A-209' });
     expect(await withdrawActionComment({}, form({ id: '999999', reason: 'x' }))).toEqual({ error: 'Commentaire introuvable.' });
   });
@@ -108,13 +108,13 @@ describe('retrait (motif obligatoire, D23)', () => {
 
 describe('lecture des preuves (canReadAttachment)', () => {
   it('responsable, encadrement lecteur du plan, autre Salarié', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     await insertAction('A-T40', { pilotId: 'tnguyen' });
     expect(await comment('A-T40', 'Photo jointe', [file('avant.jpg', 'image/jpeg', 'jpg')])).toMatchObject({ ok: true });
     const [proof] = await filesOf('A-T40');
-    expect(await canReadAttachment(proof, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: ['ville-b'] })).toBe(true);
+    expect(await canReadAttachment(proof, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: ['site_b'] })).toBe(true);
     expect(await canReadAttachment(proof, { role: 'Chef de projet', user: { id: 'edubois' }, allowedSiteIds: null })).toBe(true);
-    expect(await canReadAttachment(proof, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['ville-b'] })).toBe(false);
+    expect(await canReadAttachment(proof, { role: 'Chef de service', user: { id: 'jpetit' }, allowedSiteIds: ['site_b'] })).toBe(false);
     expect(await canReadAttachment(proof, { role: 'Salarié', user: { id: 'mgirard' }, allowedSiteIds: null })).toBe(false);
   });
 });

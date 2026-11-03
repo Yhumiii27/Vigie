@@ -41,12 +41,12 @@ const db = () => getDb();
 const event = async (id: string) => (await (await db()).select().from(t.events).where(eq(t.events.id, id)))[0];
 
 const baseEvent = (fields: Record<string, string>) => form({
-  title: 'Événement de test', occurredOn: '2026-10-08', location: 'Atelier montage', severity: '2', siteId: 'ville-a', declarantId: 'tnguyen', pilotId: 'clefevre', ...fields,
+  title: 'Événement de test', occurredOn: '2026-10-08', location: 'Atelier montage', severity: '2', siteId: 'site_a', declarantId: 'tnguyen', pilotId: 'clefevre', ...fields,
 });
 
 describe('EVT-09 : maladies professionnelles (données de santé) et accidents de trajet', () => {
   it('maladie professionnelle : saisie et lecture réservées à l’animateur QHSE et à la direction', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await createEvent({}, baseEvent({ type: 'MP', victimKind: 'salarie', victimId: 'mgirard' }))).toEqual({ error: MP_DENIED });
     expect((await loadVisibleEvents()).some((e) => e.id === MP)).toBe(false);
     expect((await loadEventSignals()).todo.some((x) => x.title.startsWith(MP))).toBe(false);
@@ -54,7 +54,7 @@ describe('EVT-09 : maladies professionnelles (données de santé) et accidents d
     expect(await saveEvent({}, baseEvent({ id: MP, type: 'MP' }))).toEqual({ error: MP_DENIED });
     expect(await saveEvent({}, baseEvent({ id: MP, type: 'PA' }))).toEqual({ error: 'Événement introuvable.' });
 
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadVisibleEvents()).some((e) => e.id === MP)).toBe(true);
     const r = await createEvent({}, baseEvent({
       type: 'MP', title: 'Tendinite de Pierre', victimKind: 'salarie', victimId: 'mgirard', mpTable: '57', mpDisease: 'Tendinopathie du coude',
@@ -75,7 +75,7 @@ describe('EVT-09 : maladies professionnelles (données de santé) et accidents d
   });
 
   it('pièces d’une maladie professionnelle : jamais servies à un rôle non habilité', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await addEventFiles(formWith({ eventId: MP, health: '1' }, { files: [file('certificat.pdf')] }))).toEqual({ count: 1 });
     expect(await addEventFiles(formWith({ eventId: MP }, { files: [file('photo-poste.pdf')] }))).toEqual({ count: 1 });
     const rows = await (await db()).select().from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, MP)));
@@ -104,9 +104,9 @@ describe('EVT-09 : maladies professionnelles (données de santé) et accidents d
 
 describe('EVT-10 : synthèse imprimable de la DAT et feuille d’accident', () => {
   it('animateur QHSE et direction seulement ; consultation tracée', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await loadDatPrint('EV-2026-119')).toBeNull();
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const d = await loadDatPrint('EV-2026-119');
     expect(d).toMatchObject({ id: 'EV-2026-119', duty: 'cpam', cpam: { declaredOn: '2026-09-09' } });
     expect(d!.lesionNature).not.toBeNull();
@@ -118,7 +118,7 @@ describe('EVT-10 : synthèse imprimable de la DAT et feuille d’accident', () =
 
 describe('EVT-17 : traitement d’un produit non conforme', () => {
   it('dérogation sans autorité refusée ; décision, quantité et coût journalisés', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const nc = { type: 'NC', ncOrigin: 'Fabrication', title: 'NC de test' };
     expect(await createEvent({}, baseEvent({ ...nc, ncDisposition: 'derogation' }))).toMatchObject({ fieldErrors: { ncDispositionNote: expect.any(String) } });
     expect(await createEvent({}, baseEvent({ ...nc, ncCostKeur: '-3' }))).toMatchObject({ fieldErrors: { ncCostKeur: expect.any(String) } });
@@ -137,7 +137,7 @@ describe('PRV-07 : signataires du plan et date de signature EU', () => {
   it('nom et qualité obligatoires, date jamais future ni antérieure à l’inspection ; journal avec le signataire', async () => {
     actAs('Salarié');
     expect(await signEu({})).toEqual({ error: DENIED });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await signEu({ signedEuName: '', signedEuQuality: '' })).toMatchObject({ fieldErrors: { signedEuName: 'Champ obligatoire.', signedEuQuality: 'Champ obligatoire.' } });
     expect(await signEu({ signedEuOn: '2026-10-10' })).toMatchObject({ fieldErrors: { signedEuOn: expect.stringContaining('future') } });
     expect(await signEu({ signedEuOn: '2026-01-01' })).toMatchObject({ fieldErrors: { signedEuOn: expect.stringContaining('inspection') } });
@@ -148,7 +148,7 @@ describe('PRV-07 : signataires du plan et date de signature EU', () => {
     expect(await lastLog('prevention_plan', 'PP-2026-016')).toMatchObject({ action: 'sign', summary: expect.stringContaining('[H. Marchand] (Directeur de site), le 08/10/2026') });
   });
   it('signature EE : nom et qualité obligatoires', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-016', signedEeOn: '2026-10-09' }))).toMatchObject({ fieldErrors: { signedEeName: 'Champ obligatoire.' } });
   });
 });
@@ -156,7 +156,7 @@ describe('PRV-07 : signataires du plan et date de signature EU', () => {
 describe('DUE-03 : transmission au SPST et dépôt sur le portail', () => {
   const versionForm = (fields: Record<string, string>) => form({ version: '2026.1', validatedById: 'hmarchand', cseConsultedOn: '2026-03-20', comment: '', ...fields });
   it('dates contrôlées, journalisées ; échéance tant que la transmission n’est pas renseignée', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await updateCurrentDuerpVersion({}, versionForm({ spstSentOn: '' }))).toEqual({ error: APPROVERS_ONLY });
     actAs('Animateur QHSE', 'all');
     expect(await updateCurrentDuerpVersion({}, versionForm({ spstSentOn: '2026-03-01' }))).toMatchObject({ fieldErrors: { spstSentOn: expect.stringContaining('15/03/2026') } });
@@ -220,9 +220,9 @@ describe('VEI-10 et VEI-11 : applicabilité par site, texte, résultat des contr
   }
   it('exigence propre au site de [Ville B] : absente sous le site A, présente sous B et « Tous les sites »', async () => {
     const id = await atexId();
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect((await loadWatch()).requirements.some((r) => r.id === id)).toBe(false);
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect((await loadWatch()).requirements.find((r) => r.id === id)).toMatchObject({ siteLabels: ['Site de [Ville B]'] });
     actAs('Chef de service', 'all');
     expect((await loadWatch()).requirements.some((r) => r.id === id)).toBe(true);
@@ -230,7 +230,7 @@ describe('VEI-10 et VEI-11 : applicabilité par site, texte, résultat des contr
   it('lien officiel exigé ; sites journalisés', async () => {
     const id = await atexId();
     actAs('Animateur QHSE', 'all');
-    expect(await saveRequirement({}, await requirementForm(id, { legifranceUrl: 'https://example.com/texte' }, ['ville-b']))).toMatchObject({ fieldErrors: { legifranceUrl: expect.any(String) } });
+    expect(await saveRequirement({}, await requirementForm(id, { legifranceUrl: 'https://example.com/texte' }, ['site_b']))).toMatchObject({ fieldErrors: { legifranceUrl: expect.any(String) } });
     expect(await saveRequirement({}, await requirementForm(id, {}, ['ville-z']))).toMatchObject({ fieldErrors: { siteIds: 'Site inconnu ou archivé.' } });
     expect(await saveRequirement({}, await requirementForm(id, {}, []))).toEqual({ ok: true, id: String(id) });
     expect((await lastLog('requirement', id))?.details).toEqual(expect.arrayContaining([
@@ -253,7 +253,7 @@ describe('VEI-10 et VEI-11 : applicabilité par site, texte, résultat des contr
     expect(await lastLog('requirement', id)).toMatchObject({ action: 'detach', reason: 'Mauvaise version du texte', details: [{ field: 'Texte joint', from: 'directive.pdf', to: null }] });
   });
   it('résultat obligatoire et cohérent avec les réserves ; défavorable signalé jusqu’au prochain contrôle favorable', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const [gate] = await (await db()).select().from(t.controls).where(eq(t.controls.equipment, 'Portes et portails motorisés'));
     const record = (fields: Record<string, string>) => recordControl({}, form({ controlId: String(gate.id), performedOn: '2026-10-08', organization: 'Interne — maintenance', ...fields }));
     // Jeu de démonstration : dernier contrôle défavorable.
@@ -271,7 +271,7 @@ describe('VEI-10 et VEI-11 : applicabilité par site, texte, résultat des contr
 
 describe('AUD-08 et AUD-09 : cycle de certification, types de constat', () => {
   it('renouvellement (3 ans au plus), suspension motivée, levée ; journal du référentiel', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await suspendCertification({}, form({ id: 'iso9001', suspendedOn: '2026-10-01', reason: 'Écart majeur' }))).toEqual({ error: APPROVERS_ONLY });
     actAs('Animateur QHSE', 'all');
     expect(await renewCertification({}, form({ id: 'iso9001', issuedOn: '2026-10-01', validUntil: '2030-10-01' }))).toMatchObject({ fieldErrors: { validUntil: expect.stringContaining('3 ans') } });
@@ -304,9 +304,9 @@ describe('AUD-08 et AUD-09 : cycle de certification, types de constat', () => {
 
 describe('DOC-12 : refus et acceptation partielle d’un bordereau', () => {
   it('motif et quantité refusée exigés ; refus journalisé ; valorisation sur la part acceptée', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-01', quantity: '100' }))).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const entry = (fields: Record<string, string>) => saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-05', quantity: '200', bsdNumber: 'BSD-20261005-REFUS01', ...fields }));
     expect(await entry({ bsdStatus: 'accepte_partiel' })).toMatchObject({ fieldErrors: { bsdRefusalReason: expect.any(String), bsdRefusedQuantity: expect.any(String) } });
     expect(await entry({ bsdStatus: 'accepte_partiel', bsdRefusedQuantity: '200', bsdRefusalReason: 'Fûts non étiquetés' })).toMatchObject({ fieldErrors: { bsdRefusedQuantity: expect.any(String) } });
@@ -331,8 +331,8 @@ describe('AUD-13 : objectifs QHSE mesurables', () => {
     expect(await objective({ indicator: 'actions_retard', target: '120' })).toMatchObject({ fieldErrors: { target: expect.any(String) } });
     const [decision] = await (await db()).select().from(t.reviewDecisions).where(eq(t.reviewDecisions.kind, 'decision'));
     expect(await objective({ reviewDecisionId: String(decision.id) })).toMatchObject({ fieldErrors: { reviewDecisionId: expect.any(String) } });
-    actAs('Animateur QHSE', 'ville-a');
-    expect(await objective({ siteId: 'ville-b' })).toMatchObject({ fieldErrors: { siteId: expect.stringContaining('autre site') } });
+    actAs('Animateur QHSE', 'site_a');
+    expect(await objective({ siteId: 'site_b' })).toMatchObject({ fieldErrors: { siteId: expect.stringContaining('autre site') } });
     actAs('Animateur QHSE', 'all');
     const r = await objective({});
     expect(r).toMatchObject({ ok: true });

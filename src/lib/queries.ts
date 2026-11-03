@@ -301,20 +301,6 @@ export function actionBrief(a: ActionRow | undefined, people: Map<string, Person
   };
 }
 
-// ─── Veille : projets Keystone concernés ────────────────────────────────────
-
-type ConcernReq = { dueOn: string | null; affectsProjects: boolean; keystoneProjects: number | null };
-
-/** Projets Keystone livrés après la date d'application d'une exigence qui les concerne (affectsProjects), par livraison. */
-export const concernedProjects = <P extends { deliveryOn: string | null }>(req: Omit<ConcernReq, 'keystoneProjects'>, projects: P[]) =>
-  req.affectsProjects && req.dueOn
-    ? projects.filter((p) => !!p.deliveryOn && p.deliveryOn > req.dueOn!).sort((a, b) => a.deliveryOn!.localeCompare(b.deliveryOn!))
-    : [];
-
-/** Nombre de projets concernés : le champ manuel `keystoneProjects` reste une surcharge du calcul (null = non applicable). */
-export const concernedCount = (req: ConcernReq, projects: { deliveryOn: string | null }[]) =>
-  req.keystoneProjects ?? (req.affectsProjects && req.dueOn ? concernedProjects(req, projects).length : null);
-
 // ─── Audits : statut calculé d'une certification ────────────────────────────
 
 /** Statut affiché d'un référentiel : engagement, validité du certificat et prochain audit au programme. */

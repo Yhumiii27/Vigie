@@ -150,7 +150,7 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
     });
 
     it('registre des accidents bénins (données de santé, EVT-04) : renvoi vers les événements, aucune inscription transmise', async () => {
-      const path = '/evenements/registre-benin?site=ville-a';
+      const path = '/evenements/registre-benin?site=site_a';
       const { status, location, body } = await load(path, rsc);
       expect(status === 307 ? location : body, path).toContain('/evenements');
       expect(body, path).not.toContain('Registre des accidents du travail bénins');

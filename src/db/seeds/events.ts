@@ -89,9 +89,9 @@ export const EVENT_DETAILS: Record<string, Partial<typeof t.events.$inferInsert>
 // Registre des accidents du travail bénins (EVT-04), un registre par site : soins sans arrêt ni soins médicaux donnés par
 // un SST de l'effectif (titre SST valide dans MATRIX). L'inscription n° 1 attend encore les visas du registre papier.
 export const BENIGN: (typeof t.benignAccidents.$inferInsert)[] = [
-  { siteId: 'ville-a', number: 1, eventId: 'EV-2026-118', careGivenAt: new Date(`${rel(-32)}T11:05:00+02:00`), caregiverId: 'sbenali', caregiverQualification: 'sst',
+  { siteId: 'site_a', number: 1, eventId: 'EV-2026-118', careGivenAt: new Date(`${rel(-32)}T11:05:00+02:00`), caregiverId: 'sbenali', caregiverQualification: 'sst',
     care: 'Désinfection, pansement compressif', signedOn: null, createdById: 'clefevre', createdAt: new Date(`${rel(-32)}T11:30:00+02:00`) },
-  { siteId: 'ville-a', number: 2, eventId: 'EV-2026-120', careGivenAt: new Date(`${rel(-29)}T14:20:00+02:00`), caregiverId: 'proux', caregiverQualification: 'sst',
+  { siteId: 'site_a', number: 2, eventId: 'EV-2026-120', careGivenAt: new Date(`${rel(-29)}T14:20:00+02:00`), caregiverId: 'proux', caregiverQualification: 'sst',
     care: 'Rinçage oculaire au sérum physiologique, contrôle visuel', signedOn: rel(-28), createdById: 'clefevre', createdAt: new Date(`${rel(-29)}T14:45:00+02:00`) },
 ];
 
@@ -126,15 +126,16 @@ export async function seedEvents(tx: SeedTx) {
   // Accidents du travail déclarés à la CPAM (hors soins inscrits au registre des accidents bénins).
   const CPAM: Record<string, string> = { 'EV-2026-127': rel(-12), 'EV-2026-119': rel(-30) };
   await tx.insert(t.events).values(EVENTS.map((e) => ({
-    id: e[0], siteId: SITE_B_LOCATION.test(e[4]) ? 'ville-b' : 'ville-a', occurredOn: e[1], type: e[2], title: e[3], location: e[4], declarant: e[5], declarantId: declarantId(e[5]),
-    keystoneProject: e[6] || null, equipment: e[7] || null, pilotId: pid(e[8]), severity: e[9], step: e[10],
+    id: e[0], siteId: SITE_B_LOCATION.test(e[4]) ? 'site_b' : 'site_a', occurredOn: e[1], type: e[2], title: e[3], location: e[4], declarant: e[5], declarantId: declarantId(e[5]),
+    // D02 : code du projet (keystone.pub_projets, substitut de démonstration) ; plus de libellé « id · client » saisi.
+    keystoneProjectCode: e[6] ? e[6].split(' · ')[0] : null, equipment: e[7] || null, pilotId: pid(e[8]), severity: e[9], step: e[10],
     description: e[11], immediateMeasures: e[12], analysisMethod: e[13], ncOrigin: e[14] ?? null, injury: e[15] ?? null, lostDays: e[16] ?? null,
     cpamDeclaredOn: CPAM[e[0]] ?? null,
     createdAt: new Date(`${e[1]}T09:00:00+02:00`),
     ...EVENT_DETAILS[e[0]],
   })));
   await tx.insert(t.events).values(NEW_REPORTS.map(([id, occurredOn, type, title, location, declarant, severity, description, immediateMeasures, createdAt]) => ({
-    id, siteId: 'ville-a', occurredOn, type, title, location, declarant: PEOPLE.find((p) => p[0] === declarant)![1], declarantId: declarant,
+    id, siteId: 'site_a', occurredOn, type, title, location, declarant: PEOPLE.find((p) => p[0] === declarant)![1], declarantId: declarant,
     pilotId: null, severity, step: 0, description, immediateMeasures, analysisMethod: '5m', createdAt: new Date(createdAt),
     ...(id === 'EV-2026-123' ? { dismissedAt: new Date(`${rel(-19)}T09:00:00+02:00`), dismissedById: 'clefevre', dismissReason: 'Doublon de EV-2026-124 (même constat, même déclarant).' } : {}),
   })));

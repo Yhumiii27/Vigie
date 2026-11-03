@@ -185,7 +185,7 @@ describe('à compléter (D8, calculé)', () => {
     verifyMethod: null, efficacyNote: null, effective: null,
   });
   const full: ActionCompletion = {
-    status: 'verifiee', source: 'evenement', problem: 'Chute', domain: 'securite', priority: 'urgent', siteId: 'ville-a', verifyDueOn: '2026-10-01',
+    status: 'verifiee', source: 'evenement', problem: 'Chute', domain: 'securite', priority: 'urgent', siteId: 'site_a', verifyDueOn: '2026-10-01',
     doneOn: '2026-09-20', closedOn: '2026-10-01', verifyMethod: 'visuelle', efficacyNote: 'RAS', effective: false,
   };
   const BASE = ['source', 'problem', 'domain', 'priority', 'siteId'];
@@ -278,13 +278,13 @@ describe('droits (ACT-22 tranché le 15/10/2026, D19)', () => {
     expect(ROLE_KEYS.filter(canReadPlan)).toEqual(['Animateur QHSE', 'Direction', 'Chef de service', 'Chef de projet']);
   });
   it('canReadAction : ses actions de tout site ; les autres dans le périmètre', () => {
-    const own = { pilotId: 'u1', siteId: 'ville-b' };
-    const other = { pilotId: 'u2', siteId: 'ville-b' };
-    expect(canReadAction('Chef de service', 'u1', own, ['ville-a'])).toBe(true);
-    expect(canReadAction('Salarié', 'u1', own, ['ville-a'])).toBe(true);
-    expect(canReadAction('Chef de service', 'u1', other, ['ville-a'])).toBe(false);
-    expect(canReadAction('Chef de service', 'u1', other, ['ville-a', 'ville-b'])).toBe(true);
-    expect(canReadAction('Chef de service', 'u1', { pilotId: 'u2', siteId: null }, ['ville-a'])).toBe(true);
+    const own = { pilotId: 'u1', siteId: 'site_b' };
+    const other = { pilotId: 'u2', siteId: 'site_b' };
+    expect(canReadAction('Chef de service', 'u1', own, ['site_a'])).toBe(true);
+    expect(canReadAction('Salarié', 'u1', own, ['site_a'])).toBe(true);
+    expect(canReadAction('Chef de service', 'u1', other, ['site_a'])).toBe(false);
+    expect(canReadAction('Chef de service', 'u1', other, ['site_a', 'site_b'])).toBe(true);
+    expect(canReadAction('Chef de service', 'u1', { pilotId: 'u2', siteId: null }, ['site_a'])).toBe(true);
     expect(canReadAction('Animateur QHSE', 'u1', other, null)).toBe(true);
     expect(canReadAction('Salarié', 'u1', other, null)).toBe(false);
     expect(canReadAction('Salarié', 'u1', { pilotId: 'u2', siteId: null }, null)).toBe(false);

@@ -88,14 +88,14 @@ describe('formatBackfillReport', () => {
 
 describe('coactivityOriginHref (ACT-12)', () => {
   it('« Coactivité JJ/MM/AAAA » : carte du site de l’action à cette date', () => {
-    expect(coactivityOriginHref('Coactivité 09/10/2026', 'ville-a')).toBe('/prevention/carte?site=ville-a&date=2026-10-09');
-    expect(coactivityOriginHref(' Coactivité 28/09/2026 · voie de livraison', 'ville-b')).toBe('/prevention/carte?site=ville-b&date=2026-09-28');
+    expect(coactivityOriginHref('Coactivité 09/10/2026', 'site_a')).toBe('/prevention/carte?site=site_a&date=2026-10-09');
+    expect(coactivityOriginHref(' Coactivité 28/09/2026 · voie de livraison', 'site_b')).toBe('/prevention/carte?site=site_b&date=2026-09-28');
     expect(coactivityOriginHref('Coactivité 09/10/2026', null)).toBe('/prevention/carte?date=2026-10-09');
   });
   it('autre référence ou date inexistante : aucun lien', () => {
-    expect(coactivityOriginHref('Coactivité 31/02/2026', 'ville-a')).toBeNull();
-    expect(coactivityOriginHref('Coactivité', 'ville-a')).toBeNull();
-    expect(coactivityOriginHref('PP-2026-012', 'ville-a')).toBeNull();
-    expect(coactivityOriginHref('Coactivité 2026-10-09', 'ville-a')).toBeNull();
+    expect(coactivityOriginHref('Coactivité 31/02/2026', 'site_a')).toBeNull();
+    expect(coactivityOriginHref('Coactivité', 'site_a')).toBeNull();
+    expect(coactivityOriginHref('PP-2026-012', 'site_a')).toBeNull();
+    expect(coactivityOriginHref('Coactivité 2026-10-09', 'site_a')).toBeNull();
   });
 });

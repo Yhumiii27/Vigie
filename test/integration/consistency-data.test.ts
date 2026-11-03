@@ -33,15 +33,15 @@ describe('EVT-11 : analyse des causes après l’étape « Actions »', () => {
   beforeAll(async () => { await (await getDb()).update(t.events).set({ step: 3 }).where(eq(t.events.id, ID)); });
 
   it('droits et site avant tout contrôle', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await saveAnalysis({}, emptyTree())).toEqual({ error: DENIED });
     expect(await setAnalysisMethod(ID, '5m')).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await saveAnalysis({}, emptyTree())).toEqual({ error: OTHER_SITE });
   });
 
   it('l’analyse retenue ne se vide plus ; une autre méthode reste libre', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await changeLog('event', ID)).length;
     expect(await saveAnalysis({}, emptyTree())).toEqual({
       error: "Événement à l'étape « Actions » : l'analyse des causes ne peut plus être vidée (modifiez-la plutôt).",
@@ -55,7 +55,7 @@ describe('EVT-11 : analyse des causes après l’étape « Actions »', () => {
   });
 
   it('la méthode ne change que pour une méthode renseignée (journal)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const refused = await setAnalysisMethod(ID, 'why');
     expect(refused.error).toMatch(/^Événement à l'étape « Actions » : la méthode d'analyse ne change que pour une méthode déjà renseignée/);
     expect((await (await db()).select().from(t.events).where(eq(t.events.id, ID)))[0].analysisMethod).toBe('tree');
@@ -66,13 +66,13 @@ describe('EVT-11 : analyse des causes après l’étape « Actions »', () => {
 
 describe('PRV-11 : plan, permis et activités de la carte', () => {
   const activity = (over: Record<string, string>) => form({
-    siteId: 'ville-a', title: 'Découpe de reprise', team: 'interne', ownerId: 'sbenali', startOn: '2026-10-05', endOn: '2026-10-05', ...over,
+    siteId: 'site_a', title: 'Découpe de reprise', team: 'interne', ownerId: 'sbenali', startOn: '2026-10-05', endOn: '2026-10-05', ...over,
   });
 
   it('activité : permis annulé ou hors période refusé ; permis en vigueur accepté et journalisé', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await saveActivity({}, activity({ permitId: 'PF-2026-030' }))).toEqual({ error: DENIED });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveActivity({}, activity({ permitId: 'PF-2026-028' })))
       .toMatchObject({ fieldErrors: { permitId: 'Le permis PF-2026-028 est annulé : demandez un nouveau permis.' } });
     expect(await saveActivity({}, activity({ permitId: 'PF-2026-030', startOn: '2026-10-12', endOn: '2026-10-13' })))
@@ -83,7 +83,7 @@ describe('PRV-11 : plan, permis et activités de la carte', () => {
   });
 
   it('plan : sa période ne se réduit pas en deçà des activités rattachées', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const [p] = await (await db()).select().from(t.preventionPlans).where(eq(t.preventionPlans.id, 'PP-2026-015'));
     const before = (await changeLog('prevention_plan', p.id)).length;
     const r = await savePlan({}, form({
@@ -99,9 +99,9 @@ describe('PRV-11 : plan, permis et activités de la carte', () => {
   });
 
   it('permis demandé : sa validité recoupe toujours les activités rattachées', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     const created = await saveActivity({}, form({
-      siteId: 'ville-b', title: 'Essais BE-2', team: 'externe', contractorId: 'EE-005', ownerId: 'jpetit', startOn: '2026-10-12', endOn: '2026-10-12', permitId: 'PE-2026-009',
+      siteId: 'site_b', title: 'Essais BE-2', team: 'externe', contractorId: 'EE-005', ownerId: 'jpetit', startOn: '2026-10-12', endOn: '2026-10-12', permitId: 'PE-2026-009',
     }));
     expect(created).toMatchObject({ ok: true });
     const [p] = await (await db()).select().from(t.permits).where(eq(t.permits.id, 'PE-2026-009'));
@@ -123,12 +123,12 @@ describe('DUE-05 : unités de travail d’un site archivé', () => {
   it('modifiée : garde son site archivé ; restauration refusée tant que le site est archivé (droits, motif, journal)', async () => {
     const d = await db();
     await d.insert(t.workUnits).values([
-      { id: 'depot-c', label: 'Dépôt C', siteId: 'ville-c', sort: 90 },
-      { id: 'quai-c', label: 'Quai C', siteId: 'ville-c', sort: 91, archivedAt: new Date('2026-03-31T16:00:00Z'), archivedById: 'clefevre', archiveReason: 'Dépôt fermé' },
+      { id: 'depot-c', label: 'Dépôt C', siteId: 'site_c', sort: 90 },
+      { id: 'quai-c', label: 'Quai C', siteId: 'site_c', sort: 91, archivedAt: new Date('2026-03-31T16:00:00Z'), archivedById: 'clefevre', archiveReason: 'Dépôt fermé' },
     ]);
     actAs('Animateur QHSE', 'all');
-    expect(await saveWorkUnit({}, form({ id: 'depot-c', label: 'Dépôt C (fermé)', siteId: 'ville-c' }))).toEqual({ ok: true, id: 'depot-c' });
-    expect((await d.select().from(t.workUnits).where(eq(t.workUnits.id, 'depot-c')))[0]).toMatchObject({ label: 'Dépôt C (fermé)', siteId: 'ville-c' });
+    expect(await saveWorkUnit({}, form({ id: 'depot-c', label: 'Dépôt C (fermé)', siteId: 'site_c' }))).toEqual({ ok: true, id: 'depot-c' });
+    expect((await d.select().from(t.workUnits).where(eq(t.workUnits.id, 'depot-c')))[0]).toMatchObject({ label: 'Dépôt C (fermé)', siteId: 'site_c' });
     expect(await lastLog('work_unit', 'depot-c')).toMatchObject({ action: 'update', details: [{ field: 'Libellé', from: 'Dépôt C', to: 'Dépôt C (fermé)' }] });
 
     actAs('Chef de service', 'all');
@@ -139,7 +139,7 @@ describe('DUE-05 : unités de travail d’un site archivé', () => {
       .toEqual({ error: "Le site « Site de [Ville C] — ancien dépôt logistique » est archivé : restaurez-le avant de restaurer l'unité." });
     expect(await changeLog('work_unit', 'quai-c')).toEqual([]);
     // Site actif : restauration permise et journalisée.
-    await d.update(t.workUnits).set({ siteId: 'ville-a' }).where(eq(t.workUnits.id, 'quai-c'));
+    await d.update(t.workUnits).set({ siteId: 'site_a' }).where(eq(t.workUnits.id, 'quai-c'));
     expect(await restoreWorkUnit({}, form({ id: 'quai-c', reason: 'Réouverture' }))).toEqual({ ok: true, id: 'quai-c' });
     expect(await lastLog('work_unit', 'quai-c')).toMatchObject({ action: 'restore', reason: 'Réouverture', byId: 'clefevre' });
   });
@@ -150,11 +150,11 @@ describe('HAB-04 : un recyclage repris garde son lien vers l’habilitation', ()
     const d = await db();
     await d.insert(t.actions).values({
       id: 'A-930', openedOn: '2026-09-01', pilotId: 'clefevre', status: 'a_faire', dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null,
-      originRef: 'Habilitations · mgirard', detail: 'Recyclage elec — mgirard', siteId: 'ville-a', legacyOrigin: 'skills',
+      originRef: 'Habilitations · mgirard', detail: 'Recyclage elec — mgirard', siteId: 'site_a', legacyOrigin: 'skills',
       qualificationPersonId: 'mgirard', qualificationTitleId: 'elec',
     });
     await d.insert(t.qualificationRequirements).values({ personId: 'mgirard', titleId: 'elec' }).onConflictDoNothing();
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const cell = async () => (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
     expect((await cell())?.renewal).toMatchObject({ id: 'A-930', planned: true });
     expect(await abandonAction({}, form({ id: 'A-930', from: 'a_faire', reason: 'Recyclage géré par le service RH' }))).toMatchObject({ ok: true });
@@ -167,7 +167,7 @@ describe('HAB-04 : un recyclage repris garde son lien vers l’habilitation', ()
 
 describe('VEI-03 et VEI-06 : exigence suivie par des contrôles, jugée sur toute l’entreprise', () => {
   it('contrôles rattachés de tous les sites du périmètre ; échéance du prochain contrôle', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const { requirements, controls } = await loadWatch();
     const lifting = requirements.find((r) => r.domain === 'Appareils de levage')!;
     expect(controls.some((c) => c.equipment.startsWith('Pont roulant'))).toBe(false); // onglet « Contrôles » : site sélectionné
@@ -183,7 +183,7 @@ describe('VEI-03 et VEI-06 : exigence suivie par des contrôles, jugée sur tout
     const d = await db();
     const [req] = await d.select().from(t.requirements).where(eq(t.requirements.domain, 'Appareils de levage'));
     await d.update(t.requirements).set({ evaluation: 'analyse', actionId: 'A-217' }).where(eq(t.requirements.id, req.id));
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const titles = (await loadWatchSignals()).todo.filter((x) => x.href === `/veille?exigence=${req.id}`).map((x) => x.title);
     expect(titles.some((x) => x.includes("date d'application"))).toBe(false);
   });
@@ -199,7 +199,7 @@ describe('TDB-07 : état lu avec gravité et date d’échéance, retards par an
   });
 
   it('échéance lue, puis aggravée (dépassée) : de nouveau non lue ; ancien état lu sans gravité ni date ignoré', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const find = async () => (await loadNotifications()).find((n) => n.kind === 'Contrôle' && n.title.startsWith('VGP · chariot élévateur R489'));
     const upcoming = await find();
     expect(upcoming).toMatchObject({ tone: 'warn', dueOn: '2026-10-15', read: false });

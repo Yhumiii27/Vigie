@@ -1,0 +1,7 @@
+{
+  "source": "Keystone origin/main c585f12, drizzle/0035_share.sql (contrat D04 v1)",
+  "readers": ["vigie_app"],
+  "columns": [["source", "text"], ["affectation_id", "uuid"], ["matricule", "text"], ["personne_nom", "text"], ["projet_code", "text"],
+    ["projet_nom", "text"], ["client", "text"], ["activite_code", "text"], ["activite", "text"], ["du", "date"], ["au", "date"],
+    ["lieu", "text"], ["pays", "text"], ["pays_iso2", "character(2)"], ["heures_prevues", "numeric"]]
+}

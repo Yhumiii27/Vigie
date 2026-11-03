@@ -75,7 +75,7 @@ describe('Salarié : ses données seulement', () => {
     await db.insert(t.actions).values({
       id: 'A-950', detail: 'Contrôler la dérive outil au poste CU-2', problem: 'Dérive outil au poste CU-2.', openedOn: '2026-10-01',
       initialDueOn: '2026-10-30', dueOn: '2026-10-30', status: 'a_faire', source: 'evenement', originRef: 'EV-2026-130', eventId: 'EV-2026-130',
-      siteId: 'ville-a', pilotId: ME,
+      siteId: 'site_a', pilotId: ME,
     });
     actAs('Animateur QHSE', 'all');
     expect(JSON.stringify((await loadActionDetail('A-950')).payload)).toContain("Cotes hors tolérance sur l'arbre de malaxeur");

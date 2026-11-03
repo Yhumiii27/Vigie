@@ -63,5 +63,6 @@ export async function seedSkills(tx: SeedTx) {
   await tx.insert(t.qualifications).values(quals);
   // Recyclages : aucune action QSE (gérés par les RH, réponses du service QHSE du 15/10/2026) — plus de recyclage planifié
   // par une action (ancienne A-207).
-  await tx.insert(t.keystoneAssignments).values({ personId: 'tnguyen', project: 'K-2025-042 · [Client A]', activity: 'Mise en service', startOn: rel(4), endOn: rel(8) });
+  // Affectation de [T. Nguyen] (alerte d'habilitation) : lue dans keystone.pub_affectations (substitut src/db/seeds/foreign.ts),
+  // cache keystone_assignments rafraîchi à l'ouverture de la base (D04).
 }

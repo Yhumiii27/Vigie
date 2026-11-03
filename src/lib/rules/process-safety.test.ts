@@ -34,6 +34,7 @@ describe('codes saisis', () => {
     expect(siteCodeError('le_havre')).toBeNull();
     expect(siteCodeError(null)).toBeNull();
     expect(siteCodeError('all')).toMatch(/réservé/);
+    expect(siteCodeError('site_a')).toBeNull();
     expect(siteCodeError('ville-a')).not.toBeNull();
     expect(siteCodeError('2e_site')).not.toBeNull();
     expect(siteCodeError('x')).not.toBeNull();

@@ -6,7 +6,7 @@ import { asRole, consoleErrors } from './helpers';
 
 test('Animateur QHSE : registre de sécurité, inscription d’une observation, impression par site', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/veille?onglet=registre');
   await expect(page.getByRole('link', { name: /Registre de sécurité/ })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Inspection du travail' }).first()).toBeVisible();
@@ -24,7 +24,7 @@ test('Animateur QHSE : registre de sécurité, inscription d’une observation, 
 });
 
 test('Salarié : vue d’ensemble du DUERP en consultation, sans registre de sécurité', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Salarié', 'ville-a');
+  await asRole(context, baseURL!, 'Salarié', 'site_a');
   await page.goto('/risques?vue=ensemble');
   await expect(page.getByText('Matrice toutes unités')).toBeVisible();
   await expect(page.getByText('Risques prioritaires')).toBeVisible();
@@ -35,7 +35,7 @@ test('Salarié : vue d’ensemble du DUERP en consultation, sans registre de sé
 });
 
 test('Chef de service : réunions périodiques du contrat annuel de nettoyage', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/prevention?plan=PP-2025-041');
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Inspections et réunions périodiques')).toBeVisible();

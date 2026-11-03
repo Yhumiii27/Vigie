@@ -13,6 +13,9 @@ import { resetConfig } from '@/lib/env';
 import { nextActionNumber } from '@/server/action-core';
 import { DEMO_0004_MIGRATIONS, openLegacyBase, prepareDemo0004, readDemo0004, type LegacyBase } from '../fixtures/legacy-base';
 
+/** Identifiant de site après la migration 0024 (décision CV-09 : `ville-a` → `site_a`…). */
+const matrixSite = (id: unknown) => (typeof id === 'string' ? id.replace(/^ville-([abc])$/, 'site_$1') : id);
+
 // Migration 0005 (ACT-17, ACT-18, ACT-19, ACT-35, ACT-40) : reprise des actions d'une base 0004 dans le modèle du service
 // QHSE (drizzle/0005_actions_qse.sql, plan du paquet 1 § 1.4 amendé le 15/10/2026). Base de démonstration 0004
 // (test/fixtures/demo-0004.json) complétée de lignes brutes pour les cas que le jeu de démonstration n'a pas, migrée
@@ -233,7 +236,7 @@ describe('migration 0005 — base de démonstration 0004', () => {
       const a = action(id);
       expect({ id, effective: a.effective }).toEqual({ id, effective: a.status === 'verifiee' ? true : null });
       expect({ id, closedOn: a.closedOn, verifyDueOn: a.verifyDueOn, efficacyNote: a.efficacyNote, verifiedById: a.verifiedById, siteId: a.siteId, pilotId: a.pilotId, originRef: a.originRef })
-        .toEqual({ id, closedOn: old.closed_on, verifyDueOn: old.verify_due_on, efficacyNote: old.efficacy_note, verifiedById: old.verified_by_id, siteId: old.site_id, pilotId: old.pilot_id, originRef: old.origin_ref });
+        .toEqual({ id, closedOn: old.closed_on, verifyDueOn: old.verify_due_on, efficacyNote: old.efficacy_note, verifiedById: old.verified_by_id, siteId: matrixSite(old.site_id), pilotId: old.pilot_id, originRef: old.origin_ref });
       expect({ id, eventId: a.eventId, reviewId: a.reviewId, preventionPlanId: a.preventionPlanId, permitId: a.permitId, documentId: a.documentId, wasteStreamId: a.wasteStreamId, wasteEntryId: a.wasteEntryId })
         .toEqual({ id, eventId: old.event_id, reviewId: old.review_id, preventionPlanId: old.prevention_plan_id, permitId: old.permit_id, documentId: old.document_id, wasteStreamId: old.waste_stream_id, wasteEntryId: old.waste_entry_id });
       expect({ id, createdAt: a.createdAt.toISOString() }).toEqual({ id, createdAt: new Date(String(old.created_at)).toISOString() });
@@ -291,7 +294,8 @@ describe('migration 0005 — base de démonstration 0004', () => {
   it('données des autres tables inchangées (nombre de lignes)', async () => {
     const extra: Record<string, number> = { actions: RAW_IDS.length, audit_plan_items: 6, audit_findings: 3, review_decisions: 1 };
     for (const [table, list] of Object.entries(fixture.tables)) {
-      if (table === 'change_log') continue;
+      // Table supprimée par la migration 0024 (D02 : projets lus dans keystone.pub_projets).
+      if (table === 'change_log' || table === 'keystone_projects') continue;
       const [{ n }] = (await base.query(`select count(*)::int as n from "${table}"`)).rows as { n: number }[];
       expect({ table, n }).toEqual({ table, n: list.length + (extra[table] ?? 0) });
     }
@@ -475,7 +479,7 @@ describe('migration 0005 — mise à niveau d’une base de démonstration 0004 
     }
     // Les huit sites complétés ; A-150 reste « site à compléter ».
     expect(['A-181', 'A-184', 'A-188', 'A-196', 'A-152', 'A-158', 'A-174', 'A-208'].map((id) => row(id).siteId))
-      .toEqual(['ville-b', ...Array(7).fill('ville-a')]);
+      .toEqual(['site_b', ...Array(7).fill('site_a')]);
     expect(row('A-150').siteId).toBeNull();
   });
 

@@ -43,16 +43,16 @@ describe('actions des constats d’audit et périmètre', () => {
     const db = await getDb();
     // Constat qui porte une action du site A (jeu de démonstration).
     const [row] = await db.select({ id: t.findingActions.findingId, actionId: t.findingActions.actionId }).from(t.findingActions)
-      .innerJoin(t.actions, eq(t.actions.id, t.findingActions.actionId)).where(eq(t.actions.siteId, 'ville-a')).limit(1);
+      .innerJoin(t.actions, eq(t.actions.id, t.findingActions.actionId)).where(eq(t.actions.siteId, 'site_a')).limit(1);
     expect(row, 'constat portant une action du site A').toBeDefined();
     const findingOf = async () => (await loadAudits({})).auditGroups.flatMap((g) => g.findings).find((f) => f.id === row.id)!;
 
     // Direction (tous les sites), site B sélectionné : action du site A lue.
-    await actAsEntra('hmarchand', 'Direction', null, 'ville-b');
+    await actAsEntra('hmarchand', 'Direction', null, 'site_b');
     expect((await findingOf()).actions[0].action).toMatchObject({ id: row.actionId, title: expect.any(String) });
 
     // Chef de projet rattaché au site B, sans autre site accordé : numéro seul, aucune donnée de l'action.
-    await actAsEntra('jpetit', 'Chef de projet', [], 'ville-b');
+    await actAsEntra('jpetit', 'Chef de projet', [], 'site_b');
     const f = await findingOf();
     expect(f.actions).toEqual([{ id: row.actionId, action: null }]);
   });

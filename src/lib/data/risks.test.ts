@@ -57,15 +57,15 @@ describe('indices de version des documents maîtrisés', () => {
 
 describe('unitRiskTodos : alertes des unités au responsable QHSE du site de l’unité (TDB-01)', () => {
   const leads: Record<string, Recipients> = {
-    'ville-a': { ownerIds: ['lead-a'], who: '[A. Leroy]', vacant: false },
-    'ville-b': { ownerIds: ['lead-b'], who: '[B. Morel]', vacant: false },
+    'site_a': { ownerIds: ['lead-a'], who: '[A. Leroy]', vacant: false },
+    'site_b': { ownerIds: ['lead-b'], who: '[B. Morel]', vacant: false },
   };
   const everyLead: Recipients = { ownerIds: ['lead-a', 'lead-b'], who: '[A. Leroy] · [B. Morel]', vacant: false };
   const vacant: Recipients = { ownerIds: ['anim-1', 'anim-2'], who: VACANT_QHSE_LEAD, vacant: true };
   const forSite = (siteId: string | null) => (siteId ? leads[siteId] ?? vacant : everyLead);
   const units = [
-    { id: 'atelier', label: 'Atelier A', siteId: 'ville-a' }, { id: 'zone', label: 'Zone B', siteId: 'ville-b' },
-    { id: 'routes', label: 'Déplacements', siteId: null }, { id: 'annexe', label: 'Annexe C', siteId: 'ville-c' },
+    { id: 'atelier', label: 'Atelier A', siteId: 'site_a' }, { id: 'zone', label: 'Zone B', siteId: 'site_b' },
+    { id: 'routes', label: 'Déplacements', siteId: null }, { id: 'annexe', label: 'Annexe C', siteId: 'site_c' },
   ];
   const risks: { id: number; unitId: string; hazard: string; flag: RiskFlag | null }[] = [
     { id: 1, unitId: 'atelier', hazard: 'Bruit', flag: 'toDefine' }, { id: 2, unitId: 'atelier', hazard: 'Chute', flag: 'toDefine' },
@@ -78,18 +78,18 @@ describe('unitRiskTodos : alertes des unités au responsable QHSE du site de l�
 
   it('deux sites, deux responsables : chaque unité vers le responsable de son site', () => {
     expect(find('Atelier A')).toEqual([{
-      kind: RISK_TODO_KIND, who: '[A. Leroy]', ownerIds: ['lead-a'], siteId: 'ville-a', date: '2026-10-09', tone: 'danger', overdue: true, count: 2,
+      kind: RISK_TODO_KIND, who: '[A. Leroy]', ownerIds: ['lead-a'], siteId: 'site_a', date: '2026-10-09', tone: 'danger', overdue: true, count: 2,
       title: 'Atelier A · 2 risques ≥ 8 sans action de réduction', href: '/risques?unite=atelier',
     }]);
     expect(find('Zone B')).toEqual([
-      expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], siteId: 'ville-b', count: 1, title: 'Zone B · 1 risque au résiduel encore ≥ 8', href: '/risques?risque=4' }),
+      expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], siteId: 'site_b', count: 1, title: 'Zone B · 1 risque au résiduel encore ≥ 8', href: '/risques?risque=4' }),
       expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], tone: 'warn', title: 'Zone B · Hydraulique — résiduel à recoter (actions vérifiées)', href: '/risques?risque=5' }),
     ]);
   });
 
   it('unité commune à tous les sites : responsables des sites actifs ; poste vacant : animateurs QHSE', () => {
     expect(find('Déplacements')).toEqual([expect.objectContaining({ ownerIds: ['lead-a', 'lead-b'], who: '[A. Leroy] · [B. Morel]', siteId: null })]);
-    expect(find('Annexe C')).toEqual([expect.objectContaining({ ownerIds: ['anim-1', 'anim-2'], who: VACANT_QHSE_LEAD, siteId: 'ville-c', tone: 'warn' })]);
+    expect(find('Annexe C')).toEqual([expect.objectContaining({ ownerIds: ['anim-1', 'anim-2'], who: VACANT_QHSE_LEAD, siteId: 'site_c', tone: 'warn' })]);
     expect(todo).toHaveLength(5);
   });
 });
@@ -133,24 +133,24 @@ describe('PAPRIPACT : actions reprises et proposées (DUE-02)', () => {
     expect(parseProgramSnapshot([])).toBeNull();
     expect(parseProgramSnapshot('x')).toBeNull();
     expect(parseProgramSnapshot({ takenOn: '2026-10-01', duerpVersion: '2026.1', cseConsultedOn: '2026-09-30', lines: [
-      { actionId: 'A-1', title: 'Former', siteId: 'ville-a', site: 'Site A', pilot: '[C. Lefèvre]', dueOn: '2026-03-01', status: 'Clôturée',
+      { actionId: 'A-1', title: 'Former', siteId: 'site_a', site: 'Site A', pilot: '[C. Lefèvre]', dueOn: '2026-03-01', status: 'Clôturée',
         risks: [{ id: 3, unitId: 'montage', unit: 'Atelier montage', hazard: 'Électricité', cotation: 8 }, { unit: 'Bureaux', hazard: 'Chute', cotation: '4' }],
         estimatedCost: 2400, resources: '', indicator: 'Habilitations à jour' },
       { title: 'sans référence' }, 'ligne illisible',
     ] })).toEqual({
       takenOn: '2026-10-01', takenBy: null, duerpVersion: '2026.1', cseConsultedOn: '2026-09-30',
       lines: [{
-        actionId: 'A-1', title: 'Former', siteId: 'ville-a', site: 'Site A', pilot: '[C. Lefèvre]', dueOn: '2026-03-01', status: 'Clôturée',
+        actionId: 'A-1', title: 'Former', siteId: 'site_a', site: 'Site A', pilot: '[C. Lefèvre]', dueOn: '2026-03-01', status: 'Clôturée',
         risks: [{ id: 3, unitId: 'montage', unit: 'Atelier montage', hazard: 'Électricité', cotation: 8 }, { unit: 'Bureaux', hazard: 'Chute', cotation: 0 }],
         estimatedCost: 2400, resources: null, indicator: 'Habilitations à jour',
       }],
     });
     expect(parseProgramSnapshot({ lines: 'x' })).toEqual({ takenOn: '', takenBy: null, duerpVersion: '', cseConsultedOn: '', lines: [] });
 
-    const lines = [{ siteId: 'ville-a' }, { siteId: 'ville-b' }, { siteId: null }];
-    expect(programLinesInScope(lines, ['ville-b'], null)).toEqual([{ siteId: 'ville-b' }, { siteId: null }]);
-    expect(programLinesInScope(lines, null, 'ville-a')).toEqual([{ siteId: 'ville-a' }, { siteId: null }]);
+    const lines = [{ siteId: 'site_a' }, { siteId: 'site_b' }, { siteId: null }];
+    expect(programLinesInScope(lines, ['site_b'], null)).toEqual([{ siteId: 'site_b' }, { siteId: null }]);
+    expect(programLinesInScope(lines, null, 'site_a')).toEqual([{ siteId: 'site_a' }, { siteId: null }]);
     expect(programLinesInScope(lines, null, null)).toEqual(lines);
-    expect(programLinesInScope(lines, ['ville-b'], 'ville-a')).toEqual([{ siteId: null }]);
+    expect(programLinesInScope(lines, ['site_b'], 'site_a')).toEqual([{ siteId: null }]);
   });
 });

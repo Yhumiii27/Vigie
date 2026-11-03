@@ -13,7 +13,7 @@ const ALIASES: Record<string, string> = { "Zone d'essais": "Hall d'essais" };
 /** Zone archivée du jeu (site A, hors du dessin des bâtiments) : coordonnées normalisées comme celles de seeds/sitemap.ts. */
 const W = 1600;
 const ARCHIVED_ZONE = {
-  siteId: 'ville-a', name: 'Ancienne aire de charge des batteries', kind: 'autre',
+  siteId: 'site_a', name: 'Ancienne aire de charge des batteries', kind: 'autre',
   polygon: [[80, 560], [240, 560], [240, 760], [80, 760]].map(([x, y]) => [Math.round((x / W) * 1e5) / 1e5, Math.round((y / W) * 1e5) / 1e5]),
   notes: 'Charge des chariots électriques (bornes au sol).',
   archivedAt: new Date(`${rel(-9)}T10:00:00+02:00`),

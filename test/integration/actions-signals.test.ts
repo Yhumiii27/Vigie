@@ -16,7 +16,7 @@ freshDemoDatabase();
 
 const base = {
   openedOn: '2026-09-01', initialDueOn: '2026-10-01', dueOn: '2026-10-01', verifyDueOn: '2026-11-30', priority: 'moyen_terme' as const,
-  domain: 'securite' as const, problem: 'Problème de test.', source: 'causerie' as const, originRef: 'Causerie du 01/09', siteId: 'ville-a', pilotId: 'edubois',
+  domain: 'securite' as const, problem: 'Problème de test.', source: 'causerie' as const, originRef: 'Causerie du 01/09', siteId: 'site_a', pilotId: 'edubois',
 };
 
 beforeAll(async () => {
@@ -37,14 +37,14 @@ describe('échéances du plan (§ 15.3)', () => {
     const [a203] = await db.select().from(t.actions).where(eq(t.actions.id, 'A-203'));
     const [item] = forAction(await signals(), 'A-203');
     expect(item).toMatchObject({
-      kind: 'Action en retard', tone: 'danger', overdue: true, ownerIds: ['clefevre'], siteId: 'ville-b', href: '/actions?action=A-203',
+      kind: 'Action en retard', tone: 'danger', overdue: true, ownerIds: ['clefevre'], siteId: 'site_b', href: '/actions?action=A-203',
       title: `A-203 · ${actionLabel(a203.detail)} — échéance dépassée depuis le 15/09`,
     });
   });
 
   it('échéance sous 15 jours : responsable, accent ; actions du programme d’audit exclues', async () => {
     const todo = await signals();
-    expect(forAction(todo, 'A-214')).toEqual([expect.objectContaining({ kind: 'Action', tone: 'accent', ownerIds: ['sbenali'], date: '2026-10-17', siteId: 'ville-a' })]);
+    expect(forAction(todo, 'A-214')).toEqual([expect.objectContaining({ kind: 'Action', tone: 'accent', ownerIds: ['sbenali'], date: '2026-10-17', siteId: 'site_a' })]);
     expect(forAction(todo, 'A-181')).toEqual([]); // portée par le programme d'audit
     expect(forAction(todo, 'A-196')).toEqual([]); // au-delà de 15 jours
   });
@@ -66,11 +66,11 @@ describe('échéances du plan (§ 15.3)', () => {
     expect(todo).toHaveLength(2);
     const bySite = new Map(todo.map((x) => [x.siteId, x]));
     expect(bySite.get(null)).toMatchObject({ count: 1, href: TO_COMPLETE_HREF, tone: 'warn', ownerIds: ['clefevre'], key: `${TO_COMPLETE_KIND}|sans-site|1` }); // A-150
-    expect(bySite.get('ville-a')).toMatchObject({ count: 1, ownerIds: ['clefevre'], title: "Plan d'actions · 1 action à compléter (champs obligatoires manquants)" });
+    expect(bySite.get('site_a')).toMatchObject({ count: 1, ownerIds: ['clefevre'], title: "Plan d'actions · 1 action à compléter (champs obligatoires manquants)" });
     const db = await getDb();
     await db.update(t.actions).set({ priority: null }).where(eq(t.actions.id, 'A-196'));
-    const two = (await signals()).find((x) => x.kind === TO_COMPLETE_KIND && x.siteId === 'ville-a');
-    expect(two).toMatchObject({ count: 2, key: `${TO_COMPLETE_KIND}|ville-a|2`, title: "Plan d'actions · 2 actions à compléter (champs obligatoires manquants)" });
+    const two = (await signals()).find((x) => x.kind === TO_COMPLETE_KIND && x.siteId === 'site_a');
+    expect(two).toMatchObject({ count: 2, key: `${TO_COMPLETE_KIND}|site_a|2`, title: "Plan d'actions · 2 actions à compléter (champs obligatoires manquants)" });
     await db.update(t.actions).set({ priority: 'moyen_terme' }).where(eq(t.actions.id, 'A-196'));
   });
 });
@@ -80,7 +80,7 @@ describe('action de suite d’un événement clos (§ 22.12, D6)', () => {
 
   it('A-221 (EV-2026-124 à « Efficacité vérifiée ») : décision au responsable QHSE du site de l’événement', async () => {
     expect(await closedEvent()).toEqual([expect.objectContaining({
-      siteId: 'ville-a', ownerIds: ['clefevre'], href: '/evenements?sel=EV-2026-124', tone: 'warn',
+      siteId: 'site_a', ownerIds: ['clefevre'], href: '/evenements?sel=EV-2026-124', tone: 'warn',
       title: "EV-2026-124 · action de suite A-221 — décider d'une réouverture",
     })]);
     // A-222 : suite rattachée à son propre événement (EV-2026-126, étape « Actions ») : rien.

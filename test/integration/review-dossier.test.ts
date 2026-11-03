@@ -30,7 +30,7 @@ async function reviewOn(date: string): Promise<Review> {
 }
 async function newNc(id: string, occurredOn: string) {
   const db = await getDb();
-  await db.insert(t.events).values({ id, siteId: 'ville-a', type: 'NC', title: `NC ${occurredOn}`, occurredOn, location: 'Atelier', severity: 2, ncOrigin: 'Fabrication' });
+  await db.insert(t.events).values({ id, siteId: 'site_a', type: 'NC', title: `NC ${occurredOn}`, occurredOn, location: 'Atelier', severity: 2, ncOrigin: 'Fabrication' });
 }
 const holdForm = (id: number, minutes: string) => form({
   id: String(id), reviewOn: '2026-12-10', participantIds: 'hmarchand', minutes, nextReviewOn: '2027-06-17', nextKind: 'intermediaire',
@@ -52,7 +52,7 @@ describe('AUD-06 : dossier arrêté à la séance', () => {
     actAs('Chef de service', 'all');
     expect(await holdReview({}, holdForm(annual.id, 'Compte rendu'))).toEqual({ error: DENIED });
     expect(await closeReview(annual.id)).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await holdReview({}, holdForm(annual.id, 'Compte rendu'))).toEqual({ error: ALL_SITES_SEANCE });
     expect((await reviewOn('2026-12-10')).status).toBe('planifiee');
 
@@ -83,7 +83,7 @@ describe('AUD-06 : dossier arrêté à la séance', () => {
     await newNc('EV-2026-901', '2026-12-12');
     await newNc('EV-2026-902', '2026-12-05');
     // Correction sans changement de date : pas de nouveau figeage (un site précis suffit).
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await holdReview({}, holdForm(annual.id, 'Compte rendu corrigé'))).toEqual({ ok: true });
     actAs('Animateur QHSE', 'all');
     const page = await loadReviewDossierPage({ revue: String(annual.id) });
@@ -100,7 +100,7 @@ describe('AUD-06 : dossier arrêté à la séance', () => {
     // AUD-15 : visa réservé à la direction.
     actAs('Animateur QHSE', 'all');
     expect(await closeReview(annual.id)).toEqual({ error: 'Visa réservé à la direction.' });
-    actAs('Direction', 'ville-a');
+    actAs('Direction', 'site_a');
     expect(await closeReview(annual.id)).toEqual({ error: 'Sélectionnez « Tous les sites » : le dossier archivé couvre tout le périmètre.' });
     actAs('Direction', 'all');
     expect(await closeReview(annual.id)).toEqual({});

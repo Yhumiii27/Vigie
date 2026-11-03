@@ -18,7 +18,9 @@ import { withCurrent } from '@/lib/form-options';
 /** Champs modifiables d'un événement (données simples transmises par la page serveur ; `knownAt` à l'heure de Paris). */
 export type EditableEvent = {
   id: string; siteId: string; type: string; title: string; occurredOn: string; occurredTime: string | null; location: string;
-  equipment: string | null; keystoneProject: string | null; pilotId: string | null; severity: number;
+  equipment: string | null;
+  /** Projet Keystone : code (keystone.pub_projets, D02) et libellé affiché (« code · client », ou ancien libellé saisi). */
+  keystoneProjectCode: string | null; keystoneProject: string | null; pilotId: string | null; severity: number;
   description: string; immediateMeasures: string; ncOrigin: string | null;
   customer: string | null; customerRef: string | null; envAspect: string | null; envMedium: string | null;
   controlId: number | null; riskId: number | null; documentId: string | null; preventionPlanId: string | null; permitId: string | null;
@@ -34,6 +36,8 @@ export type EventDefaults = Partial<Omit<EditableEvent, 'id'>> & { declarantId?:
 
 export type EventFieldOptions = {
   people: readonly Option[]; sites: readonly Option[]; projects: readonly Option[];
+  /** Projets de Keystone indisponibles (D02) : message sous le choix. */
+  projectsMessage?: string | null;
   controls: readonly Option[]; risks: readonly Option[]; documents: readonly Option[]; plans: readonly Option[]; permits: readonly Option[];
   /** Victime d'un AT (personnes de l'effectif, victime enregistrée comprise) ; par défaut `people`. */
   victims?: readonly Option[];
@@ -134,10 +138,10 @@ export function EventFields(props: FieldsProps) {
   const required = (k: QualificationField) => (QUALIFICATION_FIELDS[type as EventType] ?? []).includes(k);
   const hint = (k: QualificationField, base?: ReactNode) => (required(k) ? requiredHint(base) : base);
   const textHint = (text: string) => (at || mp ? <>Sans détail médical : visible de l&apos;encadrement et dans les échéances.<InjuryWarning text={text} health={health} /></> : undefined);
-  // Un projet saisi avant la synchronisation Keystone reste proposé tel quel.
+  // Projet de la fiche absent de keystone.pub_projets (ou source indisponible) : reste proposé tel quel (code et libellé).
   // Origine NC : celle de la fiche tant que le type n'a pas changé ; sinon repartir de la valeur par défaut du nouveau type.
   const ncDefault = type === e.type && e.ncOrigin ? e.ncOrigin : type === 'RC' ? 'Réclamation client' : '';
-  const projects = withCurrent(options.projects, e.keystoneProject, null, 'start');
+  const projects = withCurrent(options.projects, e.keystoneProjectCode, e.keystoneProject, 'start');
   const str = (v: string | number | null | undefined) => (v == null ? '' : String(v));
   // Rôle non habilité : un accident du travail enregistré garde son type (requalification par l'animateur QHSE ou la direction).
   // Maladie professionnelle (EVT-09) : proposée aux rôles habilités à la création seulement ; elle garde ensuite son type.
@@ -200,8 +204,9 @@ export function EventFields(props: FieldsProps) {
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="keystoneProject" label="Projet Keystone lié">
-          <Select name="keystoneProject" options={projects} defaultValue={e.keystoneProject ?? ''} placeholder="Aucun projet" />
+        <Field name="keystoneProjectCode" label="Projet Keystone lié"
+          hint={options.projectsMessage ?? (e.keystoneProject && !e.keystoneProjectCode ? `Ancien libellé : ${e.keystoneProject}` : undefined)}>
+          <Select name="keystoneProjectCode" options={projects} defaultValue={e.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
         </Field>
       </FormRow>
       <FormRow>

@@ -13,7 +13,7 @@ freshDemoDatabase();
 
 describe('cycle de vie complet d’une action', () => {
   it('création, avancement, report, reprise, terminée, vérifiée non efficace, suite', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const created = await saveAction({}, form({ ...NEW_ACTION, source: 'evenement', link: 'event:EV-2026-131', originRef: '', pilotId: 'tnguyen' }));
     expect(created).toEqual({ ok: true, id: 'A-223' });
     const id = created.id!;
@@ -25,7 +25,7 @@ describe('cycle de vie complet d’une action', () => {
     const r = await verifyAction({}, form({
       id, from: 'terminee', verifyMethod: 'audit_visite', efficacyNote: 'Mode opératoire non appliqué au poste M3.', effective: 'non_efficace', hours: '6',
       ne_detail: 'Former les monteurs au mode opératoire', ne_pilotId: 'sbenali', ne_priority: 'urgent', ne_dueOn: '2026-10-30', ne_verifyDueOn: '2026-11-20',
-      ne_domain: 'securite', ne_siteId: 'ville-a',
+      ne_domain: 'securite', ne_siteId: 'site_a',
     }));
     expect(r).toMatchObject({ ok: true, id, ids: ['A-224'] });
     expect(await actionRow(id)).toMatchObject({ status: 'verifiee', effective: false, hours: 6, closedOn: '2026-10-09', dueOn: '2026-11-30', initialDueOn: '2026-11-15' });

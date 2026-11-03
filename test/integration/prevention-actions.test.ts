@@ -40,9 +40,9 @@ describe('droits et site sélectionné', () => {
   });
 
   it('plan d’un autre site que celui sélectionné : refusé', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await signEu('PP-2026-016')).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await closePlan('PP-2026-011')).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
     expect(await signEu('PP-inconnu')).toEqual({ error: 'Plan de prévention introuvable.' });
   });
@@ -119,7 +119,7 @@ describe('closePlan et cancelPlan', () => {
   it('intervention réalisée sans plan signé : clôture sans action QSE (actions immédiates, 15/10/2026), écart tracé', async () => {
     actAs('Animateur QHSE');
     const created = await savePlan({}, form({
-      contractorId: 'EE-002', siteId: 'ville-a', title: 'Remplacement des luminaires de l’allée centrale', location: 'Atelier usinage',
+      contractorId: 'EE-002', siteId: 'site_a', title: 'Remplacement des luminaires de l’allée centrale', location: 'Atelier usinage',
       startOn: '2026-09-14', endOn: '2026-09-18', estimatedHours: '1 200', measures: 'Nacelle balisée.', interferenceRisks: '',
     }));
     expect(created).toMatchObject({ ok: true, id: 'PP-2026-019' });
@@ -137,7 +137,7 @@ describe('closePlan et cancelPlan', () => {
   it('actions reprises rattachées au plan : consultation seule (abandonnées non listées), plan engagé jamais supprimé', async () => {
     actAs('Animateur QHSE');
     const db = await getDb();
-    const legacy = { openedOn: '2026-09-01', pilotId: 'clefevre', dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null, siteId: 'ville-a', legacyOrigin: 'prevention' } as const;
+    const legacy = { openedOn: '2026-09-01', pilotId: 'clefevre', dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null, siteId: 'site_a', legacyOrigin: 'prevention' } as const;
     await db.insert(t.actions).values([
       { ...legacy, id: 'A-900', status: 'a_faire', originRef: 'PP-2026-018', detail: 'Faire signer le plan PP-2026-018', preventionPlanId: 'PP-2026-018' },
       { ...legacy, id: 'A-901', status: 'abandonnee', originRef: 'PP-2026-018', detail: 'Doublon', preventionPlanId: 'PP-2026-018', cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Doublon' },
@@ -150,7 +150,7 @@ describe('closePlan et cancelPlan', () => {
   });
 
   it('permis rattachés encore actifs : clôturez-les d’abord', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     // PE-2026-009 (demandé) est rattaché au contrat ATEX PP-2026-014, signé et en cours.
     expect(await closePlan('PP-2026-014')).toEqual({ error: 'Permis rattachés encore actifs (PE-2026-009) : clôturez-les ou annulez-les avant de clore le plan.' });
     expect((await plan('PP-2026-014')).status).toBe('signe');
@@ -181,7 +181,7 @@ describe('deletePlan : suppression d’un brouillon saisi par erreur', () => {
   it('refusée pour un plan engagé (permis, événement, inspection ou signature)', async () => {
     actAs('Animateur QHSE');
     expect((await deletePlan('PP-2026-016')).error).toBe('Plan déjà engagé (inspection commune ou signature enregistrée) : annulez-le avec un motif.');
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await deletePlan('PP-2026-014')).error).toMatch(/^Plan déjà engagé \(inspection commune ou signature enregistrée, permis PE-2026-009\)/);
   });
   it('brouillon sans engagement : ligne et pièces jointes supprimées, journal conservé, référence jamais réattribuée', async () => {
@@ -195,7 +195,7 @@ describe('deletePlan : suppression d’un brouillon saisi par erreur', () => {
     files.forEach((f) => expect(existsSync(path.join(uploads, f.storagePath))).toBe(false));
     expect((await changeLog('prevention_plan', 'PP-2026-018')).map((l) => l.action)).toEqual(['attach', 'attach', 'delete']);
     const next = await savePlan({}, form({
-      contractorId: 'EE-001', siteId: 'ville-a', title: 'Nouveau plan', location: 'Atelier', startOn: '2026-11-02', endOn: '2026-11-03', estimatedHours: '8',
+      contractorId: 'EE-001', siteId: 'site_a', title: 'Nouveau plan', location: 'Atelier', startOn: '2026-11-02', endOn: '2026-11-03', estimatedHours: '8',
     }));
     expect(next).toMatchObject({ ok: true, id: 'PP-2026-020' });
   });
@@ -228,7 +228,7 @@ describe('addPlanAttachments et removePlanAttachment', () => {
     await db.update(t.preventionPlans).set({ importedFromId: b.id }).where(eq(t.preventionPlans.id, 'PP-2026-016'));
     expect(await removePlanAttachment(b.id)).toEqual({ error: 'Le formulaire importé reste attaché au plan.' });
     expect(await removePlanAttachment('inconnue')).toEqual({ error: 'Pièce jointe introuvable.' });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await removePlanAttachment(b.id)).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
   });
 });

@@ -34,7 +34,7 @@ test('Salarié : audits fermés, renvoi vers son accueil', async ({ page, contex
 });
 
 test('Animateur QHSE : registre des accidents bénins ouvert', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/evenements/registre-benin');
   await expect(page).toHaveURL(/registre-benin/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

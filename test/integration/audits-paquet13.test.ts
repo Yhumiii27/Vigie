@@ -30,7 +30,7 @@ async function planItem(label: string) {
 describe('jeu de démonstration (migration 0021)', () => {
   it('audit client hors programme du site A, auditeur interne lié, second élément d’octobre', async () => {
     const client = await planItem('Client A');
-    expect(client).toMatchObject({ unplanned: true, done: true, siteId: 'ville-a', track: 'Audits clients' });
+    expect(client).toMatchObject({ unplanned: true, done: true, siteId: 'site_a', track: 'Audits clients' });
     expect(await planItem('BE · 17/10')).toMatchObject({ auditorId: 'lmoreau', auditor: null });
     const october = (await (await db()).select().from(t.auditPlanItems).where(and(eq(t.auditPlanItems.track, 'Visites sécurité'), eq(t.auditPlanItems.month, 10))));
     expect(october.map((p) => p.label).sort()).toEqual(['Essais 12/10', 'Magasin · 29/10']);
@@ -44,10 +44,10 @@ describe('AUD-20 : audits hors programme en vrais audits', () => {
       .toMatchObject({ fieldErrors: { doneOn: 'Date obligatoire.' } });
     expect(await savePlanItem({}, form({ unplanned: '1', track: 'Audits clients', label: 'Client B', doneOn: '2026-10-10', siteId: 'all' })))
       .toMatchObject({ fieldErrors: { doneOn: 'Date de réalisation future.' } });
-    const r = await savePlanItem({}, form({ unplanned: '1', track: 'Audits clients', label: 'Client B', detail: 'Audit client [Client B]', doneOn: '2026-09-15', auditor: '[Auditeur client B]', siteId: 'ville-b' }));
+    const r = await savePlanItem({}, form({ unplanned: '1', track: 'Audits clients', label: 'Client B', detail: 'Audit client [Client B]', doneOn: '2026-09-15', auditor: '[Auditeur client B]', siteId: 'site_b' }));
     expect(r).toMatchObject({ ok: true });
     const item = await planItem('Client B');
-    expect(item).toMatchObject({ year: 2026, month: 9, plannedOn: '2026-09-15', done: true, doneOn: '2026-09-15', unplanned: true, siteId: 'ville-b' });
+    expect(item).toMatchObject({ year: 2026, month: 9, plannedOn: '2026-09-15', done: true, doneOn: '2026-09-15', unplanned: true, siteId: 'site_b' });
     expect(await lastLog('audit_plan_item', item.id)).toMatchObject({ action: 'create', summary: 'Audit hors programme enregistré (Audits clients, réalisé le 15/09/2026)' });
     // Hors échéances du programme (réalisé) ; proposé au rattachement des constats.
     expect((await loadAuditSignals()).todo.some((x) => x.href?.endsWith(`element=${item.id}`))).toBe(false);
@@ -58,7 +58,7 @@ describe('AUD-20 : audits hors programme en vrais audits', () => {
       .toMatchObject({ fieldErrors: { planItemId: expect.stringContaining('Rattachez le constat à un audit') } });
     expect(await saveFinding({}, form({ planItemId: String(item.id), kind: 'observation', text: 'Étiquetage des colis' }))).toMatchObject({ ok: true });
     const [f] = await (await db()).select().from(t.auditFindings).where(eq(t.auditFindings.text, 'Étiquetage des colis'));
-    expect(f).toMatchObject({ planItemId: item.id, siteId: 'ville-b', foundOn: '2026-09-15' });
+    expect(f).toMatchObject({ planItemId: item.id, siteId: 'site_b', foundOn: '2026-09-15' });
     // Saisi par erreur sans rapport, constat ni action : annulable (motif) ; avec un constat : refusé.
     expect(await cancelPlanItem({}, form({ id: String(item.id), reason: 'Doublon' }))).toMatchObject({ error: expect.stringContaining('Des constats ou un rapport') });
   });
@@ -69,15 +69,15 @@ describe('AUD-20 : audits hors programme en vrais audits', () => {
     const [legacy] = await d.insert(t.auditFindings).values({ audit: 'Audit client ancien', kind: 'piste', text: 'Ancien constat libre', foundOn: '2026-03-02' }).returning();
     // Un constat à libellé libre existant reste modifiable avec son libellé.
     expect(await saveFinding({}, form({ id: String(legacy.id), planItemId: '__other', audit: 'Audit client ancien', kind: 'piste', text: 'Ancien constat libre (corrigé)' }))).toMatchObject({ ok: true });
-    actAs('Chef de service', 'ville-a');
-    expect(await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', siteId: 'ville-a' }))).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-a');
-    const r = await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', auditorId: 'lmoreau', siteId: 'ville-a' }));
+    actAs('Chef de service', 'site_a');
+    expect(await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', siteId: 'site_a' }))).toEqual({ error: DENIED });
+    actAs('Animateur QHSE', 'site_a');
+    const r = await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', auditorId: 'lmoreau', siteId: 'site_a' }));
     expect(r).toMatchObject({ ok: true });
     const [after] = await d.select().from(t.auditFindings).where(eq(t.auditFindings.id, legacy.id));
-    expect(after).toMatchObject({ planItemId: Number(r.id), siteId: 'ville-a', audit: 'Audit client ancien · mars 2026' });
+    expect(after).toMatchObject({ planItemId: Number(r.id), siteId: 'site_a', audit: 'Audit client ancien · mars 2026' });
     expect(await lastLog('audit_finding', legacy.id)).toMatchObject({ summary: "Rattaché à l'audit hors programme « Audit client ancien · mars 2026 »" });
-    expect(await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', siteId: 'ville-a' }))).toEqual({ error: 'Aucun constat sans audit sous ce libellé.' });
+    expect(await convertFreeAudit({}, form({ audit: 'Audit client ancien', track: 'Audits clients', label: 'Ancien', doneOn: '2026-03-02', siteId: 'site_a' }))).toEqual({ error: 'Aucun constat sans audit sous ce libellé.' });
   });
 });
 
@@ -94,7 +94,7 @@ describe('AUD-21 : plusieurs éléments par ligne et par mois', () => {
 
 describe('AUD-22 : programme, constats et certifications rattachés à un site', () => {
   it('lecture filtrée sur le site sélectionné ; écriture selon la règle de site ; site repris par les constats', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const client = await planItem('Client A');
     const onB = await loadAudits({ year: '2026' });
     expect(onB.plan.some((p) => p.id === client.id)).toBe(false);
@@ -102,8 +102,8 @@ describe('AUD-22 : programme, constats et certifications rattachés à un site',
     // Élément commun à l'entreprise : visible sur chaque site.
     expect(onB.plan.some((p) => p.label === 'Production')).toBe(true);
     // Écriture sur un élément du site A depuis le site B : refusée.
-    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, doneOn: client.doneOn!, siteId: 'ville-a' }))).toEqual({ error: OTHER_SITE, fieldErrors: { siteId: OTHER_SITE } });
-    actAs('Animateur QHSE', 'ville-a');
+    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, doneOn: client.doneOn!, siteId: 'site_a' }))).toEqual({ error: OTHER_SITE, fieldErrors: { siteId: OTHER_SITE } });
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadAudits({ year: '2026' })).plan.find((p) => p.id === client.id)).toMatchObject({ site: 'Site de [Ville A]', unplanned: true });
     // Changement de site (« Tous les sites ») : repris par ses constats, journal de l'élément et des constats.
     actAs('Animateur QHSE', 'all');
@@ -113,7 +113,7 @@ describe('AUD-22 : programme, constats et certifications rattachés à un site',
     expect(await lastLog('audit_finding', f.id)).toMatchObject({ details: [{ field: 'Site', from: 'Site de [Ville A]', to: 'Tous les sites' }] });
     expect(await lastLog('audit_plan_item', client.id)).toMatchObject({ details: expect.arrayContaining([{ field: 'Site', from: 'Site de [Ville A]', to: 'Tous les sites' }]) });
     // Remis sur le site A pour la suite.
-    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, detail: client.detail!, doneOn: client.doneOn!, auditor: client.auditor!, scope: client.scope!, ownerId: client.ownerId!, siteId: 'ville-a' }))).toMatchObject({ ok: true });
+    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, detail: client.detail!, doneOn: client.doneOn!, auditor: client.auditor!, scope: client.scope!, ownerId: client.ownerId!, siteId: 'site_a' }))).toMatchObject({ ok: true });
   });
 
   it('échéance « constat sans action » au site du constat, visible sur ce site ; action du constat sur son site', async () => {
@@ -121,27 +121,27 @@ describe('AUD-22 : programme, constats et certifications rattachés à un site',
     const client = await planItem('Client A');
     const [f] = await (await db()).select().from(t.auditFindings).where(eq(t.auditFindings.planItemId, client.id));
     const sig = (await loadAuditSignals()).todo.find((x) => x.href === `/audits?constat=${f.id}`);
-    expect(sig).toMatchObject({ siteId: 'ville-a', title: expect.stringContaining('Observation sans action') });
-    actAs('Animateur QHSE', 'ville-b');
+    expect(sig).toMatchObject({ siteId: 'site_a', title: expect.stringContaining('Observation sans action') });
+    actAs('Animateur QHSE', 'site_b');
     expect((await loadVisibleTodo()).some((x) => x.href === `/audits?constat=${f.id}` && !x.elsewhere)).toBe(false);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadVisibleTodo()).some((x) => x.href === `/audits?constat=${f.id}`)).toBe(true);
     // Action d'un constat du site A : site A imposé (sélection « Tous les sites » : le site de l'action reste celui du constat).
     actAs('Animateur QHSE', 'all');
     const base = { ...NEW_ACTION, source: 'audit_interne', link: `finding:${f.id}`, originRef: '' };
-    expect(await saveAction({}, form({ ...base, siteId: 'ville-b' }))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
-    expect(await saveAction({}, form({ ...base, siteId: 'ville-a' }))).toMatchObject({ ok: true });
+    expect(await saveAction({}, form({ ...base, siteId: 'site_b' }))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
+    expect(await saveAction({}, form({ ...base, siteId: 'site_a' }))).toMatchObject({ ok: true });
   });
 
   it('certification rattachée à un site : règle de site', async () => {
-    actAs('Animateur QHSE', 'ville-b');
-    const r = await saveCertification({}, form({ standard: 'MASE', domain: 'Santé-sécurité', tone: 'warn', siteId: 'ville-b' }));
+    actAs('Animateur QHSE', 'site_b');
+    const r = await saveCertification({}, form({ standard: 'MASE', domain: 'Santé-sécurité', tone: 'warn', siteId: 'site_b' }));
     expect(r).toMatchObject({ ok: true });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadAudits({})).certs.some((c) => c.id === r.id)).toBe(false);
-    expect(await saveCertification({}, form({ id: r.id!, standard: 'MASE', domain: 'Santé-sécurité', tone: 'off', siteId: 'ville-b' }))).toEqual({ error: OTHER_SITE, fieldErrors: { siteId: OTHER_SITE } });
-    actAs('Animateur QHSE', 'ville-b');
-    expect((await loadAudits({})).certs.find((c) => c.id === r.id)).toMatchObject({ siteId: 'ville-b', site: "Site de [Ville B]" });
+    expect(await saveCertification({}, form({ id: r.id!, standard: 'MASE', domain: 'Santé-sécurité', tone: 'off', siteId: 'site_b' }))).toEqual({ error: OTHER_SITE, fieldErrors: { siteId: OTHER_SITE } });
+    actAs('Animateur QHSE', 'site_b');
+    expect((await loadAudits({})).certs.find((c) => c.id === r.id)).toMatchObject({ siteId: 'site_b', site: "Site de [Ville B]" });
   });
 });
 
@@ -160,7 +160,7 @@ describe('AUD-24 : gestion des lignes et reconduction annuelle', () => {
   });
 
   it('reconduction de 2026 sur 2027 (dates décalées, à réaliser), masquage motivé d’une ligne reprise', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await renewProgram({}, form({ year: '2027' }))).toEqual({ error: 'Sélectionnez « Tous les sites » : les lignes et la reconduction valent pour tout le programme.' });
     actAs('Animateur QHSE', 'all');
     const before = await loadAudits({ year: '2027' });
@@ -195,11 +195,11 @@ describe('AUD-24 : gestion des lignes et reconduction annuelle', () => {
 
 describe('AUD-26 : impression du programme annuel', () => {
   it('éléments en vigueur de l’année, du site sélectionné, par mois', async () => {
-    actAs('Chef de projet', 'ville-b');
+    actAs('Chef de projet', 'site_b');
     const p = await loadAuditProgramPrint('2026');
     expect(p.year).toBe(2026);
     expect(p.items.length).toBeGreaterThan(5);
-    expect(p.items.some((i) => i.siteId === 'ville-a')).toBe(false);
+    expect(p.items.some((i) => i.siteId === 'site_a')).toBe(false);
     expect(p.items.every((i, k) => k === 0 || p.items[k - 1].month <= i.month)).toBe(true);
     expect(p.cancelledCount).toBeGreaterThanOrEqual(1);
   });

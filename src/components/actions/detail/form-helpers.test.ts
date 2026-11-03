@@ -11,12 +11,12 @@ import {
   sourceHasElement, sourceHint, sourceOptions, targetChoices, targetSiteId, threadWritable, writesBlocked,
 } from './form-helpers';
 
-const SITES: Option[] = [['ville-a', 'Ville A'], ['ville-b', 'Ville B']];
+const SITES: Option[] = [['site_a', 'Ville A'], ['site_b', 'Ville B']];
 const PEOPLE: Option[] = [['clefevre', 'C. Lefèvre'], ['tnguyen', 'T. Nguyen']];
 
 const TARGETS: ActionTargetOption[] = [
-  { value: 'event:EV-2026-130', label: 'EV-2026-130 · Chute de plain-pied', siteId: 'ville-a', sources: ['evenement'], healthWarning: true },
-  { value: 'event:EV-2026-140', label: 'EV-2026-140 · Réclamation', siteId: 'ville-b', sources: ['reclamation_client'] },
+  { value: 'event:EV-2026-130', label: 'EV-2026-130 · Chute de plain-pied', siteId: 'site_a', sources: ['evenement'], healthWarning: true },
+  { value: 'event:EV-2026-140', label: 'EV-2026-140 · Réclamation', siteId: 'site_b', sources: ['reclamation_client'] },
   { value: 'finding:3', label: 'Constat · audit fournisseur', siteId: null, sources: ['audit_fournisseur'] },
   { value: 'finding:4', label: 'Constat · audit interne', siteId: null, sources: ['audit_certification', 'audit_fournisseur', 'audit_interne', 'audit_terrain'] },
 ];
@@ -24,7 +24,7 @@ const TARGETS: ActionTargetOption[] = [
 /** Fiche minimale : seuls les champs lus par les aides comptent. */
 const detail = (over: Partial<ActionDetailView> = {}): ActionDetailView => ({
   id: 'A-215', status: 'p40', pilotId: 'tnguyen', pilot: 'T. Nguyen', priority: 'urgent', domain: 'securite', riskLevel: 3,
-  siteId: 'ville-a', site: 'Ville A', source: 'evenement', originRef: 'EV-2026-130', problem: 'Problème', detail: 'Remplacer les élingues',
+  siteId: 'site_a', site: 'Ville A', source: 'evenement', originRef: 'EV-2026-130', problem: 'Problème', detail: 'Remplacer les élingues',
   dueOn: '2026-11-15', verifyDueOn: '2026-12-15', openedOn: '2026-10-01', doneOn: null, verifyMethod: null, efficacyNote: null,
   hours: null, estimatedCost: 120.5, actualCost: null, healthWarning: false, previousVerification: null,
   ...over,
@@ -118,14 +118,14 @@ describe('sources d’un élément imposé ou d’une action reprise (aucune sou
 
 describe('site proposé (§ 13)', () => {
   it('site de l’élément d’abord, puis celui de l’écran, puis le seul site, jamais « Tous les sites »', () => {
-    expect(defaultSiteId(SITES, { elementSiteId: 'ville-b', siteId: 'ville-a' })).toBe('ville-b');
-    expect(defaultSiteId(SITES, { elementSiteId: 'archive', siteId: 'ville-a' })).toBe('ville-a');
+    expect(defaultSiteId(SITES, { elementSiteId: 'site_b', siteId: 'site_a' })).toBe('site_b');
+    expect(defaultSiteId(SITES, { elementSiteId: 'archive', siteId: 'site_a' })).toBe('site_a');
     expect(defaultSiteId(SITES, { elementSiteId: null, siteId: null })).toBe('');
     expect(defaultSiteId(SITES, { siteId: 'all' })).toBe('');
-    expect(defaultSiteId([['ville-a', 'Ville A']], {})).toBe('ville-a');
+    expect(defaultSiteId([['site_a', 'Ville A']], {})).toBe('site_a');
   });
   it('site de l’élément choisi dans le sélecteur', () => {
-    expect(targetSiteId(TARGETS, 'event:EV-2026-140')).toBe('ville-b');
+    expect(targetSiteId(TARGETS, 'event:EV-2026-140')).toBe('site_b');
     expect(targetSiteId(TARGETS, 'finding:3')).toBeNull();
     expect(targetSiteId(TARGETS, '')).toBeNull();
     expect(targetSiteId(TARGETS, 'event:inconnu')).toBeNull();
@@ -215,7 +215,7 @@ describe('actions de suite (§ 7)', () => {
     const p = followUpPrefill(detail(), 'non_efficace', { closedOn: '2026-10-15', note: ' Les élingues fuient encore. ', people: PEOPLE, sites: SITES });
     expect(p).toEqual({
       problem: 'Action A-215 jugée non efficace le 15/10/2026 : Les élingues fuient encore.',
-      pilotId: 'tnguyen', priority: 'urgent', domain: 'securite', riskLevel: '3', siteId: 'ville-a',
+      pilotId: 'tnguyen', priority: 'urgent', domain: 'securite', riskLevel: '3', siteId: 'site_a',
     });
   });
   it('nouveau risque : problème à saisir ; responsable sorti et site archivé non repris', () => {

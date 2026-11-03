@@ -21,8 +21,8 @@ async function expected(site: string | null) {
 
 describe('KPI « Actions en retard »', () => {
   it('site A : retards des ouvertes, dénominateur = ouvertes, actions liées à un événement, lien filtré', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    const want = await expected('ville-a');
+    actAs('Animateur QHSE', 'site_a');
+    const want = await expected('site_a');
     // A-192 : recommandation en retard de l'étude HazOp ES-002 (VG-02, src/db/seeds/process-safety.ts).
     expect(want.late.map((a) => a.id).sort()).toEqual(['A-192', 'A-198', 'A-201', 'A-205']);
     expect(await kpi()).toMatchObject({
@@ -32,17 +32,17 @@ describe('KPI « Actions en retard »', () => {
   });
 
   it('Terminée, Reportée, Vérifiée : jamais en retard', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const before = await kpi();
     await db.insert(t.actions).values([
-      { id: 'A-960', detail: 'Terminée', source: 'evenement', originRef: 'x', siteId: 'ville-a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'terminee', doneOn: '2026-09-09', verifyDueOn: '2026-10-10' },
-      { id: 'A-961', detail: 'Reportée', source: 'evenement', originRef: 'x', siteId: 'ville-a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'reportee' },
-      { id: 'A-962', detail: 'Ouverte', source: 'evenement', originRef: 'x', siteId: 'ville-a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'p20' },
+      { id: 'A-960', detail: 'Terminée', source: 'evenement', originRef: 'x', siteId: 'site_a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'terminee', doneOn: '2026-09-09', verifyDueOn: '2026-10-10' },
+      { id: 'A-961', detail: 'Reportée', source: 'evenement', originRef: 'x', siteId: 'site_a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'reportee' },
+      { id: 'A-962', detail: 'Ouverte', source: 'evenement', originRef: 'x', siteId: 'site_a', pilotId: 'sbenali', openedOn: '2026-09-01', dueOn: '2026-09-10', initialDueOn: '2026-09-10', status: 'p20' },
     ]);
     const after = await kpi();
     expect(Number(after.value)).toBe(Number(before.value) + 1);
-    expect(after.sub).toBe(`sur ${(await expected('ville-a')).open} ouvertes`);
+    expect(after.sub).toBe(`sur ${(await expected('site_a')).open} ouvertes`);
   });
 
   it('« Tous les sites » : tout le périmètre', async () => {

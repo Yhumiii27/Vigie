@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache';
 import { desc, eq } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import { planStatus } from '@/lib/rules/prevention';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';
@@ -558,7 +559,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   const endOn = f.date('endOn', { required: true });
   const estimatedHours = f.int('estimatedHours', { required: true, min: 0, max: 100_000 });
   const dangerousWork = f.bool('dangerousWork');
-  const keystoneProject = f.opt('keystoneProject');
+  const keystoneProjectCode = f.opt('keystoneProjectCode'); // D02 : code de keystone.pub_projets
   const inspectionOn = f.date('inspectionOn');
   const interferenceRisks = f.str('interferenceRisks', { max: 4000 });
   const measures = f.str('measures', { max: 4000 });
@@ -578,11 +579,10 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   }
 
   const db = await getDb();
-  const [contractors, sites, people, projects, templates] = await Promise.all([
+  const [contractors, sites, people, templates] = await Promise.all([
     db.select({ id: t.contractors.id, name: t.contractors.name, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.people.id }).from(t.people),
-    db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
     db.select({ id: t.ppImportTemplates.id }).from(t.ppImportTemplates),
   ]);
   // Entreprise à créer déjà connue sous le même nom : le plan lui est rattaché, sauf si elle est archivée (comme savePlan).
@@ -593,7 +593,8 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   if (existingByName?.archivedAt) f.fail('contractorName', 'Entreprise archivée sous ce nom : réactivez-la dans l’onglet Entreprises extérieures.');
   if (siteId && !sites.some((s) => s.id === siteId)) f.fail('siteId', 'Site inconnu.');
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
-  if (keystoneProject && !projects.some((p) => `${p.id} · ${p.client}` === keystoneProject)) f.fail('keystoneProject', 'Projet Keystone inconnu.');
+  const projectError = await unknownProjectError(db, keystoneProjectCode);
+  if (projectError) f.fail('keystoneProjectCode', projectError);
   if (!f.ok) return f.state();
   const siteError = await requireInSite(siteId, { create: true });
   if (siteError) return { error: siteError };
@@ -617,7 +618,7 @@ export async function createPlanFromImport(_prev: FormState, fd: FormData): Prom
   };
   const values = {
     siteId, title, location, startOn: startOn!, endOn: endOn!, estimatedHours: estimatedHours!, dangerousWork,
-    keystoneProject, inspectionOn, interferenceRisks, measures, ownerId,
+    keystoneProjectCode, inspectionOn, interferenceRisks, measures, ownerId,
     signedEuOn: signedEuOn ?? null, signedEeOn: signedEeOn ?? null,
   };
   const status = planStatus({ ...values, status: 'brouillon' }, now);

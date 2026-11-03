@@ -16,7 +16,7 @@ test.describe('tablette portrait (820 × 1180)', () => {
   test.use({ viewport: { width: 820, height: 1180 } });
 
   test('Kanban : trois colonnes par rangée, pas de défilement horizontal', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/actions?vue=kanban');
     await expect(page.locator('.vg-kanban')).toBeVisible();
     expect(await columns(page)).toBe(3);
@@ -25,7 +25,7 @@ test.describe('tablette portrait (820 × 1180)', () => {
   });
 
   test('événements : liste puis fiche, « Retour à la liste »', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/evenements');
     await expect(page.locator('.vg-md-list')).toBeVisible();
     await expect(page.locator('.vg-md-detail')).toBeHidden();
@@ -41,7 +41,7 @@ test.describe('tablette paysage (1180 × 820)', () => {
   test.use({ viewport: { width: 1180, height: 820 } });
 
   test('événements : liste et fiche côte à côte ; Kanban sur trois colonnes', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/evenements?sel=EV-2026-130');
     await expect(page.locator('.vg-md-list')).toBeVisible();
     await expect(page.locator('.vg-md-detail')).toContainText('Cotes hors tolérance');
@@ -56,7 +56,7 @@ test.describe('bureau (1280 × 800) inchangé', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
   test('Kanban : six colonnes sur une rangée', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/actions?vue=kanban');
     expect(await columns(page)).toBe(6);
     expect(await page.locator('.vg-side').evaluate((el) => el.getBoundingClientRect().width)).toBe(236);

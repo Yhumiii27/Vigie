@@ -36,13 +36,13 @@ describe('saveTrainingSession : droits et contrôles', () => {
   });
 
   it('participant d’un autre site que celui sélectionné : refusé, aucune formation créée (transaction)', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveTrainingSession({}, sessionForm({ titleId: 'sst', heldOn: '2026-10-05' }, ['tnguyen', 'amartin']))).toEqual({ error: OTHER_SITE });
     expect(await (await db()).select().from(t.trainingSessions)).toEqual([]);
   });
 
   it('contrôles : participants, date future, échéance, titre archivé, salarié sorti', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const none = await saveTrainingSession({}, sessionForm({ titleId: 'sst', heldOn: '2026-10-05' }, []));
     expect(none.fieldErrors?.participants).toBe('Choisissez au moins un participant.');
     const twice = await saveTrainingSession({}, sessionForm({ titleId: 'sst', heldOn: '2026-10-05' }, ['tnguyen', 'tnguyen']));
@@ -60,7 +60,7 @@ describe('saveTrainingSession : droits et contrôles', () => {
 
 describe('saveTrainingSession : une formation par participant', () => {
   it('Chef de service : session, formations (échéance calculée), exigence ajoutée, journal de chaque élément', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const r = await saveTrainingSession({}, sessionForm({ titleId: 'sst', heldOn: '2026-10-05', provider: '[Croix-Rouge]' }, ['tnguyen', 'mgirard', 'kbernard']));
     expect(r).toMatchObject({ ok: true, message: 'Session enregistrée : 3 formations créées.' });
     const id = Number(r.id);
@@ -87,7 +87,7 @@ describe('saveTrainingSession : une formation par participant', () => {
   });
 
   it('prérequis non valide (HAB-10) : enregistré, signalé dans la confirmation', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     // Autorisation de conduite : prérequis CACES R484 ou R489 ; kbernard n'en a aucun, tnguyen a le R484.
     const r = await saveTrainingSession({}, sessionForm({ titleId: 'conduite', heldOn: '2026-10-02' }, ['kbernard', 'tnguyen']));
     expect(r.ok).toBe(true);
@@ -100,7 +100,7 @@ describe('saveTrainingSession : une formation par participant', () => {
 
 describe('cancelTrainingSession : annulation motivée', () => {
   it('droits, motif obligatoire, formations annulées et journalisées, jamais supprimées', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const r = await saveTrainingSession({}, sessionForm({ titleId: 'hauteur', heldOn: '2026-10-06' }, ['tnguyen', 'proux']));
     const id = Number(r.id);
     const [first] = await sessionQuals(id);
@@ -109,13 +109,13 @@ describe('cancelTrainingSession : annulation motivée', () => {
 
     actAs('Salarié');
     expect(await cancelTrainingSession({}, sessionForm({ id: String(id), reason: 'Erreur' }, []))).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const noReason = await cancelTrainingSession({}, sessionForm({ id: String(id), reason: '' }, []));
     expect(noReason.fieldErrors?.reason).toBeTruthy();
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await cancelTrainingSession({}, sessionForm({ id: String(id), reason: 'Mauvais titre' }, []))).toEqual({ error: OTHER_SITE });
 
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await cancelTrainingSession({}, sessionForm({ id: String(id), reason: 'Mauvais titre' }, []))).toEqual({ ok: true });
     const [session] = await (await db()).select().from(t.trainingSessions).where(eq(t.trainingSessions.id, id));
     expect(session).toMatchObject({ cancelReason: 'Mauvais titre', cancelledById: 'clefevre' });
@@ -133,7 +133,7 @@ describe('cancelTrainingSession : annulation motivée', () => {
 
 describe('recyclage groupé depuis la prévision (HAB-09)', () => {
   it('candidats d’un titre : à rattraper et proches cochés, plus lointains proposés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { rows } = await loadSkillMatrix();
     const forecast = renewalForecast(rows, '2026-10-09');
     const elec = groupRenewalCandidates(forecast, 'elec');

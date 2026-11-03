@@ -18,7 +18,7 @@ const setStatus = async (id: string, status: 'verifiee' | 'abandonnee') => (awai
 
 describe('VEI-05 : réserves dont l’action de levée est close', () => {
   it('aucune relance tant que l’action de levée est ouverte', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const c = await crane();
     expect(c.actionId).toBe('A-217');
     const { todo } = await loadWatchSignals();
@@ -31,13 +31,13 @@ describe('VEI-05 : réserves dont l’action de levée est close', () => {
   });
 
   it('action vérifiée, réserves inscrites : relance au responsable de l’équipement, clé stable, fiche « Enregistrer le contrôle »', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const c = await crane();
     await setStatus('A-217', 'verifiee');
     const { todo } = await loadWatchSignals();
     const item = todo.find((i) => i.key === `veille-boucle|controle|${c.id}|A-217`);
     expect(item).toMatchObject({
-      kind: 'Contrôle', tone: 'warn', siteId: 'ville-a', ownerIds: [c.responsibleId], href: `/veille?onglet=controles&controle=${c.id}`,
+      kind: 'Contrôle', tone: 'warn', siteId: 'site_a', ownerIds: [c.responsibleId], href: `/veille?onglet=controles&controle=${c.id}`,
       title: 'VGP levage · pont roulant 10 t — action A-217 vérifiée : réserves « 1 · fin de course à régler » à lever',
     });
     expect(item!.dueOn).toBeUndefined();
@@ -48,7 +48,7 @@ describe('VEI-05 : réserves dont l’action de levée est close', () => {
   });
 
   it('contrôle de levée sans réserve : la boucle est fermée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const c = await crane();
     expect(await recordControl({}, form({ controlId: String(c.id), performedOn: '2026-10-08', organization: '[Apave]', result: 'favorable' }))).toMatchObject({ ok: true });
     const { todo } = await loadWatchSignals();
@@ -58,7 +58,7 @@ describe('VEI-05 : réserves dont l’action de levée est close', () => {
 
 describe('VEI-05 : exigence en écart dont l’action est close', () => {
   it('action abandonnée, exigence en écart : « à réévaluer » au pilote ; sans pilote : au responsable QHSE', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const r = await firstRequirement();
     expect(r.actionId).toBe('A-196');
@@ -79,7 +79,7 @@ describe('VEI-05 : exigence en écart dont l’action est close', () => {
   });
 
   it('réévaluation conforme : la boucle est fermée, l’action reste rattachée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const r = await firstRequirement();
     expect(await evaluateRequirement({}, form({ id: String(r.id), evaluation: 'conforme' }))).toMatchObject({ ok: true });
     expect((await loadWatchSignals()).todo.some((i) => i.key?.startsWith(`veille-boucle|exigence|${r.id}|`))).toBe(false);

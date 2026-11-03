@@ -17,7 +17,7 @@ const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélecti
 const VERIFY = { from: 'terminee', verifyMethod: 'visuelle', efficacyNote: 'Constat sur place.', effective: 'efficace' };
 const section = (p: 'ne_' | 'nr_', extra: Record<string, string> = {}) => Object.fromEntries(Object.entries({
   detail: 'Nouvelle mesure de suite', pilotId: 'rfontaine', priority: 'urgent', dueOn: '2026-11-20', verifyDueOn: '2026-12-10', domain: 'securite',
-  riskLevel: '2', siteId: 'ville-a', ...extra,
+  riskLevel: '2', siteId: 'site_a', ...extra,
 }).map(([k, v]) => [`${p}${k}`, v]));
 const verify = (id: string, extra: Record<string, string> = {}) => verifyAction({}, form({ id, ...VERIFY, ...extra }));
 
@@ -42,7 +42,7 @@ describe('droits, validation, site', () => {
   });
 
   it('action d’un autre site que le site sélectionné : refusée, rien écrit', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const logs = await logCount();
     expect(await verify('A-172')).toEqual({ error: OTHER_SITE });
     expect(await logCount()).toBe(logs);
@@ -93,8 +93,8 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     const logs = await logCount();
     expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { dueOn: '' }) })).toMatchObject({ fieldErrors: { ne_dueOn: 'Date obligatoire.' } });
     expect(await verify('A-186', { newRisk: 'on', ...section('nr_') })).toMatchObject({ fieldErrors: { nr_problem: 'Champ obligatoire.' } });
-    expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { siteId: 'ville-c' }) })).toMatchObject({ fieldErrors: { ne_siteId: 'Site archivé ou inconnu : choisissez un site actif.' } });
-    expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { siteId: 'ville-b' }) })).toMatchObject({ fieldErrors: { ne_siteId: expect.any(String) } });
+    expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { siteId: 'site_c' }) })).toMatchObject({ fieldErrors: { ne_siteId: 'Site archivé ou inconnu : choisissez un site actif.' } });
+    expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { siteId: 'site_b' }) })).toMatchObject({ fieldErrors: { ne_siteId: expect.any(String) } });
     expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { pilotId: 'ylambert' }) })).toMatchObject({ fieldErrors: { ne_pilotId: expect.any(String) } });
     expect(await verify('A-186', { effective: 'non_efficace', ...section('ne_', { dueOn: '2026-10-01' }) })).toMatchObject({ fieldErrors: { ne_dueOn: expect.any(String) } });
     expect(await actionCount()).toBe(before);
@@ -117,7 +117,7 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     expect(await actionRow('A-T30')).toMatchObject({ status: 'verifiee', effective: false });
     expect(await actionRow(next)).toMatchObject({
       status: 'a_faire', source: 'audit_interne', originRef: 'Audit interne · §7.2', followsActionId: 'A-T30', followReason: 'non_efficace',
-      problem: 'Action A-T30 jugée non efficace le 09/10/2026 : Écart encore constaté.', pilotId: 'rfontaine', siteId: 'ville-a', openedOn: '2026-10-09',
+      problem: 'Action A-T30 jugée non efficace le 09/10/2026 : Écart encore constaté.', pilotId: 'rfontaine', siteId: 'site_a', openedOn: '2026-10-09',
     });
     expect((await db.select().from(t.findingActions).where(eq(t.findingActions.findingId, 3))).map((x) => x.actionId).sort()).toEqual(['A-T30', next].sort());
     expect((await db.select().from(t.requirements).where(eq(t.requirements.id, 4)))[0].actionId).toBe(next);

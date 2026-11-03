@@ -12,7 +12,7 @@ const focused = (page: Page) => page.evaluate(() => {
 
 test.describe('coque au clavier (UX-11)', () => {
   test('lien d’évitement : premier arrêt du clavier, mène au contenu', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/');
     await page.keyboard.press('Tab');
     const skip = page.getByRole('link', { name: 'Aller au contenu' });
@@ -25,7 +25,7 @@ test.describe('coque au clavier (UX-11)', () => {
   });
 
   test('menu du site : flèches, Échap rend le focus, choix annoncé', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/actions');
     const button = page.getByRole('button', { name: /^Site :/ });
     await expect(button).toHaveAttribute('aria-haspopup', 'menu');
@@ -56,7 +56,7 @@ test.describe('coque au clavier (UX-11)', () => {
   });
 
   test('menu du rôle (démonstration) : Fin puis Entrée change de rôle', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/');
     const button = page.getByRole('button', { name: /^Changer de rôle/ });
     await button.focus();
@@ -71,7 +71,7 @@ test.describe('coque au clavier (UX-11)', () => {
 });
 
 test('formulaire : focus sur le premier champ en erreur, message relié (UX-04)', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/veille');
   await page.getByRole('button', { name: 'Ajouter une exigence' }).click();
   const dialog = page.getByRole('dialog', { name: 'Nouvelle exigence' });
@@ -123,7 +123,7 @@ test.describe('convention d’URL (UX-12)', () => {
   });
 
   test('habilitations : filtres portés par l’URL, rétablis au rechargement', async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+    await asRole(context, baseURL!, 'Chef de service', 'site_a');
     await page.goto('/habilitations');
     await page.getByRole('button', { name: /^À traiter/ }).click();
     await expect(page).toHaveURL(/etat=a-traiter/);

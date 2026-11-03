@@ -28,7 +28,7 @@ async function legacyRenewal(id: string, personId: string, titleId: string, stat
   const db_ = await db();
   await db_.insert(t.actions).values({
     id, openedOn: '2026-09-01', pilotId: 'clefevre', status, dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null,
-    originRef: `Habilitations · ${personId}`, detail: `Recyclage ${titleId} — ${personId}`, siteId: 'ville-a', legacyOrigin: 'skills',
+    originRef: `Habilitations · ${personId}`, detail: `Recyclage ${titleId} — ${personId}`, siteId: 'site_a', legacyOrigin: 'skills',
     doneOn: status === 'a_faire' ? null : '2026-10-01', closedOn: status === 'verifiee' ? '2026-10-05' : null,
     qualificationPersonId: personId, qualificationTitleId: titleId,
   });
@@ -55,7 +55,7 @@ describe('droits : écran « Habilitations et formations » modifiable', () => {
       actAs(role);
       expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-01' }))).toEqual({ error: DENIED });
       expect(await setRequirement('kbernard', 'r484', true)).toEqual({ error: DENIED });
-      expect(await savePerson({}, form({ name: 'X', siteId: 'ville-a' }))).toEqual({ error: DENIED });
+      expect(await savePerson({}, form({ name: 'X', siteId: 'site_a' }))).toEqual({ error: DENIED });
       expect(await saveTitle({}, form({ label: 'Échafaudage', validityMonths: '6' }))).toEqual({ error: DENIED });
       expect(await archiveTitle({}, form({ id: 'sst', reason: 'Test' }))).toEqual({ error: DENIED });
       expect(await reinstatePerson({}, form({ id: 'ylambert', reason: 'Retour' }))).toEqual({ error: DENIED });
@@ -69,7 +69,7 @@ describe('droits : écran « Habilitations et formations » modifiable', () => {
   });
 
   it('salarié d’un autre site que celui sélectionné : refusé', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await setRequirement('tnguyen', 'r484', true)).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
     expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-01' })))
       .toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
@@ -235,7 +235,7 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
     expect(await person('lmoreau')).toMatchObject({ leftOn: '2026-10-09', leftReason: 'Mutation dans une autre filiale' });
     expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'archive', summary: "Sortie de l'effectif le 09/10/2026", reason: 'Mutation dans une autre filiale', byId: 'clefevre' });
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2026-10-09', leftReason: 'x' }))).toEqual({ error: "Salarié déjà sorti de l'effectif." });
-    expect(await savePerson({}, form({ id: 'lmoreau', name: '[L. Moreau]', siteId: 'ville-a' }))).toEqual({ error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." });
+    expect(await savePerson({}, form({ id: 'lmoreau', name: '[L. Moreau]', siteId: 'site_a' }))).toEqual({ error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." });
     expect(await setRequirement('lmoreau', 'sst', false)).toEqual({ error: "Salarié sorti de l'effectif." });
 
     expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Sortie annulée' }))).toEqual({ ok: true, id: 'lmoreau' });
@@ -247,8 +247,8 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
     actAs('Animateur QHSE', 'all');
     const db_ = await db();
     await db_.update(t.people).set({ matricule: 'M-0042' }).where(eq(t.people.id, 'rfontaine'));
-    expect(await savePerson({}, form({ id: 'rfontaine', name: '[R. Fontaine]', job: 'Magasinier cariste', service: 'Magasin', siteId: 'ville-b' }))).toEqual({ ok: true, id: 'rfontaine' });
-    expect(await person('rfontaine')).toMatchObject({ siteId: 'ville-b', job: 'Magasinier cariste', email: 'r.fontaine@epc2i.example', matricule: 'M-0042' });
+    expect(await savePerson({}, form({ id: 'rfontaine', name: '[R. Fontaine]', job: 'Magasinier cariste', service: 'Magasin', siteId: 'site_b' }))).toEqual({ ok: true, id: 'rfontaine' });
+    expect(await person('rfontaine')).toMatchObject({ siteId: 'site_b', job: 'Magasinier cariste', email: 'r.fontaine@epc2i.example', matricule: 'M-0042' });
     expect(await lastLog('person', 'rfontaine')).toMatchObject({ action: 'update', summary: 'Fiche salarié modifiée' });
     expect(await savePerson({}, form({ id: 'rfontaine', name: '[R. Fontaine]', siteId: 'inconnu' }))).toMatchObject({ fieldErrors: { siteId: 'Valeur non autorisée.' } });
   });

@@ -49,8 +49,8 @@ const READERS: Role[] = ['Chef de projet', 'Salarié'];
 const NON_APPROVERS: Role[] = ['Chef de service', 'Chef de projet', 'Salarié'];
 
 /** Personne imposée avec un périmètre restreint au site B ([J. Petit], rattaché au site B). */
-const restrictTo = (role: Role, site = 'ville-b') => {
-  auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role, siteIds: ['ville-b'] } };
+const restrictTo = (role: Role, site = 'site_b') => {
+  auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role, siteIds: ['site_b'] } };
   cookieJar.set('vigie_site', site);
 };
 const unrestrict = () => { auth.override = null; cookieJar.delete('vigie_site'); };
@@ -63,8 +63,8 @@ const unitAlerts = (todo: TodoItem[], unit: string) => todo.filter((x) => x.titl
 
 describe('TDB-01 : alertes des unités au responsable QHSE du site de l’unité', () => {
   it('deux sites, deux responsables ; poste vacant ; alertes du document unique', async () => {
-    await setLead('ville-b', 'sbenali');
-    actAs('Animateur QHSE', 'ville-b');
+    await setLead('site_b', 'sbenali');
+    actAs('Animateur QHSE', 'site_b');
     expect(await saveRisk({}, form({
       unitId: 'essais', hazard: 'Bruit des bancs', situation: 'Essais moteurs prolongés sans encoffrement', gravity: '4', probability: '3',
       existingMeasures: 'Bouchons d’oreille', residualGravity: '4', residualProbability: '3',
@@ -74,18 +74,18 @@ describe('TDB-01 : alertes des unités au responsable QHSE du site de l’unité
     let { todo } = await loadRiskSignals();
     const essais = unitAlerts(todo, "Zone d'essais");
     expect(essais.map((x) => x.title)).toContain("Zone d'essais · 1 risque ≥ 8 sans action de réduction");
-    essais.forEach((x) => expect(x).toMatchObject({ ownerIds: ['sbenali'], who: '[S. Benali]', siteId: 'ville-b' }));
+    essais.forEach((x) => expect(x).toMatchObject({ ownerIds: ['sbenali'], who: '[S. Benali]', siteId: 'site_b' }));
     const client = unitAlerts(todo, 'Mise en service chez le client');
-    expect(client).toEqual([expect.objectContaining({ title: 'Mise en service chez le client · 2 risques ≥ 8 sans action de réduction', ownerIds: ['clefevre'], siteId: 'ville-a', count: 2 })]);
+    expect(client).toEqual([expect.objectContaining({ title: 'Mise en service chez le client · 2 risques ≥ 8 sans action de réduction', ownerIds: ['clefevre'], siteId: 'site_a', count: 2 })]);
 
     // Poste vacant au site B : animateurs QHSE, « Responsable QHSE à désigner ».
-    await setLead('ville-b', null);
+    await setLead('site_b', null);
     ({ todo } = await loadRiskSignals());
     unitAlerts(todo, "Zone d'essais").forEach((x) => expect(x).toMatchObject({ ownerIds: ['clefevre'], who: VACANT_QHSE_LEAD }));
     expect(unitAlerts(todo, 'Mise en service chez le client')[0]).toMatchObject({ ownerIds: ['clefevre'], who: '[C. Lefèvre]' });
 
     // Alerte du document unique (siteId null) : validateur de la version et responsables des deux sites.
-    await setLead('ville-b', 'sbenali');
+    await setLead('site_b', 'sbenali');
     expect(await updateCurrentDuerpVersion({}, form({ version: '2026.1', validatedById: 'hmarchand', cseConsultedOn: '' }))).toMatchObject({ ok: true });
     ({ todo } = await loadRiskSignals());
     const cse = todo.find((x) => x.title === 'Consultation du CSE à renseigner · DUERP 2026.1');
@@ -104,7 +104,7 @@ describe('TDB-01 : alertes des unités au responsable QHSE du site de l’unité
 
     actAs('Animateur QHSE', 'all');
     expect(await updateCurrentDuerpVersion({}, form({ version: '2026.1', validatedById: 'hmarchand', cseConsultedOn: '2026-03-20' }))).toMatchObject({ ok: true });
-    await setLead('ville-b', 'clefevre');
+    await setLead('site_b', 'clefevre');
   });
 });
 
@@ -165,18 +165,18 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
       const json = JSON.stringify(print);
       OTHER_PEOPLE.forEach((name) => expect(json, name).not.toContain(name));
     }
-    actAs('Salarié', 'ville-b');
+    actAs('Salarié', 'site_b');
     const siteB = await loadDuerpPrint();
     expect(siteB.siteLabel).toContain('Ville B');
-    expect(siteB.units.every((u) => u.siteId === 'ville-b' || u.siteId === null)).toBe(true);
+    expect(siteB.units.every((u) => u.siteId === 'site_b' || u.siteId === null)).toBe(true);
   });
 
   it('saisie refusée au chef de projet et au salarié', async () => {
     const risk = { id: '1', unitId: 'montage', hazard: 'Manutention mécanique', situation: 'Levage', gravity: '4', probability: '2', existingMeasures: '', residualGravity: '4', residualProbability: '1' };
     for (const role of READERS) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await saveRisk({}, form(risk)), role).toEqual({ error: DENIED });
-      expect(await saveWorkUnit({}, form({ label: 'Nouvelle unité', siteId: 'ville-a' })), role).toEqual({ error: DENIED });
+      expect(await saveWorkUnit({}, form({ label: 'Nouvelle unité', siteId: 'site_a' })), role).toEqual({ error: DENIED });
       expect(await archiveRisk({}, form({ id: '1', reason: 'Test' })), role).toEqual({ error: DENIED });
       expect(await moveRisk(1, 'down'), role).toEqual({ error: DENIED });
       expect(await createDuerpVersion({}, form({ version: '2026.2', validatedById: 'hmarchand' })), role).toEqual({ error: APPROVERS_ONLY });
@@ -186,23 +186,23 @@ describe('DUE-01 : DUERP consultable par tous les rôles', () => {
   it('chef de projet : ses propres alertes du DUERP seulement (consultation)', async () => {
     actAs('Chef de projet', 'all');
     expect((await loadRiskSignals()).todo).toEqual([]);
-    await setLead('ville-a', 'edubois');
+    await setLead('site_a', 'edubois');
     const { todo, badge } = await loadRiskSignals();
     expect(todo.length).toBeGreaterThan(0);
     expect(todo.every((x) => x.ownerIds?.includes('edubois'))).toBe(true);
-    expect(todo.some((x) => x.siteId === 'ville-a')).toBe(true);
-    expect(todo.filter((x) => x.siteId !== null).every((x) => x.siteId === 'ville-a')).toBe(true);
+    expect(todo.some((x) => x.siteId === 'site_a')).toBe(true);
+    expect(todo.filter((x) => x.siteId !== null).every((x) => x.siteId === 'site_a')).toBe(true);
     expect(badge).toBe(todo.reduce((n, x) => n + (x.count ?? 1), 0));
-    await setLead('ville-a', 'clefevre');
+    await setLead('site_a', 'clefevre');
   });
 });
 
 describe('DUE-01 : registre des mises à disposition', () => {
-  const request = { requestedOn: '2026-10-01', requesterKind: 'cse', requesterName: 'CSE — réunion extraordinaire', siteId: 'ville-a', version: '2026.1', communicatedOn: '', channel: '', note: '' };
+  const request = { requestedOn: '2026-10-01', requesterKind: 'cse', requesterName: 'CSE — réunion extraordinaire', siteId: 'site_a', version: '2026.1', communicatedOn: '', channel: '', note: '' };
 
   it('droits : animateur QHSE et direction seulement, en lecture comme en saisie', async () => {
     for (const role of NON_APPROVERS) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await saveDuerpAccessRequest({}, form(request)), role).toEqual({ error: APPROVERS_ONLY });
       expect(await cancelDuerpAccessRequest({}, form({ id: '3', reason: 'Test' })), role).toEqual({ error: APPROVERS_ONLY });
       expect(await loadDuerpAccessRegister(), role).toEqual({ requests: [], versions: [], pending: 0 });
@@ -216,7 +216,7 @@ describe('DUE-01 : registre des mises à disposition', () => {
   });
 
   it('validation : version inconnue, dates, modalité', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveDuerpAccessRequest({}, form({ ...request, version: '1999.1' }))).toMatchObject({ fieldErrors: { version: 'Version inconnue.' } });
     expect(await saveDuerpAccessRequest({}, form({ ...request, communicatedOn: '2026-09-30', channel: 'papier' }))).toMatchObject({ fieldErrors: { communicatedOn: 'Antérieure à la demande.' } });
     expect(await saveDuerpAccessRequest({}, form({ ...request, requestedOn: '2026-10-10' }))).toMatchObject({ fieldErrors: { requestedOn: "Date postérieure à aujourd'hui." } });
@@ -226,8 +226,8 @@ describe('DUE-01 : registre des mises à disposition', () => {
   });
 
   it('site sélectionné et périmètre', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    expect(await saveDuerpAccessRequest({}, form({ ...request, siteId: 'ville-b' }))).toMatchObject({ error: OTHER_SITE });
+    actAs('Animateur QHSE', 'site_a');
+    expect(await saveDuerpAccessRequest({}, form({ ...request, siteId: 'site_b' }))).toMatchObject({ error: OTHER_SITE });
 
     // Animateur QHSE au périmètre restreint au site B : ni lecture ni annulation d'une demande du site A.
     restrictTo('Animateur QHSE');
@@ -241,7 +241,7 @@ describe('DUE-01 : registre des mises à disposition', () => {
   });
 
   it('journal : création, modification détaillée, annulation motivée ; demande annulée figée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const created = await saveDuerpAccessRequest({}, form(request));
     expect(created).toMatchObject({ ok: true });
     const id = created.id!;
@@ -275,7 +275,7 @@ describe('DUE-01 : registre des mises à disposition', () => {
     const access = (await loadRiskSignals()).todo.filter((x) => x.key?.startsWith('duerp-access|'));
     expect(access).toEqual([expect.objectContaining({
       title: "Demande d'accès au DUERP à traiter · Ancien salarié", href: '/risques?registre=1', key: 'duerp-access|3',
-      siteId: 'ville-a', tone: 'warn', date: '2026-10-05', ownerIds: ['clefevre'],
+      siteId: 'site_a', tone: 'warn', date: '2026-10-05', ownerIds: ['clefevre'],
     })]);
     expect(JSON.stringify(access)).not.toContain('Vasseur');
     for (const role of NON_APPROVERS) {
@@ -335,7 +335,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     expect(await saveProgramAction({}, line(2026, 'A-215'))).toEqual({ error: 'Action absente du programme.' });
 
     // A-203 (site B) : refusée avec le site A sélectionné, admise sur « Tous les sites ».
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await removeProgramAction({}, line(2026, 'A-203'))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'all');
     expect(await removeProgramAction({}, line(2026, 'A-203'))).toEqual({ ok: true, id: 'A-203' });
@@ -353,7 +353,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     expect(draft.candidateCosts['A-203']).toBe(12000);
     expect(Object.hasOwn(draft.candidateCosts, 'A-215')).toBe(false); // sans coût estimé
     expect(Object.keys(draft.candidateCosts).every((id) => draft.candidates.some(([c]) => c === id))).toBe(true);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await addProgramAction({}, line(2026, 'A-203', { estimatedCost: '12000' }))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'all');
     expect(await addProgramAction({}, line(2026, 'A-203', { estimatedCost: '12000', resources: 'Électricien ATEX externe' }))).toEqual({ ok: true, id: 'A-203' });
@@ -394,7 +394,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     expect(row.snapshot).toMatchObject({ takenOn: '2026-10-09', takenBy: '[C. Lefèvre]', duerpVersion: '2026.1', cseConsultedOn: '2026-10-08' });
     const snapshot = row.snapshot as { lines: { actionId: string; siteId: string | null; pilot: string; estimatedCost: number | null; risks: unknown[] }[] };
     expect(snapshot.lines.map((l) => l.actionId).sort()).toEqual(['A-201', 'A-203', 'A-205', 'A-214']);
-    expect(snapshot.lines.find((l) => l.actionId === 'A-203')).toMatchObject({ siteId: 'ville-b', pilot: '[C. Lefèvre]', estimatedCost: 12500.5 });
+    expect(snapshot.lines.find((l) => l.actionId === 'A-203')).toMatchObject({ siteId: 'site_b', pilot: '[C. Lefèvre]', estimatedCost: 12500.5 });
     expect(snapshot.lines.every((l) => l.risks.length > 0)).toBe(true);
     expect(await lastLog('prevention_program', '2026')).toMatchObject({ action: 'freeze', summary: 'Programme 2026 arrêté · CSE consulté le 08/10/2026 · 4 actions' });
 
@@ -412,7 +412,7 @@ describe('DUE-02 : programme annuel de prévention (PAPRIPACT)', () => {
     const b = await loadPreventionProgram(2026);
     expect(b.program).toMatchObject({ state: 'frozen', cseConsultedOn: '2026-10-08', frozenBy: '[C. Lefèvre]' });
     expect(b.lines.map((l) => l.actionId)).toEqual(['A-203']);
-    expect(b.lines.every((l) => l.siteId === 'ville-b' || l.siteId === null)).toBe(true);
+    expect(b.lines.every((l) => l.siteId === 'site_b' || l.siteId === null)).toBe(true);
     expect(b.hiddenCount).toBe(3);
     expect(b.lines[0]).toMatchObject({ pilot: '[C. Lefèvre]', status: 'En retard', frozenStatus: 'En retard' });
     expect(b.candidates).toEqual([]);

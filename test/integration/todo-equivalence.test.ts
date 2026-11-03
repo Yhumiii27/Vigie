@@ -10,7 +10,7 @@ import { actAs, freezeClock, freshDemoDatabase } from '../helpers';
 // QUA-17 : les échéances et les badges ne changent pas avec l'optimisation de leurs chargements (filtrage SQL par périmètre
 // et par site, chargements partagés mémorisés par requête, index). Référence enregistrée avant l'optimisation
 // (test/fixtures/todo-golden.json, jeu de démonstration au 09/10/2026) : pour chaque rôle et chaque site sélectionné
-// (ville-a, ville-b, « Tous les sites »), toutes les échéances du périmètre (loadTodo), les échéances visibles
+// (site_a, site_b, « Tous les sites »), toutes les échéances du périmètre (loadTodo), les échéances visibles
 // (loadVisibleTodo) et les badges (loadCounters), par empreinte SHA-256 de leur JSON (avec le nombre d'échéances et les badges
 // en clair). VIGIE_GOLDEN_UPDATE=1 la réécrit (changement volontaire, à justifier).
 
@@ -24,7 +24,7 @@ describe('Échéances et badges : équivalence (QUA-17)', () => {
   it('résultats identiques à la référence, par rôle et par site', async () => {
     const out: Record<string, unknown> = {};
     for (const role of ROLE_KEYS) {
-      for (const site of ['ville-a', 'ville-b', 'all']) {
+      for (const site of ['site_a', 'site_b', 'all']) {
         actAs(role, site);
         const [todo, visible, counters] = [await loadTodo(), await loadVisibleTodo(), await loadCounters()];
         out[`${role}|${site}`] = { todo: todo.length, visible: visible.length, badges: counters.badges, todoHash: hash(todo), visibleHash: hash(visible) };

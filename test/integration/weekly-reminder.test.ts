@@ -46,7 +46,7 @@ const reminderOf = async () => (await loadNotifications()).find((n) => n.family 
 
 describe('rappel du mercredi dans la cloche', () => {
   it('mercredi 14/10 : clé de la semaine, lien, date, nombres (QHSE : ses propres actions seulement, tous sites)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { n, m, rows } = await expected('clefevre', '2026-10-14');
     expect(n).toBeGreaterThan(0);
     expect(m).toBeGreaterThan(0);
@@ -61,7 +61,7 @@ describe('rappel du mercredi dans la cloche', () => {
   });
 
   it('Terminées comprises, Reportées exclues (Chef de service)', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const { n, m, rows } = await expected('sbenali', '2026-10-14');
     expect(rows.some((a) => a.status === 'terminee')).toBe(true);
     const reported = await (await getDb()).select({ id: t.actions.id }).from(t.actions).where(and(eq(t.actions.pilotId, 'sbenali'), eq(t.actions.status, 'reportee')));
@@ -70,20 +70,20 @@ describe('rappel du mercredi dans la cloche', () => {
   });
 
   it('actions sur un autre site que le site sélectionné ni du périmètre : comptées (D19)', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     const { n } = await expected('sbenali', '2026-10-14');
     expect((await reminderOf())?.title).toMatch(new RegExp(`^Vos actions QSE en cours : ${n},`));
   });
 
   it('Salarié : son rappel', async () => {
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const { n, m } = await expected('tnguyen', '2026-10-14');
     expect(n).toBeGreaterThan(0);
     expect(await reminderOf()).toMatchObject({ key: 'rappel-actions|2026-W42', title: `Vos actions QSE en cours : ${n}, dont ${m} en retard`, tone: m ? 'warn' : 'accent' });
   });
 
   it('aucune action ouverte ni Terminée (Vérifiées, Reportées, Abandonnées seulement) : aucun rappel', async () => {
-    actAs('Direction', 'ville-a');
+    actAs('Direction', 'site_a');
     expect((await expected('hmarchand', '2026-10-14')).n).toBe(0);
     expect(await reminderOf()).toBeUndefined();
     // Une action reportée seulement : toujours rien.
@@ -96,7 +96,7 @@ describe('rappel du mercredi dans la cloche', () => {
   });
 
   it('visible vendredi 16/10 et mardi 20/10 (même clé, daté du 14/10) tant qu’il n’est pas lu ; lu → masqué ; mercredi 21/10 → W43', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     for (const day of ['2026-10-16', '2026-10-20']) {
       setToday(day);
       expect(await reminderOf(), day).toMatchObject({ key: 'rappel-actions|2026-W42', date: '2026-10-14' });

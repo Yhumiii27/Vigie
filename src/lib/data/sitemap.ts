@@ -1,6 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { and, asc, count, eq, isNotNull, isNull, ne } from 'drizzle-orm';
+import { loadProjectIndex } from '@/lib/foreign/keystone';
+import { projectText } from '@/lib/foreign/labels';
 import { getDb, schema as t, type Db } from '@/db';
 import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/lib/rules/prevention';
 import {
@@ -28,7 +30,7 @@ type Rows = Awaited<ReturnType<typeof fetchRows>>;
 type Person = { name: string };
 
 async function fetchRows(db: Db) {
-  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents] = await Promise.all([
+  const [sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents, projects] = await Promise.all([
     // Sites actifs uniquement (un site archivé n'a plus de carte ni de coactivité).
     db.select().from(t.sites).where(isNull(t.sites.archivedAt)).orderBy(asc(t.sites.sort)),
     db.select().from(t.siteMaps),
@@ -45,8 +47,10 @@ async function fetchRows(db: Db) {
     db.select().from(t.coactivityControls).where(isNull(t.coactivityControls.cancelledAt)).orderBy(asc(t.coactivityControls.id)),
     // EVT-19 : événements rattachés à chaque zone (avertissement avant l'archivage ; maladies professionnelles jamais rattachées).
     db.select({ zoneId: t.events.zoneId, n: count() }).from(t.events).where(and(isNotNull(t.events.zoneId), ne(t.events.type, 'MP'))).groupBy(t.events.zoneId),
+    // D02 : projets de keystone.pub_projets (affichage « code · client »).
+    loadProjectIndex(),
   ]);
-  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents };
+  return { sites, maps, zones, routes, activities, contractors, plans, permits, mapFiles, controls, zoneEvents, projects };
 }
 
 /** Paires d'activités maîtrisées d'un site (clés de detectConflicts, PRV-10). */
@@ -128,7 +132,8 @@ function activityViews(rows: Rows, siteId: string, people: Map<string, Person>, 
       permitType: a.permitId ? permits.get(a.permitId)?.type ?? null : null,
       planPermits: (a.preventionPlanId ? planPermits.get(a.preventionPlanId) ?? [] : []).filter((p) => p.id !== a.permitId),
       dangerousWork: plan?.dangerousWork ?? false,
-      keystoneProject: a.keystoneProject,
+      keystoneProject: projectText(a.keystoneProjectCode, a.keystoneProject, rows.projects),
+      keystoneProjectCode: a.keystoneProjectCode,
       zoneId: a.zoneId,
       geometry: parseGeometry(a.geometry),
       startOn: a.startOn,
@@ -191,7 +196,7 @@ function candidates(rows: Rows, siteId: string, activities: ActivityView[], now:
       const name = contractor.get(p.contractorId) ?? p.contractorId;
       return {
         kind: 'plan', id: p.id, title: p.title, location: p.location, contractorId: p.contractorId, contractor: name, ownerId: p.ownerId,
-        startOn: p.startOn, endOn: p.endOn, hours: null, keystoneProject: p.keystoneProject, preventionPlanId: p.id, permitId: null, permitType: null,
+        startOn: p.startOn, endOn: p.endOn, hours: null, keystoneProject: projectText(p.keystoneProjectCode, p.keystoneProject, rows.projects), keystoneProjectCode: p.keystoneProjectCode, preventionPlanId: p.id, permitId: null, permitType: null,
         label: `${p.id} · ${name}`,
       };
     });
@@ -206,7 +211,7 @@ function candidates(rows: Rows, siteId: string, activities: ActivityView[], now:
       return {
         kind: 'permit' as const, id: p.id, title: p.description, location: p.location, contractorId: p.contractorId, contractor: name, ownerId: p.issuerId,
         startOn: from.slice(0, 10), endOn: to.slice(0, 10), hours: `${hourLabel(from.slice(11, 16))} – ${hourLabel(to.slice(11, 16))}`,
-        keystoneProject: p.keystoneProject, preventionPlanId: p.preventionPlanId, permitId: p.id, permitType: p.type,
+        keystoneProject: projectText(p.keystoneProjectCode, p.keystoneProject, rows.projects), keystoneProjectCode: p.keystoneProjectCode, preventionPlanId: p.preventionPlanId, permitId: p.id, permitType: p.type,
         label: `${p.id} · ${PERMIT_TYPES[type].label}${name ? ` · ${name}` : ' · intervention interne'}`,
       };
     })
@@ -266,6 +271,7 @@ export async function loadSitemap(params: { site?: string; plan?: string; permit
       .map((c): Choice => [c.id, `${c.name} — ${c.trade}`]),
     people: options.people,
     projects: options.projects,
+    projectsMessage: options.projectsMessage,
     plans: sitePlans.map((p): Choice => [p.id, `${p.id} · ${contractorName.get(p.contractorId) ?? p.contractorId} — ${p.title}`]),
     planContractor: Object.fromEntries(sitePlans.map((p) => [p.id, p.contractorId])),
     permits: sitePermits.map((p): Choice => [p.id, `${p.id} · ${PERMIT_TYPES[p.type === 'essai' ? 'essai' : 'feu'].label} — ${p.location}`]),

@@ -1,0 +1,5 @@
+{
+  "source": "Keystone origin/main c585f12, drizzle/0035_share.sql (contrat D16 v1)",
+  "readers": ["vigie_app"],
+  "columns": [["id", "uuid"], ["name", "text"], ["x3_code", "text"], ["is_internal", "boolean"]]
+}

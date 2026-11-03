@@ -1,6 +1,8 @@
 import 'server-only';
 import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { schema as t } from '@/db';
+import { loadProjectIndex, loadSuppliers } from '@/lib/foreign/keystone';
+import { projectText, unavailableMessage } from '@/lib/foreign/labels';
 import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
@@ -82,7 +84,10 @@ export type PlanView = {
   period: string;
   estimatedHours: number;
   dangerousWork: boolean;
+  /** Projet Keystone affiché (« code · client » d'après keystone.pub_projets, D02 ; ancien libellé d'une fiche antérieure). */
   keystoneProject: string | null;
+  /** Code du projet (keystone.pub_projets.code) : valeur du choix du formulaire. */
+  keystoneProjectCode: string | null;
   inspectionOn: string | null;
   inspectionDone: boolean;
   interferenceRisks: string;
@@ -185,7 +190,9 @@ export type PermitView = {
   planGap: boolean;
   /** Écart compté avec le plan rattaché, lui-même en écart (même intervention) : référence du plan, null sinon. */
   planGapWith: string | null;
+  /** Projet Keystone affiché et code (D02), comme pour un plan. */
   keystoneProject: string | null;
+  keystoneProjectCode: string | null;
   /** Dates-heures locales (Paris) « AAAA-MM-JJTHH:mm ». */
   validFrom: string;
   validTo: string;
@@ -243,6 +250,9 @@ export type ContractorView = {
   permitList: { id: string; typeLabel: string; icon: string; validity: string; stateLabel: string; tone: Tone }[];
   /** Motif empêchant l'archivage (plans ou permis en cours sur un site quelconque), null sinon. */
   archiveBlock: string | null;
+  /** D16 : fournisseur Keystone rattaché (keystone.pub_fournisseurs.id) et son nom (identifiant si la source est indisponible). */
+  supplierId: string | null;
+  supplier: string | null;
 };
 
 /** Instant → « 31/03/2026 » (jour à Paris). */
@@ -331,7 +341,7 @@ export async function loadPrevention() {
   const permitIds = permits.map((p) => p.id);
   const importIds = plans.map((p) => p.importedFromId).filter((id): id is string => !!id);
 
-  const [preventionActions, attachments, imported, permitLogs, procedure] = await Promise.all([
+  const [preventionActions, attachments, imported, permitLogs, procedure, projects, suppliers] = await Promise.all([
     // Actions reprises (bases antérieures au 15/10/2026), abandonnées comprises : elles restent rattachées (un plan qui en
     // a une n'est plus un brouillon supprimable). Source par les colonnes posées à la création (ACT-01).
     planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
@@ -341,7 +351,10 @@ export async function loadPrevention() {
     // permis reste chargé ici, il porte la date de délivrance affichée (PRV-04).
     loadChangeLogs('permit', permitIds),
     loadProcedure(db),
+    loadProjectIndex(),
+    loadSuppliers(),
   ]);
+  const supplierOf = new Map(suppliers.ok ? suppliers.rows.map((x) => [x.id, x.name]) : []);
   const linkedActions = preventionActions.filter((a) => a.status !== 'abandonnee');
   const importedIds = new Set(imported.map((f) => f.id));
   const actionsOf = (key: 'preventionPlanId' | 'permitId', id: string) => linkedActions
@@ -402,7 +415,8 @@ export async function loadPrevention() {
       planBlocker: p.status === 'demande' ? planIssue : null,
       planGap: gaps.permitGaps.has(p.id),
       planGapWith: gaps.gapWith.get(p.id) ?? null,
-      keystoneProject: p.keystoneProject,
+      keystoneProject: projectText(p.keystoneProjectCode, p.keystoneProject, projects),
+      keystoneProjectCode: p.keystoneProjectCode,
       validFrom: from,
       validTo: to,
       watchUntil: watch,
@@ -468,7 +482,8 @@ export async function loadPrevention() {
       period: periodLabel(p.startOn, p.endOn),
       estimatedHours: p.estimatedHours,
       dangerousWork: p.dangerousWork,
-      keystoneProject: p.keystoneProject,
+      keystoneProject: projectText(p.keystoneProjectCode, p.keystoneProject, projects),
+      keystoneProjectCode: p.keystoneProjectCode,
       inspectionOn: p.inspectionOn,
       inspectionDone: inspectionDone(p, now),
       interferenceRisks: p.interferenceRisks,
@@ -554,6 +569,8 @@ export async function loadPrevention() {
     const archivedBy = name(c.archivedById);
     return {
       id: c.id,
+      supplierId: c.supplierId,
+      supplier: c.supplierId ? supplierOf.get(c.supplierId) ?? (suppliers.ok ? `${c.supplierId} (absent de Keystone)` : c.supplierId) : null,
       version: contractorVersions.get(c.id) ?? '0',
       name: c.name,
       trade: c.trade,
@@ -646,6 +663,11 @@ export async function loadPrevention() {
     plans: planViews,
     permits: permitViews,
     contractors: contractorViews,
+    /** D16 : fournisseurs de Keystone proposés à une entreprise extérieure (sans les ateliers internes) ; message si indisponibles. */
+    suppliers: {
+      options: suppliers.ok ? suppliers.rows.filter((x) => !x.internal).map((x): Option => [x.id, x.x3Code ? `${x.name} (${x.x3Code})` : x.name]) : [],
+      message: suppliers.ok ? null : unavailableMessage('suppliers'),
+    },
     kpis,
     /** Interventions en cours sans plan signé (plans). */
     alerts: missing,

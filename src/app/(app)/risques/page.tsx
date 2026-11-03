@@ -36,7 +36,7 @@ import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url
 export const metadata: Metadata = { title: SCREENS.risks.title };
 
 /** Rôles en consultation : aucune liste de choix (ni liste du personnel) transmise à la page. */
-const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites'> = { people: [], sites: [] };
+const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites' | 'projects' | 'projectsMessage'> = { people: [], sites: [], projects: [], projectsMessage: null };
 
 export default async function RisksPage({ searchParams }: PageProps<'/risques'>) {
   const session = await guard('risks');
@@ -262,7 +262,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}:${overview}:${emergency}:${study}`} />}
           {study && studies ? (
             <ProcessSafetyPanel key={deepStudy?.id ?? 'etudes'} rows={studies.studies} cancelled={studies.cancelled} canManage={approve}
-              options={approve ? { sites: options.sites, people: options.people } : { sites: [], people: [] }} actionOptions={actionOptions} today={today()} showSite={!viewSite}
+              options={approve ? { sites: options.sites, people: options.people, projects: options.projects, projectsMessage: options.projectsMessage } : { sites: [], people: [], projects: [], projectsMessage: null }} actionOptions={actionOptions} today={today()} showSite={!viewSite}
               versions={studies.versions} defaultSite={defaultSiteId} initialId={deepStudy?.id} closeHref={hrefWith('/risques', params, {})} />
           ) : emergency && emergencies ? (
             <EmergencyPanel key={deepSituation?.id ?? 'urgences'} rows={emergencies.situations} archived={emergencies.archived} canManage={edit} canApprove={approve}

@@ -61,7 +61,8 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   const [watchTouched, setWatchTouched] = useState(!!permit?.watchUntil);
   const presets = PERMIT_TYPES[type].checklist;
   const checkedCount = items.filter((i) => i.checked).length;
-  const projects = withCurrent(options.projects, permit?.keystoneProject, null, 'start');
+  // D02 : projet de la fiche absent de keystone.pub_projets (ou source indisponible) gardé comme choix.
+  const projects = withCurrent(options.projects, permit?.keystoneProjectCode, permit?.keystoneProject, 'start');
 
   // Plan de prévention : plans de l'entreprise couvrant la validité, selon la règle du site.
   const rule = ruleOf(options, siteId);
@@ -163,8 +164,8 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
           <Select name="preventionPlanId" options={planOptions} value={planId} onChange={(e) => choosePlan(e.target.value)}
             placeholder={contractorId && !candidates.length ? 'Aucun plan couvrant ces dates' : 'Aucun'} />
         </Field>
-        <Field name="keystoneProject" label="Projet Keystone">
-          <Select name="keystoneProject" options={projects} defaultValue={permit?.keystoneProject ?? ''} placeholder="Aucun projet" />
+        <Field name="keystoneProjectCode" label="Projet Keystone" hint={options.projectsMessage ?? (permit?.keystoneProject && !permit.keystoneProjectCode ? `Ancien libellé : ${permit.keystoneProject}` : undefined)}>
+          <Select name="keystoneProjectCode" options={projects} defaultValue={permit?.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
         </Field>
       </FormRow>
       {stale && (

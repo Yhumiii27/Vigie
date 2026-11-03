@@ -249,6 +249,10 @@ export function matchByName<T extends { name: string }>(raw: string, list: T[]):
 export function matchProject(raw: string, options: readonly (readonly [string, string])[]): string | null {
   const text = squash(raw);
   if (!text) return null;
+  // Code de keystone.pub_projets (valeur du choix, D02) écrit tel quel dans le formulaire : « HLT-026 », « K-2025-042 ».
+  const upper = text.toUpperCase();
+  const exact = options.find(([v]) => new RegExp(`(^|[^A-Z0-9])${v.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Z0-9]|$)`).test(upper));
+  if (exact) return exact[0];
   // Référence « K-2025-042 » (préfixe K), ou « 2025-042 » sans préfixe : numéro à 3 chiffres qui ne se prolonge pas
   // en date (« 2026-10-12 » n'est pas une référence d'affaire).
   const ref = /\bK\s*-?\s*(\d{4})\s*[-/ ]\s*(\d{2,3})(?![\d]|[-/.]\d)/i.exec(text)

@@ -7,7 +7,7 @@ import { readReportToken, reportPostStatus, reportTokenMatches, reportTokenPath,
 // anonymes : src/lib/report-guard.test.ts.
 
 const SECRET = 'secret-des-qr-codes-de-test-0123456789';
-const ref = { siteId: 'ville-a', zoneId: 12, version: 1 };
+const ref = { siteId: 'site_a', zoneId: 12, version: 1 };
 
 describe('jeton de poste', () => {
   it('signé, lisible, accepté par le contrôle de forme du proxy', () => {
@@ -22,7 +22,7 @@ describe('jeton de poste', () => {
   it('refusé pour un autre secret, site, poste ou version', () => {
     const token = signReportToken(SECRET, ref);
     expect(reportTokenMatches('autre-secret-des-qr-codes-0123456789', token, ref)).toBe(false);
-    expect(reportTokenMatches(SECRET, token, { ...ref, siteId: 'ville-b' })).toBe(false);
+    expect(reportTokenMatches(SECRET, token, { ...ref, siteId: 'site_b' })).toBe(false);
     expect(reportTokenMatches(SECRET, token, { ...ref, zoneId: 13 })).toBe(false);
     expect(reportTokenMatches(SECRET, token, { ...ref, version: 2 })).toBe(false);
     // Signature recopiée sur un autre poste ou une autre version.

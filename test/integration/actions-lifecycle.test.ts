@@ -88,7 +88,7 @@ describe('transitions de moveAction (step, report, resume, finish, unfinish)', (
   });
 
   it('action d’un autre site que le site sélectionné : refusée, rien écrit', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const logs = (await changeLog('action', 'A-T10')).length;
     expect(await move('A-T10', 'p80', 'p60')).toEqual({ error: OTHER_SITE });
     expect(await abandonAction({}, form({ id: 'A-T10', from: 'p80', reason: 'Test' }))).toEqual({ error: OTHER_SITE });

@@ -10,7 +10,7 @@ import {
   CONTROL_HORIZON_DAYS, CONTROL_RESULTS, REQUIREMENT_EVAL, REQUIREMENT_NEEDS_ACTION, REQUIREMENT_REVIEW_MONTHS, TODO_HORIZON_DAYS,
   SAFETY_NOTICE_KINDS, isBlockingControlResult, requirementReviewMonths, type ControlResult, type SafetyNoticeKind, type TodoItem, type Tone,
 } from '../domain';
-import { actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, lcfirst, loadActionRows, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
+import { actionView, certificationStatus, controlStatus, lcfirst, loadActionRows, loadControls, loadPeople, loadSiteRows, requirementDue } from '../queries';
 import { canReadAction } from '../action-rules';
 import { currentSiteId, getSession, inPerimeter, inSite, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
@@ -85,23 +85,14 @@ const loadCertificationIndicators = cache(async (now: string): Promise<Map<strin
 
 // ─── Projets Keystone concernés (veille, tableau de bord) ───────────────────
 
-type ProjectRow = typeof t.keystoneProjects.$inferSelect;
-type ProjectReq = { dueOn: string | null; affectsProjects: boolean; keystoneProjects: number | null };
+type ProjectReq = { keystoneProjects: number | null };
 
 /**
- * Projets Keystone concernés par une exigence : calculés (livraison après la date d'application) pour une exigence
- * marquée `affectsProjects` ; le nombre saisi (`keystoneProjects`) reste une surcharge. count = null : non applicable.
+ * Projets Keystone concernés par une exigence : nombre saisi dans la fiche (`keystoneProjects`). D02 de M-02 : la table
+ * keystone_projects est supprimée et keystone.pub_projets ne publie pas de date de livraison ; le calcul « livrés après la
+ * date d'application » attend la réponse CV-11 (lecture d'un jalon de Keystone). count = null : non renseigné.
  */
-export function projectsOf(r: ProjectReq, all: ProjectRow[]) {
-  const list = concernedProjects(r, all).map((p) => ({ id: p.id, client: p.client, title: p.title, delivery: fmtDate(p.deliveryOn!) }));
-  return { count: concernedCount(r, all), manual: r.keystoneProjects != null, computed: r.affectsProjects && !!r.dueOn ? list.length : null, list };
-}
-
-/** Projets Keystone concernés par une exigence (lecture de keystone_projects), pour le tableau de bord. */
-export async function requirementProjects(r: ProjectReq) {
-  const db = await getDb();
-  return projectsOf(r, await db.select().from(t.keystoneProjects));
-}
+export const projectsOf = (r: ProjectReq) => ({ count: r.keystoneProjects ?? null, manual: r.keystoneProjects != null });
 
 /**
  * Exigences réglementaires (toute l'entreprise, archivées comprises) et contrôles périodiques du site sélectionné
@@ -111,13 +102,12 @@ export async function loadWatch() {
   const db = await getDb();
   const now = today();
   const horizon = addDays(now, TODO_HORIZON_DAYS);
-  const [session, people, reqs, allControls, sites, projects, site, duerp, prevention, waste, certs] = await Promise.all([
+  const [session, people, reqs, allControls, sites, site, duerp, prevention, waste, certs] = await Promise.all([
     getSession(),
     loadPeople(),
     db.select().from(t.requirements).orderBy(asc(t.requirements.sort), asc(t.requirements.id)),
     db.select().from(t.controls).orderBy(asc(t.controls.sort), asc(t.controls.id)),
     loadSiteRows(),
-    db.select().from(t.keystoneProjects).orderBy(asc(t.keystoneProjects.deliveryOn)),
     currentSiteId(),
     loadDuerpStatus(),
     loadPreventionCompliance(),
@@ -233,7 +223,7 @@ export async function loadWatch() {
       version: reqVersions.get(String(r.id)) ?? '0',
       loopBack: requirementLoopBack({ evaluation: r.evaluation, actionId: r.actionId, archived }, r.actionId ? linkedStatus.get(r.actionId) : null),
       action: actionOf(r.actionId),
-      projects: projectsOf(r, projects),
+      projects: projectsOf(r),
       controls: linked,
       // Suggestion calculée, jamais stockée : l'évaluation reste un jugement du pilote.
       suggestGap: !archived && (!!late || !!indicator?.gap) && r.evaluation !== 'ecart',

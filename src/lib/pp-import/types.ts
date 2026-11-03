@@ -57,6 +57,8 @@ export type ImportScreenData = {
   siteLocked: boolean;
   people: Option[];
   projects: Option[];
+  /** Projets de Keystone indisponibles (D02) : message affiché à la place du choix. */
+  projectsMessage: string | null;
   today: string;
   currentUserId: string;
   /** Lecture des scans par l'API Claude. */

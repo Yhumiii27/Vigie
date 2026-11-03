@@ -31,10 +31,10 @@ beforeAll(async () => {
   Object.assign(process.env, ENTRA_ENV);
   resetConfig();
   const later = { dueOn: '2027-03-31', initialDueOn: '2027-03-31', verifyDueOn: '2027-04-30' };
-  await insertAction('A-T80', { siteId: 'ville-b', pilotId: 'tnguyen', ...later });
-  await insertAction('A-T81', { siteId: 'ville-b', pilotId: 'sbenali', status: 'terminee', doneOn: '2026-10-01', ...later });
-  await insertAction('A-T82', { siteId: 'ville-a', pilotId: 'sbenali', status: 'terminee', doneOn: '2026-10-01', ...later });
-  await insertAction('A-T83', { siteId: 'ville-b', pilotId: 'sbenali', status: 'abandonnee', cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Test', ...later });
+  await insertAction('A-T80', { siteId: 'site_b', pilotId: 'tnguyen', ...later });
+  await insertAction('A-T81', { siteId: 'site_b', pilotId: 'sbenali', status: 'terminee', doneOn: '2026-10-01', ...later });
+  await insertAction('A-T82', { siteId: 'site_a', pilotId: 'sbenali', status: 'terminee', doneOn: '2026-10-01', ...later });
+  await insertAction('A-T83', { siteId: 'site_b', pilotId: 'sbenali', status: 'abandonnee', cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Test', ...later });
 });
 afterAll(() => {
   for (const k of Object.keys(ENTRA_ENV)) delete process.env[k];
@@ -52,7 +52,7 @@ async function actAsEntra(pid: string, role: Role, sites: string[] | null, site:
 
 describe('responsable restreint au site A, action du site B (D19)', () => {
   it('Salarié : commente et joint ses preuves, sans transition', async () => {
-    await actAsEntra('tnguyen', 'Salarié', ['ville-a'], 'ville-a');
+    await actAsEntra('tnguyen', 'Salarié', ['site_a'], 'site_a');
     expect(await addActionComment({}, formWith({ actionId: 'A-T80', body: 'Fait ce matin.' }, { files: [file('photo.jpg', 'image/jpeg', 'jpg')] }))).toEqual({ ok: true, id: 'A-T80' });
     expect(await addActionFiles(formWith({ actionId: 'A-T80' }, { files: [file('pv.pdf')] }))).toEqual({ count: 1 });
     expect(await moveAction({}, form({ id: 'A-T80', from: 'a_faire', to: 'p20' }))).toEqual({ error: APPROVERS_ONLY });
@@ -61,7 +61,7 @@ describe('responsable restreint au site A, action du site B (D19)', () => {
   });
 
   it('Chef de service : commente son action du site B, pas celle d’un autre', async () => {
-    await actAsEntra('sbenali', 'Chef de service', ['ville-a'], 'ville-a');
+    await actAsEntra('sbenali', 'Chef de service', ['site_a'], 'site_a');
     expect(await addActionComment({}, form({ actionId: 'A-T81', body: 'Contrôle fait.' }))).toEqual({ ok: true, id: 'A-T81' });
     expect(await addActionComment({}, form({ actionId: 'A-T80', body: 'Lecture' }))).toEqual({ error: 'Votre rôle ne permet pas cette modification.' });
   });
@@ -72,7 +72,7 @@ describe('QHSE restreint au site A : toute écriture sur une action du site B re
     const db = await getDb();
     const [comment] = await db.select().from(t.actionComments).where(eq(t.actionComments.actionId, 'A-T80'));
     const [proof] = await db.select().from(t.attachments).where(eq(t.attachments.entityId, 'A-T80'));
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const results = [
       await saveAction({}, form(editFields(await actionRow('A-T80'), { priority: 'urgent' }))),
       await moveAction({}, form({ id: 'A-T80', from: 'a_faire', to: 'p20' })),
@@ -88,14 +88,14 @@ describe('QHSE restreint au site A : toute écriture sur une action du site B re
     ];
     for (const r of results) {
       expect(r).toEqual({ error: OUTSIDE });
-      expect(JSON.stringify(r)).not.toMatch(/ville-b|Ville B/);
+      expect(JSON.stringify(r)).not.toMatch(/site_b|Ville B/);
     }
     expect(await actionRow('A-T80')).toMatchObject({ status: 'a_faire', priority: 'moyen_terme' });
     expect((await actionRow('A-T81')).status).toBe('terminee');
   });
 
   it('avancement et état d’une action du site B jamais révélés : refus de périmètre avant tout autre contrôle', async () => {
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const results = [
       // Avancement affiché périmé (A-T80 est À faire) : pas de « l'action a changé entre-temps ».
       await moveAction({}, form({ id: 'A-T80', from: 'p40', to: 'p60' })),
@@ -113,23 +113,23 @@ describe('QHSE restreint au site A : toute écriture sur une action du site B re
   });
 
   it('création depuis un élément du site B (hors périmètre) refusée sans nommer le site', async () => {
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const later = { dueOn: '2027-03-31', verifyDueOn: '2027-04-30' };
-    const r = await saveAction({}, form({ ...NEW_ACTION, ...later, source: 'evenement', link: 'event:EV-2026-129', originRef: '', siteId: 'ville-a' }));
+    const r = await saveAction({}, form({ ...NEW_ACTION, ...later, source: 'evenement', link: 'event:EV-2026-129', originRef: '', siteId: 'site_a' }));
     expect(r).toMatchObject({ error: OUTSIDE, fieldErrors: { link: OUTSIDE } });
-    expect(JSON.stringify(r)).not.toMatch(/ville-b|Ville B/);
+    expect(JSON.stringify(r)).not.toMatch(/site_b|Ville B/);
   });
 
   it('création et action de suite sur le site B refusées', async () => {
-    await actAsEntra('clefevre', 'Animateur QHSE', ['ville-a'], 'ville-a');
+    await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
     const later = { dueOn: '2027-03-31', verifyDueOn: '2027-04-30' };
-    expect(await saveAction({}, form({ ...NEW_ACTION, ...later, siteId: 'ville-b' }))).toMatchObject({ error: OUTSIDE });
-    const ne = { ne_detail: 'Suite', ne_pilotId: 'sbenali', ne_priority: 'urgent', ne_dueOn: '2027-03-31', ne_verifyDueOn: '2027-04-30', ne_domain: 'securite', ne_siteId: 'ville-b' };
+    expect(await saveAction({}, form({ ...NEW_ACTION, ...later, siteId: 'site_b' }))).toMatchObject({ error: OUTSIDE });
+    const ne = { ne_detail: 'Suite', ne_pilotId: 'sbenali', ne_priority: 'urgent', ne_dueOn: '2027-03-31', ne_verifyDueOn: '2027-04-30', ne_domain: 'securite', ne_siteId: 'site_b' };
     expect(await verifyAction({}, form({ id: 'A-T82', from: 'terminee', verifyMethod: 'ecrit', efficacyNote: 'Non', effective: 'non_efficace', ...ne }))).toMatchObject({
       error: OUTSIDE, fieldErrors: { ne_siteId: OUTSIDE },
     });
     expect((await actionRow('A-T82')).status).toBe('terminee');
     // Même vérification avec une suite du site A : admise.
-    expect(await verifyAction({}, form({ id: 'A-T82', from: 'terminee', verifyMethod: 'ecrit', efficacyNote: 'Non', effective: 'non_efficace', ...ne, ne_siteId: 'ville-a' }))).toMatchObject({ ok: true, ids: [expect.any(String)] });
+    expect(await verifyAction({}, form({ id: 'A-T82', from: 'terminee', verifyMethod: 'ecrit', efficacyNote: 'Non', effective: 'non_efficace', ...ne, ne_siteId: 'site_a' }))).toMatchObject({ ok: true, ids: [expect.any(String)] });
   });
 });

@@ -276,19 +276,19 @@ describe('dates et heures (Europe/Paris)', () => {
 
 describe('PRV-11 : activités de la carte rattachées à un plan ou à un permis', () => {
   const act = (id: number, startOn: string, endOn: string, over: Partial<{ siteId: string; contractorId: string | null }> = {}) =>
-    ({ id, title: `A${id}`, siteId: 'ville-a', contractorId: 'EE-001', startOn, endOn, ...over });
+    ({ id, title: `A${id}`, siteId: 'site_a', contractorId: 'EE-001', startOn, endOn, ...over });
   it('plan : site, entreprise et période qui couvre chaque activité', () => {
-    const list = [act(1, '2026-10-05', '2026-10-09'), act(2, '2026-10-12', '2026-10-12', { contractorId: null }), act(3, '2026-10-01', '2026-10-02', { siteId: 'ville-b' })];
-    const r = activityLinkIssues({ siteId: 'ville-a', contractorId: 'EE-004', from: '2026-10-06', to: '2026-10-12' }, list, 'all');
+    const list = [act(1, '2026-10-05', '2026-10-09'), act(2, '2026-10-12', '2026-10-12', { contractorId: null }), act(3, '2026-10-01', '2026-10-02', { siteId: 'site_b' })];
+    const r = activityLinkIssues({ siteId: 'site_a', contractorId: 'EE-004', from: '2026-10-06', to: '2026-10-12' }, list, 'all');
     expect(r.site.map((a) => a.id)).toEqual([3]);
     expect(r.contractor.map((a) => a.id)).toEqual([1, 3]); // activité sans entreprise : jamais en conflit
     expect(r.period.map((a) => a.id)).toEqual([1, 3]);
-    expect(activityLinkIssues({ siteId: 'ville-a', contractorId: 'EE-001', from: '2026-10-05', to: '2026-10-12' }, list.slice(0, 2), 'all'))
+    expect(activityLinkIssues({ siteId: 'site_a', contractorId: 'EE-001', from: '2026-10-05', to: '2026-10-12' }, list.slice(0, 2), 'all'))
       .toEqual({ site: [], contractor: [], period: [] });
   });
   it('permis : sa validité recoupe chaque activité (un jour suffit)', () => {
     const list = [act(1, '2026-10-05', '2026-10-09'), act(2, '2026-10-12', '2026-10-13')];
-    expect(activityLinkIssues({ siteId: 'ville-a', contractorId: null, from: '2026-10-09', to: '2026-10-09' }, list, 'overlap').period.map((a) => a.id)).toEqual([2]);
+    expect(activityLinkIssues({ siteId: 'site_a', contractorId: null, from: '2026-10-09', to: '2026-10-09' }, list, 'overlap').period.map((a) => a.id)).toEqual([2]);
   });
   it('rattacher un permis : en vigueur et valable un jour de l’activité ; un rattachement existant reste admis', () => {
     const permit = { id: 'PF-1', status: 'delivre', validFrom: paris('2026-10-05T13:30'), validTo: paris('2026-10-05T17:00') };

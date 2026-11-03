@@ -21,13 +21,13 @@ const db = () => getDb();
 
 describe('EVT-24 : « Nouvel événement » prérempli depuis une fiche', () => {
   it('contrôle, risque et document visibles : site, lieu ou équipement et rattachement repris', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const d = await db();
-    const [control] = await d.select().from(t.controls).where(and(eq(t.controls.siteId, 'ville-a'), isNull(t.controls.archivedAt))).limit(1);
-    expect(await loadNewEventDefaults({ controle: String(control.id) })).toMatchObject({ siteId: 'ville-a', equipment: control.equipment, controlId: control.id });
+    const [control] = await d.select().from(t.controls).where(and(eq(t.controls.siteId, 'site_a'), isNull(t.controls.archivedAt))).limit(1);
+    expect(await loadNewEventDefaults({ controle: String(control.id) })).toMatchObject({ siteId: 'site_a', equipment: control.equipment, controlId: control.id });
     const [risk] = await d.select({ id: t.risks.id, unit: t.workUnits.label }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id))
-      .where(and(eq(t.workUnits.siteId, 'ville-a'), isNull(t.risks.archivedAt), isNull(t.workUnits.archivedAt))).limit(1);
-    expect(await loadNewEventDefaults({ risque: String(risk.id) })).toMatchObject({ siteId: 'ville-a', location: risk.unit, riskId: risk.id });
+      .where(and(eq(t.workUnits.siteId, 'site_a'), isNull(t.risks.archivedAt), isNull(t.workUnits.archivedAt))).limit(1);
+    expect(await loadNewEventDefaults({ risque: String(risk.id) })).toMatchObject({ siteId: 'site_a', location: risk.unit, riskId: risk.id });
     const [doc] = await d.select().from(t.documents).limit(1);
     expect(await loadNewEventDefaults({ document: doc.id })).toMatchObject({ documentId: doc.id });
     // Type proposé par l'écran Environnement ; jamais une maladie professionnelle.
@@ -36,14 +36,14 @@ describe('EVT-24 : « Nouvel événement » prérempli depuis une fiche', () => 
   });
 
   it('élément d’un autre site, archivé ou inconnu : ignoré, rien n’est révélé', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     const d = await db();
-    const [control] = await d.select().from(t.controls).where(eq(t.controls.siteId, 'ville-a')).limit(1);
-    const [risk] = await d.select({ id: t.risks.id }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.workUnits.siteId, 'ville-a')).limit(1);
+    const [control] = await d.select().from(t.controls).where(eq(t.controls.siteId, 'site_a')).limit(1);
+    const [risk] = await d.select({ id: t.risks.id }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.workUnits.siteId, 'site_a')).limit(1);
     expect(await loadNewEventDefaults({ controle: String(control.id) })).toBeNull();
     expect(await loadNewEventDefaults({ risque: String(risk.id) })).toBeNull();
     expect(await loadNewEventDefaults({ controle: '999999', risque: 'abc', document: 'DOC-INCONNU' })).toBeNull();
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     await d.update(t.risks).set({ archivedAt: new Date(), archivedById: 'clefevre', archiveReason: 'Essai de préremplissage' }).where(eq(t.risks.id, risk.id));
     expect(await loadNewEventDefaults({ risque: String(risk.id) })).toBeNull();
     await d.update(t.risks).set({ archivedAt: null, archivedById: null, archiveReason: null }).where(eq(t.risks.id, risk.id));
@@ -56,7 +56,7 @@ describe('EVT-27 : vue déclarant', () => {
     const mine = await d.select({ id: t.events.id, siteId: t.events.siteId }).from(t.events)
       .where(and(eq(t.events.declarantId, 'tnguyen'), eq(t.events.anonymous, false)));
     expect(mine.length).toBeGreaterThan(0);
-    const other = mine[0].siteId === 'ville-a' ? 'ville-b' : 'ville-a';
+    const other = mine[0].siteId === 'site_a' ? 'site_b' : 'site_a';
     actAs('Salarié', other);
     const visible = await loadVisibleEvents();
     expect(visible.map((e) => e.id).sort()).toEqual(mine.map((e) => e.id).sort());
@@ -73,14 +73,14 @@ describe('EVT-27 : vue déclarant', () => {
       { id: photo, entityType: 'event', entityId: ev.id, fileName: 'fuite.jpg', mimeType: 'image/jpeg', size: 10, storagePath: 'essai/fuite.jpg', uploadedBy: 'tnguyen' },
       { id: medical, entityType: 'event', entityId: ev.id, fileName: 'certificat.jpg', mimeType: 'image/jpeg', size: 10, storagePath: 'essai/certificat.jpg', health: true },
     ]);
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const r = (await loadMyReport(ev.id))!;
     expect(r.photos.map((p) => p.id)).toContain(photo);
     expect(r.photos.map((p) => p.id)).not.toContain(medical);
     expect(r.photos.find((p) => p.id === photo)).toEqual({ id: photo, url: `/fichiers/${photo}`, name: 'fuite.jpg' });
     expect(r.photoCount).toBe(r.photos.length);
     // Un autre salarié ne lit pas ce signalement.
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await loadMyReport(ev.id)).toBeNull();
   });
 });
@@ -91,16 +91,16 @@ describe('HAB-15 : réordonnancement des titres suivis', () => {
 
   it('réservé au service QHSE et à la direction', async () => {
     const before = await order();
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await moveTitle(before[1], 'up')).toEqual({ error: expect.any(String) });
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await moveTitle(before[1], 'up')).toEqual({ error: expect.any(String) });
     expect(await order()).toEqual(before);
   });
 
   it('déplacement d’un rang, journalisé ; bornes et titre inconnu sans effet', async () => {
     const before = await order();
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await moveTitle(before[1], 'up')).toEqual({});
     const after = await order();
     expect(after.slice(0, 2)).toEqual([before[1], before[0]]);
@@ -139,10 +139,10 @@ describe('AUD-19 : lien profond vers un référentiel', () => {
 
 describe('AUD-29 : audits sans constat dans la liste des constats', () => {
   it('audit réalisé sans constat : groupe vide, sur son site seulement', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const d = await db();
     const [item] = await d.insert(t.auditPlanItems).values({
-      year: 2026, month: 9, track: 'Production', label: '[AUD-29] Audit sans constat', done: true, doneOn: '2026-09-15', siteId: 'ville-a',
+      year: 2026, month: 9, track: 'Production', label: '[AUD-29] Audit sans constat', done: true, doneOn: '2026-09-15', siteId: 'site_a',
     }).returning();
     const onA = await loadAudits({ year: '2026' });
     const g = onA.auditGroups.find((x) => x.planItemId === item.id);
@@ -150,14 +150,14 @@ describe('AUD-29 : audits sans constat dans la liste des constats', () => {
     // Les groupes restent triés du plus récent au plus ancien.
     const dates = onA.auditGroups.map((x) => x.date ?? '');
     expect([...dates].sort().reverse()).toEqual(dates);
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await loadAudits({ year: '2026' })).auditGroups.some((x) => x.planItemId === item.id)).toBe(false);
   });
 });
 
 describe('VEI-13 : échéance triable des exigences', () => {
   it('dueSort : date de l’échéance affichée (prochain contrôle, DUERP, date saisie)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { requirements } = await loadWatch();
     for (const r of requirements) {
       if (r.dueSort) expect(r.dueSort).toMatch(/^\d{4}-\d{2}-\d{2}$/);

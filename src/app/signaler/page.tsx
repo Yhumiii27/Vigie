@@ -17,7 +17,7 @@ const muted = { fontSize: 13.5, color: 'var(--color-neutral-400)', textWrap: 'pr
 // Formulaire de signalement terrain (EVT-06, EVT-07), sur téléphone comme sur poste de travail.
 // - QR code de poste : /signaler?jeton=<jeton signé> (src/lib/report-token.ts) — lieu et site pré-remplis ; sans session,
 //   c'est le seul accès au formulaire (anonyme ou nom + entreprise déclarés), le proxy laissant passer ce seul cas.
-// - Personne connectée : bouton « Nouveau signalement », ancien QR code ?poste=12&site=ville-a, lieu libre ?lieu=… ;
+// - Personne connectée : bouton « Nouveau signalement », ancien QR code ?poste=12&site=site_a, lieu libre ?lieu=… ;
 //   ?type=ENV présélectionne le type (lien « Signaler » de l'écran Environnement).
 export default async function ReportPage({ searchParams }: PageProps<'/signaler'>) {
   const sp = await searchParams;

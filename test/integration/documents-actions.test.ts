@@ -33,7 +33,7 @@ describe('updateDocument', () => {
   });
 
   it('site : document d’un autre site que celui sélectionné refusé', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await updateDocument({}, await metadataForm('IT-MON-012', { title: 'Autre titre' }))).toEqual({ error: expect.stringContaining('autre site') });
     expect((await document('IT-MON-012')).title).toBe('Retournement des bâtis > 1 t');
   });
@@ -41,7 +41,7 @@ describe('updateDocument', () => {
   it('propriétaire sorti de l’effectif : conservé tant qu’il n’est pas remplacé, jamais choisi à nouveau', async () => {
     const db = await getDb();
     await db.update(t.documents).set({ ownerId: 'ylambert' }).where(eq(t.documents.id, 'IT-MON-012'));
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await updateDocument({}, await metadataForm('IT-MON-012', { distribution: 'Atelier montage · poste M3' }))).toEqual({ ok: true, id: 'IT-MON-012' });
     expect(await document('IT-MON-012')).toMatchObject({ ownerId: 'ylambert', distribution: 'Atelier montage · poste M3' });
 
@@ -50,7 +50,7 @@ describe('updateDocument', () => {
     expect((await document('PR-QHSE-001')).ownerId).toBe('clefevre');
 
     const created = await createDocument({}, form({
-      type: 'procedure', process: 'QHSE', title: 'Document de test', ownerId: 'ylambert', reviewMonths: '24', siteId: 'ville-a',
+      type: 'procedure', process: 'QHSE', title: 'Document de test', ownerId: 'ylambert', reviewMonths: '24', siteId: 'site_a',
       distribution: 'Encadrement', summary: 'Création du document',
     }));
     expect(created.fieldErrors?.ownerId).toBe("Propriétaire sorti de l'effectif : choisissez une personne présente.");
@@ -59,18 +59,18 @@ describe('updateDocument', () => {
 
   it('site archivé : conservé sans changement, jamais choisi pour un autre document', async () => {
     const db = await getDb();
-    await db.update(t.documents).set({ siteId: 'ville-c' }).where(eq(t.documents.id, 'FO-MON-003'));
+    await db.update(t.documents).set({ siteId: 'site_c' }).where(eq(t.documents.id, 'FO-MON-003'));
     actAs('Animateur QHSE', 'all');
     expect(await updateDocument({}, await metadataForm('FO-MON-003', { reviewMonths: '24' }))).toEqual({ ok: true, id: 'FO-MON-003' });
-    expect(await document('FO-MON-003')).toMatchObject({ siteId: 'ville-c', reviewMonths: 24 });
+    expect(await document('FO-MON-003')).toMatchObject({ siteId: 'site_c', reviewMonths: 24 });
 
-    expect(await updateDocument({}, await metadataForm('IT-USI-004', { siteId: 'ville-c' }))).toEqual({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
-    expect((await document('IT-USI-004')).siteId).toBe('ville-a');
+    expect(await updateDocument({}, await metadataForm('IT-USI-004', { siteId: 'site_c' }))).toEqual({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
+    expect((await document('IT-USI-004')).siteId).toBe('site_a');
   });
 
   it('journal : changement de propriétaire et de site tracé, enregistrement sans changement non journalisé', async () => {
     actAs('Animateur QHSE', 'all');
-    expect(await updateDocument({}, await metadataForm('FO-QHSE-010', { ownerId: 'tnguyen', siteId: 'ville-a' }))).toEqual({ ok: true, id: 'FO-QHSE-010' });
+    expect(await updateDocument({}, await metadataForm('FO-QHSE-010', { ownerId: 'tnguyen', siteId: 'site_a' }))).toEqual({ ok: true, id: 'FO-QHSE-010' });
     const log = await lastLog('document', 'FO-QHSE-010');
     expect(log).toMatchObject({ action: 'update', summary: 'Informations du document modifiées', byId: 'clefevre' });
     expect(log?.details).toEqual([
@@ -111,7 +111,7 @@ describe('actions liées à un document et à ses versions', () => {
     actAs('Animateur QHSE');
     const v = await versionOf('IT-MON-012', 'A');
     expect(v.actionId).toBe('A-215');
-    const other = await firstAction((a) => a.siteId === 'ville-a' && !['verifiee', 'abandonnee'].includes(a.status) && a.id !== 'A-215');
+    const other = await firstAction((a) => a.siteId === 'site_a' && !['verifiee', 'abandonnee'].includes(a.status) && a.id !== 'A-215');
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: other.id }))).toEqual({ ok: true, id: 'IT-MON-012' });
     expect((await versionOf('IT-MON-012', 'A')).actionId).toBe(other.id);
     expect(await lastLog('action', 'A-215')).toMatchObject({ action: 'unlink', summary: 'Détachée de IT-MON-012 · version A', byId: 'clefevre' });
@@ -128,10 +128,10 @@ describe('actions liées à un document et à ses versions', () => {
   it('refus : action close, action d’un autre site que le document, action inconnue ; rien écrit', async () => {
     actAs('Animateur QHSE');
     const v = await versionOf('IT-MON-012', 'A');
-    const closed = await firstAction((a) => a.status === 'verifiee' && (a.siteId === 'ville-a' || a.siteId === null));
+    const closed = await firstAction((a) => a.status === 'verifiee' && (a.siteId === 'site_a' || a.siteId === null));
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: closed.id })))
       .toMatchObject({ fieldErrors: { actionId: `L'action ${closed.id} est vérifiée ou abandonnée : elle ne peut plus être rattachée.` } });
-    const elsewhere = await firstAction((a) => a.siteId === 'ville-b' && !['verifiee', 'abandonnee'].includes(a.status));
+    const elsewhere = await firstAction((a) => a.siteId === 'site_b' && !['verifiee', 'abandonnee'].includes(a.status));
     // DOC-13 : mêmes contrôles et même ordre que linkAction (checkLinkChange) — le site de l'action est contrôlé d'abord
     // (rien n'est révélé d'une action hors du site sélectionné) ; sous « Tous les sites », le site du document.
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: elsewhere.id })))
@@ -149,11 +149,11 @@ describe('actions liées à un document et à ses versions', () => {
     const db = await getDb();
     actAs('Animateur QHSE');
     const v = await versionOf('IT-MON-012', 'A');
-    const abandoned = await firstAction((a) => a.status === 'abandonnee' && (a.siteId === 'ville-a' || a.siteId === null));
+    const abandoned = await firstAction((a) => a.status === 'abandonnee' && (a.siteId === 'site_a' || a.siteId === null));
     // Ligne reprise : version encore liée à une action abandonnée (l'abandon détache d'ordinaire la version).
     await db.update(t.documentVersions).set({ actionId: abandoned.id }).where(eq(t.documentVersions.id, v.id));
     const before = await changeLogCount(abandoned.id);
-    const other = await firstAction((a) => a.siteId === 'ville-a' && !['verifiee', 'abandonnee'].includes(a.status));
+    const other = await firstAction((a) => a.siteId === 'site_a' && !['verifiee', 'abandonnee'].includes(a.status));
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: other.id })))
       .toMatchObject({ fieldErrors: { actionId: `L'action ${abandoned.id} est abandonnée : consultation seule.` } });
     expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: '' })))
@@ -171,8 +171,8 @@ describe('actions liées à un document et à ses versions', () => {
       const vs = versions.filter((v) => v.documentId === id);
       return vs.some((v) => v.status === 'approuve') && !vs.some((v) => v.status === 'brouillon' || v.status === 'en_revue');
     })!;
-    actAs('Animateur QHSE', 'ville-a');
-    const elsewhere = await firstAction((a) => a.siteId === 'ville-b' && !['verifiee', 'abandonnee'].includes(a.status));
+    actAs('Animateur QHSE', 'site_a');
+    const elsewhere = await firstAction((a) => a.siteId === 'site_b' && !['verifiee', 'abandonnee'].includes(a.status));
     const r = await reviseDocument({}, form({ documentId: common, summary: 'Révision', actionId: elsewhere.id }));
     expect(r.fieldErrors?.actionId).toBe('Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.');
     actAs('Animateur QHSE', 'all');
@@ -184,9 +184,9 @@ describe('actions liées à un document et à ses versions', () => {
 
   it('createDocument : action liée à la version A journalisée', async () => {
     actAs('Animateur QHSE');
-    const open = await firstAction((a) => a.siteId === 'ville-a' && !['verifiee', 'abandonnee'].includes(a.status));
+    const open = await firstAction((a) => a.siteId === 'site_a' && !['verifiee', 'abandonnee'].includes(a.status));
     const r = await createDocument({}, form({
-      title: 'Consigne de levage', type: 'instruction', process: 'MON', ownerId: 'sbenali', reviewMonths: '24', distribution: 'Atelier', siteId: 'ville-a',
+      title: 'Consigne de levage', type: 'instruction', process: 'MON', ownerId: 'sbenali', reviewMonths: '24', distribution: 'Atelier', siteId: 'site_a',
       actionId: open.id,
     }));
     expect(r.ok).toBe(true);

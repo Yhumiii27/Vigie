@@ -26,7 +26,7 @@ test('Salarié : mon espace — actions, habilitations, signalements', async ({ 
 });
 
 test('tiroir de navigation : entrée « Mon espace » sur téléphone', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/evenements');
   await page.getByRole('button', { name: 'Ouvrir le menu de navigation' }).click();
   await page.getByRole('link', { name: /Mon espace/ }).click();

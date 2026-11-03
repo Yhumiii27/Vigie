@@ -36,7 +36,7 @@ describe('loadMySpace', () => {
   });
 
   it('Chef de service : ses seules actions, pas le plan de son périmètre', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const space = await loadMySpace();
     const db = await getDb();
     const own = (await db.select().from(t.actions).where(eq(t.actions.pilotId, 'sbenali'))).filter((a) => !isClosedActionStatus(a.status));

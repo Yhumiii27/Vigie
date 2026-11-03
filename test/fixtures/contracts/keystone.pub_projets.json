@@ -1,0 +1,9 @@
+{
+  "source": "Keystone origin/main c585f12, drizzle/0071_project_category_share.sql (contrat D02 v1 + capex_code, besoin_ref, client_interne, filiale_code, categorie)",
+  "readers": ["vigie_app"],
+  "columns": [["code", "text"], ["numero", "text"], ["code_analytique", "text"], ["nature", "text"], ["nom", "text"], ["client_id", "uuid"],
+    ["client", "text"], ["client_code3", "text"], ["phase_code", "text"], ["phase", "text"], ["imputable", "boolean"],
+    ["chef_projet_matricule", "text"], ["chef_projet_nom", "text"], ["ville", "text"], ["pays", "text"], ["fournisseurs", "text"],
+    ["maj_le", "timestamp with time zone"], ["capex_code", "text"], ["besoin_ref", "text"], ["client_interne", "boolean"],
+    ["filiale_code", "text"], ["categorie", "text"]]
+}

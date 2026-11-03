@@ -43,7 +43,7 @@ export async function seedComplianceFunctions(tx: SeedTx) {
   // VEI-14 : équipement de mesure étalonné (conforme), site A.
   const [{ m }] = await tx.select({ m: count() }).from(t.controls);
   const [gauge] = await tx.insert(t.controls).values({
-    siteId: 'ville-a', equipment: METROLOGY, controlType: 'Étalonnage', category: 'metrologie', tolerance: '± 0,02 mm',
+    siteId: 'site_a', equipment: METROLOGY, controlType: 'Étalonnage', category: 'metrologie', tolerance: '± 0,02 mm',
     periodMonths: 12, organization: '[Laboratoire accrédité COFRAC]', responsibleId: 'lmoreau', lastOn: rel(-200), nextOn: rel(165), sort: m,
   }).returning({ id: t.controls.id });
   await tx.insert(t.controlRecords).values({
@@ -55,12 +55,12 @@ export async function seedComplianceFunctions(tx: SeedTx) {
   const [pont] = await tx.select({ id: t.controls.id }).from(t.controls).where(eq(t.controls.equipment, 'Pont roulant 10 t — atelier montage'));
   await tx.insert(t.safetyNotices).values([
     {
-      siteId: 'ville-a', kind: 'observation', receivedOn: rel(-20), authority: 'Inspection du travail', reference: 'Courrier du contrôleur, visite du ' + rel(-27).split('-').reverse().join('/'),
+      siteId: 'site_a', kind: 'observation', receivedOn: rel(-20), authority: 'Inspection du travail', reference: 'Courrier du contrôleur, visite du ' + rel(-27).split('-').reverse().join('/'),
       text: 'Vérification générale périodique du pont roulant 10 t à réaliser ; balisage de l’allée centrale de l’atelier montage à reprendre.',
       dueOn: rel(10), controlId: pont?.id ?? null, createdById: 'clefevre', createdAt: at(rel(-19)),
     },
     {
-      siteId: 'ville-a', kind: 'observation', receivedOn: rel(-120), authority: 'CARSAT', reference: 'Rapport de visite',
+      siteId: 'site_a', kind: 'observation', receivedOn: rel(-120), authority: 'CARSAT', reference: 'Rapport de visite',
       text: 'Signalisation des zones de circulation piétons au magasin à compléter.', dueOn: rel(-60),
       answeredOn: rel(-75), answer: 'Marquage au sol des allées piétonnes réalisé et photographié ; courrier de réponse adressé à la CARSAT.', answeredById: 'clefevre',
       createdById: 'clefevre', createdAt: at(rel(-118)),
@@ -84,8 +84,8 @@ export async function seedComplianceFunctions(tx: SeedTx) {
   const zones = await tx.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId }).from(t.mapZones).where(isNull(t.mapZones.archivedAt));
   const units = new Set((await tx.select({ id: t.workUnits.id }).from(t.workUnits).where(isNull(t.workUnits.archivedAt))).map((u) => u.id));
   const ZONE_UNITS: [string, string, string][] = [
-    ['ville-a', 'Atelier montage', 'montage'], ['ville-a', 'Atelier usinage', 'usinage'], ['ville-a', 'Magasin', 'magasin'],
-    ['ville-b', "Hall d'essais", 'essais'], ['ville-b', 'Zone ATEX 2 · banc BE-1', 'essais'],
+    ['site_a', 'Atelier montage', 'montage'], ['site_a', 'Atelier usinage', 'usinage'], ['site_a', 'Magasin', 'magasin'],
+    ['site_b', "Hall d'essais", 'essais'], ['site_b', 'Zone ATEX 2 · banc BE-1', 'essais'],
   ];
   for (const [siteId, name, unitId] of ZONE_UNITS) {
     const zone = zones.find((z) => z.siteId === siteId && z.name === name);

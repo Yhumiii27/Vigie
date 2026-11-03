@@ -48,7 +48,7 @@ describe('pub_etudes_securite : requête de référence (contrat Arche § 2.5)',
 
   it('valeurs du jeu de démonstration, égales à celles de l’écran ; étude annulée publiée « annulee »', async () => {
     actAs('Animateur QHSE', 'all');
-    expect(await saveProcessSafetyStudy({}, form({ siteId: 'ville-b', keystoneProjectCode: 'K-2025-042', milestone: 'HS6', type: 'aspd', status: 'planifiee', sessionOn: '2026-12-01' }))).toEqual({ ok: true, id: 'ES-004' });
+    expect(await saveProcessSafetyStudy({}, form({ siteId: 'site_b', keystoneProjectCode: 'K-2025-042', milestone: 'HS6', type: 'aspd', status: 'planifiee', sessionOn: '2026-12-01' }))).toEqual({ ok: true, id: 'ES-004' });
     expect(await cancelProcessSafetyStudy({}, form({ id: 'ES-004', reason: 'Projet suspendu' }))).toEqual({ ok: true, id: 'ES-004' });
     const published = await rows(sql.raw(`SELECT etude_ref, capex_code, projet_code, jalon, type, statut, seance_le::text AS seance_le, conclue_le::text AS conclue_le,
       conclusion, animateur, rapport_ref, recommandations, recommandations_ouvertes, recommandations_en_retard, reserves_bloquantes, lien,

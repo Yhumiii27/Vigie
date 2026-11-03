@@ -7,7 +7,7 @@ import {
 const SECRET = 'un-secret-de-session-de-test-assez-long';
 const NOW = 1_800_000_000;
 const claims = (over: Partial<SessionClaims> = {}): SessionClaims =>
-  ({ pid: 'p1', role: 'Salarié', sites: ['ville-a'], oid: 'oid-1', auth: NOW - 60, seen: NOW - 60, ...over });
+  ({ pid: 'p1', role: 'Salarié', sites: ['site_a'], oid: 'oid-1', auth: NOW - 60, seen: NOW - 60, ...over });
 
 describe('cookie de session', () => {
   it('chiffré, authentifié, lié au secret', async () => {

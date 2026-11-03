@@ -71,7 +71,7 @@ function placingFor(c: PositionCandidate, zones: SitemapData['zones']): Placing 
     label: c.label,
     draft: {
       title: truncate(c.title, 160), team: c.contractorId ? 'externe' : 'interne', contractorId: c.contractorId, ownerId: c.ownerId,
-      keystoneProject: c.keystoneProject, startOn: c.startOn, endOn: c.endOn, hours: c.hours, preventionPlanId: c.preventionPlanId,
+      keystoneProject: c.keystoneProject, keystoneProjectCode: c.keystoneProjectCode, startOn: c.startOn, endOn: c.endOn, hours: c.hours, preventionPlanId: c.preventionPlanId,
       permitId: c.permitId, zoneId: zone?.id ?? null, notes: c.location ? `Lieu indiqué : ${c.location}.` : null, source: c.id,
     },
   };

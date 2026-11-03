@@ -120,6 +120,11 @@
       "when": 1793548921610,
       "sql": "ea5784c6cc9945335067a0becc85aa231c8851508eeca034972568608ab2695a",
       "snapshot": "6128bec8aebb380dad5221ae9f17519e8d283d8ad4fb13f2648835d79ac19e87"
+    },
+    "0024_convergence_m02": {
+      "when": 1793695428725,
+      "sql": "559cb047a8848c64b978dba0ceefcda993aea645b1462c6c746557fd1ce2162e",
+      "snapshot": "b60d3deefa4c9f6201d4ea14030139a215fd95930afb1d5eb16f5c4d7ad0c935"
     }
   }
 }

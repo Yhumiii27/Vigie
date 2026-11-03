@@ -32,11 +32,11 @@ describe('démonstration', () => {
     const { getSession } = await import('@/lib/session');
     const { loadQhseLeads } = await import('@/lib/data/leads');
     const s = await getSession();
-    expect(s).toMatchObject({ role: 'Animateur QHSE', demo: true, bootstrap: false, site: { id: 'ville-a' } });
+    expect(s).toMatchObject({ role: 'Animateur QHSE', demo: true, bootstrap: false, site: { id: 'site_a' } });
     expect(s.user.id).toBe('clefevre');
     expect(s.user).not.toHaveProperty('entraObjectId');
     const leads = await loadQhseLeads();
-    expect(leads.forSite('ville-b')).toEqual({ ownerIds: ['clefevre'], who: '[C. Lefèvre]', vacant: false });
+    expect(leads.forSite('site_b')).toEqual({ ownerIds: ['clefevre'], who: '[C. Lefèvre]', vacant: false });
     expect(leads.directors.map((p) => p.id)).toEqual(['hmarchand']);
     cookieJar.set('vigie_role', 'Salarié');
     expect((await getSession()).user.id).toBe('tnguyen');
@@ -46,23 +46,23 @@ describe('démonstration', () => {
   it('poste vacant : alertes aux animateurs QHSE, « responsable à désigner »', async () => {
     const { saveSite } = await import('@/server/sites');
     const { loadQhseLeads } = await import('@/lib/data/leads');
-    const r = await saveSite({}, form({ id: 'ville-b', label: "Site de [Ville B] — zone d'essais", qhseLeadId: '' }));
+    const r = await saveSite({}, form({ id: 'site_b', label: "Site de [Ville B] — zone d'essais", qhseLeadId: '' }));
     expect(r).toMatchObject({ ok: true });
-    expect((await loadQhseLeads()).forSite('ville-b')).toEqual({ ownerIds: ['clefevre'], who: 'Responsable QHSE à désigner', vacant: true });
+    expect((await loadQhseLeads()).forSite('site_b')).toEqual({ ownerIds: ['clefevre'], who: 'Responsable QHSE à désigner', vacant: true });
     const db = await getDb();
-    const [log] = await db.select().from(t.changeLog).where((await import('drizzle-orm')).eq(t.changeLog.entityId, 'ville-b'));
+    const [log] = await db.select().from(t.changeLog).where((await import('drizzle-orm')).eq(t.changeLog.entityId, 'site_b'));
     expect(log.details).toEqual([{ field: 'Responsable QHSE', from: '[C. Lefèvre]', to: 'à désigner' }]);
-    expect(await saveSite({}, form({ id: 'ville-b', label: "Site de [Ville B] — zone d'essais", qhseLeadId: 'inconnu' }))).toMatchObject({ fieldErrors: { qhseLeadId: expect.any(String) } });
+    expect(await saveSite({}, form({ id: 'site_b', label: "Site de [Ville B] — zone d'essais", qhseLeadId: 'inconnu' }))).toMatchObject({ fieldErrors: { qhseLeadId: expect.any(String) } });
     const { loadTodo } = await import('@/lib/data/todo');
     cookieJar.set('vigie_site', 'all');
     const todo = await loadTodo();
-    expect(todo.find((x) => x.key === 'site-lead|ville-b')).toMatchObject({ ownerIds: ['clefevre', 'hmarchand'] });
+    expect(todo.find((x) => x.key === 'site-lead|site_b')).toMatchObject({ ownerIds: ['clefevre', 'hmarchand'] });
     cookieJar.delete('vigie_site');
   });
 
   it('fiche personne : identifiant généré, homonyme admis, e-mail et matricule uniques', async () => {
     const { savePerson } = await import('@/server/skills');
-    const base = { name: '[T. Nguyen]', job: 'Monteur', service: 'Atelier montage', siteId: 'ville-a' };
+    const base = { name: '[T. Nguyen]', job: 'Monteur', service: 'Atelier montage', siteId: 'site_a' };
     const created = await savePerson({}, form({ ...base, email: 'Autre.Nguyen@epc2i.example', matricule: 'M-001' }));
     expect(created.ok).toBe(true);
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/);

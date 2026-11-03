@@ -9,7 +9,7 @@ const people: PersonTodoPerson[] = [
   { id: 'sal', name: 'Salarié', email: null, lastRole: null, leftOn: null },
   { id: 'parti', name: 'Parti', email: null, lastRole: 'Direction', leftOn: '2026-10-01' },
 ];
-const item = (over: Partial<TodoItem>): TodoItem => ({ date: TODAY, kind: 'Contrôle', tone: 'warn', title: 'x', who: '', siteId: 'ville-a', href: '/veille?onglet=controles&controle=1', ...over });
+const item = (over: Partial<TodoItem>): TodoItem => ({ date: TODAY, kind: 'Contrôle', tone: 'warn', title: 'x', who: '', siteId: 'site_a', href: '/veille?onglet=controles&controle=1', ...over });
 
 describe('PRD-12 : échéances par personne hors requête', () => {
   it('rôle inconnu : Salarié (le plus restreint)', () => {
@@ -20,7 +20,7 @@ describe('PRD-12 : échéances par personne hors requête', () => {
 
   it('responsables désignés seulement (ownerIds), présents, tous sites ; retards et horizon des notifications comptés', () => {
     const items = [
-      item({ title: 'retard', ownerIds: ['qhse', 'cs'], overdue: true, siteId: 'ville-b' }),
+      item({ title: 'retard', ownerIds: ['qhse', 'cs'], overdue: true, siteId: 'site_b' }),
       item({ title: 'dans 20 j', ownerIds: ['qhse'], date: '2026-10-29' }),
       item({ title: 'sans responsable' }),
       item({ title: 'du parti', ownerIds: ['parti'] }),

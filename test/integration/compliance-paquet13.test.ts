@@ -67,7 +67,7 @@ describe('jeu de démonstration du paquet 13', () => {
 
 describe('VEI-18 : périodicité de réévaluation propre à chaque exigence', () => {
   it('saisie, journal et échéance de réévaluation selon la périodicité', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const r = await requirement('ISO 9001:2015');
     expect(await saveRequirement({}, requirementForm(r, { reviewMonths: '6' }))).toEqual({ ok: true, id: String(r.id) });
     expect(await lastLog('requirement', r.id)).toMatchObject({ action: 'update', details: expect.arrayContaining([{ field: 'Réévaluation tous les (mois)', from: '12 (par défaut)', to: '6' }]) });
@@ -85,7 +85,7 @@ describe('VEI-18 : périodicité de réévaluation propre à chaque exigence', (
   it('Salarié et Chef de projet : refusés', async () => {
     const r = await requirement('ISO 9001:2015');
     for (const role of ['Salarié', 'Chef de projet'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await saveRequirement({}, requirementForm(r, { reviewMonths: '6' }))).toEqual({ error: DENIED });
     }
   });
@@ -125,7 +125,7 @@ describe('VEI-14 : métrologie, étalonnage hors tolérance', () => {
   const record = (id: number, over: Record<string, string> = {}) => form({ controlId: String(id), performedOn: '2026-10-08', organization: '[Laboratoire accrédité COFRAC]', result: 'hors_tolerance', notes: 'Écart de 0,05 mm au-delà de 100 mm.', ...over });
 
   it('nature et tolérance saisies et journalisées ; hors tolérance réservé à un étalonnage', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const pont = await control('Pont roulant 10 t — atelier montage');
     expect(await recordControl({}, record(pont.id))).toMatchObject({ fieldErrors: { result: expect.stringContaining('Réglementaire') } });
     const fd = form({
@@ -141,12 +141,12 @@ describe('VEI-14 : métrologie, étalonnage hors tolérance', () => {
   });
 
   it('étalonnage hors tolérance : non-conformité ouverte, rattachée à l’équipement et à l’enregistrement, journalisée', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const gauge = await control(GAUGE);
     const res = await recordControl({}, record(gauge.id));
     expect(res).toMatchObject({ ok: true, eventId: expect.stringMatching(/^EV-2026-\d+$/), notice: expect.stringContaining('non-conformité') });
     const [ev] = await (await db()).select().from(t.events).where(eq(t.events.id, res.eventId!));
-    expect(ev).toMatchObject({ type: 'NC', step: 0, siteId: 'ville-a', controlId: gauge.id, declarantId: 'sbenali', occurredOn: '2026-10-08' });
+    expect(ev).toMatchObject({ type: 'NC', step: 0, siteId: 'site_a', controlId: gauge.id, declarantId: 'sbenali', occurredOn: '2026-10-08' });
     const [rec] = await (await db()).select().from(t.controlRecords).where(eq(t.controlRecords.id, Number(res.id)));
     expect(rec).toMatchObject({ result: 'hors_tolerance', eventId: ev.id });
     expect(await lastLog('event', ev.id)).toMatchObject({ action: 'create', byId: 'sbenali' });
@@ -164,24 +164,24 @@ describe('VEI-14 : métrologie, étalonnage hors tolérance', () => {
     const res = await recordControl({}, record(gauge.id, { performedOn: '2026-10-09' }));
     expect(res).toMatchObject({ ok: true, notice: expect.stringContaining('déclarez la non-conformité') });
     expect(res.eventId).toBeUndefined();
-    await (await db()).update(t.controls).set({ siteId: 'ville-a' }).where(eq(t.controls.id, gauge.id));
-    actAs('Salarié', 'ville-a');
+    await (await db()).update(t.controls).set({ siteId: 'site_a' }).where(eq(t.controls.id, gauge.id));
+    actAs('Salarié', 'site_a');
     expect(await recordControl({}, record(gauge.id))).toEqual({ error: DENIED });
   });
 });
 
 describe('VEI-15 : registre de sécurité, observations et mises en demeure', () => {
   const noticeForm = (over: Record<string, string> = {}) => form({
-    kind: 'mise_en_demeure', siteId: 'ville-b', receivedOn: '2026-10-05', authority: 'Inspection du travail', reference: 'MED-2026-04',
+    kind: 'mise_en_demeure', siteId: 'site_b', receivedOn: '2026-10-05', authority: 'Inspection du travail', reference: 'MED-2026-04',
     text: 'Garde-corps de la plateforme PIRL à mettre en conformité.', dueOn: '2026-10-20', ...over,
   });
 
   it('inscription, modification, réponse : droits, site et journal', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveSafetyNotice({}, noticeForm())).toMatchObject({ error: expect.stringContaining('autre site') });
-    actAs('Salarié', 'ville-b');
+    actAs('Salarié', 'site_b');
     expect(await saveSafetyNotice({}, noticeForm())).toEqual({ error: DENIED });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await saveSafetyNotice({}, noticeForm({ dueOn: '2026-10-01' }))).toMatchObject({ fieldErrors: { dueOn: 'Le délai de réponse suit la réception.' } });
     const created = await saveSafetyNotice({}, noticeForm());
     expect(created).toMatchObject({ ok: true });
@@ -189,9 +189,9 @@ describe('VEI-15 : registre de sécurité, observations et mises en demeure', ()
     expect(await lastLog('safety_notice', id)).toMatchObject({ action: 'create', byId: 'sbenali', summary: 'Mise en demeure (Inspection du travail) inscrite au registre de sécurité' });
     expect(await saveSafetyNotice({}, noticeForm({ id: String(id), dueOn: '2026-10-25' }))).toMatchObject({ ok: true });
     expect(await lastLog('safety_notice', id)).toMatchObject({ action: 'update', details: [{ field: 'Délai de réponse', from: '20/10/2026', to: '25/10/2026' }] });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await answerSafetyNotice({}, form({ id: String(id), answeredOn: '2026-10-09', answer: 'Garde-corps remplacé.' }))).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await answerSafetyNotice({}, form({ id: String(id), answeredOn: '2026-10-01', answer: 'Trop tôt.' }))).toMatchObject({ fieldErrors: { answeredOn: 'La réponse suit la réception.' } });
     expect(await answerSafetyNotice({}, form({ id: String(id), answeredOn: '2026-10-09', answer: 'Garde-corps remplacé, photo jointe au courrier.' }))).toEqual({ ok: true, id: String(id) });
     expect(await lastLog('safety_notice', id)).toMatchObject({ action: 'answer', summary: 'Réponse du 09/10/2026 enregistrée' });
@@ -200,11 +200,11 @@ describe('VEI-15 : registre de sécurité, observations et mises en demeure', ()
   });
 
   it('annulation : motif obligatoire, service QHSE et direction seulement, jamais supprimée', async () => {
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     const created = await saveSafetyNotice({}, noticeForm({ kind: 'observation', text: 'Doublon.' }));
     const id = Number(created.id);
     expect(await cancelSafetyNotice({}, form({ id: String(id), reason: 'Doublon' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await cancelSafetyNotice({}, form({ id: String(id), reason: '' }))).toMatchObject(REASON_REQUIRED);
     expect(await cancelSafetyNotice({}, form({ id: String(id), reason: 'Saisie en double de la mise en demeure' }))).toEqual({ ok: true, id: String(id) });
     expect(await lastLog('safety_notice', id)).toMatchObject({ action: 'cancel', reason: 'Saisie en double de la mise en demeure' });
@@ -214,17 +214,17 @@ describe('VEI-15 : registre de sécurité, observations et mises en demeure', ()
   });
 
   it('échéance de réponse au responsable QHSE du site ; registre imprimable par site', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { todo } = await loadWatchSignals();
-    const pending = todo.find((x) => x.kind === 'Registre de sécurité' && x.siteId === 'ville-a');
+    const pending = todo.find((x) => x.kind === 'Registre de sécurité' && x.siteId === 'site_a');
     expect(pending).toMatchObject({ ownerIds: ['clefevre'], tone: 'warn', dueOn: '2026-10-19', key: expect.stringMatching(/^registre-securite\|\d+$/) });
     expect((await loadVisibleTodo()).some((x) => x.kind === 'Registre de sécurité')).toBe(true);
     // Salarié : écran de la veille fermé, aucune échéance du registre.
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect((await loadVisibleTodo()).some((x) => x.kind === 'Registre de sécurité')).toBe(false);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { sites } = await loadSafetyRegisterPrint();
-    expect(sites.map((s) => s.id)).toEqual(['ville-a']);
+    expect(sites.map((s) => s.id)).toEqual(['site_a']);
     expect(sites[0].notices.length).toBe(2);
     const pont = sites[0].controls.find((c) => c.equipment === 'Pont roulant 10 t — atelier montage')!;
     expect(pont.records.length).toBeGreaterThan(0);
@@ -238,7 +238,7 @@ describe('DUE-19 : mesures de maîtrise liées aux contrôles, documents et habi
   }
 
   it('fiche du risque : validité calculée ; échéance au responsable QHSE du site quand une mesure n’est plus valide', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const handling = await riskOf('montage', 'Manutention mécanique');
     const view = (await loadRisks()).risks.find((r) => r.id === handling.id)!;
     const pont = view.measures.find((m) => m.kind === 'control')!;
@@ -248,9 +248,9 @@ describe('DUE-19 : mesures de maîtrise liées aux contrôles, documents et habi
     // Procédure en vigueur dont la revue périodique est dépassée : signalée sans invalider la mesure.
     expect(procedure).toMatchObject({ valid: true, tone: 'warn', targetId: 'PR-QHSE-005' });
     const { todo } = await loadRiskSignals();
-    expect(todo.find((x) => x.key === `duerp-mesure|${handling.id}`)).toMatchObject({ siteId: 'ville-a', ownerIds: ['clefevre'], href: `/risques?risque=${handling.id}` });
+    expect(todo.find((x) => x.key === `duerp-mesure|${handling.id}`)).toMatchObject({ siteId: 'site_a', ownerIds: ['clefevre'], href: `/risques?risque=${handling.id}` });
     // Salarié : lecture du DUERP, sans lien vers l'écran de la veille ; pas d'échéance (non responsable).
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const mine = (await loadRisks()).risks.find((r) => r.id === handling.id)!;
     expect(mine.measures.find((m) => m.kind === 'control')).toMatchObject({ href: null, valid: false });
     expect((await loadRiskSignals()).todo.some((x) => x.key?.startsWith('duerp-mesure|'))).toBe(false);
@@ -261,12 +261,12 @@ describe('DUE-19 : mesures de maîtrise liées aux contrôles, documents et habi
     const [title] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'hauteur'));
     const link = (over: Record<string, string> = {}) => form({ riskId: String(noise.id), kind: 'title', targetId: title.id, ...over });
     for (const role of ['Salarié', 'Chef de projet'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await linkRiskMeasure({}, link())).toEqual({ error: DENIED });
     }
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await linkRiskMeasure({}, link())).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     // Contrôle d'un autre site : refusé.
     const bench = await control("Banc d'essais BE-1 — matériel ATEX");
     expect(await linkRiskMeasure({}, link({ kind: 'control', targetId: String(bench.id) }))).toMatchObject({ fieldErrors: { targetId: expect.any(String) } });
@@ -290,40 +290,40 @@ describe('DUE-20 : unités de travail reliées aux zones du plan de site', () =>
     return z;
   }
   const unitForm = (over: Record<string, string>, zones: number[]) => {
-    const fd = form({ id: 'bureaux', label: 'Bureaux', siteId: 'ville-a', zonesField: '1', ...over });
+    const fd = form({ id: 'bureaux', label: 'Bureaux', siteId: 'site_a', zonesField: '1', ...over });
     zones.forEach((z) => fd.append('zoneIds', String(z)));
     return fd;
   };
 
   it('zones du site de l’unité seulement ; une zone passe d’une unité à l’autre ; journal de l’unité et de la carte', async () => {
-    actAs('Chef de service', 'ville-a');
-    const offices = await zone('ville-a', 'Bureaux');
-    const be = await zone('ville-a', "Bureau d'études");
-    const hall = await zone('ville-b', "Hall d'essais");
+    actAs('Chef de service', 'site_a');
+    const offices = await zone('site_a', 'Bureaux');
+    const be = await zone('site_a', "Bureau d'études");
+    const hall = await zone('site_b', "Hall d'essais");
     expect(await saveWorkUnit({}, unitForm({}, [hall.id]))).toMatchObject({ fieldErrors: { zoneIds: expect.stringContaining("autre site") } });
     expect(await saveWorkUnit({}, unitForm({}, [offices.id, be.id]))).toEqual({ ok: true, id: 'bureaux' });
     expect(await lastLog('work_unit', 'bureaux')).toMatchObject({ summary: expect.stringContaining('Zones du plan rattachées : ') });
-    expect((await changeLog('site_map', 'ville-a')).at(-1)).toMatchObject({ summary: expect.stringContaining("rattachée à l'unité de travail « Bureaux »") });
+    expect((await changeLog('site_map', 'site_a')).at(-1)).toMatchObject({ summary: expect.stringContaining("rattachée à l'unité de travail « Bureaux »") });
     // Le bureau d'études passe à l'unité « Bureau d'études » : retiré des bureaux.
-    const fd = form({ id: 'be', label: "Bureau d'études", siteId: 'ville-a', zonesField: '1' });
+    const fd = form({ id: 'be', label: "Bureau d'études", siteId: 'site_a', zonesField: '1' });
     fd.append('zoneIds', String(be.id));
     expect(await saveWorkUnit({}, fd)).toEqual({ ok: true, id: 'be' });
-    expect((await zone('ville-a', "Bureau d'études")).workUnitId).toBe('be');
+    expect((await zone('site_a', "Bureau d'études")).workUnitId).toBe('be');
     const units = (await loadRisks()).units;
     expect(units.find((u) => u.id === 'bureaux')!.zones.map((z) => z.name)).toEqual(['Bureaux']);
     // Aucune zone cochée : zones détachées.
     expect(await saveWorkUnit({}, unitForm({}, []))).toEqual({ ok: true, id: 'bureaux' });
-    expect((await zone('ville-a', 'Bureaux')).workUnitId).toBeNull();
+    expect((await zone('site_a', 'Bureaux')).workUnitId).toBeNull();
   });
 
   it('signalement par le QR code du poste : risques de l’unité proposés, risque d’une autre zone ignoré', async () => {
-    const montage = await zone('ville-a', 'Atelier montage');
-    const magasin = await zone('ville-a', 'Magasin');
+    const montage = await zone('site_a', 'Atelier montage');
+    const magasin = await zone('site_a', 'Magasin');
     const risks = await loadZoneRisks([montage.id, magasin.id]);
     expect(risks[String(montage.id)].length).toBeGreaterThan(2);
     const chosen = risks[String(montage.id)][0];
     const jeton = signReportToken(config().reportSecret!, { siteId: montage.siteId, zoneId: montage.id, version: montage.qrVersion });
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const ok = await createReport(form({ type: 'SD', description: 'Élingue effilochée au poste M3.', jeton, riskId: String(chosen.id) }));
     const [ev] = await (await db()).select().from(t.events).where(eq(t.events.id, ok.id!));
     expect(ev).toMatchObject({ zoneId: montage.id, riskId: chosen.id });
@@ -345,12 +345,12 @@ describe('HAB-13 : efficacité des formations (évaluation à froid) et sensibil
   it('droits, site, constat obligatoire, date et journal de la formation', async () => {
     const q = await training('tnguyen', 'hauteur');
     for (const role of ['Salarié', 'Chef de projet'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: DENIED });
     }
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectivenessNote: '' }))).toMatchObject({ fieldErrors: { effectivenessNote: expect.any(String) } });
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectivenessOn: '2000-01-01' }))).toMatchObject({ fieldErrors: { effectivenessOn: "L'évaluation suit l'obtention de la formation." } });
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ ok: true, id: String(q.id) });
@@ -358,13 +358,13 @@ describe('HAB-13 : efficacité des formations (évaluation à froid) et sensibil
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectiveness: 'efficace', effectivenessNote: '' }))).toMatchObject({ ok: true });
     expect(await lastLog('qualification', q.id)).toMatchObject({ details: expect.arrayContaining([{ field: 'Efficacité', from: 'Non efficace', to: 'Efficace' }]) });
     // Le salarié lit l'évaluation de sa formation.
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     const cell = (await loadSkillMatrix()).rows[0].cells.find((c) => c.title.id === 'hauteur')!;
     expect(cell.history.find((e) => e.id === q.id)!.effectiveness).toMatchObject({ key: 'efficace', on: '2026-10-09' });
   });
 
   it('formation annulée : évaluation refusée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const q = await training('tnguyen', 'hauteur');
     await (await db()).update(t.qualifications).set({ cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Test' }).where(eq(t.qualifications.id, q.id));
     expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: 'Formation annulée : elle ne peut plus être évaluée.' });
@@ -374,7 +374,7 @@ describe('HAB-13 : efficacité des formations (évaluation à froid) et sensibil
 
 describe('HAB-18 : indicateurs de compétences dans la revue', () => {
   it('taux de conformité, formations sur 12 mois et recyclages en retard au dossier de la revue', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const [review] = await (await db()).select().from(t.reviews).where(eq(t.reviews.status, 'planifiee'));
     const page = await loadReviewDossierPage({ revue: String(review.id) });
     if (!page || !('dossier' in page) || !page.dossier) throw new Error('dossier introuvable');
@@ -384,20 +384,20 @@ describe('HAB-18 : indicateurs de compétences dans la revue', () => {
 
 describe('PRV-17 : inspections et réunions périodiques des interventions longues', () => {
   it('jeu de démonstration : prochaine réunion due au responsable du plan', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const plan = (await loadPrevention()).plans.find((p) => p.id === 'PP-2025-041')!;
     expect(plan).toMatchObject({ meetingPeriodDays: 30, nextMeeting: { dueOn: '2026-10-19', late: false } });
     const { todo } = await loadPreventionSignals();
-    expect(todo.find((x) => x.key === 'pp-reunion|PP-2025-041')).toMatchObject({ ownerIds: ['sbenali'], dueOn: '2026-10-19', siteId: 'ville-a' });
+    expect(todo.find((x) => x.key === 'pp-reunion|PP-2025-041')).toMatchObject({ ownerIds: ['sbenali'], dueOn: '2026-10-19', siteId: 'site_a' });
   });
 
   it('séance, périodicité et annulation : droits, site, motif et journal', async () => {
     const meeting = (over: Record<string, string> = {}) => form({ planId: 'PP-2025-041', kind: 'reunion', heldOn: '2026-10-08', participants: '[S. Benali], chef d’équipe', notes: 'Point mensuel.', ...over });
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await recordPlanMeeting({}, meeting())).toEqual({ error: DENIED });
-    actAs('Chef de projet', 'ville-b');
+    actAs('Chef de projet', 'site_b');
     expect(await recordPlanMeeting({}, meeting())).toEqual({ error: OTHER_SITE });
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     expect(await recordPlanMeeting({}, meeting({ heldOn: '2025-01-01' }))).toMatchObject({ fieldErrors: { heldOn: expect.stringContaining("début de l'intervention") } });
     const saved = await recordPlanMeeting({}, meeting());
     expect(saved).toMatchObject({ ok: true });

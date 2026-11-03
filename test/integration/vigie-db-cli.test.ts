@@ -57,7 +57,7 @@ beforeAll(async () => {
   });
   await withDb(async (db) => {
     await migrate(drizzle(db), { migrationsFolder: MIGRATIONS_DIR });
-    await db.query("insert into sites (id, label, sort) values ('ville-a', 'Site A', 1), ('ville-b', 'Site B', 2)");
+    await db.query("insert into sites (id, label, sort) values ('site_a', 'Site A', 1), ('site_b', 'Site B', 2)");
   });
   await mkdir(path.join(dir, 'uploads'));
   await writeFile(path.join(dir, 'uploads', UPLOAD), 'pièce jointe en clair (fichier ancien)');
@@ -77,7 +77,7 @@ describe('vigie-db (sauvegarde, liste, restauration)', () => {
     expect(vigieDb('list').out).toContain(file);
 
     // Données perdues après la sauvegarde.
-    await withDb((db) => db.query("delete from sites where id = 'ville-b'"));
+    await withDb((db) => db.query("delete from sites where id = 'site_b'"));
     await rm(path.join(dir, 'uploads', UPLOAD));
     expect(await siteLabels()).toEqual(['Site A']);
 
@@ -129,7 +129,7 @@ describe('vigie-db (sauvegarde, liste, restauration)', () => {
     const clear = vigieDb('backup', '--clair', '--sans-pieces-jointes');
     expect(clear.code).toBe(0);
     const [file] = await backups(/-manuelle(-\d+)?\.tar$/);
-    await withDb((db) => db.query("delete from sites where id = 'ville-b'"));
+    await withDb((db) => db.query("delete from sites where id = 'site_b'"));
     const refused = vigieDb('restore', path.join(dir, 'backups', file), '--remplacer');
     expect(refused.code).not.toBe(0);
     expect(refused.out).toMatch(/Sauvegarde en clair refusée/);

@@ -30,7 +30,7 @@ const create = async (link: string, source: string) => {
 
 describe('plusieurs actions par constat (AUD-28)', () => {
   it('deux actions créées depuis le même constat : toutes deux rattachées, listées sur le constat, échéance « sans action » levée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadAuditSignals()).todo.some((x) => x.href === '/audits?constat=5')).toBe(true);
     // Constat déjà porteur d'une action : toujours proposé par le sélecteur du plan.
     const first = await create('finding:5', 'audit_interne');
@@ -45,7 +45,7 @@ describe('plusieurs actions par constat (AUD-28)', () => {
   });
 
   it('une action ne porte qu’un constat, fixé à sa création : ni rattachement ni détachement ensuite', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const [first] = await actionsOf(5);
     expect(await linkAction('finding:1', first)).toEqual({ error: EVENT_AUDIT_LOCKED });
     expect(await unlinkAction('finding:5', first)).toEqual({ error: EVENT_AUDIT_LOCKED });
@@ -54,7 +54,7 @@ describe('plusieurs actions par constat (AUD-28)', () => {
   });
 
   it('abandon d’une des actions : détachée du constat (journal du constat), l’autre reste', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const [first, second] = await actionsOf(5);
     expect(await abandonAction({}, form({ id: first, from: 'a_faire', reason: 'Doublon' }))).toMatchObject({ ok: true });
     expect(await actionsOf(5)).toEqual([second]);
@@ -76,7 +76,7 @@ describe('plusieurs actions par constat (AUD-28)', () => {
   });
 
   it('annulation du constat : ses actions restent au plan, l’annulation est inscrite à l’historique de chacune', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const ids = await actionsOf(5);
     expect(ids).toHaveLength(2);
     expect(await cancelFinding({}, form({ id: '5', reason: 'Constat saisi en double' }))).toEqual({ ok: true, id: '5' });
