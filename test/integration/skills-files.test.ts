@@ -19,7 +19,7 @@ const counts = async () => {
 
 describe('saveQualification : attestations', () => {
   it('plus de 10 fichiers : refusé, rien n’est enregistré', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = await counts();
     const files = Array.from({ length: 11 }, (_, i) => file(`attestation-${i + 1}.pdf`));
     const result = await saveQualification({}, formWith(fields, { files }));
@@ -28,7 +28,7 @@ describe('saveQualification : attestations', () => {
   });
 
   it('plus de 10 Mo au total : refusé, rien n’est enregistré', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = await counts();
     const result = await saveQualification({}, formWith(fields, { files: [big('recto.pdf', 6 * MB), big('verso.pdf', 6 * MB)] }));
     expect(result.fieldErrors?.files).toBe('Ces fichiers dépassent 10 Mo au total : envoyez-les en plusieurs fois.');

@@ -5,7 +5,7 @@ import { AXE_SCREENS, asRole, axeViolations } from './helpers';
 // rendu au bouton) et lien d'évitement.
 
 test('tiroir : Échap ferme d’abord le menu du site, puis le tiroir ; focus rendu au bouton', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/');
   const toggle = page.getByRole('button', { name: 'Ouvrir le menu de navigation' });
   await toggle.click();

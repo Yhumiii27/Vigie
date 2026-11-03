@@ -34,48 +34,48 @@ async function streamForm(id: string, changes: Record<string, string> = {}) {
 
 describe('droits et site', () => {
   it('Chef de service : registre, filières et SIRET refusés', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveWasteStream({}, await streamForm('FD-01', { label: 'Huiles' }))).toEqual({ error: DENIED });
     expect(await saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-01', quantity: '100' }))).toEqual({ error: DENIED });
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '00000000000109' }))).toEqual({ error: APPROVERS_ONLY });
+    expect(await saveSiteSiret({}, form({ siteId: 'site_a', siret: '00000000000109' }))).toEqual({ error: APPROVERS_ONLY });
   });
 
   it('autre site que celui sélectionné : refusé', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await saveWasteStream({}, await streamForm('FD-01', { label: 'Huiles' }))).toEqual({ error: expect.stringContaining('autre site') });
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '00000000000109' }))).toEqual({ error: expect.stringContaining('autre site') });
+    expect(await saveSiteSiret({}, form({ siteId: 'site_a', siret: '00000000000109' }))).toEqual({ error: expect.stringContaining('autre site') });
     expect((await stream('FD-01')).label).toBe('Huiles hydrauliques usagées');
   });
 });
 
 describe('saveSiteSiret', () => {
   it('SIRET contrôlé, enregistré sans espaces, journalisé sur le site ; sans changement, rien n’est journalisé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    const invalid = await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '12345678901234' }));
+    actAs('Animateur QHSE', 'site_a');
+    const invalid = await saveSiteSiret({}, form({ siteId: 'site_a', siret: '12345678901234' }));
     expect(invalid.fieldErrors?.siret).toBe('SIRET invalide : 14 chiffres, clé de contrôle incorrecte.');
     expect(await saveSiteSiret({}, form({ siteId: 'inconnu', siret: '' }))).toMatchObject({ error: 'Site inconnu.' });
 
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '000 000 000 00109' }))).toEqual({ ok: true, id: 'ville-a' });
+    expect(await saveSiteSiret({}, form({ siteId: 'site_a', siret: '000 000 000 00109' }))).toEqual({ ok: true, id: 'site_a' });
     const db = await getDb();
-    expect((await db.select().from(t.sites).where(eq(t.sites.id, 'ville-a')))[0].siret).toBe('00000000000109');
-    const log = await lastLog('site', 'ville-a');
+    expect((await db.select().from(t.sites).where(eq(t.sites.id, 'site_a')))[0].siret).toBe('00000000000109');
+    const log = await lastLog('site', 'site_a');
     expect(log).toMatchObject({ action: 'update', summary: "SIRET de l'établissement modifié", reason: null, byId: 'clefevre' });
     expect(log?.details).toEqual([{ field: 'SIRET', from: '000 000 000 00018', to: '000 000 000 00109' }]);
 
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '00000000000109' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect((await lastLog('site', 'ville-a'))?.id).toBe(log?.id);
+    expect(await saveSiteSiret({}, form({ siteId: 'site_a', siret: '00000000000109' }))).toEqual({ ok: true, id: 'site_a' });
+    expect((await lastLog('site', 'site_a'))?.id).toBe(log?.id);
   });
 
   it('site archivé : SIRET modifiable (registre dû 3 ans)', async () => {
     actAs('Animateur QHSE', 'all');
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-c', siret: '00000000000174' }))).toEqual({ ok: true, id: 'ville-c' });
-    expect(await lastLog('site', 'ville-c')).toMatchObject({ summary: "SIRET de l'établissement renseigné", details: [{ field: 'SIRET', from: null, to: '000 000 000 00174' }] });
+    expect(await saveSiteSiret({}, form({ siteId: 'site_c', siret: '00000000000174' }))).toEqual({ ok: true, id: 'site_c' });
+    expect(await lastLog('site', 'site_c')).toMatchObject({ summary: "SIRET de l'établissement renseigné", details: [{ field: 'SIRET', from: null, to: '000 000 000 00174' }] });
   });
 });
 
 describe('saveWasteStream : mentions par défaut de la filière', () => {
   it('SIRET invalide et qualification incohérente refusés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const badSiret = await saveWasteStream({}, await streamForm('FD-01', { collectorSiret: '123' }));
     expect(badSiret.fieldErrors?.collectorSiret).toEqual(expect.stringContaining('SIRET'));
     const badQualification = await saveWasteStream({}, await streamForm('FD-01', { qualification: 'elimination' }));
@@ -85,10 +85,10 @@ describe('saveWasteStream : mentions par défaut de la filière', () => {
   });
 
   it('transit (R13) sans qualification : admis, à préciser à chaque enlèvement ; code R sans qualification : proposée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const base = {
       label: 'Batteries au plomb', ewcCode: '16 06 01*', channel: 'Regroupement', collector: '[Collecteur DD Ouest]', destination: '[Plateforme de regroupement]',
-      siteId: 'ville-a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '', collectorReceipt: '', destinationSiret: '', destinationAddress: '',
+      siteId: 'site_a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '', collectorReceipt: '', destinationSiret: '', destinationAddress: '',
     };
     const transit = await saveWasteStream({}, form({ ...base, treatmentCode: 'R13' }));
     expect(transit).toMatchObject({ ok: true });
@@ -103,7 +103,7 @@ describe('saveWasteStream : mentions par défaut de la filière', () => {
 
 describe('saveWasteEntry : copies des mentions', () => {
   it('inscription sans transporteur : mentions du collecteur et de l’installation copiées, qualification de la filière', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const result = await saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-08', quantity: '300', bsdNumber: 'BSD-20261008-TEST0001' }));
     expect(result).toMatchObject({ ok: true });
     const fd01 = await stream('FD-01');
@@ -115,7 +115,7 @@ describe('saveWasteEntry : copies des mentions', () => {
   });
 
   it('transporteur propre : SIRET contrôlé ; qualification incohérente avec le code figé refusée', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const bad = await saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-08', quantity: '50', transporter: '[Transports Durand]', transporterSiret: '00000000000001' }));
     expect(bad.fieldErrors?.transporterSiret).toEqual(expect.stringContaining('SIRET'));
     const elimination = await saveWasteEntry({}, form({ streamId: 'FD-01', removedOn: '2026-10-08', quantity: '50', qualification: 'elimination' }));
@@ -132,7 +132,7 @@ describe('saveWasteEntry : copies des mentions', () => {
   });
 
   it('modification de la filière : un enlèvement inscrit garde sa copie ; une copie vide suit la filière si l’installation est la même', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     expect(await saveWasteStream({}, await streamForm('FD-01', { destinationSiret: '00000000000190' }))).toEqual({ ok: true, id: 'FD-01' });
     expect(await lastLog('waste_stream', 'FD-01')).toMatchObject({
@@ -161,30 +161,30 @@ describe('saveWasteEntry : copies des mentions', () => {
 
 describe('registre : mentions incomplètes, échéance, export', () => {
   it('transporteur non référencé : trois mentions manquantes ; sans SIRET du site, toutes les lignes le signalent', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     let { entries } = await loadEnvironment(2026);
     const benne = entries.filter((e) => e.transporter === BENNE && !e.cancelled);
     expect(benne.map((e) => e.removedOn).sort()).toEqual(['2026-01-14', '2026-04-15', '2026-07-08']);
     benne.forEach((e) => expect(e.gaps).toEqual(TRANSPORTER_GAPS));
     expect(entries.filter((e) => e.cancelled).every((e) => e.gaps.length === 0)).toBe(true);
 
-    expect(await saveSiteSiret({}, form({ siteId: 'ville-a', siret: '' }))).toEqual({ ok: true, id: 'ville-a' });
-    expect(await lastLog('site', 'ville-a')).toMatchObject({ summary: "SIRET de l'établissement retiré", details: [{ field: 'SIRET', from: '000 000 000 00109', to: null }] });
+    expect(await saveSiteSiret({}, form({ siteId: 'site_a', siret: '' }))).toEqual({ ok: true, id: 'site_a' });
+    expect(await lastLog('site', 'site_a')).toMatchObject({ summary: "SIRET de l'établissement retiré", details: [{ field: 'SIRET', from: '000 000 000 00109', to: null }] });
     ({ entries } = await loadEnvironment(2026));
     expect(entries.filter((e) => !e.cancelled).every((e) => e.gaps.includes("SIRET de l'établissement"))).toBe(true);
     expect(entries.find((e) => e.transporter === BENNE && !e.cancelled)?.gaps).toEqual(["SIRET de l'établissement", ...TRANSPORTER_GAPS]);
   });
 
   it('échéance « mentions incomplètes » : à traiter, hors badge', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { todo } = await loadEnvironmentSignals();
-    const item = todo.find((i) => i.siteId === 'ville-a' && i.title.startsWith('Registre des déchets 2026') && i.title.includes('mentions incomplètes'));
+    const item = todo.find((i) => i.siteId === 'site_a' && i.title.startsWith('Registre des déchets 2026') && i.title.includes('mentions incomplètes'));
     expect(item).toMatchObject({ kind: 'Déchets', tone: 'warn', count: 0 });
     expect(item?.href).toContain('vue=mentions-incompletes');
   });
 
   it('export CSV : colonnes de l’arrêté, quantité en tonnes', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const { csv } = await loadWasteRegisterCsv(2026);
     const [header, ...lines] = csv.replace(/^﻿/, '').trimEnd().split('\r\n').map((l) => l.split(';'));
     for (const h of ["Date d'expédition (enlèvement)", "SIRET de l'établissement", 'POP', 'Quantité (t ou m³)', 'SIRET du transporteur', 'N° de récépissé du transporteur',
@@ -207,7 +207,7 @@ describe('archivage d’une filière (DOC-09) : jamais supprimée', () => {
   const newStream = async (label: string) => {
     const r = await saveWasteStream({}, form({
       label, ewcCode: '16 06 01*', treatmentCode: 'R4', channel: 'Regroupement', collector: '[Collecteur DD Ouest]',
-      destination: '[Plateforme de regroupement]', siteId: 'ville-a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '',
+      destination: '[Plateforme de regroupement]', siteId: 'site_a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '',
       collectorReceipt: '', destinationSiret: '', destinationAddress: '',
     }));
     expect(r).toMatchObject({ ok: true });
@@ -217,7 +217,7 @@ describe('archivage d’une filière (DOC-09) : jamais supprimée', () => {
     // Contrat FormData du paquet 1 (plan § 2.14) : source « Déchets » imposée par la filière (admissibleSources).
     const r = await saveAction({}, form({
       source: 'dechets', link: `wastestream:${streamId}`, originRef: streamId, pilotId: 'clefevre', priority: 'moyen_terme', domain: 'environnement',
-      problem: `Filière ${streamId} : test`, detail: `Action de test · ${streamId}`, dueOn: '2026-11-15', verifyDueOn: '2026-12-15', riskLevel: '', siteId: 'ville-a',
+      problem: `Filière ${streamId} : test`, detail: `Action de test · ${streamId}`, dueOn: '2026-11-15', verifyDueOn: '2026-12-15', riskLevel: '', siteId: 'site_a',
     }));
     expect(r).toMatchObject({ ok: true });
     return r.id!;
@@ -226,19 +226,19 @@ describe('archivage d’une filière (DOC-09) : jamais supprimée', () => {
   const entryForm = (streamId: string) => form({ streamId, removedOn: '2026-10-05', quantity: '12', transporter: '', bsdNumber: '', bsdStatus: '', notes: '', eventId: '' });
 
   it('droits, motif et site : Chef de service, motif vide et autre site refusés, filière en service', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const id = await newStream('Batteries (droits)');
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await archiveWasteStream({}, form({ id, reason: 'Test' }))).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await archiveWasteStream({}, form({ id, reason: '' }))).toMatchObject({ fieldErrors: { reason: expect.any(String) } });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await archiveWasteStream({}, form({ id, reason: 'Test' }))).toEqual({ error: expect.stringContaining('autre site') });
     expect((await stream(id)).archivedAt).toBeNull();
   });
 
   it('archivée avec motif et journal ; plus de nouvel enlèvement ni de modification ; réactivée avec motif', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const id = await newStream('Batteries (archive)');
     const actionId = await actionFrom(id);
     expect(await archiveWasteStream({}, form({ id, reason: 'Déchet plus produit' }))).toMatchObject({ ok: true, id });
@@ -262,21 +262,21 @@ describe('archivage d’une filière (DOC-09) : jamais supprimée', () => {
 
 describe('relevés de consommation journalisés (DOC-10)', () => {
   it('saisie, modification et effacement journalisés par mois et par site ; historique au même droit que l’écran', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    const key = 'ville-a|2026-09-01';
+    actAs('Animateur QHSE', 'site_a');
+    const key = 'site_a|2026-09-01';
     const before = (await changeLog('consumption', key)).length;
-    expect(await saveConsumptionMonth({}, form({ siteId: 'ville-a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
+    expect(await saveConsumptionMonth({}, form({ siteId: 'site_a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
     const first = await lastLog('consumption', key);
     expect(first).toMatchObject({ byId: 'clefevre' });
     const detail = (first?.details as { field: string; to: string | null }[]).find((d) => d.field === 'Électricité (kWh)');
     expect(detail?.to).toMatch(/^1\s500$/);
     // Même valeurs : aucune entrée.
-    expect(await saveConsumptionMonth({}, form({ siteId: 'ville-a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
+    expect(await saveConsumptionMonth({}, form({ siteId: 'site_a', month: '2026-09', electricite: '1500', gaz: '', eau: '' }))).toMatchObject({ ok: true });
     expect((await changeLog('consumption', key)).length).toBe(before + 1);
     expect(await loadEntityHistory('consumption', key)).toMatchObject({ entries: [expect.objectContaining({ id: first!.id })] });
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await loadEntityHistory('consumption', key)).toEqual({ error: 'Historique introuvable.' });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await loadEntityHistory('consumption', key)).toEqual({ error: 'Historique introuvable.' });
   });
 });
@@ -288,23 +288,23 @@ describe('action « BSD manquants » du registre (paquet 1 Actions QSE)', () => 
   };
 
   it('sans action rattachée à l’exigence : source « Déchets » proposée (Veille admise), exigence liée, domaine Environnement', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const req = await bsdRequirement();
     await (await getDb()).update(t.requirements).set({ actionId: null }).where(eq(t.requirements.id, req.id));
     const d = await loadEnvironment();
     expect(d.bsdAction).toBeNull();
     expect(d.bsdActionDefaults).toMatchObject({
-      source: 'dechets', sourceChoices: ['dechets', 'veille'], link: `requirement:${req.id}`, domain: 'environnement', siteId: 'ville-a',
+      source: 'dechets', sourceChoices: ['dechets', 'veille'], link: `requirement:${req.id}`, domain: 'environnement', siteId: 'site_a',
       originRef: `Registre des déchets ${d.year}`, dueOn: '2026-10-24', verifyDueOn: '2026-11-23',
     });
     expect(d.bsdActionDefaults).not.toHaveProperty('lockSource');
   });
 
   it('action non close rattachée à l’exigence : retrouvée par ce rattachement (plus par la référence d’origine), sans nouvel élément lié', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const req = await bsdRequirement();
-    const open = (await db.select().from(t.actions)).filter((a) => a.siteId === 'ville-a' && ['a_faire', 'initiee', 'p20', 'p40', 'p60', 'p80', 'terminee'].includes(a.status))[0];
+    const open = (await db.select().from(t.actions)).filter((a) => a.siteId === 'site_a' && ['a_faire', 'initiee', 'p20', 'p40', 'p60', 'p80', 'terminee'].includes(a.status))[0];
     await db.update(t.requirements).set({ actionId: open.id }).where(eq(t.requirements.id, req.id));
     const d = await loadEnvironment();
     expect(d.bsdAction).toMatchObject({ id: open.id, label: expect.any(String) });

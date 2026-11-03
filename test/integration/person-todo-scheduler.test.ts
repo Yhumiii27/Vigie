@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cookieJar } from '../next-mocks';
 import { actAs, freshDemoDatabase } from '../helpers';
 import { getDb } from '@/db';
-import { PERSON_TODO_TASK, personTodoTask, scheduledTasks, startScheduler, type ScheduledTask } from '@/db/scheduler';
+import { PERSON_TODO_TASK, SHARED_REFERENCES_TASK, personTodoTask, sharedReferencesTask, scheduledTasks, startScheduler, type ScheduledTask } from '@/db/scheduler';
 import type { Db } from '@/db/types';
 import { DEMO_ROLE_PEOPLE } from '@/lib/demo';
 import type { Role } from '@/lib/domain';
@@ -52,7 +52,21 @@ describe('PRD-12 : échéances par personne sans session', () => {
 describe('PRD-12 : tâche planifiée', () => {
   it('inscrite dans le serveur Next.js (instrumentation) seulement, avec ou sans transport d’e-mail', () => {
     expect(serverRuntime()).toBeDefined();
-    expect(scheduledTasks(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun' })).map((t) => t.name)).toEqual([PERSON_TODO_TASK]);
+    expect(scheduledTasks(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun' })).map((t) => t.name)).toEqual([PERSON_TODO_TASK, SHARED_REFERENCES_TASK]);
+  });
+
+  it('référentiels partagés (lot 0 de M-02) : une fois par nuit, à partir de 2 h (Paris), jamais le jour du démarrage', async () => {
+    const db = await getDb();
+    const { schema: t } = await import('@/db');
+    const count = async () => (await db.select().from(t.syncRuns)).length;
+    const task = sharedReferencesTask(new Date('2026-10-09T10:00:00Z'));
+    const n0 = await count();
+    await task.run(db, new Date('2026-10-09T23:30:00Z')); // 01 h 30 à Paris le 10/10 : trop tôt
+    expect(await count()).toBe(n0);
+    await task.run(db, new Date('2026-10-10T00:30:00Z')); // 02 h 30 à Paris
+    expect(await count()).toBe(n0 + 4);
+    await task.run(db, new Date('2026-10-10T12:00:00Z')); // même jour : rien
+    expect(await count()).toBe(n0 + 4);
   });
 
   it('calcul au premier passage puis au plus une fois par heure', async () => {

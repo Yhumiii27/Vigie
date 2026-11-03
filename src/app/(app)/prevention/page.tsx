@@ -98,6 +98,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
     people: formOptions.people,
     sites: formOptions.sites,
     projects: formOptions.projects,
+    projectsMessage: formOptions.projectsMessage,
     contractors: d.choices.contractors,
     plans: d.choices.plans,
     siteRules: d.siteRules,
@@ -219,7 +220,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer le registre</a>
             )}
             {manage && tab === 'permis' && <NewPermitButton options={options} />}
-            {manage && tab === 'entreprises' && <NewContractorButton />}
+            {manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
           </span>
         </div>
 
@@ -293,7 +294,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               ]} />
               <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Plans et permis comptés sur le site sélectionné</span>
             </div>
-            <ContractorsTable key={openContractor?.id ?? 'liste'} contractors={contractors} canManage={manage} openId={openContractor?.id}
+            <ContractorsTable key={openContractor?.id ?? 'liste'} contractors={contractors} suppliers={manage ? d.suppliers : { options: [], message: null }} canManage={manage} openId={openContractor?.id}
               emptyLabel={showArchived ? 'Aucune entreprise archivée.' : 'Aucune entreprise extérieure enregistrée.'} />
           </>
         )}

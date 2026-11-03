@@ -7,7 +7,7 @@ import { asRole, consoleErrors } from './helpers';
 
 test('Animateur QHSE : audit hors programme, programme imprimable, carte de revue avec perception client', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/audits?annee=2026');
   await page.getByRole('button', { name: 'Audit hors programme' }).click();
   const dialog = page.getByRole('dialog');
@@ -27,7 +27,7 @@ test('Animateur QHSE : audit hors programme, programme imprimable, carte de revu
 });
 
 test('Direction : demande de changement à évaluer, décision motivée', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Direction', 'ville-a');
+  await asRole(context, baseURL!, 'Direction', 'site_a');
   await page.goto('/audits?changement=MC-002');
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Réorganisation des allées du magasin').first()).toBeVisible();
@@ -39,7 +39,7 @@ test('Direction : demande de changement à évaluer, décision motivée', async 
 });
 
 test('Chef de service : situations d’urgence, exercice tenu ; Salarié : consignes en consultation', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/risques?vue=urgences');
   await expect(page.getByText(/Exercice en retard depuis le/).first()).toBeVisible();
   await page.getByRole('cell', { name: /Déversement de produit chimique/ }).click();
@@ -49,7 +49,7 @@ test('Chef de service : situations d’urgence, exercice tenu ; Salarié : consi
   await dialog.getByLabel('Déroulement et enseignements').fill('Kit antipollution en place en 4 min.');
   await dialog.getByRole('button', { name: "Enregistrer l'exercice" }).click();
   await expect(dialog.getByText('Exercice enregistré.')).toBeVisible();
-  await asRole(context, baseURL!, 'Salarié', 'ville-a');
+  await asRole(context, baseURL!, 'Salarié', 'site_a');
   await page.goto('/risques?vue=urgences');
   await expect(page.getByText("Incendie de l'atelier montage").first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Identifier une situation' })).toHaveCount(0);
@@ -68,7 +68,7 @@ test('Animateur QHSE : revue documentaire sans modification ; données d’une p
   await expect(page.getByRole('heading', { level: 1, name: /Données personnelles · \[S\. Benali\]/ })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: /Habilitations et formations/ })).toBeVisible();
   // Encadrement : page réservée (données de santé comprises), renvoi vers l'écran.
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/habilitations/donnees-personnelles?salarie=sbenali');
   await expect(page).not.toHaveURL(/donnees-personnelles/);
 });

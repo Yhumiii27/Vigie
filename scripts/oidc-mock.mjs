@@ -12,8 +12,8 @@
 //   - navigateur : la page d'autorisation liste les comptes ;
 //   - curl : GET /_mock/login?user=<clé> avec le même fichier de cookies, puis le parcours de connexion de Vigie ;
 //   - ou paramètre login_hint=<clé> dans l'URL d'autorisation.
-// Comptes par défaut (DEFAULT_USERS ci-dessous) calqués sur le jeu de démonstration ; groupes d'exemple grp-ville-a,
-// grp-ville-b (VIGIE_SITE_GROUPS=grp-ville-a:ville-a,grp-ville-b:ville-b). GET /_mock/users les liste.
+// Comptes par défaut (DEFAULT_USERS ci-dessous) calqués sur le jeu de démonstration ; groupes d'exemple grp-site_a,
+// grp-site_b (VIGIE_SITE_GROUPS=grp-site_a:site_a,grp-site_b:site_b). GET /_mock/users les liste.
 // Revendications email et xms_edov (adresse vérifiée, vraie sauf « edov: false ») comme les revendications facultatives
 // d'Entra ; « noEmail: true » les retire (VIGIE_EMAIL_DOMAINS=epc2i.example pour les comptes par défaut).
 
@@ -36,9 +36,9 @@ const DEFAULT_USERS = {
   animateur: { name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', roles: ['Vigie.AnimateurQHSE'], groups: [] },
   direction: { name: '[H. Marchand]', email: 'h.marchand@epc2i.example', roles: ['Vigie.Salarie', 'Vigie.Direction'], groups: [] },
   chefservice: { name: '[S. Benali]', email: 'S.Benali@EPC2I.example', roles: ['Vigie.ChefService'], groups: [] },
-  salarie: { name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-ville-b'] },
+  salarie: { name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b'] },
   essais: { name: '[A. Martin]', email: 'a.martin@epc2i.example', roles: ['Vigie.ChefProjet'], groups: [] },
-  nouveau: { name: 'Nina Rousseau', email: 'n.rousseau@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-ville-b', 'grp-inconnu'] },
+  nouveau: { name: 'Nina Rousseau', email: 'n.rousseau@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b', 'grp-inconnu'] },
   sansrole: { name: '[P. Roux]', email: 'p.roux@epc2i.example', roles: [], groups: [] },
   parti: { name: '[Y. Lambert]', email: 'y.lambert@epc2i.example', roles: ['Vigie.Salarie'], groups: [] },
   nonaffecte: { name: 'Externe Non Affecté', email: 'externe@autre.example', roles: [], groups: [], assigned: false },

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { fmtDate } from '@/lib/dates';
 import { isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
@@ -88,6 +89,9 @@ export async function saveProcessSafetyStudy(_prev: FormState, fd: FormData): Pr
   const loaded = id ? await loadForWrite(id) : null;
   if (loaded?.error) return { error: loaded.error };
   const current = loaded?.s ?? null;
+  // D02 : code présent dans keystone.pub_projets (inchangé admis ; source indisponible : saisie refusée avec un message).
+  const knownError = await unknownProjectError(await getDb(), projectCode, current?.keystoneProjectCode);
+  if (knownError) return { error: 'Certains champs sont à corriger.', fieldErrors: { keystoneProjectCode: knownError } };
   const status: StoredStudyStatus = current?.status === 'validee' ? 'validee' : askedStatus ?? 'planifiee';
   const now = today();
   const dateErrors = studyFieldErrors(

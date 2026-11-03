@@ -20,7 +20,7 @@ freshDemoDatabase();
 async function insertAction(db: DbOrTx, id: string, o: { status?: Avancement; siteId?: string | null; pilotId?: string } = {}) {
   await db.insert(t.actions).values({
     id, openedOn: '2026-10-01', pilotId: o.pilotId ?? 'sbenali', status: o.status ?? 'a_faire', dueOn: '2026-10-30', initialDueOn: '2026-10-30',
-    originRef: 'Réf. test', detail: `Action ${id}`, siteId: o.siteId === undefined ? 'ville-a' : o.siteId,
+    originRef: 'Réf. test', detail: `Action ${id}`, siteId: o.siteId === undefined ? 'site_a' : o.siteId,
   });
 }
 const counter = async () => (await (await getDb()).select().from(t.actionCounters))[0];
@@ -271,10 +271,10 @@ describe('preuves des actions : enregistrement et lecture (src/lib/uploads.ts, D
   it('responsable : preuves de son action quel que soit son site (D19) ; hors périmètre sinon refusé', async () => {
     const a215 = await proofOf('A-215'); // site A, responsable tnguyen (Salarié)
     const a214 = await proofOf('A-214'); // site A, responsable sbenali (Chef de service)
-    expect(await canReadAttachment(a215, session('Salarié', 'tnguyen', ['ville-b']))).toBe(true);
-    expect(await canReadAttachment(a214, session('Chef de service', 'sbenali', ['ville-b']))).toBe(true);
-    expect(await canReadAttachment(a214, session('Chef de service', 'lmoreau', ['ville-b']))).toBe(false);
-    expect(await canReadAttachment(a214, session('Chef de service', 'lmoreau', ['ville-a']))).toBe(true);
+    expect(await canReadAttachment(a215, session('Salarié', 'tnguyen', ['site_b']))).toBe(true);
+    expect(await canReadAttachment(a214, session('Chef de service', 'sbenali', ['site_b']))).toBe(true);
+    expect(await canReadAttachment(a214, session('Chef de service', 'lmoreau', ['site_b']))).toBe(false);
+    expect(await canReadAttachment(a214, session('Chef de service', 'lmoreau', ['site_a']))).toBe(true);
     expect(await canReadAttachment(a214, session('Chef de projet', 'edubois'))).toBe(true);
     expect(await canReadAttachment(a214, session('Salarié', 'tnguyen'))).toBe(false);
     expect(await canReadAttachment(a215, session('Salarié', 'mgirard'))).toBe(false);

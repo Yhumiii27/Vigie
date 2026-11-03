@@ -37,17 +37,17 @@ describe('pièces jointes génériques', () => {
     actAs('Chef de projet');
     expect(await add('risk', risk.id)).toEqual({ error: DENIED });
     // Unité de la zone d'essais : site de [Ville B].
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await add('risk', risk.id)).toEqual({ error: expect.stringContaining('autre site') });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await add('risk', risk.id, 'mesurage.pdf')).toEqual({ count: 1 });
     expect(await lastLog('risk', risk.id)).toMatchObject({ action: 'attach', details: [{ field: 'Justificatif', from: null, to: 'mesurage.pdf' }] });
     const [att] = await filesOf('risk', risk.id);
     expect(await canReadAttachment(att, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: null })).toBe(true);
-    expect(await canReadAttachment(att, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: ['ville-a'] })).toBe(false);
+    expect(await canReadAttachment(att, { role: 'Salarié', user: { id: 'tnguyen' }, allowedSiteIds: ['site_a'] })).toBe(false);
     actAs('Salarié');
     expect(await removeEntityFile(att.id, 'erreur')).toEqual({ error: DENIED });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await removeEntityFile(att.id, '  ')).toEqual({ error: 'Motif obligatoire.' });
     expect(await removeEntityFile(att.id, 'Mauvais poste mesuré')).toEqual({});
     expect(await lastLog('risk', risk.id)).toMatchObject({ action: 'detach', reason: 'Mauvais poste mesuré', details: [{ field: 'Justificatif', from: 'mesurage.pdf', to: null }] });
@@ -125,19 +125,19 @@ describe('pièces jointes génériques', () => {
 
   it('enlèvement (DOC-11) : environnement seulement, site, enlèvement annulé figé', async () => {
     const entries = await (await db()).select().from(t.wasteEntries);
-    const live = entries.find((e) => !e.cancelledAt && e.siteId === 'ville-a')!;
+    const live = entries.find((e) => !e.cancelledAt && e.siteId === 'site_a')!;
     const cancelled = entries.find((e) => e.cancelledAt)!;
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await add('waste_entry', live.id)).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await add('waste_entry', live.id)).toEqual({ error: expect.stringContaining('autre site') });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await add('waste_entry', cancelled.id)).toEqual({ error: 'Enlèvement annulé : ses pièces sont conservées pour la trace.' });
     expect(await add('waste_entry', live.id, 'bsd.pdf')).toEqual({ count: 1 });
     expect(await lastLog('waste_entry', live.id)).toMatchObject({ action: 'attach', details: [{ field: "Pièce de l'enlèvement", to: 'bsd.pdf' }] });
     const [att] = await filesOf('waste_entry', live.id);
     expect(await canReadAttachment(att, { role: 'Chef de service', user: { id: 'sbenali' }, allowedSiteIds: null })).toBe(false);
-    expect(await canReadAttachment(att, { role: 'Animateur QHSE', user: { id: 'clefevre' }, allowedSiteIds: ['ville-b'] })).toBe(false);
+    expect(await canReadAttachment(att, { role: 'Animateur QHSE', user: { id: 'clefevre' }, allowedSiteIds: ['site_b'] })).toBe(false);
     const year = +live.removedOn.slice(0, 4);
     expect((await loadEnvironment(year)).entries.find((e) => e.id === live.id)?.files.map((f) => f.name)).toContain('bsd.pdf');
   });
@@ -152,31 +152,31 @@ describe('pièces jointes génériques', () => {
 
 describe('coactivité maîtrisée (PRV-10)', () => {
   it('maîtrise motivée, plus signalée, sans doublon ; levée avec motif ; journal de la carte', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = await loadSitemap({});
     // Démonstration : une situation déjà maîtrisée (voie de livraison).
     expect(before.controls).toHaveLength(1);
     const signaled = before.conflictsToday.filter((c) => !before.controls.some((x) => x.key === c.key));
     const target = signaled[0];
-    const fields = { siteId: 'ville-a', date: target.date, key: target.key, measure: 'Zone balisée, horaires décalés' };
+    const fields = { siteId: 'site_a', date: target.date, key: target.key, measure: 'Zone balisée, horaires décalés' };
     actAs('Salarié');
     expect(await controlConflict({}, form(fields))).toEqual({ error: DENIED });
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await controlConflict({}, form(fields))).toEqual({ error: expect.stringContaining('autre site') });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await controlConflict({}, form({ ...fields, measure: '' }))).toMatchObject({ fieldErrors: { measure: 'Champ obligatoire.' } });
     expect(await controlConflict({}, form({ ...fields, key: '9999-99999' }))).toEqual({ error: expect.stringContaining("n'est plus détectée") });
     const badgeBefore = (await loadCoactivitySignals()).badge;
     expect(await controlConflict({}, form(fields))).toMatchObject({ ok: true });
     expect(await controlConflict({}, form(fields))).toEqual({ error: 'Cette situation est déjà marquée maîtrisée.' });
-    expect(await lastLog('site_map', 'ville-a')).toMatchObject({ action: 'control', byId: 'sbenali', details: expect.arrayContaining([{ field: 'Mesure prise', from: null, to: fields.measure }]) });
+    expect(await lastLog('site_map', 'site_a')).toMatchObject({ action: 'control', byId: 'sbenali', details: expect.arrayContaining([{ field: 'Mesure prise', from: null, to: fields.measure }]) });
     expect((await loadCoactivitySignals()).badge).toBe(badgeBefore - 1);
     const after = await loadSitemap({});
     const ctl = after.controls.find((c) => c.key === target.key)!;
     expect(ctl).toMatchObject({ measure: fields.measure, by: '[S. Benali]' });
     expect(await releaseConflictControl({}, form({ id: String(ctl.id), reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     expect(await releaseConflictControl({}, form({ id: String(ctl.id), reason: 'Balisage retiré' }))).toMatchObject({ ok: true });
-    expect(await lastLog('site_map', 'ville-a')).toMatchObject({ action: 'release', reason: 'Balisage retiré' });
+    expect(await lastLog('site_map', 'site_a')).toMatchObject({ action: 'release', reason: 'Balisage retiré' });
     expect((await loadCoactivitySignals()).badge).toBe(badgeBefore);
     // Levée conservée (jamais supprimée) ; une nouvelle maîtrise est possible.
     expect((await (await db()).select().from(t.coactivityControls).where(eq(t.coactivityControls.id, ctl.id)))[0]).toMatchObject({ cancelReason: 'Balisage retiré' });
@@ -259,18 +259,18 @@ describe('échéances de la revue (AUD-16)', () => {
 
 describe('liens profonds et liens filtrés', () => {
   it('enlèvement : année retrouvée dans le site sélectionné seulement (DOC-08)', async () => {
-    const [entry] = await (await db()).select().from(t.wasteEntries).where(eq(t.wasteEntries.siteId, 'ville-a')).limit(1);
-    actAs('Animateur QHSE', 'ville-a');
+    const [entry] = await (await db()).select().from(t.wasteEntries).where(eq(t.wasteEntries.siteId, 'site_a')).limit(1);
+    actAs('Animateur QHSE', 'site_a');
     expect(await wasteEntryYear(entry.id)).toBe(+entry.removedOn.slice(0, 4));
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await wasteEntryYear(entry.id)).toBeNull();
   });
   it('tableau de bord (TDB-12) : blessure dans les liens des seuls rôles habilités, ancienneté > 30 j', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const qhse = await loadDashboard();
     expect(qhse.pyramid[0].href).toMatch(/^\/evenements\?etat=tous&type=AT&effectif=1&blessure=arret&du=\d{4}-\d{2}-\d{2}$/);
     expect(qhse.kpis.find((k) => k.label === 'Événements ouverts')?.subHref).toBe('/evenements?anciennete=30');
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const manager = await loadDashboard();
     expect(manager.pyramid.slice(0, 3).every((p) => p.href && !p.href.includes('blessure'))).toBe(true);
     expect(manager.kpis[0].href).toBe('/evenements?etat=tous&type=AT&effectif=1');

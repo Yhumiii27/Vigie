@@ -55,8 +55,8 @@ describe('revendications Entra ID', () => {
   });
 
   it('sites accordés par groupe, sans doublon ; tous les sites pour direction et animateur', () => {
-    const map = [{ groupId: 'G-A', siteId: 'ville-a' }, { groupId: 'g-b', siteId: 'ville-b' }, { groupId: 'g-b2', siteId: 'ville-b' }];
-    expect(sitesFromGroups(['g-a', 'g-b', 'g-b2', 'autre'], map)).toEqual(['ville-a', 'ville-b']);
+    const map = [{ groupId: 'G-A', siteId: 'site_a' }, { groupId: 'g-b', siteId: 'site_b' }, { groupId: 'g-b2', siteId: 'site_b' }];
+    expect(sitesFromGroups(['g-a', 'g-b', 'g-b2', 'autre'], map)).toEqual(['site_a', 'site_b']);
     expect(sitesFromGroups([], map)).toEqual([]);
     expect(hasAllSites('Direction') && hasAllSites('Animateur QHSE')).toBe(true);
     expect(hasAllSites('Chef de service') || hasAllSites('Chef de projet') || hasAllSites('Salarié')).toBe(false);

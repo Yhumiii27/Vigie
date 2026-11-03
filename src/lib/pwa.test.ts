@@ -10,7 +10,7 @@ describe('ressources publiques du signalement installable', () => {
     expect(isPwaAsset('/pwa/icon.svg')).toBe(true);
   });
   it('rien d’autre : pages, plans du site, chemins détournés', () => {
-    for (const p of ['/signaler', '/signaler/mes-signalements', '/plans/ville-a.svg', '/pwa/', '/pwa/../fichiers/x', '/pwa/icon.png/../../evenements', '/pwa/a/b.png', '/manifest.webmanifest/x', '/sw.js']) {
+    for (const p of ['/signaler', '/signaler/mes-signalements', '/plans/site_a.svg', '/pwa/', '/pwa/../fichiers/x', '/pwa/icon.png/../../evenements', '/pwa/a/b.png', '/manifest.webmanifest/x', '/sw.js']) {
       expect(isPwaAsset(p)).toBe(false);
     }
   });

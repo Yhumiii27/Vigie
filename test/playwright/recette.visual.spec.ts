@@ -13,7 +13,7 @@ const SCREENS = ['/', '/a-faire', '/evenements', '/actions', '/risques', '/veill
 
 for (const url of SCREENS) {
   test(`Animateur QHSE · ${url}`, async ({ page, context, baseURL }) => {
-    await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+    await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto(url);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await page.waitForLoadState('networkidle');

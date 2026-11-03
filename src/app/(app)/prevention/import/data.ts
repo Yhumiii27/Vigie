@@ -42,6 +42,7 @@ export async function loadImportScreen(): Promise<ImportScreenData> {
     siteLocked: !!selectedSite,
     people: options.people,
     projects: options.projects,
+    projectsMessage: options.projectsMessage,
     today: today(),
     currentUserId: session.user.id,
     aiStatus: status,

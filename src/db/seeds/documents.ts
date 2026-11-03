@@ -82,14 +82,14 @@ const DOCUMENTS: D[] = [
     ],
   },
   {
-    id: 'IT-MON-012', title: 'Retournement des bâtis > 1 t', type: 'instruction', process: 'MON', owner: 'sbenali', reviewMonths: 24, siteId: 'ville-a',
+    id: 'IT-MON-012', title: 'Retournement des bâtis > 1 t', type: 'instruction', process: 'MON', owner: 'sbenali', reviewMonths: 24, siteId: 'site_a',
     distribution: 'Atelier montage · poste M3 · pontiers',
     versions: [
       ['A', 'brouillon', "Création suite au presque-accident EV-2026-131 : dotation d'élingage par type de bâti, angle d'élingage, périmètre de basculement", 'tnguyen', null, null, null, 'A-215'],
     ],
   },
   {
-    id: 'IT-USI-004', title: "Contrôle de l'arbre Ø45 h7", type: 'instruction', process: 'USI', owner: 'lmoreau', reviewMonths: 24, siteId: 'ville-a',
+    id: 'IT-USI-004', title: "Contrôle de l'arbre Ø45 h7", type: 'instruction', process: 'USI', owner: 'lmoreau', reviewMonths: 24, siteId: 'site_a',
     distribution: 'Atelier usinage · centre CU-2 · contrôle final',
     versions: [
       ['A', 'archive', 'Création', 'lmoreau', 'clefevre', rel(-1425), rel(-1418)],
@@ -98,7 +98,7 @@ const DOCUMENTS: D[] = [
     ],
   },
   {
-    id: 'IT-ESS-002', title: "Consignes zone d'essais ATEX", type: 'instruction', process: 'ESS', owner: 'jpetit', reviewMonths: 24, siteId: 'ville-b',
+    id: 'IT-ESS-002', title: "Consignes zone d'essais ATEX", type: 'instruction', process: 'ESS', owner: 'jpetit', reviewMonths: 24, siteId: 'site_b',
     distribution: "Zone d'essais · techniciens · entreprises extérieures intervenant en zone",
     versions: [
       ['A', 'archive', 'Création', 'jpetit', 'clefevre', rel(-1585), rel(-1579)],
@@ -106,7 +106,7 @@ const DOCUMENTS: D[] = [
     ],
   },
   {
-    id: 'IT-MON-007', title: 'Montage du réducteur RD-5', type: 'instruction', process: 'MON', owner: 'sbenali', reviewMonths: 24, siteId: 'ville-a',
+    id: 'IT-MON-007', title: 'Montage du réducteur RD-5', type: 'instruction', process: 'MON', owner: 'sbenali', reviewMonths: 24, siteId: 'site_a',
     distribution: 'Atelier montage',
     versions: [
       ['A', 'archive', 'Création', 'sbenali', 'clefevre', rel(-2783), rel(-2776)],
@@ -122,7 +122,7 @@ const DOCUMENTS: D[] = [
     ],
   },
   {
-    id: 'FO-MON-003', title: 'Fiche de réglage réducteur RD-7', type: 'formulaire', process: 'MON', owner: 'sbenali', reviewMonths: 36, siteId: 'ville-a',
+    id: 'FO-MON-003', title: 'Fiche de réglage réducteur RD-7', type: 'formulaire', process: 'MON', owner: 'sbenali', reviewMonths: 36, siteId: 'site_a',
     distribution: 'Atelier montage · poste de réglage des réducteurs',
     versions: [
       ['A', 'archive', 'Création', 'sbenali', 'clefevre', rel(-1838), rel(-1831)],

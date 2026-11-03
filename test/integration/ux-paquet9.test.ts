@@ -22,18 +22,18 @@ freshDemoDatabase();
 
 describe('choix du site et du rôle (UX-14)', () => {
   it('setSite : site du périmètre accepté, autre site refusé avec un message, sans rien changer', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     cookieJar.delete('vigie_site');
-    expect(await setSite('ville-b')).toEqual({ ok: true });
-    expect(cookieJar.get('vigie_site')).toBe('ville-b');
+    expect(await setSite('site_b')).toEqual({ ok: true });
+    expect(cookieJar.get('vigie_site')).toBe('site_b');
     expect(await setSite('site-inconnu')).toEqual({ error: expect.stringMatching(/hors de votre périmètre/) });
-    expect(cookieJar.get('vigie_site')).toBe('ville-b');
+    expect(cookieJar.get('vigie_site')).toBe('site_b');
   });
 
   it('setSite : hors du périmètre d’une personne rattachée à un site', async () => {
-    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['ville-b'] } };
+    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['site_b'] } };
     cookieJar.delete('vigie_site');
-    expect(await setSite('ville-a')).toMatchObject({ error: expect.any(String) });
+    expect(await setSite('site_a')).toMatchObject({ error: expect.any(String) });
     expect(cookieJar.get('vigie_site')).toBeUndefined();
     auth.override = null;
   });
@@ -80,11 +80,11 @@ describe('élément introuvable (UX-13)', () => {
 
   it('documents : un document d’un site hors du périmètre n’est ni nommé ni expliqué (bandeau « introuvable »)', async () => {
     // Démonstration (tous les sites), site Ville-B sélectionné : un document de Ville-A est expliqué (« sélectionnez ce site »).
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect((await loadDocuments()).elsewhere).toHaveProperty('IT-MON-012');
     // Personne rattachée à Ville-B seulement : le document de Ville-A est inconnu, son site n'est jamais nommé.
-    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['ville-b'] } };
-    cookieJar.set('vigie_site', 'ville-b');
+    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['site_b'] } };
+    cookieJar.set('vigie_site', 'site_b');
     const restricted = await loadDocuments();
     expect(restricted.elsewhere).not.toHaveProperty('IT-MON-012');
     expect(restricted.rows.some((r) => r.id === 'IT-MON-012')).toBe(false);

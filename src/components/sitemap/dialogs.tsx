@@ -189,7 +189,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
   const guessed = !activity && point && src.zoneId != null && src.zoneId !== detected?.id ? zones.find((z) => z.id === src.zoneId) : undefined;
   const zoneHint = detected && zoneId === detected.id && (!activity || activity.zoneId == null) ? `Déduite de la position : ${detected.name}.`
     : point && !detected ? `Position hors des zones dessinées${guessed ? ` (lieu indiqué : ${guessed.name})` : ''}.` : undefined;
-  const projects = withCurrent(choices.projects, src.keystoneProject, null, 'start');
+  const projects = withCurrent(choices.projects, src.keystoneProjectCode, src.keystoneProject, 'start');
   const routeIds = new Set(src.routeIds ?? []);
 
   const pickPlan = (id: string) => {
@@ -224,8 +224,8 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
             <Select name="contractorId" options={choices.contractors} value={contractorId} onChange={(e) => setContractorId(e.target.value)} placeholder="Choisir…" />
           </Field>
         ) : (
-          <Field name="keystoneProject" label="Projet Keystone">
-            <Select name="keystoneProject" options={projects} defaultValue={src.keystoneProject ?? ''} placeholder="Aucun projet" />
+          <Field name="keystoneProjectCode" label="Projet Keystone" hint={choices.projectsMessage ?? undefined}>
+            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
           </Field>
         )}
         <Field name="ownerId" label={team === 'externe' ? 'Responsable interne (donneur d\'ordre)' : 'Responsable'}>
@@ -237,8 +237,8 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
           <Field name="preventionPlanId" label="Plan de prévention">
             <Select name="preventionPlanId" options={choices.plans} value={planId} onChange={(e) => pickPlan(e.target.value)} placeholder="Aucun plan" />
           </Field>
-          <Field name="keystoneProject" label="Projet Keystone">
-            <Select name="keystoneProject" options={projects} defaultValue={src.keystoneProject ?? ''} placeholder="Aucun projet" />
+          <Field name="keystoneProjectCode" label="Projet Keystone" hint={choices.projectsMessage ?? undefined}>
+            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
           </Field>
         </FormRow>
       )}

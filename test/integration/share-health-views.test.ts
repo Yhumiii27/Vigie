@@ -45,7 +45,7 @@ describe('pub_hse_projet : ni accident du travail ni maladie professionnelle (É
 
 describe('pub_journal : cycle d’une action née d’une maladie professionnelle', () => {
   it('ni intitulé, ni type, ni entrée de l’événement MP dans le journal publié', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const [mp] = await db.select().from(t.events).where(eq(t.events.id, MP));
     expect(mp).toMatchObject({ type: 'MP', title: MP_TITLE });

@@ -9,7 +9,7 @@
 #        VIGIE_PUBLIC_URL=$APP  VIGIE_SESSION_SECRET=…  DATABASE_URL=…  VIGIE_UPLOAD_DIR=$UPLOAD_DIR
 #        ENTRA_TENANT_ID=vigie-test ENTRA_CLIENT_ID=vigie ENTRA_CLIENT_SECRET=secret-de-test
 #        ENTRA_ISSUER=http://127.0.0.1:55480/vigie-test/v2.0
-#        VIGIE_SITE_GROUPS=grp-ville-a:ville-a,grp-ville-b:ville-b
+#        VIGIE_SITE_GROUPS=grp-site_a:site_a,grp-site_b:site_b
 #        VIGIE_EMAIL_DOMAINS=epc2i.example
 #
 # Usage : APP=http://localhost:3291 MOCK=http://127.0.0.1:55480 VIGIE_SESSION_SECRET=… \
@@ -88,7 +88,7 @@ check "POST d'une origine inconnue refusé" "$(code -X POST -H 'Origin: http://v
 echo "2. Sans session (SEC-01)"
 check "page → connexion (avec retour)" "$(location "$APP/evenements?onglet=1")" "/auth/connexion?retour=%2Fevenements%3Fonglet%3D1"
 check "pièce jointe → connexion" "$(location "$APP/fichiers/att-a")" "/auth/connexion?retour=%2Ffichiers%2Fatt-a"
-check "server action sans session : 401" "$(code -X POST -H "Origin: $APP" -H "Next-Action: $SET_SITE" --data '["ville-a"]' "$APP/")" 401
+check "server action sans session : 401" "$(code -X POST -H "Origin: $APP" -H "Next-Action: $SET_SITE" --data '["site_a"]' "$APP/")" 401
 check "cookie de rôle de démonstration ignoré" "$(location -b 'vigie_role=Direction' "$APP/")" "/auth/connexion?retour=%2F"
 check "session falsifiée ignorée" "$(location -b 'vigie_session=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..AAAA.BBBB.CCCC' "$APP/")" "/auth/connexion?retour=%2F"
 R=$(curl -s -D - -o /dev/null "$APP/evenements")
@@ -107,27 +107,27 @@ check "animateur QHSE : connexion, retour à la page demandée" "$(login animate
 contains "animateur : nom de la fiche rapprochée par e-mail" "$(cat "$WORK/animateur.html")" "C. Lefèvre"
 [ -n "$PSQL" ] && check "animateur : objectId enregistré, dernier rôle" "$(sql "select entra_object_id is not null, last_role from people where id='clefevre'")" "t|Animateur QHSE"
 check "animateur : « Tous les sites » proposé" "$(set_site animateur all)" cookie
-check "animateur : site B" "$(set_site animateur ville-b)" cookie
+check "animateur : site B" "$(set_site animateur site_b)" cookie
 check "direction (Salarié + Direction) : rôle le plus élevé" "$(login direction / >/dev/null; grep -o '>Direction</span>' "$WORK/direction.html" | head -1)" ">Direction</span>"
 check "chef de service (e-mail en majuscules) : connexion" "$(login chefservice)" "200 /"
 [ -n "$PSQL" ] && check "chef de service : fiche sbenali rapprochée" "$(sql "select count(*) from people where id='sbenali' and entra_object_id is not null")" 1
 check "chef de service : site de rattachement par défaut" "$(selected_site "$WORK/chefservice.html")" "Site de [Ville A] — siège et ateliers"
-check "chef de service : site B hors périmètre refusé" "$(set_site chefservice ville-b)" refus
+check "chef de service : site B hors périmètre refusé" "$(set_site chefservice site_b)" refus
 check "chef de service : « Tous les sites » refusé" "$(set_site chefservice all)" refus
-check "chef de service : site A accepté" "$(set_site chefservice ville-a)" cookie
+check "chef de service : site A accepté" "$(set_site chefservice site_a)" cookie
 check "salarié + groupe site B : connexion" "$(login salarie /evenements)" "200 /evenements"
-check "salarié : site B accordé par groupe" "$(set_site salarie ville-b)" cookie
+check "salarié : site B accordé par groupe" "$(set_site salarie site_b)" cookie
 check "salarié : « Tous les sites » refusé" "$(set_site salarie all)" refus
-check "salarié : cookie de site B → site B" "$(curl -s -b "$(jar salarie)" -b 'vigie_site=ville-b' "$APP/evenements" -o "$WORK/s2.html"; selected_site "$WORK/s2.html")" "Site de [Ville B] — zone d'essais"
+check "salarié : cookie de site B → site B" "$(curl -s -b "$(jar salarie)" -b 'vigie_site=site_b' "$APP/evenements" -o "$WORK/s2.html"; selected_site "$WORK/s2.html")" "Site de [Ville B] — zone d'essais"
 check "salarié : écran fermé → accueil du rôle avant le rendu (SEC-14)" "$(location -b "$(jar salarie)" "$APP/veille")" "/evenements"
 check "salarié : tableau de bord → accueil du rôle (SEC-14)" "$(location -b "$(jar salarie)" "$APP/")" "/evenements"
 check "salarié : QR codes des postes → /signaler (SEC-14)" "$(location -b "$(jar salarie)" "$APP/signaler/postes")" "/signaler"
 check "aperçu mobile hors démonstration : 404 (SEC-14)" "$(code -b "$(jar salarie)" "$APP/apercu-mobile")" 404
 check "chef de projet du site B : connexion" "$(login essais)" "200 /"
-check "chef de projet : cookie visant le site A → site B (rattachement)" "$(curl -s -b "$(jar essais)" -b 'vigie_site=ville-a' "$APP/" -o "$WORK/e2.html"; selected_site "$WORK/e2.html")" "Site de [Ville B] — zone d'essais"
+check "chef de projet : cookie visant le site A → site B (rattachement)" "$(curl -s -b "$(jar essais)" -b 'vigie_site=site_a' "$APP/" -o "$WORK/e2.html"; selected_site "$WORK/e2.html")" "Site de [Ville B] — zone d'essais"
 check "nouvel utilisateur (salarié) : fiche créée, accueil du rôle" "$(login nouveau)" "200 /evenements"
 if [ -n "$PSQL" ]; then
-  check "nouvel utilisateur : site = premier site accordé, groupe inconnu ignoré" "$(sql "select site_id, last_role, email from people where entra_object_id is not null and name='Nina Rousseau'")" "ville-b|Salarié|n.rousseau@epc2i.example"
+  check "nouvel utilisateur : site = premier site accordé, groupe inconnu ignoré" "$(sql "select site_id, last_role, email from people where entra_object_id is not null and name='Nina Rousseau'")" "site_b|Salarié|n.rousseau@epc2i.example"
   check "nouvel utilisateur : création journalisée" "$(sql "select count(*) from change_log c join people p on p.id = c.entity_id where p.name='Nina Rousseau' and c.action='create'")" 1
 fi
 check "nouvel utilisateur : 2e connexion, même fiche" "$(login nouveau >/dev/null; sql "select count(*) from people where name='Nina Rousseau'" || echo 1)" 1

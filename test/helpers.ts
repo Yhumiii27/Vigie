@@ -52,7 +52,7 @@ export function freezeClock(iso: string) {
 }
 
 /** Rôle de démonstration (personne associée : src/lib/demo.ts) et site sélectionné de la requête simulée. */
-export function actAs(role: Role, site = 'ville-a') {
+export function actAs(role: Role, site = 'site_a') {
   cookieJar.set('vigie_role', role);
   cookieJar.set('vigie_site', site);
 }

@@ -58,15 +58,15 @@ describe('création : source d’origine posée par le lien explicite seulement'
   });
 
   it('document : colonne posée, création journalisée sur l’action et sur le document', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await create('revue_documentaire', 'document:PR-QHSE-002');
-    expect(a).toMatchObject({ documentId: 'PR-QHSE-002', originRef: 'PR-QHSE-002', siteId: 'ville-a' });
+    expect(a).toMatchObject({ documentId: 'PR-QHSE-002', originRef: 'PR-QHSE-002', siteId: 'site_a' });
     expect(await lastLog('action', a.id)).toMatchObject({ action: 'create', byId: 'clefevre' });
     expect(await lastLog('document', 'PR-QHSE-002')).toMatchObject({ action: 'link', summary: `Action ${a.id} créée et rattachée`, byId: 'clefevre' });
   });
 
   it('référence d’origine qui nomme une fiche, sans lien : simple texte (plus de résolution)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await changeLog('document', 'PR-QHSE-002')).length;
     const a = await create('revue_documentaire', null, { originRef: 'PR-QHSE-002 révision après REX levage' });
     expect(a).toMatchObject({ documentId: null, preventionPlanId: null, wasteStreamId: null, originRef: 'PR-QHSE-002 révision après REX levage' });
@@ -75,7 +75,7 @@ describe('création : source d’origine posée par le lien explicite seulement'
   });
 
   it('environnement : filière, enlèvement (journal de l’enlèvement), registre annuel sans fiche', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await create('dechets', 'wastestream:FD-04')).toMatchObject({ wasteStreamId: 'FD-04', wasteEntryId: null, originRef: 'FD-04', source: 'dechets' });
     const entry = await entryId('FD-04', '2026-02-11');
     const a = await create('dechets', `wasteentry:${entry}`);
@@ -86,7 +86,7 @@ describe('création : source d’origine posée par le lien explicite seulement'
   });
 
   it('plan de prévention, permis : aucune action QSE', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = await actionCount();
     expect(await saveAction({}, form(fields('comex', 'preventionplan:PP-2026-015')))).toMatchObject({ fieldErrors: { link: NON_QSE_LINK_MESSAGE } });
     expect(await saveAction({}, form(fields('comex', 'permit:PF-2026-031')))).toMatchObject({ fieldErrors: { link: NON_QSE_LINK_MESSAGE } });
@@ -96,10 +96,10 @@ describe('création : source d’origine posée par le lien explicite seulement'
   it('source d’un autre site, site de l’action différent de celui de la source, source annulée : refusés', async () => {
     const before = await actionCount();
     const fd11 = await entryId('FD-11', '2026-08-19');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveAction({}, form(fields('dechets', `wasteentry:${fd11}`)))).toEqual({ error: OTHER_SITE, fieldErrors: { link: OTHER_SITE } });
     actAs('Animateur QHSE', 'all');
-    expect(await saveAction({}, form(fields('dechets', `wasteentry:${fd11}`, { siteId: 'ville-a' })))).toMatchObject({
+    expect(await saveAction({}, form(fields('dechets', `wasteentry:${fd11}`, { siteId: 'site_a' })))).toMatchObject({
       error: expect.stringContaining("L'action doit concerner le site de son élément lié (FD-11 · 19/08/2026)"), fieldErrors: { siteId: expect.any(String) },
     });
     const entry = await entryId('FD-04', '2026-02-11');
@@ -108,16 +108,16 @@ describe('création : source d’origine posée par le lien explicite seulement'
     await (await db()).update(t.wasteEntries).set({ cancelledAt: null, cancelledById: null, cancelReason: null }).where(eq(t.wasteEntries.id, entry));
     expect(await actionCount()).toBe(before);
     // Même source sur son site : acceptée.
-    actAs('Animateur QHSE', 'ville-b');
-    expect(await create('dechets', `wasteentry:${fd11}`, { siteId: 'ville-b' })).toMatchObject({ wasteEntryId: fd11, siteId: 'ville-b' });
+    actAs('Animateur QHSE', 'site_b');
+    expect(await create('dechets', `wasteentry:${fd11}`, { siteId: 'site_b' })).toMatchObject({ wasteEntryId: fd11, siteId: 'site_b' });
   });
 
   it('périmètre restreint : élément hors périmètre refusé sans rien en révéler', async () => {
     // Animateur QHSE rattaché au site B (site de rattachement toujours dans le périmètre), sites accordés : B seulement.
-    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Animateur QHSE', siteIds: ['ville-b'] } };
-    cookieJar.set('vigie_site', 'ville-b');
+    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Animateur QHSE', siteIds: ['site_b'] } };
+    cookieJar.set('vigie_site', 'site_b');
     try {
-      expect(await saveAction({}, form(fields('dechets', 'wastestream:FD-04', { siteId: 'ville-b' })))).toEqual({
+      expect(await saveAction({}, form(fields('dechets', 'wastestream:FD-04', { siteId: 'site_b' })))).toEqual({
         error: 'Cet élément appartient à un site hors de votre périmètre.', fieldErrors: { link: 'Cet élément appartient à un site hors de votre périmètre.' },
       });
     } finally {
@@ -129,7 +129,7 @@ describe('création : source d’origine posée par le lien explicite seulement'
 
 describe('origine verrouillée après la création', () => {
   it('modification : source d’origine conservée, absente du détail journalisé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await actionRow('A-219');
     expect(await saveAction({}, form(editFields(a, { detail: `${a.detail} (précisé)` })))).toEqual({ ok: true, id: 'A-219' });
     expect(await actionRow('A-219')).toMatchObject({ wasteStreamId: 'FD-04', originRef: 'FD-04', source: 'dechets' });
@@ -141,14 +141,14 @@ describe('origine verrouillée après la création', () => {
   it('changement de site : refusé hors du site de la source', async () => {
     actAs('Animateur QHSE', 'all');
     const a = await actionRow('A-219');
-    expect(await saveAction({}, form(editFields(a, { siteId: 'ville-b' })))).toMatchObject({
+    expect(await saveAction({}, form(editFields(a, { siteId: 'site_b' })))).toMatchObject({
       error: expect.stringContaining("L'action doit concerner le site de son élément lié"), fieldErrors: { siteId: expect.any(String) },
     });
-    expect((await actionRow('A-219')).siteId).toBe('ville-a');
+    expect((await actionRow('A-219')).siteId).toBe('site_a');
   });
 
   it('rattacher ou détacher une source d’origine après coup : refusé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await changeLog('action', 'A-219')).length;
     expect(await linkAction('document:PR-QHSE-002', 'A-201')).toEqual({ error: ORIGIN_LOCKED });
     expect(await unlinkAction('wastestream:FD-04', 'A-219')).toEqual({ error: ORIGIN_LOCKED });
@@ -161,7 +161,7 @@ describe('origine verrouillée après la création', () => {
   });
 
   it('abandon : la source d’origine reste rattachée, absente des liens détachés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const a = await create('revue_documentaire', 'document:PR-QHSE-005');
     expect(await abandonAction({}, form({ id: a.id, from: 'a_faire', reason: 'Doublon de test' }))).toMatchObject({ ok: true });
     expect(await actionRow(a.id)).toMatchObject({ status: 'abandonnee', documentId: 'PR-QHSE-005' });
@@ -176,7 +176,7 @@ describe('reprise des références d’origine (backfillActionLinks, npm run db:
   it('essai sans écriture, puis liens posés et journalisés une seule fois, jamais pour une action postérieure à 0005', async () => {
     const d = await db();
     const fd11 = await entryId('FD-11', '2026-08-19');
-    await insertAction('A-T01', { legacyOrigin: 'env', originRef: 'FD-11 · 19/08/2026', siteId: 'ville-b' });
+    await insertAction('A-T01', { legacyOrigin: 'env', originRef: 'FD-11 · 19/08/2026', siteId: 'site_b' });
     await insertAction('A-T02', { legacyOrigin: 'docs', originRef: 'IT-MON-012 révision C' });
     await insertAction('A-T03', { legacyOrigin: 'prevention', originRef: 'PP-2099-001' });
     await insertAction('A-T04', { legacyOrigin: 'env', originRef: 'FD-04 · 01/01/2026' });

@@ -1,0 +1,6 @@
+{
+  "source": "Matrix origin/main 78c99e7, infra/postgres/partage/10-matrix-referentiels.sql (contrat D14 v1 + filiale_code, latitude, longitude)",
+  "readers": ["vigie_app"],
+  "columns": [["code", "text"], ["libelle", "text"], ["ville", "text"], ["pays_iso2", "character(2)"], ["ordre", "integer"], ["actif", "boolean"],
+    ["filiale_code", "text"], ["latitude", "numeric(9,6)"], ["longitude", "numeric(9,6)"]]
+}

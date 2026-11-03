@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  actionBrief, actionView, certificationStatus, concernedCount, concernedProjects, controlStatus, eventView, isOpen,
+  actionBrief, actionView, certificationStatus, controlStatus, eventView, isOpen,
   lastFullMonths, lcfirst, requirementDue, safetyRates, skillState, workforceAccident, type ActionRow, type EventRow, type Person,
 } from './queries';
 
@@ -14,7 +14,7 @@ const action = (over: Partial<ActionRow> = {}): ActionRow => ({
   documentId: null, wasteStreamId: null, wasteEntryId: null, safetyStudyId: null, safetyStudyBlocking: false, qualificationPersonId: null, qualificationTitleId: null, domain: 'securite', problem: 'Garde-corps absent sur la passerelle.',
   detail: 'Poser un garde-corps\nSelon la norme NF E85-015.', verifyDueOn: '2026-11-15', closedOn: null, verifyMethod: null,
   efficacyNote: null, effective: null, newRisk: false, verifiedById: null, riskLevel: null, hours: null, estimatedCost: null,
-  actualCost: null, followsActionId: null, followReason: null, siteId: 'ville-a', legacyOrigin: null, cancelledAt: null,
+  actualCost: null, followsActionId: null, followReason: null, siteId: 'site_a', legacyOrigin: null, cancelledAt: null,
   cancelledById: null, cancelReason: null, createdAt: new Date('2026-09-01T08:00:00Z'), ...over,
 });
 
@@ -109,20 +109,6 @@ describe('événements', () => {
     expect(eventView(ev({ declarant: 'J. Martin', declarantCompany: 'Levage Ouest', reportedVia: 'poste' }), people, NOW).declarantLabel)
       .toBe('J. Martin (Levage Ouest) · déclaré sans compte');
     expect(eventView(ev({ declarant: '[T. Nguyen]', reportedVia: 'session' }), people, NOW).declarantLabel).toBe('[T. Nguyen]');
-  });
-});
-
-describe('veille : projets Keystone concernés', () => {
-  const projects = [{ id: 'K3', deliveryOn: '2027-03-01' }, { id: 'K1', deliveryOn: '2026-06-01' }, { id: 'K2', deliveryOn: '2027-01-15' }, { id: 'K0', deliveryOn: null }];
-  it('projets livrés après la date d’application, par livraison', () => {
-    expect(concernedProjects({ dueOn: '2027-01-01', affectsProjects: true }, projects).map((p) => p.id)).toEqual(['K2', 'K3']);
-    expect(concernedProjects({ dueOn: '2027-01-01', affectsProjects: false }, projects)).toEqual([]);
-    expect(concernedProjects({ dueOn: null, affectsProjects: true }, projects)).toEqual([]);
-  });
-  it('le nombre saisi reste une surcharge du calcul ; null = non applicable', () => {
-    expect(concernedCount({ dueOn: '2027-01-01', affectsProjects: true, keystoneProjects: null }, projects)).toBe(2);
-    expect(concernedCount({ dueOn: '2027-01-01', affectsProjects: true, keystoneProjects: 7 }, projects)).toBe(7);
-    expect(concernedCount({ dueOn: '2027-01-01', affectsProjects: false, keystoneProjects: null }, projects)).toBeNull();
   });
 });
 

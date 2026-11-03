@@ -41,14 +41,25 @@ describe('base de production vide', () => {
     const { loadTodo } = await import('@/lib/data/todo');
     expect(Array.isArray(await loadTodo())).toBe(true);
 
+    // D14 (CV-09) : le premier site se choisit dans matrix.pub_sites. Sur une base PostgreSQL hors démonstration, aucun
+    // substitut : la source est indisponible et la création refusée avec un message ; substituts posés ensuite pour la suite.
     const { saveSite } = await import('@/server/sites');
-    const r = await saveSite({}, form({ id: '', label: 'Site de Lyon', qhseLeadId: 'p1' }));
-    expect(r).toMatchObject({ ok: true, id: 'site-de-lyon' });
+    const { installForeignSubstitutes } = await import('@/db/foreign-substitutes');
+    if (process.env.DATABASE_URL) {
+      expect(await saveSite({}, form({ id: '', code: 'site_a', qhseLeadId: 'p1' }))).toMatchObject({ error: expect.stringMatching(/Sites de Matrix indisponibles/) });
+      await installForeignSubstitutes(db, { engine: 'pglite', demo: false });
+    }
+    expect(await saveSite({}, form({ id: '', label: 'Site de Lyon' }))).toMatchObject({ fieldErrors: { code: expect.any(String) } });
+    expect(await saveSite({}, form({ id: '', code: 'lyon' }))).toMatchObject({ fieldErrors: { code: 'Site inconnu de Matrix.' } });
+    expect(await saveSite({}, form({ id: '', code: 'site_c' }))).toMatchObject({ fieldErrors: { code: 'Site fermé dans Matrix.' } });
+    const r = await saveSite({}, form({ id: '', code: 'site_a', qhseLeadId: 'p1' }));
+    expect(r).toMatchObject({ ok: true, id: 'site_a' });
     const [site] = await db.select().from(t.sites);
-    expect(site).toMatchObject({ id: 'site-de-lyon', qhseLeadId: 'p1' });
+    expect(site).toMatchObject({ id: 'site_a', label: 'Site de [Ville A] — siège et ateliers', sort: 1, qhseLeadId: 'p1', matrixState: 'actif' });
     const [p1] = await db.select().from(t.people);
-    expect(p1.siteId).toBe('site-de-lyon');
-    expect(await getSession()).toMatchObject({ bootstrap: false, site: { id: 'site-de-lyon' } });
+    expect(p1.siteId).toBe('site_a');
+    expect(await getSession()).toMatchObject({ bootstrap: false, site: { id: 'site_a' } });
+    expect(await saveSite({}, form({ id: '', code: 'site_a' }))).toMatchObject({ fieldErrors: { code: 'Site déjà suivi par Vigie.' } });
   });
 
   it('Salarié sans site de rattachement ni site accordé actif : accès refusé', async () => {
@@ -63,7 +74,7 @@ describe('base de production vide', () => {
     auth.state = { status: 'authenticated', identity: { personId: 'p1', role: 'Salarié', siteIds: ['autre-site'] } };
     const { getSession } = await import('@/lib/session');
     expect(await getSession()).toMatchObject({
-      site: { id: 'site-de-lyon' }, siteOptions: [{ id: 'site-de-lyon' }], allowedSiteIds: ['autre-site', 'site-de-lyon'],
+      site: { id: 'site_a' }, siteOptions: [{ id: 'site_a' }], allowedSiteIds: ['autre-site', 'site_a'],
     });
   });
 });

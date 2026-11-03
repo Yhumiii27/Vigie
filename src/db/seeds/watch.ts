@@ -65,14 +65,14 @@ export async function seedWatch(tx: SeedTx) {
     // Indicateur rattaché (VEI-07) : DUERP (version en vigueur, écran /risques), plans de prévention (R. 4512-6),
     // bordereaux de déchets dangereux (R. 541-45, écran Environnement).
     linkedTo: r[0].includes('R. 4121-1') ? 'duerp' : r[0].includes('R. 4512-6') ? 'prevention' : r[0].includes('R. 541-45') ? 'waste_bsd' : null,
-    // Projets Keystone concernés calculés (livrés après le 20/01/2027) : plus de surcharge manuelle.
-    ...(sort === 0 ? { featured: true, affectsProjects: true, keystoneProjects: null, actionId: 'A-196', impact: 'toute machine mise sur le marché après cette date doit y être conforme.' } : {}),
+    // Projets Keystone concernés : nombre saisi (keystone.pub_projets ne publie pas de date de livraison, CV-11).
+    ...(sort === 0 ? { featured: true, affectsProjects: true, keystoneProjects: 7, actionId: 'A-196', impact: 'toute machine mise sur le marché après cette date doit y être conforme.' } : {}),
   }))).returning({ id: t.requirements.id })).map((r) => r.id);
   await tx.insert(t.requirementEvaluations).values(Object.entries(EVALUATIONS).flatMap(([i, rows]) => rows.map(([evaluatedOn, evaluation, note, by]) => ({
     requirementId: reqIds[+i], evaluatedOn, evaluation, note, evaluatedById: by, createdAt: new Date(`${evaluatedOn}T12:00:00+02:00`),
   }))));
   const controlIds = (await tx.insert(t.controls).values(CONTROLS.map((c, sort) => ({
-    siteId: SITE_B_LOCATION.test(c[0]) ? 'ville-b' : 'ville-a',
+    siteId: SITE_B_LOCATION.test(c[0]) ? 'site_b' : 'site_a',
     equipment: c[0], controlType: c[1], periodMonths: c[2], organization: c[3], responsibleId: c[4] ? pid(c[4]) : null,
     lastOn: c[5], nextOn: c[6], reserves: c[7], sort,
     // Appareils de levage : arrêté du 1er mars 2004 ; réserve du pont roulant portée par A-217.

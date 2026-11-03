@@ -104,7 +104,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   ];
   const openCount = events.filter(isOpen).length;
   const fieldOptions: EventFieldOptions = {
-    people: options.people, sites: options.sites, projects: options.projects,
+    people: options.people, sites: options.sites, projects: options.projects, projectsMessage: options.projectsMessage,
     controls: linkOptions.controls, risks: linkOptions.risks, documents: linkOptions.documents, plans: linkOptions.plans, permits: linkOptions.permits,
     zones: linkOptions.zones,
   };
@@ -396,7 +396,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
   // Données de santé à null pour un rôle non habilité (withoutHealth) : le formulaire ne les propose pas.
   const editable: EditableEvent = {
     id: e.id, siteId: e.siteId, type: e.type, title: e.title, occurredOn: e.occurredOn, occurredTime: e.occurredTime, location: e.location, equipment: e.equipment,
-    keystoneProject: e.keystoneProject, pilotId: e.pilotId, severity: e.severity, description: e.description, immediateMeasures: e.immediateMeasures,
+    keystoneProject: e.keystoneProject, keystoneProjectCode: e.keystoneProjectCode, pilotId: e.pilotId, severity: e.severity, description: e.description, immediateMeasures: e.immediateMeasures,
     ncOrigin: e.ncOrigin, customer: e.customer, customerRef: e.customerRef, envAspect: e.envAspect, envMedium: e.envMedium,
     victimKind: e.victimKind, victimId: e.victimId, victimName: e.victimName, victimCompany: e.victimCompany, workSchedule: e.workSchedule,
     knownAt: e.knownAt ? toParisLocal(e.knownAt) : null, activity: e.activity, circumstances: e.circumstances, witnesses: e.witnesses, thirdParty: e.thirdParty,

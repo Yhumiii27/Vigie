@@ -187,9 +187,6 @@ export default async function DashboardPage() {
                   <span style={{ fontSize: 12.5 }}>projets Keystone concernés<br /><span style={{ color: 'var(--color-neutral-500)', fontSize: 11.5 }}>livraison planifiée après le {fmtDate(d.featured.dueOn)}</span></span>
                 </div>
               )}
-              {d.featured.projectIds.length > 0 && (
-                <div style={{ fontSize: 11.5, color: 'var(--color-neutral-400)', fontVariantNumeric: 'tabular-nums', textWrap: 'pretty' }}>{d.featured.projectIds.join(' · ')}</div>
-              )}
               {d.featured.href && <Link href={d.featured.href} className="vg-link">Voir l&apos;exigence{d.featured.actionId ? ` et l'analyse d'écart ${d.featured.actionId}` : ''} →</Link>}
             </div>
           )}

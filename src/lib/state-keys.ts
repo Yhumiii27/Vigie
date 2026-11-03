@@ -52,3 +52,9 @@ export const STUDY_TYPE_CODES = ['hazid', 'hazop', 'amdec', 'controle_chantier',
 export const STUDY_STATUS_CODES = ['planifiee', 'realisee', 'validee'] as const;
 /** process_safety_studies.conclusion : STUDY_CONCLUSIONS, ou vide. */
 export const STUDY_CONCLUSION_CODES = ['favorable', 'reserves', 'defavorable'] as const;
+/** sites.matrix_state : MATRIX_SITE_STATES (src/lib/foreign/labels.ts) — D14, migration 0024. */
+export const MATRIX_STATE_CODES = ['actif', 'ferme', 'absent'] as const;
+/** sync_runs.status : SYNC_STATUSES (src/lib/foreign/labels.ts) — lot 0 de M-02, migration 0024. */
+export const SYNC_STATUS_CODES = ['ok', 'error', 'unavailable'] as const;
+/** keystone_assignments.source : ASSIGNMENT_SOURCES (src/lib/foreign/labels.ts) — D04, contrat keystone.pub_affectations. */
+export const ASSIGNMENT_SOURCE_CODES = ['rotation', 'planning'] as const;

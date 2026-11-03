@@ -1,6 +1,7 @@
 # Convergence des données (décision M-02 de Matrix) appliquée à Vigie — note de cadrage
 
-État au 02/11/2026. Document de cadrage : **rien n'est développé, rien n'est demandé**. Les demandes du § 5 sont des
+État au 02/11/2026, mis à jour le 03/11/2026 : **lot 0 et lot 1 sans D01 développés** (D14, D02, D04, D16, contrôle D18 ;
+migration `0024_convergence_m02`, voir § 7). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
@@ -68,21 +69,23 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | Déc. | Plan de Matrix (15/10) | Ce qui a changé | Reste valable | État |
 |---|---|---|---|---|
 | D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | à faire, lot 1 |
-| D02 Projets | `keystone_projects` supprimée, `keystone_project_code` dans 4 tables ; 3,5 j | colonnes de code déjà posées (0008) mais jamais saisies ; 5ᵉ table (études) déjà en code ; la veille lit une date de livraison absente de `pub_projets` | lecture directe de `pub_projets` | à faire, lot 1 |
-| D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | à faire, lot 1 |
+| D02 Projets | `keystone_projects` supprimée, `keystone_project_code` dans 4 tables ; 3,5 j | colonnes de code déjà posées (0008) mais jamais saisies ; 5ᵉ table (études) déjà en code ; la veille lit une date de livraison absente de `pub_projets` | lecture directe de `pub_projets` | **fait le 03/11** (veille : nombre saisi, CV-11 ouverte) |
+| D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
 | D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | à faire, lot 2 |
 | D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | à faire, lot 2, à arbitrer (CV-01, CV-02) |
 | D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | à faire, lot 4, à arbitrer (CV-05) |
 | D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | à faire, lot 5, à confirmer (CV-06) |
 | D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | à faire, lot 3 |
-| D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | à faire, lot 1, méthode révisée (CV-09) |
-| D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | à faire, lot 1 |
-| D18 Journal | journal à créer ; 3 j | `change_log` et `pub_journal` livrés | — | **fait** (contrôle seulement) |
+| D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
+| D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | **fait le 03/11** (choix dans la fiche ; proposition par le nom à l'import des plans : non faite) |
+| D18 Journal | journal à créer ; 3 j | `change_log` et `pub_journal` livrés | — | **fait** ; `qui_matricule` rempli pour les personnes de démonstration (matricules posés le 03/11), à recontrôler après D01 |
 | D19 Paramètres | constante `SKILL_SOON_DAYS` gardée jusqu'à C-12 | constante à `src/lib/domain.ts:491` (le plan cite `:88`), hors de `src/lib/horizons.ts` | tout | attend C-12, lot 2 |
 | D06 / H3 Heures | API `GET …/heures-travaillees` de Cursus ; 2,5 j | route absente de Cursus ; Cursus propose une vue `pub_heures_travaillees` ; planificateur de Vigie en place ; M-03 provisoire | Cursus fait foi | lot parallèle, attend M-03 |
 | D15, D17, D20, D21, D23 | sans charge pour Vigie | D23 fait (`pub_controles`, 0014) ; D21 : usines des filiales = sites de Vigie (VG-05) | — | voir § 3.13 |
 
 ## 2. Socle commun des lectures croisées (lot 0)
+
+**Fait le 03/11/2026** (§ 7) : déclarations dans `src/db/foreign.ts` (comme proposé ci-dessous), substituts en TypeScript (`src/db/foreign-substitutes.ts` et `src/db/seeds/foreign.ts`, au lieu de fichiers SQL) créés à l'ouverture de la base, tâche nommée « Référentiels partagés », onglet « Connecteurs » dans « Gérer les sites ».
 
 Le plan compte ce travail dans chaque décision ; il est commun à toutes et doit précéder le lot 1. Il recouvre en partie
 INT-01 (« socle commun des connecteurs », `docs/RESTE-A-FAIRE.md:1421`).
@@ -157,13 +160,15 @@ démonstration · charge révisée. Les références `HAB-…`, `DOC-…` renvoi
 - **Retire ou dégrade.** Création libre d'un site et modification de son libellé ; saisie libre du code (VG-05) remplacée
   par un choix. Rien d'autre.
 - **Prérequis.** `matrix.pub_sites` existe, lien `vigie_app` dans la convention (`90-droits.sql:199`) ; à vérifier dans
-  l'écran « Liens entre outils ». Sites des usines des filiales créés dans Matrix (D21). `pub_controles.site_code`
-  publie l'identifiant de Vigie : demander à Matrix d'ajouter en fin de vue le code commun (§ 5.1).
+  l'écran « Liens entre outils ». Sites des usines des filiales créés dans Matrix (D21). Avec CV-09,
+  `pub_controles.site_code` publie directement le code de Matrix (écart É8 clos) : plus de demande de colonne `site_code_commun`.
 - **Démonstration.** Substitut `matrix.pub_sites` avec `site_a`, `site_b`, `site_c` ; codes posés sur les trois sites
   de démonstration (aujourd'hui sans code, `src/db/seeds/core.ts:68-79`).
 - **Charge : 1,5 j** (plan : 2,5 j).
 
 ### 3.2 D01 · Personnes (plan `:136`)
+
+- **Décision CV-10 (responsable produit, 03/11/2026).** Aucune fiche de personne propre à Vigie : toutes viennent de Cursus (`cursus.pub_salaries`), intérimaires et salariés d'entreprises extérieures compris. Cursus leur donne un matricule **permanent** préfixé `I` (intérimaire) ou `E` (extérieur), retrouvé quand la personne revient sur site. Ils se pré-déclarent avant leur venue dans un formulaire public de **Cursus**, validé par les RH. **Vigie** produit la liste des arrivées et départs à venir pour le poste de garde (PRV-25) à partir des présences prévues publiées par Cursus. Rattachement d'un compte Entra : adresse e-mail publiée par Cursus (proposé). Demandes à Cursus et à Matrix rédigées, à valider.
 
 - **Cible.** Cursus fait foi pour les salariés (`cursus.pub_salaries` : `matricule`, `nom`, `poste`, `unite_code`,
   `site_code`, `entree`, `sortie`, `actif`). `vigie.people` reste (104 clés étrangères vers `people.id`), cache relié par
@@ -430,29 +435,31 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
 ### 5.1 Matrix
 
 ```markdown
-## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app pour la convergence (M-02, lots 1 à 4)
+## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app utilisés depuis le 03/11/2026 (M-02, lots 0 et 1)
 - Statut : OUVERTE
-- Demande : confirmer dans le registre matrix.liens (nature lecture, lecteur vigie_app) les liens de la convention
-  du 15/10/2026 que Vigie va utiliser, et ajouter ceux qui manquent :
-  1. existants à confirmer : matrix.pub_sites, matrix.pub_organigramme, matrix.pub_correspondances,
-     cursus.pub_salaries, cursus.pub_titres, cursus.pub_titres_detenus, cursus.pub_parametres, keystone.pub_projets,
-     keystone.pub_affectations, keystone.pub_fournisseurs, keystone.pub_activites, keystone.pub_articles,
-     keystone.pub_livrables, keystone.pub_nomenclatures, keystone.pub_parc_machines, codex.pub_documents,
-     codex.pub_revisions_document, codex.pub_validations, codex.pub_types_document ;
-  2. nouveau : keystone.pub_jalons_projets (jalon pv_reception) ou keystone.pub_avancement_projets (fin_prevue_le),
-     selon la réponse CV-11.
-- Justification : décision M-02 (D01, D02, D04, D08, D09, D10, D13, D14, D16) ; Vigie lira ces vues au lieu de ses
-  tables keystone_projects, qualifications, documents… (docs/specs/convergence-m02.md de Vigie).
-- Détails techniques : lectures par SELECT seulement, depuis src/lib/foreign/ ; aucune écriture. Vigie a besoin du
-  contrat (colonnes, types, ordre) de chaque vue pour ses substituts de démonstration.
+- Demande : confirmer dans le registre matrix.liens les liens de nature lecture, lecteur vigie_app, sur les quatre vues
+  que Vigie lit depuis sa migration 0024 (convention du 15/10/2026, partage/90-droits.sql:199, 212, 214, 216) :
+  1. matrix.pub_sites (code, libelle, ville, pays_iso2, ordre, actif, filiale_code, latitude, longitude) — sites suivis
+     (cache vigie.sites, identifiant = code, décision CV-09 de Vigie) ;
+  2. keystone.pub_projets (contrat D02 v1 + capex_code, besoin_ref, client_interne, filiale_code, categorie) — choix et
+     affichage des projets (lecture directe, plus de table keystone_projects) ;
+  3. keystone.pub_affectations (contrat D04 v1) — cache vigie.keystone_assignments (jointure par matricule) ;
+  4. keystone.pub_fournisseurs (contrat D16 v1) — vigie.contractors.supplier_id.
+  Et prévenir Vigie de toute évolution du contrat de ces quatre publications (Vigie fige leur forme dans
+  test/fixtures/contracts/*.json et en tire ses substituts de démonstration).
+- Justification : décision M-02 (D14, D02, D04, D16) ; lecture par SELECT seulement depuis src/lib/foreign/ de Vigie,
+  aucune écriture (M-17). Sans le lien, Vigie affiche « source indisponible » et refuse la saisie qui en dépend.
+- Détails techniques : vérification en vigie_app : select count(*) from matrix.pub_sites (idem pour les trois vues de
+  Keystone) ; Vigie ne crée jamais de schéma ni de vue hors du schéma vigie sur le serveur commun.
 - Validé par Guillaume le :
 
-## [2026-11-xx] Vigie → Matrix — Code commun du site en fin de vigie.pub_controles
-- Statut : OUVERTE
-- Demande : ajouter en fin de la publication vigie.pub_controles une colonne site_code_commun = sites.code (jointure
-  sites.id = controls.site_id) ; site_code garde l'identifiant de Vigie (contrat Crucible v1 inchangé).
-- Justification : D14 garde les identifiants de Vigie et porte le code de Matrix dans sites.code (VG-05) ; Crucible
-  rapproche ses sites par le code de matrix.pub_sites.
+## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app pour la suite de la convergence (M-02, lots 1 à 4)
+- Statut : OUVERTE (à déposer avec les lots concernés)
+- Demande : confirmer les liens de la convention restants : matrix.pub_organigramme, matrix.pub_correspondances,
+  cursus.pub_salaries, cursus.pub_titres, cursus.pub_titres_detenus, cursus.pub_parametres, keystone.pub_activites,
+  keystone.pub_articles, keystone.pub_livrables, keystone.pub_nomenclatures, keystone.pub_parc_machines,
+  codex.pub_documents, codex.pub_revisions_document, codex.pub_validations, codex.pub_types_document ; nouveau :
+  keystone.pub_jalons_projets (jalon pv_reception) ou keystone.pub_avancement_projets (fin_prevue_le), selon CV-11.
 - Validé par Guillaume le :
 
 ## [2026-11-xx] Vigie → Matrix — Lien d'exécution de keystone_app (D13, D12) — après CV-08
@@ -555,7 +562,7 @@ Questions nouvelles (CV : convergence de Vigie) :
 | CV-07 | Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
 | CV-08 | Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
 | CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache, ou réécrire les identifiants ? **Tranché le 03/11/2026 : réécrire les identifiants (identifiant de site = code de Matrix), pour ne rien doublonner.** | responsable produit | lot 1 |
-| CV-10 | D01 : personnes sans matricule (comptes Entra hors Cursus, intérimaires, extérieurs) gardées comme fiches locales ? Lien compte Entra ↔ matricule : rattachement manuel par le QHSE, ou correspondance tenue par Matrix (`pub_correspondances`), ou e-mail publié par Cursus ? | responsable produit, RH | lot 1 |
+| CV-10 | **Tranché le 03/11/2026 : toutes les personnes viennent de Cursus ; intérimaires et extérieurs avec un matricule permanent `I` / `E`, pré-déclaration dans Cursus, liste du poste de garde dans Vigie (PRV-25).** Question d'origine — D01 : personnes sans matricule (comptes Entra hors Cursus, intérimaires, extérieurs) gardées comme fiches locales ? Lien compte Entra ↔ matricule : rattachement manuel par le QHSE, ou correspondance tenue par Matrix (`pub_correspondances`), ou e-mail publié par Cursus ? | responsable produit, RH | lot 1 |
 | CV-11 | Veille : « projets concernés » d'une exigence d'après une date de livraison que `pub_projets` ne publie pas. Lire `pub_jalons_projets` (PV de réception) ou `pub_avancement_projets` (fin prévue), ou ne garder que la surcharge manuelle ? | QHSE | lot 1 (D02) |
 
 ## Annexe : écarts relevés dans le plan de Matrix (à lui signaler)
@@ -571,3 +578,16 @@ Questions nouvelles (CV : convergence de Vigie) :
 - D02 : la veille de Vigie a besoin d'une date de livraison absente de `pub_projets`.
 - M-18 : les vues `pub_` de D12 ne sont plus créées par une migration de Vigie (le plan, § D12 « vues déjà écrites »,
   et `partage/60` le supposaient).
+
+## 7. Réalisation du 03/11/2026 (lot 0, D14, D02, D04, D16 ; migration `0024_convergence_m02`)
+
+| Élément | Fait | Attend |
+|---|---|---|
+| Lot 0 | `src/db/foreign.ts` (vues `.existing()`, `FOREIGN_CONTRACTS`, aucune migration générée), `src/lib/foreign/` (`readSource` : `to_regclass` et `has_table_privilege`, état « source indisponible », `log.warn` limité), substituts `src/db/foreign-substitutes.ts` + `src/db/seeds/foreign.ts` (PGlite ou démonstration, schéma absent ; repère sur le schéma, recréés à chaque ouverture), contrats figés `test/fixtures/contracts/*.json`, `refreshSharedReferences` (`src/server/foreign-sync.ts`) à l'ouverture, chaque nuit (tâche « Référentiels partagés ») et par « Actualiser » ; table `sync_runs` ; onglet « Connecteurs » de « Gérer les sites » ; garde-fou et tests `test/integration/foreign-sources.test.ts` | liens de lecture (§ 5.1) ; recette sur le serveur commun |
+| D14 | identifiant = code de Matrix (CV-09), `sites.code` supprimée, 27 clés en `ON UPDATE CASCADE`, réécriture des identifiants de démonstration (`ville-a/b/c` → `site_a/b/c`) dans la migration, `sites.matrix_state` et échéance « fermé / absent de Matrix », suivi d'un site choisi dans `pub_sites` (amorçage compris), libellé et ordre lus | sites créés dans Matrix ; Vigie sur le serveur commun |
+| D02 | `keystone_projects` supprimée, choix et contrôle du code (`unknownProjectError`) dans les événements, plans, permis, activités, import des plans et études ; affichage « code · client » (`projectText`) ; ancien libellé lu seulement ; veille : nombre de projets saisi | CV-11 (date de livraison) ; Keystone basculé ; suppression des colonnes `keystone_project` dans une migration ultérieure |
+| D04 | cache `keystone_assignments` (`affectation_id`, `source`, `project_code`), jointure par matricule, fin depuis moins d'un an, retrait des affectations disparues | D01 (matricules réels) ; Keystone basculé |
+| D16 | `contractors.supplier_id` choisi dans la fiche (sans les ateliers internes), contrôlé, journalisé par le nom | proposition par le nom à l'import des plans (non faite) ; NC fournisseur (lot 3) |
+| D18 | contrôle : `pub_journal.qui_matricule` rempli pour les personnes de démonstration | recontrôle après D01 |
+
+Choix pris par défaut, à confirmer : codes des projets de démonstration gardés au format `K-AAAA-NNN` (Keystone n'impose pas de format) ; affectations disparues de la vue retirées du cache (cache sans historique propre) ; pas de contrainte de format sur `sites.id` en base (format contrôlé par le choix dans `pub_sites` et `siteCodeError`) ; rafraîchissement nocturne à partir de 2 h ; substituts aussi en PGlite hors démonstration (application Mac, tests).

@@ -48,7 +48,7 @@ async function staleCase(entity: string, id: string | number, action: Action, fi
 
 describe('QUA-12 : veille réglementaire', () => {
   it('exigence, contrôle, observation du registre de sécurité', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const [r] = await db.select().from(t.requirements).where(isNull(t.requirements.archivedAt)).orderBy(asc(t.requirements.sort)).limit(1);
     const watch = await loadWatch();
@@ -60,7 +60,7 @@ describe('QUA-12 : veille réglementaire', () => {
     }, [{ summary: 'Résumé de A' }, { summary: 'Résumé de B' }]);
     expect((await db.select().from(t.requirements).where(eq(t.requirements.id, r.id)))[0].summary).toBe('Résumé de A');
 
-    const c = watch.controls.find((x) => !x.archived && x.siteId === 'ville-a')!;
+    const c = watch.controls.find((x) => !x.archived && x.siteId === 'site_a')!;
     expect(c.version).toBe(await entityVersion(db, 'control', c.id));
     await staleCase('control', c.id, saveControl, {
       id: String(c.id), equipment: c.equipment, controlType: c.controlType, periodMonths: String(c.periodMonths), organization: c.organization,
@@ -68,7 +68,7 @@ describe('QUA-12 : veille réglementaire', () => {
       lastOn: c.lastOn, nextOn: c.nextOn, reserves: c.reserves ?? '',
     }, [{ organization: 'Organisme A' }, { organization: 'Organisme B' }]);
 
-    const notice = { kind: 'observation', siteId: 'ville-a', receivedOn: '2026-10-01', authority: 'Inspection du travail', text: 'Observation de test' };
+    const notice = { kind: 'observation', siteId: 'site_a', receivedOn: '2026-10-01', authority: 'Inspection du travail', text: 'Observation de test' };
     const created = await saveSafetyNotice({}, form(notice));
     expect(created).toMatchObject({ ok: true });
     expect((await loadSafetyNotices()).notices.find((n) => n.id === Number(created.id))!.version).toBe(await entityVersion(db, 'safety_notice', created.id!));
@@ -78,10 +78,10 @@ describe('QUA-12 : veille réglementaire', () => {
 
 describe('QUA-12 : habilitations', () => {
   it('fiche salarié, titre suivi, correction d’une formation', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const matrix = await loadSkillMatrix();
-    const row = matrix.rows.find((x) => x.person.siteId === 'ville-a')!;
+    const row = matrix.rows.find((x) => x.person.siteId === 'site_a')!;
     const p = row.person;
     expect(matrix.versions.person[p.id]).toBe(await entityVersion(db, 'person', p.id));
     await staleCase('person', p.id, savePerson, { id: p.id, name: p.name, job: p.job ?? '', service: p.service ?? '', siteId: p.siteId ?? '', inSkillsMatrix: 'on' },
@@ -95,7 +95,7 @@ describe('QUA-12 : habilitations', () => {
     }, [{ label: `${title.label} (A)` }, { label: `${title.label} (B)` }]);
 
     const cell = matrix.rows.flatMap((x) => x.cells.map((cl) => ({ person: x.person, cell: cl })))
-      .find((x) => x.person.siteId === 'ville-a' && x.cell.qualificationId && !x.cell.title.scopeLabel)!;
+      .find((x) => x.person.siteId === 'site_a' && x.cell.qualificationId && !x.cell.title.scopeLabel)!;
     const q = cell.cell;
     expect(matrix.versions.qualification[String(q.qualificationId)]).toBe(await entityVersion(db, 'qualification', q.qualificationId!));
     await staleCase('qualification', q.qualificationId!, saveQualification, {
@@ -106,7 +106,7 @@ describe('QUA-12 : habilitations', () => {
 
 describe('QUA-12 : documents maîtrisés', () => {
   it('informations du document et brouillon (journal du document)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const { rows } = await loadDocuments();
     const d = rows.find((x) => x.id === 'IT-MON-012')!;
@@ -146,12 +146,12 @@ describe('QUA-12 : audits', () => {
   it('référentiel, élément du programme, constat, objectif, élément du contexte', async () => {
     actAs('Animateur QHSE', 'all');
     const db = await getDb();
-    const cert = { standard: 'MASE', domain: 'Santé-sécurité', tone: 'warn', siteId: 'ville-a' };
+    const cert = { standard: 'MASE', domain: 'Santé-sécurité', tone: 'warn', siteId: 'site_a' };
     const c = await saveCertification({}, form(cert));
     expect(c).toMatchObject({ ok: true });
     await staleCase('certification', c.id!, saveCertification, { ...cert, id: c.id! }, [{ domain: 'Domaine A' }, { domain: 'Domaine B' }]);
 
-    const item = { year: '2026', month: '12', track: 'Audits internes', label: 'Audit QUA-12', siteId: 'ville-a' };
+    const item = { year: '2026', month: '12', track: 'Audits internes', label: 'Audit QUA-12', siteId: 'site_a' };
     const p = await savePlanItem({}, form(item));
     expect(p).toMatchObject({ ok: true });
     await staleCase('audit_plan_item', p.id!, savePlanItem, { ...item, id: p.id! }, [{ label: 'Audit QUA-12 (A)' }, { label: 'Audit QUA-12 (B)' }]);
@@ -181,18 +181,18 @@ describe('QUA-12 : audits', () => {
 
 describe('QUA-12 : environnement', () => {
   it('filière et enlèvement', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const stream = {
       label: 'Batteries QUA-12', ewcCode: '16 06 01*', channel: 'Regroupement', collector: '[Collecteur DD Ouest]', destination: '[Plateforme]',
-      siteId: 'ville-a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '', collectorReceipt: '', destinationSiret: '', destinationAddress: '', treatmentCode: 'R13',
+      siteId: 'site_a', unit: 'kg', qualification: '', collectorSiret: '', collectorAddress: '', collectorReceipt: '', destinationSiret: '', destinationAddress: '', treatmentCode: 'R13',
     };
     const s = await saveWasteStream({}, form(stream));
     expect(s).toMatchObject({ ok: true });
     await staleCase('waste_stream', s.id!, saveWasteStream, { ...stream, id: s.id! }, [{ collector: 'Collecteur A' }, { collector: 'Collecteur B' }]);
 
     const env = await loadEnvironment();
-    const entry = env.entries.find((e) => !e.cancelled && e.siteId === 'ville-a')!;
+    const entry = env.entries.find((e) => !e.cancelled && e.siteId === 'site_a')!;
     expect(entry.version).toBe(await entityVersion(db, 'waste_entry', entry.id));
     expect(env.streams.find((x) => x.id === s.id)!.version).toBe(await entityVersion(db, 'waste_stream', s.id!));
     const [row] = await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.id, entry.id));
@@ -203,7 +203,7 @@ describe('QUA-12 : environnement', () => {
 
 describe('QUA-12 : prévention et DUERP', () => {
   it('entreprise extérieure, permis, unité de travail', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const k = await saveContractor({}, form({ name: 'Levage QUA-12', trade: 'Levage' }));
     expect(k).toMatchObject({ ok: true });
@@ -211,7 +211,7 @@ describe('QUA-12 : prévention et DUERP', () => {
 
     const prevention = await loadPrevention();
     expect(prevention.contractors.find((x) => x.id === k.id)!.version).toBe(await entityVersion(db, 'contractor', k.id!));
-    const [p] = await db.select().from(t.permits).where(and(eq(t.permits.status, 'demande'), eq(t.permits.siteId, 'ville-a'))).limit(1);
+    const [p] = await db.select().from(t.permits).where(and(eq(t.permits.status, 'demande'), eq(t.permits.siteId, 'site_a'))).limit(1);
     const permit = {
       id: p.id, type: p.type, siteId: p.siteId, location: p.location, description: p.description, contractorId: p.contractorId ?? '', performer: p.performer,
       preventionPlanId: p.preventionPlanId ?? '', keystoneProject: p.keystoneProject ?? '', validFrom: toParisLocal(p.validFrom).slice(0, 16),
@@ -219,9 +219,9 @@ describe('QUA-12 : prévention et DUERP', () => {
     };
     await staleCase('permit', p.id, savePermit, permit, [{ location: 'Lieu A' }, { location: 'Lieu B' }]);
 
-    const u = await saveWorkUnit({}, form({ label: 'Unité QUA-12', siteId: 'ville-a' }));
+    const u = await saveWorkUnit({}, form({ label: 'Unité QUA-12', siteId: 'site_a' }));
     expect(u).toMatchObject({ ok: true });
     expect((await loadRisks()).units.find((x) => x.id === u.id)!.version).toBe(await entityVersion(db, 'work_unit', u.id!));
-    await staleCase('work_unit', u.id!, saveWorkUnit, { id: u.id!, siteId: 'ville-a' }, [{ label: 'Unité QUA-12 A' }, { label: 'Unité QUA-12 B' }]);
+    await staleCase('work_unit', u.id!, saveWorkUnit, { id: u.id!, siteId: 'site_a' }, [{ label: 'Unité QUA-12 A' }, { label: 'Unité QUA-12 B' }]);
   });
 });

@@ -98,8 +98,9 @@ describe('décision M-18 : vues pub_ définies par Matrix', () => {
     // Requêtes de référence : vues temporaires de la session, le temps de lire leurs dépendances.
     for (const { view, doc } of REFERENCE_QUERIES) await db.execute(sql.raw(`create temporary view ${view} as ${referenceQuery(doc)}`));
     try {
+      // Vues du schéma de Vigie seulement (substituts de démonstration des vues des autres outils exclus, lot 0 de M-02).
       const used = await rows(sql`select distinct u.view_name, u.table_name, u.column_name from information_schema.view_column_usage u
-        where u.view_name like 'pub\_%' order by 1, 2, 3`);
+        where u.view_name like 'pub\_%' and u.view_schema in (current_schema(), pg_my_temp_schema()::regnamespace::text) order by 1, 2, 3`);
       const published = new Set(used.map((r) => `${r.table_name}.${r.column_name}`));
       const tables = new Set(used.map((r) => String(r.table_name)));
       // Les vues des migrations et la requête des études sont bien vues (sinon le garde-fou ne garderait rien).

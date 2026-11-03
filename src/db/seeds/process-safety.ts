@@ -18,7 +18,7 @@ import type { SeedTx } from './types';
 // de démonstration antérieure à la migration 0023 (upgradeDemo) ; marqueur : aucune étude et personnes du jeu présentes.
 
 export const DEMO_CAPEX = 'CPX-APM-2026-01';
-const SITE = 'ville-a';
+const SITE = 'site_a';
 const QHSE = 'clefevre';
 
 type StudySeed = typeof t.processSafetyStudies.$inferInsert;

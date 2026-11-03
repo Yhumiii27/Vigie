@@ -4,7 +4,8 @@ import { Bootstrap } from '@/components/Bootstrap';
 import type { NavSection } from '@/components/Sidebar';
 import { NAV, ROLE_KEYS, SCREENS, canApprove, canSee, initials } from '@/lib/domain';
 import { loadCounters } from '@/lib/data/counters';
-import { loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
+import { loadConnectors } from '@/lib/data/connectors';
+import { loadMatrixSiteChoices, loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
 import { getSession } from '@/lib/session';
 
 // Manifeste du signalement installable (EVT-20) lié aux seules pages /signaler : l'application ne s'installe pas d'ici.
@@ -14,11 +15,17 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const session = await getSession();
   const { role, user, site, siteOptions, demo } = session;
   // Base sans site (première mise en service en production) : écran d'amorçage à la place de l'application.
-  if (session.bootstrap) return <Bootstrap session={session} leadOptions={canApprove(role) ? await loadQhseLeadOptions() : []} />;
-  // Gestion des sites (création, renommage, responsable QHSE, archivage) : animateur QHSE et direction.
+  if (session.bootstrap) {
+    const [leadOptions, matrix] = canApprove(role) ? await Promise.all([loadQhseLeadOptions(), loadMatrixSiteChoices()]) : [[], { choices: [], message: null }];
+    return <Bootstrap session={session} leadOptions={leadOptions} matrix={matrix} />;
+  }
+  // Gestion des sites (suivi d'un site de Matrix, responsable QHSE, « ne plus suivre », connecteurs) : animateur QHSE et direction.
   const [counters, siteAdmin] = await Promise.all([
     loadCounters(),
-    canApprove(role) ? Promise.all([loadSiteAdmin(), loadQhseLeadOptions()]).then(([sites, leadOptions]) => ({ sites, leadOptions })) : null,
+    canApprove(role)
+      ? Promise.all([loadSiteAdmin(), loadQhseLeadOptions(), loadMatrixSiteChoices(), loadConnectors()])
+        .then(([sites, leadOptions, matrix, connectors]) => ({ sites, leadOptions, matrix, connectors }))
+      : null,
   ]);
   const nav: NavSection[] = NAV.map((sec) => ({
     label: sec.label,

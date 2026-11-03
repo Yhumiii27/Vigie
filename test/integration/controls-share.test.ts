@@ -59,7 +59,7 @@ describe('pub_controles : contrat Crucible v1', () => {
     expect(n).toBe(all.length);
     const bench = await controlByEquipment("Banc d'essais BE-1");
     expect(await published(bench.id)).toEqual({
-      vigie_ref: String(bench.id), site_code: 'ville-b', equipement: bench.equipment, equipement_code: DEMO_EQUIPMENT_CODE,
+      vigie_ref: String(bench.id), site_code: 'site_b', equipement: bench.equipment, equipement_code: DEMO_EQUIPMENT_CODE,
       type_controle: 'Inspection ATEX', organisme: bench.organization, periodicite_mois: 12, dernier_le: bench.lastOn, prochain_le: bench.nextOn,
       reserves: bench.reserves, archive: false, date_connue: true, maj_journal: true,
     });
@@ -71,7 +71,7 @@ describe('pub_controles : contrat Crucible v1', () => {
     expect(await published(compressor.id)).toMatchObject({ equipement_code: null, archive: false, date_connue: true });
     // Ni journal ni enregistrement (reprise de données, par exemple) : maj_le nul.
     const [bare] = await db.insert(t.controls).values({
-      equipment: 'Sans trace', controlType: 'VGP', periodMonths: 12, organization: '[Apave]', lastOn: '2026-01-01', nextOn: '2027-01-01', siteId: 'ville-a',
+      equipment: 'Sans trace', controlType: 'VGP', periodMonths: 12, organization: '[Apave]', lastOn: '2026-01-01', nextOn: '2027-01-01', siteId: 'site_a',
     }).returning({ id: t.controls.id });
     expect(await published(bare.id)).toMatchObject({ equipement_code: null, date_connue: false });
   });
@@ -95,14 +95,14 @@ describe('controls.equipment_code : saisie dans la fiche du contrôle', () => {
       actAs(role);
       expect(await saveControl({}, await controlForm(forklift.id, { equipmentCode: 'CHE-R489' }))).toEqual({ error: DENIED });
     }
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect(await saveControl({}, await controlForm(forklift.id, { equipmentCode: 'CHE-R489' }))).toEqual({ error: expect.stringContaining('autre site') });
     expect((await controlByEquipment('Chariot élévateur')).equipmentCode).toBeNull();
   });
 
   it('format refusé avec un message par champ, rien d’écrit', async () => {
     const forklift = await controlByEquipment('Chariot élévateur');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     for (const [code, message] of [['X', /2 à 32/], ['CHE R489', /majuscules/], ['CHE_R489', /majuscules/], ['-CHE', /majuscules/], ['A'.repeat(33), /2 à 32/]] as const) {
       const r = await saveControl({}, await controlForm(forklift.id, { equipmentCode: code }));
       expect(r.fieldErrors?.equipmentCode, code).toMatch(message);
@@ -112,7 +112,7 @@ describe('controls.equipment_code : saisie dans la fiche du contrôle', () => {
 
   it('saisi (mis en majuscules), journalisé, publié avec maj_le ; retiré : null, journalisé ; non unique', async () => {
     const forklift = await controlByEquipment('Chariot élévateur');
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveControl({}, await controlForm(forklift.id, { equipmentCode: ' che-r489 ' }))).toEqual({ ok: true, id: String(forklift.id) });
     expect((await controlByEquipment('Chariot élévateur')).equipmentCode).toBe('CHE-R489');
     expect(await lastLog('control', forklift.id)).toMatchObject({
@@ -141,10 +141,10 @@ describe('controls.equipment_code : saisie dans la fiche du contrôle', () => {
   });
 
   it('création avec code ; fiche chargée (loadWatch) ; contrôle enregistré puis archivage publiés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const created = await saveControl({}, form({
       equipment: 'Étuve climatique EC-3', equipmentCode: 'LAB67-EC3', controlType: 'Vérification métrologique', periodMonths: '12', organization: 'Interne — métrologie',
-      responsibleId: '', siteId: 'ville-a', requirementId: '', lastOn: '2026-09-01', nextOn: '', reserves: '',
+      responsibleId: '', siteId: 'site_a', requirementId: '', lastOn: '2026-09-01', nextOn: '', reserves: '',
     }));
     expect(created).toMatchObject({ ok: true });
     const id = Number(created.id);

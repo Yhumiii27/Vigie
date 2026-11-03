@@ -83,7 +83,8 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
   const signed = !!(plan?.signedEuOn || plan?.signedEeOn);
   // Intervention commencée : déplacer la date de début exige un motif (un écart R. 4512-6 ne s'efface pas sans trace).
   const startMoved = !!plan && plan.startOn <= options.today && start !== plan.startOn;
-  const projects = withCurrent(options.projects, plan?.keystoneProject, null, 'start');
+  // D02 : projet de la fiche absent de keystone.pub_projets (ou source indisponible) gardé comme choix.
+  const projects = withCurrent(options.projects, plan?.keystoneProjectCode, plan?.keystoneProject, 'start');
 
   return (
     <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id, version: plan?.version }}>
@@ -152,8 +153,8 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
           <Select name="ownerId" options={options.people} defaultValue={plan?.ownerId ?? ''} placeholder="Choisir…" />
         </Field>
       </FormRow>
-      <Field name="keystoneProject" label="Projet Keystone">
-        <Select name="keystoneProject" options={projects} defaultValue={plan?.keystoneProject ?? ''} placeholder="Aucun projet" />
+      <Field name="keystoneProjectCode" label="Projet Keystone" hint={options.projectsMessage ?? (plan?.keystoneProject && !plan.keystoneProjectCode ? `Ancien libellé : ${plan.keystoneProject}` : undefined)}>
+        <Select name="keystoneProjectCode" options={projects} defaultValue={plan?.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
       </Field>
       <Field name="interferenceRisks" label="Risques d'interférence" hint="Coactivité, circulation, énergies, produits, zones à risque…">
         <TextArea name="interferenceRisks" rows={3} defaultValue={plan?.interferenceRisks ?? ''} />

@@ -31,9 +31,9 @@ const REGISTER = 'Inscription au registre des accidents bénins';
 
 /** AT saisi par l'animateur QHSE (site A), connu de l'employeur le vendredi 09/10/2026 à 15 h. */
 async function accident(fields: Record<string, string>) {
-  actAs('Animateur QHSE', 'ville-a');
+  actAs('Animateur QHSE', 'site_a');
   const r = await createEvent({}, form({
-    type: 'AT', title: 'Accident · quai', occurredOn: '2026-10-09', location: 'Quai de chargement', severity: '2', siteId: 'ville-a',
+    type: 'AT', title: 'Accident · quai', occurredOn: '2026-10-09', location: 'Quai de chargement', severity: '2', siteId: 'site_a',
     declarantId: 'tnguyen', pilotId: 'sbenali', circumstances: 'Pied pris sous une palette.', ...fields,
   }));
   expect(r, JSON.stringify(r)).toMatchObject({ ok: true });
@@ -48,14 +48,14 @@ async function readyToClose(id: string, actionId: string) {
   // Analyse des causes exigée à la clôture (EVT-11).
   await d.insert(t.eventAnalyses).values({ eventId: id, method: '5m', content: [['Milieu', 'Quai encombré']] });
   await d.insert(t.actions).values({
-    id: actionId, detail: 'Baliser le quai', source: 'evenement', originRef: id, eventId: id, siteId: 'ville-a', pilotId: 'sbenali',
+    id: actionId, detail: 'Baliser le quai', source: 'evenement', originRef: id, eventId: id, siteId: 'site_a', pilotId: 'sbenali',
     openedOn: '2026-10-09', dueOn: '2026-10-20', initialDueOn: '2026-10-20', status: 'verifiee', doneOn: '2026-10-09', closedOn: '2026-10-09',
   });
 }
 
 describe('indicateurs sécurité : accidents de l’effectif seulement', () => {
   it('TF1 / TG, jours sans accident avec arrêt et pyramide inchangés par un intérimaire ou une personne extérieure', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const snapshot = async () => {
       const d = await loadDashboard();
       return {
@@ -66,7 +66,7 @@ describe('indicateurs sécurité : accidents de l’effectif seulement', () => {
     };
     const before = await snapshot();
     const d = await db();
-    const base = { siteId: 'ville-a', type: 'AT', title: 'Accident · quai', location: 'Quai', severity: 2, step: 1, injury: 'arret', lostDays: 20, occurredOn: '2026-09-28' };
+    const base = { siteId: 'site_a', type: 'AT', title: 'Accident · quai', location: 'Quai', severity: 2, step: 1, injury: 'arret', lostDays: 20, occurredOn: '2026-09-28' };
     await d.insert(t.events).values([
       { ...base, id: 'EV-2026-T21', victimKind: 'externe', victimName: 'K. Weber' },
       { ...base, id: 'EV-2026-T22', victimKind: 'interimaire', victimName: 'J. Martin' },
@@ -96,11 +96,11 @@ describe('obligation de déclaration selon la victime', () => {
     expect(cpam).toMatchObject({ duty: 'ett', dueOn: '2026-10-10', tone: 'warn', canWaive: true });
     expect(cpam?.label).toBe("ETT à informer avant le 10/10/2026 à 15 h 00 (copie CARSAT et inspection du travail) : elle déclare l'accident");
     // Échéance réservée aux rôles habilités aux données de santé.
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await todoOf(id)).toEqual([]);
 
     await readyToClose(id, 'A-971');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await advanceEvent(id)).toEqual({ error: "Victime intérimaire : l'entreprise de travail temporaire déclare l'accident ; indiquez quand elle a été informée (motif) avant la clôture." });
     const reason = 'ETT Intérim Plus informée le 09/10 à 17 h par lettre recommandée ; copies CARSAT et inspection du travail';
     expect(await waiveCpamDeclaration({}, form({ id, reason }))).toEqual({ ok: true, id });
@@ -130,12 +130,12 @@ describe('accident bénin (premiers soins)', () => {
     expect((await loadEventDetail(id))?.cpam).toMatchObject({
       dueOn: '2026-10-12', label: 'Accident bénin : à inscrire au registre ou à déclarer avant le 12/10/2026 à 15 h 00',
     });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await todoOf(id)).toEqual([]);
   });
 
   it('inscription : mentions du registre exigées (victime, circonstances, lieu, nature et siège des lésions)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const bare = await accident({ injury: 'soins', circumstances: '', location: LOCATION_UNSPECIFIED });
     const missing = "Complétez la fiche (Modifier) avant l'inscription au registre : victime, circonstances, lieu, nature des lésions, siège des lésions.";
     const inscription = (eventId: string) => form({ id: eventId, careGivenAt: '2026-10-09T15:15', caregiverKind: 'staff', caregiverId: 'sbenali', care: 'Désinfection et pansement' });
@@ -145,7 +145,7 @@ describe('accident bénin (premiers soins)', () => {
     // Fiche complétée : inscription, l'échéance disparaît.
     const e = await row(id);
     expect(await saveEvent({}, form({
-      id, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'ville-a', pilotId: 'sbenali',
+      id, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'site_a', pilotId: 'sbenali',
       victimKind: 'salarie', victimId: 'tnguyen', circumstances: e.circumstances!, injury: 'soins', lesionNature: 'Contusion', lesionSite: 'Pied gauche',
     }))).toEqual({ ok: true, id });
     expect((await loadEventDetail(id))?.register).toMatchObject({ canRegister: true, hint: null });
@@ -177,7 +177,7 @@ describe('accident bénin (premiers soins)', () => {
     const arret = await accident({ injury: 'sans_arret', victimKind: 'salarie', victimId: 'kbernard', cpamDeclaredOn: '2026-10-09' });
     const e = await row(arret);
     expect(await saveEvent({}, form({
-      id: arret, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'ville-a', pilotId: 'sbenali',
+      id: arret, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'site_a', pilotId: 'sbenali',
       victimKind: 'salarie', victimId: 'kbernard', circumstances: e.circumstances!, injury: 'soins', cpamDeclaredOn: '2026-10-09',
     }))).toEqual({ ok: true, id: arret });
     expect(await row(arret)).toMatchObject({ injury: 'soins', cpamDeclaredOn: '2026-10-09' });
@@ -186,7 +186,7 @@ describe('accident bénin (premiers soins)', () => {
   it('accident inscrit au registre : date de déclaration refusée (bascule en déclaration CPAM)', async () => {
     const e = await row(id);
     expect(await saveEvent({}, form({
-      id, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'ville-a', pilotId: 'sbenali',
+      id, type: 'AT', title: e.title, occurredOn: e.occurredOn, location: e.location, severity: '2', siteId: 'site_a', pilotId: 'sbenali',
       victimKind: 'salarie', victimId: 'tnguyen', circumstances: e.circumstances!, injury: 'soins', lesionNature: 'Contusion', lesionSite: 'Pied gauche',
       cpamDeclaredOn: '2026-10-09',
     }))).toMatchObject({ fieldErrors: { cpamDeclaredOn: expect.stringMatching(/^Inscrit au registre des accidents bénins/) } });

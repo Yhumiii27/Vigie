@@ -156,8 +156,8 @@ export function ReviewStep({ data, draft, sections, files, format, templateId, t
                   : <>Plan écrit non obligatoire (moins de {MANDATORY_HOURS} h sur 12 mois, sans travaux dangereux) ; l&apos;analyse des risques d&apos;interférence reste requise (R. 4512-6).</>}
               </Notice>
             )}
-            <Field name="keystoneProject" label="Projet Keystone" hint={draft.hints.keystoneProject}>
-              <Select name="keystoneProject" options={data.projects} defaultValue={draft.keystoneProject} placeholder="Aucun projet" />
+            <Field name="keystoneProjectCode" label="Projet Keystone" hint={draft.hints.keystoneProject ?? data.projectsMessage ?? undefined}>
+              <Select name="keystoneProjectCode" options={data.projects} defaultValue={draft.keystoneProject} placeholder="Aucun projet" />
             </Field>
 
             <SectionTitle>Inspection commune et analyse des risques</SectionTitle>

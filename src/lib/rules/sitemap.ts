@@ -41,8 +41,8 @@ export const TEAMS: Record<Team, { label: string; icon: string; color: string }>
 
 /** Plans schématiques par défaut (public/plans) : dimensions du viewBox et largeur réelle représentée. */
 export const DEFAULT_PLANS: Record<string, { url: string; width: number; height: number; metersPerUnit: number }> = {
-  'ville-a': { url: '/plans/ville-a.svg', width: 1600, height: 1000, metersPerUnit: 320 },
-  'ville-b': { url: '/plans/ville-b.svg', width: 1600, height: 1000, metersPerUnit: 200 },
+  'site_a': { url: '/plans/site_a.svg', width: 1600, height: 1000, metersPerUnit: 320 },
+  'site_b': { url: '/plans/site_b.svg', width: 1600, height: 1000, metersPerUnit: 200 },
 };
 
 // ─── Vues sérialisables ─────────────────────────────────────────────────────
@@ -101,7 +101,9 @@ export type ActivityView = {
   /** Permis ouverts (demandés ou délivrés) du plan lié, hors permis de l'activité : appliqués les jours de validité. */
   planPermits: CoPermit[];
   dangerousWork: boolean;
+  /** Projet Keystone affiché (« code · client », D02) et son code (keystone.pub_projets.code). */
   keystoneProject: string | null;
+  keystoneProjectCode: string | null;
   zoneId: number | null;
   geometry: Geometry | null;
   startOn: string;
@@ -126,6 +128,7 @@ export type PositionCandidate = {
   endOn: string;
   hours: string | null;
   keystoneProject: string | null;
+  keystoneProjectCode: string | null;
   preventionPlanId: string | null;
   permitId: string | null;
   permitType: string | null;
@@ -139,6 +142,8 @@ export type SitemapChoices = {
   contractors: Choice[];
   people: Choice[];
   projects: Choice[];
+  /** Projets de Keystone indisponibles (D02) : message sous le choix. */
+  projectsMessage: string | null;
   /** Plans de prévention du site (non clos) ; `planContractor` donne l'entreprise de chacun. */
   plans: Choice[];
   planContractor: Record<string, string>;

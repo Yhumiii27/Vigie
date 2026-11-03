@@ -2,6 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { readSuppliers, supplierError } from '@/lib/foreign/keystone';
 import { isPlanEnded } from '@/lib/rules/prevention';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';
@@ -36,11 +37,24 @@ export async function saveContractor(_prev: FormState, fd: FormData): Promise<Fo
   if (all.some((c) => c.id !== id && c.name.toLocaleLowerCase('fr') === key)) {
     return { error: 'Cette entreprise existe déjà.', fieldErrors: { name: 'Nom déjà utilisé.' } };
   }
-  const values = { name, trade, contactName, contactPhone, contactEmail };
-  if (id) {
-    const before = all.find((c) => c.id === id);
-    if (!before) return { error: 'Entreprise introuvable.' };
-    const details = diffFields(before, values, { name: 'Raison sociale', trade: 'Corps de métier', contactName: 'Interlocuteur', contactPhone: 'Téléphone', contactEmail: 'E-mail' });
+  const before = id ? all.find((c) => c.id === id) : undefined;
+  if (id && !before) return { error: 'Entreprise introuvable.' };
+  // D16 : fournisseur Keystone (keystone.pub_fournisseurs, sans les ateliers internes), facultatif, sans clé étrangère :
+  // contrôlé contre la vue à l'enregistrement (valeur déjà enregistrée admise) ; absent du formulaire : inchangé.
+  const supplierId = fd.has('supplierId') ? f.opt('supplierId') : before?.supplierId ?? null;
+  const supplierIssue = await supplierError(db, supplierId, before?.supplierId);
+  if (supplierIssue) return { error: 'Certains champs sont à corriger.', fieldErrors: { supplierId: supplierIssue } };
+  const values = { name, trade, contactName, contactPhone, contactEmail, supplierId };
+  const supplierName = async (sid: string | null) => {
+    if (!sid) return null;
+    const read = await readSuppliers(db);
+    return (read.ok ? read.rows.find((x) => x.id === sid)?.name : null) ?? sid;
+  };
+  if (id && before) {
+    const details = [
+      ...diffFields(before, values, { name: 'Raison sociale', trade: 'Corps de métier', contactName: 'Interlocuteur', contactPhone: 'Téléphone', contactEmail: 'E-mail' }),
+      ...(before.supplierId !== supplierId ? [{ field: 'Fournisseur Keystone', from: await supplierName(before.supplierId), to: await supplierName(supplierId) }] : []),
+    ];
     const stale = await freshWrite(() => db.transaction(async (tx) => {
       // QUA-12 : fiche modifiée depuis l'ouverture du formulaire (autre saisie, archivage) : rien n'est écrasé.
       await assertFresh(tx, 'contractor', id, fd.get(VERSION_FIELD));
@@ -54,7 +68,8 @@ export async function saveContractor(_prev: FormState, fd: FormData): Promise<Fo
   const newId = await db.transaction(async (tx) => {
     const ref = await nextEntityReference(tx, 'contractor', 'EE-', 3);
     await tx.insert(t.contractors).values({ id: ref, ...values });
-    await logChange(tx, { entityType: 'contractor', entityId: ref, action: 'create', summary: 'Entreprise ajoutée' });
+    const supplier = await supplierName(supplierId);
+    await logChange(tx, { entityType: 'contractor', entityId: ref, action: 'create', summary: `Entreprise ajoutée${supplier ? ` · fournisseur Keystone ${supplier}` : ''}` });
     return ref;
   });
   return done(newId);

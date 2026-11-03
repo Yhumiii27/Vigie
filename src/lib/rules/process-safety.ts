@@ -158,7 +158,8 @@ export const studyLabel = (s: { type: StudyType; capexCode: string | null; proje
 
 /**
  * Code commun du site (matrix.sites.code, décision D14 de Matrix) : minuscules, chiffres et soulignés, une lettre en
- * premier, 2 à 32 caractères, jamais « all » (contrainte sites_code_check de Matrix, reprise par sites.code).
+ * premier, 2 à 32 caractères, jamais « all » (contrainte sites_code_check de Matrix) ; depuis la décision CV-09, c'est le format de
+ * l'identifiant d'un site de Vigie (sites.id), contrôlé au suivi d'un site de matrix.pub_sites (src/server/sites.ts).
  */
 export const SITE_CODE = /^[a-z][a-z0-9_]{1,31}$/;
 export function siteCodeError(code: string | null | undefined): string | null {

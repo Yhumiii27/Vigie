@@ -47,7 +47,7 @@ describe('droits et types refusés', () => {
 
 describe('rattacher et détacher', () => {
   it('risque : journal de l’action et du risque, dans les deux sens', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await linkAction('risk:3', 'A-215')).toEqual({});
     expect(await lastLog('action', 'A-215')).toMatchObject({ action: 'link', summary: expect.stringContaining('Rattachée à'), byId: 'clefevre' });
     expect(await lastLog('risk', 3)).toMatchObject({ action: 'link', summary: 'Action A-215 rattachée', byId: 'clefevre' });
@@ -57,17 +57,17 @@ describe('rattacher et détacher', () => {
   });
 
   it('Vérifiée : plus de rattachement, détachement admis ; Abandonnée : ni l’un ni l’autre', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await linkAction('risk:13', 'A-165')).toEqual({ error: "L'action A-165 est vérifiée ou abandonnée : elle ne peut plus être rattachée." });
     expect(await unlinkAction('risk:14', 'A-165')).toEqual({});
     expect(await (await getDb()).select().from(t.riskActions).where(eq(t.riskActions.actionId, 'A-165'))).toEqual([]);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await linkAction('risk:20', 'A-180')).toMatchObject({ error: expect.stringContaining('vérifiée ou abandonnée') });
     expect(await unlinkAction('risk:20', 'A-180')).toEqual({ error: "L'action A-180 est abandonnée : consultation seule." });
   });
 
   it('élément à action unique : déjà porté par une action en cours refusé, par une action vérifiée remplacé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     await insertAction('A-T70');
     expect(await linkAction('requirement:1', 'A-T70')).toEqual({ error: expect.stringContaining("Déjà rattaché à l'action A-196") });
     await (await getDb()).update(t.requirements).set({ actionId: 'A-165' }).where(eq(t.requirements.id, 6));
@@ -76,7 +76,7 @@ describe('rattacher et détacher', () => {
   });
 
   it('version de document rattachée après coup : le document de l’action reste inchangé (D15)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     await insertAction('A-T71');
     expect(await linkAction('docversion:24', 'A-T71')).toEqual({});
     expect((await actionRow('A-T71')).documentId).toBeNull();
@@ -84,7 +84,7 @@ describe('rattacher et détacher', () => {
   });
 
   it('revue : une seule revue de direction par action', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     await insertAction('A-T72', { reviewId: 1 });
     expect(await linkAction('review:3', 'A-T72')).toEqual({ error: "L'action A-T72 relève déjà d'une autre revue de direction." });
     await insertAction('A-T73');
@@ -94,7 +94,7 @@ describe('rattacher et détacher', () => {
   });
 
   it('site : action d’un autre site que le site sélectionné, élément d’un autre site que l’action : refusés', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await linkAction('risk:3', 'A-T73')).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'all');
     expect(await linkAction('control:6', 'A-T73')).toEqual({ error: "L'action A-T73 concerne un autre site que l'élément à rattacher." });
@@ -105,11 +105,11 @@ describe('rattacher et détacher', () => {
 describe('linkFacts (§ 2.12b)', () => {
   it('référence par défaut, site, faits de la source admise', async () => {
     const db = await getDb();
-    expect(await linkFacts(db, 'event:EV-2026-128')).toEqual({ reference: 'EV-2026-128', siteId: 'ville-a', facts: { eventType: 'RC' } });
+    expect(await linkFacts(db, 'event:EV-2026-128')).toEqual({ reference: 'EV-2026-128', siteId: 'site_a', facts: { eventType: 'RC' } });
     expect(await linkFacts(db, 'plan:7')).toMatchObject({ siteId: null, facts: { track: 'Fournisseurs' } });
     expect(await linkFacts(db, 'finding:1')).toMatchObject({ reference: expect.stringMatching(/^Constat · .* · §8\.2\.3$/), facts: { track: 'Audits internes' } });
     expect(await linkFacts(db, 'reviewdecision:1')).toMatchObject({ facts: { decisionKind: 'objectif' } });
-    expect(await linkFacts(db, 'control:6')).toMatchObject({ siteId: 'ville-b' });
+    expect(await linkFacts(db, 'control:6')).toMatchObject({ siteId: 'site_b' });
     expect(await linkFacts(db, 'wasteentry:999999')).toBeNull();
     expect(await linkFacts(db, 'inconnu:1')).toBeNull();
     const plan7 = await linkFacts(db, 'plan:7');

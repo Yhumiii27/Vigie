@@ -13,7 +13,7 @@ import { withCurrent } from '@/lib/form-options';
 // Éléments partagés par les fenêtres de l'écran « Plans de prévention et permis ».
 
 /** Listes de choix des formulaires du domaine (préparées par la page serveur). */
-export type PreventionOptions = Pick<FormOptions, 'people' | 'sites' | 'projects'> & {
+export type PreventionOptions = Pick<FormOptions, 'people' | 'sites' | 'projects' | 'projectsMessage'> & {
   contractors: Option[];
   /** Plans du site sélectionné, pour le rattachement d'un permis (filtrés par site, entreprise et dates). */
   plans: PlanChoice[];

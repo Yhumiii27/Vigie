@@ -123,7 +123,7 @@ describe('SEC-07 : limites par personne', () => {
 
 describe('SEC-09 : signalement anonyme', () => {
   it('photo : métadonnées retirées côté serveur, nom remplacé, aucun auteur', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const fd = form({ type: 'SD', description: 'Câble au sol dans l’allée.', anonymous: '1' });
     fd.append('photos', new File([jpegWithExif()], 'IMG_2026-10-09_Jean.jpg', { type: 'image/jpeg' }));
     const counters = async () => (await (await getDb()).select().from(t.reportRateLimits)).map((c) => `${c.key}:${c.hits}`).sort();
@@ -167,7 +167,7 @@ describe('QUA-12 : risques du DUERP', () => {
   it('risque modifié entre-temps : refusé ; version de la liste à jour après l’enregistrement', async () => {
     const { saveRisk } = await import('@/server/risks');
     const { loadRisks } = await import('@/lib/data/risks');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const values = {
       unitId: 'usinage', hazard: 'Projection de copeaux', situation: 'Usinage sans carter', gravity: '3', probability: '3',
       existingMeasures: 'Lunettes', residualGravity: '3', residualProbability: '2',

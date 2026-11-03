@@ -3,14 +3,14 @@ import type { Option } from '@/lib/data/options';
 import { canApprove } from '@/lib/domain';
 import type { Session } from '@/lib/session';
 import { saveSite } from '@/server/sites';
-import { ActionForm, Field, Input } from './form';
-import { QhseLeadField } from './SitesManager';
+import { ActionForm } from './form';
+import { MatrixSiteField, QhseLeadField, type MatrixChoices } from './SitesManager';
 
 /**
  * Amorçage d'une base de production vide (aucun site actif) : l'animateur QHSE ou la direction crée le premier site ;
  * les autres rôles sont invités à patienter. Remplace tout l'écran tant qu'aucun site n'existe.
  */
-export function Bootstrap({ session, leadOptions }: { session: Session; leadOptions: Option[] }) {
+export function Bootstrap({ session, leadOptions, matrix }: { session: Session; leadOptions: Option[]; matrix: MatrixChoices }) {
   const { role, user, demo } = session;
   const admin = canApprove(role);
   return (
@@ -22,17 +22,15 @@ export function Bootstrap({ session, leadOptions }: { session: Session; leadOpti
         </div>
         <div className="card" style={{ gap: 12 }}>
           <div className="card-kicker">Première mise en service</div>
-          <div className="card-title" style={{ fontSize: 16 }}>{admin ? 'Créer le premier site' : 'Vigie n’est pas encore configuré'}</div>
+          <div className="card-title" style={{ fontSize: 16 }}>{admin ? 'Suivre le premier site' : 'Vigie n’est pas encore configuré'}</div>
           <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
             {admin
-              ? 'Aucun site n’est encore enregistré. Chaque signalement, action, contrôle ou unité de travail est rattaché à un site : créez le premier pour commencer. Les suivants s’ajoutent ensuite depuis « Gérer les sites… », dans le sélecteur de site.'
+              ? 'Aucun site n’est encore suivi. Chaque signalement, action, contrôle ou unité de travail est rattaché à un site : choisissez le premier dans le référentiel des sites de Matrix pour commencer. Les suivants s’ajoutent ensuite depuis « Gérer les sites… », dans le sélecteur de site.'
               : `Connecté en tant que ${user.name} (${role}). Aucun site n’est encore enregistré : un animateur QHSE ou la direction doit créer le premier site avant que Vigie soit utilisable.`}
           </p>
           {admin && (
-            <ActionForm action={saveSite} hidden={{ id: '' }} submitLabel="Créer le site" submitIcon="ph-factory">
-              <Field name="label" label="Libellé du site">
-                <Input name="label" maxLength={120} required autoFocus placeholder="Ex. Site de Lyon — siège et ateliers" />
-              </Field>
+            <ActionForm action={saveSite} hidden={{ id: '' }} submitLabel="Suivre le site" submitIcon="ph-factory">
+              <MatrixSiteField matrix={matrix} />
               <QhseLeadField options={leadOptions} current={{ qhseLeadId: role === 'Animateur QHSE' ? user.id : null, qhseLead: user.name }} />
             </ActionForm>
           )}

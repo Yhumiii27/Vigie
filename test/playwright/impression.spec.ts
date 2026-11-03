@@ -6,7 +6,7 @@ import { asRole, consoleErrors } from './helpers';
 
 test('Animateur QHSE : fiche d’un accident du travail imprimable depuis la fiche, données de santé comprises', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/evenements?sel=EV-2026-127');
   const link = page.getByRole('link', { name: 'Imprimer la fiche' });
   await expect(link).toHaveAttribute('href', '/evenements/fiche/EV-2026-127');
@@ -21,7 +21,7 @@ test('Animateur QHSE : fiche d’un accident du travail imprimable depuis la fic
 });
 
 test('Chef de service : même fiche, données de santé restreintes', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/evenements/fiche/EV-2026-127');
   await expect(page.getByRole('heading', { level: 1, name: /EV-2026-127/ })).toBeVisible();
   await expect(page.getByText('Données restreintes')).toBeVisible();
@@ -43,7 +43,7 @@ test('Salarié : fiche de son signalement (sans analyse ni pilote), rien d’un 
 
 test('Plan d’actions : fiche imprimable d’une action, mêmes droits que la fiche', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/actions?action=A-214');
   await expect(page.getByRole('link', { name: 'Imprimer la fiche' })).toHaveAttribute('href', '/actions/fiche/A-214');
   await page.goto('/actions/fiche/A-214');

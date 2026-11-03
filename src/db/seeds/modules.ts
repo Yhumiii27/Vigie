@@ -26,7 +26,7 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
 
   // PRV-10 : livraisons poids lourds et repli de la nacelle sur la voie de livraison, maîtrisés par un créneau réservé.
   const activities = await tx.select({ id: t.siteActivities.id, title: t.siteActivities.title }).from(t.siteActivities)
-    .where(and(eq(t.siteActivities.siteId, 'ville-a'), isNull(t.siteActivities.cancelledAt)));
+    .where(and(eq(t.siteActivities.siteId, 'site_a'), isNull(t.siteActivities.cancelledAt)));
   const a = activities.find((x) => x.title.startsWith('Livraisons et expéditions poids lourds'));
   const b = activities.find((x) => x.title.startsWith('Repli de la nacelle'));
   if (a && b) {
@@ -34,10 +34,10 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
     const at = paris(rel(-1), '09:30');
     const measure = 'Livraisons poids lourds suspendues de 13 h à 14 h pendant le repli de la nacelle ; voie balisée et guidée par le magasinier.';
     const [row] = await tx.insert(t.coactivityControls).values({
-      siteId: 'ville-a', pairKey: `${lo.id}-${hi.id}`, activityA: lo.id, activityB: hi.id, measure, controlledById: 'clefevre', controlledAt: at,
+      siteId: 'site_a', pairKey: `${lo.id}-${hi.id}`, activityA: lo.id, activityB: hi.id, measure, controlledById: 'clefevre', controlledAt: at,
     }).returning({ id: t.coactivityControls.id });
     await tx.insert(t.changeLog).values({
-      entityType: 'site_map', entityId: 'ville-a', action: 'control', byId: 'clefevre', at,
+      entityType: 'site_map', entityId: 'site_a', action: 'control', byId: 'clefevre', at,
       summary: `Coactivité maîtrisée : « ${lo.title} » et « ${hi.title} » (voie d'accès commune, situation du 08/10/2026)`,
       details: [{ field: 'Mesure prise', from: null, to: measure }, { field: 'Maîtrise', from: null, to: `n° ${row.id}` }],
     });
@@ -82,7 +82,7 @@ export async function seedModuleFunctions(tx: SeedTx, opts: { files?: boolean } 
 
   // DOC-11 : certificat de traitement d'un enlèvement de déchets dangereux traité.
   const [entry] = await tx.select({ id: t.wasteEntries.id, bsd: t.wasteEntries.bsdNumber }).from(t.wasteEntries)
-    .where(and(eq(t.wasteEntries.bsdStatus, 'traite'), eq(t.wasteEntries.siteId, 'ville-a'), isNull(t.wasteEntries.cancelledAt)))
+    .where(and(eq(t.wasteEntries.bsdStatus, 'traite'), eq(t.wasteEntries.siteId, 'site_a'), isNull(t.wasteEntries.cancelledAt)))
     .orderBy(desc(t.wasteEntries.removedOn)).limit(1);
   if (entry) {
     await attach('waste_entry', String(entry.id), { entityType: 'waste_entry', entityId: String(entry.id) }, "Pièce de l'enlèvement",

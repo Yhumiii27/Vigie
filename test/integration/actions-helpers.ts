@@ -10,7 +10,7 @@ import { getDb, schema as t } from '@/db';
 export const NEW_ACTION = {
   source: 'comex', originRef: 'COMEX du 08/10/2026', pilotId: 'sbenali', priority: 'moyen_terme', dueOn: '2026-11-15', domain: 'securite',
   problem: 'Problème constaté au COMEX.', detail: 'Mettre en place le suivi mensuel\nAvec un indicateur partagé.', verifyDueOn: '2026-12-01',
-  siteId: 'ville-a', riskLevel: '', estimatedCost: '', actualCost: '',
+  siteId: 'site_a', riskLevel: '', estimatedCost: '', actualCost: '',
 } as const;
 
 /** Une action du plan. */
@@ -39,7 +39,7 @@ export async function insertAction(id: string, values: Partial<typeof t.actions.
   await (await getDb()).insert(t.actions).values({
     id, openedOn: '2026-10-01', pilotId: 'sbenali', status: 'a_faire', priority: 'moyen_terme', dueOn: '2026-11-30', initialDueOn: '2026-11-30',
     source: 'comex', originRef: 'COMEX de test', domain: 'securite', problem: 'Problème de test', detail: `Action de test ${id}`,
-    verifyDueOn: '2026-12-15', siteId: 'ville-a', ...values,
+    verifyDueOn: '2026-12-15', siteId: 'site_a', ...values,
   });
   return actionRow(id);
 }

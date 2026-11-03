@@ -27,12 +27,12 @@ describe('parseConfig', () => {
     const c = parseConfig({
       VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr/', VIGIE_ALLOWED_HOSTS: 'Vigie.interne:8443',
       DATABASE_URL: 'postgres://vigie@db/vigie', ENTRA_TENANT_ID: 't', ENTRA_CLIENT_ID: 'c', ENTRA_CLIENT_SECRET: 's',
-      VIGIE_SESSION_SECRET: 'x'.repeat(32), VIGIE_SITE_GROUPS: 'g1:ville-a, g2:ville-b', VIGIE_UPLOAD_KEY: 'ab'.repeat(32),
+      VIGIE_SESSION_SECRET: 'x'.repeat(32), VIGIE_SITE_GROUPS: 'g1:site_a, g2:site_b', VIGIE_UPLOAD_KEY: 'ab'.repeat(32),
     });
     expect(c.publicUrl).toBe('https://vigie.exemple.fr');
     expect(c.allowedHosts).toEqual(['vigie.interne:8443', 'vigie.exemple.fr']);
     expect(c.entra?.issuer).toBe('https://login.microsoftonline.com/t/v2.0');
-    expect(c.siteGroups).toEqual([{ groupId: 'g1', siteId: 'ville-a' }, { groupId: 'g2', siteId: 'ville-b' }]);
+    expect(c.siteGroups).toEqual([{ groupId: 'g1', siteId: 'site_a' }, { groupId: 'g2', siteId: 'site_b' }]);
     expect(c.uploadKey?.length).toBe(32);
     expect(c.reportSecret).toBeNull();
     expect(entraMissing(c)).toEqual([]);

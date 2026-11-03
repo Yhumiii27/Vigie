@@ -218,7 +218,7 @@ describe('échéances', () => {
     const list = [item({ date: '2026-10-12' }), item({ date: '2026-10-20', overdue: true }), item({ date: '2026-10-10' })];
     expect(list.sort(byUrgency).map((t) => t.date)).toEqual(['2026-10-20', '2026-10-10', '2026-10-12']);
     expect(todoKey(item({ href: '/actions?action=A-1' }))).toBe('Action|/actions?action=A-1|T|warn');
-    expect(todoKey(item({ key: 'site-lead|ville-b' }))).toBe('site-lead|ville-b|warn');
+    expect(todoKey(item({ key: 'site-lead|site_b' }))).toBe('site-lead|site_b|warn');
   });
   it('TDB-07 : retards triés par ancienneté (date d’échéance réelle), tous datés du jour', () => {
     const late = (dueOn: string, title: string) => item({ date: '2026-10-09', overdue: true, tone: 'danger', dueOn, title });

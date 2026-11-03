@@ -43,9 +43,9 @@ beforeAll(async () => {
   const row = { openedOn: '2026-10-01', status: 'a_faire' as const, source: 'evenement' as const, originRef: 'EV-2026-128', pilotId: 'sbenali',
     priority: 'moyen_terme' as const, domain: 'securite' as const, problem: 'Zone de test non balisée.', verifyDueOn: '2026-11-30' };
   await db.insert(t.actions).values([
-    { ...row, id: ID, detail: 'Baliser la zone de test hydraulique', siteId: 'ville-b', dueOn: '2026-10-12', initialDueOn: '2026-10-12' },
-    // Site archivé (ville-c) : échéance du périmètre dont le site ne peut plus être sélectionné.
-    { ...row, id: 'A-T06', detail: 'Remettre les clés du dépôt fermé', siteId: 'ville-c', dueOn: '2026-10-13', initialDueOn: '2026-10-13' },
+    { ...row, id: ID, detail: 'Baliser la zone de test hydraulique', siteId: 'site_b', dueOn: '2026-10-12', initialDueOn: '2026-10-12' },
+    // Site archivé (site_c) : échéance du périmètre dont le site ne peut plus être sélectionné.
+    { ...row, id: 'A-T06', detail: 'Remettre les clés du dépôt fermé', siteId: 'site_c', dueOn: '2026-10-13', initialDueOn: '2026-10-13' },
   ]);
 });
 
@@ -53,9 +53,9 @@ afterEach(() => { auth.state = null; });
 
 describe('échéances de la personne sur les autres sites (TDB-05)', () => {
   it('Chef de service sur le site A : son action du site B est visible, signalée et ouvrable', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const item = await find();
-    expect(item).toMatchObject({ elsewhere: true, siteId: 'ville-b', siteLabel: 'Site de [Ville B]', href: HREF, source: 'actions' });
+    expect(item).toMatchObject({ elsewhere: true, siteId: 'site_b', siteLabel: 'Site de [Ville B]', href: HREF, source: 'actions' });
     expect((await loadNotifications()).find((n) => n.key === item!.key)).toMatchObject({ elsewhere: true, siteLabel: 'Site de [Ville B]' });
     const page = await loadTodoPage({ mine: true });
     expect(page.items.some((x) => x.key === item!.key)).toBe(true);
@@ -68,11 +68,11 @@ describe('échéances de la personne sur les autres sites (TDB-05)', () => {
   });
 
   it('badge d\'écran : site sélectionné seulement ; badge À faire : toutes les échéances', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const onA = await loadCounters();
     expect(onA.badges.actions).toBe(await screenCount('actions'));
     expect(onA.badges.todo).toBe((await loadVisibleTodo()).length);
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect((await find())).toMatchObject({ elsewhere: false });
     expect((await loadCounters()).badges.actions).toBe(await screenCount('actions'));
     expect((await loadVisibleTodo()).some((x) => x.title.startsWith(`${ID} ·`) && x.source === 'actions' && !x.elsewhere)).toBe(true);
@@ -80,45 +80,45 @@ describe('échéances de la personne sur les autres sites (TDB-05)', () => {
 
   it('encadrement en lecture seule du plan (ACT-22, D3) : plus les échéances d\'action des autres sur son site, toujours les siennes', async () => {
     // A-201 : en retard, site A, responsable [R. Fontaine].
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await find('A-201')).toMatchObject({ kind: 'Action en retard', elsewhere: false });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await find('A-201')).toBeUndefined();
     expect((await loadVisibleTodo()).filter((x) => x.source === 'actions').every((x) => x.ownerIds?.includes('sbenali'))).toBe(true);
     expect(await find('A-214')).toMatchObject({ elsewhere: false }); // la sienne, site A
     expect(await find()).toMatchObject({ elsewhere: true }); // la sienne, site B
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     expect(await find('A-201')).toBeUndefined();
   });
 
   it('Animateur QHSE : l\'action d\'un autre (site B) n\'apparaît que sur le site B', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await find()).toBeUndefined();
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await find()).toMatchObject({ elsewhere: false, href: HREF });
     actAs('Animateur QHSE', 'all');
     expect(await find()).toMatchObject({ elsewhere: false });
   });
 
   it('périmètre restreint : hors périmètre, l\'échéance n\'existe pas ; site accordé : visible', async () => {
-    cookieJar.set('vigie_site', 'ville-a');
+    cookieJar.set('vigie_site', 'site_a');
     restricted('sbenali', 'Chef de service', []);
     expect(await find()).toBeUndefined();
-    restricted('sbenali', 'Chef de service', ['ville-b']);
+    restricted('sbenali', 'Chef de service', ['site_b']);
     expect(await find()).toMatchObject({ elsewhere: true, href: HREF, siteLabel: 'Site de [Ville B]' });
   });
 
   it('site archivé hors « Tous les sites » : échéance visible, sans lien', async () => {
-    cookieJar.set('vigie_site', 'ville-a');
-    restricted('sbenali', 'Chef de service', ['ville-c']);
+    cookieJar.set('vigie_site', 'site_a');
+    restricted('sbenali', 'Chef de service', ['site_c']);
     const item = await find('A-T06');
     expect(item).toMatchObject({ elsewhere: true, siteLabel: 'Site de [Ville C]' });
     expect(item!.href).toBeUndefined();
     await expect(openTodo(item!.key)).resolves.toBeUndefined();
-    expect(cookieJar.get('vigie_site')).toBe('ville-a');
+    expect(cookieJar.get('vigie_site')).toBe('site_a');
     // Périmètre complet : « Tous les sites » est proposé, l'échéance s'ouvre sous ce choix.
     auth.state = null;
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const full = await find('A-T06');
     expect(full).toMatchObject({ elsewhere: true, href: '/actions?action=A-T06' });
     await expect(openTodo(full!.key)).rejects.toThrow('NEXT_REDIRECT:/actions?action=A-T06');
@@ -128,11 +128,11 @@ describe('échéances de la personne sur les autres sites (TDB-05)', () => {
 
 describe('openTodo : ouverture d\'une échéance visible', () => {
   it('autre site : sélectionne le site, marque comme lue, redirige ; sans journal', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const item = (await find())!;
     const logs = await changeLogCount();
     await expect(openTodo(item.key, { markRead: true })).rejects.toThrow(`NEXT_REDIRECT:${HREF}`);
-    expect(cookieJar.get('vigie_site')).toBe('ville-b');
+    expect(cookieJar.get('vigie_site')).toBe('site_b');
     expect((await reads('sbenali')).map((r) => r.itemKey)).toContain(item.key);
     expect(await changeLogCount()).toBe(logs);
   });
@@ -140,28 +140,28 @@ describe('openTodo : ouverture d\'une échéance visible', () => {
   it('sans markRead : pas d\'état lu', async () => {
     const db = await getDb();
     await db.delete(t.notificationReads).where(eq(t.notificationReads.personId, 'sbenali'));
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const item = (await find())!;
     await expect(openTodo(item.key)).rejects.toThrow(`NEXT_REDIRECT:${HREF}`);
     expect(await reads('sbenali')).toEqual([]);
   });
 
   it('clé inconnue, invalide ou échéance invisible : rien', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const key = (await find())!.key;
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const logs = await changeLogCount();
     await expect(openTodo(key, { markRead: true })).resolves.toBeUndefined();
     await expect(openTodo('Action|/actions?action=A-000|inconnue', { markRead: true })).resolves.toBeUndefined();
     await expect(openTodo('x'.repeat(401), { markRead: true })).resolves.toBeUndefined();
     await expect(openTodo(42 as unknown as string)).resolves.toBeUndefined();
-    expect(cookieJar.get('vigie_site')).toBe('ville-a');
+    expect(cookieJar.get('vigie_site')).toBe('site_a');
     expect(await reads('clefevre')).toEqual([]);
     expect(await changeLogCount()).toBe(logs);
   });
 
   it('Salarié : ses échéances s\'ouvrent, celles des autres non', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const other = (await find())!.key;
     actAs('Salarié', 'all');
     const own = (await loadVisibleTodo()).find((x) => x.href);

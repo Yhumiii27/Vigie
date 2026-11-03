@@ -35,10 +35,10 @@ describe('site d’un événement : ses actions le suivent et le tracent', () =>
   it('changement de site : chaque action du même site déplacée, une entrée « Site » dans son historique', async () => {
     actAs('Chef de service', 'all');
     // EV-2026-131 (site A) porte A-214 et A-215 ; ses rattachements facultatifs (risque…) sont retirés pour le site B.
-    const r = await saveEvent({}, await eventForm('EV-2026-131', { siteId: 'ville-b', riskId: '', controlId: '', documentId: '', preventionPlanId: '', permitId: '' }));
+    const r = await saveEvent({}, await eventForm('EV-2026-131', { siteId: 'site_b', riskId: '', controlId: '', documentId: '', preventionPlanId: '', permitId: '' }));
     expect(r, JSON.stringify(r)).toEqual({ ok: true, id: 'EV-2026-131' });
     for (const id of ['A-214', 'A-215']) {
-      expect((await actionRow(id)).siteId).toBe('ville-b');
+      expect((await actionRow(id)).siteId).toBe('site_b');
       const log = await lastLog('action', id);
       expect(log).toMatchObject({ action: 'update', summary: "Site modifié avec l'événement EV-2026-131", byId: 'sbenali' });
       expect(log!.details).toEqual([{ field: 'Site', from: expect.stringContaining('[Ville A]'), to: expect.stringContaining('[Ville B]') }]);
@@ -55,7 +55,7 @@ describe('site d’un événement : ses actions le suivent et le tracent', () =>
 
 describe('réserves d’un contrôle : l’action de levée détachée et tracée', () => {
   it('nouvelles réserves : action détachée du contrôle (journal de l’action) ; annulation de l’enregistrement : idem si elle était revenue', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     // Contrôle 1 (A-217 lève « 1 · fin de course à régler »).
     const r = await recordControl({}, form({ controlId: '1', performedOn: '2026-10-05', organization: 'Apave', reserves: '2 · garde-corps à reprendre', result: 'reserves' }));
@@ -74,7 +74,7 @@ describe('réserves d’un contrôle : l’action de levée détachée et tracé
   });
 
   it('mêmes réserves : action conservée, rien dans son historique', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     await db.update(t.controls).set({ actionId: 'A-217' }).where(eq(t.controls.id, 1));
     const [c] = await db.select().from(t.controls).where(eq(t.controls.id, 1));

@@ -26,8 +26,8 @@ async function expected(siteId: string) {
 
 describe('TF1 / TG du tableau de bord (TDB-04)', () => {
   it('site A : 12 mois complets (oct. 2025 – sept. 2026), objectif et période, sans avertissement', async () => {
-    actAs('Animateur QHSE', 'ville-a');
-    const want = await expected('ville-a');
+    actAs('Animateur QHSE', 'site_a');
+    const want = await expected('site_a');
     expect(want.months).toBe(12);
     const kpi = await tf1Kpi();
     expect(kpi).toMatchObject({
@@ -40,12 +40,12 @@ describe('TF1 / TG du tableau de bord (TDB-04)', () => {
   });
 
   it('le mois en cours (octobre 2026) n\'entre pas dans le taux', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = await tf1Kpi();
     const db = await getDb();
-    await db.insert(t.hoursWorked).values({ month: '2026-10-01', siteId: 'ville-a', hours: 1_000 });
+    await db.insert(t.hoursWorked).values({ month: '2026-10-01', siteId: 'site_a', hours: 1_000 });
     await db.insert(t.events).values({
-      id: 'EV-2026-T10', siteId: 'ville-a', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-10-05', location: 'Atelier montage',
+      id: 'EV-2026-T10', siteId: 'site_a', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-10-05', location: 'Atelier montage',
       severity: 2, step: 1, injury: 'arret', lostDays: 30,
     });
     const after = await tf1Kpi();
@@ -54,7 +54,7 @@ describe('TF1 / TG du tableau de bord (TDB-04)', () => {
 
   it('mois sans heures (site B, sept. 2026) sous « Tous les sites » : signalé, taux sur les mois saisis', async () => {
     const db = await getDb();
-    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'ville-b'), eq(t.hoursWorked.month, '2026-09-01')));
+    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'site_b'), eq(t.hoursWorked.month, '2026-09-01')));
     actAs('Animateur QHSE', 'all');
     const kpi = await tf1Kpi();
     expect(kpi.note).toMatch(/^Heures manquantes : sept\. 2026 \(Site de \[Ville B\]\) — taux sur les mois saisis$/);
@@ -62,15 +62,15 @@ describe('TF1 / TG du tableau de bord (TDB-04)', () => {
     expect(kpi.value).not.toBe('—');
     expect((await loadDashboard()).safety).toMatchObject({ complete: false, missing: 'sept. 2026 (Site de [Ville B])' });
     // Site A seul : rien ne manque.
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await tf1Kpi()).note).not.toMatch(/manquantes/);
   });
 
   it('plus de deux mois manquants : les plus récents, puis « +n »', async () => {
     const db = await getDb();
-    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'ville-b'), eq(t.hoursWorked.month, '2026-08-01')));
-    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'ville-b'), eq(t.hoursWorked.month, '2026-07-01')));
-    actAs('Animateur QHSE', 'ville-b');
+    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'site_b'), eq(t.hoursWorked.month, '2026-08-01')));
+    await db.delete(t.hoursWorked).where(and(eq(t.hoursWorked.siteId, 'site_b'), eq(t.hoursWorked.month, '2026-07-01')));
+    actAs('Animateur QHSE', 'site_b');
     // Un seul site : sans libellé de site.
     expect((await tf1Kpi()).note).toBe('Heures manquantes : sept. 2026, août 2026 +1 — taux sur les mois saisis');
   });
@@ -88,12 +88,12 @@ describe('TF1 / TG du tableau de bord (TDB-04)', () => {
   it('AT avec arrêt avant le premier mois d\'heures saisi : mois signalé, jamais « Objectif » sur un taux amputé', async () => {
     const db = await getDb();
     await db.delete(t.hoursWorked);
-    await db.insert(t.hoursWorked).values(MONTHS.filter((m) => m >= '2026-05').map((m) => ({ month: `${m}-01`, siteId: 'ville-b', hours: 10_000 })));
+    await db.insert(t.hoursWorked).values(MONTHS.filter((m) => m >= '2026-05').map((m) => ({ month: `${m}-01`, siteId: 'site_b', hours: 10_000 })));
     await db.insert(t.events).values({
-      id: 'EV-2026-T03', siteId: 'ville-b', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-03-12', location: 'Atelier montage',
+      id: 'EV-2026-T03', siteId: 'site_b', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-03-12', location: 'Atelier montage',
       severity: 2, step: 1, injury: 'arret', lostDays: 12,
     });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const kpi = await tf1Kpi();
     expect(kpi.tone).toBe('warn');
     expect(kpi.note).toMatch(/^Heures manquantes : .*avr\. 2026.* — taux sur les mois saisis$/);

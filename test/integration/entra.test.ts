@@ -20,20 +20,20 @@ beforeAll(async () => {
   process.env.VIGIE_DATA_DIR = 'memory://';
   Object.assign(process.env, {
     VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr', VIGIE_SESSION_SECRET: SECRET,
-    ENTRA_TENANT_ID: 'tenant', ENTRA_CLIENT_ID: 'client', ENTRA_CLIENT_SECRET: 'secret', VIGIE_SITE_GROUPS: 'g-b:ville-b',
+    ENTRA_TENANT_ID: 'tenant', ENTRA_CLIENT_ID: 'client', ENTRA_CLIENT_SECRET: 'secret', VIGIE_SITE_GROUPS: 'g-b:site_b',
     VIGIE_EMAIL_DOMAINS: 'exemple.fr',
   });
   resetConfig();
   await closeDb();
   const db = await getDb();
   await db.insert(t.sites).values([
-    { id: 'ville-a', label: 'Site A', sort: 1 }, { id: 'ville-b', label: 'Site B', sort: 2 },
-    { id: 'ville-c', label: 'Site C', sort: 0, archivedAt: new Date('2026-01-01T00:00:00Z'), archiveReason: 'Site fermé' },
+    { id: 'site_a', label: 'Site A', sort: 1 }, { id: 'site_b', label: 'Site B', sort: 2 },
+    { id: 'site_c', label: 'Site C', sort: 0, archivedAt: new Date('2026-01-01T00:00:00Z'), archiveReason: 'Site fermé' },
   ]);
   await db.insert(t.people).values([
-    { id: 'pa', name: 'A. Dupont', email: 'a.dupont@exemple.fr', siteId: 'ville-a', sort: 0 },
-    { id: 'pb', name: 'B. Durand', email: 'b.durand@exemple.fr', siteId: 'ville-b', entraObjectId: 'oid-autre', sort: 1 },
-    { id: 'pl', name: 'L. Parti', email: 'l.parti@exemple.fr', siteId: 'ville-a', leftOn: '2026-09-30', sort: 2 },
+    { id: 'pa', name: 'A. Dupont', email: 'a.dupont@exemple.fr', siteId: 'site_a', sort: 0 },
+    { id: 'pb', name: 'B. Durand', email: 'b.durand@exemple.fr', siteId: 'site_b', entraObjectId: 'oid-autre', sort: 1 },
+    { id: 'pl', name: 'L. Parti', email: 'l.parti@exemple.fr', siteId: 'site_a', leftOn: '2026-09-30', sort: 2 },
   ]);
 });
 afterAll(async () => {
@@ -65,7 +65,7 @@ describe('fiche à la connexion', () => {
     const { signInPerson } = await import('@/lib/auth/person');
     const db = await getDb();
     const r = await signInPerson(db, { profile: profile({ oid: 'oid-a', email: 'A.Dupont@Exemple.FR' }), role: 'Chef de projet', groupSites: [], today: TODAY, emailDomains: DOMAINS });
-    expect(r).toEqual({ ok: true, personId: 'pa', created: false, siteIds: ['ville-a'] });
+    expect(r).toEqual({ ok: true, personId: 'pa', created: false, siteIds: ['site_a'] });
     const [pa] = await db.select().from(t.people).where(eq(t.people.id, 'pa'));
     expect(pa).toMatchObject({ entraObjectId: 'oid-a', lastRole: 'Chef de projet', email: 'a.dupont@exemple.fr' });
     expect(pa.lastLoginAt).toBeInstanceOf(Date);
@@ -76,8 +76,8 @@ describe('fiche à la connexion', () => {
   it('connexion suivante par objectId : adresse vérifiée reprise, adresse non vérifiée ignorée ; sites accordés par groupe', async () => {
     const { signInPerson } = await import('@/lib/auth/person');
     const db = await getDb();
-    const r = await signInPerson(db, { profile: profile({ oid: 'oid-a', email: 'anne.dupont@exemple.fr' }), role: 'Salarié', groupSites: ['ville-b', 'inconnu'], today: TODAY, emailDomains: DOMAINS });
-    expect(r).toEqual({ ok: true, personId: 'pa', created: false, siteIds: ['ville-b', 'ville-a'] });
+    const r = await signInPerson(db, { profile: profile({ oid: 'oid-a', email: 'anne.dupont@exemple.fr' }), role: 'Salarié', groupSites: ['site_b', 'inconnu'], today: TODAY, emailDomains: DOMAINS });
+    expect(r).toEqual({ ok: true, personId: 'pa', created: false, siteIds: ['site_b', 'site_a'] });
     const [pa] = await db.select().from(t.people).where(eq(t.people.id, 'pa'));
     expect(pa).toMatchObject({ email: 'anne.dupont@exemple.fr', lastRole: 'Salarié' });
     // Adresse non vérifiée, ou hors des domaines de l'entreprise : la connexion passe (objectId), la fiche garde son adresse.
@@ -104,9 +104,9 @@ describe('fiche à la connexion', () => {
     const db = await getDb();
     const count = async () => (await db.select({ id: t.people.id }).from(t.people)).length;
     const before = await count();
-    expect(await signInPerson(db, { profile: profile({ oid: 'oid-h', name: 'P. Durand', email: 'p.durand@prestataire.example' }), role: 'Chef de projet', groupSites: ['ville-b'], today: TODAY, emailDomains: DOMAINS }))
+    expect(await signInPerson(db, { profile: profile({ oid: 'oid-h', name: 'P. Durand', email: 'p.durand@prestataire.example' }), role: 'Chef de projet', groupSites: ['site_b'], today: TODAY, emailDomains: DOMAINS }))
       .toMatchObject({ ok: false, motif: 'adresse', reason: expect.stringMatching(/domaine hors de VIGIE_EMAIL_DOMAINS/) });
-    expect(await signInPerson(db, { profile: profile({ oid: 'oid-s', name: 'Sous Domaine', email: 's.d@filiale.exemple.fr' }), role: 'Salarié', groupSites: ['ville-b'], today: TODAY, emailDomains: DOMAINS }))
+    expect(await signInPerson(db, { profile: profile({ oid: 'oid-s', name: 'Sous Domaine', email: 's.d@filiale.exemple.fr' }), role: 'Salarié', groupSites: ['site_b'], today: TODAY, emailDomains: DOMAINS }))
       .toMatchObject({ ok: false, motif: 'adresse' });
     // Direction sans adresse : refusée aussi (une adresse non vérifiée ne devient jamais la clé d'une fiche).
     expect(await signInPerson(db, { profile: profile({ oid: 'oid-d0', name: 'D. Sans', email: null }), role: 'Direction', groupSites: [], today: TODAY, emailDomains: DOMAINS }))
@@ -118,17 +118,17 @@ describe('fiche à la connexion', () => {
   it('création : identifiant généré, adresse vérifiée, site = premier site autorisé actif ; homonyme distinct', async () => {
     const { signInPerson } = await import('@/lib/auth/person');
     const db = await getDb();
-    const sal = await signInPerson(db, { profile: profile({ oid: 'oid-n', name: 'A. Dupont', email: 'Nouveau@exemple.fr' }), role: 'Salarié', groupSites: ['ville-b'], today: TODAY, emailDomains: DOMAINS });
-    expect(sal).toMatchObject({ ok: true, created: true, siteIds: ['ville-b'] });
+    const sal = await signInPerson(db, { profile: profile({ oid: 'oid-n', name: 'A. Dupont', email: 'Nouveau@exemple.fr' }), role: 'Salarié', groupSites: ['site_b'], today: TODAY, emailDomains: DOMAINS });
+    expect(sal).toMatchObject({ ok: true, created: true, siteIds: ['site_b'] });
     const dir = await signInPerson(db, { profile: profile({ oid: 'oid-d', name: 'D. Martin', email: 'd.martin@exemple.fr' }), role: 'Direction', groupSites: [], today: TODAY, emailDomains: DOMAINS });
     expect(dir).toMatchObject({ ok: true, created: true, siteIds: null });
     const rows = await db.select().from(t.people).where(eq(t.people.name, 'A. Dupont'));
     expect(rows).toHaveLength(2);
     const created = rows.find((p) => p.entraObjectId === 'oid-n')!;
-    expect(created).toMatchObject({ siteId: 'ville-b', email: 'nouveau@exemple.fr', lastRole: 'Salarié', sort: 3 });
+    expect(created).toMatchObject({ siteId: 'site_b', email: 'nouveau@exemple.fr', lastRole: 'Salarié', sort: 3 });
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
     const [d] = await db.select().from(t.people).where(eq(t.people.entraObjectId, 'oid-d'));
-    expect(d).toMatchObject({ siteId: 'ville-a', email: 'd.martin@exemple.fr' });
+    expect(d).toMatchObject({ siteId: 'site_a', email: 'd.martin@exemple.fr' });
   });
 });
 
@@ -137,18 +137,18 @@ describe('session Entra ID', () => {
     const { sealSession } = await import('@/lib/auth/cookie');
     const { getSession } = await import('@/lib/session');
     const now = Math.floor(Date.now() / 1000);
-    cookieJar.set('__Host-vigie_session', await sealSession({ pid: 'pa', role: 'Salarié', sites: ['ville-b'], oid: 'oid-a', auth: now, seen: now }, SECRET));
+    cookieJar.set('__Host-vigie_session', await sealSession({ pid: 'pa', role: 'Salarié', sites: ['site_b'], oid: 'oid-a', auth: now, seen: now }, SECRET));
     const s = await getSession();
-    expect(s).toMatchObject({ role: 'Salarié', demo: false, site: { id: 'ville-a' }, allowedSiteIds: ['ville-b', 'ville-a'] });
+    expect(s).toMatchObject({ role: 'Salarié', demo: false, site: { id: 'site_a' }, allowedSiteIds: ['site_b', 'site_a'] });
     expect(s.user.id).toBe('pa');
-    expect(s.siteOptions.map((o) => o.id)).toEqual(['ville-a', 'ville-b']);
+    expect(s.siteOptions.map((o) => o.id)).toEqual(['site_a', 'site_b']);
     cookieJar.set('vigie_site', 'all');
-    expect((await getSession()).site.id).toBe('ville-a');
-    cookieJar.set('vigie_site', 'ville-b');
-    expect((await getSession()).site.id).toBe('ville-b');
+    expect((await getSession()).site.id).toBe('site_a');
+    cookieJar.set('vigie_site', 'site_b');
+    expect((await getSession()).site.id).toBe('site_b');
     const { requireInSite } = await import('@/lib/guard');
-    expect(await requireInSite('ville-c')).toMatch(/périmètre/);
-    expect(await requireInSite('ville-b')).toBeNull();
+    expect(await requireInSite('site_c')).toMatch(/périmètre/);
+    expect(await requireInSite('site_b')).toBeNull();
     // Cookie de rôle de démonstration : sans effet hors démonstration.
     cookieJar.set('vigie_role', 'Direction');
     expect((await getSession()).role).toBe('Salarié');

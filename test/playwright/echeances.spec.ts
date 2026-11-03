@@ -5,7 +5,7 @@ import { asRole, consoleErrors } from './helpers';
 // (TDB-11), site indiqué en vue « Tous les sites » (TDB-15).
 
 test('titres d’onglet du tableau de bord et de la page À faire (TDB-17)', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/');
   await expect(page).toHaveTitle('Tableau de bord QHSE · Vigie');
   await page.goto('/a-faire');
@@ -13,7 +13,7 @@ test('titres d’onglet du tableau de bord et de la page À faire (TDB-17)', asy
 });
 
 test('échéance ouverte depuis À faire : marquée lue (TDB-11)', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Direction', 'ville-a');
+  await asRole(context, baseURL!, 'Direction', 'site_a');
   const errors = consoleErrors(page);
   await page.goto('/a-faire');
   const unread = page.locator('a.vg-row', { has: page.locator('.vg-unread') }).first();

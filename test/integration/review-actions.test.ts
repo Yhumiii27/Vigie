@@ -30,7 +30,7 @@ describe('décisions et actions de la revue (ACT-28)', () => {
   it('action d’une décision lue sur tout le périmètre, quel que soit le site sélectionné', async () => {
     const june = await reviewOn('2026-06-18');
     // A-174 (décision de la revue de juin) est sur le site A : visible avec le site B sélectionné.
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const card = await loadReviewCard({ revue: String(june.id) });
     const d = card.decisions.find((x) => x.actionId === 'A-174')!;
     expect(d.action).toMatchObject({ id: 'A-174', status: 'Reportée', title: expect.stringMatching(/^Former les chefs d'équipe/) });
@@ -80,12 +80,12 @@ describe('création d’une action depuis une décision (saveAction, flux A)', (
     await db.insert(t.sites).values({ id: 'ferme-e1', label: 'Site fermé', archivedAt: new Date('2026-01-01T00:00:00Z'), archiveReason: 'Site fermé' });
     const fields = (over: Record<string, string>) => form({
       source: 'objectif', link: `reviewdecision:${d.id}`, pilotId: 'clefevre', priority: 'moyen_terme', dueOn: '2026-12-15', verifyDueOn: '2027-01-15',
-      domain: 'securite', problem: d.text, detail: 'Plan de formation des chefs d’équipe', siteId: 'ville-a', ...over,
+      domain: 'securite', problem: d.text, detail: 'Plan de formation des chefs d’équipe', siteId: 'site_a', ...over,
     });
     const count = async () => (await db.select({ id: t.actions.id }).from(t.actions)).length;
     const before = await count();
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await saveAction({}, fields({})), role).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
     }
     actAs('Animateur QHSE', 'all');
@@ -101,7 +101,7 @@ describe('création d’une action depuis une décision (saveAction, flux A)', (
     const r = await saveAction({}, fields({}));
     expect(r, JSON.stringify(r)).toMatchObject({ ok: true });
     const [row] = await db.select().from(t.actions).where(eq(t.actions.id, r.id!));
-    expect(row).toMatchObject({ source: 'objectif', siteId: 'ville-a', status: 'a_faire' });
+    expect(row).toMatchObject({ source: 'objectif', siteId: 'site_a', status: 'a_faire' });
     const [linked] = await db.select({ actionId: t.reviewDecisions.actionId }).from(t.reviewDecisions).where(eq(t.reviewDecisions.id, d.id));
     expect(linked.actionId).toBe(r.id);
     expect(await lastLog('action', r.id!)).toMatchObject({ action: 'create', byId: 'clefevre' });

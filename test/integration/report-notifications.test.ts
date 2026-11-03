@@ -15,9 +15,9 @@ import { myReportHref, reportOutcomeTitle } from '@/server/notify';
 freshDemoDatabase();
 
 async function created(fields: Record<string, string> = {}) {
-  actAs('Chef de service', 'ville-a');
+  actAs('Chef de service', 'site_a');
   const r = await createEvent({}, form({
-    type: 'PA', title: 'Charge mal arrimée', occurredOn: '2026-10-08', location: 'Atelier montage', severity: '2', siteId: 'ville-a',
+    type: 'PA', title: 'Charge mal arrimée', occurredOn: '2026-10-08', location: 'Atelier montage', severity: '2', siteId: 'site_a',
     declarantId: 'tnguyen', pilotId: 'sbenali', ...fields,
   }));
   expect(r, JSON.stringify(r)).toMatchObject({ ok: true });
@@ -29,7 +29,7 @@ describe('suite d’un signalement (TDB-06)', () => {
   it('qualifié : notification au déclarant, lien vers « Mes signalements », visible dans sa cloche', async () => {
     const id = await created();
     const before = (await suites('tnguyen')).length;
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await advanceEvent(id)).toEqual({});
     const mine = await suites('tnguyen');
     expect(mine).toHaveLength(before + 1);
@@ -37,7 +37,7 @@ describe('suite d’un signalement (TDB-06)', () => {
       entityType: 'event', entityId: id, byId: 'sbenali', href: myReportHref(id), readAt: null,
       title: expect.stringMatching(new RegExp(`^Votre signalement ${id} a été qualifié par .+ : Charge mal arrimée$`)),
     });
-    actAs('Salarié', 'ville-b');
+    actAs('Salarié', 'site_b');
     const bell = await loadNotifications();
     expect(bell.find((n) => n.key === `notification:${mine.at(-1)!.id}`)).toMatchObject({
       kind: 'Suite de votre signalement', family: 'signalement_suite', href: myReportHref(id), info: true, siteId: null,
@@ -47,10 +47,10 @@ describe('suite d’un signalement (TDB-06)', () => {
   it('classé sans suite : notification au déclarant ; refus : rien', async () => {
     const id = await created();
     const before = (await suites('tnguyen')).length;
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await dismissEvent({}, form({ id, reason: 'Doublon' }))).toMatchObject({ error: expect.any(String) });
     expect(await suites('tnguyen')).toHaveLength(before);
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await dismissEvent({}, form({ id, reason: 'Doublon de EV-2026-123' }))).toEqual({ ok: true, id });
     expect((await suites('tnguyen')).at(-1)).toMatchObject({ entityId: id, byId: 'clefevre', title: expect.stringContaining('a été classé sans suite par') });
   });
@@ -61,7 +61,7 @@ describe('suite d’un signalement (TDB-06)', () => {
     const own = await created({ declarantId: 'sbenali' });
     const beforeT = (await suites('tnguyen')).length;
     const beforeS = (await suites('sbenali')).length;
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await advanceEvent(anonymous)).toEqual({});
     expect(await advanceEvent(own)).toEqual({});
     expect(await suites('tnguyen')).toHaveLength(beforeT);
@@ -69,7 +69,7 @@ describe('suite d’un signalement (TDB-06)', () => {
   });
 
   it('autre personne : la notification d’un déclarant n’a pas de lien pour elle (et n’est jamais dans sa cloche)', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const bell = await loadNotifications();
     expect(bell.some((n) => n.family === 'signalement_suite')).toBe(false);
   });

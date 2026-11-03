@@ -26,8 +26,8 @@ describe('jeu de démonstration du lot 2', () => {
 
     const register = await db.select().from(t.benignAccidents).orderBy(t.benignAccidents.number);
     expect(register.map((r) => [r.siteId, r.number, r.eventId, r.caregiverId])).toEqual([
-      ['ville-a', 1, 'EV-2026-118', 'sbenali'],
-      ['ville-a', 2, 'EV-2026-120', 'proux'],
+      ['site_a', 1, 'EV-2026-118', 'sbenali'],
+      ['site_a', 2, 'EV-2026-120', 'proux'],
     ]);
     expect(register[0].signedOn).toBeNull();
     const [sst] = await db.select().from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true));
@@ -36,7 +36,7 @@ describe('jeu de démonstration du lot 2', () => {
 
   it('une seule inscription active par événement ; numéro unique par site', async () => {
     const db = await getDb();
-    const base = { siteId: 'ville-a', eventId: 'EV-2026-118', careGivenAt: new Date(), caregiverQualification: 'sst', care: 'x' };
+    const base = { siteId: 'site_a', eventId: 'EV-2026-118', careGivenAt: new Date(), caregiverQualification: 'sst', care: 'x' };
     await expect(db.insert(t.benignAccidents).values({ ...base, number: 99 })).rejects.toThrow();
     await expect(db.insert(t.benignAccidents).values({ ...base, eventId: 'EV-2026-127', number: 1 })).rejects.toThrow();
   });
@@ -101,7 +101,7 @@ describe('jeu de démonstration du lot 2', () => {
 
   it('déchets : SIRET des sites, mentions des filières, transporteur distinct sans mentions', async () => {
     const db = await getDb();
-    const sites = await db.select().from(t.sites).where(inArray(t.sites.id, ['ville-a', 'ville-b']));
+    const sites = await db.select().from(t.sites).where(inArray(t.sites.id, ['site_a', 'site_b']));
     expect(sites.every((s) => !!s.siret && isSiret(s.siret))).toBe(true);
     const streams = await db.select().from(t.wasteStreams);
     expect(streams.every((s) => isSiret(s.collectorSiret!) && isSiret(s.destinationSiret!) && !!s.qualification)).toBe(true);
@@ -116,20 +116,20 @@ describe('jeu de démonstration du lot 2', () => {
 describe('échéances : périmètre, site sélectionné, consultation seule (fondation TDB-02 / TDB-05)', () => {
   it('signaux calculés sur tout le périmètre (siteId), affichés pour le site sélectionné', async () => {
     const { loadTodo, loadVisibleTodo } = await import('@/lib/data/todo');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const all = await loadTodo();
-    expect(all.every((x) => x.siteId === null || ['ville-a', 'ville-b'].includes(x.siteId))).toBe(true);
-    expect(all.some((x) => x.siteId === 'ville-b')).toBe(true);
+    expect(all.every((x) => x.siteId === null || ['site_a', 'site_b'].includes(x.siteId))).toBe(true);
+    expect(all.some((x) => x.siteId === 'site_b')).toBe(true);
     const onA = await loadVisibleTodo();
     // Autre site du périmètre : seulement les échéances de la personne, marquées « elsewhere » (TDB-05).
-    expect(onA.filter((x) => x.siteId === 'ville-b').every((x) => x.elsewhere && x.ownerIds?.includes('clefevre'))).toBe(true);
-    expect(onA.filter((x) => x.siteId === 'ville-b').length).toBeLessThan(all.filter((x) => x.siteId === 'ville-b').length);
+    expect(onA.filter((x) => x.siteId === 'site_b').every((x) => x.elsewhere && x.ownerIds?.includes('clefevre'))).toBe(true);
+    expect(onA.filter((x) => x.siteId === 'site_b').length).toBeLessThan(all.filter((x) => x.siteId === 'site_b').length);
     expect(onA.some((x) => x.siteId === null)).toBe(true);
   });
 
   it('écran en consultation seule : seules les échéances de la personne (contribution à la revue, visite sécurité)', async () => {
     const { loadVisibleTodo } = await import('@/lib/data/todo');
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     const todo = await loadVisibleTodo();
     const audits = todo.filter((x) => x.href?.startsWith('/audits'));
     expect(audits.length).toBeGreaterThan(0);
@@ -147,13 +147,13 @@ describe('écrans ouverts en consultation : écritures refusées', () => {
     const db = await getDb();
     const [finding] = await db.select({ id: t.auditFindings.id }).from(t.auditFindings).limit(1);
     const [risk] = await db.select({ id: t.risks.id }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id))
-      .where(and(eq(t.workUnits.siteId, 'ville-a')));
+      .where(and(eq(t.workUnits.siteId, 'site_a')));
     for (const role of ['Chef de service', 'Chef de projet'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await cancelFinding({}, form({ id: String(finding.id), reason: 'test' }))).toMatchObject({ error: DENIED });
     }
     for (const role of ['Chef de projet', 'Salarié'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect((await archiveRisk({}, form({ id: String(risk.id), reason: 'test' }))).error).toBeTruthy();
     }
     cookieJar.clear();

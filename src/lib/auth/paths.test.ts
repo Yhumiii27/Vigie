@@ -14,7 +14,7 @@ describe('chemin de retour après connexion', () => {
   });
 
   it('jeton de poste : contrôle de forme seulement', () => {
-    expect(looksLikeReportToken('v1.ville-a.12.1.Zx9_-abcdefghijklmnop')).toBe(true);
+    expect(looksLikeReportToken('v1.site_a.12.1.Zx9_-abcdefghijklmnop')).toBe(true);
     expect(looksLikeReportToken('court')).toBe(false);
     expect(looksLikeReportToken('<script>alert(1)</script>xxxxxxxx')).toBe(false);
     expect(looksLikeReportToken(null)).toBe(false);

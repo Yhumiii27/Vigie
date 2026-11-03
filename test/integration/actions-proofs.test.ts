@@ -20,7 +20,7 @@ const filesOf = async (actionId: string) => (await getDb()).select().from(t.atta
 
 describe('ajout', () => {
   it('responsable salarié (autre site sélectionné) : preuves, journal, une notification par fichier (ACT-31)', async () => {
-    actAs('Salarié', 'ville-b');
+    actAs('Salarié', 'site_b');
     const before = (await notificationsOf('clefevre')).length;
     expect(await add('A-215', [file('releve.pdf'), file('photo.png', 'image/png', 'png')])).toEqual({ count: 2 });
     expect((await filesOf('A-215')).filter((f) => f.commentId === null && f.uploadedBy === 'tnguyen').map((f) => f.fileName).sort()).toEqual(['photo.png', 'releve.pdf']);
@@ -33,7 +33,7 @@ describe('ajout', () => {
   });
 
   it('QHSE : sans notification, site sélectionné ; encadrement non responsable refusé ; abandonnée refusée ; fichiers contrôlés', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const before = (await notificationsOf('clefevre')).length;
     expect(await add('A-215', [file('pv.pdf')])).toEqual({ count: 1 });
     expect((await notificationsOf('clefevre')).length).toBe(before);
@@ -41,9 +41,9 @@ describe('ajout', () => {
     expect(await add('A-215', Array.from({ length: 11 }, (_, i) => file(`f${i}.pdf`)))).toEqual({ error: '10 fichiers au maximum par envoi.' });
     expect(await add('A-215', [file('x.exe', 'application/x-msdownload')])).toMatchObject({ error: expect.stringContaining('Format non accepté') });
     expect(await add('A-180', [file()])).toEqual({ error: 'Action abandonnée : consultation seule.' });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await add('A-215', [file()])).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await add('A-215', [file()])).toEqual({ error: DENIED });
     actAs('Salarié');
     expect(await add('A-214', [file()])).toEqual({ error: DENIED });
@@ -65,28 +65,28 @@ describe('retrait (avant « Vérifiée »)', () => {
 
   it('ancien responsable après réattribution, encadrement auteur : refusés ; QHSE : admis (site sélectionné)', async () => {
     const photo = (await filesOf('A-215')).find((f) => f.fileName === 'photo.png')!;
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveAction({}, form(editFields(await actionRow('A-215'), { pilotId: 'lmoreau' })))).toMatchObject({ ok: true });
     actAs('Salarié');
     expect(await removeActionFile(photo.id)).toEqual({ error: DENIED });
     // Chef de service responsable de A-T60 : dépose, puis l'action est confiée à un autre.
     await insertAction('A-T60', { pilotId: 'sbenali' });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await add('A-T60', [file('bon.pdf')])).toEqual({ count: 1 });
     const [bon] = await filesOf('A-T60');
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveAction({}, form(editFields(await actionRow('A-T60'), { pilotId: 'proux' })))).toMatchObject({ ok: true });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await removeActionFile(bon.id)).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await removeActionFile(photo.id)).toEqual({ error: OTHER_SITE });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await removeActionFile(photo.id)).toEqual({});
     expect(await removeActionFile(bon.id)).toEqual({});
   });
 
   it('action Vérifiée : preuve ajoutée encore admise, retrait refusé à tous', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await add('A-176', [file('exercice.pdf')])).toEqual({ count: 1 });
     const [proof] = await filesOf('A-176');
     expect(await removeActionFile(proof.id)).toEqual({ error: 'Action vérifiée ou abandonnée : les preuves ne peuvent plus être retirées.' });

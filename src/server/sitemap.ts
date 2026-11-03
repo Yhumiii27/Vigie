@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import { isPlanEnded, permitActivityBlocker, planCovers, planStatus } from '@/lib/rules/prevention';
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/lib/rules/coactivity';
@@ -84,7 +85,7 @@ const ACTIVITY = 'site_activity';
 const ZONE_LABELS = { name: 'Nom', kind: 'Type', notes: 'Notes' } as const;
 const ROUTE_LABELS = { name: 'Nom', kind: 'Type', shared: 'Voie commune', notes: 'Notes' } as const;
 const ACTIVITY_LABELS = {
-  title: 'Intitulé', team: 'Équipe', contractorId: 'Entreprise extérieure', ownerId: 'Responsable', keystoneProject: 'Projet Keystone', zoneId: 'Zone',
+  title: 'Intitulé', team: 'Équipe', contractorId: 'Entreprise extérieure', ownerId: 'Responsable', keystoneProjectCode: 'Projet Keystone', zoneId: 'Zone',
   startOn: 'Début', endOn: 'Fin', hours: 'Plage horaire', vehicles: 'Véhicules ou engins', notes: 'Notes', preventionPlanId: 'Plan de prévention',
   permitId: 'Permis', routeIds: 'Voies empruntées',
 } as const;
@@ -295,7 +296,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   const team = f.oneOf('team', ['interne', 'externe'] as const, { required: true });
   const contractorId = team === 'externe' ? f.str('contractorId') || null : null;
   const ownerId = f.opt('ownerId');
-  const keystoneProject = f.opt('keystoneProject');
+  const projectInput = f.opt('keystoneProjectCode'); // D02 : code de keystone.pub_projets (absent du formulaire : inchangé)
   let zoneId = f.int('zoneId');
   const startOn = f.date('startOn', { required: true });
   const endOn = f.date('endOn', { required: true });
@@ -312,13 +313,12 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   if (startOn && endOn && endOn < startOn) f.fail('endOn', 'La fin ne peut pas précéder le début.');
 
   const db = await getDb();
-  const [sites, zones, routes, contractors, people, projects, plan, permit, existing] = await Promise.all([
+  const [sites, zones, routes, contractors, people, plan, permit, existing] = await Promise.all([
     db.select({ id: t.sites.id }).from(t.sites),
     db.select({ id: t.mapZones.id, siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt }).from(t.mapZones),
     db.select({ id: t.mapRoutes.id, siteId: t.mapRoutes.siteId, name: t.mapRoutes.name }).from(t.mapRoutes),
     db.select({ id: t.contractors.id, archivedAt: t.contractors.archivedAt }).from(t.contractors),
     db.select({ id: t.people.id }).from(t.people),
-    db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
     preventionPlanId ? db.select().from(t.preventionPlans).where(eq(t.preventionPlans.id, preventionPlanId)).then((r) => r[0]) : undefined,
     permitId ? db.select().from(t.permits).where(eq(t.permits.id, permitId)).then((r) => r[0]) : undefined,
     id ? db.select().from(t.siteActivities).where(eq(t.siteActivities.id, id)).then((r) => r[0]) : undefined,
@@ -333,7 +333,9 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
   else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', 'Entreprise archivée : réactivez-la dans l’onglet Entreprises extérieures.');
   if (ownerId && !people.some((p) => p.id === ownerId)) f.fail('ownerId', 'Personne inconnue.');
-  if (keystoneProject && keystoneProject !== existing?.keystoneProject && !projects.some((p) => `${p.id} · ${p.client}` === keystoneProject)) f.fail('keystoneProject', 'Projet Keystone inconnu.');
+  const keystoneProjectCode = fd.has('keystoneProjectCode') ? projectInput : existing?.keystoneProjectCode ?? null;
+  const projectError = await unknownProjectError(db, keystoneProjectCode, existing?.keystoneProjectCode);
+  if (projectError) f.fail('keystoneProjectCode', projectError);
   if (zoneId && !zones.some((z) => z.id === zoneId && z.siteId === siteId)) f.fail('zoneId', "Zone inconnue sur ce site.");
   else if (zoneId && zoneId !== existing?.zoneId && zones.some((z) => z.id === zoneId && z.archivedAt)) f.fail('zoneId', 'Zone archivée : choisissez une zone de la carte.');
   if (routeIds.some((r) => !routes.some((x) => x.id === r && x.siteId === siteId))) f.fail('routeIds', 'Voie inconnue sur ce site.');
@@ -362,7 +364,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
   // Zone déduite de la position quand elle n'est pas choisie.
   if (!zoneId && geometry?.type === 'point') zoneId = await zoneAt(siteId, geometry.at);
   const values = {
-    title, team: team!, contractorId, ownerId, keystoneProject, zoneId: zoneId ?? null, geometry, startOn: startOn!, endOn: endOn!, hours,
+    title, team: team!, contractorId, ownerId, keystoneProjectCode, zoneId: zoneId ?? null, geometry, startOn: startOn!, endOn: endOn!, hours,
     routeIds, vehicles, notes, preventionPlanId, permitId,
   };
   if (existing) {
@@ -387,7 +389,7 @@ export async function saveActivity(_prev: FormState, fd: FormData): Promise<Form
 
 /** Activité telle que le journal l'affiche : entreprise, responsable, zone et voies par leur nom. */
 async function activityLogView(
-  a: { title: string; team: string; contractorId: string | null; ownerId: string | null; keystoneProject: string | null; zoneId: number | null; startOn: string; endOn: string;
+  a: { title: string; team: string; contractorId: string | null; ownerId: string | null; keystoneProjectCode: string | null; zoneId: number | null; startOn: string; endOn: string;
     hours: string | null; vehicles: boolean; notes: string | null; preventionPlanId: string | null; permitId: string | null; routeIds: number[] },
   zones: { id: number; name?: string }[], routes: { id: number; name?: string }[],
 ) {

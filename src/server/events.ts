@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
@@ -275,7 +276,9 @@ function readEventForm(f: Reader, health: boolean) {
   const zoneId = type === 'MP' ? null : f.int('zoneId', { min: 1 });
   const location = f.str('location', { required: zoneId == null, max: 120 });
   const equipment = f.str('equipment', { max: 120 }) || null;
-  const keystoneProject = f.opt('keystoneProject');
+  // D02 : code d'un projet de keystone.pub_projets (contrôlé dans validateEventRefs) ; l'ancien libellé « id · client »
+  // (keystone_project) n'est plus écrit.
+  const keystoneProjectCode = f.opt('keystoneProjectCode');
   const pilotId = f.opt('pilotId');
   const severity = f.int('severity', { required: true, min: 1, max: 4 });
   const siteId = f.str('siteId', { required: true });
@@ -348,7 +351,7 @@ function readEventForm(f: Reader, health: boolean) {
   if (reservesOn && reservesOn > now) f.fail('reservesOn', "La date ne peut pas être postérieure à aujourd'hui.");
   if (reservesOn && cpamDeclaredOn && reservesOn < cpamDeclaredOn) f.fail('reservesOn', 'Les réserves ne peuvent pas précéder la déclaration.');
   return {
-    type: type as EventType, title, occurredOn: occurredOn!, occurredTime, location, equipment, keystoneProject, pilotId, severity: severity!, siteId,
+    type: type as EventType, title, occurredOn: occurredOn!, occurredTime, location, equipment, keystoneProjectCode, pilotId, severity: severity!, siteId,
     description, immediateMeasures, ncOrigin,
     victimKind, victimId, victimName, victimCompany, workSchedule, knownAt, activity, circumstances, witnesses, thirdParty,
     customer, customerRef, envAspect, envMedium,
@@ -372,9 +375,9 @@ const submitsHealth = (fd: FormData) => HEALTH_FORM_FIELDS.some((k) => {
  * (projet saisi avant la synchronisation Keystone, équipement réformé depuis).
  */
 async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?: EventRow) {
-  const [people, projects, [control], [risk], [doc], [plan], [permit], [zone]] = await Promise.all([
+  const [people, projectError, [control], [risk], [doc], [plan], [permit], [zone]] = await Promise.all([
     db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people),
-    db.select({ id: t.keystoneProjects.id, client: t.keystoneProjects.client }).from(t.keystoneProjects),
+    unknownProjectError(db, v.keystoneProjectCode, current?.keystoneProjectCode),
     v.controlId != null ? db.select({ siteId: t.controls.siteId, archivedAt: t.controls.archivedAt }).from(t.controls).where(eq(t.controls.id, v.controlId)) : [],
     v.riskId != null
       ? db.select({ siteId: t.workUnits.siteId, archivedAt: t.risks.archivedAt }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.risks.id, v.riskId))
@@ -396,9 +399,7 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
     if (!victim) f.fail('victimId', 'Personne inconnue.');
     else if (victim.leftOn && victim.leftOn <= v.occurredOn) f.fail('victimId', "Personne sortie de l'effectif à la date de l'accident.");
   }
-  if (v.keystoneProject && v.keystoneProject !== current?.keystoneProject && !projects.some((p) => `${p.id} · ${p.client}` === v.keystoneProject)) {
-    f.fail('keystoneProject', 'Projet Keystone inconnu.');
-  }
+  if (projectError) f.fail('keystoneProjectCode', projectError);
   // Contrôle, unité de travail et document sans site (null) valent pour tous les sites.
   if (v.controlId != null) {
     if (!control) f.fail('controlId', 'Contrôle périodique inconnu.');
@@ -434,7 +435,7 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
 }
 
 const LABELS: Partial<Record<keyof EventValues, string>> = {
-  type: 'Type', title: 'Intitulé', occurredOn: 'Date', occurredTime: 'Heure', location: 'Lieu', equipment: 'Équipement', keystoneProject: 'Projet Keystone',
+  type: 'Type', title: 'Intitulé', occurredOn: 'Date', occurredTime: 'Heure', location: 'Lieu', equipment: 'Équipement', keystoneProjectCode: 'Projet Keystone',
   pilotId: 'Pilote', severity: 'Gravité potentielle', siteId: 'Site', description: 'Description', immediateMeasures: 'Mesures immédiates',
   ncOrigin: 'Origine',
   victimKind: 'Statut de la victime', victimId: 'Victime', victimName: 'Victime (nom déclaré)', victimCompany: 'Entreprise de la victime',
@@ -488,11 +489,13 @@ export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormSta
       if (!fd.has(k === 'commute' ? 'commuteField' : k)) (v as Record<string, unknown>)[k] = ev[k];
     }
   }
+  // D02 : projet Keystone absent du formulaire reçu (appel direct, ancien formulaire « keystoneProject ») : code enregistré conservé.
+  if (!fd.has('keystoneProjectCode')) v.keystoneProjectCode = ev.keystoneProjectCode;
   // Zone (EVT-19, paquet 7) absente du formulaire reçu : zone enregistrée conservée, sauf changement de site ou maladie professionnelle.
   if (!fd.has('zoneId') && v.type !== 'MP') v.zoneId = v.siteId === ev.siteId ? ev.zoneId : null;
   if (ev.step >= STEP_QUALIFIED) {
     if (!v.pilotId) f.fail('pilotId', 'Un événement qualifié garde un pilote désigné.');
-    for (const k of missingQualification(v)) f.fail(qualificationInput(k, v), 'Requis pour un événement qualifié.');
+    for (const k of missingQualification({ ...v, keystoneProject: ev.keystoneProject })) f.fail(qualificationInput(k, v), 'Requis pour un événement qualifié.');
   }
   // Registre des accidents bénins (rôle habilité seulement : les autres ne modifient ni le type d'un AT ni sa blessure).
   // Un changement de site est admis : l'inscription reste au registre du site où elle a été faite.

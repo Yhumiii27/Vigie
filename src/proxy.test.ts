@@ -105,7 +105,7 @@ describe('production sans Entra ID configuré', () => {
       expect(passes(await proxy(req(`https://vigie.exemple.fr${path}`)))).toBe(true);
     }
     // Pages et fichiers voisins : connexion exigée (redirection, ou 401/503 pour une écriture).
-    for (const path of ['/signaler', '/signaler/mes-signalements', '/plans/ville-a.svg', '/pwa/../evenements']) {
+    for (const path of ['/signaler', '/signaler/mes-signalements', '/plans/site_a.svg', '/pwa/../evenements']) {
       expect(passes(await proxy(req(`https://vigie.exemple.fr${path}`)))).toBe(false);
     }
     expect(passes(await proxy(req('https://vigie.exemple.fr/signaler-sw.js', { method: 'POST' })))).toBe(false);

@@ -31,7 +31,7 @@ export async function seedCompliance(tx: SeedTx) {
   const existing = new Set((await tx.select({ id: t.events.id }).from(t.events).where(inArray(t.events.id, [MP_ID, COMMUTE_ID]))).map((e) => e.id));
   if (!existing.has(MP_ID)) {
     await tx.insert(t.events).values({
-      id: MP_ID, siteId: 'ville-a', type: 'MP', title: 'Maladie professionnelle', occurredOn: rel(-107), location: 'Atelier montage',
+      id: MP_ID, siteId: 'site_a', type: 'MP', title: 'Maladie professionnelle', occurredOn: rel(-107), location: 'Atelier montage',
       declarant: 'Caisse primaire d’assurance maladie', declarantId: null, pilotId: 'clefevre', severity: 2, step: 1,
       description: 'Déclaration transmise par la caisse. Poste de montage à analyser (manutentions répétées).', immediateMeasures: 'Aménagement du poste demandé au médecin du travail.',
       analysisMethod: '5m', victimKind: 'salarie', victimId: 'tnguyen',
@@ -42,7 +42,7 @@ export async function seedCompliance(tx: SeedTx) {
   }
   if (!existing.has(COMMUTE_ID)) {
     await tx.insert(t.events).values({
-      id: COMMUTE_ID, siteId: 'ville-b', type: 'AT', title: 'Accident de trajet · domicile – travail', occurredOn: rel(-9), occurredTime: '07:40',
+      id: COMMUTE_ID, siteId: 'site_b', type: 'AT', title: 'Accident de trajet · domicile – travail', occurredOn: rel(-9), occurredTime: '07:40',
       location: 'Trajet domicile – travail', declarant: '[A. Martin]', declarantId: 'amartin', pilotId: 'clefevre', severity: 2, step: 1,
       description: 'Chute à vélo sur le trajet habituel, avant la prise de poste.', immediateMeasures: '', analysisMethod: '5m',
       commute: true, victimKind: 'salarie', victimId: 'amartin', circumstances: 'Chute à vélo sur une chaussée glissante, sur le trajet habituel domicile – travail.',
@@ -103,7 +103,7 @@ export async function seedCompliance(tx: SeedTx) {
     ['Code du travail — R. 4512-6', { legifranceUrl: 'https://www.legifrance.gouv.fr/codes/texte_lc/LEGITEXT000006072050' }],
     ['Code du travail — R. 4121-1', { legifranceUrl: 'https://www.legifrance.gouv.fr/codes/texte_lc/LEGITEXT000006072050' }],
     // Zones ATEX : banc d'essais du site de [Ville B] seulement.
-    ['Directive ATEX 2014/34/UE', { siteIds: ['ville-b'], legifranceUrl: 'https://eur-lex.europa.eu/eli/dir/2014/34/oj' }],
+    ['Directive ATEX 2014/34/UE', { siteIds: ['site_b'], legifranceUrl: 'https://eur-lex.europa.eu/eli/dir/2014/34/oj' }],
   ];
   for (const [prefix, set] of links) {
     const id = reqId(prefix);
@@ -148,7 +148,7 @@ export async function seedCompliance(tx: SeedTx) {
     { year: 2026, label: 'Développer la remontée des presque-accidents et situations dangereuses', indicator: 'remontees', target: 24, siteId: null, pilotId: 'clefevre', sort: 1, createdById: 'clefevre' },
     { year: 2026, label: 'Des actions efficaces dès la première vérification', indicator: 'actions_efficaces', target: 80, siteId: null, pilotId: 'clefevre', sort: 2, createdById: 'clefevre' },
     { year: 2026, label: 'Maîtriser le coût de non-qualité', indicator: 'cout_non_qualite', target: 15000, siteId: null, pilotId: 'lmoreau', sort: 3, createdById: 'clefevre' },
-    { year: 2026, label: 'Aucun contrôle réglementaire dépassé', indicator: 'controles_depasses', target: 0, siteId: 'ville-a', pilotId: 'sbenali', sort: 4, createdById: 'clefevre' },
+    { year: 2026, label: 'Aucun contrôle réglementaire dépassé', indicator: 'controles_depasses', target: 0, siteId: 'site_a', pilotId: 'sbenali', sort: 4, createdById: 'clefevre' },
   ]);
 
   // CNF-05 : contexte du système de management.

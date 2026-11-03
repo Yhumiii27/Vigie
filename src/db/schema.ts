@@ -10,6 +10,7 @@ import {
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
+  ASSIGNMENT_SOURCE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -50,14 +51,16 @@ export const sites = pgTable('sites', {
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references((): AnyPgColumn => people.id),
   archiveReason: text('archive_reason'),
-  // VG-05 (migration 0023) : code commun du site, clé de matrix.sites.code (décision D14 de Matrix) ; facultatif tant que
-  // la liste de Matrix n'est pas reprise (les identifiants de Vigie, « ville-a », ne suivent pas son format). Unique quand
-  // il est renseigné ; saisi dans « Gérer les sites » par le périmètre complet (src/server/sites.ts), journalisé. Les usines
-  // des filiales (sites des CAPEX d'Arche, matrix.pub_sites.filiale_code) sont des sites de Vigie portant ce code.
-  code: text('code').unique('sites_code_unique'),
+  // D14 de Matrix, décision CV-09 (03/11/2026, migration 0024) : l'identifiant d'un site EST son code commun
+  // (matrix.sites.code, motif ^[a-z][a-z0-9_]{1,31}$, jamais « all ») ; plus de colonne code distincte. La table est un
+  // cache de matrix.pub_sites (src/server/foreign-sync.ts) : libellé et ordre rafraîchis depuis la vue, attributs ci-dessus
+  // propres à Vigie. Un site n'est créé qu'en choisissant un site de la vue non encore suivi (src/server/sites.ts).
+  // État lu dans Matrix au dernier rafraîchissement : actif | ferme (actif = false) | absent (plus dans la vue) ; null =
+  // jamais lu (base antérieure, source indisponible). Signal « fermé dans Matrix » : loadSiteSignals.
+  matrixState: text('matrix_state'),
 }, (t) => [
   archiveState('sites_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
-  check('sites_code_check', sql`${t.code} is null or (${t.code} ~ '^[a-z][a-z0-9_]{1,31}$' and ${t.code} <> 'all')`),
+  check('sites_matrix_state_check', inList(t.matrixState, MATRIX_STATE_CODES)),
 ]);
 
 // Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
@@ -66,7 +69,7 @@ export const people = pgTable('people', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   job: text('job').notNull().default(''),
-  siteId: text('site_id').references(() => sites.id), // site de rattachement
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // site de rattachement
   // Suivi dans la matrice des habilitations (salariés de production).
   inSkillsMatrix: boolean('in_skills_matrix').notNull().default(false),
   sort: integer('sort').notNull().default(0),
@@ -88,17 +91,10 @@ export const people = pgTable('people', {
 // Heures travaillées par mois et par site — base du TF1 / TG (source RH).
 export const hoursWorked = pgTable('hours_worked', {
   month: date('month', { mode: 'string' }).notNull(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   hours: integer('hours').notNull(),
 }, (t) => [primaryKey({ columns: [t.month, t.siteId] })]);
 
-// Projets lus depuis Keystone (référentiel pour les listes de choix).
-export const keystoneProjects = pgTable('keystone_projects', {
-  id: text('id').primaryKey(), // K-2025-042
-  client: text('client').notNull(),
-  title: text('title').notNull(),
-  deliveryOn: date('delivery_on', { mode: 'string' }),
-});
 
 // Pièces jointes (photos de signalement, documents maîtrisés, rapports de contrôle…), stockées dans .data/uploads.
 export const attachments = pgTable('attachments', {
@@ -130,7 +126,7 @@ export const attachments = pgTable('attachments', {
 
 export const events = pgTable('events', {
   id: text('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   type: text('type').notNull(), // AT | PA | SD | NC | RC | ENV
   title: text('title').notNull(),
   occurredOn: date('occurred_on', { mode: 'string' }).notNull(),
@@ -266,7 +262,7 @@ export const eventSteps = pgTable('event_steps', {
 // (annulation motivée, numéro non réattribué). Données de santé : animateur QHSE et direction seulement (canSeeHealth).
 export const benignAccidents = pgTable('benign_accidents', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id), // site du registre (fixé à l'inscription)
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }), // site du registre (fixé à l'inscription)
   number: integer('number').notNull(), // numéro d'ordre dans le registre du site
   eventId: text('event_id').notNull().references(() => events.id),
   careGivenAt: timestamp('care_given_at', { withTimezone: true }).notNull(),
@@ -346,7 +342,7 @@ export const actions = pgTable('actions', {
   actualCost: numeric('actual_cost', { precision: 12, scale: 2, mode: 'number' }), // € TTC
   followsActionId: text('follows_action_id').references((): AnyPgColumn => actions.id), // action de suite (ACT-23)
   followReason: text('follow_reason').$type<FollowReason>(),
-  siteId: text('site_id').references(() => sites.id), // un seul site, obligatoire à toute création et modification ; null = reprise « site à compléter »
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // un seul site, obligatoire à toute création et modification ; null = reprise « site à compléter »
   // Origine Vigie avant 0005 (ev, audit, risk, watch, client, rev, skills, prevention, docs, env) : écrite par la reprise
   // seulement (D9), lue par la reprise des liens (src/lib/origin-links.ts) et comme indication d'une source à compléter.
   legacyOrigin: text('legacy_origin'),
@@ -460,7 +456,7 @@ export const duerpVersions = pgTable('duerp_versions', {
 export const workUnits = pgTable('work_units', {
   id: text('id').primaryKey(),
   label: text('label').notNull(),
-  siteId: text('site_id').references(() => sites.id),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }),
   sort: integer('sort').notNull().default(0),
   // Archivage (unité retirée du document unique, sans risque en vigueur) : jamais de suppression, motif conservé.
   archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -529,7 +525,7 @@ export const riskMeasureLinks = pgTable('risk_measure_links', {
 // (loadEmergencySignals).
 export const emergencySituations = pgTable('emergency_situations', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   label: text('label').notNull(),
   scenario: text('scenario').notNull().default(''),
   response: text('response').notNull().default(''), // moyens d'intervention et consignes
@@ -557,7 +553,7 @@ export const emergencySituations = pgTable('emergency_situations', {
 // docs/specs/etudes-securite.md. Échéance : séance passée d'une étude encore planifiée (loadProcessSafetySignals).
 export const processSafetyStudies = pgTable('process_safety_studies', {
   id: text('id').primaryKey(), // « ES-001 », jamais réattribué
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   capexCode: text('capex_code'), // code CAPEX d'Arche (arche.pub_capex.code), saisi
   keystoneProjectCode: text('keystone_project_code'), // code projet Keystone (keystone.pub_projets.code), saisi
   milestone: text('milestone').notNull(),
@@ -616,7 +612,7 @@ export const duerpAccessRequests = pgTable('duerp_access_requests', {
   requestedOn: date('requested_on', { mode: 'string' }).notNull(),
   requesterKind: text('requester_kind').notNull(), // DUERP_REQUESTERS (src/lib/domain.ts)
   requesterName: text('requester_name').notNull(), // personne ou organisme demandeur
-  siteId: text('site_id').references(() => sites.id), // établissement concerné ; null = tous les sites
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // établissement concerné ; null = tous les sites
   version: text('version').notNull().references(() => duerpVersions.version), // version communiquée (ou demandée)
   communicatedOn: date('communicated_on', { mode: 'string' }), // null = demande en attente
   channel: text('channel'), // DUERP_ACCESS_CHANNELS
@@ -698,7 +694,7 @@ export const requirements = pgTable('requirements', {
 
 export const controls = pgTable('controls', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').references(() => sites.id),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }),
   equipment: text('equipment').notNull(),
   controlType: text('control_type').notNull(),
   periodMonths: integer('period_months').notNull(),
@@ -781,7 +777,7 @@ export const requirementEvaluations = pgTable('requirement_evaluations', {
 // annulation motivée (saisie erronée). Journal : `safety_notice`. Échéance : réponse attendue (loadWatchSignals).
 export const safetyNotices = pgTable('safety_notices', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   kind: text('kind').notNull(), // SAFETY_NOTICE_KINDS : observation | mise_en_demeure
   receivedOn: date('received_on', { mode: 'string' }).notNull(),
   authority: text('authority').notNull(), // inspection du travail, CARSAT, organisme agréé…
@@ -886,7 +882,11 @@ export const trainingSessions = pgTable('training_sessions', {
   archiveState('training_sessions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
-// Affectations lues depuis le planning Keystone.
+// D04 de Matrix (migration 0024) : cache de keystone.pub_affectations (rotations de chantier et affectations du planning),
+// rafraîchi par src/server/foreign-sync.ts seulement (jamais saisi) ; une ligne par affectation de la vue (affectation_id,
+// clé de la vue) dont le salarié est rattaché par people.matricule et qui finit il y a moins d'un an. `project` recomposé
+// « code · client » pour l'affichage ; `project_code` = keystone.pub_projets.code. Lu par loadSkillMatrix (alerte
+// d'habilitation sur une affectation). Lignes d'une base antérieure (affectation_id vide) : remplacées au rafraîchissement.
 export const keystoneAssignments = pgTable('keystone_assignments', {
   id: serial('id').primaryKey(),
   personId: text('person_id').notNull().references(() => people.id),
@@ -894,7 +894,12 @@ export const keystoneAssignments = pgTable('keystone_assignments', {
   activity: text('activity').notNull(),
   startOn: date('start_on', { mode: 'string' }).notNull(),
   endOn: date('end_on', { mode: 'string' }).notNull(),
-});
+  affectationId: text('affectation_id').unique('keystone_assignments_affectation_id_unique'),
+  source: text('source'),
+  projectCode: text('project_code'),
+}, (t) => [
+  check('keystone_assignments_source_check', inList(t.source, ASSIGNMENT_SOURCE_CODES)),
+]);
 
 // ─── Audits et certifications ───────────────────────────────────────────────
 
@@ -914,7 +919,7 @@ export const certifications = pgTable('certifications', {
   suspendedById: text('suspended_by_id').references(() => people.id),
   suspendReason: text('suspend_reason'),
   // AUD-22 (migration 0021) : site couvert par le certificat ; null = commun à l'entreprise (certificat multisite).
-  siteId: text('site_id').references((): AnyPgColumn => sites.id),
+  siteId: text('site_id').references((): AnyPgColumn => sites.id, { onUpdate: 'cascade' }),
 });
 // Le prochain audit de suivi n'est pas stocké : élément du programme rattaché (certificationId) non réalisé le plus proche.
 
@@ -935,7 +940,7 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   auditorId: text('auditor_id').references(() => people.id),
   scope: text('scope'), // périmètre audité
   // AUD-22 (migration 0021) : site audité ; null = commun à l'entreprise (lu et écrit selon la règle de site, requireInSite).
-  siteId: text('site_id').references(() => sites.id),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }),
   // AUD-20 (migration 0021) : audit hors programme (non planifié : audit client, inopiné…) enregistré comme un vrai audit,
   // déjà réalisé (date, auditeur, rapport, constats) ; hors échéances du programme.
   unplanned: boolean('unplanned').notNull().default(false),
@@ -981,7 +986,7 @@ export const auditFindings = pgTable('audit_findings', {
   responseDueOn: date('response_due_on', { mode: 'string' }), // AUD-09 : réponse attendue (plan d'actions) au plus tard le
   // AUD-22 (migration 0021) : site du constat — celui de son audit (imposé quand planItemId est renseigné), sinon choisi ;
   // null = commun à l'entreprise.
-  siteId: text('site_id').references(() => sites.id),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }),
   sort: integer('sort').notNull().default(0),
   // Annulation (constat saisi par erreur ou en double) : jamais de suppression, motif conservé, les actions liées restent au plan.
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
@@ -1087,7 +1092,7 @@ export const qhseObjectives = pgTable('qhse_objectives', {
   label: text('label').notNull(),
   indicator: text('indicator').notNull(), // clé de OBJECTIVE_INDICATORS
   target: numeric('target', { precision: 12, scale: 2, mode: 'number' }).notNull(),
-  siteId: text('site_id').references(() => sites.id), // null : tous les sites
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null : tous les sites
   pilotId: text('pilot_id').references(() => people.id),
   reviewDecisionId: integer('review_decision_id').references(() => reviewDecisions.id),
   sort: integer('sort').notNull().default(0),
@@ -1125,7 +1130,7 @@ export const contextItems = pgTable('context_items', {
 // Jamais supprimée : annulation motivée. Journal `change_request` ; échéances (loadChangeSignals).
 export const changeRequests = pgTable('change_requests', {
   id: text('id').primaryKey(), // MC-001 (nextEntityReference, portée « ref:MC- »)
-  siteId: text('site_id').references(() => sites.id),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }),
   kind: text('kind').notNull(), // CHANGE_KINDS
   title: text('title').notNull(),
   description: text('description').notNull(),
@@ -1176,7 +1181,7 @@ export const contractors = pgTable('contractors', {
 // Plan de prévention (Code du travail R. 4512-6 à R. 4512-12).
 export const preventionPlans = pgTable('prevention_plans', {
   id: text('id').primaryKey(), // PP-2026-014
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   contractorId: text('contractor_id').notNull().references(() => contractors.id),
   title: text('title').notNull(), // nature des travaux
   location: text('location').notNull(),
@@ -1288,7 +1293,7 @@ export const aiUsage = pgTable('ai_usage', {
 export const permits = pgTable('permits', {
   id: text('id').primaryKey(), // PF-2026-031 / PE-2026-008
   type: text('type').notNull(), // feu | essai
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   location: text('location').notNull(),
   description: text('description').notNull(),
   contractorId: text('contractor_id').references(() => contractors.id), // null = intervention interne
@@ -1323,7 +1328,7 @@ export const documents = pgTable('documents', {
   ownerId: text('owner_id').notNull().references(() => people.id),
   reviewMonths: integer('review_months').notNull().default(36),
   distribution: text('distribution').notNull().default(''), // services / postes destinataires
-  siteId: text('site_id').references(() => sites.id), // null = tous sites
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null = tous sites
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   // DOC-17 (migration 0021, ISO 9001 §7.5.3.2) : origine (interne | externe : norme, document client ou fournisseur,
   // texte d'un organisme), émetteur d'un document externe, durée de conservation (texte : « 5 ans après la fin du
@@ -1378,7 +1383,7 @@ export const documentVersions = pgTable('document_versions', {
 
 export const wasteStreams = pgTable('waste_streams', {
   id: text('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   label: text('label').notNull(),
   ewcCode: text('ewc_code').notNull(), // code déchet européen, « * » = dangereux
   hazardous: boolean('hazardous').notNull().default(false),
@@ -1411,7 +1416,7 @@ export const wasteStreams = pgTable('waste_streams', {
 // Registre chronologique des déchets sortants.
 export const wasteEntries = pgTable('waste_entries', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   streamId: text('stream_id').notNull().references(() => wasteStreams.id),
   removedOn: date('removed_on', { mode: 'string' }).notNull(),
   quantity: numeric('quantity', { precision: 12, scale: 2, mode: 'number' }).notNull(),
@@ -1450,7 +1455,7 @@ export const wasteEntries = pgTable('waste_entries', {
 ]);
 
 export const consumptions = pgTable('consumptions', {
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   month: date('month', { mode: 'string' }).notNull(),
   kind: text('kind').notNull(), // electricite | gaz | eau
   value: numeric('value', { precision: 12, scale: 2, mode: 'number' }).notNull(),
@@ -1460,7 +1465,7 @@ export const consumptions = pgTable('consumptions', {
 
 // Plan de masse par site ; coordonnées des objets normalisées 0–1 sur l'image du plan.
 export const siteMaps = pgTable('site_maps', {
-  siteId: text('site_id').primaryKey().references(() => sites.id),
+  siteId: text('site_id').primaryKey().references(() => sites.id, { onUpdate: 'cascade' }),
   attachmentId: text('attachment_id').references(() => attachments.id), // null = plan schématique par défaut
   width: integer('width').notNull(), // dimensions naturelles de l'image (px)
   height: integer('height').notNull(),
@@ -1471,7 +1476,7 @@ export const siteMaps = pgTable('site_maps', {
 
 export const mapZones = pgTable('map_zones', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   name: text('name').notNull(),
   kind: text('kind').notNull(), // batiment | atelier | stockage | atex | essais | quai | parking | exterieur | autre
   polygon: jsonb('polygon').notNull(), // [[x, y], …] normalisés
@@ -1494,7 +1499,7 @@ export const mapZones = pgTable('map_zones', {
 // Voies de circulation (accès) ; « shared » = voie commune à plusieurs équipes.
 export const mapRoutes = pgTable('map_routes', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   name: text('name').notNull(),
   kind: text('kind').notNull(), // vehicules | pietons | mixte | engins
   polyline: jsonb('polyline').notNull(), // [[x, y], …] normalisés
@@ -1505,7 +1510,7 @@ export const mapRoutes = pgTable('map_routes', {
 // Activités localisées (équipes internes et entreprises extérieures) servant à l'analyse de coactivité.
 export const siteActivities = pgTable('site_activities', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   title: text('title').notNull(),
   team: text('team').notNull(), // interne | externe
   contractorId: text('contractor_id').references(() => contractors.id),
@@ -1539,7 +1544,7 @@ export const siteActivities = pgTable('site_activities', {
 // site (`site_map`, identifiant du site). Aucune action QSE (prévention : actions immédiates, réponses du 15/10/2026).
 export const coactivityControls = pgTable('coactivity_controls', {
   id: serial('id').primaryKey(),
-  siteId: text('site_id').notNull().references(() => sites.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
   pairKey: text('pair_key').notNull(),
   activityA: integer('activity_a').notNull().references(() => siteActivities.id),
   activityB: integer('activity_b').notNull().references(() => siteActivities.id),
@@ -1605,3 +1610,23 @@ export const reportRateLimits = pgTable('report_rate_limits', {
   windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
   hits: integer('hits').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index('report_rate_limits_window_idx').on(t.windowStart)]);
+
+// Lot 0 de M-02 (migration 0024) : journal des rafraîchissements des caches lus chez les autres outils (sites de Matrix,
+// affectations de Keystone) et des lectures directes contrôlées (projets, fournisseurs). Une ligne par source et par
+// passage (démarrage, tâche planifiée, bouton « Actualiser ») ; aucune donnée personnelle (nombres et message technique).
+// Lu par l'onglet « Connecteurs » de « Gérer les sites » (src/lib/data/connectors.ts).
+export const syncRuns = pgTable('sync_runs', {
+  id: serial('id').primaryKey(),
+  source: text('source').notNull(), // matrix.pub_sites | keystone.pub_affectations …
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  status: text('status').notNull(), // ok | error | unavailable
+  read: integer('read').notNull().default(0), // lignes lues dans la vue
+  added: integer('added').notNull().default(0),
+  updated: integer('updated').notNull().default(0),
+  removed: integer('removed').notNull().default(0), // retirées du cache, ou marquées « absentes » (sites)
+  message: text('message'),
+}, (t) => [
+  check('sync_runs_status_check', inList(t.status, SYNC_STATUS_CODES)),
+  index('sync_runs_source_idx').on(t.source, t.startedAt),
+]);

@@ -7,20 +7,20 @@ import {
 // Rappel du mercredi (docs/specs/actions-qse.md § 15.2, révisé le 15/10/2026 : Terminées incluses, Reportées exclues).
 
 const TODAY = '2026-10-14'; // mercredi, semaine 2026-W42
-const SITES = new Map([['ville-a', 'Site de [Ville A] — siège et ateliers'], ['ville-b', "Site de [Ville B] — zone d'essais"]]);
-const action = (id: string, status: string, dueOn: string, siteId: string | null = 'ville-a', detail = `Action ${id}`): ReminderAction => ({ id, status, dueOn, siteId, detail });
+const SITES = new Map([['site_a', 'Site de [Ville A] — siège et ateliers'], ['site_b', "Site de [Ville B] — zone d'essais"]]);
+const action = (id: string, status: string, dueOn: string, siteId: string | null = 'site_a', detail = `Action ${id}`): ReminderAction => ({ id, status, dueOn, siteId, detail });
 
 describe('reminderRows', () => {
   const actions = [
     action('A-10', 'a_faire', '2026-10-30'),
-    action('A-11', 'p40', '2026-10-01', 'ville-b'), // 13 j de retard
+    action('A-11', 'p40', '2026-10-01', 'site_b'), // 13 j de retard
     action('A-12', 'initiee', '2026-10-10'), // 4 j de retard
     action('A-13', 'terminee', '2026-09-01'), // date dépassée, mais Terminée : jamais en retard
     action('A-14', 'reportee', '2026-09-01'),
     action('A-15', 'verifiee', '2026-09-01'),
     action('A-16', 'abandonnee', '2026-09-01'),
     action('A-17', 'p80', '2026-10-30', null), // même date cible que A-10 : numéro décroissant
-    action('A-18', 'terminee', '2026-08-15', 'ville-c'),
+    action('A-18', 'terminee', '2026-08-15', 'site_c'),
     action('A-19', 'en_cours', '2026-09-01'), // avancement inconnu (valeur d'avant 0005) : ignoré
   ];
   const r = reminderRows(actions, TODAY, SITES);
@@ -41,10 +41,10 @@ describe('reminderRows', () => {
       late: true, lateDays: 13, site: 'Site de [Ville B]', href: '/actions?action=A-11',
     });
     expect(r.open[2]).toMatchObject({ id: 'A-17', site: 'Site à compléter', avancement: '80 %', late: false });
-    expect(r.finished[0].site).toBe('ville-c'); // site inconnu de la liste : identifiant
+    expect(r.finished[0].site).toBe('site_c'); // site inconnu de la liste : identifiant
   });
   it('libellé = première ligne du détail ; aucune action → rappel vide', () => {
-    expect(reminderRows([action('A-1', 'a_faire', '2026-11-01', 'ville-a', '  Remplacer le flexible\nDétail long')], TODAY, SITES).open[0].label).toBe('Remplacer le flexible');
+    expect(reminderRows([action('A-1', 'a_faire', '2026-11-01', 'site_a', '  Remplacer le flexible\nDétail long')], TODAY, SITES).open[0].label).toBe('Remplacer le flexible');
     expect(reminderRows([action('A-2', 'reportee', '2026-11-01')], TODAY, SITES)).toEqual({ open: [], finished: [], count: 0, late: 0 });
   });
   it('avancements interrogés : les six ouvertes et Terminée', () => {
@@ -76,7 +76,7 @@ describe('semaine, clé, échéance d’envoi', () => {
 
 describe('e-mail du rappel', () => {
   const rows = reminderRows([
-    action('A-11', 'p40', '2026-10-01', 'ville-b', 'Contrôler <les> flexibles & "raccords"'),
+    action('A-11', 'p40', '2026-10-01', 'site_b', 'Contrôler <les> flexibles & "raccords"'),
     action('A-10', 'a_faire', '2026-10-30'),
     action('A-13', 'terminee', '2026-09-01'),
   ], TODAY, SITES);

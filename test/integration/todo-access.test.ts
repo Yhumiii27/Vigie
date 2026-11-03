@@ -24,7 +24,7 @@ const isCpam = (x: { kind: string }) => x.kind === 'Déclaration AT à la CPAM';
 
 describe('responsable d\'une échéance sur un écran en consultation seule', () => {
   it('Chef de projet : son audit interne est visible, lien selon l\'accès à l\'écran', async () => {
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     const item = await byTitle(AUDIT_BE);
     expect(item).toMatchObject({ date: '2026-10-17', source: 'audits', ownerIds: ['edubois'] });
     const page = await loadTodoPage({ mine: false });
@@ -40,7 +40,7 @@ describe('responsable d\'une échéance sur un écran en consultation seule', ()
   });
 
   it('Chef de service : sa visite sécurité et sa contribution à la revue, pas l\'audit d\'un autre', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await byTitle(VISIT)).toMatchObject({ date: '2026-10-12', ownerIds: ['sbenali'], source: 'audits' });
     expect(await byTitle(CONTRIBUTION)).toMatchObject({ overdue: true, ownerIds: ['sbenali'], source: 'audits' });
     expect(await byTitle(AUDIT_BE)).toBeUndefined();
@@ -50,7 +50,7 @@ describe('responsable d\'une échéance sur un écran en consultation seule', ()
   });
 
   it('écran modifiable : toutes les échéances (Animateur QHSE)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await byTitle(AUDIT_BE)).toBeDefined();
     expect(await byTitle(VISIT)).toBeDefined();
   });
@@ -91,7 +91,7 @@ describe('données de santé (non-régression SEC-06)', () => {
     // Accident avec arrêt non déclaré, piloté par le chef de service : échéance CPAM adressée au responsable QHSE du site.
     const db = await getDb();
     await db.insert(t.events).values({
-      id: 'EV-2026-T01', siteId: 'ville-a', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-10-08', location: 'Atelier montage',
+      id: 'EV-2026-T01', siteId: 'site_a', type: 'AT', title: 'Chute de plain-pied', occurredOn: '2026-10-08', location: 'Atelier montage',
       severity: 2, step: 1, pilotId: 'sbenali', injury: 'arret', createdAt: new Date('2026-10-08T10:00:00+02:00'),
     });
   });
@@ -104,7 +104,7 @@ describe('données de santé (non-régression SEC-06)', () => {
     }
     actAs('Animateur QHSE', 'all');
     expect((await loadVisibleTodo()).find(isCpam)).toMatchObject({ health: true, title: 'EV-2026-T01 · Chute de plain-pied' });
-    actAs('Direction', 'ville-a');
+    actAs('Direction', 'site_a');
     expect((await loadVisibleTodo()).some(isCpam)).toBe(true);
     cookieJar.clear();
   });

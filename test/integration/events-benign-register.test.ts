@@ -30,7 +30,7 @@ const OTHER_SITE = "Cet élément appartient à un autre site que celui sélecti
 const OUTSIDE = 'Cet élément appartient à un site hors de votre périmètre.';
 
 /** Accident bénin (premiers soins) saisi par l'animateur QHSE, étape « Déclaré ». */
-async function benignAt(siteId = 'ville-a') {
+async function benignAt(siteId = 'site_a') {
   actAs('Animateur QHSE', siteId);
   const r = await createEvent({}, form({
     type: 'AT', title: 'Accident · atelier', occurredOn: '2026-10-08', occurredTime: '09:30', location: 'Atelier montage', severity: '1', siteId,
@@ -60,39 +60,39 @@ describe('inscription au registre', () => {
   it('droits : animateur QHSE et direction seulement', async () => {
     id = await benignAt();
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await registerBenignAccident({}, inscription(id)), role).toEqual({ error: APPROVERS_ONLY });
     }
   });
 
   it('site : site sélectionné, puis périmètre', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await registerBenignAccident({}, inscription(id))).toEqual({ error: OTHER_SITE });
     // Direction au périmètre restreint au site B ([J. Petit], rattaché au site B).
-    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Direction', siteIds: ['ville-b'] } };
-    cookieJar.set('vigie_site', 'ville-b');
+    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Direction', siteIds: ['site_b'] } };
+    cookieJar.set('vigie_site', 'site_b');
     expect(await registerBenignAccident({}, inscription(id))).toEqual({ error: OUTSIDE });
-    expect(await loadBenignRegister('ville-a')).toBeNull();
-    expect(await loadBenignRegister('ville-b')).toMatchObject({ site: { id: 'ville-b' } });
+    expect(await loadBenignRegister('site_a')).toBeNull();
+    expect(await loadBenignRegister('site_b')).toMatchObject({ site: { id: 'site_b' } });
     auth.override = null;
   });
 
   it('conditions : premiers soins seulement, une inscription active par accident', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await registerBenignAccident({}, inscription('EV-2026-119'))).toEqual({ error: 'Seul un accident sans arrêt ni soins médicaux (premiers soins) s’inscrit au registre des accidents bénins.' });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await registerBenignAccident({}, inscription('EV-2026-118'))).toEqual({ error: 'Accident déjà inscrit au registre des accidents bénins (n° 1).' });
     expect(await registerBenignAccident({}, inscription('EV-2026-131'))).toEqual({ error: "Seul un accident du travail s'inscrit au registre des accidents bénins." });
   });
 
   it('donneur de soins : secouriste SST valide à la date des soins, ou professionnel de santé qualifié', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const noSst = 'Sans titre de secouriste du travail (SST) valide à la date des soins sur ce site.';
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'kbernard' }))).toMatchObject({ fieldErrors: { caregiverId: noSst } });
     // Titre SST expiré avant les soins.
     await (await getDb()).insert(t.qualifications).values({ personId: 'kbernard', titleId: 'sst', obtainedOn: '2024-01-15', expiresOn: '2026-01-15' });
-    expect((await loadFirstAiders('ville-a', '2025-06-01')).map((a) => a.id)).toContain('kbernard');
-    expect((await loadFirstAiders('ville-a', '2026-10-08')).map((a) => a.id)).not.toContain('kbernard');
+    expect((await loadFirstAiders('site_a', '2025-06-01')).map((a) => a.id)).toContain('kbernard');
+    expect((await loadFirstAiders('site_a', '2026-10-08')).map((a) => a.id)).not.toContain('kbernard');
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'kbernard' }))).toMatchObject({ fieldErrors: { caregiverId: noSst } });
     // Secouriste d'un autre site : non proposé.
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'amartin' }))).toMatchObject({ fieldErrors: { caregiverId: noSst } });
@@ -104,24 +104,24 @@ describe('inscription au registre', () => {
   });
 
   it('numérotation par site : suite du registre du site A, registre distinct du site B', async () => {
-    expect(await entryOf(id)).toMatchObject({ siteId: 'ville-a', number: 3, caregiverId: 'sbenali', caregiverQualification: 'sst', createdById: 'clefevre' });
-    const b = await benignAt('ville-b');
-    actAs('Animateur QHSE', 'ville-b');
+    expect(await entryOf(id)).toMatchObject({ siteId: 'site_a', number: 3, caregiverId: 'sbenali', caregiverQualification: 'sst', createdById: 'clefevre' });
+    const b = await benignAt('site_b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await registerBenignAccident({}, inscription(b, { caregiverKind: 'pro', caregiverId: '', caregiverName: 'Dr Weber', caregiverQualification: 'medecin' }))).toEqual({ ok: true, id: b });
-    expect(await entryOf(b)).toMatchObject({ siteId: 'ville-b', number: 1, caregiverId: null, caregiverName: 'Dr Weber', caregiverQualification: 'medecin' });
+    expect(await entryOf(b)).toMatchObject({ siteId: 'site_b', number: 1, caregiverId: null, caregiverName: 'Dr Weber', caregiverQualification: 'medecin' });
   });
 
   it('journal réservé ; fiche : inscription pour l’animateur QHSE, rien pour les autres rôles', async () => {
     expect(await lastLog('event', id)).toMatchObject({
       action: 'register', summary: 'Inscrit au registre des accidents bénins', byId: 'clefevre', details: [{ field: 'Registre des accidents bénins', from: null, to: 'n° 3 · Site de [Ville A]' }],
     });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await loadEventChangeLog(id)).map((e) => e.summary)).toContain('Inscrit au registre des accidents bénins');
     const d = await loadEventDetail(id);
     expect(d?.register).toMatchObject({ canRegister: false, entry: { number: 3, caregiver: '[S. Benali]', care: 'Désinfection et pansement', signedOn: null } });
     expect(d?.cpam).toMatchObject({ label: 'Non requise · inscrit au registre des accidents bénins (n° 3)', canWaive: false });
     expect(d?.blocker).toBeNull();
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect((await loadEventChangeLog(id)).map((e) => e.summary)).not.toContain('Inscrit au registre des accidents bénins');
     const restricted = await loadEventDetail(id);
     expect(restricted).toMatchObject({ register: null, cpam: null });
@@ -129,14 +129,14 @@ describe('inscription au registre', () => {
   });
 
   it('fiche verrouillée par l’inscription : blessure et type conservés, classement refusé', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveEvent({}, await formOf(id, { injury: 'arret' }))).toMatchObject({ fieldErrors: { injury: 'Inscrit au registre des accidents bénins : utilisez « Basculer en déclaration CPAM ».' } });
     expect(await saveEvent({}, await formOf(id, { type: 'PA' }))).toMatchObject({ fieldErrors: { type: "Inscrit au registre des accidents bénins : annulez d'abord l'inscription." } });
     // Changement de site admis (« Tous les sites ») : l'inscription reste au registre du site A.
     actAs('Animateur QHSE', 'all');
-    expect(await saveEvent({}, await formOf(id, { siteId: 'ville-b' }))).toEqual({ ok: true, id });
-    expect(await entryOf(id)).toMatchObject({ siteId: 'ville-a', number: 3 });
-    expect(await saveEvent({}, await formOf(id, { siteId: 'ville-a' }))).toEqual({ ok: true, id });
+    expect(await saveEvent({}, await formOf(id, { siteId: 'site_b' }))).toEqual({ ok: true, id });
+    expect(await entryOf(id)).toMatchObject({ siteId: 'site_a', number: 3 });
+    expect(await saveEvent({}, await formOf(id, { siteId: 'site_a' }))).toEqual({ ok: true, id });
     expect(await dismissEvent({}, form({ id, reason: 'Doublon' }))).toEqual({ error: "Annulez d'abord l'inscription au registre des accidents bénins." });
   });
 });
@@ -148,11 +148,11 @@ describe('visas, bascule et annulation', () => {
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'proux' }))).toEqual({ ok: true, id });
     const entry = await entryOf(id);
     expect(entry.number).toBe(4);
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await signBenignAccident({}, form({ id: String(entry.id), signedOn: '2026-10-09' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await signBenignAccident({}, form({ id: String(entry.id), signedOn: '2026-10-09' }))).toEqual({ error: OTHER_SITE });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await signBenignAccident({}, form({ id: String(entry.id), signedOn: '2026-10-07' }))).toMatchObject({ fieldErrors: { signedOn: 'Les visas ne peuvent pas précéder les soins.' } });
     expect(await signBenignAccident({}, form({ id: String(entry.id), signedOn: '2026-10-10' }))).toMatchObject({ fieldErrors: { signedOn: "La date ne peut pas être postérieure à aujourd'hui." } });
     expect(await signBenignAccident({}, form({ id: String(entry.id), signedOn: '2026-10-09' }))).toEqual({ ok: true, id });
@@ -161,9 +161,9 @@ describe('visas, bascule et annulation', () => {
   });
 
   it('bascule en déclaration CPAM : blessure, échéance de 48 h depuis la connaissance de l’arrêt, retour aux premiers soins refusé', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await escalateBenignAccident({}, form({ id, injury: 'arret', knownAt: '2026-10-08T18:00' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await escalateBenignAccident({}, form({ id, injury: 'soins', knownAt: '2026-10-08T18:00' }))).toMatchObject({ fieldErrors: { injury: 'Valeur non autorisée.' } });
     expect(await escalateBenignAccident({}, form({ id, injury: 'arret', knownAt: '2026-10-08T09:00' }))).toMatchObject({ fieldErrors: { knownAt: 'La date ne peut pas précéder les soins inscrits au registre.' } });
     expect(await escalateBenignAccident({}, form({ id, injury: 'arret', lostDays: '2', knownAt: '2026-10-08T18:00' }))).toEqual({ ok: true, id });
@@ -185,15 +185,15 @@ describe('visas, bascule et annulation', () => {
     expect(await escalateBenignAccident({}, form({ id, injury: 'arret', knownAt: '2026-10-08T18:00' }))).toEqual({ error: 'Accident déjà basculé en déclaration CPAM.' });
     expect(await saveEvent({}, await formOf(id, { injury: 'soins', lostDays: '' }))).toMatchObject({ fieldErrors: { injury: 'Accident basculé en déclaration CPAM : la blessure ne revient pas aux premiers soins.' } });
     expect(await saveEvent({}, await formOf(id, { injury: 'sans_arret', lostDays: '' }))).toEqual({ ok: true, id });
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(JSON.stringify(await loadEventChangeLog(id))).not.toMatch(/registre|Blessure|Jours perdus/i);
   });
 
   it('annulation : motif obligatoire, journal, numéro jamais réattribué', async () => {
     const entry = await entryOf(id);
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await cancelBenignAccident({}, form({ id: String(entry.id), reason: 'Erreur' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await cancelBenignAccident({}, form({ id: String(entry.id) }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     expect(await cancelBenignAccident({}, form({ id: String(entry.id), reason: 'Inscrit sur le mauvais accident' }))).toEqual({ ok: true, id });
     expect(await cancelBenignAccident({}, form({ id: String(entry.id), reason: 'Encore' }))).toEqual({ error: 'Inscription annulée.' });
@@ -211,13 +211,13 @@ describe('visas, bascule et annulation', () => {
 
 describe('registre imprimable', () => {
   it('rôles habilités : inscriptions du site (annulées comprises) et secouristes ; null pour les autres', async () => {
-    actAs('Chef de service', 'ville-a');
-    expect(await loadBenignRegister('ville-a')).toBeNull();
-    actAs('Animateur QHSE', 'ville-a');
-    expect(await loadBenignRegister(null)).toMatchObject({ site: null, sites: [{ id: 'ville-a' }, { id: 'ville-b' }] });
+    actAs('Chef de service', 'site_a');
+    expect(await loadBenignRegister('site_a')).toBeNull();
+    actAs('Animateur QHSE', 'site_a');
+    expect(await loadBenignRegister(null)).toMatchObject({ site: null, sites: [{ id: 'site_a' }, { id: 'site_b' }] });
     expect(await loadBenignRegister('inconnu')).toBeNull();
-    const reg = await loadBenignRegister('ville-a');
-    expect(reg?.site).toEqual({ id: 'ville-a', label: 'Site de [Ville A]' });
+    const reg = await loadBenignRegister('site_a');
+    expect(reg?.site).toEqual({ id: 'site_a', label: 'Site de [Ville A]' });
     expect(reg?.entries.map((e) => e.number)).toEqual([1, 2, 3, 4, 5]);
     expect(reg?.entries[0]).toMatchObject({
       ref: 'EV-2026-118', victim: '[T. Nguyen]', lesionNature: 'Pincement', lesionSite: 'Majeur droit', caregiver: '[S. Benali]',
@@ -229,15 +229,15 @@ describe('registre imprimable', () => {
     expect(reg?.firstAiders.map((a) => a.id)).toEqual(expect.arrayContaining(['sbenali', 'proux', 'tnguyen']));
     expect(reg?.firstAiders.map((a) => a.id)).not.toContain('amartin'); // site B
     expect(reg?.firstAiders.map((a) => a.id)).not.toContain('ylambert'); // sorti de l'effectif
-    expect((await loadBenignRegister('ville-a', 2025))?.entries).toEqual([]);
+    expect((await loadBenignRegister('site_a', 2025))?.entries).toEqual([]);
   });
 
   it('titre de secourisme : drapeau first_aid, à défaut le libellé « SST »', async () => {
     const db = await getDb();
     await db.update(t.trainingTitles).set({ firstAid: false }).where(eq(t.trainingTitles.id, 'sst'));
-    expect((await loadFirstAiders('ville-a', '2026-10-08')).map((a) => a.id)).toContain('sbenali');
+    expect((await loadFirstAiders('site_a', '2026-10-08')).map((a) => a.id)).toContain('sbenali');
     await db.update(t.trainingTitles).set({ label: 'Secourisme' }).where(eq(t.trainingTitles.id, 'sst'));
-    expect(await loadFirstAiders('ville-a', '2026-10-08')).toEqual([]);
+    expect(await loadFirstAiders('site_a', '2026-10-08')).toEqual([]);
     await db.update(t.trainingTitles).set({ label: 'SST', firstAid: true }).where(eq(t.trainingTitles.id, 'sst'));
   });
 });

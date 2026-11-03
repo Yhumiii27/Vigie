@@ -62,14 +62,14 @@ beforeAll(async () => {
   resetConfig();
   await closeDb();
   const db = await getDb();
-  await db.insert(t.sites).values([{ id: 'ville-a', label: 'Site A — atelier', sort: 1 }, { id: 'ville-b', label: 'Site B', sort: 2 }]);
+  await db.insert(t.sites).values([{ id: 'site_a', label: 'Site A — atelier', sort: 1 }, { id: 'site_b', label: 'Site B', sort: 2 }]);
   await db.insert(t.people).values([
-    { id: 'qhse', name: 'C. Lefèvre', email: 'c.lefevre@exemple.fr', siteId: 'ville-a', sort: 0 },
-    { id: 'sal', name: 'T. Nguyen', email: 't.nguyen@exemple.fr', siteId: 'ville-a', sort: 1 },
+    { id: 'qhse', name: 'C. Lefèvre', email: 'c.lefevre@exemple.fr', siteId: 'site_a', sort: 0 },
+    { id: 'sal', name: 'T. Nguyen', email: 't.nguyen@exemple.fr', siteId: 'site_a', sort: 1 },
   ]);
   const zones = await db.insert(t.mapZones).values([
-    { siteId: 'ville-a', name: 'Atelier montage', kind: 'atelier', polygon: [[0, 0], [1, 0], [1, 1]] },
-    { siteId: 'ville-b', name: 'Zone d’essais', kind: 'essais', polygon: [[0, 0], [1, 0], [1, 1]] },
+    { siteId: 'site_a', name: 'Atelier montage', kind: 'atelier', polygon: [[0, 0], [1, 0], [1, 1]] },
+    { siteId: 'site_b', name: 'Zone d’essais', kind: 'essais', polygon: [[0, 0], [1, 0], [1, 1]] },
   ]).returning({ id: t.mapZones.id });
   [zoneA, zoneB] = zones.map((z) => z.id);
 });
@@ -92,7 +92,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     expect(posts.map((p) => [p.name, p.signed, p.version])).toEqual([['Atelier montage', true, 1], ['Zone d’essais', true, 1]]);
     expect(posts[0].path).toMatch(new RegExp(`^/signaler\\?jeton=${zoneA}\\.1\\.[A-Za-z0-9_-]{22}$`));
     expect(await resolveReportToken(await tokenOf(zoneA))).toEqual({
-      status: 'ok', post: { zoneId: zoneA, name: 'Atelier montage', siteId: 'ville-a', siteLabel: 'Site A' },
+      status: 'ok', post: { zoneId: zoneA, name: 'Atelier montage', siteId: 'site_a', siteLabel: 'Site A' },
     });
     // Origine des QR codes imprimés : VIGIE_PUBLIC_URL, jamais l'en-tête Host (PRD-07).
     const { publicOrigin } = await import('@/lib/public-url');
@@ -110,7 +110,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     const db = await getDb();
     const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
     expect(ev).toMatchObject({
-      siteId: 'ville-a', location: 'Atelier montage', declarant: 'Jean Martin', declarantCompany: 'Intérim Plus', declarantId: null,
+      siteId: 'site_a', location: 'Atelier montage', declarant: 'Jean Martin', declarantCompany: 'Intérim Plus', declarantId: null,
       anonymous: false, reportedVia: 'poste', step: 0, severity: 3, title: 'Carter de protection absent.',
     });
     const files = await db.select().from(t.attachments).where(eq(t.attachments.entityId, r.id!));
@@ -127,7 +127,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     const db = await getDb();
     const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
     // Canal neutre et nom de photo neutre (SEC-09) : rien ne dit par où ni par qui le signalement est arrivé.
-    expect(ev).toMatchObject({ siteId: 'ville-b', location: 'Quai 2', declarant: null, declarantCompany: null, declarantId: null, anonymous: true, reportedVia: 'terrain' });
+    expect(ev).toMatchObject({ siteId: 'site_b', location: 'Quai 2', declarant: null, declarantCompany: null, declarantId: null, anonymous: true, reportedVia: 'terrain' });
     expect(await db.select({ fileName: t.attachments.fileName, uploadedBy: t.attachments.uploadedBy }).from(t.attachments).where(eq(t.attachments.entityId, r.id!)))
       .toEqual([{ fileName: 'photo-1.jpg', uploadedBy: null }]);
   });
@@ -157,7 +157,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     expect(await regenerateReportPost({}, fd({ id: String(zoneA), reason: 'Étiquette arrachée' }))).toEqual({ ok: true });
     const db = await getDb();
     const [log] = await db.select().from(t.changeLog).where(eq(t.changeLog.action, 'qr'));
-    expect(log).toMatchObject({ entityType: 'site', entityId: 'ville-a', byId: 'qhse', reason: 'Étiquette arrachée' });
+    expect(log).toMatchObject({ entityType: 'site', entityId: 'site_a', byId: 'qhse', reason: 'Étiquette arrachée' });
     expect(log.summary).toContain('« Atelier montage » régénéré (version 2)');
 
     auth.state = { status: 'anonymous' };
@@ -212,7 +212,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     req.headers = new Headers({ host: 'vigie.exemple.fr', 'x-forwarded-for': '192.0.2.12' });
     expect((await send('Dernier sous le plafond.')).id).toBeTruthy();
     const [log] = await db.select().from(t.changeLog).where(eq(t.changeLog.action, 'report-limit'));
-    expect(log).toMatchObject({ entityType: 'site', entityId: 'ville-b', byId: null });
+    expect(log).toMatchObject({ entityType: 'site', entityId: 'site_b', byId: null });
     expect(log.summary).toContain('Poste « Zone d’essais » : plafond de 60 signalements');
     req.headers = new Headers({ host: 'vigie.exemple.fr', 'x-forwarded-for': '192.0.2.13' });
     const m = await count();
@@ -223,7 +223,7 @@ describe('signalement sans compte (jeton de poste)', () => {
     auth.state = { status: 'authenticated', identity: { personId: 'qhse', role: 'Animateur QHSE', siteIds: null } };
     req.cookies.set('vigie_site', 'all');
     const { todo } = await loadReportPostSignals();
-    expect(todo).toMatchObject([{ kind: 'QR code de poste', tone: 'danger', href: '/signaler/postes?site=ville-b', key: `report-ceiling|${zoneB}|1` }]);
+    expect(todo).toMatchObject([{ kind: 'QR code de poste', tone: 'danger', href: '/signaler/postes?site=site_b', key: `report-ceiling|${zoneB}|1` }]);
     expect(todo[0].title).toContain('Zone d’essais (Site B) — plafond de signalements sans compte atteint');
     // « Régénérer le QR » : nouvelle version, nouveau compteur, plus d'alerte.
     const { regenerateReportPost } = await import('@/server/events');
@@ -258,13 +258,13 @@ describe('signalement sans compte (jeton de poste)', () => {
     const { resolveReportToken } = await import('@/lib/data/report-posts');
     const { postTotalValue, reportLimitKey } = await import('@/lib/report-guard');
     const db = await getDb();
-    const [zoneC] = await db.insert(t.mapZones).values({ siteId: 'ville-a', name: 'Ancien local de charge', kind: 'autre', polygon: [[0, 0], [1, 0], [1, 1]] })
+    const [zoneC] = await db.insert(t.mapZones).values({ siteId: 'site_a', name: 'Ancien local de charge', kind: 'autre', polygon: [[0, 0], [1, 0], [1, 1]] })
       .returning({ id: t.mapZones.id });
     const jeton = await tokenOf(zoneC.id);
     auth.state = { status: 'authenticated', identity: { personId: 'qhse', role: 'Animateur QHSE', siteIds: null } };
     expect(await archiveZone({}, fd({ id: String(zoneC.id), reason: 'Local démoli' }))).toEqual({ ok: true, id: String(zoneC.id) });
     auth.state = { status: 'anonymous' };
-    expect(await resolveReportToken(jeton)).toMatchObject({ status: 'archived', post: { zoneId: zoneC.id, siteId: 'ville-a' } });
+    expect(await resolveReportToken(jeton)).toMatchObject({ status: 'archived', post: { zoneId: zoneC.id, siteId: 'site_a' } });
     // Signature fausse sur la zone archivée : « non reconnu », rien n'est révélé.
     expect(await resolveReportToken(`${zoneC.id}.1.AAAAAAAAAAAAAAAAAAAAAA`)).toEqual({ status: 'invalid' });
 
@@ -280,10 +280,10 @@ describe('signalement sans compte (jeton de poste)', () => {
 
     const r = await createReport(fd({ type: 'SD', description: 'Câble au sol.', anonymous: '1', jeton, zoneId: String(zoneA) }));
     const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
-    expect(ev).toMatchObject({ siteId: 'ville-a', zoneId: zoneA, location: 'Atelier montage', anonymous: true, reportedVia: 'terrain', declarant: null });
+    expect(ev).toMatchObject({ siteId: 'site_a', zoneId: zoneA, location: 'Atelier montage', anonymous: true, reportedVia: 'terrain', declarant: null });
     const free = await createReport(fd({ type: 'SD', description: 'Flaque.', declarant: 'Paul Durand', jeton, location: 'Cour arrière' }));
     const [ev2] = await db.select().from(t.events).where(eq(t.events.id, free.id!));
-    expect(ev2).toMatchObject({ siteId: 'ville-a', zoneId: null, location: 'Cour arrière', reportedVia: 'poste' });
+    expect(ev2).toMatchObject({ siteId: 'site_a', zoneId: null, location: 'Cour arrière', reportedVia: 'poste' });
     // Limite de débit comptée sur le poste du jeton (zone archivée), comme avant l'archivage.
     const [counter] = await db.select().from(t.reportRateLimits)
       .where(eq(t.reportRateLimits.key, reportLimitKey('postTotal', postTotalValue(zoneC.id, 1), REPORT_SECRET)));
@@ -298,7 +298,7 @@ describe('signalement d’une personne connectée', () => {
     const r = await createReport(fd({ type: 'RC', description: 'Fuite d’huile sous la presse.', jeton: await tokenOf(zoneB) }, [jpeg()]));
     const db = await getDb();
     const [ev] = await db.select().from(t.events).where(eq(t.events.id, r.id!));
-    expect(ev).toMatchObject({ siteId: 'ville-b', location: 'Zone d’essais', declarant: 'T. Nguyen', declarantId: 'sal', declarantCompany: null, reportedVia: 'session' });
+    expect(ev).toMatchObject({ siteId: 'site_b', location: 'Zone d’essais', declarant: 'T. Nguyen', declarantId: 'sal', declarantCompany: null, reportedVia: 'session' });
     const [file] = await db.select().from(t.attachments).where(eq(t.attachments.entityId, r.id!));
     expect(file).toMatchObject({ uploadedBy: 'sal', fileName: 'photo.jpg' });
     // Anonyme depuis une session (SEC-09) : ni déclarant, ni canal « session », ni nom d'origine des photos.
@@ -314,9 +314,9 @@ describe('signalement d’une personne connectée', () => {
     const { loadMyReports } = await import('@/lib/data/events');
     expect((await loadMyReports()).map((m) => m.id)).toContain(r.id);
     // Sans QR code : site de rattachement ; un ancien `siteId` hors périmètre est ignoré.
-    const r2 = await createReport(fd({ type: 'SD', description: 'Sans QR code.', siteId: 'ville-b' }));
+    const r2 = await createReport(fd({ type: 'SD', description: 'Sans QR code.', siteId: 'site_b' }));
     const [ev2] = await db.select().from(t.events).where(eq(t.events.id, r2.id!));
-    expect(ev2).toMatchObject({ siteId: 'ville-a', location: 'Lieu non précisé', reportedVia: 'session' });
+    expect(ev2).toMatchObject({ siteId: 'site_a', location: 'Lieu non précisé', reportedVia: 'session' });
     // Le champ piège ne concerne pas une personne connectée.
     expect((await createReport(fd({ type: 'SD', description: 'Avec piège.', site_web: 'x' }))).id).toBeTruthy();
   });

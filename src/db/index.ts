@@ -150,9 +150,19 @@ async function open(): Promise<Opened> {
   // rien sans MATRIX_URL ni MATRIX_DECLARATIONS_DIR, ni pendant la construction (next build). current_schema() : vigie
   // sur le serveur (search_path du pool), public en PGlite.
   if (!building) void declareDatabaseSchema('vigie', opened.query, c.matrix, MATRIX_LOG);
+  // Vues des autres outils (lot 0 de M-02) : substituts de démonstration en PGlite ou en démonstration quand le schéma de
+  // l'outil est absent (src/db/foreign-substitutes.ts) ; jamais sur le serveur commun.
+  const { installForeignSubstitutes } = await import('./foreign-substitutes');
+  await installForeignSubstitutes(opened.db, { engine: opened.engine, demo: c.demo });
   if (c.demo) {
     const { seed } = await import('./seed');
     await seed(opened.db, { files: true });
+  }
+  // Caches des référentiels partagés (sites de Matrix, affectations de Keystone) rafraîchis à l'ouverture, hors
+  // construction ; jamais bloquant (source indisponible : sync_runs et journal du serveur, src/server/foreign-sync.ts).
+  if (!building) {
+    const { refreshSharedReferences } = await import('@/server/foreign-sync');
+    await refreshSharedReferences(opened.db);
   }
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
   // Pièces jointes orphelines (PRD-13) : serveur avec tâches planifiées et base persistante seulement (jamais les tests).

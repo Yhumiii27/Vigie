@@ -45,15 +45,15 @@ beforeAll(async () => {
   await withDb(async (db) => {
     await migrate(drizzle(db), { migrationsFolder: MIGRATIONS_DIR });
     await db.exec(`
-      insert into sites (id, label, sort) values ('ville-a', 'Site A', 1);
-      insert into people (id, name, site_id) values ('clefevre', '[C. Lefèvre]', 'ville-a');
+      insert into sites (id, label, sort) values ('site_a', 'Site A', 1);
+      insert into people (id, name, site_id) values ('clefevre', '[C. Lefèvre]', 'site_a');
       insert into documents (id, title, type, process, owner_id) values ('PR-QHSE-002', 'Traitement des non-conformités', 'procedure', 'QHSE', 'clefevre');
       insert into actions (id, opened_on, detail, legacy_origin, source, origin_ref, site_id, pilot_id, due_on, initial_due_on, status) values
-        ('A-001', '2026-10-01', 'Réviser la procédure', 'docs', 'revue_documentaire', 'PR-QHSE-002 après REX', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
-        ('A-002', '2026-10-01', 'Plan supprimé', 'prevention', null, 'PP-2026-099', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
-        ('A-003', '2026-10-01', 'Événement', 'ev', 'evenement', 'EV-2026-001', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'initiee'),
+        ('A-001', '2026-10-01', 'Réviser la procédure', 'docs', 'revue_documentaire', 'PR-QHSE-002 après REX', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
+        ('A-002', '2026-10-01', 'Plan supprimé', 'prevention', null, 'PP-2026-099', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
+        ('A-003', '2026-10-01', 'Événement', 'ev', 'evenement', 'EV-2026-001', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'initiee'),
         -- Action créée après la migration 0005 (legacy_origin vide) : jamais examinée, même si sa référence désigne un document.
-        ('A-004', '2026-10-12', 'Action récente', null, 'revue_documentaire', 'PR-QHSE-002', 'ville-a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire');
+        ('A-004', '2026-10-12', 'Action récente', null, 'revue_documentaire', 'PR-QHSE-002', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire');
     `);
   });
 }, 120_000);

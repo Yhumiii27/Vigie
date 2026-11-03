@@ -37,7 +37,7 @@ describe('création : droits (ACT-22, service QHSE seulement)', () => {
     expect(r).toEqual({ ok: true, id: 'A-223' });
     expect(await actionRow('A-223')).toMatchObject({
       openedOn: '2026-10-09', status: 'a_faire', dueOn: '2026-11-15', initialDueOn: '2026-11-15', source: 'comex', originRef: 'COMEX du 08/10/2026',
-      pilotId: 'sbenali', priority: 'moyen_terme', domain: 'securite', verifyDueOn: '2026-12-01', siteId: 'ville-a', riskLevel: null, eventId: null,
+      pilotId: 'sbenali', priority: 'moyen_terme', domain: 'securite', verifyDueOn: '2026-12-01', siteId: 'site_a', riskLevel: null, eventId: null,
     });
     const log = await lastLog('action', 'A-223');
     expect(log).toMatchObject({ action: 'create', summary: 'Action créée', byId: 'clefevre' });
@@ -61,7 +61,7 @@ describe('création : champs, dates, responsable (§ 4, D24)', () => {
   it('champs obligatoires, référence d’origine sans élément, 4 000 caractères', async () => {
     actAs('Animateur QHSE');
     const before = await actionCount();
-    const r = await saveAction({}, form({ siteId: 'ville-a' }));
+    const r = await saveAction({}, form({ siteId: 'site_a' }));
     expect(r).toMatchObject({ error: 'Certains champs sont à corriger.' });
     expect(Object.keys(r.fieldErrors!)).toEqual(expect.arrayContaining(['source', 'pilotId', 'priority', 'dueOn', 'domain', 'problem', 'detail', 'verifyDueOn', 'originRef']));
     expect(await create({ originRef: '' })).toMatchObject({ fieldErrors: { originRef: expect.stringContaining("référence d'origine") } });
@@ -92,9 +92,9 @@ describe('création : champs, dates, responsable (§ 4, D24)', () => {
     const before = await actionCount();
     expect(await create({ siteId: '' })).toMatchObject({ fieldErrors: { siteId: 'Champ obligatoire.' } });
     expect(await create({ siteId: 'all' })).toMatchObject({ fieldErrors: { siteId: expect.stringContaining('un seul site') } });
-    expect(await create({ siteId: 'ville-c' })).toMatchObject({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
-    actAs('Animateur QHSE', 'ville-a');
-    expect(await create({ siteId: 'ville-b' })).toMatchObject({ error: OTHER_SITE });
+    expect(await create({ siteId: 'site_c' })).toMatchObject({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
+    actAs('Animateur QHSE', 'site_a');
+    expect(await create({ siteId: 'site_b' })).toMatchObject({ error: OTHER_SITE });
     expect(await actionCount()).toBe(before);
   });
 });
@@ -107,10 +107,10 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
     expect(await create({ link: 'event:EV-2026-128', source: 'evenement', originRef: '' })).toEqual(mismatch);
     expect(await create({ link: 'event:EV-2026-131', source: 'reclamation_client', originRef: '' })).toEqual(mismatch);
     expect(await create({ link: 'event:EV-2026-131', source: 'comex', originRef: '' })).toEqual(mismatch);
-    expect(await create({ link: 'event:EV-2026-129', source: 'evenement', originRef: '', siteId: 'ville-a' })).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
+    expect(await create({ link: 'event:EV-2026-129', source: 'evenement', originRef: '', siteId: 'site_a' })).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
     expect(await actionCount()).toBe(before);
     const a = await created({ link: 'event:EV-2026-131', source: 'evenement', originRef: '' });
-    expect(a).toMatchObject({ eventId: 'EV-2026-131', originRef: 'EV-2026-131', source: 'evenement', siteId: 'ville-a' });
+    expect(a).toMatchObject({ eventId: 'EV-2026-131', originRef: 'EV-2026-131', source: 'evenement', siteId: 'site_a' });
     expect(await created({ link: 'event:EV-2026-128', source: 'reclamation_client', originRef: 'Réclamation [Client C]' })).toMatchObject({ eventId: 'EV-2026-128', originRef: 'Réclamation [Client C]' });
   });
 
@@ -129,7 +129,7 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
   });
 
   it('audit : source selon la ligne du programme (Certification, Fournisseurs, Audits internes), journal du constat', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await create({ link: 'finding:3', source: 'duerp', originRef: '' })).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     expect(await create({ link: 'plan:6', source: 'audit_terrain', originRef: '' })).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     expect(await create({ link: 'plan:7', source: 'audit_interne', originRef: '' })).toMatchObject({ fieldErrors: { source: expect.any(String) } });
@@ -148,7 +148,7 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
   });
 
   it('risque, exigence, contrôle, décision de revue, version de document', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     expect(await create({ link: 'risk:3', source: 'comex', originRef: '' })).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     const r = await created({ link: 'risk:3', source: 'duerp', originRef: '' });
@@ -234,17 +234,17 @@ describe('modification (QHSE, D16, D17, D24)', () => {
     actAs('Animateur QHSE', 'all');
     const a150 = await actionRow('A-150');
     expect(await saveAction({}, form(editFields(a150, { estimatedCost: '10' })))).toMatchObject({ fieldErrors: { siteId: 'Champ obligatoire.' } });
-    expect(await saveAction({}, form(editFields(a150, { siteId: 'ville-a' })))).toEqual({ ok: true, id: 'A-150' });
-    expect((await actionRow('A-150')).siteId).toBe('ville-a');
-    expect(await saveAction({}, form(editFields(await actionRow('A-214'), { siteId: 'ville-b' })))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
+    expect(await saveAction({}, form(editFields(a150, { siteId: 'site_a' })))).toEqual({ ok: true, id: 'A-150' });
+    expect((await actionRow('A-150')).siteId).toBe('site_a');
+    expect(await saveAction({}, form(editFields(await actionRow('A-214'), { siteId: 'site_b' })))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
     const raw = await insertAction('A-T02');
-    expect(await saveAction({}, form(editFields(raw, { siteId: 'ville-c' })))).toMatchObject({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
-    expect(await saveAction({}, form(editFields(raw, { siteId: 'ville-b' })))).toEqual({ ok: true, id: 'A-T02' });
+    expect(await saveAction({}, form(editFields(raw, { siteId: 'site_c' })))).toMatchObject({ error: 'Site archivé ou inconnu : choisissez un site actif.' });
+    expect(await saveAction({}, form(editFields(raw, { siteId: 'site_b' })))).toEqual({ ok: true, id: 'A-T02' });
     expect(await lastLog('action', 'A-T02')).toMatchObject({ details: [{ field: 'Site', from: 'Site de [Ville A]', to: 'Site de [Ville B]' }] });
   });
 
   it('action d’un autre site que le site sélectionné : refusée, rien écrit', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const a = await actionRow('A-215');
     const logs = (await changeLog('action', 'A-215')).length;
     expect(await saveAction({}, form(editFields(a, { priority: 'urgent' })))).toEqual({ error: OTHER_SITE });
@@ -253,7 +253,7 @@ describe('modification (QHSE, D16, D17, D24)', () => {
   });
 
   it('Vérifiée : coûts et pointage modifiables, vérification planifiée figée', async () => {
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     const a = await actionRow('A-165');
     expect(await saveAction({}, form(editFields(a, { actualCost: '1500', hours: '12,5', verifyDueOn: '2026-12-31' })))).toEqual({ ok: true, id: 'A-165' });
     expect(await actionRow('A-165')).toMatchObject({ actualCost: 1500, hours: 12.5, verifyDueOn: '2026-09-26' });

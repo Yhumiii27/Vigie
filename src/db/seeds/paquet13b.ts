@@ -42,12 +42,12 @@ export async function seedManagementSystem(tx: SeedTx) {
   // AUD-20, AUD-22 : audit client hors programme du site A, réalisé, avec un constat d'observation.
   const [audit] = await tx.insert(t.auditPlanItems).values({
     year: +rel(-45).slice(0, 4), month: +rel(-45).slice(5, 7), track: 'Audits clients', label: 'Client A', plannedOn: rel(-45), detail: CLIENT_AUDIT,
-    done: true, doneOn: rel(-45), auditor: '[Auditeur qualité du Client A]', scope: 'Fabrication et contrôle final des réducteurs', siteId: 'ville-a', unplanned: true, ownerId: 'lmoreau',
+    done: true, doneOn: rel(-45), auditor: '[Auditeur qualité du Client A]', scope: 'Fabrication et contrôle final des réducteurs', siteId: 'site_a', unplanned: true, ownerId: 'lmoreau',
   }).returning({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, month: t.auditPlanItems.month });
   const [{ n: findings }] = await tx.select({ n: count() }).from(t.auditFindings);
   await tx.insert(t.auditFindings).values({
     audit: `${CLIENT_AUDIT} · ${monthName(audit.month)} ${audit.year}`,
-    planItemId: audit.id, siteId: 'ville-a', clause: '§8.6', foundOn: rel(-45), kind: 'observation', sort: findings,
+    planItemId: audit.id, siteId: 'site_a', clause: '§8.6', foundOn: rel(-45), kind: 'observation', sort: findings,
     text: 'Libération des réducteurs RD-7 : signature du contrôle final à rendre visible sur le bon de livraison',
   });
 
@@ -56,7 +56,7 @@ export async function seedManagementSystem(tx: SeedTx) {
     .where(and(eq(t.auditPlanItems.track, 'Visites sécurité'), eq(t.auditPlanItems.label, 'Essais 12/10')));
   if (visit) {
     await tx.insert(t.auditPlanItems).values({
-      year: visit.year, month: visit.month, track: 'Visites sécurité', label: 'Magasin · 29/10', plannedOn: rel(20), detail: 'Visite sécurité — magasin et quais', ownerId: 'sbenali', siteId: 'ville-a',
+      year: visit.year, month: visit.month, track: 'Visites sécurité', label: 'Magasin · 29/10', plannedOn: rel(20), detail: 'Visite sécurité — magasin et quais', ownerId: 'sbenali', siteId: 'site_a',
     });
   }
 
@@ -81,12 +81,12 @@ export async function seedManagementSystem(tx: SeedTx) {
   // CNF-08 : situations d'urgence du site A.
   const [fire, spill] = await tx.insert(t.emergencySituations).values([
     {
-      siteId: 'ville-a', label: "Incendie de l'atelier montage", drillMonths: 12, ownerId: 'sbenali', createdById: 'clefevre', createdAt: at(rel(-700)),
+      siteId: 'site_a', label: "Incendie de l'atelier montage", drillMonths: 12, ownerId: 'sbenali', createdById: 'clefevre', createdAt: at(rel(-700)),
       scenario: 'Départ de feu au poste de soudure ou dans le stock de cartons ; fumées dans l’atelier et le magasin voisin.',
       response: 'Extincteurs CO2 et eau pulvérisée, RIA à l’entrée, guides et serre-files désignés, point de rassemblement parking nord ; appel du 18.',
     },
     {
-      siteId: 'ville-a', label: 'Déversement de produit chimique au magasin', drillMonths: 12, ownerId: 'rfontaine', createdById: 'clefevre', createdAt: at(rel(-700)),
+      siteId: 'site_a', label: 'Déversement de produit chimique au magasin', drillMonths: 12, ownerId: 'rfontaine', createdById: 'clefevre', createdAt: at(rel(-700)),
       scenario: 'Fût d’huile de coupe ou de dégraissant percé lors d’une manutention ; écoulement vers le caniveau des quais.',
       response: 'Kit antipollution au quai 2, obturateur de caniveau, absorbants ; fiche réflexe affichée ; évacuation par la filière des déchets souillés.',
     },
@@ -99,13 +99,13 @@ export async function seedManagementSystem(tx: SeedTx) {
   // CNF-11 : demandes de changement.
   await tx.insert(t.changeRequests).values([
     {
-      id: 'MC-001', siteId: 'ville-a', kind: 'equipement', title: 'Nouvelle cabine de peinture à l’atelier montage', status: 'acceptee', pilotId: 'sbenali', plannedOn: rel(10),
+      id: 'MC-001', siteId: 'site_a', kind: 'equipement', title: 'Nouvelle cabine de peinture à l’atelier montage', status: 'acceptee', pilotId: 'sbenali', plannedOn: rel(10),
       description: 'Remplacement de la cabine de retouche par une cabine ventilée avec filtration.', rationale: 'Exposition aux solvants (DUERP, atelier montage) et capacité insuffisante.',
       impacts: 'Risque chimique réduit ; nouvelle formation des peintres ; consignes du poste et plan de prévention de l’installateur à mettre à jour.',
       decidedOn: rel(-20), decidedById: 'hmarchand', decisionNote: 'Acceptée : budget validé, installation pendant l’arrêt de fin octobre.', createdById: 'sbenali', createdAt: at(rel(-35)),
     },
     {
-      id: 'MC-002', siteId: 'ville-a', kind: 'organisation', title: 'Réorganisation des allées du magasin', status: 'demandee', pilotId: 'rfontaine',
+      id: 'MC-002', siteId: 'site_a', kind: 'organisation', title: 'Réorganisation des allées du magasin', status: 'demandee', pilotId: 'rfontaine',
       description: 'Déplacement des racks de la zone 3 pour créer une allée piétonne dédiée.', rationale: 'Observation de la CARSAT sur la circulation des piétons.',
       impacts: 'Coactivité chariots / piétons réduite ; plan de circulation à mettre à jour.', createdById: 'rfontaine', createdAt: at(rel(-6)),
     },

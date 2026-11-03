@@ -43,14 +43,14 @@ describe('AUD-22 : périmètre restreint', () => {
   it('audit du site A hors périmètre : ni affiché, ni dans les échéances, ni modifiable', async () => {
     const [client] = await (await getDb()).select().from(t.auditPlanItems).where(eq(t.auditPlanItems.label, 'Client A'));
     // Chef de projet rattaché au site B, sans autre site accordé.
-    await actAsEntra('jpetit', 'Chef de projet', [], 'ville-b');
+    await actAsEntra('jpetit', 'Chef de projet', [], 'site_b');
     const data = await loadAudits({ year: '2026', element: String(client.id) });
     expect(data.plan.some((p) => p.id === client.id)).toBe(false);
     expect(data.missingElement).toBe(true);
-    expect((await loadAuditSignals()).todo.some((x) => x.siteId === 'ville-a')).toBe(false);
+    expect((await loadAuditSignals()).todo.some((x) => x.siteId === 'site_a')).toBe(false);
     // Animateur QHSE rattaché au site B, périmètre restreint : écriture refusée, reconduction réservée au périmètre complet.
-    await actAsEntra('jpetit', 'Animateur QHSE', [], 'ville-b');
-    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, doneOn: client.doneOn!, siteId: 'ville-a' })))
+    await actAsEntra('jpetit', 'Animateur QHSE', [], 'site_b');
+    expect(await savePlanItem({}, form({ id: String(client.id), track: client.track, label: client.label, doneOn: client.doneOn!, siteId: 'site_a' })))
       .toEqual({ error: 'Cet élément appartient à un site hors de votre périmètre.', fieldErrors: { siteId: 'Cet élément appartient à un site hors de votre périmètre.' } });
     expect(await renewProgram({}, form({ year: '2027' }))).toEqual({ error: 'Élément commun à tous les sites : réservé à la direction et à l’animateur QHSE.' });
   });
@@ -58,11 +58,11 @@ describe('AUD-22 : périmètre restreint', () => {
 
 describe('SEC-13 : données d’une personne hors périmètre', () => {
   it('ni proposée ni lue', async () => {
-    await actAsEntra('clefevre', 'Animateur QHSE', [], 'ville-b');
+    await actAsEntra('clefevre', 'Animateur QHSE', [], 'site_b');
     // clefevre est rattachée au site A : son périmètre restreint couvre son site de rattachement.
     const people = (await loadPersonalDataPeople()).map(([id]) => id);
     expect(people).toContain('sbenali');
-    await actAsEntra('jpetit', 'Direction', [], 'ville-b');
+    await actAsEntra('jpetit', 'Direction', [], 'site_b');
     const restricted = (await loadPersonalDataPeople()).map(([id]) => id);
     expect(restricted).toContain('amartin');
     expect(restricted).not.toContain('sbenali');

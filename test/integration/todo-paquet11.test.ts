@@ -26,7 +26,7 @@ const ROLES: Role[] = ['Animateur QHSE', 'Direction', 'Chef de service', 'Chef d
 async function visibleByRole(match: (x: { kind: string; title: string }) => boolean) {
   const out: Record<string, number> = {};
   for (const role of ROLES) {
-    for (const site of ['ville-a', 'ville-b', 'all']) {
+    for (const site of ['site_a', 'site_b', 'all']) {
       actAs(role, site);
       out[`${role}|${site}`] = (await loadVisibleTodo()).filter(match).length;
     }
@@ -53,9 +53,9 @@ describe('coactivité : personnes concernées (PRV-19)', () => {
 
   it('visibilité : jamais pour le Salarié qui n’en est pas responsable ; le responsable QHSE la voit sur tous les sites', async () => {
     const seen = await visibleByRole((x) => x.kind === 'Coactivité');
-    expect(seen['Salarié|ville-a'] + seen['Salarié|ville-b'] + seen['Salarié|all']).toBe(0);
+    expect(seen['Salarié|site_a'] + seen['Salarié|site_b'] + seen['Salarié|all']).toBe(0);
     // Échéances de coactivité du site A : visibles du responsable QHSE même sous le site B (ses échéances, TDB-05).
-    expect(seen['Animateur QHSE|ville-b']).toBe(seen['Animateur QHSE|all']);
+    expect(seen['Animateur QHSE|site_b']).toBe(seen['Animateur QHSE|all']);
   });
 });
 
@@ -64,25 +64,25 @@ describe('relevés de consommation (DOC-19)', () => {
     actAs('Animateur QHSE', 'all');
     const before = (await loadEnvironmentSignals()).todo.filter((x) => x.kind === 'Consommations');
     expect(before.map((x) => [x.siteId, x.title, x.ownerIds, x.who])).toEqual([
-      ['ville-b', 'Relevés de septembre 2026 · Site de [Ville B]', [LEAD], expect.stringMatching(/\S/)],
+      ['site_b', 'Relevés de septembre 2026 · Site de [Ville B]', [LEAD], expect.stringMatching(/\S/)],
     ]);
     const db = await getDb();
-    await db.delete(t.consumptions).where(eq(t.consumptions.siteId, 'ville-b'));
+    await db.delete(t.consumptions).where(eq(t.consumptions.siteId, 'site_b'));
     const after = (await loadEnvironmentSignals()).todo.filter((x) => x.kind === 'Consommations');
     expect(after).toEqual([expect.objectContaining({
-      siteId: 'ville-b', title: 'Aucun relevé de consommation saisi · relevés de septembre 2026 · Site de [Ville B]',
+      siteId: 'site_b', title: 'Aucun relevé de consommation saisi · relevés de septembre 2026 · Site de [Ville B]',
       dueOn: '2026-10-15', date: '2026-10-15', overdue: false, count: 1, ownerIds: [LEAD],
     })]);
-    // Site archivé (ville-c) : jamais suivi.
-    expect(after.some((x) => x.siteId === 'ville-c')).toBe(false);
+    // Site archivé (site_c) : jamais suivi.
+    expect(after.some((x) => x.siteId === 'site_c')).toBe(false);
   });
 
   it('visibilité : Salarié jamais ; le responsable QHSE la voit sous l’autre site', async () => {
     const seen = await visibleByRole((x) => x.kind === 'Consommations');
-    expect(seen['Salarié|ville-a'] + seen['Salarié|ville-b'] + seen['Salarié|all']).toBe(0);
-    expect(seen['Animateur QHSE|ville-a']).toBe(1);
-    expect(seen['Animateur QHSE|ville-b']).toBe(1);
-    expect(seen['Chef de projet|ville-a']).toBe(0);
+    expect(seen['Salarié|site_a'] + seen['Salarié|site_b'] + seen['Salarié|all']).toBe(0);
+    expect(seen['Animateur QHSE|site_a']).toBe(1);
+    expect(seen['Animateur QHSE|site_b']).toBe(1);
+    expect(seen['Chef de projet|site_a']).toBe(0);
   });
 });
 
@@ -117,7 +117,7 @@ describe('programme d’audit (AUD-18)', () => {
     expect(of(next.id)).toEqual([]);
     expect(of(far.id)).toEqual([]);
     // Visible du responsable de l'élément, jamais du Salarié.
-    actAs('Chef de service', 'ville-b');
+    actAs('Chef de service', 'site_b');
     expect((await loadVisibleTodo()).some((x) => x.title.startsWith('Audit interne magasin'))).toBe(true);
     actAs('Salarié', 'all');
     expect((await loadVisibleTodo()).some((x) => x.title.startsWith('Audit interne magasin'))).toBe(false);
@@ -126,7 +126,7 @@ describe('programme d’audit (AUD-18)', () => {
   it('élément en retard porté par une action en retard : une seule échéance, responsable de l’action ajouté', async () => {
     const db = await getDb();
     await db.insert(t.actions).values({
-      id: 'A-970', detail: 'Préparer l’audit fournisseur', source: 'audit_fournisseur', originRef: 'Programme 2026', siteId: 'ville-a', pilotId: 'rfontaine',
+      id: 'A-970', detail: 'Préparer l’audit fournisseur', source: 'audit_fournisseur', originRef: 'Programme 2026', siteId: 'site_a', pilotId: 'rfontaine',
       openedOn: '2026-08-01', dueOn: '2026-09-15', initialDueOn: '2026-09-15', status: 'p20',
     });
     const [item] = await db.insert(t.auditPlanItems).values({
@@ -150,15 +150,15 @@ describe('site indiqué en vue « Tous les sites » (TDB-15)', () => {
     expect(all.length).toBeGreaterThan(0);
     for (const x of all) {
       expect(x.elsewhere).toBe(false);
-      expect(x.siteLabel).toBe(x.siteId ? x.siteId === 'ville-a' ? 'Site de [Ville A]' : 'Site de [Ville B]' : undefined);
+      expect(x.siteLabel).toBe(x.siteId ? x.siteId === 'site_a' ? 'Site de [Ville A]' : 'Site de [Ville B]' : undefined);
     }
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     for (const x of await loadVisibleTodo()) expect(!!x.siteLabel).toBe(x.elsewhere);
   });
 
   it('jamais une échéance qui révèle une donnée de santé pour un rôle non habilité', async () => {
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as Role[]) {
-      for (const site of ['ville-a', 'all']) {
+      for (const site of ['site_a', 'all']) {
         actAs(role, site);
         expect((await loadVisibleTodo()).filter((x) => x.health)).toEqual([]);
       }

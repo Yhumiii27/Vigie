@@ -42,7 +42,7 @@ Listes d'état : `STUDY_MILESTONE_CODES`, `STUDY_TYPE_CODES`, `STUDY_STATUS_CODE
 - source imposée : « HAZOP » (`hazop`, cible `safetystudy`, chemin `/risques?vue=etudes`) pour tous les types d'étude — aucune source n'a été ajoutée aux 24 sources du QHSE ;
 - action de suite (vérification « non efficace » ou « nouveau risque ») : rattachée aussi à l'étude (`followUpLinkMode` = `multi`), réserve bloquante reprise.
 
-**Sites (VG-05)** — `sites.code` (facultatif, unique quand il est renseigné) : clé `matrix.sites.code` de la décision D14 de Matrix (minuscules, chiffres et soulignés, une lettre en premier, 2 à 32 caractères, jamais `all` : contrainte `sites_code_check`, règle `siteCodeError`). Les usines des filiales sont des sites de Vigie portant ce code. Saisi dans « Gérer les sites » par le périmètre complet (animateur QHSE, direction), journalisé (« Code commun (Matrix) »). Les identifiants de Vigie (`ville-a`) ne suivent pas le format de Matrix : ils ne changent pas ; le code s'y ajoute.
+**Sites (VG-05)** — remplacé par la décision CV-09 (03/11/2026, migration 0024) : l'identifiant d'un site de Vigie **est** son code commun (`matrix.sites.code`, minuscules, chiffres et soulignés, jamais `all`) ; la colonne `sites.code` est supprimée et un site se suit en le choisissant dans `matrix.pub_sites` (« Gérer les sites », D14, `docs/specs/convergence-m02.md`). Les usines des filiales sont des sites de Vigie suivis de cette liste (`filiale_code` dans Matrix).
 
 ## 3. Droits
 
@@ -139,7 +139,7 @@ Notes pour Matrix : vue à créer `WITH (security_barrier)` comme `pub_controles
 
 ## 7. Démonstration (`src/db/seeds/process-safety.ts`)
 
-Alignée sur la démonstration d'Arche (CAPEX `CPX-APM-2026-01`, rapport HazID `NOT-CPX-APM-2026-01-002` de son catalogue Codex simulé), sur le site A : ES-001 HazID validée favorable (jalon HS 2 franchi), ES-002 HazOp validée avec réserves et trois recommandations — A-191 réserve bloquante ouverte, A-192 en retard au 09/10/2026, A-193 vérifiée efficace — (HS 3 non franchi), ES-003 PSSR planifiée dans 25 jours. Aucun code commun de site dans le jeu (aucun site de filiale).
+Alignée sur la démonstration d'Arche (CAPEX `CPX-APM-2026-01`, rapport HazID `NOT-CPX-APM-2026-01-002` de son catalogue Codex simulé), sur le site A : ES-001 HazID validée favorable (jalon HS 2 franchi), ES-002 HazOp validée avec réserves et trois recommandations — A-191 réserve bloquante ouverte, A-192 en retard au 09/10/2026, A-193 vérifiée efficace — (HS 3 non franchi), ES-003 PSSR planifiée dans 25 jours. Sites du jeu : `site_a`, `site_b` (codes du substitut de `matrix.pub_sites`, aucun site de filiale).
 
 ## 8. Fichiers
 
@@ -154,5 +154,5 @@ Alignée sur la démonstration d'Arche (CAPEX `CPX-APM-2026-01`, rapport HazID `
 5. Référence « ES-001 » (3 chiffres, sans année), lien profond publié en chemin relatif (`lien`), à préfixer par l'adresse publique de Vigie.
 6. Une seule échéance : séance passée d'une étude encore planifiée ; pas d'échéance « réalisée sans validation ».
 7. Animateur : une personne de l'effectif ou un intervenant extérieur (nom libre), facultatif.
-8. Code commun du site facultatif, saisi par le périmètre complet ; aucun code donné aux sites de démonstration.
+8. Code commun du site : depuis CV-09, c'est l'identifiant du site (choisi dans `matrix.pub_sites`).
 9. Étude annulée publiée (`statut = 'annulee'`), ses recommandations restent au plan d'actions.

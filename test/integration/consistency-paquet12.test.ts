@@ -47,7 +47,7 @@ describe('DUE-12 : deux risques au même danger de la même unité', () => {
     const copy: Partial<typeof risk> = { ...risk };
     delete copy.id;
     const [twin] = await d.insert(t.risks).values({ ...(copy as typeof risk), situation: `${risk.situation} (second poste)` }).returning({ id: t.risks.id });
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await linkAction('risk:3', 'A-215')).toEqual({});
     const before = (await changeLog('action', 'A-215')).length;
     expect(await linkAction(`risk:${twin.id}`, 'A-215')).toEqual({});
@@ -78,20 +78,20 @@ describe('DUE-15 : validateur de la version du DUERP sorti de l’effectif', () 
 
 describe('HAB-12 : titres suivis communs à tous les sites', () => {
   it('Chef de service : ajout, modification, archivage et restauration refusés ; QHSE et direction oui', async () => {
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await saveTitle({}, form({ label: 'Nacelle', validityMonths: '60' }))).toEqual({ error: TITLES_RESERVED });
     expect(await saveTitle({}, form({ id: 'sst', label: 'SST renommé', validityMonths: '24' }))).toEqual({ error: TITLES_RESERVED });
     expect(await archiveTitle({}, form({ id: 'sst', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
     expect(await restoreTitle({}, form({ id: 'pont-ancien', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
     for (const role of ['Chef de projet', 'Salarié'] as Role[]) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await saveTitle({}, form({ label: 'Nacelle', validityMonths: '60' })), role).toEqual({ error: DENIED });
     }
     const [sst] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'sst'));
     expect(sst.archivedAt).toBeNull();
     expect(sst.label).not.toBe('SST renommé');
     for (const role of ['Animateur QHSE', 'Direction'] as Role[]) {
-      actAs(role, 'ville-b');
+      actAs(role, 'site_b');
       const r = await saveTitle({}, form({ label: `Nacelle ${role}`, validityMonths: '60' }));
       expect(r, role).toMatchObject({ ok: true });
       expect(await lastLog('training_title', r.id!)).toMatchObject({ action: 'create' });
@@ -102,7 +102,7 @@ describe('HAB-12 : titres suivis communs à tous les sites', () => {
 describe('HAB-14 : vue Salarié indépendante du site sélectionné', () => {
   it('sa ligne sur chaque site sélectionné, et rien d’autre', async () => {
     const [me] = await (await db()).select().from(t.people).where(eq(t.people.id, 'tnguyen'));
-    for (const site of ['ville-a', 'ville-b', 'all']) {
+    for (const site of ['site_a', 'site_b', 'all']) {
       actAs('Salarié', site);
       const m = await loadSkillMatrix();
       expect(m.self).toBe(true);
@@ -112,7 +112,7 @@ describe('HAB-14 : vue Salarié indépendante du site sélectionné', () => {
     }
     expect(me.siteId).toBeTruthy();
     // L'encadrement reste filtré par le site sélectionné.
-    actAs('Chef de service', me.siteId === 'ville-a' ? 'ville-b' : 'ville-a');
+    actAs('Chef de service', me.siteId === 'site_a' ? 'site_b' : 'site_a');
     expect((await loadSkillMatrix()).rows.some((r) => r.person.id === 'tnguyen')).toBe(false);
   });
 });
@@ -125,7 +125,7 @@ describe('VEI-16 : annulation d’une évaluation de veille saisie par erreur', 
     const history = await d.select().from(t.requirementEvaluations).where(eq(t.requirementEvaluations.requirementId, reqId));
     const earlier = history.find((e) => e.id !== wrong.id)!;
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as Role[]) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await cancelRequirementEvaluation({}, form({ id: String(wrong.id), reason: 'Erreur' })), role).toEqual({ error: APPROVERS_ONLY });
     }
     actAs('Animateur QHSE', 'all');
@@ -173,7 +173,7 @@ describe('AUD-25 : rétablir un constat annulé', () => {
     actAs('Animateur QHSE', 'all');
     expect(await cancelFinding({}, form({ id, reason: 'Doublon supposé' }))).toEqual({ ok: true, id });
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as Role[]) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await restoreFinding({}, form({ id, reason: 'Erreur' })), role).toEqual({ error: DENIED });
     }
     actAs('Animateur QHSE', 'all');
@@ -239,7 +239,7 @@ describe('AUD-36 : décision abandonnée ou reformulée après la séance', () =
     // Retrait refusé après la séance ; abandon : droits, motif, journal.
     expect(await deleteReviewDecision(+id)).toEqual({ error: expect.stringContaining('déclarez-les abandonnées') });
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as Role[]) {
-      actAs(role, 'ville-a');
+      actAs(role, 'site_a');
       expect(await abandonReviewDecision({}, form({ id, reason: 'x' })), role).toEqual({ error: DENIED });
     }
     actAs('Animateur QHSE', 'all');
@@ -315,8 +315,8 @@ describe('DOC-20 : filières d’un site archivé', () => {
   it('non proposées pour un nouvel enlèvement, refusées avec un message du champ', async () => {
     const d = await db();
     const [src] = await d.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, 'FD-01'));
-    await d.insert(t.wasteStreams).values({ ...src, id: 'FD-99', siteId: 'ville-c', label: 'Huiles (ancien dépôt)' });
-    const [site] = await d.select({ archivedAt: t.sites.archivedAt }).from(t.sites).where(eq(t.sites.id, 'ville-c'));
+    await d.insert(t.wasteStreams).values({ ...src, id: 'FD-99', siteId: 'site_c', label: 'Huiles (ancien dépôt)' });
+    const [site] = await d.select({ archivedAt: t.sites.archivedAt }).from(t.sites).where(eq(t.sites.id, 'site_c'));
     expect(site.archivedAt).not.toBeNull();
     actAs('Animateur QHSE', 'all');
     const env = await loadEnvironment();

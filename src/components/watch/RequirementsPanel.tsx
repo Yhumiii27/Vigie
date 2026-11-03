@@ -196,7 +196,7 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
         // VEI-10 : applicabilité par site et lien vers le texte.
         ['Sites concernés', r.siteLabels.length ? r.siteLabels.join(', ') : 'Tous les sites'],
         !!r.legifranceUrl && ['Texte', <a key="t" href={r.legifranceUrl} target="_blank" rel="noreferrer noopener" className="vg-link" style={{ fontSize: 12.5 }}>Consulter le texte officiel</a>],
-        r.projects.count != null && ['Projets Keystone', `${plural(r.projects.count, 'concerné', 'concernés')}${r.projects.manual ? ' · saisie manuelle' : ''}`],
+        r.projects.count != null && ['Projets Keystone', `${plural(r.projects.count, 'concerné', 'concernés')}`],
         r.featured && ['Tableau de bord', <span key="f" style={{ color: 'var(--color-accent)' }}><Icon name="ph-push-pin" size={12} /> À la une</span>],
       ]} />
 
@@ -251,7 +251,6 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
           {view === 'fiche' && (
             <>
               <LinkedControls r={r} />
-              <KeystoneProjects r={r} />
               <EntityFiles kind="requirement" entityId={r.id} title="Texte réglementaire joint" kicker={r.text} files={r.textFiles} canAdd={editable}
                 emptyText="Aucun texte joint." hint="PDF du texte ou extrait applicable · 10 Mo par fichier." />
               {editable ? (
@@ -321,29 +320,6 @@ function LinkedControls({ r }: { r: RequirementView }) {
           <ToneTag tone={c.tone} style={{ whiteSpace: 'nowrap' }}>{c.status}</ToneTag>
         </div>
       ))}
-    </div>
-  );
-}
-
-/** Projets Keystone livrés après la date d'application (calculés depuis le référentiel Keystone). */
-function KeystoneProjects({ r }: { r: RequirementView }) {
-  if (!r.projects.list.length) return null;
-  return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <div className="vg-eyebrow">Projets Keystone concernés</div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 }}>
-        {r.projects.list.map((p) => (
-          <li key={p.id} style={{ fontSize: 12.5, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 500 }}>{p.id}</span>
-            <span style={{ color: 'var(--color-neutral-300)' }}>{p.client} · {p.title}</span>
-            <span style={muted}>livraison le {p.delivery}</span>
-          </li>
-        ))}
-      </ul>
-      <span style={muted}>
-        Lecture depuis le référentiel Keystone · lien direct à venir
-        {r.projects.manual && r.projects.computed != null ? ` · nombre saisi (${r.projects.count}) en surcharge du calcul (${r.projects.computed})` : ''}
-      </span>
     </div>
   );
 }
@@ -464,7 +440,6 @@ function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate, onEvalu
 function RequirementForm({ r, options, featured, onDone, onCancel }: {
   r?: RequirementView; options: Opts; featured: Featured; onDone: () => void; onCancel: () => void;
 }) {
-  const computed = r?.projects.computed;
   // Pilote sorti de l'effectif : conservé comme choix tant qu'aucun successeur n'est désigné (VEI-01).
   const pilots = withCurrent(options.people, r?.pilotId, r ? `${r.pilot || r.pilotId}${LEFT_SUFFIX}` : undefined);
   const applicable = options.applicableSites ?? [];
@@ -529,8 +504,8 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
         <Field name="pilotId" label="Pilote" hint={pilots !== options.people ? "Pilote sorti de l'effectif : désignez un successeur." : undefined}>
           <Select name="pilotId" options={pilots} defaultValue={r?.pilotId ?? ''} placeholder="Non désigné" />
         </Field>
-        <Field name="keystoneProjects" label="Surcharge du nombre de projets"
-          hint={computed != null ? `Vide = calculé (${plural(computed, 'projet', 'projets')})` : 'Vide = calculé depuis Keystone (case ci-dessous).'}>
+        <Field name="keystoneProjects" label="Nombre de projets concernés"
+          hint="Saisi : Keystone ne publie pas encore la date de livraison des projets (question CV-11).">
           <Input name="keystoneProjects" type="number" min={0} max={999} step={1} inputMode="numeric" defaultValue={r?.keystoneProjects ?? ''} />
         </Field>
       </FormRow>

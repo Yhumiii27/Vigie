@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, isNull, like } from 'drizzle-orm';
 import { DEMO_QHSE_LEAD } from '../lib/demo';
 import { backfillActionLinks } from '../lib/origin-links';
 import * as t from './schema';
@@ -10,6 +10,7 @@ import { seedCompliance } from './seeds/compliance';
 import { seedControlCodes } from './seeds/controls-share';
 import { DEMO_LAST_ROLES, DEMO_SIRET, PEOPLE, demoEmail, seedCore } from './seeds/core';
 import { rel } from './seeds/dates';
+import { DEMO_CONTRACTOR_SUPPLIERS, DEMO_MATRICULES, DEMO_PROJECTS } from './seeds/foreign';
 import { seedDocuments } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { BENIGN, EVENTS, EVENT_DETAILS, seedEvents } from './seeds/events';
@@ -61,6 +62,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedManagementSystem(tx));
   // Études de sécurité des procédés (migration 0023), une seule fois (src/db/seeds/process-safety.ts).
   await db.transaction((tx) => seedProcessSafety(tx));
+  // Convergence M-02 (migration 0024) : matricules, codes des projets Keystone et fournisseur d'une entreprise du jeu.
+  await upgradeDemoConvergence(db);
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -80,7 +83,7 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
       await tx.update(t.people).set({ email }).where(and(eq(t.people.id, id), isNull(t.people.email)));
     }
     await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD })
-      .where(and(inArray(t.sites.id, ['ville-a', 'ville-b']), isNull(t.sites.qhseLeadId)));
+      .where(and(inArray(t.sites.id, ['site_a', 'site_b']), isNull(t.sites.qhseLeadId)));
   });
 }
 
@@ -117,6 +120,37 @@ async function upgradeDemoAccidents(db: Db) {
     if (register.length) await tx.insert(t.benignAccidents).values(register);
     const [flagged] = await tx.select({ n: count() }).from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true));
     if (flagged.n === 0) await tx.update(t.trainingTitles).set({ firstAid: true }).where(eq(t.trainingTitles.id, FIRST_AID_TITLE));
+  });
+}
+
+/**
+ * Base de démonstration remplie avant la migration 0024 (convergence M-02) : matricules des personnes du jeu (jointure des
+ * affectations de Keystone, D04), code du projet Keystone d'après l'ancien libellé « id · client » des projets du jeu
+ * (D02 ; l'ancien libellé reste) et fournisseur Keystone de l'entreprise EE-001 (D16). Seulement les valeurs encore
+ * vides (idempotent, jamais d'écrasement d'une saisie) ; matricule déjà attribué à une autre fiche : non repris.
+ */
+async function upgradeDemoConvergence(db: Db) {
+  const [marker] = await db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD));
+  if (marker.n === 0) return;
+  await db.transaction(async (tx) => {
+    const taken = new Set((await tx.select({ m: t.people.matricule }).from(t.people).where(isNotNull(t.people.matricule))).map((p) => p.m!));
+    for (const [id, matricule] of Object.entries(DEMO_MATRICULES)) {
+      if (taken.has(matricule)) continue;
+      await tx.update(t.people).set({ matricule }).where(and(eq(t.people.id, id), isNull(t.people.matricule)));
+    }
+    for (const [code] of DEMO_PROJECTS) {
+      const legacy = like(t.events.keystoneProject, `${code} ·%`);
+      await tx.update(t.events).set({ keystoneProjectCode: code }).where(and(legacy, isNull(t.events.keystoneProjectCode)));
+      await tx.update(t.preventionPlans).set({ keystoneProjectCode: code })
+        .where(and(like(t.preventionPlans.keystoneProject, `${code} ·%`), isNull(t.preventionPlans.keystoneProjectCode)));
+      await tx.update(t.permits).set({ keystoneProjectCode: code })
+        .where(and(like(t.permits.keystoneProject, `${code} ·%`), isNull(t.permits.keystoneProjectCode)));
+      await tx.update(t.siteActivities).set({ keystoneProjectCode: code })
+        .where(and(like(t.siteActivities.keystoneProject, `${code} ·%`), isNull(t.siteActivities.keystoneProjectCode)));
+    }
+    for (const [id, supplierId] of Object.entries(DEMO_CONTRACTOR_SUPPLIERS)) {
+      await tx.update(t.contractors).set({ supplierId }).where(and(eq(t.contractors.id, id), isNull(t.contractors.supplierId)));
+    }
   });
 }
 
@@ -229,7 +263,7 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
       { entityType: 'prevention_plan', entityId: 'PP-2026-010', action: 'cancel', summary: 'Plan annulé', reason: 'Intervention reportée à la campagne de printemps 2027 : un nouveau plan sera établi', byId: 'jpetit', at: new Date(`${rel(-8)}T11:00:00+02:00`) },
       { entityType: 'contractor', entityId: 'EE-007', action: 'archive', summary: 'Entreprise archivée', reason: 'Contrat de maintenance des sols terminé, entreprise plus référencée', byId: 'clefevre', at: new Date(`${rel(-192)}T10:00:00+02:00`) },
       { entityType: 'control', entityId: String(controlIds[8]), action: 'archive', summary: 'Contrôle archivé · équipement réformé', reason: 'Équipement réformé : remplacé par le pont roulant 10 t', byId: 'clefevre', at: new Date(`${rel(-101)}T10:00:00+02:00`) },
-      { entityType: 'site', entityId: 'ville-c', action: 'archive', summary: 'Site archivé', reason: 'Dépôt fermé fin mars 2026 : activité regroupée sur le site de [Ville A].', byId: 'hmarchand', at: new Date(`${rel(-192)}T16:00:00Z`) },
+      { entityType: 'site', entityId: 'site_c', action: 'archive', summary: 'Site archivé', reason: 'Dépôt fermé fin mars 2026 : activité regroupée sur le site de [Ville A].', byId: 'hmarchand', at: new Date(`${rel(-192)}T16:00:00Z`) },
     ]);
     return true;
   });

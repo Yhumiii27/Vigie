@@ -16,18 +16,18 @@ import { rel } from './dates';
 
 // [id, site, libellé, code déchet, unité, code traitement, filière de traitement, collecteur, installation de destination]
 const STREAMS: [string, string, string, string, string, string, string, string, string][] = [
-  ['FD-01', 'ville-a', 'Huiles hydrauliques usagées', '13 01 10*', 'kg', 'R9', 'Régénération', '[Collecteur Huiles Ouest]', '[Raffinerie de régénération — Ville C]'],
-  ['FD-02', 'ville-a', 'Absorbants et chiffons souillés', '15 02 02*', 'kg', 'R1', 'Valorisation énergétique (cimenterie)', '[Collecteur DD Ouest]', '[Cimenterie — Ville D]'],
-  ['FD-03', 'ville-a', 'Emballages souillés (fûts, bidons)', '15 01 10*', 'kg', 'R4', 'Reconditionnement et recyclage des métaux', '[Collecteur DD Ouest]', '[Centre de reconditionnement de fûts — Ville E]'],
-  ['FD-04', 'ville-a', 'Fluides de coupe usagés', '12 01 09*', 'kg', 'D9', 'Traitement physico-chimique', '[Collecteur DD Ouest]', '[Centre de traitement physico-chimique — Ville F]'],
-  ['FD-05', 'ville-a', "Copeaux et chutes d'acier", '12 01 01', 'kg', 'R4', 'Recyclage matière', '[Ferrailleur Ouest]', '[Centre de recyclage des métaux — Ville A]'],
-  ['FD-06', 'ville-a', "Copeaux d'aluminium", '12 01 03', 'kg', 'R4', 'Recyclage matière', '[Ferrailleur Ouest]', '[Centre de recyclage des métaux — Ville A]'],
-  ['FD-07', 'ville-a', 'Cartons', '15 01 01', 'kg', 'R3', 'Recyclage matière', '[Collecteur DIB Ouest]', '[Papeterie — Ville G]'],
-  ['FD-08', 'ville-a', 'Palettes et bois', '15 01 03', 'kg', 'R3', 'Recyclage en panneaux', '[Collecteur DIB Ouest]', '[Plateforme bois — Ville H]'],
-  ['FD-09', 'ville-a', 'Déchets en mélange (DIB)', '20 03 01', 'kg', 'D10', 'Incinération', '[Collecteur DIB Ouest]', '[Unité d’incinération — Ville A]'],
-  ['FD-10', 'ville-b', "Résidus d'essais et emballages souillés", '15 01 10*', 'kg', 'D10', 'Incinération de déchets dangereux', '[Collecteur DD Ouest]', '[Centre d’incinération de déchets dangereux — Ville I]'],
-  ['FD-11', 'ville-b', "Huiles hydrauliques usagées (banc d'essais)", '13 01 10*', 'kg', 'R9', 'Régénération', '[Collecteur Huiles Ouest]', '[Raffinerie de régénération — Ville C]'],
-  ['FD-12', 'ville-b', "Déchets en mélange (zone d'essais)", '20 03 01', 'kg', 'D10', 'Incinération', '[Collecteur DIB Ouest]', '[Unité d’incinération — Ville B]'],
+  ['FD-01', 'site_a', 'Huiles hydrauliques usagées', '13 01 10*', 'kg', 'R9', 'Régénération', '[Collecteur Huiles Ouest]', '[Raffinerie de régénération — Ville C]'],
+  ['FD-02', 'site_a', 'Absorbants et chiffons souillés', '15 02 02*', 'kg', 'R1', 'Valorisation énergétique (cimenterie)', '[Collecteur DD Ouest]', '[Cimenterie — Ville D]'],
+  ['FD-03', 'site_a', 'Emballages souillés (fûts, bidons)', '15 01 10*', 'kg', 'R4', 'Reconditionnement et recyclage des métaux', '[Collecteur DD Ouest]', '[Centre de reconditionnement de fûts — Ville E]'],
+  ['FD-04', 'site_a', 'Fluides de coupe usagés', '12 01 09*', 'kg', 'D9', 'Traitement physico-chimique', '[Collecteur DD Ouest]', '[Centre de traitement physico-chimique — Ville F]'],
+  ['FD-05', 'site_a', "Copeaux et chutes d'acier", '12 01 01', 'kg', 'R4', 'Recyclage matière', '[Ferrailleur Ouest]', '[Centre de recyclage des métaux — Ville A]'],
+  ['FD-06', 'site_a', "Copeaux d'aluminium", '12 01 03', 'kg', 'R4', 'Recyclage matière', '[Ferrailleur Ouest]', '[Centre de recyclage des métaux — Ville A]'],
+  ['FD-07', 'site_a', 'Cartons', '15 01 01', 'kg', 'R3', 'Recyclage matière', '[Collecteur DIB Ouest]', '[Papeterie — Ville G]'],
+  ['FD-08', 'site_a', 'Palettes et bois', '15 01 03', 'kg', 'R3', 'Recyclage en panneaux', '[Collecteur DIB Ouest]', '[Plateforme bois — Ville H]'],
+  ['FD-09', 'site_a', 'Déchets en mélange (DIB)', '20 03 01', 'kg', 'D10', 'Incinération', '[Collecteur DIB Ouest]', '[Unité d’incinération — Ville A]'],
+  ['FD-10', 'site_b', "Résidus d'essais et emballages souillés", '15 01 10*', 'kg', 'D10', 'Incinération de déchets dangereux', '[Collecteur DD Ouest]', '[Centre d’incinération de déchets dangereux — Ville I]'],
+  ['FD-11', 'site_b', "Huiles hydrauliques usagées (banc d'essais)", '13 01 10*', 'kg', 'R9', 'Régénération', '[Collecteur Huiles Ouest]', '[Raffinerie de régénération — Ville C]'],
+  ['FD-12', 'site_b', "Déchets en mélange (zone d'essais)", '20 03 01', 'kg', 'D10', 'Incinération', '[Collecteur DIB Ouest]', '[Unité d’incinération — Ville B]'],
 ];
 
 // Collecteurs (transporteurs par défaut) : SIRET, adresse, n° de récépissé de déclaration (R. 541-50 à R. 541-53).
@@ -116,8 +116,8 @@ const SEASON = {
 } as const;
 // Site A : siège et ateliers ; site B : zone d'essais (bancs électriques, chauffage électrique, pas de gaz).
 const BASE: Record<string, Partial<Record<keyof typeof SEASON, number>>> = {
-  'ville-a': { electricite: 52_000, gaz: 38_000, eau: 150 },
-  'ville-b': { electricite: 9_200, eau: 24 },
+  'site_a': { electricite: 52_000, gaz: 38_000, eau: 150 },
+  'site_b': { electricite: 9_200, eau: 24 },
 };
 // Évolution 2026 / 2025 : relamping LED et chauffage mieux régulé, eau stable.
 const TREND_2026: Record<keyof typeof SEASON, number> = { electricite: 0.955, gaz: 0.93, eau: 1.02 };
@@ -166,7 +166,7 @@ export async function seedEnvironment(tx: SeedTx) {
   // Janvier 2025 → septembre 2026 (août 2026 pour le site B : relevé de septembre manquant), léger aléa de ±4 %.
   const rows: (typeof t.consumptions.$inferInsert)[] = [];
   Object.entries(BASE).forEach(([siteId, kinds], si) => {
-    const months = siteId === 'ville-b' ? 20 : 21;
+    const months = siteId === 'site_b' ? 20 : 21;
     for (let i = 0; i < months; i++) {
       const y = 2025 + Math.floor(i / 12), m = (i % 12) + 1;
       (Object.keys(kinds) as (keyof typeof SEASON)[]).forEach((kind, ki) => {

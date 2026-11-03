@@ -75,10 +75,10 @@ describe('VEI-10 et VEI-11 : exigences et contrôles', () => {
     expect(legalTextUrlError('pas une adresse')).toMatch(/invalide/);
   });
   it('applicabilité par site', () => {
-    expect(appliesToSite([], 'ville-a')).toBe(true);
-    expect(appliesToSite(['ville-b'], 'ville-a')).toBe(false);
-    expect(appliesToSite(['ville-b'], 'ville-b')).toBe(true);
-    expect(appliesToSite(['ville-b'], null)).toBe(true);
+    expect(appliesToSite([], 'site_a')).toBe(true);
+    expect(appliesToSite(['site_b'], 'site_a')).toBe(false);
+    expect(appliesToSite(['site_b'], 'site_b')).toBe(true);
+    expect(appliesToSite(['site_b'], null)).toBe(true);
   });
   it('résultats de contrôle : défavorable et mise à l’arrêt bloquent l’équipement', () => {
     // VEI-14 (paquet 13) : « hors tolérance » ajouté pour l'étalonnage d'un équipement de mesure, bloquant lui aussi.
@@ -141,28 +141,28 @@ describe('AUD-13 : objectifs mesurables', () => {
     expect(elapsedMonths(2027, NOW)).toEqual([]);
   });
   const ev = (o: Partial<ObjectiveData['events'][number]>): ObjectiveData['events'][number] => ({
-    type: 'PA', injury: null, lostDays: null, occurredOn: '2026-03-01', siteId: 'ville-a', victimKind: null, commute: false, ncCostKeur: null, dismissedAt: null, ...o,
+    type: 'PA', injury: null, lostDays: null, occurredOn: '2026-03-01', siteId: 'site_a', victimKind: null, commute: false, ncCostKeur: null, dismissedAt: null, ...o,
   });
   const data: ObjectiveData = {
     events: [
-      ev({}), ev({ type: 'SD', siteId: 'ville-b' }), ev({ dismissedAt: new Date() }), ev({ occurredOn: '2025-12-01' }),
+      ev({}), ev({ type: 'SD', siteId: 'site_b' }), ev({ dismissedAt: new Date() }), ev({ occurredOn: '2025-12-01' }),
       ev({ type: 'AT', injury: 'arret', lostDays: 10, victimKind: 'salarie' }), ev({ type: 'AT', injury: 'arret', lostDays: 5, commute: true }),
       ev({ type: 'NC', ncCostKeur: 1.2 }), ev({ type: 'RC', ncCostKeur: 0.3 }),
     ],
     actions: [
-      { siteId: 'ville-a', status: 'verifiee', dueOn: '2026-05-01', closedOn: '2026-06-01', effective: true },
-      { siteId: 'ville-a', status: 'verifiee', dueOn: '2026-05-01', closedOn: '2026-06-01', effective: false },
-      { siteId: 'ville-a', status: 'p40', dueOn: '2026-09-01', closedOn: null, effective: null },
-      { siteId: 'ville-b', status: 'a_faire', dueOn: '2026-12-01', closedOn: null, effective: null },
+      { siteId: 'site_a', status: 'verifiee', dueOn: '2026-05-01', closedOn: '2026-06-01', effective: true },
+      { siteId: 'site_a', status: 'verifiee', dueOn: '2026-05-01', closedOn: '2026-06-01', effective: false },
+      { siteId: 'site_a', status: 'p40', dueOn: '2026-09-01', closedOn: null, effective: null },
+      { siteId: 'site_b', status: 'a_faire', dueOn: '2026-12-01', closedOn: null, effective: null },
     ],
-    controls: [{ siteId: 'ville-a', nextOn: '2026-10-01', archivedAt: null }, { siteId: 'ville-b', nextOn: '2026-12-01', archivedAt: null }],
-    hours: Array.from({ length: 9 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}-01`, siteId: 'ville-a', hours: 100_000 })),
-    sites: [{ id: 'ville-a', archivedOn: null }, { id: 'ville-b', archivedOn: null }],
+    controls: [{ siteId: 'site_a', nextOn: '2026-10-01', archivedAt: null }, { siteId: 'site_b', nextOn: '2026-12-01', archivedAt: null }],
+    hours: Array.from({ length: 9 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, '0')}-01`, siteId: 'site_a', hours: 100_000 })),
+    sites: [{ id: 'site_a', archivedOn: null }, { id: 'site_b', archivedOn: null }],
   };
   const value = (indicator: Parameters<typeof objectiveValue>[0], siteId: string | null = null, year = 2026) => objectiveValue(indicator, data, { year, now: NOW, siteId });
   it('valeurs calculées : comptages de l’année, classés sans suite et trajet exclus', () => {
     expect(value('remontees')).toBe(2);
-    expect(value('remontees', 'ville-a')).toBe(1);
+    expect(value('remontees', 'site_a')).toBe(1);
     expect(value('accidents_arret')).toBe(1);
     expect(value('nc')).toBe(1);
     expect(value('reclamations')).toBe(1);
@@ -174,8 +174,8 @@ describe('AUD-13 : objectifs mesurables', () => {
     expect(value('remontees', null, 2027)).toBeNull();
   });
   it('TF1 sur les mois échus, accidents de l’effectif hors trajet', () => {
-    expect(value('tf1', 'ville-a')).toBeCloseTo((1 * 1e6) / 900_000, 5);
-    expect(value('tg', 'ville-a')).toBeCloseTo((10 * 1e3) / 900_000, 5);
+    expect(value('tf1', 'site_a')).toBeCloseTo((1 * 1e6) / 900_000, 5);
+    expect(value('tg', 'site_a')).toBeCloseTo((10 * 1e3) / 900_000, 5);
   });
 });
 

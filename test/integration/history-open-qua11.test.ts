@@ -19,7 +19,7 @@ const opened = (entity: HistoryEntity, id: string | number) => loadEntityHistory
 
 describe('QUA-11 : écrans sans journal dans leur charge', () => {
   it('risques, audits et environnement ne transportent plus d’historique', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     const [risks, audits, env, register] = await Promise.all([loadRisks(), loadAudits({}), loadEnvironment(), loadDuerpAccessRegister()]);
     const json = JSON.stringify({ risks, audits, env, register });
     expect(json).not.toMatch(/"(history|log)":\[/);
@@ -30,14 +30,14 @@ describe('QUA-11 : historique à l’ouverture de la fiche', () => {
   it('risque et unité archivée : rôles qui modifient le DUERP, site de l’unité', async () => {
     const db = await getDb();
     const [risk] = await db.select({ id: t.risks.id, siteId: t.workUnits.siteId }).from(t.risks)
-      .innerJoin(t.workUnits, eq(t.workUnits.id, t.risks.unitId)).where(eq(t.workUnits.siteId, 'ville-a')).orderBy(asc(t.risks.id)).limit(1);
-    actAs('Animateur QHSE', 'ville-a');
+      .innerJoin(t.workUnits, eq(t.workUnits.id, t.risks.unitId)).where(eq(t.workUnits.siteId, 'site_a')).orderBy(asc(t.risks.id)).limit(1);
+    actAs('Animateur QHSE', 'site_a');
     expect(await opened('risk', risk.id)).toMatchObject({ entries: expect.any(Array) });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await opened('risk', risk.id)).toEqual(NOT_FOUND);
-    actAs('Chef de projet', 'ville-a');
+    actAs('Chef de projet', 'site_a');
     expect(await opened('risk', risk.id)).toEqual(NOT_FOUND);
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await opened('risk', risk.id)).toEqual(NOT_FOUND);
     expect(await opened('risk', 'x')).toEqual(NOT_FOUND);
   });
@@ -52,31 +52,31 @@ describe('QUA-11 : historique à l’ouverture de la fiche', () => {
       expect(await opened(entity, id), entity).toMatchObject({ entries: expect.any(Array) });
     }
     // Encadrement en consultation : lit l'historique comme l'écran ; Salarié : écran fermé.
-    actAs('Chef de service', item.siteId ?? 'ville-a');
+    actAs('Chef de service', item.siteId ?? 'site_a');
     expect(await opened('audit_plan_item', item.id)).toMatchObject({ entries: expect.any(Array) });
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect(await opened('audit_plan_item', item.id)).toEqual(NOT_FOUND);
     expect(await opened('certification', cert.id)).toEqual(NOT_FOUND);
     // Élément d'un site : refusé depuis un autre site.
-    await db.update(t.auditFindings).set({ siteId: 'ville-b' }).where(eq(t.auditFindings.id, finding.id));
-    actAs('Animateur QHSE', 'ville-a');
+    await db.update(t.auditFindings).set({ siteId: 'site_b' }).where(eq(t.auditFindings.id, finding.id));
+    actAs('Animateur QHSE', 'site_a');
     expect(await opened('audit_finding', finding.id)).toEqual(NOT_FOUND);
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await opened('audit_finding', finding.id)).toMatchObject({ entries: expect.any(Array) });
     await db.update(t.auditFindings).set({ siteId: finding.siteId }).where(eq(t.auditFindings.id, finding.id));
   });
 
   it('filière et enlèvement : écran Environnement, site de la fiche', async () => {
     const db = await getDb();
-    const [stream] = await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.siteId, 'ville-a')).limit(1);
-    const [entry] = await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.siteId, 'ville-a')).limit(1);
-    actAs('Animateur QHSE', 'ville-a');
+    const [stream] = await db.select().from(t.wasteStreams).where(eq(t.wasteStreams.siteId, 'site_a')).limit(1);
+    const [entry] = await db.select().from(t.wasteEntries).where(eq(t.wasteEntries.siteId, 'site_a')).limit(1);
+    actAs('Animateur QHSE', 'site_a');
     expect(await opened('waste_stream', stream.id)).toMatchObject({ entries: expect.any(Array) });
     expect(await opened('waste_entry', entry.id)).toMatchObject({ entries: expect.any(Array) });
-    actAs('Animateur QHSE', 'ville-b');
+    actAs('Animateur QHSE', 'site_b');
     expect(await opened('waste_stream', stream.id)).toEqual(NOT_FOUND);
     expect(await opened('waste_entry', entry.id)).toEqual(NOT_FOUND);
-    actAs('Chef de service', 'ville-a');
+    actAs('Chef de service', 'site_a');
     expect(await opened('waste_entry', entry.id)).toEqual(NOT_FOUND);
   });
 
@@ -84,7 +84,7 @@ describe('QUA-11 : historique à l’ouverture de la fiche', () => {
     const [req] = await (await getDb()).select().from(t.duerpAccessRequests).limit(1);
     actAs('Animateur QHSE', req.siteId ?? 'all');
     expect(await opened('duerp_access_request', req.id)).toMatchObject({ entries: expect.any(Array) });
-    actAs('Chef de service', req.siteId ?? 'ville-a');
+    actAs('Chef de service', req.siteId ?? 'site_a');
     expect(await opened('duerp_access_request', req.id)).toEqual(NOT_FOUND);
   });
 });

@@ -51,7 +51,7 @@ export async function seedRisks(tx: SeedTx) {
     }),
     { version: '2026.1', current: true, updatedOn: rel(-208), nextUpdateOn: rel(157), retention: '40 ans', validatedById: 'hmarchand', cseConsultedOn: rel(-203) },
   ]);
-  await tx.insert(t.workUnits).values(UNITS.map(([id, label], sort) => ({ id, label, sort, siteId: id === 'essais' ? 'ville-b' : 'ville-a' })));
+  await tx.insert(t.workUnits).values(UNITS.map(([id, label], sort) => ({ id, label, sort, siteId: id === 'essais' ? 'site_b' : 'site_a' })));
   const inserted = await tx.insert(t.risks).values(RISKS.map((r, sort) => ({
     unitId: r[0], hazard: r[1], situation: r[2], gravity: r[3], probability: r[4], existingMeasures: r[5],
     residualGravity: r[6], residualProbability: r[7], sort,
@@ -62,8 +62,8 @@ export async function seedRisks(tx: SeedTx) {
   // Registre des mises à disposition du DUERP (DUE-01) : la demande de l'ancien salarié est encore à traiter.
   await tx.insert(t.duerpAccessRequests).values([
     { requestedOn: rel(-203), requesterKind: 'cse', requesterName: 'CSE — réunion ordinaire de mars', siteId: null, version: '2026.1', communicatedOn: rel(-203), channel: 'sur_place', note: 'Présentation de la mise à jour annuelle et consultation du CSE.', createdById: 'clefevre', createdAt: new Date(`${rel(-203)}T16:00:00+01:00`) },
-    { requestedOn: rel(-190), requesterKind: 'medecin', requesterName: 'Service de prévention et de santé au travail', siteId: 'ville-a', version: '2026.1', communicatedOn: rel(-189), channel: 'electronique', note: null, createdById: 'clefevre', createdAt: new Date(`${rel(-189)}T10:00:00+02:00`) },
-    { requestedOn: rel(-4), requesterKind: 'ancien_salarie', requesterName: '[G. Vasseur]', siteId: 'ville-a', version: '2024.1', communicatedOn: null, channel: null, note: 'Ancien monteur (2019–2024) : versions en vigueur pendant son activité.', createdById: 'clefevre', createdAt: new Date(`${rel(-4)}T09:30:00+02:00`) },
+    { requestedOn: rel(-190), requesterKind: 'medecin', requesterName: 'Service de prévention et de santé au travail', siteId: 'site_a', version: '2026.1', communicatedOn: rel(-189), channel: 'electronique', note: null, createdById: 'clefevre', createdAt: new Date(`${rel(-189)}T10:00:00+02:00`) },
+    { requestedOn: rel(-4), requesterKind: 'ancien_salarie', requesterName: '[G. Vasseur]', siteId: 'site_a', version: '2024.1', communicatedOn: null, channel: null, note: 'Ancien monteur (2019–2024) : versions en vigueur pendant son activité.', createdById: 'clefevre', createdAt: new Date(`${rel(-4)}T09:30:00+02:00`) },
   ]);
   // PAPRIPACT 2026 en préparation (DUE-02) : sans consultation du CSE ni lignes figées.
   await tx.insert(t.preventionPrograms).values({ year: 2026, duerpVersion: '2026.1', comment: 'Programme issu de la mise à jour 2026.1, à présenter au CSE.', createdById: 'clefevre', createdAt: new Date(`${rel(-38)}T10:00:00+02:00`) });

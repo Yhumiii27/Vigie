@@ -1,6 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { loadProjectIndex } from '@/lib/foreign/keystone';
+import { projectText } from '@/lib/foreign/labels';
 import { getDb, schema as t } from '@/db';
 import { fmtQty, wasteEntryHref } from '@/lib/rules/environment';
 import type { ChangeEntry } from '@/lib/change-entry';
@@ -271,8 +273,13 @@ export const loadVisibleEvents = cache(async () => {
   const { role, user } = await getSession();
   // EVT-27 : le Salarié lit ses propres signalements nominatifs sur tout son périmètre, quel que soit le site sélectionné
   // (comme « Mes signalements ») ; les autres rôles, les événements du site sélectionné.
-  if (isEmployee(role)) return (await loadSiteEvents('perimeter')).filter((e) => e.declarantId === user.id && !e.anonymous);
-  return loadSiteEvents();
+  const [rows, projects] = await Promise.all([
+    isEmployee(role) ? loadSiteEvents('perimeter').then((l) => l.filter((e) => e.declarantId === user.id && !e.anonymous)) : loadSiteEvents(),
+    loadProjectIndex(),
+  ]);
+  // D02 : projet affiché « code · client » d'après keystone.pub_projets (code seul si la source est indisponible ; ancien
+  // libellé saisi d'une fiche antérieure sans code).
+  return rows.map((e) => ({ ...e, keystoneProject: projectText(e.keystoneProjectCode, e.keystoneProject, projects) }));
 });
 
 /**

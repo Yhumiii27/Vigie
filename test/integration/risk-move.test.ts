@@ -24,7 +24,7 @@ const moveForm = async (id: number, unitId: string) => {
 
 describe('déplacement d’un risque (DUE-14)', () => {
   it('même site : risque placé en dernier dans l’unité de destination, journal du déplacement', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveRisk({}, await moveForm(2, 'usinage'))).toEqual({ ok: true, id: '2' });
     expect(await riskOf(2)).toMatchObject({ unitId: 'usinage', sort: 11 });
     expect(await lastLog('risk', 2)).toMatchObject({ action: 'update', details: [{ field: 'Unité de travail', from: 'Atelier montage', to: 'Atelier usinage' }] });
@@ -45,13 +45,13 @@ describe('déplacement d’un risque (DUE-14)', () => {
     expect(await saveRisk({}, await moveForm(14, 'montage'))).toEqual({ ok: true, id: '14' });
     expect(await riskOf(14)).toMatchObject({ unitId: 'montage', sort: 6 });
     const [a] = await (await getDb()).select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, 'A-165'));
-    expect(a.siteId).toBe('ville-b');
+    expect(a.siteId).toBe('site_b');
   });
 
   it('site sélectionné : unité de destination ou d’origine d’un autre site refusée (droits inchangés)', async () => {
-    actAs('Animateur QHSE', 'ville-a');
+    actAs('Animateur QHSE', 'site_a');
     expect((await saveRisk({}, await moveForm(13, 'montage'))).error).toBe('Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.');
-    actAs('Salarié', 'ville-a');
+    actAs('Salarié', 'site_a');
     expect((await saveRisk({}, await moveForm(2, 'montage'))).error).toBe('Votre rôle ne permet pas cette modification.');
   });
 });

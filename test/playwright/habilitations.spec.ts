@@ -4,7 +4,7 @@ import { asRole } from './helpers';
 // Habilitations et formations (QUA-08) : matrice de l'encadrement, « Mes habilitations » du Salarié (sa seule ligne).
 
 test('Chef de service : matrice de tous les salariés, saisie proposée', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/habilitations');
   await expect(page.getByRole('heading', { name: 'Habilitations et formations', level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Enregistrer une formation' })).toBeVisible();
@@ -25,7 +25,7 @@ test('Salarié : ses seules habilitations, en consultation', async ({ page, cont
 
 // HAB-06 : session de formation collective et recyclage groupé depuis la prévision (« À prévoir »).
 test('Animateur QHSE : session collective puis recyclage groupé depuis « À prévoir »', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Animateur QHSE', 'ville-a');
+  await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/habilitations');
   await page.getByRole('button', { name: 'Session collective' }).click();
   const dialog = page.getByRole('dialog', { name: 'Session de formation collective' });

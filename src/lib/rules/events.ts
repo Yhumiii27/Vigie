@@ -159,7 +159,9 @@ export const LOCATION_UNSPECIFIED = 'Lieu non précisé';
 export type QualifiableEvent = {
   type: string; location: string; severity: number | null; ncOrigin: string | null;
   victimKind: string | null; victimId: string | null; victimName: string | null; circumstances: string | null;
-  customer: string | null; customerRef: string | null; keystoneProject: string | null; envAspect: string | null; envMedium: string | null;
+  customer: string | null; customerRef: string | null; envAspect: string | null; envMedium: string | null;
+  /** Projet Keystone : code de keystone.pub_projets (D02), ou ancien libellé « id · client » d'une fiche antérieure. */
+  keystoneProjectCode?: string | null; keystoneProject?: string | null;
 };
 
 const filled = (v: string | null | undefined) => !!v && v.trim() !== '';
@@ -173,7 +175,7 @@ export function missingQualification(e: QualifiableEvent): QualificationField[] 
     severity: () => Number.isInteger(e.severity) && e.severity! >= 1 && e.severity! <= 4,
     ncOrigin: () => filled(e.ncOrigin),
     customer: () => filled(e.customer),
-    customerRef: () => filled(e.customerRef) || filled(e.keystoneProject),
+    customerRef: () => filled(e.customerRef) || filled(e.keystoneProjectCode) || filled(e.keystoneProject),
     envAspect: () => filled(e.envAspect),
     envMedium: () => filled(e.envMedium),
   };

@@ -22,7 +22,7 @@ type Detail = import('@/lib/action-view').ActionDetailView;
 type Options = import('@/lib/action-view').ActionFormOptions;
 type Role = import('@/lib/domain').Role;
 
-const OPTIONS: Options = { people: [['clefevre', 'C. Lefèvre'], ['tnguyen', 'T. Nguyen']], sites: [['ville-a', 'Ville A']], today: '2026-10-15' };
+const OPTIONS: Options = { people: [['clefevre', 'C. Lefèvre'], ['tnguyen', 'T. Nguyen']], sites: [['site_a', 'Ville A']], today: '2026-10-15' };
 const NONE: Options = { people: [], sites: [], today: '2026-10-15' };
 
 const detail = (over: Partial<Detail> = {}): Detail => ({
@@ -30,7 +30,7 @@ const detail = (over: Partial<Detail> = {}): Detail => ({
   status: 'p40', avancement: '40 %', statusLabel: '40 %', tone: 'accent', group: 'ouverte', kanban: null, late: false, lateDays: 0, verifyLate: false,
   priority: 'urgent', priorityLabel: 'Urgent', domain: 'securite', domainLabel: 'Sécurité',
   source: 'evenement', sourceLabel: 'Évènement QSE', sourceIcon: 'ph-warning', originRef: 'EV-2026-130',
-  siteId: 'ville-a', site: 'Ville A', siteShort: 'VA', pilotId: 'tnguyen', pilot: 'T. Nguyen', pilotInitials: 'TN', pilotLeft: false,
+  siteId: 'site_a', site: 'Ville A', siteShort: 'VA', pilotId: 'tnguyen', pilot: 'T. Nguyen', pilotInitials: 'TN', pilotLeft: false,
   dueOn: '2026-11-15', due: '15/11/2026', initialDueOn: '2026-11-15', rescheduled: false, verifyDueOn: '2026-12-15', verifyDue: '15/12/2026',
   doneOn: null, closedOn: null, cancelledOn: null, cancelReason: null, hours: null, estimatedCost: null, actualCost: null,
   followsActionId: null, followReason: null, missing: [], toComplete: false, mine: false, elsewhere: false,
@@ -149,13 +149,13 @@ describe('formulaire d’action : source et site', () => {
     expect(form({ link: 'permit:PT-1' })).toContain(NON_QSE_LINK_MESSAGE.replace(/'/g, '&#x27;'));
   });
   it('plan, sans élément : les 24 sources ; « Tous les sites » jamais proposé', () => {
-    const html = form({}, { ...OPTIONS, sites: [['all', 'Tous les sites'], ['ville-a', 'Ville A']] });
+    const html = form({}, { ...OPTIONS, sites: [['all', 'Tous les sites'], ['site_a', 'Ville A']] });
     const select = [...html.matchAll(/<select id="source"[\s\S]*?<\/select>/g)][0][0];
     expect(select.match(/<option value="[a-z_]+"/g)).toHaveLength(24);
     expect(html).not.toContain('Tous les sites');
   });
   it('modification d’une Vérifiée : vérification planifiée figée, pointage seul (nature et constat par « Rouvrir », D17)', () => {
-    const html = form({ id: 'A-170', status: 'verifiee', source: 'duerp', siteId: 'ville-a', verifyDueOn: '2026-09-01', doneOn: '2026-09-05' });
+    const html = form({ id: 'A-170', status: 'verifiee', source: 'duerp', siteId: 'site_a', verifyDueOn: '2026-09-01', doneOn: '2026-09-05' });
     expect(html).toContain('Fixée : l’action est vérifiée.');
     expect(html).not.toContain('name="verifyDueOn"');
     expect(html).not.toContain('name="verifyMethod"');

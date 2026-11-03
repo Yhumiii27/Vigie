@@ -21,7 +21,7 @@ test('Salarié : situation dangereuse signalée, suivie dans « Mes signalements
 });
 
 test('signalement anonyme avec photo : envoyé, sans nom', async ({ page, context, baseURL }) => {
-  await asRole(context, baseURL!, 'Chef de service', 'ville-a');
+  await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/signaler');
   await page.getByRole('radio', { name: 'Presque-accident' }).click();
   await page.getByRole('textbox', { name: 'Description' }).fill('Chariot passé à grande vitesse devant la sortie du vestiaire.');
