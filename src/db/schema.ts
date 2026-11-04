@@ -6,11 +6,11 @@ import {
   type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type ReminderSendStatus, type SourceKey, type VerifyMethod,
 } from '../lib/action-keys';
 import {
-  BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EFFECTIVENESS_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
+  BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
-  ASSIGNMENT_SOURCE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
+  ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -325,7 +325,7 @@ export const actions = pgTable('actions', {
   // case de la matrice (salarié × titre), conservée sur l'action close ou abandonnée et quand le titre n'est plus requis ;
   // jamais posée par Vigie (aucune action QSE pour un recyclage, 15/10/2026).
   qualificationPersonId: text('qualification_person_id').references(() => people.id),
-  qualificationTitleId: text('qualification_title_id').references((): AnyPgColumn => trainingTitles.id),
+  qualificationTitleId: text('qualification_title_id').references((): AnyPgColumn => trainingTitles.id, { onUpdate: 'cascade' }),
   domain: text('domain').$type<ActionDomain>(), // null = à compléter (reprise)
   problem: text('problem'), // description du problème (≤ 4 000) ; null = à compléter (reprise)
   detail: text('detail').notNull(), // détail de l'action (≤ 4 000) ; libellé = actionLabel(detail)
@@ -503,7 +503,7 @@ export const riskMeasureLinks = pgTable('risk_measure_links', {
   kind: text('kind').notNull(), // MEASURE_LINK_KINDS : control | document | title
   controlId: integer('control_id').references((): AnyPgColumn => controls.id),
   documentId: text('document_id').references((): AnyPgColumn => documents.id),
-  titleId: text('title_id').references((): AnyPgColumn => trainingTitles.id),
+  titleId: text('title_id').references((): AnyPgColumn => trainingTitles.id, { onUpdate: 'cascade' }),
   createdById: text('created_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   removedAt: timestamp('removed_at', { withTimezone: true }),
@@ -802,85 +802,47 @@ export const safetyNotices = pgTable('safety_notices', {
 
 // ─── Habilitations et formations ────────────────────────────────────────────
 
+// D08 de Matrix (migration 0025, décision CV-01 du 04/11/2026) : cache du catalogue des titres de Cursus (vue
+// cursus.pub_titres), une ligne = titre suivi par Vigie dans sa matrice ; `id` = titre_id de Cursus (« habilitation.he »,
+// « formation.sst »…). Intitulé et validité rafraîchis par src/server/foreign-sync.ts seulement (jamais saisis) ; suivi,
+// « ne plus suivre » (archivage motivé) et attributs propres au QHSE (CV-03) saisis dans Vigie.
 export const trainingTitles = pgTable('training_titles', {
   id: text('id').primaryKey(),
+  // libelle_court de Cursus.
   label: text('label').notNull(),
-  validityMonths: integer('validity_months').notNull().default(0), // 0 = sans échéance
+  // validite_mois de Cursus ; 0 = sans échéance (NULL dans la vue).
+  validityMonths: integer('validity_months').notNull().default(0),
   sort: integer('sort').notNull().default(0),
   // Titre de secourisme (SST) : ses titulaires valides peuvent donner les soins inscrits au registre des accidents bénins (EVT-04).
   firstAid: boolean('first_aid').notNull().default(false),
-  // HAB-10 : titres exigés pour que celui-ci soit valide (CACES avant l'autorisation de conduite, R. 4323-56) et libellé du
-  // champ « portée » de ses formations (catégories CACES, indices d'habilitation électrique).
-  prerequisiteIds: jsonb('prerequisite_ids').$type<string[]>().notNull().default([]),
+  // Libellé de l'ancienne « portée » des formations (HAB-10) : gardé en attendant la confirmation de CV-04 (portée non
+  // publiée par Cursus, plus affichée ni saisie).
   scopeLabel: text('scope_label'),
   // HAB-13 (migration 0020) : action de sensibilisation (ISO 45001 §7.3 : accueil sécurité, causerie, consignes) plutôt
-  // qu'une formation qualifiante ; suivie et évaluée comme une formation.
+  // qu'une formation qualifiante.
   awareness: boolean('awareness').notNull().default(false),
   // AUD-27 (migration 0021) : titre qui qualifie un auditeur interne (formation d'auditeur ISO 19011…) ; l'auditeur interne
   // d'un audit du programme sans titre valide de ce type est signalé (jamais refusé).
   internalAuditor: boolean('internal_auditor').notNull().default(false),
-  // Titre retiré du suivi (historique conservé).
+  // État du titre dans le catalogue de Cursus au dernier rafraîchissement (null : jamais lu).
+  cursusState: text('cursus_state'),
+  // Titre qui n'est plus suivi (historique conservé).
   archivedAt: timestamp('archived_at', { withTimezone: true }),
   archivedById: text('archived_by_id').references(() => people.id),
   archiveReason: text('archive_reason'),
 }, (t) => [
   archiveState('training_titles_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+  check('training_titles_cursus_state_check', inList(t.cursusState, CURSUS_TITLE_STATE_CODES)),
 ]);
 
+// Titres requis par salarié (HAB-03), saisis dans Vigie ; les titres détenus sont lus dans cursus.pub_titres_detenus
+// (D09, jointure par people.matricule et training_titles.id, src/lib/foreign/cursus.ts) : plus de table qualifications ni
+// training_sessions depuis la migration 0025.
 export const qualificationRequirements = pgTable('qualification_requirements', {
   personId: text('person_id').notNull().references(() => people.id),
-  titleId: text('title_id').notNull().references(() => trainingTitles.id),
+  titleId: text('title_id').notNull().references(() => trainingTitles.id, { onUpdate: 'cascade' }),
   // Recyclage repris : porté par l'action (actions.qualification_person_id / qualification_title_id, HAB-04).
 }, (t) => [primaryKey({ columns: [t.personId, t.titleId] })]);
-
-// Historique des formations suivies : une ligne par formation, jamais écrasée. La qualification en cours d'une case
-// de la matrice est la dernière ligne non annulée (obtainedOn desc, puis id desc). Attestation : attachments 'qualification'.
-export const qualifications = pgTable('qualifications', {
-  id: serial('id').primaryKey(),
-  personId: text('person_id').notNull().references(() => people.id),
-  titleId: text('title_id').notNull().references(() => trainingTitles.id),
-  obtainedOn: date('obtained_on', { mode: 'string' }).notNull(),
-  expiresOn: date('expires_on', { mode: 'string' }),
-  provider: text('provider'),
-  scope: text('scope'), // HAB-10 : catégories ou niveaux obtenus (« 1A, 3, 5 », « B1V, BR »)
-  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
-  recordedById: text('recorded_by_id').references(() => people.id),
-  // HAB-06 (migration 0022) : session de formation collective qui a créé cette formation (null : saisie individuelle).
-  sessionId: integer('session_id').references(() => trainingSessions.id),
-  // HAB-13 (migration 0020) : évaluation à froid de l'efficacité (ISO 45001 §7.2 d, ISO 9001 §7.2 c) — résultat
-  // (TRAINING_EFFECTIVENESS), date, constat et auteur ; modifiable (journal de la formation), jamais sur une formation annulée.
-  effectiveness: text('effectiveness'),
-  effectivenessOn: date('effectiveness_on', { mode: 'string' }),
-  effectivenessNote: text('effectiveness_note'),
-  effectivenessById: text('effectiveness_by_id').references(() => people.id),
-  // Formation enregistrée par erreur : annulée avec un motif (jamais supprimée) et exclue du calcul de l'état.
-  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  cancelledById: text('cancelled_by_id').references(() => people.id),
-  cancelReason: text('cancel_reason'),
-}, (t) => [
-  index('qualifications_person_title_idx').on(t.personId, t.titleId),
-  archiveState('qualifications_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
-  check('qualifications_effectiveness_check', sql`(${t.effectiveness} is null and ${t.effectivenessOn} is null) or (${inList(t.effectiveness, EFFECTIVENESS_CODES)} and ${t.effectivenessOn} is not null)`),
-]);
-
-// HAB-06 (migration 0022) : session de formation collective ou recyclage groupé — un titre, une date, un organisme ; elle
-// crée une formation par participant (qualifications.session_id) dans la même transaction. Jamais supprimée : annulée avec
-// un motif, ce qui annule ses formations encore en vigueur (chacune journalisée).
-export const trainingSessions = pgTable('training_sessions', {
-  id: serial('id').primaryKey(),
-  titleId: text('title_id').notNull().references(() => trainingTitles.id),
-  heldOn: date('held_on', { mode: 'string' }).notNull(),
-  expiresOn: date('expires_on', { mode: 'string' }),
-  provider: text('provider'),
-  scope: text('scope'),
-  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
-  recordedById: text('recorded_by_id').references(() => people.id),
-  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  cancelledById: text('cancelled_by_id').references(() => people.id),
-  cancelReason: text('cancel_reason'),
-}, (t) => [
-  archiveState('training_sessions_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
-]);
 
 // D04 de Matrix (migration 0024) : cache de keystone.pub_affectations (rotations de chantier et affectations du planning),
 // rafraîchi par src/server/foreign-sync.ts seulement (jamais saisi) ; une ligne par affectation de la vue (affectation_id,

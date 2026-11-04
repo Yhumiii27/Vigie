@@ -4,8 +4,8 @@ import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
-import { GroupRenewalButton } from '@/components/skills/GroupRenewalButton';
-import { groupRenewalCandidates, renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
+import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
+import { CURSUS_HELD_NOTICE } from '@/lib/foreign/labels';
 import { today } from '@/lib/today';
 import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
@@ -14,7 +14,7 @@ import { hasLeft } from '@/lib/people';
 import { loadPeople } from '@/lib/queries';
 import { loadFormOptions, type Option } from '@/lib/data/options';
 import { loadSiteAdmin } from '@/lib/data/sites';
-import { loadSkillMatrix } from '@/lib/data/skills';
+import { loadSkillMatrix, loadTitleChoices } from '@/lib/data/skills';
 
 export const metadata: Metadata = { title: SCREENS.skills.title };
 
@@ -25,12 +25,13 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   const sp = await searchParams;
   // Bandeaux : titres manquants ou expirés, mais aussi expirant avant ou pendant une affectation Keystone (`lapses`).
   // Rôle Salarié : sa seule ligne, ses échéances et ses affectations (filtrées par loadSkillMatrix).
-  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, versions, self }, { sites }, allSites] =
-    await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin()]);
   // Même règle que les server actions du domaine (requireSkillsEditor).
   const manage = canEdit(session.role, 'skills');
-  // Titres suivis, communs à tous les sites : service QHSE et direction seulement (requireTitlesEditor, HAB-12).
+  // Titres suivis, communs à tous les sites : service QHSE et direction seulement (requireTitlesEditor, HAB-12) ; choix
+  // « Suivre un titre » tirés du catalogue de Cursus (D08), lus pour eux seulement.
   const manageTitles = manage && canApprove(session.role);
+  const [{ titles, archivedTitles, rows, lapses, others, departed, archive, versions, self, source }, { sites }, allSites, catalog] =
+    await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin(), manageTitles ? loadTitleChoices() : { choices: [], message: null }]);
   const now = today();
   // Nouveau salarié : site sélectionné, ou le premier site en vue « Tous les sites ».
   const defaultSiteId = session.site.id === ALL_SITES ? sites[0]?.[0] ?? '' : session.site.id;
@@ -77,6 +78,15 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
       <PageHeader title={SCREENS.skills.title} sub={sub} />
       <div className="vg-page">
         {link?.notice && <MissingNotice text={link.notice} closeHref="/habilitations" />}
+        {/* D09, décision CV-01 du 04/11/2026 : consultation seule, Cursus fait foi. */}
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+          <i className="ph ph-plugs-connected" style={{ fontSize: 13, marginRight: 6 }} aria-hidden />{CURSUS_HELD_NOTICE}
+        </p>
+        {!source.ok && (
+          <div className="card" role="status" style={{ padding: '10px 14px', borderColor: 'var(--tone-warn-dot)', fontSize: 12.5, textWrap: 'pretty' }}>
+            {source.message} Les états des titres requis ne sont pas calculés : aucune alerte ni échéance d&apos;habilitation tant que la source n&apos;est pas lue.
+          </div>
+        )}
         <SkillAlerts alerts={lapses} today={now} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <SegLinks options={views} />
@@ -91,9 +101,6 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
           <div className="card" style={{ gap: 12 }}>
             <CardHead title="Recyclages et formations à prévoir" aside={(
               <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
-                {/* HAB-06 : recyclage groupé (session collective) sur un titre de la prévision. */}
-                {manage && <GroupRenewalButton titles={titles} today={now}
-                  renewals={Object.fromEntries(forecast.titles.map((ti) => [ti.id, groupRenewalCandidates(forecast, ti.id)]))} />}
                 {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
                 <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
                   <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
@@ -101,15 +108,15 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
               </span>
             )} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-              Titres requis expirés, jamais suivis ou expirant d&apos;ici 12 mois, par mois d&apos;échéance. Plan de formation géré par le service RH :
-              aucune action QSE n&apos;est créée.
+              Titres requis expirés, jamais suivis, suspendus ou expirant d&apos;ici 12 mois, par mois d&apos;échéance, d&apos;après Cursus. Plan de formation
+              et sessions gérés par le service RH dans Cursus : aucune action QSE n&apos;est créée.
             </p>
             <ForecastView forecast={forecast} />
           </div>
         ) : (
           <SkillMatrix titles={titles} versions={versions} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
-            canManage={manage} canManageTitles={manageTitles} options={options} today={now} defaultSiteId={defaultSiteId}
+            canManage={manage} canManageTitles={manageTitles} catalog={catalog} options={options} today={now} defaultSiteId={defaultSiteId}
             initialSel={initialSel} closeHref="/habilitations" siteLabels={siteLabels} />
         )}
       </div>

@@ -2,6 +2,7 @@ import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import * as t from '../schema';
 import type { SeedTx } from './types';
 import { rel } from './dates';
+import { DRIVING_TITLE } from './skills';
 
 // Jeu de démonstration du paquet 5 (conformité réglementaire, migration 0008) : maladie professionnelle et accident de
 // trajet (EVT-09), traitement des produits non conformes (EVT-17), signataires des plans de prévention (PRV-07),
@@ -79,20 +80,10 @@ export async function seedCompliance(tx: SeedTx) {
   // DUE-03 : version en vigueur transmise au SPST.
   await tx.update(t.duerpVersions).set({ spstSentOn: rel(-196) }).where(and(eq(t.duerpVersions.version, '2026.1'), isNull(t.duerpVersions.spstSentOn)));
 
-  // HAB-10 : autorisation de conduite subordonnée à un CACES valide ; catégories et indices obtenus ; une autorisation
-  // délivrée sans CACES (état « prérequis non valide »).
-  await tx.update(t.trainingTitles).set({ prerequisiteIds: ['r484', 'r489'] }).where(eq(t.trainingTitles.id, 'conduite'));
-  await tx.update(t.trainingTitles).set({ scopeLabel: 'Catégories CACES' }).where(inArray(t.trainingTitles.id, ['r484', 'r489']));
-  await tx.update(t.trainingTitles).set({ scopeLabel: 'Indices d’habilitation' }).where(eq(t.trainingTitles.id, 'elec'));
-  for (const [titleId, scope] of [['r489', '1A, 3, 5'], ['r484', '1'], ['elec', 'B1V, BR, H0V']] as const) {
-    await tx.update(t.qualifications).set({ scope }).where(and(eq(t.qualifications.titleId, titleId), isNull(t.qualifications.cancelledAt), isNull(t.qualifications.scope)));
-  }
+  // HAB-10 : autorisation de conduite exigée de [K. Bernard] ; délivrée sans CACES valide, elle est suspendue dans Cursus
+  // (substitut de cursus.pub_titres_detenus, src/db/seeds/foreign.ts). Prérequis et portée sont tenus par Cursus (lot 2 de M-02).
   if (people.has('kbernard')) {
-    await tx.insert(t.qualificationRequirements).values({ personId: 'kbernard', titleId: 'conduite' }).onConflictDoNothing();
-    const [held] = await tx.select({ n: count() }).from(t.qualifications).where(and(eq(t.qualifications.personId, 'kbernard'), eq(t.qualifications.titleId, 'conduite')));
-    if (held.n === 0) {
-      await tx.insert(t.qualifications).values({ personId: 'kbernard', titleId: 'conduite', obtainedOn: rel(-8), expiresOn: rel(1818), provider: 'Formation interne', recordedById: 'clefevre' });
-    }
+    await tx.insert(t.qualificationRequirements).values({ personId: 'kbernard', titleId: DRIVING_TITLE }).onConflictDoNothing();
   }
 
   // VEI-10 : lien vers le texte et applicabilité par site.

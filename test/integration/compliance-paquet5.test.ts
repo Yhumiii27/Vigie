@@ -22,7 +22,6 @@ import { loadEntityHistory } from '@/server/history';
 import { archiveObjective, saveObjective } from '@/server/objectives';
 import { recordPlanEeSignature, signPlanEu } from '@/server/prevention';
 import { updateCurrentDuerpVersion } from '@/server/risks';
-import { saveQualification, saveTitle } from '@/server/skills';
 import { recordControl, saveRequirement } from '@/server/watch';
 import { addEntityFiles, removeEntityFile } from '@/server/entity-files';
 
@@ -171,39 +170,12 @@ describe('DUE-03 : transmission au SPST et dépôt sur le portail', () => {
   });
 });
 
-describe('HAB-10 : prérequis entre titres, catégories et niveaux', () => {
-  const titleForm = (id: string, fields: Record<string, string>, prereq: string[] = []) => {
-    const fd = form({ id, label: id === 'conduite' ? 'Autorisation de conduite' : 'CACES R489', validityMonths: '60', firstAidField: '1', prerequisitesField: '1', ...fields });
-    prereq.forEach((p) => fd.append('prerequisiteIds', p));
-    return fd;
-  };
-  it('autorisation de conduite sans CACES valide : « prérequis non valide », échéance', async () => {
+describe('HAB-10 (lot 2 de M-02) : prérequis tenus par Cursus', () => {
+  it('autorisation de conduite délivrée sans CACES valide : suspendue d’après Cursus ; autres titulaires valides', async () => {
     actAs('Animateur QHSE', 'all');
-    const cell = (await loadSkillData('perimeter')).rows.find((r) => r.person.id === 'kbernard')!.cells.find((c) => c.title.id === 'conduite')!;
-    expect(cell).toMatchObject({ state: 'p', missingPrerequisites: ['CACES R484', 'CACES R489'] });
-    const proux = (await loadSkillData('perimeter')).rows.find((r) => r.person.id === 'proux')!.cells.find((c) => c.title.id === 'conduite')!;
-    expect(proux.state).toBe('v');
-  });
-  it('prérequis : soi-même, inconnu ou circulaire refusés ; modification journalisée', async () => {
-    actAs('Salarié');
-    expect(await saveTitle({}, titleForm('conduite', {}, ['r489']))).toEqual({ error: DENIED });
-    actAs('Animateur QHSE', 'all');
-    expect(await saveTitle({}, titleForm('conduite', {}, ['conduite']))).toMatchObject({ fieldErrors: { prerequisiteIds: expect.stringContaining('propre prérequis') } });
-    expect(await saveTitle({}, titleForm('conduite', {}, ['inconnu']))).toMatchObject({ fieldErrors: { prerequisiteIds: expect.any(String) } });
-    expect(await saveTitle({}, titleForm('r489', { scopeLabel: 'Catégories CACES' }, ['conduite']))).toMatchObject({ fieldErrors: { prerequisiteIds: expect.stringContaining('circulaire') } });
-    expect(await saveTitle({}, titleForm('conduite', {}, ['r489']))).toEqual({ ok: true, id: 'conduite' });
-    expect((await lastLog('training_title', 'conduite'))?.details).toEqual(expect.arrayContaining([
-      expect.objectContaining({ field: 'Prérequis', from: 'CACES R484, CACES R489', to: 'CACES R489' }),
-    ]));
-  });
-  it('catégories obtenues saisies avec la formation d’un titre qui en porte', async () => {
-    actAs('Animateur QHSE', 'all');
-    expect(await saveQualification({}, form({ personId: 'kbernard', titleId: 'r489', obtainedOn: '2026-10-05', scope: '1A, 3' }))).toMatchObject({ ok: true });
-    const [q] = await (await db()).select().from(t.qualifications).where(and(eq(t.qualifications.personId, 'kbernard'), eq(t.qualifications.titleId, 'r489')));
-    expect(q.scope).toBe('1A, 3');
-    // CACES valide : l'autorisation de conduite redevient valide.
-    const cell = (await loadSkillData('perimeter')).rows.find((r) => r.person.id === 'kbernard')!.cells.find((c) => c.title.id === 'conduite')!;
-    expect(cell.state).toBe('v');
+    const rows = (await loadSkillData('perimeter')).rows;
+    expect(rows.find((r) => r.person.id === 'kbernard')!.cells.find((c) => c.title.id === 'habilitation.ac489')).toMatchObject({ state: 'p', prerequisiteMissing: true });
+    expect(rows.find((r) => r.person.id === 'proux')!.cells.find((c) => c.title.id === 'habilitation.ac489')!.state).toBe('v');
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { cookieJar, form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { AuthState } from '@/lib/auth';
 import { toParisLocal } from '@/lib/dates';
@@ -90,7 +90,9 @@ describe('inscription au registre', () => {
     const noSst = 'Sans titre de secouriste du travail (SST) valide à la date des soins sur ce site.';
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'kbernard' }))).toMatchObject({ fieldErrors: { caregiverId: noSst } });
     // Titre SST expiré avant les soins.
-    await (await getDb()).insert(t.qualifications).values({ personId: 'kbernard', titleId: 'sst', obtainedOn: '2024-01-15', expiresOn: '2026-01-15' });
+    // Titre SST expiré avant les soins, publié par Cursus (substitut de cursus.pub_titres_detenus).
+    await (await getDb()).execute(sql.raw(`insert into cursus.substitut_titres_detenus (cursus_ref, matricule, titre_id, nature, code, obtenu_le, expire_le, utilisable_jusqu_au, prerequis_manquant)
+      values ('certification.9990', 'EMP-9010', 'formation.sst', 'formation', 'sst', '2024-01-15', '2026-01-15', '2026-01-15', false)`));
     expect((await loadFirstAiders('site_a', '2025-06-01')).map((a) => a.id)).toContain('kbernard');
     expect((await loadFirstAiders('site_a', '2026-10-08')).map((a) => a.id)).not.toContain('kbernard');
     expect(await registerBenignAccident({}, inscription(id, { caregiverId: 'kbernard' }))).toMatchObject({ fieldErrors: { caregiverId: noSst } });
@@ -234,10 +236,10 @@ describe('registre imprimable', () => {
 
   it('titre de secourisme : drapeau first_aid, à défaut le libellé « SST »', async () => {
     const db = await getDb();
-    await db.update(t.trainingTitles).set({ firstAid: false }).where(eq(t.trainingTitles.id, 'sst'));
+    await db.update(t.trainingTitles).set({ firstAid: false }).where(eq(t.trainingTitles.id, 'formation.sst'));
     expect((await loadFirstAiders('site_a', '2026-10-08')).map((a) => a.id)).toContain('sbenali');
-    await db.update(t.trainingTitles).set({ label: 'Secourisme' }).where(eq(t.trainingTitles.id, 'sst'));
+    await db.update(t.trainingTitles).set({ label: 'Secourisme' }).where(eq(t.trainingTitles.id, 'formation.sst'));
     expect(await loadFirstAiders('site_a', '2026-10-08')).toEqual([]);
-    await db.update(t.trainingTitles).set({ label: 'SST', firstAid: true }).where(eq(t.trainingTitles.id, 'sst'));
+    await db.update(t.trainingTitles).set({ label: 'SST', firstAid: true }).where(eq(t.trainingTitles.id, 'formation.sst'));
   });
 });

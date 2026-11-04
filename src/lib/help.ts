@@ -65,12 +65,12 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
     ],
   },
   skills: {
-    intro: 'Matrice salariés × titres suivis (habilitations, CACES, formations), avec échéances de recyclage.',
+    intro: 'Matrice salariés × titres suivis (habilitations, CACES, formations), avec échéances de recyclage, en consultation : les données sont tenues par Cursus (RH).',
     tips: [
       'Filtrez par service, par titre suivi ou sur les salariés « À traiter » ; la colonne des salariés reste visible en faisant défiler.',
-      'Une case ouvre la formation en cours, ses attestations et son historique.',
-      'L’ordre des colonnes se règle dans « Titres suivis » (service QHSE et direction).',
-      '« Session collective » enregistre une formation pour chaque participant en une fois ; « Recycler », dans « À prévoir », propose les salariés dont le titre est à renouveler.',
+      'Une case montre l’état du titre d’après Cursus (obtention, échéance, suspension) et permet de le rendre requis ou non pour le salarié.',
+      'Formations, habilitations, sessions et attestations se saisissent dans Cursus ; un nouveau titre se demande au service RH.',
+      '« Titres suivis » (service QHSE et direction) : suivre un titre du catalogue de Cursus, ne plus le suivre, régler l’ordre des colonnes.',
       'Sur téléphone, « Mon espace » (menu) rassemble vos actions, vos habilitations et vos signalements.',
     ],
   },

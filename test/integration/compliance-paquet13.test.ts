@@ -10,14 +10,12 @@ import { loadPreventionSignals } from '@/lib/data/prevention-signals';
 import { loadZoneRisks } from '@/lib/data/report-posts';
 import { loadReviewDossierPage } from '@/lib/data/review';
 import { loadRiskSignals, loadRisks } from '@/lib/data/risks';
-import { loadSkillMatrix } from '@/lib/data/skills';
 import { loadVisibleTodo } from '@/lib/data/todo';
 import { loadSafetyNotices, loadSafetyRegisterPrint, loadWatch, loadWatchSignals } from '@/lib/data/watch';
 import { signReportToken } from '@/lib/report-token';
 import { createReport } from '@/server/events';
 import { cancelPlanMeeting, recordPlanMeeting, setPlanMeetingPeriod } from '@/server/prevention';
 import { linkRiskMeasure, removeRiskMeasure, saveWorkUnit } from '@/server/risks';
-import { evaluateTrainingEffectiveness } from '@/server/skills';
 import { answerSafetyNotice, cancelSafetyNotice, recordControl, saveControl, saveRequirement, saveSafetyNotice } from '@/server/watch';
 
 // Paquet 13, première moitié (conformité et fonctions métier, migration 0020) : interventions longues (PRV-17), vue
@@ -60,7 +58,7 @@ describe('jeu de démonstration du paquet 13', () => {
     expect((await d.select().from(t.preventionPlanMeetings).where(eq(t.preventionPlanMeetings.planId, 'PP-2025-041'))).length).toBe(5);
     expect((await d.select().from(t.riskMeasureLinks)).length).toBe(5);
     expect((await d.select().from(t.mapZones).where(eq(t.mapZones.workUnitId, 'essais'))).length).toBe(2);
-    const [accueil] = await d.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'accueil'));
+    const [accueil] = await d.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'formation.accueil'));
     expect(accueil.awareness).toBe(true);
   });
 });
@@ -258,7 +256,7 @@ describe('DUE-19 : mesures de maîtrise liées aux contrôles, documents et habi
 
   it('lier et retirer : droits, site, doublon, motif et journal', async () => {
     const noise = await riskOf('montage', 'Bruit');
-    const [title] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'hauteur'));
+    const [title] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'habilitation.hauteur'));
     const link = (over: Record<string, string> = {}) => form({ riskId: String(noise.id), kind: 'title', targetId: title.id, ...over });
     for (const role of ['Salarié', 'Chef de projet'] as const) {
       actAs(role, 'site_a');
@@ -331,44 +329,6 @@ describe('DUE-20 : unités de travail reliées aux zones du plan de site', () =>
     const ignored = await createReport(form({ type: 'SD', description: 'Test.', jeton, riskId: String(other.id) }));
     const [ev2] = await (await db()).select().from(t.events).where(eq(t.events.id, ignored.id!));
     expect(ev2.riskId).toBeNull();
-  });
-});
-
-describe('HAB-13 : efficacité des formations (évaluation à froid) et sensibilisation', () => {
-  async function training(personId: string, titleId: string) {
-    const [q] = await (await db()).select().from(t.qualifications)
-      .where(and(eq(t.qualifications.personId, personId), eq(t.qualifications.titleId, titleId), isNull(t.qualifications.cancelledAt)));
-    return q;
-  }
-  const evalForm = (id: number, over: Record<string, string> = {}) => form({ id: String(id), effectiveness: 'non_efficace', effectivenessOn: '2026-10-09', effectivenessNote: 'Consignation non maîtrisée au poste.', ...over });
-
-  it('droits, site, constat obligatoire, date et journal de la formation', async () => {
-    const q = await training('tnguyen', 'hauteur');
-    for (const role of ['Salarié', 'Chef de projet'] as const) {
-      actAs(role, 'site_a');
-      expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: DENIED });
-    }
-    actAs('Chef de service', 'site_b');
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: OTHER_SITE });
-    actAs('Chef de service', 'site_a');
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectivenessNote: '' }))).toMatchObject({ fieldErrors: { effectivenessNote: expect.any(String) } });
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectivenessOn: '2000-01-01' }))).toMatchObject({ fieldErrors: { effectivenessOn: "L'évaluation suit l'obtention de la formation." } });
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ ok: true, id: String(q.id) });
-    expect(await lastLog('qualification', q.id)).toMatchObject({ action: 'evaluate', byId: 'sbenali', summary: expect.stringContaining('Non efficace') });
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id, { effectiveness: 'efficace', effectivenessNote: '' }))).toMatchObject({ ok: true });
-    expect(await lastLog('qualification', q.id)).toMatchObject({ details: expect.arrayContaining([{ field: 'Efficacité', from: 'Non efficace', to: 'Efficace' }]) });
-    // Le salarié lit l'évaluation de sa formation.
-    actAs('Salarié', 'site_a');
-    const cell = (await loadSkillMatrix()).rows[0].cells.find((c) => c.title.id === 'hauteur')!;
-    expect(cell.history.find((e) => e.id === q.id)!.effectiveness).toMatchObject({ key: 'efficace', on: '2026-10-09' });
-  });
-
-  it('formation annulée : évaluation refusée', async () => {
-    actAs('Animateur QHSE', 'site_a');
-    const q = await training('tnguyen', 'hauteur');
-    await (await db()).update(t.qualifications).set({ cancelledAt: new Date(), cancelledById: 'clefevre', cancelReason: 'Test' }).where(eq(t.qualifications.id, q.id));
-    expect(await evaluateTrainingEffectiveness({}, evalForm(q.id))).toEqual({ error: 'Formation annulée : elle ne peut plus être évaluée.' });
-    await (await db()).update(t.qualifications).set({ cancelledAt: null, cancelledById: null, cancelReason: null }).where(eq(t.qualifications.id, q.id));
   });
 });
 

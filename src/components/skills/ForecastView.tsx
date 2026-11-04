@@ -6,7 +6,7 @@ import type { ForecastItem, RenewalForecast } from '@/lib/rules/skills';
 const STATE_LABEL: Record<string, { label: string; tone: 'danger' | 'warn' | 'neutral' }> = {
   r: { label: 'Jamais suivi', tone: 'danger' },
   x: { label: 'Expiré', tone: 'danger' },
-  p: { label: 'Prérequis non valide', tone: 'danger' },
+  p: { label: 'Suspendu (Cursus)', tone: 'danger' },
   s: { label: 'Expire sous 60 j', tone: 'warn' },
   v: { label: 'Valide', tone: 'neutral' },
 };
@@ -23,7 +23,7 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
   if (!total) return <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucun recyclage ni formation à prévoir sur les 12 prochains mois.</p>;
   const count = (items: ForecastItem[], titleId: string) => items.filter((i) => i.titleId === titleId).length;
   const groups = [
-    ...(overdue.length ? [{ key: 'retard', label: 'À rattraper (expiré, jamais suivi ou prérequis manquant)', items: overdue }] : []),
+    ...(overdue.length ? [{ key: 'retard', label: 'À rattraper (expiré, jamais suivi ou suspendu)', items: overdue }] : []),
     ...months.filter((m) => m.items.length).map((m) => ({ key: m.month, label: monthLabel(m.month), items: m.items })),
   ];
   return (
@@ -33,7 +33,7 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
           <thead>
             <tr>
               <th>Titre</th>
-              <th style={{ textAlign: 'center' }} title="Expiré, jamais suivi ou prérequis manquant">À rattraper</th>
+              <th style={{ textAlign: 'center' }} title="Expiré, jamais suivi ou suspendu">À rattraper</th>
               {months.map((m) => <th key={m.month} style={{ textAlign: 'center' }} title={monthLabel(m.month)}>{fmtMonthAbbr(`${m.month}-01`)}{m.month.endsWith('-01') ? ` ${m.month.slice(2, 4)}` : ''}</th>)}
               <th style={{ textAlign: 'center' }}>Total</th>
             </tr>
@@ -69,7 +69,7 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
                     ? <Link href={`/habilitations?salarie=${encodeURIComponent(i.personId)}&titre=${encodeURIComponent(i.titleId)}`} className="vg-link" style={{ fontSize: 12.5, minWidth: 150, display: 'inline-block', minHeight: 24, lineHeight: '24px' }}>{i.person}</Link>
                     : <span style={{ minWidth: 150 }}>{i.person}</span>}
                   <span style={{ flex: 1, minWidth: 140 }}>{i.title}</span>
-                  <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{i.expiresOn ? `échéance ${fmtDate(i.expiresOn)}` : 'aucune formation enregistrée'}</span>
+                  <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{i.expiresOn ? `échéance ${fmtDate(i.expiresOn)}` : 'aucun titre détenu (Cursus)'}</span>
                   {st.tone !== 'neutral' && <ToneTag tone={st.tone}>{st.label}</ToneTag>}
                 </li>
               );

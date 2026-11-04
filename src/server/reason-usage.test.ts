@@ -28,7 +28,6 @@ const WITHOUT_MOTIF: Record<string, string> = {
   removeEventFile: 'retrait d’une pièce d’un événement non clos, journalisé (detach) — motif à décider (QUA-22, choix à valider)',
   removeActionFile: 'retrait d’une preuve avant « Vérifiée » (canRemoveProof, § 8 de la spécification des actions) : sans motif',
   removePlanAttachment: 'retrait d’une pièce d’un plan modifiable, journalisé (detach) — motif à décider (QUA-22, choix à valider)',
-  removeQualificationFile: 'retrait d’une attestation ajoutée par erreur, journalisé (detach) — motif à décider (QUA-22, choix à valider)',
   removeProgramAction: 'retrait d’une ligne du programme de prévention en préparation (avant son arrêt), journalisé',
 };
 

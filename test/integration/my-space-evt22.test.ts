@@ -24,9 +24,9 @@ describe('loadMySpace', () => {
     expect(space.actions.map((a) => a.id)).toContain('A-215');
     expect(space.actions.every((a) => a.href === `/actions?action=${a.id}`)).toBe(true);
     // Matrice : titres requis ou détenus de tnguyen (vvvnsxnv) ; hauteur expiré, SST bientôt.
-    expect(space.skills?.map((s) => s.titleId)).toEqual(['accueil', 'elec', 'r484', 'sst', 'hauteur', 'conduite']);
-    expect(space.skills?.find((s) => s.titleId === 'hauteur')?.state).toBe('x');
-    expect(space.renewals.map((r) => r.titleId)).toEqual(expect.arrayContaining(['hauteur', 'sst']));
+    expect(space.skills?.map((s) => s.titleId)).toEqual(['formation.accueil', 'habilitation.he', 'formation.caces484', 'formation.sst', 'habilitation.hauteur', 'habilitation.ac489']);
+    expect(space.skills?.find((s) => s.titleId === 'habilitation.hauteur')?.state).toBe('x');
+    expect(space.renewals.map((r) => r.titleId)).toEqual(expect.arrayContaining(['habilitation.hauteur', 'formation.sst']));
     expect(space.renewals.every((r) => r.personId === 'tnguyen')).toBe(true);
     expect(space.reports.total).toBe(6);
     const json = JSON.stringify(space);

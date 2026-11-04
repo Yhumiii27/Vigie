@@ -22,7 +22,8 @@ export type Lapse = 'missing' | 'expired' | 'before' | 'during';
 
 /** Manque du titre pour l'affectation, null s'il la couvre en entier (ou s'il n'est pas requis). */
 export function lapseFor(state: SkillState, expiresOn: string | null, a: Span, now: string): Lapse | null {
-  if (state === 'n') return null;
+  // Non requis, ou état inconnu (titres détenus de Cursus indisponibles) : aucune alerte.
+  if (state === 'n' || state === 'u') return null;
   if (state === 'r') return 'missing';
   if (!expiresOn || expiresOn >= a.endOn) return null;
   if (expiresOn < now) return 'expired';
@@ -48,42 +49,35 @@ export function heldState(expiresOn: string | null, now: string): SkillState {
  * - jamais avant aujourd'hui (titre déjà expiré, affectation en cours ou débutant aujourd'hui).
  */
 export function renewalDue(state: SkillState, expiresOn: string | null, upcoming: readonly Span[], now: string): string | null {
-  if (state === 'n') return null;
+  if (state === 'n' || state === 'u') return null;
   const next = upcoming.find((a) => lapseFor(state, expiresOn, a, now) !== null);
   if (state === 'v' && !next) return null;
   const due = next ? addDays(next.startOn, -1) : expiresOn ?? addDays(now, 30);
   return due < now ? now : due;
 }
 
-/**
- * Prérequis non satisfaits (HAB-10) : un titre qui porte des prérequis (titres actifs seulement) n'est valide que si la
- * personne détient au moins l'un d'eux en cours de validité à `now` (requis ou non pour elle) — par exemple une
- * autorisation de conduite avec un CACES valide de la catégorie (R. 4323-56). Renvoie les prérequis (tous) quand aucun
- * n'est valide, [] sinon ou sans prérequis.
- */
-export function missingPrerequisites(prerequisiteIds: readonly string[], held: ReadonlyMap<string, { expiresOn: string | null } | undefined>, activeIds: ReadonlySet<string>, now: string): string[] {
-  const active = prerequisiteIds.filter((id) => activeIds.has(id));
-  const valid = (id: string) => {
-    const q = held.get(id);
-    return !!q && (!q.expiresOn || q.expiresOn >= now);
-  };
-  return active.length && !active.some(valid) ? active : [];
-}
+/** Titre détenu d'après Cursus (cursus.pub_titres_detenus) : ce qui fixe l'état d'une case de la matrice. */
+export type HeldFacts = {
+  expiresOn: string | null;
+  usableUntil: string | null;
+  prerequisiteMissing: boolean;
+  measure: 'suspension' | 'retrait' | null;
+  measureOn: string | null;
+};
 
-/** Prérequis qui créeraient un cycle (A exige B qui exige A…) si `titleId` exigeait `prerequisiteIds`. */
-export function prerequisiteCycle(titleId: string, prerequisiteIds: readonly string[], graph: ReadonlyMap<string, readonly string[]>): string | null {
-  for (const start of prerequisiteIds) {
-    const seen = new Set<string>();
-    const stack = [start];
-    while (stack.length) {
-      const id = stack.pop()!;
-      if (id === titleId) return start;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      stack.push(...(graph.get(id) ?? []));
-    }
-  }
-  return null;
+/**
+ * État d'une case d'après le titre détenu publié par Cursus (D09, lecture conseillée par Cursus : utilisable si
+ * `utilisable_jusqu_au` >= aujourd'hui et `prerequis_manquant` faux) : non requis (n), jamais suivi (r), suspendu (p :
+ * prérequis manquant, ou suspension ou retrait de l'habilitation à cette date), sinon valide, à renouveler ou expiré d'après
+ * le dernier jour utilisable (échéance bornée par les prérequis et une mesure à venir). `expiresOn` : date affichée et
+ * comparée aux affectations (échéance du titre pour un titre suspendu).
+ */
+export function heldTitleState(required: boolean, held: HeldFacts | undefined, now: string): { state: SkillState; expiresOn: string | null } {
+  if (!held) return { state: required ? 'r' : 'n', expiresOn: null };
+  const usable = held.usableUntil ?? held.expiresOn;
+  if (!required) return { state: 'n', expiresOn: usable };
+  if (held.prerequisiteMissing || (held.measure && (!held.measureOn || held.measureOn <= now))) return { state: 'p', expiresOn: held.expiresOn };
+  return { state: heldState(usable, now), expiresOn: usable };
 }
 
 /** Une formation d'échéance `expiresOn` règle-t-elle le besoin (titre valide au-delà de 60 jours et couvrant les affectations) ? */
@@ -100,12 +94,12 @@ export type ForecastItem = {
   personId: string; person: string; titleId: string; title: string;
   /** Échéance du titre (dernier jour de validité) ; null : jamais suivi. */
   expiresOn: string | null;
-  /** État actuel du titre requis (r jamais suivi, x expiré, p prérequis non valide, s expire sous 60 j, v valide). */
+  /** État actuel du titre requis (r jamais suivi, x expiré, p suspendu, s expire sous 60 j, v valide). */
   state: SkillState;
 };
 export type ForecastMonth = { month: string; items: ForecastItem[] };
 export type RenewalForecast = {
-  /** À rattraper : titre requis jamais suivi, expiré, ou inopérant faute de prérequis valide. */
+  /** À rattraper : titre requis jamais suivi, expiré, ou suspendu (prérequis manquant, suspension ou retrait dans Cursus). */
   overdue: ForecastItem[];
   /** Les FORECAST_MONTHS mois à venir (« AAAA-MM »), mois en cours d'abord, avec les titres requis qui y expirent. */
   months: ForecastMonth[];
@@ -139,7 +133,7 @@ export function renewalForecast(
   const used = new Map<string, string>();
   for (const row of rows) {
     for (const c of row.cells) {
-      if (!c.required || c.state === 'n') continue;
+      if (!c.required || c.state === 'n' || c.state === 'u') continue;
       const item: ForecastItem = { personId: row.person.id, person: row.person.name, titleId: c.title.id, title: c.title.label, expiresOn: c.expiresOn, state: c.state };
       if (c.state === 'r' || c.state === 'x' || c.state === 'p' || (c.expiresOn && c.expiresOn < now)) {
         overdue.push(item);
@@ -197,7 +191,7 @@ export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
   if (f.self && f.personId !== f.selfId) return { notice: 'Fiche non accessible : seules vos habilitations sont affichées.' };
   if (!f.rowIds.has(f.personId)) {
     const left = f.departed.get(f.personId);
-    if (left) return { notice: `Salarié sorti de l'effectif le ${fmtDate(left)} : ses formations sont conservées en consultation seule (filtre « Sortis »).` };
+    if (left) return { notice: `Salarié sorti de l'effectif le ${fmtDate(left)} : sa fiche et ses titres sont conservés en consultation seule (filtre « Sortis »).` };
     if (f.otherIds.has(f.personId)) return { notice: "Cette personne n'est pas suivie dans la matrice des habilitations (personnel hors matrice)." };
     if (f.otherSite) return { notice: 'Salarié rattaché à un autre site que celui sélectionné : changez de site pour afficher sa ligne.' };
     return { notice: SKILL_LINK_MISSING };
@@ -207,7 +201,7 @@ export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
   return {
     select: { personId: f.personId },
     notice: archived
-      ? `Titre « ${archived} » archivé : il n'est plus suivi dans la matrice ; ses formations restent consultables dans « Titres suivis ». La ligne du salarié est mise en évidence.`
+      ? `Titre « ${archived} » qui n'est plus suivi : il ne figure plus dans la matrice (titres détenus consultables dans Cursus). La ligne du salarié est mise en évidence.`
       : 'Titre introuvable : la ligne du salarié est mise en évidence.',
   };
 }
@@ -216,60 +210,26 @@ export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
 
 /**
  * Indicateurs de compétences du dossier de revue (HAB-18, ISO 9001 §7.2 et §9.3.2 ; ISO 45001 §7.2), calculés, jamais
- * stockés : taux de conformité (titres requis valides, y compris expirant sous 60 jours, sur l'ensemble des titres requis),
- * formations suivies sur les 12 mois précédant `asOf` (non annulées, tous titres), dont évaluées à froid et jugées non ou
- * partiellement efficaces (HAB-13), recyclages en retard (titres requis expirés).
+ * stockés : taux de conformité (titres requis valides, y compris expirant sous 60 jours, sur l'ensemble des titres requis
+ * lus), titres obtenus sur les 12 mois précédant `asOf` (dernière formation de chaque case d'après Cursus, tous titres),
+ * recyclages en retard (titres requis expirés). L'efficacité des formations (évaluation à froid) est tenue par Cursus
+ * (non publiée) : plus comptée dans Vigie (décision CV-01 du 04/11/2026). Cases d'état inconnu (Cursus indisponible) exclues.
  */
 export function skillIndicators(
-  rows: readonly { cells: readonly { state: SkillState; history: readonly { obtainedOn: string; cancelled: unknown; effectiveness: { key: string } | null }[] }[] }[],
+  rows: readonly { cells: readonly { state: SkillState; obtainedOn: string | null }[] }[],
   asOf: string,
 ) {
-  const cells = rows.flatMap((r) => r.cells);
+  const cells = rows.flatMap((r) => r.cells).filter((c) => c.state !== 'u');
   const required = cells.filter((c) => c.state !== 'n');
   const compliant = required.filter((c) => c.state === 'v' || c.state === 's').length;
   const from = addMonths(asOf, -12);
-  const trainings = cells.flatMap((c) => c.history).filter((e) => !e.cancelled && e.obtainedOn > from && e.obtainedOn <= asOf);
-  const evaluated = trainings.filter((e) => e.effectiveness);
+  const trainings = cells.filter((c) => c.obtainedOn && c.obtainedOn > from && c.obtainedOn <= asOf);
   return {
     required: required.length,
     compliant,
     /** Taux de conformité en % (arrondi à l'entier), null sans titre requis. */
     rate: required.length ? Math.round((compliant / required.length) * 100) : null,
     trainings12: trainings.length,
-    evaluated: evaluated.length,
-    ineffective: evaluated.filter((e) => e.effectiveness!.key !== 'efficace').length,
     lateRenewals: required.filter((c) => c.state === 'x').length,
   };
-}
-
-// ─── Session de formation collective et recyclage groupé (HAB-06) ──────────
-
-/** Participants d'une session au plus (une formation par participant, en une transaction). */
-export const SESSION_MAX_PARTICIPANTS = 50;
-
-/** Contrôle de la liste des participants d'une session : au moins un, sans doublon, au plus SESSION_MAX_PARTICIPANTS. */
-export function sessionParticipantsError(ids: readonly string[]): string | null {
-  if (!ids.length) return 'Choisissez au moins un participant.';
-  if (new Set(ids).size !== ids.length) return 'Un participant est choisi deux fois.';
-  if (ids.length > SESSION_MAX_PARTICIPANTS) return `${SESSION_MAX_PARTICIPANTS} participants au plus par session.`;
-  return null;
-}
-
-/**
- * Recyclage groupé depuis la prévision (HAB-09) : salariés à recycler pour un titre, à rattraper d'abord puis par échéance,
- * sans doublon. `preselected` : à rattraper ou expirant dans les `months` mois (3 par défaut, le mois en cours compris) —
- * cochés d'office ; les échéances plus lointaines sont proposées, décochées (un recyclage trop tôt avance l'échéance).
- */
-export function groupRenewalCandidates(forecast: RenewalForecast, titleId: string, months = 3): { personId: string; person: string; expiresOn: string | null; preselected: boolean }[] {
-  const soon = new Set(forecast.months.slice(0, months).map((m) => m.month));
-  const seen = new Set<string>();
-  const out: { personId: string; person: string; expiresOn: string | null; preselected: boolean }[] = [];
-  const add = (i: ForecastItem, preselected: boolean) => {
-    if (i.titleId !== titleId || seen.has(i.personId)) return;
-    seen.add(i.personId);
-    out.push({ personId: i.personId, person: i.person, expiresOn: i.expiresOn, preselected });
-  };
-  forecast.overdue.forEach((i) => add(i, true));
-  forecast.months.forEach((m) => m.items.forEach((i) => add(i, soon.has(m.month))));
-  return out;
 }

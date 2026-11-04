@@ -14,7 +14,8 @@ import { loadEntityHistory } from '@/server/history';
 import { linkAction, unlinkAction } from '@/server/links';
 import { saveSiteRule } from '@/server/sites';
 import { cancelActivity, saveActivity, saveZone } from '@/server/sitemap';
-import { addQualificationFiles, removeQualificationFile, savePerson, setRequirement } from '@/server/skills';
+import { savePerson, setRequirement } from '@/server/skills';
+import { logChange } from '@/server/changelog';
 import { recordControl, saveControl } from '@/server/watch';
 
 // Paquet 3 — traçabilité et journal : chaque écriture journalisée dans sa transaction (TDB-09, EVT-12, PRV-12, HAB-03,
@@ -180,18 +181,12 @@ describe('habilitations : exigences, attestations et fiche salarié journalisée
     expect(await loadEntityHistory('skill_cell', key)).toEqual(NOT_FOUND);
   });
 
-  it('attestation jointe puis retirée : journal de la formation, dans la case', async () => {
+  it('journal des formations saisies avant la bascule vers Cursus : rattaché à la case (migration 0025)', async () => {
     actAs('Chef de service', 'site_a');
-    const [q] = await (await db()).select().from(t.qualifications)
-      .where(and(eq(t.qualifications.personId, 'tnguyen'), isNull(t.qualifications.cancelledAt)));
-    expect(await addQualificationFiles(formWith({ qualificationId: String(q.id) }, { files: [file('attestation-sst.pdf')] }))).toEqual({ count: 1 });
-    expect(await lastLog('qualification', q.id)).toMatchObject({ action: 'attach', details: [{ field: 'Fichier', from: null, to: 'attestation-sst.pdf' }] });
-    const [att] = await (await db()).select().from(t.attachments).where(and(eq(t.attachments.entityType, 'qualification'), eq(t.attachments.entityId, String(q.id)), eq(t.attachments.fileName, 'attestation-sst.pdf')));
-    expect(await removeQualificationFile(att.id)).toEqual({});
-    expect(await lastLog('qualification', q.id)).toMatchObject({ action: 'detach', details: [{ field: 'Fichier', from: 'attestation-sst.pdf', to: null }] });
-    expect(await (await db()).select().from(t.attachments).where(eq(t.attachments.id, att.id))).toEqual([]);
-    const history = await loadEntityHistory('skill_cell', `tnguyen|${q.titleId}`);
-    expect('entries' in history && history.entries.map((e) => e.action)).toEqual(expect.arrayContaining(['attach', 'detach']));
+    const key = 'tnguyen|formation.sst';
+    await logChange(await db(), { entityType: 'qualification', entityId: key, action: 'create', byId: 'clefevre', summary: 'Formation du 01/09/2026 enregistrée' });
+    const history = await loadEntityHistory('skill_cell', key);
+    expect('entries' in history && history.entries.map((e) => e.summary)).toEqual(expect.arrayContaining(['Formation du 01/09/2026 enregistrée']));
   });
 
   it('fiche salarié modifiée : champs changés au journal ; historique de la fiche', async () => {

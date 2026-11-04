@@ -26,6 +26,8 @@ export type MySpace = {
   /** Recyclages et formations à prévoir : à rattraper, puis échéances des 12 prochains mois. */
   renewals: ForecastItem[];
   reports: { total: number; open: number };
+  /** Titres détenus de Cursus indisponibles : message (états non calculés), sinon null. */
+  skillsMessage: string | null;
 };
 
 export async function loadMySpace(): Promise<MySpace> {
@@ -45,7 +47,7 @@ export async function loadMySpace(): Promise<MySpace> {
     .map(({ a, v }) => ({ id: a.id, label: v.label, statusLabel: v.statusLabel, tone: v.tone, dueOn: a.dueOn, late: v.late, href: actionHref(a.id) }));
   const row = skillData.rows.find((r) => r.person.id === session.user.id);
   const skills = row
-    ? row.cells.filter((c) => c.required || c.qualificationId !== null)
+    ? row.cells.filter((c) => c.required || c.cursusRef !== null)
       .map((c) => ({ titleId: c.title.id, title: c.title.label, state: c.state, expiresOn: c.expiresOn, required: c.required }))
     : null;
   const forecast = row ? renewalForecast([{ person: { id: row.person.id, name: row.person.name }, cells: row.cells }], now) : null;
@@ -56,5 +58,6 @@ export async function loadMySpace(): Promise<MySpace> {
     skills,
     renewals,
     reports: { total: reports.length, open: reports.filter((r) => r.step < STEP_CLOSED && !r.dismissed).length },
+    skillsMessage: skillData.source.message,
   };
 }

@@ -225,9 +225,9 @@ async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
     case 'control_record':
       return Number.isInteger(num) ? one(db.select({ siteId: t.controls.siteId }).from(t.controlRecords)
         .innerJoin(t.controls, eq(t.controls.id, t.controlRecords.controlId)).where(eq(t.controlRecords.id, num))) : null;
+    // Attestation jointe avant la bascule vers Cursus (migration 0025) : case « personne|titre », site du salarié.
     case 'qualification':
-      return Number.isInteger(num) ? one(db.select({ siteId: t.people.siteId }).from(t.qualifications)
-        .innerJoin(t.people, eq(t.people.id, t.qualifications.personId)).where(eq(t.qualifications.id, num))) : null;
+      return one(db.select({ siteId: t.people.siteId }).from(t.people).where(eq(t.people.id, row.entityId.split('|')[0])));
     // Paquet 6 : justificatif d'un risque (site de son unité de travail), pièce d'un enlèvement de déchets.
     case 'risk':
       return Number.isInteger(num) ? one(db.select({ siteId: t.workUnits.siteId }).from(t.risks)
@@ -307,10 +307,9 @@ async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boo
     case 'site_map':
       return canSee(role, 'prevention');
     case 'qualification': {
+      // Attestation reprise (case « personne|titre », consultation seule) : le Salarié ne lit que les siennes.
       if (!canSee(role, 'skills')) return false;
-      if (!isEmployee(role)) return true;
-      const [q] = await db.select({ personId: t.qualifications.personId }).from(t.qualifications).where(eq(t.qualifications.id, Number(row.entityId)));
-      return q?.personId === user.id;
+      return !isEmployee(role) || row.entityId.split('|')[0] === user.id;
     }
     case 'audit_plan_item':
     case 'certification':

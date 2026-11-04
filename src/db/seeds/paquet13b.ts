@@ -3,6 +3,7 @@ import * as t from '../schema';
 import { monthName } from '../../lib/dates';
 import { rel } from './dates';
 import type { SeedTx } from './types';
+import { AUDITOR_TITLE } from './skills';
 
 // Jeu de démonstration de la seconde moitié du paquet 13 (conformité et fonctions métier, migration 0021) :
 // - AUD-27 : titre « Auditeur interne » (qualification de [L. Moreau]) et auditeur interne des audits internes ;
@@ -13,7 +14,6 @@ import type { SeedTx } from './types';
 // - CNF-11 : demandes de changement (à évaluer, acceptée à mettre en œuvre, mise en œuvre).
 
 const at = (day: string, time = '10:00') => new Date(`${day}T${time}:00+02:00`);
-const AUDITOR_TITLE = 'auditeur-interne';
 const CLIENT_AUDIT = 'Audit client [Client A]';
 
 /**
@@ -29,12 +29,12 @@ export async function seedManagementSystem(tx: SeedTx) {
   ]);
   if (situations.n > 0 || changes.n > 0 || lead.n === 0) return;
 
-  // AUD-27 : titre qualifiant un auditeur interne, [L. Moreau] qualifié ; auditeur interne des audits internes.
+  // AUD-27 : titre qualifiant un auditeur interne suivi par Vigie ([L. Moreau] le détient d'après Cursus : substitut
+  // src/db/seeds/foreign.ts) ; auditeur interne des audits internes.
   const [title] = await tx.select({ id: t.trainingTitles.id }).from(t.trainingTitles).where(eq(t.trainingTitles.id, AUDITOR_TITLE));
   if (!title) {
     const [{ n: sort }] = await tx.select({ n: count() }).from(t.trainingTitles);
     await tx.insert(t.trainingTitles).values({ id: AUDITOR_TITLE, label: 'Auditeur interne (ISO 19011)', validityMonths: 0, sort, internalAuditor: true });
-    await tx.insert(t.qualifications).values({ personId: 'lmoreau', titleId: AUDITOR_TITLE, obtainedOn: rel(-900), provider: '[Organisme de formation]', recordedById: 'clefevre' });
   }
   await tx.update(t.auditPlanItems).set({ auditorId: 'lmoreau', auditor: null })
     .where(and(eq(t.auditPlanItems.auditor, '[L. Moreau]'), eq(t.auditPlanItems.track, 'Audits internes')));

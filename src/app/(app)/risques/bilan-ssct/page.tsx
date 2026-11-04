@@ -119,8 +119,9 @@ export default async function SsctReportPage({ searchParams }: PageProps<'/risqu
         <Meta rows={[
           ['Contrôles réglementaires réalisés', `${r.controls.performed} · avec réserves : ${r.controls.withReserves} · défavorables ou mise à l’arrêt : ${r.controls.blocking}`],
           ['Plans de prévention (interventions de l’année)', String(r.prevention.plans)],
-          ['Formations et habilitations obtenues', String(r.trainings.total)],
+          ['Formations et habilitations obtenues (d’après Cursus)', r.trainings.unavailable ? 'Données de Cursus indisponibles' : String(r.trainings.total)],
         ]} />
+        {r.trainings.unavailable && <p className="pp-muted" style={{ margin: 0, fontSize: 11.5 }}>{r.trainings.unavailable}</p>}
         {r.trainings.byTitle.length > 0 && (
           <p className="pp-text" style={{ fontSize: 12 }}>{r.trainings.byTitle.map((x) => `${x.title} : ${x.n}`).join(' · ')}</p>
         )}

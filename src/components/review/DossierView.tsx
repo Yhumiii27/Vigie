@@ -581,8 +581,8 @@ export function DossierView({ page, role, notice }: {
             <div className="rd-kpis">
               <Kpi label="Conformité des titres requis" value={d.skills.indicators.rate == null ? '—' : `${d.skills.indicators.rate} %`}
                 note={`${d.skills.indicators.compliant} sur ${d.skills.indicators.required} titres requis valides`} />
-              <Kpi label="Formations sur 12 mois" value={String(d.skills.indicators.trainings12)}
-                note={`${d.skills.indicators.evaluated} évaluée${d.skills.indicators.evaluated > 1 ? 's' : ''} à froid · ${d.skills.indicators.ineffective} non ou partiellement efficace${d.skills.indicators.ineffective > 1 ? 's' : ''}`} />
+              <Kpi label="Titres obtenus sur 12 mois" value={String(d.skills.indicators.trainings12)}
+                note="D'après Cursus (RH) ; efficacité des formations suivie dans Cursus" />
               <Kpi label="Recyclages en retard" value={String(d.skills.indicators.lateRenewals)} note="titres requis expirés" />
             </div>
           )}

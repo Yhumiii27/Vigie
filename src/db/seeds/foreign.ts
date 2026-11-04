@@ -1,5 +1,6 @@
 import type { ForeignSourceKey } from '../foreign';
 import { rel } from './dates';
+import { AUDITOR_TITLE, DRIVING_TITLE, MATRIX, PROVIDERS, TITLES, demoHeld } from './skills';
 
 // Contenu des substituts des vues des autres outils (lot 0 de M-02, src/db/foreign-substitutes.ts) : vues de même forme
 // que les publications de Matrix et de Keystone, créées seulement en PGlite ou en démonstration, quand le schéma de l'outil
@@ -59,6 +60,61 @@ export const DEMO_SUPPLIERS: Row[] = [
 /** Fournisseur Keystone rattaché d'office à une entreprise extérieure du jeu (contractors.supplier_id). */
 export const DEMO_CONTRACTOR_SUPPLIERS: Record<string, string> = { 'EE-001': '5f000000-0000-4000-8000-000000000001' };
 
+/**
+ * Catalogue de cursus.pub_titres (D08) : les titres suivis du jeu (identifiant = titre_id, libellé court = intitulé de Vigie),
+ * le titre qui n'est plus suivi, le titre d'auditeur interne et trois titres non suivis (choix de « Suivre un titre »).
+ * validite_mois NULL = sans échéance.
+ */
+export function demoCursusTitles(): Row[] {
+  const row = (id: string, libelle: string, court: string, months: number | null): Row => {
+    const [nature, ...code] = id.split('.');
+    return { titre_id: id, nature, code: code.join('.'), libelle, libelle_court: court, validite_mois: months };
+  };
+  return [
+    ...TITLES.map(([id, label, months]) => row(id, label, label, months || null)),
+    row('formation.pontier', 'Pontier (ancien référentiel)', 'Pontier (ancien référentiel)', 60),
+    row(AUDITOR_TITLE, 'Auditeur interne (ISO 19011)', 'Auditeur interne (ISO 19011)', null),
+    row('formation.elec', "Préparation à l'habilitation électrique", 'Préparation habilitation électrique', 36),
+    row('formation.aipr', 'Autorisation d’intervention à proximité des réseaux', 'AIPR', 60),
+    row('habilitation.ac484', 'Autorisation de conduite R484', 'Autorisation de conduite R484', 60),
+  ];
+}
+
+/**
+ * Titres détenus de cursus.pub_titres_detenus (D09), construits d'après la matrice du jeu (src/db/seeds/skills.ts) pour
+ * garder les mêmes états : valides, à renouveler (SST de [T. Nguyen], habilitation électrique de [M. Girard]), expiré
+ * (travail en hauteur de [T. Nguyen]), suspendu faute de prérequis (autorisation de conduite de [K. Bernard], délivrée
+ * sans CACES valide), jamais suivi (cases « r ») ; plus le titre d'auditeur interne de [L. Moreau] (AUD-27). Une ligne par
+ * salarié et titre (dernière formation, habilitation délivrée), comme la vue de Cursus. Formation : organisme ;
+ * habilitation : signataire (delivre_par). Prérequis et mesures : calculés par Cursus, posés ici à la main.
+ */
+export function demoHeldTitles(): Row[] {
+  let n = 0;
+  const row = (personId: string, titleId: string, obtainedOn: string, expiresOn: string | null, provider: string | null, missing = false): Row => {
+    const habilitation = titleId.startsWith('habilitation.');
+    n += 1;
+    return {
+      cursus_ref: `${habilitation ? 'hab_titre' : 'certification'}.${9000 + n}`, matricule: DEMO_MATRICULES[personId], titre_id: titleId,
+      nature: habilitation ? 'habilitation' : 'formation', code: titleId.split('.').slice(1).join('.'), obtenu_le: obtainedOn, expire_le: expiresOn,
+      // Prérequis manquant : jamais utilisable (veille de la délivrance), comme la vue de Cursus.
+      utilisable_jusqu_au: missing ? rel(-9) : expiresOn, prerequis_manquant: missing,
+      organisme: habilitation ? null : provider, delivre_par: habilitation ? provider : null, session_prevue_le: null, mesure: null, mesure_le: null,
+    };
+  };
+  const rows: Row[] = [];
+  MATRIX.forEach(([personId, codes], pi) => {
+    [...codes].forEach((code, ti) => {
+      if (code === 'n' || code === 'r') return;
+      const titleId = TITLES[ti][0];
+      const { obtainedOn, expiresOn } = demoHeld(pi, ti, personId);
+      rows.push(row(personId, titleId, obtainedOn, expiresOn, PROVIDERS[titleId] ?? null));
+    });
+  });
+  rows.push(row('kbernard', DRIVING_TITLE, rel(-8), rel(1818), 'Formation interne', true));
+  rows.push(row('lmoreau', AUDITOR_TITLE, rel(-900), null, '[Organisme de formation]'));
+  return rows;
+}
+
 /** Lignes de chaque substitut (même forme que la vue publiée). */
 export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
   return {
@@ -84,5 +140,7 @@ export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
       },
     ],
     suppliers: DEMO_SUPPLIERS,
+    titles: demoCursusTitles(),
+    heldTitles: demoHeldTitles(),
   };
 }

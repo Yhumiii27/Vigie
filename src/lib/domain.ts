@@ -445,15 +445,6 @@ export const MEASURE_LINK_KINDS: Record<MeasureLinkKind, { label: string; icon: 
 };
 export const MEASURE_LINK_KIND_KEYS = Object.keys(MEASURE_LINK_KINDS) as MeasureLinkKind[];
 
-/** Efficacité d'une formation évaluée à froid (HAB-13, ISO 45001 §7.2, qualifications.effectiveness, migration 0020). */
-export type TrainingEffectiveness = 'efficace' | 'partielle' | 'non_efficace';
-export const TRAINING_EFFECTIVENESS: Record<TrainingEffectiveness, { label: string; tone: Tone }> = {
-  efficace: { label: 'Efficace', tone: 'ok' },
-  partielle: { label: 'Partiellement efficace', tone: 'warn' },
-  non_efficace: { label: 'Non efficace', tone: 'danger' },
-};
-export const TRAINING_EFFECTIVENESS_KEYS = Object.keys(TRAINING_EFFECTIVENESS) as TrainingEffectiveness[];
-
 /** Contexte du système de management (CNF-05, ISO 9001 §4.1, §4.2, §6.1). */
 export type ContextKind = 'enjeu_interne' | 'enjeu_externe' | 'partie_interessee' | 'risque' | 'opportunite';
 export const CONTEXT_KINDS: Record<ContextKind, { label: string; plural: string; clause: string; tone: Tone; detail: string }> = {
@@ -478,14 +469,17 @@ export const REQUIREMENT_REVIEW_MAX = 60;
 /** Périodicité de réévaluation d'une exigence (VEI-18) : la sienne, sinon REQUIREMENT_REVIEW_MONTHS. */
 export const requirementReviewMonths = (r: { reviewMonths?: number | null }) => r.reviewMonths ?? REQUIREMENT_REVIEW_MONTHS;
 
-export type SkillState = 'v' | 's' | 'x' | 'r' | 'p' | 'n';
+export type SkillState = 'v' | 's' | 'x' | 'r' | 'p' | 'u' | 'n';
 export const SKILL_STATES: Record<SkillState, { label: string; icon: string; bg: string; fg: string; border: string }> = {
   v: { label: 'Valide', icon: 'ph-check', bg: TONE.ok.bg, fg: TONE.ok.fg, border: '1px solid transparent' },
   s: { label: 'Expire sous 60 jours', icon: 'ph-clock', bg: TONE.warn.bg, fg: TONE.warn.fg, border: '1px solid transparent' },
   x: { label: 'Expiré', icon: 'ph-x', bg: TONE.danger.bg, fg: TONE.danger.fg, border: '1px solid transparent' },
   r: { label: 'Requis, jamais suivi', icon: 'ph-warning', bg: 'transparent', fg: TONE.danger.dot, border: `1px dashed ${TONE.danger.dot}` },
-  // HAB-10 : titre détenu mais inopérant, un titre prérequis (CACES d'une autorisation de conduite, R. 4323-56) n'étant pas valide.
-  p: { label: 'Prérequis non valide', icon: 'ph-link-break', bg: TONE.danger.bg, fg: TONE.danger.fg, border: `1px dashed ${TONE.danger.dot}` },
+  // D09 (lot 2 de M-02) : titre détenu mais inutilisable d'après Cursus — prérequis manquant (prerequis_manquant, CACES d'une
+  // autorisation de conduite, R. 4323-56) ou habilitation suspendue ou retirée (mesure de cursus.pub_titres_detenus).
+  p: { label: 'Suspendu', icon: 'ph-link-break', bg: TONE.danger.bg, fg: TONE.danger.fg, border: `1px dashed ${TONE.danger.dot}` },
+  // Titre requis dont l'état ne peut pas être lu (titres détenus de Cursus indisponibles) : aucune alerte calculée.
+  u: { label: 'Donnée indisponible', icon: 'ph-question', bg: 'transparent', fg: 'var(--color-neutral-400)', border: '1px dashed var(--color-neutral-600)' },
   n: { label: 'Non requis', icon: 'ph-minus', bg: 'transparent', fg: 'var(--color-neutral-700)', border: '1px solid transparent' },
 };
 export const SKILL_SOON_DAYS = 60;

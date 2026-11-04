@@ -1,12 +1,14 @@
 # Convergence des données (décision M-02 de Matrix) appliquée à Vigie — note de cadrage
 
 État au 02/11/2026, mis à jour le 03/11/2026 : **lot 0 et lot 1 sans D01 développés** (D14, D02, D04, D16, contrôle D18 ;
-migration `0024_convergence_m02`, voir § 7). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
+migration `0024_convergence_m02`, voir § 7) ; le 04/11/2026 : **lot 2 développé** en consultation seule (D08, D09 ; décision
+CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
-lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix.
+lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
+03/11/2026 · 7 bis. Réalisation du 04/11/2026.
 
 ## 1. Objet, sources et état
 
@@ -71,15 +73,15 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | à faire, lot 1 |
 | D02 Projets | `keystone_projects` supprimée, `keystone_project_code` dans 4 tables ; 3,5 j | colonnes de code déjà posées (0008) mais jamais saisies ; 5ᵉ table (études) déjà en code ; la veille lit une date de livraison absente de `pub_projets` | lecture directe de `pub_projets` | **fait le 03/11** (veille : nombre saisi, CV-11 ouverte) |
 | D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
-| D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | à faire, lot 2 |
-| D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | à faire, lot 2, à arbitrer (CV-01, CV-02) |
+| D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | **fait le 04/11** (§ 7 bis ; C-01 et CV-03 par défaut) |
+| D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | **fait le 04/11** en consultation seule (CV-01 tranché, § 7 bis) |
 | D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | à faire, lot 4, à arbitrer (CV-05) |
 | D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | à faire, lot 5, à confirmer (CV-06) |
 | D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | à faire, lot 3 |
 | D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
 | D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | **fait le 03/11** (choix dans la fiche ; proposition par le nom à l'import des plans : non faite) |
 | D18 Journal | journal à créer ; 3 j | `change_log` et `pub_journal` livrés | — | **fait** ; `qui_matricule` rempli pour les personnes de démonstration (matricules posés le 03/11), à recontrôler après D01 |
-| D19 Paramètres | constante `SKILL_SOON_DAYS` gardée jusqu'à C-12 | constante à `src/lib/domain.ts:491` (le plan cite `:88`), hors de `src/lib/horizons.ts` | tout | attend C-12, lot 2 |
+| D19 Paramètres | constante `SKILL_SOON_DAYS` gardée jusqu'à C-12 | constante à `src/lib/domain.ts:491` (le plan cite `:88`), hors de `src/lib/horizons.ts` | tout | attend C-12 (constante gardée le 04/11, `pub_parametres` non lue) |
 | D06 / H3 Heures | API `GET …/heures-travaillees` de Cursus ; 2,5 j | route absente de Cursus ; Cursus propose une vue `pub_heures_travaillees` ; planificateur de Vigie en place ; M-03 provisoire | Cursus fait foi | lot parallèle, attend M-03 |
 | D15, D17, D20, D21, D23 | sans charge pour Vigie | D23 fait (`pub_controles`, 0014) ; D21 : usines des filiales = sites de Vigie (VG-05) | — | voir § 3.13 |
 
@@ -418,7 +420,7 @@ Hors charge : arbitrages métier (C-01, CV-01…), recette du service QHSE, trav
 |---|---|---|---|
 | 0 | socle § 2 | oui, entièrement | contrats des vues dans le registre de Matrix (lecture de l'écran « Publications ») |
 | 1 | D14, D01, D02, D04, D16 (+ contrôle D18) — caches et lectures seules | oui, sur substituts ; recette réelle par outil | Vigie sur le serveur (étape 2) ; D14 : sites créés dans Matrix ; D02, D04, D16 : Keystone basculé (étape 3) ; D01 : Cursus basculé (étape 4) ; CV-09, CV-10, CV-11 |
-| 2 | D08, D09, D19 | non avant CV-01, CV-02, C-01 | Cursus basculé ; trois titres créés dans Cursus ; C-02 ; C-12 pour D19 ; portée publiée si gardée |
+| 2 | D08, D09, D19 — **fait le 04/11/2026 (§ 7 bis), D19 attend C-12** | sur substituts (CV-01, CV-02 tranchés ; C-01 par défaut) | Cursus basculé ; trois titres créés dans Cursus ; C-02 ; C-12 pour D19 ; portée publiée si gardée |
 | 3 | D13 | oui (fiche NC, vues déjà là) | CV-07 (numéro), CV-08 (API ou fonction), connecteur Keystone par vues ; C-13 |
 | 4 | D10 | non avant CV-05, C-06 | Codex basculé ; import étendu seulement si des documents existent en production ; types et sous-types dans le registre de Codex |
 | 5 | D12 | non avant CV-06 | Codex (`submitChange` réel), Keystone (connecteur ECO par vues), publications du dépôt de Matrix appliquées après la migration de Vigie |
@@ -545,7 +547,7 @@ pas envoyée »), que le lot 2 applique.
 ## 6. Questions
 
 Questions du plan de Matrix encore ouvertes pour Vigie (§ 8 du plan) : **C-01** (sens de `elec`, `atex`, `hauteur`,
-`conduite`), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE),
+`conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE),
 **C-12** (horizon d'alerte 60 ou 90 jours), **C-13** (accueils sécurité de chantier). **C-03** et **C-08** ne portent
 plus que sur la démonstration (P-03) ; **C-04** (usage des applications Mac) fixe la durée de vie des substituts.
 
@@ -553,14 +555,14 @@ Questions nouvelles (CV : convergence de Vigie) :
 
 | N° | Question | Pour qui | Bloque |
 |---|---|---|---|
-| CV-01 | D09 : le plan garde une saisie de formation depuis Vigie par une API de Cursus (inexistante) ; le service QHSE a répondu le 15/10 « le RH gère, le QHSE consulte » (HAB-21). Vigie passe-t-il en **consultation seule** des formations ? | responsable produit, QHSE, RH | lot 2 |
-| CV-02 | Fonctions livrées après le 15/10 et contraires à D09 : sessions collectives et recyclage groupé (HAB-06, 31/10), évaluation à froid (HAB-13), indicateurs de formation de la revue (HAB-18). Les retirer (Cursus a sessions et évaluations, non publiées), ou garder l'évaluation à froid dans Vigie rattachée à `cursus_ref` ? Faut-il demander à Cursus de publier l'efficacité (sans avis nominatif) ? | QHSE, RH | lot 2 |
-| CV-03 | Attributs propres au QHSE sur un titre du catalogue de Cursus (titre de secourisme, sensibilisation, auditeur interne, libellé de portée) : gardés dans le cache de Vigie (proposé) ou portés par Cursus ? Les titres ne se créent plus que par les RH (HAB-12) : accepté ? | QHSE, RH | lot 2 |
-| CV-04 | Portée des titres (catégories CACES, indices électriques, HAB-10) : à tenir et publier par Cursus, ou abandonnée dans Vigie ? | QHSE, RH | lot 2 |
+| CV-01 | D09 : le plan garde une saisie de formation depuis Vigie par une API de Cursus (inexistante) ; le service QHSE a répondu le 15/10 « le RH gère, le QHSE consulte » (HAB-21). Vigie passe-t-il en **consultation seule** des formations ? **Tranché le 04/11/2026 : « consultation seule »** — Vigie lit `cursus.pub_titres` et `cursus.pub_titres_detenus`, sans API d'écriture ; saisie des formations, sessions (HAB-06), évaluation à froid (HAB-13), création des titres (HAB-12) et prérequis saisis (HAB-10) retirés (ce qui tranche aussi CV-02 : retrait). | responsable produit, QHSE, RH | lot 2 |
+| CV-02 | **Tranché avec CV-01 le 04/11/2026 : fonctions retirées de Vigie** (aucune publication de l'efficacité demandée à Cursus pour l'instant). Question d'origine — Fonctions livrées après le 15/10 et contraires à D09 : sessions collectives et recyclage groupé (HAB-06, 31/10), évaluation à froid (HAB-13), indicateurs de formation de la revue (HAB-18). Les retirer (Cursus a sessions et évaluations, non publiées), ou garder l'évaluation à froid dans Vigie rattachée à `cursus_ref` ? Faut-il demander à Cursus de publier l'efficacité (sans avis nominatif) ? | QHSE, RH | lot 2 |
+| CV-03 | **Appliqué par défaut le 04/11/2026, à confirmer : attributs gardés dans le cache de Vigie ; titres créés par les RH seulement.** Question d'origine — Attributs propres au QHSE sur un titre du catalogue de Cursus (titre de secourisme, sensibilisation, auditeur interne, libellé de portée) : gardés dans le cache de Vigie (proposé) ou portés par Cursus ? Les titres ne se créent plus que par les RH (HAB-12) : accepté ? | QHSE, RH | lot 2 |
+| CV-04 | **Appliqué par défaut le 04/11/2026, à confirmer : portée abandonnée dans Vigie** (non publiée par Cursus ; `scope_label` gardé sans usage). Question d'origine — Portée des titres (catégories CACES, indices électriques, HAB-10) : à tenir et publier par Cursus, ou abandonnée dans Vigie ? | QHSE, RH | lot 2 |
 | CV-05 | D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
 | CV-06 | D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
-| CV-07 | Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
-| CV-08 | Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
+| CV-07 | **Tranché le 04/11/2026 : numéro propre de Vigie `EV-…` partout (aucun `NCR-nnn`)**, attribué par Vigie (lot 3). Question d'origine — Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
+| CV-08 | **Tranché le 04/11/2026 : Keystone écrit par une fonction `vigie.pub_…` qui dépose la demande dans une table de réception traitée par Vigie** (réponse asynchrone, état lu dans une vue ; lot 3, non réalisé). Question d'origine — Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
 | CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache, ou réécrire les identifiants ? **Tranché le 03/11/2026 : réécrire les identifiants (identifiant de site = code de Matrix), pour ne rien doublonner.** | responsable produit | lot 1 |
 | CV-10 | **Tranché le 03/11/2026 : toutes les personnes viennent de Cursus ; intérimaires et extérieurs avec un matricule permanent `I` / `E`, pré-déclaration dans Cursus, liste du poste de garde dans Vigie (PRV-25).** Question d'origine — D01 : personnes sans matricule (comptes Entra hors Cursus, intérimaires, extérieurs) gardées comme fiches locales ? Lien compte Entra ↔ matricule : rattachement manuel par le QHSE, ou correspondance tenue par Matrix (`pub_correspondances`), ou e-mail publié par Cursus ? | responsable produit, RH | lot 1 |
 | CV-11 | Veille : « projets concernés » d'une exigence d'après une date de livraison que `pub_projets` ne publie pas. Lire `pub_jalons_projets` (PV de réception) ou `pub_avancement_projets` (fin prévue), ou ne garder que la surcharge manuelle ? | QHSE | lot 1 (D02) |
@@ -591,3 +593,24 @@ Questions nouvelles (CV : convergence de Vigie) :
 | D18 | contrôle : `pub_journal.qui_matricule` rempli pour les personnes de démonstration | recontrôle après D01 |
 
 Choix pris par défaut, à confirmer : codes des projets de démonstration gardés au format `K-AAAA-NNN` (Keystone n'impose pas de format) ; affectations disparues de la vue retirées du cache (cache sans historique propre) ; pas de contrainte de format sur `sites.id` en base (format contrôlé par le choix dans `pub_sites` et `siteCodeError`) ; rafraîchissement nocturne à partir de 2 h ; substituts aussi en PGlite hors démonstration (application Mac, tests).
+
+## 7 bis. Réalisation du 04/11/2026 (lot 2 : D08, D09 ; migration `0025_convergence_m02_titles`)
+
+Décision CV-01 du 04/11/2026 : **Vigie en consultation seule** des formations et habilitations ; Cursus fait foi pour le
+catalogue (D08) et les titres détenus (D09). Décisions du même jour pour la suite : CV-07 (numéro `EV-…` partout) et CV-08
+(fonction `vigie.pub_…` et table de réception traitée par Vigie), à réaliser au lot 3.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| D08 | `training_titles` = cache de `cursus.pub_titres` : identifiant = `titre_id` (démonstration recodée par la migration, clés `qualification_requirements.title_id`, `actions.qualification_title_id`, `risk_measure_links.title_id` en `ON UPDATE CASCADE`, journal, pièces jointes et états lus réécrits), intitulé ← `libelle_court`, validité ← `validite_mois` (nul → 0), `cursus_state` (`actif` \| `absent`) rafraîchis par `refreshSharedReferences` (source `titles`, journal `training_title` « sync ») ; « Suivre un titre » choisi dans le catalogue (`followTitle`, `loadTitleChoices`), « Ne plus suivre » / « Suivre à nouveau » motivés, ordre local (HAB-15) ; attributs propres gardés (CV-03, par défaut) ; `prerequisite_ids` supprimée | Cursus basculé ; trois titres à créer dans Cursus (§ 5.2) ; C-01 confirmé ; CV-03 confirmé |
+| D09 | `qualifications` et `training_sessions` supprimées (aucune vue `pub_` ni requête de référence ne les lisait) ; titres détenus lus dans `cursus.pub_titres_detenus` (`readHeldTitles`), joints par `people.matricule` (`src/lib/data/held-titles.ts`) ; état d'une case par `heldTitleState` (« Suspendu » = `prerequis_manquant` ou mesure de suspension / retrait, sinon `utilisable_jusqu_au`) ; matrice, alertes, échéances, prévision HAB-09, EVT-22, SEC-13, secouristes EVT-04, auditeurs AUD-27, bilan SSCT, HAB-18 (sans les formations évaluées), mesures « titre » DUE-19 relus sur la vue ; attestations et journal des formations rattachés à la case « personne\|titre » (lisibles, plus modifiables) ; retirés : saisie et attestations d'une formation, HAB-06, évaluation à froid HAB-13, portée (CV-04, par défaut) | Cursus basculé ; lien de lecture de `vigie_app` (§ 5.1) ; C-02 (aptitude médicale) ; CV-04 confirmé |
+| D19 | `SKILL_SOON_DAYS` (60 j) gardé, `cursus.pub_parametres` non lue | C-12 |
+| Source indisponible | cases requises « Donnée indisponible » (`u`), bandeau, aucune échéance par case, une échéance commune `habilitations-cursus-indisponible` au QHSE ; suivi d'un titre et secouriste de l'effectif refusés avec le message ; auditeur interne jamais signalé | recette sur le serveur commun |
+
+Choix pris par défaut, à confirmer (tableau « Convergence M-02, lot 2 » du § 19 de `docs/RESTE-A-FAIRE.md`) : rapprochement
+C-01 des titres de démonstration (`elec` → `habilitation.he`, `conduite` → `habilitation.ac489`, `hauteur` et `atex` →
+l'habilitation, CACES et SST → la formation, `accueil` → `formation.accueil`) ; attributs QHSE dans le cache (CV-03) ;
+portée abandonnée (CV-04) ; substitut de démonstration construit d'après la matrice du jeu (prérequis et mesures posés à la
+main, comme Cursus les calculerait) ; une ligne par salarié et titre (dernière formation) : l'historique des formations
+saisies avant la bascule reste au journal de la case.
+

@@ -202,7 +202,7 @@ describe('SEC-13 : données d’une personne (droit d’accès)', () => {
     const d = await loadPersonalData('sbenali');
     expect(d).not.toBeNull();
     expect(d!.identity).toMatchObject({ name: '[S. Benali]', site: expect.stringContaining('[Ville A]') });
-    expect(d!.qualifications.length).toBeGreaterThan(0);
+    expect(d!.qualifications!.length).toBeGreaterThan(0);
     expect(d!.actions.length).toBeGreaterThan(0);
     expect(d!.changes.total).toBeGreaterThan(0);
     expect(d!.situations.map((s) => s.label)).toContain("Incendie de l'atelier montage");

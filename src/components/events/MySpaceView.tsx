@@ -40,7 +40,7 @@ const Empty = ({ children }: { children: ReactNode }) => (
  * de la matrice, recyclages à prévoir) et mes signalements. Les seules données de la personne connectée (loadMySpace).
  */
 export function MySpaceView({ space, reportHref, myReportsHref }: { space: MySpace; reportHref: string; myReportsHref: string }) {
-  const { actions, skills, renewals, reports } = space;
+  const { actions, skills, renewals, reports, skillsMessage } = space;
   const late = actions.filter((a) => a.late).length;
   return (
     <div style={{ padding: '14px 18px 40px', display: 'grid', gap: 22, fontFamily: 'var(--font-body)', fontSize: 14 }}>
@@ -88,6 +88,7 @@ export function MySpaceView({ space, reportHref, myReportsHref }: { space: MySpa
           <Empty>Vous n&apos;êtes pas suivi dans la matrice des habilitations.</Empty>
         ) : (
           <>
+            {skillsMessage && <div className="card" role="status" style={{ padding: 12, fontSize: 13 }}>{skillsMessage}</div>}
             {renewals.length > 0 && (
               <div className="card" style={{ gap: 6, padding: 12 }} role="note" aria-label="Recyclages à prévoir">
                 <span style={{ fontSize: 13, color: 'var(--tone-warn-fg)' }}>À prévoir avec votre responsable</span>

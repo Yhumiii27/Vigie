@@ -15,7 +15,7 @@ import {
 import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
 import { config } from '@/lib/config';
-import { loadFirstAiders } from '@/lib/data/events';
+import { readFirstAiders } from '@/lib/data/events';
 import { ARCHIVED_POST_NOTICE, loadSiteZones, loadZoneRisks, resolveReportToken } from '@/lib/data/report-posts';
 import { fmtDate, fromParisLocal, parisDay, referenceNow, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -720,8 +720,9 @@ export async function registerBenignAccident(_prev: FormState, fd: FormData): Pr
     caregiverId = f.str('caregiverId', { required: true }) || null;
     qualification = 'sst';
     if (caregiverId && careGivenAt) {
-      const aiders = await loadFirstAiders(ev.siteId, parisDay(careGivenAt));
-      if (!aiders.some((a) => a.id === caregiverId)) f.fail('caregiverId', 'Sans titre de secouriste du travail (SST) valide à la date des soins sur ce site.');
+      const { aiders, message } = await readFirstAiders(ev.siteId, parisDay(careGivenAt));
+      if (message) f.fail('caregiverId', message);
+      else if (!aiders.some((a) => a.id === caregiverId)) f.fail('caregiverId', 'Sans titre de secouriste du travail (SST) valide à la date des soins sur ce site.');
     }
   } else if (kind === 'pro') {
     caregiverName = f.str('caregiverName', { required: true, max: 120 }) || null;
