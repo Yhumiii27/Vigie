@@ -21,6 +21,7 @@ import {
 import { canCreateAction } from '../action-rules';
 import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeople, loadSiteEvents, type Person } from '../queries';
 import { loadChangeLog } from './changelog';
+import { readPeopleHeldTitles } from './held-titles';
 import { loadQhseLeads } from './leads';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
@@ -78,41 +79,42 @@ export type FirstAider = { id: string; name: string; until: string | null };
 
 /**
  * Secouristes du travail d'un site à une date (sans contrôle de session : appelé par les server actions) : personnes du
- * site (ou sans site) présentes à l'effectif ce jour-là, dont la dernière formation non annulée d'un titre de secourisme
- * (training_titles.first_aid ; à défaut, titre « SST » ou « sauveteur secouriste » d'après son libellé) obtenue au plus tard
- * ce jour-là est encore valide. Triés par nom.
+ * site (ou sans site) présentes à l'effectif ce jour-là, dont le titre de secourisme (training_titles.first_aid ; à défaut,
+ * titre « SST » ou « sauveteur secouriste » d'après son libellé) détenu d'après Cursus (D09 : dernière formation, obtenue
+ * au plus tard ce jour-là) est utilisable ce jour-là. Triés par nom. Titres détenus de Cursus indisponibles : liste vide et
+ * message (saisie d'un secouriste de l'effectif refusée avec ce message).
  */
-export async function loadFirstAiders(siteId: string, onIso: string): Promise<FirstAider[]> {
+export async function readFirstAiders(siteId: string, onIso: string): Promise<{ aiders: FirstAider[]; message: string | null }> {
   const db = await getDb();
   const titles = await db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, firstAid: t.trainingTitles.firstAid })
     .from(t.trainingTitles).where(isNull(t.trainingTitles.archivedAt));
   const flagged = titles.filter((x) => x.firstAid);
-  const ids = (flagged.length ? flagged : titles.filter((x) => FIRST_AID_TITLE_FALLBACK.test(x.label))).map((x) => x.id);
-  if (!ids.length) return [];
-  const [people, quals] = await Promise.all([
+  const ids = new Set((flagged.length ? flagged : titles.filter((x) => FIRST_AID_TITLE_FALLBACK.test(x.label))).map((x) => x.id));
+  if (!ids.size) return { aiders: [], message: null };
+  const [people, held] = await Promise.all([
     db.select({ id: t.people.id, name: t.people.name, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people),
-    db.select({ id: t.qualifications.id, personId: t.qualifications.personId, titleId: t.qualifications.titleId, obtainedOn: t.qualifications.obtainedOn, expiresOn: t.qualifications.expiresOn })
-      .from(t.qualifications).where(and(inArray(t.qualifications.titleId, ids), isNull(t.qualifications.cancelledAt))),
+    readPeopleHeldTitles(db),
   ]);
-  // Dernière formation de chaque (personne, titre) obtenue au plus tard à la date.
-  const latest = new Map<string, (typeof quals)[number]>();
-  for (const q of quals) {
-    if (q.obtainedOn > onIso) continue;
-    const key = `${q.personId}|${q.titleId}`;
-    const cur = latest.get(key);
-    if (!cur || q.obtainedOn > cur.obtainedOn || (q.obtainedOn === cur.obtainedOn && q.id > cur.id)) latest.set(key, q);
-  }
+  if (!held.ok) return { aiders: [], message: held.message };
   const until = new Map<string, string | null>();
-  for (const q of latest.values()) {
-    if (q.expiresOn && q.expiresOn < onIso) continue;
+  for (const q of held.list) {
+    if (!ids.has(q.titleId) || !q.obtainedOn || q.obtainedOn > onIso || q.prerequisiteMissing) continue;
+    const end = q.usableUntil ?? q.expiresOn;
+    if (end && end < onIso) continue;
     const prev = until.get(q.personId);
     // Plusieurs titres valides : l'échéance la plus lointaine (sans échéance d'abord).
-    if (!until.has(q.personId) || (prev !== null && (q.expiresOn === null || q.expiresOn > prev!))) until.set(q.personId, q.expiresOn);
+    if (!until.has(q.personId) || (prev !== null && (end === null || end > prev!))) until.set(q.personId, end);
   }
-  return people
+  const aiders = people
     .filter((p) => until.has(p.id) && (!p.siteId || p.siteId === siteId) && !(p.leftOn && p.leftOn <= onIso))
     .map((p) => ({ id: p.id, name: p.name, until: until.get(p.id) ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  return { aiders, message: null };
+}
+
+/** Secouristes du travail d'un site à une date (liste vide si les titres détenus de Cursus sont indisponibles). */
+export async function loadFirstAiders(siteId: string, onIso: string): Promise<FirstAider[]> {
+  return (await readFirstAiders(siteId, onIso)).aiders;
 }
 
 /** Choix « Secouriste de l'effectif » : « Nom · SST valide jusqu'au … ». */

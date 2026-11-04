@@ -10,6 +10,7 @@ import { loadAllActions, loadControls, loadEvents, loadPeople, safetyRates, work
 import { ALL_SITES, getSession, inSite } from '../session';
 import { today } from '@/lib/today';
 import { statsInput } from './action-stats';
+import { loadHeldTitles } from './held-titles';
 
 // ─── Bilan annuel santé, sécurité et conditions de travail (CNF-03) ─────────
 // Rapport annuel présenté au CSE (art. L. 2312-27 du code du travail, 1°) : bilan de la situation générale de la santé, de
@@ -40,7 +41,7 @@ export async function loadSsctReport(rawYear: string | undefined) {
     db.select().from(t.duerpVersions),
     db.select().from(t.preventionPrograms),
     db.select({ id: t.preventionPlans.id, siteId: t.preventionPlans.siteId, startOn: t.preventionPlans.startOn, status: t.preventionPlans.status }).from(t.preventionPlans),
-    db.select({ personId: t.qualifications.personId, titleId: t.qualifications.titleId, obtainedOn: t.qualifications.obtainedOn }).from(t.qualifications).where(isNull(t.qualifications.cancelledAt)),
+    loadHeldTitles(),
     db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label }).from(t.trainingTitles),
     loadPeople(),
   ]);
@@ -106,7 +107,8 @@ export async function loadSsctReport(rawYear: string | undefined) {
       .from(t.controlRecords).where(and(inArray(t.controlRecords.controlId, controlIds), isNull(t.controlRecords.cancelledAt)))).filter((r) => inYear(r.performedOn))
     : [];
   const sitePeople = new Set([...people.values()].filter((p) => inSite(siteId, p.siteId)).map((p) => p.id));
-  const yearQuals = quals.filter((q) => sitePeople.has(q.personId) && inYear(q.obtainedOn));
+  // Titres détenus d'après Cursus (D09 : dernière formation de chaque salarié et titre) obtenus dans l'année.
+  const yearQuals = quals.list.filter((q) => sitePeople.has(q.personId) && inYear(q.obtainedOn));
   const titleLabel = new Map(titles.map((x) => [x.id, x.label]));
   const byTitle = [...yearQuals.reduce((m, q) => m.set(q.titleId, (m.get(q.titleId) ?? 0) + 1), new Map<string, number>())]
     .map(([id, n]) => ({ title: titleLabel.get(id) ?? id, n })).sort((a, b) => b.n - a.n || a.title.localeCompare(b.title, 'fr'));
@@ -121,7 +123,7 @@ export async function loadSsctReport(rawYear: string | undefined) {
       performed: records.length, withReserves: records.filter((r) => r.reserves).length,
       blocking: records.filter((r) => isBlockingControlResult(r.result)).length,
     },
-    trainings: { total: yearQuals.length, byTitle },
+    trainings: { total: yearQuals.length, byTitle, unavailable: quals.message },
     /** Fin de l'année ou date du jour pour l'année en cours. */
     periodEnd: year === currentYear ? now : `${year}-12-31`,
   };

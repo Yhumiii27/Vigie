@@ -58,7 +58,7 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
               <TextArea name="leftReason" rows={1} maxLength={REASON_MAX} required placeholder="Ex. fin de contrat" />
             </Field>
           </FormRow>
-          {note('ph-info', "Le salarié quitte la matrice, les échéances et les listes à cette date ; ses formations restent consultables (filtre « Sortis »).")}
+          {note('ph-info', "Le salarié quitte la matrice, les échéances et les listes à cette date ; ses titres restent consultables (filtre « Sortis »).")}
         </ActionForm>
       ) : (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={() => setOpen(true)}>

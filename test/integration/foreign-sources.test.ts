@@ -40,7 +40,7 @@ describe('contrats des vues lues et substituts de démonstration', () => {
 
   it('les substituts sont repérés et recréés ; un schéma qui n’en est pas un n’est jamais touché', async () => {
     await exec(`insert into keystone.${substituteTable('pub_fournisseurs')} (id, name, is_internal) values ('5f000000-0000-4000-8000-0000000000ff', 'Ajout de test', false)`);
-    expect(await reinstall()).toEqual(['matrix', 'keystone']);
+    expect(await reinstall()).toEqual(['matrix', 'keystone', 'cursus']);
     expect(await rows(sql`select 1 from keystone.pub_fournisseurs where name = 'Ajout de test'`)).toEqual([]);
     await exec('create schema autre_outil');
     await exec("comment on schema autre_outil is 'Schéma d''un autre outil'");

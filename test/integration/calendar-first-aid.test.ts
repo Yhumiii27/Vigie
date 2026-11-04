@@ -4,7 +4,7 @@ import { actAs, freshDemoDatabase, lastLog } from '../helpers';
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { saveSite } from '@/server/sites';
-import { saveTitle } from '@/server/skills';
+import { followTitle, saveTitle } from '@/server/skills';
 
 // Réglages du lot 2 saisis à l'écran : droit local d'Alsace-Moselle d'un site (jours fériés du délai de déclaration CPAM,
 // EVT-03) et titre de secourisme (donneurs de soins du registre des accidents bénins, EVT-04). Une case n'est lue que si le
@@ -55,23 +55,22 @@ describe('titre suivi : secourisme', () => {
   it('écran Habilitations fermé ou en consultation : refusé', async () => {
     for (const role of ['Chef de projet', 'Salarié'] as const) {
       actAs(role);
-      expect(await saveTitle({}, form({ id: 'sst', label: 'SST', validityMonths: '24', firstAidField: '1' })), role).toEqual({ error: DENIED });
+      expect(await saveTitle({}, form({ id: 'formation.sst', firstAidField: '1' })), role).toEqual({ error: DENIED });
     }
-    expect((await title('sst')).firstAid).toBe(true);
+    expect((await title('formation.sst')).firstAid).toBe(true);
   });
 
-  it('création cochée ; modification sans la case : inchangée ; décochée, journalisée', async () => {
+  it('suivi coché depuis le catalogue de Cursus ; modification sans la case : inchangée ; décochée, journalisée', async () => {
     actAs('Animateur QHSE');
-    const r = await saveTitle({}, form({ label: 'Secourisme en milieu isolé', validityMonths: '24', firstAidField: '1', firstAid: 'on' }));
-    expect(r).toMatchObject({ ok: true });
+    const r = await followTitle({}, form({ titleId: 'formation.aipr', firstAid: 'on' }));
+    expect(r).toEqual({ ok: true, id: 'formation.aipr' });
     expect(await title(r.id!)).toMatchObject({ firstAid: true });
-    expect(await lastLog('training_title', r.id!)).toMatchObject({ action: 'create', summary: 'Titre « Secourisme en milieu isolé » ajouté (secourisme)' });
+    expect(await lastLog('training_title', r.id!)).toMatchObject({ action: 'create', summary: 'Titre « AIPR » suivi (catalogue de Cursus : formation.aipr) — secourisme' });
 
-    expect(await saveTitle({}, form({ id: r.id!, label: 'Secourisme en milieu isolé', validityMonths: '36' }))).toEqual({ ok: true, id: r.id });
-    expect(await title(r.id!)).toMatchObject({ firstAid: true, validityMonths: 36 });
-    expect((await lastLog('training_title', r.id!))?.details).toEqual([{ field: 'Validité (mois)', from: '24', to: '36' }]);
+    expect(await saveTitle({}, form({ id: r.id! }))).toEqual({ ok: true, id: r.id });
+    expect(await title(r.id!)).toMatchObject({ firstAid: true });
 
-    expect(await saveTitle({}, form({ id: r.id!, label: 'Secourisme en milieu isolé', validityMonths: '36', firstAidField: '1' }))).toEqual({ ok: true, id: r.id });
+    expect(await saveTitle({}, form({ id: r.id!, firstAidField: '1' }))).toEqual({ ok: true, id: r.id });
     expect(await title(r.id!)).toMatchObject({ firstAid: false });
     expect(await lastLog('training_title', r.id!)).toMatchObject({
       action: 'update', byId: 'clefevre', details: [{ field: 'Secourisme', from: 'oui', to: 'non' }],

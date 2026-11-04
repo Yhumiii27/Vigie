@@ -3,8 +3,9 @@ import { eq, inArray, isNotNull } from 'drizzle-orm';
 import { schema as t, type Db } from '@/db';
 import { addDays } from '@/lib/dates';
 import { readAssignments, readProjects, readSuppliers } from '@/lib/foreign/keystone';
+import { readCursusTitles, readHeldTitles } from '@/lib/foreign/cursus';
 import { readMatrixSites } from '@/lib/foreign/matrix';
-import { MATRIX_SITE_STATES, SOURCES, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
+import { CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SOURCES, type CursusTitleState, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
 import type { SourceRead } from '@/lib/foreign/source';
 import { log } from '@/lib/log';
 import { today } from '@/lib/today';
@@ -20,6 +21,10 @@ import { logChange, type ChangeDetail } from './changelog';
 // - sites (D14, cache de matrix.pub_sites) : libellé et ordre repris de Matrix, état actif | ferme | absent ; un site absent
 //   de la vue n'est jamais supprimé ni archivé d'office (signal « fermé dans Matrix », loadSiteSignals) ; changement de
 //   libellé, d'ordre ou d'état journalisé sur le site (auteur vide : tâche du serveur).
+// - titres (D08, cache de cursus.pub_titres, lot 2) : intitulé (libelle_court) et validité (validite_mois, nul = sans
+//   échéance → 0) des titres suivis repris de Cursus, état actif | absent ; un titre absent du catalogue n'est jamais
+//   supprimé ni retiré du suivi d'office ; changement journalisé sur le titre (auteur vide). Les titres détenus
+//   (cursus.pub_titres_detenus, D09) sont lus directement : seulement contrôlés ici.
 // - affectations (D04, cache de keystone.pub_affectations) : affectations finies depuis moins d'un an des salariés dont le
 //   matricule est connu ; une affectation disparue de la vue est retirée du cache (cache sans historique propre).
 
@@ -74,6 +79,39 @@ async function refreshSites(db: Db): Promise<SyncResult> {
   return result;
 }
 
+/** Titres suivis par Vigie : intitulé, validité et état repris de cursus.pub_titres. */
+async function refreshTitles(db: Db): Promise<SyncResult> {
+  const read = await readCursusTitles(db);
+  if (!read.ok) return failed('titles', read);
+  const byId = new Map(read.rows.map((x) => [x.id, x]));
+  const result = { ...empty('titles'), read: read.rows.length };
+  await db.transaction(async (tx) => {
+    const local = await tx.select({ id: t.trainingTitles.id, label: t.trainingTitles.label, validityMonths: t.trainingTitles.validityMonths, cursusState: t.trainingTitles.cursusState }).from(t.trainingTitles);
+    for (const x of local) {
+      const src = byId.get(x.id);
+      const state: CursusTitleState = src ? 'actif' : 'absent';
+      const label = src?.shortLabel ?? x.label;
+      const validityMonths = src ? src.validityMonths ?? 0 : x.validityMonths;
+      if (label === x.label && validityMonths === x.validityMonths && state === x.cursusState) continue;
+      await tx.update(t.trainingTitles).set({ label, validityMonths, cursusState: state }).where(eq(t.trainingTitles.id, x.id));
+      result.updated++;
+      if (state === 'absent' && x.cursusState !== 'absent') result.removed++;
+      const months = (n: number) => (n ? `${n} mois` : 'sans échéance');
+      const details: ChangeDetail[] = [
+        ...(label !== x.label ? [{ field: 'Intitulé', from: x.label, to: label }] : []),
+        ...(validityMonths !== x.validityMonths ? [{ field: 'Validité', from: months(x.validityMonths), to: months(validityMonths) }] : []),
+        // Premier état lu « au catalogue » : sans intérêt pour l'historique.
+        ...(state !== x.cursusState && (x.cursusState || state !== 'actif')
+          ? [{ field: 'Catalogue de Cursus', from: x.cursusState ? CURSUS_TITLE_STATES[x.cursusState as CursusTitleState].label : null, to: CURSUS_TITLE_STATES[state].label }] : []),
+      ];
+      if (details.length) {
+        await logChange(tx, { byId: null, entityType: 'training_title', entityId: x.id, action: 'sync', summary: 'Titre mis à jour depuis Cursus (catalogue des titres)', details });
+      }
+    }
+  });
+  return result;
+}
+
 /** Affectations des salariés rattachés par matricule, depuis keystone.pub_affectations. */
 async function refreshAssignments(db: Db): Promise<SyncResult> {
   const read = await readAssignments(db, addDays(today(), -ASSIGNMENT_HISTORY_DAYS));
@@ -111,7 +149,7 @@ async function refreshAssignments(db: Db): Promise<SyncResult> {
 }
 
 /** Source lue directement : disponibilité et nombre de lignes. */
-async function checkDirect(source: 'projects' | 'suppliers', read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
+async function checkDirect(source: 'projects' | 'suppliers' | 'heldTitles', read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
   const r = await read;
   return r.ok ? { ...empty(source), read: r.rows.length } : failed(source, r);
 }
@@ -126,6 +164,8 @@ export async function refreshSharedReferences(db: Db): Promise<SyncResult[]> {
     ['assignments', () => refreshAssignments(db)],
     ['projects', () => checkDirect('projects', readProjects(db))],
     ['suppliers', () => checkDirect('suppliers', readSuppliers(db))],
+    ['titles', () => refreshTitles(db)],
+    ['heldTitles', () => checkDirect('heldTitles', readHeldTitles(db))],
   ];
   const results: SyncResult[] = [];
   for (const [source, run] of steps) {

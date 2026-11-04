@@ -1,9 +1,9 @@
 'use server';
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { ChangeEntry } from '@/lib/change-entry';
-import { loadChangeLog, loadChangeLogs } from '@/lib/data/changelog';
+import { loadChangeLog } from '@/lib/data/changelog';
 import { canApprove, canEdit, canSee, isEmployee, type Role, type ScreenKey } from '@/lib/domain';
 import { getSession, siteFilter } from '@/lib/session';
 
@@ -141,12 +141,11 @@ const RULES: Record<HistoryEntity, Rule> = {
       ]);
       return p && title ? p : undefined;
     },
+    // Exigence de la case, et journal des formations saisies dans Vigie avant la bascule vers Cursus (migration 0025 :
+    // rattaché à la case « personne|titre »).
     async load(id) {
-      const [personId, titleId] = id.split('|');
-      const quals = await (await db()).select({ id: t.qualifications.id }).from(t.qualifications)
-        .where(and(eq(t.qualifications.personId, personId), eq(t.qualifications.titleId, titleId)));
-      const [byQual, requirement] = await Promise.all([loadChangeLogs('qualification', quals.map((q) => q.id)), loadChangeLog('qualification_requirement', id)]);
-      return [...[...byQual.values()].flat(), ...requirement].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id);
+      const [byQual, requirement] = await Promise.all([loadChangeLog('qualification', id), loadChangeLog('qualification_requirement', id)]);
+      return [...byQual, ...requirement].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id);
     },
   },
   // Documents maîtrisés (DOC-04) : cycle de vie des versions et métadonnées, montré à la saisie seulement.

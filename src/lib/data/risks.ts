@@ -304,7 +304,7 @@ async function loadRiskMeasures(risks: { id: number; unitId: string }[], unitSit
       if (!ti) continue;
       // Salariés suivis du site de l'unité (unité commune : tous les sites du périmètre) pour qui le titre est requis.
       const cells = (skills?.rows ?? []).filter((row) => !siteId || row.person.siteId === siteId)
-        .flatMap((row) => row.cells.filter((c) => c.title.id === ti.id && c.state !== 'n'));
+        .flatMap((row) => row.cells.filter((c) => c.title.id === ti.id && c.state !== 'n' && c.state !== 'u'));
       const st = measureState({ kind: 'title', archived: !!ti.archivedAt, required: cells.length, lapsed: cells.filter((c) => c.state === 'x' || c.state === 'r' || c.state === 'p').length }, now);
       view = { id: l.id, kind: 'title', targetId: ti.id, label: ti.label, href: canSee(role, 'skills') ? '/habilitations' : null, valid: st.valid, state: st.label, tone: st.tone };
     }

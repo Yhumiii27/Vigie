@@ -145,10 +145,9 @@ describe('Salarié : ses données seulement', () => {
     expect(Object.keys(badges).every((k) => ['todo', 'events', 'actions', 'skills', 'docs'].includes(k))).toBe(true);
   });
 
-  it('pièces jointes : ses signalements, ses actions, ses formations', async () => {
-    const db = await getDb();
-    const [qMine] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, ME));
-    const [qOther] = await db.select({ id: t.qualifications.id }).from(t.qualifications).where(eq(t.qualifications.personId, 'mgirard'));
+  it('pièces jointes : ses signalements, ses actions, ses attestations reprises (case « personne|titre »)', async () => {
+    const qMine = { id: `${ME}|formation.sst` };
+    const qOther = { id: 'mgirard|formation.sst' };
     const row = (entityType: string, entityId: string | number, uploadedBy: string | null = null): AttachmentAccess => ({
       id: 'x', entityType, entityId: String(entityId), fileName: 'f.pdf', mimeType: 'application/pdf', size: 1, storagePath: 'x', uploadedBy, createdAt: new Date(), health: false,
     });

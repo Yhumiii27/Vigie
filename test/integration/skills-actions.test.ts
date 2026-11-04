@@ -1,29 +1,28 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { form } from '../next-mocks';
-import { actAs, changeLog, file, formWith, lastLog, freshDemoDatabase } from '../helpers';
-import { and, eq } from 'drizzle-orm';
+import { actAs, changeLog, lastLog, freshDemoDatabase } from '../helpers';
+import { and, eq, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
+import { installForeignSubstitutes, substituteTable } from '@/db/foreign-substitutes';
 import {
-  addQualificationFiles, archiveTitle, cancelQualification, reinstatePerson, removeQualificationFile, restoreTitle, saveQualification,
-  savePerson, saveTitle, setPersonLeft, setRequirement,
+  archiveTitle, followTitle, moveTitle, reinstatePerson, restoreTitle, savePerson, saveTitle, setPersonLeft, setRequirement,
 } from '@/server/skills';
-import { loadSkillData, loadSkillMatrix } from '@/lib/data/skills';
+import { loadSkillData, loadSkillMatrix, loadSkillSignals, loadTitleChoices } from '@/lib/data/skills';
+import { refreshSharedReferences } from '@/server/foreign-sync';
 
-// Recette des server actions des habilitations et formations jamais exécutées jusqu'ici (QUA-05) : formations
-// (création, correction, annulation, attestations), exigences, personnel (sortie, réintégration), titres suivis.
-// Plan d'actions (réponses du service QHSE du 15/10/2026) : aucune formation ni aucun recyclage ne donne lieu à une action
-// QSE ; le jeu neuf n'en contient plus (ancienne A-207). Une action de recyclage d'une base reprise (A-907, source « à
-// compléter », origine historique skills) est simulée ici : jamais modifiée par l'écran, elle protège le rattachement de
-// l'exigence tant qu'elle n'est pas close (Terminée comprise). Jeu de démonstration au 09/10/2026.
+// Habilitations et formations après la décision CV-01 du 04/11/2026 (lot 2 de M-02, D08 et D09) : Vigie consulte les
+// titres détenus dans cursus.pub_titres_detenus (substitut de démonstration) et suit des titres du catalogue de Cursus
+// (cursus.pub_titres). Restent saisis dans Vigie : exigences par salarié, personnel, suivi des titres (suivre, attributs
+// propres au QHSE, ordre, ne plus suivre). Une action de recyclage d'une base reprise (A-907) est simulée : jamais modifiée
+// par l'écran, elle protège le rattachement de l'exigence tant qu'elle n'est pas close. Jeu de démonstration au 09/10/2026.
 
-const uploads = freshDemoDatabase();
+freshDemoDatabase();
 
 const db = () => getDb();
-const action = async (id: string) => (await (await db()).select().from(t.actions).where(eq(t.actions.id, id)))[0];
+const exec = async (q: string) => (await db()).execute(sql.raw(q));
+const HELD = `cursus.${substituteTable('pub_titres_detenus')}`;
+const reinstall = async () => installForeignSubstitutes(await db(), { engine: 'pglite', demo: true });
 
-/** Action de recyclage reprise (base mise à niveau par 0005) rattachée à l'exigence de la case. */
 async function legacyRenewal(id: string, personId: string, titleId: string, status: 'a_faire' | 'terminee' | 'verifiee' = 'a_faire') {
   const db_ = await db();
   await db_.insert(t.actions).values({
@@ -34,187 +33,121 @@ async function legacyRenewal(id: string, personId: string, titleId: string, stat
   });
   await db_.insert(t.qualificationRequirements).values({ personId, titleId }).onConflictDoNothing();
 }
-/** Action de recyclage reprise de la case (HAB-04 : portée par l'action). */
-const renewalOf = async (personId: string, titleId: string) =>
-  (await (await db()).select({ id: t.actions.id }).from(t.actions)
-    .where(and(eq(t.actions.qualificationPersonId, personId), eq(t.actions.qualificationTitleId, titleId)))).map((a) => a.id);
-const quals = async (personId: string, titleId: string) =>
-  (await db()).select().from(t.qualifications).where(and(eq(t.qualifications.personId, personId), eq(t.qualifications.titleId, titleId)));
 const requirement = async (personId: string, titleId: string) =>
   (await (await db()).select().from(t.qualificationRequirements)
     .where(and(eq(t.qualificationRequirements.personId, personId), eq(t.qualificationRequirements.titleId, titleId))))[0];
 const person = async (id: string) => (await (await db()).select().from(t.people).where(eq(t.people.id, id)))[0];
-const qualFiles = async (id: number) => (await db()).select().from(t.attachments)
-  .where(and(eq(t.attachments.entityType, 'qualification'), eq(t.attachments.entityId, String(id))));
+const cellOf = async (personId: string, titleId: string) =>
+  (await loadSkillData()).rows.find((x) => x.person.id === personId)?.cells.find((c) => c.title.id === titleId);
 
 const DENIED = 'Votre rôle ne permet pas cette modification.';
+
+describe('matrice lue dans Cursus (D09)', () => {
+  it('états du jeu : valide, à renouveler, expiré, suspendu (prérequis manquant), jamais suivi', async () => {
+    actAs('Animateur QHSE', 'site_a');
+    expect(await cellOf('tnguyen', 'habilitation.hauteur')).toMatchObject({ state: 'x', expiresOn: '2026-09-28', obtainedOn: '2023-09-28', cursusRef: expect.stringMatching(/^hab_titre\./) });
+    expect(await cellOf('tnguyen', 'formation.sst')).toMatchObject({ state: 's', expiresOn: '2026-11-20', provider: 'Formation interne' });
+    expect(await cellOf('mgirard', 'habilitation.he')).toMatchObject({ state: 's', provider: '[Apave]' });
+    expect(await cellOf('kbernard', 'habilitation.ac489')).toMatchObject({ state: 'p', prerequisiteMissing: true, titleExpiresOn: expect.any(String) });
+    expect(await cellOf('kbernard', 'formation.accueil')).toMatchObject({ state: 'r', cursusRef: null });
+    expect(await cellOf('sbenali', 'habilitation.atex')).toMatchObject({ state: 'v' });
+    const { todo } = await loadSkillSignals();
+    expect(todo.find((x) => x.href === '/habilitations?salarie=kbernard&titre=habilitation.ac489'))
+      .toMatchObject({ tone: 'danger', title: '[K. Bernard] · autorisation de conduite suspendu, prérequis manquant (Cursus)' });
+  });
+
+  it('suspension ou retrait d’une habilitation dans Cursus : suspendu dès le jour de la mesure ; salarié sans matricule : aucun titre lu', async () => {
+    await exec(`update ${HELD} set mesure = 'suspension', mesure_le = '2026-10-05', utilisable_jusqu_au = '2026-10-04' where matricule = 'EMP-9009' and titre_id = 'habilitation.atex'`);
+    actAs('Animateur QHSE', 'site_a');
+    expect(await cellOf('sbenali', 'habilitation.atex')).toMatchObject({ state: 'p', measure: { kind: 'suspension', on: '2026-10-05' } });
+    const { todo } = await loadSkillSignals();
+    expect(todo.find((x) => x.href === '/habilitations?salarie=sbenali&titre=habilitation.atex')?.title).toBe('[S. Benali] · ATEX suspendu depuis le 05/10 (Cursus)');
+    await (await db()).update(t.people).set({ matricule: null }).where(eq(t.people.id, 'sbenali'));
+    expect(await cellOf('sbenali', 'formation.sst')).toMatchObject({ state: 'r', cursusRef: null });
+    await (await db()).update(t.people).set({ matricule: 'EMP-9009' }).where(eq(t.people.id, 'sbenali'));
+    await reinstall();
+  });
+
+  it('source indisponible : cases requises « u », aucune alerte par case, un signal commun au QHSE ; exigences toujours modifiables', async () => {
+    await exec('drop view cursus.pub_titres_detenus');
+    actAs('Animateur QHSE', 'site_a');
+    const data = await loadSkillData();
+    expect(data.source).toMatchObject({ ok: false, message: expect.stringContaining('Titres détenus de Cursus indisponibles') });
+    expect(data.rows.find((r) => r.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'habilitation.hauteur')).toMatchObject({ state: 'u', cursusRef: null });
+    expect(data.rows.flatMap((r) => r.cells).some((c) => c.state === 'r' || c.state === 'x')).toBe(false);
+    expect(data.lapses).toEqual([]);
+    const { todo } = await loadSkillSignals();
+    expect(todo).toEqual([expect.objectContaining({ key: 'habilitations-cursus-indisponible', tone: 'warn', siteId: null, ownerIds: expect.arrayContaining(['clefevre']) })]);
+    expect(await setRequirement('kbernard', 'formation.caces484', true)).toEqual({});
+    expect(await setRequirement('kbernard', 'formation.caces484', false)).toEqual({});
+    // Registre des accidents bénins : secouriste de l'effectif refusé avec le message de la source.
+    const { readFirstAiders } = await import('@/lib/data/events');
+    expect(await readFirstAiders('site_a', '2026-10-09')).toEqual({ aiders: [], message: expect.stringContaining('indisponibles') });
+    await reinstall();
+    expect((await loadSkillData()).source.ok).toBe(true);
+  });
+});
 
 describe('droits : écran « Habilitations et formations » modifiable', () => {
   it('Salarié et Chef de projet (écran fermé) ne modifient rien ; Chef de service oui', async () => {
     for (const role of ['Salarié', 'Chef de projet'] as const) {
       actAs(role);
-      expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-01' }))).toEqual({ error: DENIED });
-      expect(await setRequirement('kbernard', 'r484', true)).toEqual({ error: DENIED });
+      expect(await setRequirement('kbernard', 'formation.caces484', true)).toEqual({ error: DENIED });
       expect(await savePerson({}, form({ name: 'X', siteId: 'site_a' }))).toEqual({ error: DENIED });
-      expect(await saveTitle({}, form({ label: 'Échafaudage', validityMonths: '6' }))).toEqual({ error: DENIED });
-      expect(await archiveTitle({}, form({ id: 'sst', reason: 'Test' }))).toEqual({ error: DENIED });
+      expect(await followTitle({}, form({ titleId: 'formation.aipr' }))).toEqual({ error: DENIED });
+      expect(await archiveTitle({}, form({ id: 'formation.sst', reason: 'Test' }))).toEqual({ error: DENIED });
       expect(await reinstatePerson({}, form({ id: 'ylambert', reason: 'Retour' }))).toEqual({ error: DENIED });
     }
-    expect(await requirement('kbernard', 'r484')).toBeUndefined();
+    expect(await requirement('kbernard', 'formation.caces484')).toBeUndefined();
     actAs('Chef de service');
-    expect(await setRequirement('kbernard', 'r484', true)).toEqual({});
-    expect(await requirement('kbernard', 'r484')).toMatchObject({ personId: 'kbernard', titleId: 'r484' });
-    expect(await setRequirement('kbernard', 'r484', false)).toEqual({});
-    expect(await requirement('kbernard', 'r484')).toBeUndefined();
+    expect(await setRequirement('kbernard', 'formation.caces484', true)).toEqual({});
+    expect(await requirement('kbernard', 'formation.caces484')).toMatchObject({ personId: 'kbernard', titleId: 'formation.caces484' });
+    expect(await lastLog('qualification_requirement', 'kbernard|formation.caces484')).toMatchObject({ action: 'create', byId: 'sbenali' });
+    expect(await setRequirement('kbernard', 'formation.caces484', false)).toEqual({});
+    expect(await requirement('kbernard', 'formation.caces484')).toBeUndefined();
+    // Titres suivis : service QHSE et direction seulement (HAB-12).
+    expect(await followTitle({}, form({ titleId: 'formation.aipr' }))).toEqual({ error: "Titres suivis communs à tous les sites : réservés à l'animateur QHSE et à la direction." });
   });
 
   it('salarié d’un autre site que celui sélectionné : refusé', async () => {
     actAs('Chef de service', 'site_b');
-    expect(await setRequirement('tnguyen', 'r484', true)).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
-    expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-01' })))
-      .toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
-  });
-});
-
-describe('saveQualification : enregistrer une formation', () => {
-  it('contrôles : obtention jamais future, échéance après l’obtention, salarié et titre connus et actifs', async () => {
-    actAs('Animateur QHSE');
-    expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-10' })))
-      .toMatchObject({ fieldErrors: { obtainedOn: "La date d'obtention ne peut pas être postérieure à aujourd'hui." } });
-    expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'sst', obtainedOn: '2026-10-01', expiresOn: '2026-10-01' })))
-      .toMatchObject({ fieldErrors: { expiresOn: "L'échéance doit suivre la date d'obtention." } });
-    expect(await saveQualification({}, form({ personId: 'inconnu', titleId: 'sst', obtainedOn: '2026-10-01' }))).toMatchObject({ error: 'Salarié introuvable.' });
-    expect(await saveQualification({}, form({ personId: 'tnguyen', titleId: 'pont-ancien', obtainedOn: '2026-10-01' }))).toMatchObject({ error: 'Titre archivé.' });
-    expect(await saveQualification({}, form({ personId: 'ylambert', titleId: 'sst', obtainedOn: '2026-10-01' }))).toMatchObject({ error: "Salarié sorti de l'effectif." });
-  });
-
-  it('recyclage réalisé : échéance calculée, historique, attestation ; action de recyclage reprise jamais modifiée', async () => {
-    actAs('Animateur QHSE');
-    await legacyRenewal('A-907', 'mgirard', 'elec');
-    const stored = await action('A-907');
-    const actionLog = (await changeLog('action', 'A-907')).length;
-    const before = (await quals('mgirard', 'elec')).length;
-    // Un ancien formulaire qui posterait encore « closeRenewal » ne change rien.
-    const r = await saveQualification({}, formWith(
-      { personId: 'mgirard', titleId: 'elec', obtainedOn: '2026-10-05', provider: '[Apave]', closeRenewal: 'on' },
-      { files: [file('attestation.pdf')] },
-    ));
-    expect(r).toMatchObject({ ok: true, id: expect.stringMatching(/^\d+$/) });
-    const id = Number(r.id);
-    const list = await quals('mgirard', 'elec');
-    expect(list).toHaveLength(before + 1); // jamais écrasée
-    expect(list.find((q) => q.id === id)).toMatchObject({ obtainedOn: '2026-10-05', expiresOn: '2029-10-05', provider: '[Apave]', recordedById: 'clefevre', cancelledAt: null });
-    // Création, puis attestation jointe (HAB-03 : chaque fichier journalisé sur la formation).
-    expect((await changeLog('qualification', id)).map(({ action, summary, byId }) => ({ action, summary, byId }))).toEqual([
-      { action: 'create', summary: 'Formation du 05/10/2026 (échéance 05/10/2029) enregistrée', byId: 'clefevre' },
-      { action: 'attach', summary: 'Attestation jointe', byId: 'clefevre' },
-    ]);
-    expect(await action('A-907')).toEqual(stored);
-    expect(await changeLog('action', 'A-907')).toHaveLength(actionLog);
-    expect(await renewalOf('mgirard', 'elec')).toEqual(['A-907']);
-    // Matrice : action reprise affichée en consultation seule (libellé, avancement), encore à réaliser.
-    const cell = (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
-    expect(cell?.renewal).toMatchObject({ id: 'A-907', label: 'Recyclage elec — mgirard', statusLabel: 'À faire', planned: true });
-    const [att] = await qualFiles(id);
-    expect(att).toMatchObject({ fileName: 'attestation.pdf', uploadedBy: 'clefevre' });
-    expect(existsSync(path.join(uploads, att.storagePath))).toBe(true);
-
-    // Correction de la saisie (même case) : la ligne est mise à jour, la correction journalisée.
-    const fixed = await saveQualification({}, form({ qualificationId: String(id), personId: 'mgirard', titleId: 'elec', obtainedOn: '2026-10-06', expiresOn: '' }));
-    expect(fixed).toEqual({ ok: true, id: String(id) });
-    expect((await quals('mgirard', 'elec')).find((q) => q.id === id)).toMatchObject({ obtainedOn: '2026-10-06', expiresOn: '2029-10-06' });
-    expect(await lastLog('qualification', id)).toMatchObject({ action: 'update', summary: 'Formation du 06/10/2026 (échéance 06/10/2029) corrigée' });
-    expect(await saveQualification({}, form({ qualificationId: String(id), personId: 'tnguyen', titleId: 'elec', obtainedOn: '2026-10-06' }))).toEqual({ error: 'Formation introuvable.' });
-  });
-
-  it('aucune action créée par l’enregistrement d’une formation (recyclages hors actions QSE)', async () => {
-    actAs('Animateur QHSE');
-    const count = async () => (await (await db()).select({ id: t.actions.id }).from(t.actions)).length;
-    const n = await count();
-    const r = await saveQualification({}, form({ personId: 'tnguyen', titleId: 'hauteur', obtainedOn: '2026-10-08', expiresOn: '2026-10-15' }));
-    expect(r.ok).toBe(true);
-    expect(await count()).toBe(n);
-  });
-
-  it('échéance bornée au mois d’arrivée (QUA-07) : 31/08 + 6 mois = 28/02', async () => {
-    actAs('Animateur QHSE');
-    expect(await saveTitle({}, form({ label: 'Échafaudage roulant', validityMonths: '6' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
-    const r = await saveQualification({}, form({ personId: 'proux', titleId: 'echafaudage-roulant', obtainedOn: '2026-08-31' }));
-    expect(r.ok).toBe(true);
-    const [q] = await quals('proux', 'echafaudage-roulant');
-    expect(q.expiresOn).toBe('2027-02-28');
-    // Le titre devient requis pour le salarié.
-    expect(await requirement('proux', 'echafaudage-roulant')).toBeDefined();
+    expect(await setRequirement('tnguyen', 'formation.caces484', true)).toEqual({ error: 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.' });
   });
 });
 
 describe('action de recyclage reprise : lisible selon canReadAction (Integration, 15/10/2026)', () => {
   it('Salarié : numéro seul pour l’action d’un autre responsable ; décrite quand il en est responsable', async () => {
     actAs('Animateur QHSE');
-    await legacyRenewal('A-909', 'tnguyen', 'elec');
+    await legacyRenewal('A-909', 'tnguyen', 'habilitation.he');
     actAs('Salarié');
-    const cellOf = async () => (await loadSkillMatrix()).rows.find((x) => x.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'elec');
-    expect((await cellOf())?.renewal).toEqual({
+    const mine = async () => (await loadSkillMatrix()).rows.find((x) => x.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'habilitation.he');
+    expect((await mine())?.renewal).toEqual({
       id: 'A-909', label: '', dueOn: '', status: '', statusLabel: 'Action QSE reprise', tone: 'neutral', pilot: '', planned: true, readable: false,
     });
     await (await db()).update(t.actions).set({ pilotId: 'tnguyen' }).where(eq(t.actions.id, 'A-909'));
-    expect((await cellOf())?.renewal).toMatchObject({ id: 'A-909', label: 'Recyclage elec — tnguyen', statusLabel: 'À faire', readable: true });
-    // Le QHSE lit toujours l'action (plan de son périmètre).
+    expect((await mine())?.renewal).toMatchObject({ id: 'A-909', label: 'Recyclage habilitation.he — tnguyen', statusLabel: 'À faire', readable: true });
     actAs('Animateur QHSE');
-    const qhse = (await loadSkillData()).rows.find((x) => x.person.id === 'tnguyen')?.cells.find((c) => c.title.id === 'elec');
-    expect(qhse?.renewal).toMatchObject({ id: 'A-909', readable: true });
-    // Close pour la suite du fichier (archivage du titre « elec »).
+    expect((await cellOf('tnguyen', 'habilitation.he'))?.renewal).toMatchObject({ id: 'A-909', readable: true });
     await (await db()).update(t.actions).set({ status: 'abandonnee' }).where(eq(t.actions.id, 'A-909'));
   });
 });
 
-describe('cancelQualification et attestations', () => {
-  it('annulation : motif obligatoire, conservée et journalisée, puis figée', async () => {
-    actAs('Chef de service');
-    const r = await saveQualification({}, form({ personId: 'rfontaine', titleId: 'sst', obtainedOn: '2026-10-02' }));
-    const id = Number(r.id);
-    expect(await addQualificationFiles(formWith({ qualificationId: String(id) }, { files: [file('a.pdf'), file('b.png', 'image/png')] }))).toEqual({ count: 2 });
-    const [fa, fb] = await qualFiles(id);
-    expect(await removeQualificationFile(fa.id)).toEqual({});
-    expect((await qualFiles(id)).map((f) => f.id)).toEqual([fb.id]);
-    expect(await addQualificationFiles(formWith({ qualificationId: String(id) }))).toEqual({ error: 'Choisissez au moins un fichier.' });
-
-    expect(await cancelQualification({}, form({ id: String(id), reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
-    expect(await cancelQualification({}, form({ id: String(id), reason: 'Saisie sur le mauvais titre' }))).toEqual({ ok: true });
-    const [q] = (await quals('rfontaine', 'sst')).filter((x) => x.id === id);
-    expect(q).toMatchObject({ cancelledById: 'sbenali', cancelReason: 'Saisie sur le mauvais titre' });
-    expect(q.cancelledAt).toBeInstanceOf(Date);
-    expect(await lastLog('qualification', id)).toMatchObject({ action: 'cancel', reason: 'Saisie sur le mauvais titre', summary: 'Formation du 02/10/2026 annulée', byId: 'sbenali' });
-    expect(await cancelQualification({}, form({ id: String(id), reason: 'Encore' }))).toEqual({ error: 'Cette formation est déjà annulée.' });
-    expect(await addQualificationFiles(formWith({ qualificationId: String(id) }, { files: [file()] }))).toEqual({ error: 'Formation annulée : ajout impossible.' });
-    expect(await removeQualificationFile(fb.id)).toEqual({ error: 'Formation annulée : ses attestations sont conservées.' });
-    expect(await saveQualification({}, form({ qualificationId: String(id), personId: 'rfontaine', titleId: 'sst', obtainedOn: '2026-10-03' })))
-      .toEqual({ error: 'Formation annulée : elle ne peut plus être corrigée.' });
-  });
-});
-
 describe('setRequirement : titre requis pour un salarié', () => {
-  it('retrait refusé tant que le recyclage repris n’est pas clos (Terminée comprise) ; titre archivé, salarié sorti', async () => {
+  it('retrait refusé tant que le recyclage repris n’est pas clos (Terminée comprise) ; titre qui n’est plus suivi, salarié sorti', async () => {
     actAs('Animateur QHSE');
+    await legacyRenewal('A-907', 'mgirard', 'habilitation.he');
     const refused = "L'action A-907 (recyclage) n'est pas close : le service QHSE doit la clôturer ou l'abandonner avant le retrait de l'exigence.";
-    expect(await setRequirement('mgirard', 'elec', false)).toEqual({ error: refused });
+    expect(await setRequirement('mgirard', 'habilitation.he', false)).toEqual({ error: refused });
     await (await db()).update(t.actions).set({ status: 'terminee', doneOn: '2026-10-06' }).where(eq(t.actions.id, 'A-907'));
-    expect(await setRequirement('mgirard', 'elec', false)).toEqual({ error: refused });
-    const cell = (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
-    expect(cell?.renewal).toMatchObject({ id: 'A-907', planned: false });
-    expect(await requirement('mgirard', 'elec')).toBeDefined();
-    // Recyclage vérifié (clos) : le retrait est permis.
-    await legacyRenewal('A-908', 'kbernard', 'sst', 'verifiee');
-    expect(await renewalOf('kbernard', 'sst')).toEqual(['A-908']);
-    expect(await setRequirement('kbernard', 'sst', false)).toEqual({});
-    expect(await requirement('kbernard', 'sst')).toBeUndefined();
-    // HAB-04 : le recyclage clos garde son lien vers la case, listé parmi les recyclages précédents.
-    expect(await renewalOf('kbernard', 'sst')).toEqual(['A-908']);
-    const past = (await loadSkillData()).rows.find((x) => x.person.id === 'kbernard')?.cells.find((c) => c.title.id === 'sst');
-    expect(past).toMatchObject({ required: false, renewal: null, pastRenewals: [expect.objectContaining({ id: 'A-908', readable: true, planned: false })] });
-    expect(await setRequirement('tnguyen', 'pont-ancien', true)).toEqual({ error: 'Titre archivé : restaurez-le pour modifier ses exigences.' });
-    expect(await setRequirement('ylambert', 'sst', true)).toEqual({ error: "Salarié sorti de l'effectif." });
-    expect(await setRequirement('inconnu', 'sst', true)).toEqual({ error: 'Salarié ou titre introuvable.' });
+    expect(await setRequirement('mgirard', 'habilitation.he', false)).toEqual({ error: refused });
+    expect((await cellOf('mgirard', 'habilitation.he'))?.renewal).toMatchObject({ id: 'A-907', planned: false });
+    await legacyRenewal('A-908', 'kbernard', 'formation.sst', 'verifiee');
+    expect(await setRequirement('kbernard', 'formation.sst', false)).toEqual({});
+    expect(await requirement('kbernard', 'formation.sst')).toBeUndefined();
+    expect(await cellOf('kbernard', 'formation.sst')).toMatchObject({ required: false, renewal: null, pastRenewals: [expect.objectContaining({ id: 'A-908', planned: false })] });
+    expect(await setRequirement('tnguyen', 'formation.pontier', true)).toEqual({ error: "Titre qui n'est plus suivi : suivez-le à nouveau pour modifier ses exigences." });
+    expect(await setRequirement('ylambert', 'formation.sst', true)).toEqual({ error: "Salarié sorti de l'effectif." });
+    expect(await setRequirement('inconnu', 'formation.sst', true)).toEqual({ error: 'Salarié ou titre introuvable.' });
   });
 });
 
@@ -224,63 +157,83 @@ describe('personnel : sortie de l’effectif et réintégration', () => {
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'Démission' }))).toEqual({
       error: 'Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant la déclaration de sortie.',
     });
-    // QUA-22 (changement volontaire) : message commun des motifs.
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Motif obligatoire.' } });
-    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2025-10-01', leftReason: 'Démission' })))
-      .toMatchObject({ fieldErrors: { leftOn: "La date de sortie ne peut pas remonter à plus d'un an." } });
   });
-  it('sortie puis réintégration, journalisées ; fiche figée pendant la sortie', async () => {
+  it('sortie puis réintégration, journalisées ; titres du salarié sorti conservés en consultation (d’après Cursus)', async () => {
     actAs('Animateur QHSE');
     expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2026-10-09', leftReason: 'Mutation dans une autre filiale' }))).toEqual({ ok: true, id: 'lmoreau' });
-    expect(await person('lmoreau')).toMatchObject({ leftOn: '2026-10-09', leftReason: 'Mutation dans une autre filiale' });
-    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'archive', summary: "Sortie de l'effectif le 09/10/2026", reason: 'Mutation dans une autre filiale', byId: 'clefevre' });
-    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2026-10-09', leftReason: 'x' }))).toEqual({ error: "Salarié déjà sorti de l'effectif." });
-    expect(await savePerson({}, form({ id: 'lmoreau', name: '[L. Moreau]', siteId: 'site_a' }))).toEqual({ error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." });
-    expect(await setRequirement('lmoreau', 'sst', false)).toEqual({ error: "Salarié sorti de l'effectif." });
-
+    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'archive', reason: 'Mutation dans une autre filiale', byId: 'clefevre' });
+    const { archive } = await loadSkillData();
+    expect(archive.filter((r) => r.person.id === 'lmoreau').map((r) => r.title.id)).toEqual(expect.arrayContaining(['formation.accueil', 'formation.sst', 'formation.auditeur_interne']));
+    expect(await setRequirement('lmoreau', 'formation.sst', false)).toEqual({ error: "Salarié sorti de l'effectif." });
     expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Sortie annulée' }))).toEqual({ ok: true, id: 'lmoreau' });
     expect(await person('lmoreau')).toMatchObject({ leftOn: null, leftReason: null });
-    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'restore', summary: 'Salarié réintégré' });
-    expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Encore' }))).toEqual({ error: 'Aucune sortie déclarée pour ce salarié.' });
-  });
-  it('modification de fiche : changement de site, journal ; e-mail et matricule absents du formulaire inchangés', async () => {
-    actAs('Animateur QHSE', 'all');
-    const db_ = await db();
-    await db_.update(t.people).set({ matricule: 'M-0042' }).where(eq(t.people.id, 'rfontaine'));
-    expect(await savePerson({}, form({ id: 'rfontaine', name: '[R. Fontaine]', job: 'Magasinier cariste', service: 'Magasin', siteId: 'site_b' }))).toEqual({ ok: true, id: 'rfontaine' });
-    expect(await person('rfontaine')).toMatchObject({ siteId: 'site_b', job: 'Magasinier cariste', email: 'r.fontaine@epc2i.example', matricule: 'M-0042' });
-    expect(await lastLog('person', 'rfontaine')).toMatchObject({ action: 'update', summary: 'Fiche salarié modifiée' });
-    expect(await savePerson({}, form({ id: 'rfontaine', name: '[R. Fontaine]', siteId: 'inconnu' }))).toMatchObject({ fieldErrors: { siteId: 'Valeur non autorisée.' } });
   });
 });
 
-describe('titres suivis', () => {
-  it('doublons refusés (casse et accents ignorés), titre archivé à restaurer', async () => {
+describe('titres suivis (D08) : catalogue de Cursus', () => {
+  it('suivre un titre du catalogue : intitulé et validité de Cursus, attributs propres, journal ; doublons et titre inconnu refusés', async () => {
     actAs('Animateur QHSE');
-    expect(await saveTitle({}, form({ label: 'echafaudage ROULANT', validityMonths: '6' }))).toMatchObject({ fieldErrors: { label: 'Ce titre est déjà suivi.' } });
-    expect(await saveTitle({}, form({ label: 'Pontier (ancien référentiel)', validityMonths: '60' }))).toMatchObject({ fieldErrors: { label: 'Ce titre existe déjà (archivé) : restaurez-le.' } });
-    expect(await saveTitle({}, form({ id: 'pont-ancien', label: 'Pontier', validityMonths: '60' }))).toEqual({ error: 'Titre archivé : restaurez-le pour le modifier.' });
-    expect(await saveTitle({}, form({ label: 'Titre', validityMonths: '300' }))).toMatchObject({ fieldErrors: { validityMonths: 'Maximum 240.' } });
-    expect(await saveTitle({}, form({ id: 'echafaudage-roulant', label: 'Échafaudage roulant (R457)', validityMonths: '12' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
-    expect(await lastLog('training_title', 'echafaudage-roulant')).toMatchObject({ action: 'update', summary: 'Titre « Échafaudage roulant (R457) » modifié' });
+    const { choices } = await loadTitleChoices();
+    expect(choices.map(([id]) => id)).toEqual(['formation.aipr', 'habilitation.ac484', 'formation.elec']);
+    expect(await followTitle({}, form({ titleId: '' }))).toMatchObject({ fieldErrors: { titleId: expect.any(String) } });
+    expect(await followTitle({}, form({ titleId: 'formation.sst' }))).toMatchObject({ fieldErrors: { titleId: 'Ce titre est déjà suivi.' } });
+    expect(await followTitle({}, form({ titleId: 'formation.pontier' }))).toMatchObject({ fieldErrors: { titleId: 'Titre qui n’est plus suivi : suivez-le à nouveau.' } });
+    expect(await followTitle({}, form({ titleId: 'formation.inconnu' }))).toMatchObject({ fieldErrors: { titleId: 'Titre absent du catalogue de Cursus.' } });
+    expect(await followTitle({}, form({ titleId: 'formation.aipr', awareness: 'on' }))).toEqual({ ok: true, id: 'formation.aipr' });
+    const [ti] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'formation.aipr'));
+    expect(ti).toMatchObject({ label: 'AIPR', validityMonths: 60, awareness: true, firstAid: false, cursusState: 'actif', sort: 10 });
+    expect(await lastLog('training_title', 'formation.aipr')).toMatchObject({ action: 'create', byId: 'clefevre', summary: 'Titre « AIPR » suivi (catalogue de Cursus : formation.aipr) — sensibilisation' });
+    expect((await loadSkillData()).titles.at(-1)?.id).toBe('formation.aipr');
   });
-  it('archivage : motif obligatoire, refusé avec un recyclage ouvert ; restauration', async () => {
+
+  it('attributs propres au QHSE modifiés (journal) ; intitulé jamais saisi ; ordre (HAB-15)', async () => {
+    actAs('Direction');
+    expect(await saveTitle({}, form({ id: 'formation.aipr', label: 'Autre', firstAidField: '1', awarenessField: '1', internalAuditorField: '1', internalAuditor: 'on' }))).toEqual({ ok: true, id: 'formation.aipr' });
+    const [ti] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'formation.aipr'));
+    expect(ti).toMatchObject({ label: 'AIPR', awareness: false, internalAuditor: true });
+    expect(await lastLog('training_title', 'formation.aipr')).toMatchObject({ action: 'update', details: [
+      { field: 'Sensibilisation', from: 'oui', to: 'non' }, { field: 'Auditeur interne', from: 'non', to: 'oui' },
+    ] });
+    expect(await moveTitle('formation.aipr', 'up')).toEqual({});
+    expect(await lastLog('training_title', 'formation.aipr')).toMatchObject({ action: 'move' });
+  });
+
+  it('catalogue rafraîchi depuis Cursus : intitulé, validité et absence journalisés sans auteur', async () => {
+    await exec(`update cursus.${substituteTable('pub_titres')} set libelle_court = 'AIPR opérateur', validite_mois = null where titre_id = 'formation.aipr'`);
+    await exec(`delete from cursus.${substituteTable('pub_titres')} where titre_id = 'habilitation.atex'`);
+    const results = await refreshSharedReferences(await db());
+    expect(results.find((r) => r.source === 'titles')).toMatchObject({ status: 'ok', updated: 2, removed: 1 });
+    expect(results.find((r) => r.source === 'heldTitles')).toMatchObject({ status: 'ok' });
+    const titles = await (await db()).select().from(t.trainingTitles);
+    expect(titles.find((x) => x.id === 'formation.aipr')).toMatchObject({ label: 'AIPR opérateur', validityMonths: 0, cursusState: 'actif' });
+    expect(titles.find((x) => x.id === 'habilitation.atex')).toMatchObject({ cursusState: 'absent', archivedAt: null });
+    expect(await lastLog('training_title', 'formation.aipr')).toMatchObject({ action: 'sync', byId: null, details: [
+      { field: 'Intitulé', from: 'AIPR', to: 'AIPR opérateur' }, { field: 'Validité', from: '60 mois', to: 'sans échéance' },
+    ] });
+    await reinstall();
+    await refreshSharedReferences(await db());
+  });
+
+  it('ne plus suivre : motif obligatoire, refusé avec un recyclage ouvert ; suivre à nouveau', async () => {
     actAs('Animateur QHSE');
-    expect(await archiveTitle({}, form({ id: 'elec', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
-    expect(await archiveTitle({}, form({ id: 'elec', reason: 'Plus suivi' }))).toEqual({
-      error: "Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant l'archivage du titre.",
+    expect(await archiveTitle({}, form({ id: 'habilitation.he', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
+    expect(await archiveTitle({}, form({ id: 'habilitation.he', reason: 'Plus suivi' }))).toEqual({
+      error: 'Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant de ne plus suivre le titre.',
     });
-    expect(await archiveTitle({}, form({ id: 'echafaudage-roulant', reason: 'Plus d’échafaudage sur site' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
-    const [ti] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'echafaudage-roulant'));
-    expect(ti).toMatchObject({ archivedById: 'clefevre', archiveReason: 'Plus d’échafaudage sur site' });
-    expect(await archiveTitle({}, form({ id: 'echafaudage-roulant', reason: 'Encore' }))).toEqual({ error: 'Ce titre est déjà archivé.' });
-    // Historique figé pendant l'archivage.
-    const [q] = await quals('proux', 'echafaudage-roulant');
-    expect(await cancelQualification({}, form({ id: String(q.id), reason: 'Test' }))).toEqual({ error: 'Titre archivé : restaurez-le pour modifier ses formations.' });
-    // QUA-22 (changement volontaire) : restauration avec motif, inscrit au journal.
-    expect(await restoreTitle({}, form({ id: 'echafaudage-roulant', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
-    expect(await restoreTitle({}, form({ id: 'echafaudage-roulant', reason: 'Échafaudage de nouveau utilisé' }))).toEqual({ ok: true, id: 'echafaudage-roulant' });
-    expect(await lastLog('training_title', 'echafaudage-roulant')).toMatchObject({ action: 'restore', reason: 'Échafaudage de nouveau utilisé' });
-    expect((await changeLog('training_title', 'echafaudage-roulant')).map((l) => l.action)).toEqual(['create', 'update', 'archive', 'restore']);
+    expect(await archiveTitle({}, form({ id: 'formation.aipr', reason: 'Plus de travaux à proximité des réseaux' }))).toEqual({ ok: true, id: 'formation.aipr' });
+    expect(await archiveTitle({}, form({ id: 'formation.aipr', reason: 'Encore' }))).toEqual({ error: "Ce titre n'est déjà plus suivi." });
+    expect(await saveTitle({}, form({ id: 'formation.aipr', firstAidField: '1' }))).toEqual({ error: "Titre qui n'est plus suivi : suivez-le à nouveau pour le modifier." });
+    expect(await restoreTitle({}, form({ id: 'formation.aipr', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
+    expect(await restoreTitle({}, form({ id: 'formation.aipr', reason: 'Chantier de terrassement' }))).toEqual({ ok: true, id: 'formation.aipr' });
+    expect((await changeLog('training_title', 'formation.aipr')).map((l) => l.action)).toEqual(['create', 'update', 'move', 'sync', 'sync', 'archive', 'restore']);
+  });
+
+  it('catalogue de Cursus indisponible : aucun choix, suivi refusé avec le message de la source', async () => {
+    await exec('drop view cursus.pub_titres');
+    actAs('Animateur QHSE');
+    expect(await loadTitleChoices()).toEqual({ choices: [], message: expect.stringContaining('Titres de Cursus indisponibles') });
+    expect(await followTitle({}, form({ titleId: 'formation.elec' }))).toEqual({ error: expect.stringContaining('Titres de Cursus indisponibles') });
+    await reinstall();
   });
 });

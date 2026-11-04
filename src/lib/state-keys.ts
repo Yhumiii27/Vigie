@@ -36,8 +36,6 @@ export const SAFETY_NOTICE_KIND_CODES = ['observation', 'mise_en_demeure'] as co
 export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
 /** risk_measure_links.kind : MEASURE_LINK_KINDS (src/lib/domain.ts) — DUE-19. */
 export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
-/** qualifications.effectiveness : TRAINING_EFFECTIVENESS (src/lib/domain.ts) — HAB-13. */
-export const EFFECTIVENESS_CODES = ['efficace', 'partielle', 'non_efficace'] as const;
 /** documents.origin : DOC_ORIGINS (src/lib/rules/documents.ts) — DOC-17, migration 0021. */
 export const DOC_ORIGIN_CODES = ['interne', 'externe'] as const;
 /** change_requests.kind : CHANGE_KINDS (src/lib/domain.ts) — CNF-11. */
@@ -58,3 +56,5 @@ export const MATRIX_STATE_CODES = ['actif', 'ferme', 'absent'] as const;
 export const SYNC_STATUS_CODES = ['ok', 'error', 'unavailable'] as const;
 /** keystone_assignments.source : ASSIGNMENT_SOURCES (src/lib/foreign/labels.ts) — D04, contrat keystone.pub_affectations. */
 export const ASSIGNMENT_SOURCE_CODES = ['rotation', 'planning'] as const;
+/** training_titles.cursus_state : CURSUS_TITLE_STATES (src/lib/foreign/labels.ts) — D08, migration 0025. */
+export const CURSUS_TITLE_STATE_CODES = ['actif', 'absent'] as const;

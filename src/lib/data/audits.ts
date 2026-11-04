@@ -12,6 +12,7 @@ import {
   type PlanItemState, type ReviewStatus, type TodoItem, type Tone,
 } from '../domain';
 import { actionBrief, certificationStatus, loadAllActions, loadPeople, type ActionBrief } from '../queries';
+import { loadHeldTitles } from './held-titles';
 import { loadQhseLeads } from './leads';
 import type { Option } from './options';
 import { missingDetail } from '@/lib/url-state';
@@ -179,7 +180,7 @@ export function findingActionsBy<B extends ActionBrief | null>(rows: { findingId
  */
 const readAudits = cache(async () => {
   const db = await getDb();
-  const [certs, items, findings, findingLinks, actions, people, files, reviews, sites, auditorTitles, auditorQuals, hiddenTracks] = await Promise.all([
+  const [certs, items, findings, findingLinks, actions, people, files, reviews, sites, auditorTitles, held, hiddenTracks] = await Promise.all([
     db.select().from(t.certifications).orderBy(asc(t.certifications.sort), asc(t.certifications.id)),
     // Éléments annulés compris (AUD-03) : hors grille, échéances et constats, ils restent consultables (« Éléments annulés »).
     db.select().from(t.auditPlanItems).orderBy(asc(t.auditPlanItems.id)),
@@ -194,11 +195,9 @@ const readAudits = cache(async () => {
     // Revues portées par les échéances du programme (AUD-01).
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status, kind: t.reviews.kind }).from(t.reviews),
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
-    // AUD-27 : titres qui qualifient un auditeur interne, et formations (non annulées) de ces titres.
+    // AUD-27 : titres qui qualifient un auditeur interne, et titres détenus d'après Cursus (D09).
     db.select({ id: t.trainingTitles.id }).from(t.trainingTitles).where(and(eq(t.trainingTitles.internalAuditor, true), isNull(t.trainingTitles.archivedAt))),
-    db.select({ personId: t.qualifications.personId, titleId: t.qualifications.titleId, obtainedOn: t.qualifications.obtainedOn, expiresOn: t.qualifications.expiresOn })
-      .from(t.qualifications).innerJoin(t.trainingTitles, eq(t.trainingTitles.id, t.qualifications.titleId))
-      .where(and(eq(t.trainingTitles.internalAuditor, true), isNull(t.qualifications.cancelledAt))),
+    loadHeldTitles(),
     // AUD-24 : lignes masquées par année.
     db.select().from(t.auditPlanTracks),
   ]);
@@ -213,8 +212,12 @@ const readAudits = cache(async () => {
 
   const siteLabel = new Map(sites.map((x) => [x.id, x.label.split(' — ')[0]]));
   const siteName = (id: string | null) => (id ? siteLabel.get(id) ?? id : 'Tous les sites');
-  // AUD-27 : qualification d'auditeur interne valide à la date de l'audit (obtenue avant, non expirée) — signalée seulement.
-  const qualifiedAuditor = (personId: string, on: string) => auditorQuals.some((q) => q.personId === personId && q.obtainedOn <= on && (!q.expiresOn || q.expiresOn >= on));
+  // AUD-27 : qualification d'auditeur interne utilisable à la date de l'audit d'après Cursus (obtenue avant, ni expirée ni
+  // suspendue) — signalée seulement ; Cursus indisponible : rien n'est signalé (pas de fausse alerte).
+  const auditorTitleIds = new Set(auditorTitles.map((x) => x.id));
+  const auditorQuals = held.list.filter((q) => auditorTitleIds.has(q.titleId) && !q.prerequisiteMissing);
+  const qualifiedAuditor = (personId: string, on: string) => !held.ok || auditorQuals.some((q) => q.personId === personId && !!q.obtainedOn && q.obtainedOn <= on
+    && !((q.usableUntil ?? q.expiresOn) && (q.usableUntil ?? q.expiresOn)! < on));
   const trackOf = new Map(items.map((p) => [p.id, p.track]));
   const actionsOf = findingActionsBy(findingLinks, brief);
   const findingViews: FindingView[] = findings.map((f) => ({

@@ -176,6 +176,13 @@
       "when": 1793695428725,
       "tag": "0024_convergence_m02",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793796103146,
+      "tag": "0025_convergence_m02_titles",
+      "breakpoints": true
     }
   ]
 }

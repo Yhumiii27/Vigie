@@ -17,7 +17,7 @@ import { cancelPlan, closePlan, savePlan, signPlanEu } from '@/server/prevention
 import { cancelReview } from '@/server/review';
 import { archiveRisk, archiveWorkUnit, restoreRisk, restoreWorkUnit } from '@/server/risks';
 import { archiveSite } from '@/server/sites';
-import { archiveTitle, cancelQualification } from '@/server/skills';
+import { archiveTitle, restoreTitle } from '@/server/skills';
 import { archiveControl, archiveRequirement, cancelControlRecord } from '@/server/watch';
 
 /** Signature EU (PRV-07) : date, nom et qualité du signataire. */
@@ -78,8 +78,8 @@ describe('motif obligatoire des annulations, archivages et restaurations', () =>
     ['restoreRisk', () => restoreRisk({}, form({ id: '1', reason: '' }))],
     ['archiveWorkUnit', () => archiveWorkUnit({}, form({ id: 'UT-01', reason: '' }))],
     ['restoreWorkUnit', () => restoreWorkUnit({}, form({ id: 'UT-01', reason: '' }))],
-    ['cancelQualification', () => cancelQualification({}, form({ id: '1', reason: '' }))],
-    ['archiveTitle', () => archiveTitle({}, form({ id: 'sst', reason: '' }))],
+    ['archiveTitle', () => archiveTitle({}, form({ id: 'formation.sst', reason: '' }))],
+    ['restoreTitle', () => restoreTitle({}, form({ id: 'formation.pontier', reason: '' }))],
     ['archiveRequirement', () => archiveRequirement({}, form({ id: '1', reason: '' }))],
     ['archiveControl', () => archiveControl({}, form({ id: '1', reason: '' }))],
     ['cancelControlRecord', () => cancelControlRecord({}, form({ id: '1', reason: '' }))],

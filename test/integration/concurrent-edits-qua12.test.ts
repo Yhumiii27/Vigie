@@ -24,7 +24,7 @@ import { saveObjective } from '@/server/objectives';
 import { savePermit } from '@/server/permits';
 import { saveReviewDecision, saveReviewItem } from '@/server/review';
 import { saveWorkUnit } from '@/server/risks';
-import { savePerson, saveQualification, saveTitle } from '@/server/skills';
+import { savePerson, saveTitle } from '@/server/skills';
 import { STALE_EDIT, entityVersion } from '@/server/versions';
 import { saveControl, saveRequirement, saveSafetyNotice } from '@/server/watch';
 
@@ -77,7 +77,7 @@ describe('QUA-12 : veille réglementaire', () => {
 });
 
 describe('QUA-12 : habilitations', () => {
-  it('fiche salarié, titre suivi, correction d’une formation', async () => {
+  it('fiche salarié, titre suivi', async () => {
     actAs('Animateur QHSE', 'site_a');
     const db = await getDb();
     const matrix = await loadSkillMatrix();
@@ -87,20 +87,11 @@ describe('QUA-12 : habilitations', () => {
     await staleCase('person', p.id, savePerson, { id: p.id, name: p.name, job: p.job ?? '', service: p.service ?? '', siteId: p.siteId ?? '', inSkillsMatrix: 'on' },
       [{ job: 'Fonction A' }, { job: 'Fonction B' }]);
 
-    const title = matrix.titles.find((x) => !x.firstAid && !x.scopeLabel)!;
+    // Titre suivi : seuls les attributs propres au QHSE se modifient (CV-03, lot 2 de M-02) ; formations tenues par Cursus.
+    const title = matrix.titles.find((x) => !x.firstAid && !x.awareness)!;
     expect(matrix.versions.title[title.id]).toBe(await entityVersion(db, 'training_title', title.id));
-    await staleCase('training_title', title.id, saveTitle, {
-      id: title.id, validityMonths: String(title.validityMonths), firstAidField: '1', prerequisitesField: '1', awarenessField: '1', internalAuditorField: '1',
-      ...(title.prerequisiteIds ?? []).reduce((acc, x, i) => ({ ...acc, [`prerequisiteIds${i}`]: x }), {}),
-    }, [{ label: `${title.label} (A)` }, { label: `${title.label} (B)` }]);
-
-    const cell = matrix.rows.flatMap((x) => x.cells.map((cl) => ({ person: x.person, cell: cl })))
-      .find((x) => x.person.siteId === 'site_a' && x.cell.qualificationId && !x.cell.title.scopeLabel)!;
-    const q = cell.cell;
-    expect(matrix.versions.qualification[String(q.qualificationId)]).toBe(await entityVersion(db, 'qualification', q.qualificationId!));
-    await staleCase('qualification', q.qualificationId!, saveQualification, {
-      qualificationId: String(q.qualificationId), personId: cell.person.id, titleId: q.title.id, obtainedOn: q.obtainedOn!, expiresOn: q.expiresOn ?? '',
-    }, [{ provider: 'Organisme A' }, { provider: 'Organisme B' }]);
+    await staleCase('training_title', title.id, saveTitle, { id: title.id, firstAidField: '1', awarenessField: '1', internalAuditorField: '1' },
+      [{ awareness: 'on' }, { internalAuditor: 'on' }]);
   });
 });
 

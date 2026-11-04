@@ -150,16 +150,16 @@ describe('HAB-04 : un recyclage repris garde son lien vers l’habilitation', ()
     const d = await db();
     await d.insert(t.actions).values({
       id: 'A-930', openedOn: '2026-09-01', pilotId: 'clefevre', status: 'a_faire', dueOn: '2026-10-20', initialDueOn: '2026-10-20', source: null,
-      originRef: 'Habilitations · mgirard', detail: 'Recyclage elec — mgirard', siteId: 'site_a', legacyOrigin: 'skills',
-      qualificationPersonId: 'mgirard', qualificationTitleId: 'elec',
+      originRef: 'Habilitations · mgirard', detail: 'Recyclage habilitation.he — mgirard', siteId: 'site_a', legacyOrigin: 'skills',
+      qualificationPersonId: 'mgirard', qualificationTitleId: 'habilitation.he',
     });
-    await d.insert(t.qualificationRequirements).values({ personId: 'mgirard', titleId: 'elec' }).onConflictDoNothing();
+    await d.insert(t.qualificationRequirements).values({ personId: 'mgirard', titleId: 'habilitation.he' }).onConflictDoNothing();
     actAs('Animateur QHSE', 'site_a');
-    const cell = async () => (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'elec');
+    const cell = async () => (await loadSkillData()).rows.find((x) => x.person.id === 'mgirard')?.cells.find((c) => c.title.id === 'habilitation.he');
     expect((await cell())?.renewal).toMatchObject({ id: 'A-930', planned: true });
     expect(await abandonAction({}, form({ id: 'A-930', from: 'a_faire', reason: 'Recyclage géré par le service RH' }))).toMatchObject({ ok: true });
     expect((await d.select().from(t.actions).where(eq(t.actions.id, 'A-930')))[0]).toMatchObject({
-      status: 'abandonnee', qualificationPersonId: 'mgirard', qualificationTitleId: 'elec',
+      status: 'abandonnee', qualificationPersonId: 'mgirard', qualificationTitleId: 'habilitation.he',
     });
     expect(await cell()).toMatchObject({ renewal: null, pastRenewals: [expect.objectContaining({ id: 'A-930', readable: true, planned: false })] });
   });

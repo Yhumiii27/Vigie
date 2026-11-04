@@ -15,7 +15,7 @@ test('Salarié : mon espace — actions, habilitations, signalements', async ({ 
   await expect(actions.getByRole('link', { name: /A-215/ })).toBeVisible();
   const skills = page.getByRole('region', { name: /Mes habilitations/ });
   await expect(skills.getByText('Travail en hauteur').first()).toBeVisible();
-  // SST expirant le 20/11/2026 (le recyclage groupé du parcours des habilitations a pu renouveler son travail en hauteur).
+  // SST expirant le 20/11/2026 (d'après Cursus).
   await expect(skills.getByRole('note', { name: 'Recyclages à prévoir' })).toContainText('SST : recyclage avant le 20/11/2026');
   await expect(page.getByRole('region', { name: /Mes signalements/ }).getByRole('link', { name: 'Suivre mes signalements' })).toBeVisible();
   // Fiche de son action : son fil (commentaire) et sa preuve.

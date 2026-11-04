@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { francDaysDeadline, mpQuestionnaireDeadline } from '@/lib/rules/event-deadlines';
 import { HEALTH_FIELDS, HEALTH_FORM_FIELDS, MP_FIELDS, withoutHealth } from '@/lib/rules/events';
 import { bsdRefusalErrors, BSD_STATUS } from '@/lib/rules/environment';
-import { missingPrerequisites, prerequisiteCycle } from '@/lib/rules/skills';
+import { heldTitleState, type HeldFacts } from '@/lib/rules/skills';
 import { CONTROL_RESULTS, FINDING_GAP_KINDS, FINDING_KINDS, REPORT_TYPE_KEYS, canSeeEventType, contextNeedsTreatment, isBlockingControlResult } from './domain';
 import { elapsedMonths, objectiveValue, type ObjectiveData } from './objective-values';
 import { OBJECTIVE_INDICATORS, fmtObjectiveTarget, fmtObjectiveValue, objectiveStatus } from './objectives';
@@ -46,23 +46,23 @@ describe('EVT-09 : maladies professionnelles et accidents de trajet', () => {
   });
 });
 
-describe('HAB-10 : prérequis entre titres', () => {
-  const active = new Set(['r484', 'r489', 'conduite']);
-  it('au moins un prérequis valide suffit ; sinon tous sont signalés', () => {
-    expect(missingPrerequisites([], new Map(), active, NOW)).toEqual([]);
-    expect(missingPrerequisites(['r484', 'r489'], new Map([['r484', { expiresOn: '2027-01-01' }]]), active, NOW)).toEqual([]);
-    expect(missingPrerequisites(['r484', 'r489'], new Map([['r484', { expiresOn: '2026-10-01' }]]), active, NOW)).toEqual(['r484', 'r489']);
-    expect(missingPrerequisites(['r489'], new Map([['r489', { expiresOn: null }]]), active, NOW)).toEqual([]);
-    expect(missingPrerequisites(['r489'], new Map(), active, NOW)).toEqual(['r489']);
+describe('HAB-10 (lot 2 de M-02) : prérequis, suspension et retrait lus dans Cursus', () => {
+  const held = (extra: Partial<HeldFacts> = {}): HeldFacts => ({ expiresOn: '2028-01-01', usableUntil: '2028-01-01', prerequisiteMissing: false, measure: null, measureOn: null, ...extra });
+  it('prérequis manquant : suspendu (p), échéance du titre affichée', () => {
+    expect(heldTitleState(true, held({ prerequisiteMissing: true, usableUntil: '2026-01-01' }), NOW)).toEqual({ state: 'p', expiresOn: '2028-01-01' });
   });
-  it('un prérequis archivé est ignoré', () => {
-    expect(missingPrerequisites(['ancien'], new Map(), active, NOW)).toEqual([]);
+  it('suspension ou retrait : suspendu dès le jour de la mesure ; mesure à venir = dernier jour utilisable', () => {
+    expect(heldTitleState(true, held({ measure: 'retrait', measureOn: NOW, usableUntil: '2026-10-08' }), NOW).state).toBe('p');
+    expect(heldTitleState(true, held({ measure: 'suspension', measureOn: '2026-11-01', usableUntil: '2026-10-31' }), NOW)).toEqual({ state: 's', expiresOn: '2026-10-31' });
   });
-  it('cycle de prérequis détecté', () => {
-    const graph = new Map<string, string[]>([['conduite', ['r489']], ['r489', []]]);
-    expect(prerequisiteCycle('r489', ['conduite'], graph)).toBe('conduite');
-    expect(prerequisiteCycle('conduite', ['r489'], graph)).toBeNull();
-    expect(prerequisiteCycle('a', ['b'], new Map([['b', ['c']], ['c', ['a']]]))).toBe('b');
+  it('prérequis expirant avant le titre : échéance bornée (utilisable_jusqu_au)', () => {
+    expect(heldTitleState(true, held({ usableUntil: '2026-09-30' }), NOW)).toEqual({ state: 'x', expiresOn: '2026-09-30' });
+  });
+  it('non requis, jamais suivi, sans échéance', () => {
+    expect(heldTitleState(false, held(), NOW).state).toBe('n');
+    expect(heldTitleState(true, undefined, NOW)).toEqual({ state: 'r', expiresOn: null });
+    expect(heldTitleState(false, undefined, NOW)).toEqual({ state: 'n', expiresOn: null });
+    expect(heldTitleState(true, held({ expiresOn: null, usableUntil: null }), NOW)).toEqual({ state: 'v', expiresOn: null });
   });
 });
 

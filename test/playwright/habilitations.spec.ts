@@ -3,11 +3,12 @@ import { asRole } from './helpers';
 
 // Habilitations et formations (QUA-08) : matrice de l'encadrement, « Mes habilitations » du Salarié (sa seule ligne).
 
-test('Chef de service : matrice de tous les salariés, saisie proposée', async ({ page, context, baseURL }) => {
+test('Chef de service : matrice de tous les salariés, consultation (aucune saisie de formation)', async ({ page, context, baseURL }) => {
   await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/habilitations');
   await expect(page.getByRole('heading', { name: 'Habilitations et formations', level: 1 })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Enregistrer une formation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enregistrer une formation' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Ajouter un salarié' })).toBeVisible();
   const rows = page.getByRole('table').first().getByRole('row');
   expect(await rows.count()).toBeGreaterThan(3);
 });
@@ -23,30 +24,25 @@ test('Salarié : ses seules habilitations, en consultation', async ({ page, cont
   await expect(page.getByRole('table').first()).not.toContainText('[M. Girard]');
 });
 
-// HAB-06 : session de formation collective et recyclage groupé depuis la prévision (« À prévoir »).
-test('Animateur QHSE : session collective puis recyclage groupé depuis « À prévoir »', async ({ page, context, baseURL }) => {
+// Décision CV-01 du 04/11/2026 (lot 2 de M-02) : consultation des titres tenus par Cursus ; le QHSE suit un titre du
+// catalogue de Cursus, puis ne le suit plus (motif).
+test('Animateur QHSE : consultation ; suivre un titre du catalogue de Cursus, puis ne plus le suivre', async ({ page, context, baseURL }) => {
   await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/habilitations');
-  await page.getByRole('button', { name: 'Session collective' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Session de formation collective' });
-  await dialog.getByRole('combobox', { name: 'Titre' }).selectOption({ label: 'Accueil sécurité' });
-  // Case à cocher stylée (.vg-check) : clic sur son libellé.
-  for (const name of ['[K. Bernard]', '[P. Roux]']) {
-    await dialog.locator('label.vg-check', { hasText: name }).click();
-    await expect(dialog.getByRole('checkbox', { name: new RegExp(name.replace(/[[\].]/g, '\\$&')) })).toBeChecked();
-  }
-  await dialog.getByRole('button', { name: 'Enregistrer 2 formations' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole('status').filter({ hasText: 'Session enregistrée : 2 formations créées.' })).toBeVisible();
-
-  await page.goto('/habilitations?vue=a-prevoir');
-  await page.getByRole('button', { name: 'Recyclage groupé' }).click();
-  const renew = page.getByRole('dialog', { name: 'Recyclage groupé' });
-  await renew.getByRole('combobox', { name: 'Titre' }).selectOption({ label: 'Travail en hauteur' });
-  // [T. Nguyen] : Travail en hauteur expiré, coché d'office.
-  await expect(renew.getByRole('checkbox', { name: /\[T\. Nguyen\]/ })).toBeChecked();
-  const submit = renew.getByRole('button', { name: /^Enregistrer \d+ formations?$/ });
-  await submit.click();
-  await expect(renew).toHaveCount(0);
-  await expect(page.getByRole('status').filter({ hasText: /Session enregistrée : \d+ formations? créées?\./ })).toBeVisible();
+  await expect(page.getByText(/Données tenues par Cursus \(RH\)/).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Session collective' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Titres suivis' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Titres suivis' });
+  await dialog.getByRole('button', { name: 'Suivre un titre de Cursus' }).click();
+  const choice = dialog.getByRole('combobox', { name: 'Titre du catalogue de Cursus' });
+  // Premier titre du catalogue que Vigie ne suit pas encore (la liste diminue d'un passage à l'autre sur le même serveur).
+  const id = await choice.locator('option').nth(1).getAttribute('value');
+  await choice.selectOption({ value: id! });
+  await dialog.getByRole('button', { name: 'Suivre le titre' }).click();
+  await expect(dialog.getByText(id!, { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Ne plus suivre' }).last().click();
+  const reason = dialog.locator('form', { has: page.getByRole('textbox', { name: /Motif/ }) });
+  await reason.getByRole('textbox', { name: /Motif/ }).fill('Essai de parcours');
+  await reason.getByRole('button', { name: 'Ne plus suivre' }).click();
+  await expect(dialog.getByText(id!, { exact: true })).toHaveCount(0);
 });

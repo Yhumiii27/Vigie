@@ -1,0 +1,9 @@
+{
+  "source": "Cursus origin/main 3288e88, server/migrations-pg/0011_pub_titres_valides.sql (contrat D09 v1, avenant du lot 8 : mesure et mesure_le en fin de vue ; vue reprise par Matrix, registre des publications)",
+  "readers": ["vigie_app", "keystone_app", "matrix_app"],
+  "columns": [
+    ["cursus_ref", "text"], ["matricule", "text"], ["titre_id", "text"], ["nature", "text"], ["code", "text"], ["obtenu_le", "date"],
+    ["expire_le", "date"], ["utilisable_jusqu_au", "date"], ["prerequis_manquant", "boolean"], ["organisme", "text"], ["delivre_par", "text"],
+    ["session_prevue_le", "date"], ["mesure", "text"], ["mesure_le", "date"]
+  ]
+}

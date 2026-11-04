@@ -3,8 +3,9 @@ import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { injuryLabel } from '@/lib/rules/events';
 import { EVENT_TYPES, type EventType } from '../domain';
-import { fmtParisDateTime, parisDay } from '../dates';
+import { fmtParisDateTime } from '../dates';
 import { getSession, inPerimeter } from '../session';
+import { readPeopleHeldTitles } from './held-titles';
 
 // Droit d'accès d'un salarié à ses données (SEC-13, RGPD art. 15) : vue par personne de toutes les données que Vigie
 // conserve à son sujet, pour répondre à une demande d'accès. Lecture seule (aucun droit modifié ici : le rôle vient de
@@ -30,7 +31,7 @@ export async function loadPersonalData(personId: string) {
   const [sites, titles, quals, requirements, events, actions, comments, attachments, documents, planItems, reviews, changes, accesses, notifications, situations, changeRequests] = await Promise.all([
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
     db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label }).from(t.trainingTitles),
-    db.select().from(t.qualifications).where(eq(t.qualifications.personId, personId)).orderBy(desc(t.qualifications.obtainedOn)),
+    readPeopleHeldTitles(db),
     db.select().from(t.qualificationRequirements).where(eq(t.qualificationRequirements.personId, personId)),
     db.select({
       id: t.events.id, siteId: t.events.siteId, type: t.events.type, title: t.events.title, occurredOn: t.events.occurredOn,
@@ -68,10 +69,14 @@ export async function loadPersonalData(personId: string) {
       // Droits : rôle applicatif Entra relevé à la dernière connexion (jamais modifié depuis Vigie) et site de rattachement.
       lastRole: person.lastRole, lastLoginAt: fmt(person.lastLoginAt),
     },
-    qualifications: quals.map((q) => ({
-      id: q.id, title: titleLabel(q.titleId), obtainedOn: q.obtainedOn, expiresOn: q.expiresOn, provider: q.provider, scope: q.scope,
-      effectiveness: q.effectiveness, cancelled: q.cancelledAt ? { on: parisDay(q.cancelledAt), reason: q.cancelReason ?? '' } : null,
-    })),
+    // Titres détenus lus dans Cursus (D09, consultation seule ; Cursus fait foi) : null si la source est indisponible.
+    qualifications: quals.ok ? quals.list.filter((q) => q.personId === personId)
+      .sort((a, b) => (b.obtainedOn ?? '').localeCompare(a.obtainedOn ?? ''))
+      .map((q) => ({
+        id: q.ref, title: titleLabel(q.titleId), obtainedOn: q.obtainedOn, expiresOn: q.expiresOn, provider: q.provider ?? q.issuedBy,
+        suspended: q.prerequisiteMissing ? 'prérequis manquant' : q.measure ? (q.measure === 'retrait' ? 'retiré' : 'suspendu') : null,
+      })) : null,
+    qualificationsMessage: quals.message,
     requiredTitles: requirements.map((r) => titleLabel(r.titleId)),
     events: visibleEvents.map((e) => ({
       id: e.id, occurredOn: e.occurredOn, type: EVENT_TYPES[e.type as EventType]?.label ?? e.type, title: e.title, site: siteLabel(e.siteId),

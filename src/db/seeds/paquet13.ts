@@ -1,7 +1,11 @@
-import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull } from 'drizzle-orm';
 import * as t from '../schema';
 import { rel } from './dates';
 import type { SeedTx } from './types';
+import { DRIVING_TITLE } from './skills';
+
+const ELEC_TITLE = 'habilitation.he';
+const WELCOME_TITLE = 'formation.accueil';
 
 // Jeu de démonstration de la première moitié du paquet 13 (conformité et fonctions métier, migration 0020) :
 // - VEI-18 : périodicité de réévaluation propre (directive ATEX, 24 mois) ;
@@ -102,24 +106,14 @@ export async function seedComplianceFunctions(tx: SeedTx) {
   const electric = risk('montage', 'Électricité');
   const measures: (typeof t.riskMeasureLinks.$inferInsert)[] = [
     ...(handling && pont ? [{ riskId: handling, kind: 'control', controlId: pont.id }] : []),
-    ...(handling && titles.has('conduite') ? [{ riskId: handling, kind: 'title', titleId: 'conduite' }] : []),
+    ...(handling && titles.has(DRIVING_TITLE) ? [{ riskId: handling, kind: 'title', titleId: DRIVING_TITLE }] : []),
     ...(electric && elecControl ? [{ riskId: electric, kind: 'control', controlId: elecControl.id }] : []),
-    ...(electric && titles.has('elec') ? [{ riskId: electric, kind: 'title', titleId: 'elec' }] : []),
+    ...(electric && titles.has(ELEC_TITLE) ? [{ riskId: electric, kind: 'title', titleId: ELEC_TITLE }] : []),
     ...(electric && doc ? [{ riskId: electric, kind: 'document', documentId: doc.id }] : []),
   ];
   if (measures.length) await tx.insert(t.riskMeasureLinks).values(measures.map((x) => ({ ...x, createdById: 'clefevre', createdAt: at(rel(-30)) })));
 
-  // HAB-13 : accueil sécurité = sensibilisation ; formations récentes évaluées à froid.
-  if (titles.has('accueil')) await tx.update(t.trainingTitles).set({ awareness: true }).where(eq(t.trainingTitles.id, 'accueil'));
-  const recent = await tx.select({ id: t.qualifications.id, obtainedOn: t.qualifications.obtainedOn, titleId: t.qualifications.titleId }).from(t.qualifications)
-    .where(and(isNull(t.qualifications.cancelledAt), inArray(t.qualifications.titleId, ['elec', 'hauteur', 'sst'])))
-    .orderBy(desc(t.qualifications.obtainedOn), desc(t.qualifications.id));
-  const evaluated = recent.filter((q) => q.obtainedOn <= rel(-60)).slice(0, 3);
-  for (const [i, q] of evaluated.entries()) {
-    await tx.update(t.qualifications).set({
-      effectiveness: i === 2 ? 'partielle' : 'efficace', effectivenessOn: rel(-30),
-      effectivenessNote: i === 2 ? 'Consignation à revoir au poste : accompagnement par le tuteur pendant un mois.' : 'Pratique observée au poste, conforme.',
-      effectivenessById: 'clefevre',
-    }).where(eq(t.qualifications.id, q.id));
-  }
+  // HAB-13 : accueil sécurité = sensibilisation (attribut propre au QHSE, CV-03). L'évaluation à froid des formations est
+  // tenue par Cursus (lot 2 de M-02).
+  if (titles.has(WELCOME_TITLE)) await tx.update(t.trainingTitles).set({ awareness: true }).where(eq(t.trainingTitles.id, WELCOME_TITLE));
 }

@@ -109,6 +109,12 @@ async function insertRawRows(q: LegacyBase['query']) {
   await log(RAW.verifyNoLog, 'Échéance reportée au 30/11/2026', '2026-09-05T08:00:00Z');
 }
 
+/** Rapprochement des titres de démonstration de la migration 0025 (C-01, choix par défaut). */
+const CURSUS_TITLE_IDS: Record<string, string> = {
+  accueil: 'formation.accueil', elec: 'habilitation.he', r484: 'formation.caces484', r489: 'formation.caces489', sst: 'formation.sst',
+  hauteur: 'habilitation.hauteur', atex: 'habilitation.atex', conduite: 'habilitation.ac489',
+};
+
 describe('migration 0005 — base de démonstration 0004', () => {
   let base: LegacyBase;
   let rows: Map<string, typeof t.actions.$inferSelect>;
@@ -286,7 +292,8 @@ describe('migration 0005 — base de démonstration 0004', () => {
     const renewals = (fixture.tables.qualification_requirements as Row[]).filter((r) => r.renewal_action_id);
     expect(renewals.length).toBeGreaterThan(0);
     for (const r of renewals) {
-      expect(action(String(r.renewal_action_id))).toMatchObject({ qualificationPersonId: r.person_id, qualificationTitleId: r.title_id });
+      // D08 (0025) : identifiant du titre recodé en titre_id du catalogue de Cursus.
+      expect(action(String(r.renewal_action_id))).toMatchObject({ qualificationPersonId: r.person_id, qualificationTitleId: CURSUS_TITLE_IDS[String(r.title_id)] ?? r.title_id });
     }
     expect((await base.db.select().from(t.actions)).filter((a) => a.qualificationPersonId).map((a) => a.id)).toEqual(renewals.map((r) => r.renewal_action_id));
   });
@@ -294,8 +301,9 @@ describe('migration 0005 — base de démonstration 0004', () => {
   it('données des autres tables inchangées (nombre de lignes)', async () => {
     const extra: Record<string, number> = { actions: RAW_IDS.length, audit_plan_items: 6, audit_findings: 3, review_decisions: 1 };
     for (const [table, list] of Object.entries(fixture.tables)) {
-      // Table supprimée par la migration 0024 (D02 : projets lus dans keystone.pub_projets).
-      if (table === 'change_log' || table === 'keystone_projects') continue;
+      // Tables supprimées par les migrations 0024 (D02 : projets lus dans keystone.pub_projets) et 0025 (D09 : titres
+      // détenus lus dans cursus.pub_titres_detenus).
+      if (table === 'change_log' || table === 'keystone_projects' || table === 'qualifications' || table === 'training_sessions') continue;
       const [{ n }] = (await base.query(`select count(*)::int as n from "${table}"`)).rows as { n: number }[];
       expect({ table, n }).toEqual({ table, n: list.length + (extra[table] ?? 0) });
     }

@@ -78,7 +78,7 @@ describe('mise à niveau d’une base de démonstration antérieure', () => {
     const [e127] = await after.select().from(t.events).where(eq(t.events.id, 'EV-2026-127'));
     expect(e127).toMatchObject({ victimKind: 'salarie', title: 'Intitulé modifié par un utilisateur' }); // saisie conservée
     expect((await after.select().from(t.benignAccidents)).map((b) => b.eventId).sort()).toEqual(['EV-2026-118', 'EV-2026-120']);
-    expect((await after.select().from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true))).map((ti) => ti.id)).toEqual(['sst']);
+    expect((await after.select().from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true))).map((ti) => ti.id)).toEqual(['formation.sst']);
     const [siteA] = await after.select().from(t.sites).where(eq(t.sites.id, 'site_a'));
     expect(siteA.siret).toBe('00000000000018');
     const [fd01] = await after.select().from(t.wasteStreams).where(eq(t.wasteStreams.id, 'FD-01'));

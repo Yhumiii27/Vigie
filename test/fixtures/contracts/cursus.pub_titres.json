@@ -1,0 +1,5 @@
+{
+  "source": "Cursus origin/main 3288e88, server/migrations-pg/0002_partage.sql (contrat D08 v1, validite_mois NULL = sans échéance ; vue reprise par Matrix, registre des publications)",
+  "readers": ["vigie_app", "keystone_app", "matrix_app"],
+  "columns": [["titre_id", "text"], ["nature", "text"], ["code", "text"], ["libelle", "text"], ["libelle_court", "text"], ["validite_mois", "integer"]]
+}

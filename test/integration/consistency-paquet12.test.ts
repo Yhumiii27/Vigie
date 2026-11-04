@@ -17,7 +17,7 @@ import {
   abandonReviewDecision, addReviewCorrection, createReview, deleteReviewDecision, saveReviewDecision, saveReviewItem,
 } from '@/server/review';
 import { createDuerpVersion, updateCurrentDuerpVersion } from '@/server/risks';
-import { archiveTitle, restoreTitle, saveTitle } from '@/server/skills';
+import { archiveTitle, followTitle, restoreTitle, saveTitle } from '@/server/skills';
 import { cancelRequirementEvaluation } from '@/server/watch';
 
 // Paquet 12 (cohérence, droits et traçabilité) : rattachement de deux risques au même danger tracé (DUE-12), validateur
@@ -77,24 +77,22 @@ describe('DUE-15 : validateur de la version du DUERP sorti de l’effectif', () 
 });
 
 describe('HAB-12 : titres suivis communs à tous les sites', () => {
-  it('Chef de service : ajout, modification, archivage et restauration refusés ; QHSE et direction oui', async () => {
+  it('Chef de service : suivi, modification, « ne plus suivre » et « suivre à nouveau » refusés ; QHSE et direction oui', async () => {
     actAs('Chef de service', 'site_a');
-    expect(await saveTitle({}, form({ label: 'Nacelle', validityMonths: '60' }))).toEqual({ error: TITLES_RESERVED });
-    expect(await saveTitle({}, form({ id: 'sst', label: 'SST renommé', validityMonths: '24' }))).toEqual({ error: TITLES_RESERVED });
-    expect(await archiveTitle({}, form({ id: 'sst', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
-    expect(await restoreTitle({}, form({ id: 'pont-ancien', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
+    expect(await followTitle({}, form({ titleId: 'formation.aipr' }))).toEqual({ error: TITLES_RESERVED });
+    expect(await saveTitle({}, form({ id: 'formation.sst', firstAidField: '1' }))).toEqual({ error: TITLES_RESERVED });
+    expect(await archiveTitle({}, form({ id: 'formation.sst', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
+    expect(await restoreTitle({}, form({ id: 'formation.pontier', reason: 'Test' }))).toEqual({ error: TITLES_RESERVED });
     for (const role of ['Chef de projet', 'Salarié'] as Role[]) {
       actAs(role, 'site_a');
-      expect(await saveTitle({}, form({ label: 'Nacelle', validityMonths: '60' })), role).toEqual({ error: DENIED });
+      expect(await followTitle({}, form({ titleId: 'formation.aipr' })), role).toEqual({ error: DENIED });
     }
-    const [sst] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'sst'));
-    expect(sst.archivedAt).toBeNull();
-    expect(sst.label).not.toBe('SST renommé');
-    for (const role of ['Animateur QHSE', 'Direction'] as Role[]) {
+    const [sst] = await (await db()).select().from(t.trainingTitles).where(eq(t.trainingTitles.id, 'formation.sst'));
+    expect(sst).toMatchObject({ archivedAt: null, firstAid: true });
+    for (const [role, id] of [['Animateur QHSE', 'formation.aipr'], ['Direction', 'formation.elec']] as [Role, string][]) {
       actAs(role, 'site_b');
-      const r = await saveTitle({}, form({ label: `Nacelle ${role}`, validityMonths: '60' }));
-      expect(r, role).toMatchObject({ ok: true });
-      expect(await lastLog('training_title', r.id!)).toMatchObject({ action: 'create' });
+      expect(await followTitle({}, form({ titleId: id })), role).toEqual({ ok: true, id });
+      expect(await lastLog('training_title', id)).toMatchObject({ action: 'create' });
     }
   });
 });

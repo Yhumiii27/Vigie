@@ -2,13 +2,17 @@ import * as t from '../schema';
 import { iso, rel } from './dates';
 import type { SeedTx } from './types';
 
-// Jeu de démonstration : titres, matrice des habilitations, formations et affectation Keystone (QUA-26 : extrait de
-// src/db/seed.ts).
+// Jeu de démonstration : titres suivis et matrice des habilitations (QUA-26 : extrait de src/db/seed.ts). Lot 2 de M-02
+// (décision CV-01 du 04/11/2026) : les titres détenus ne sont plus enregistrés dans Vigie ; ils viennent du substitut de
+// cursus.pub_titres_detenus (src/db/seeds/foreign.ts, demoHeldTitles), construit d'après les mêmes constantes pour garder
+// les mêmes états (valide, à renouveler, expiré, suspendu, jamais suivi). Identifiants des titres = titre_id du catalogue
+// de Cursus, d'après le rapprochement proposé par le plan de Matrix (C-01, choix par défaut à confirmer).
 
-// [id, libellé, validité (mois, 0 = sans échéance)]
+// [id = titre_id de Cursus, libellé (libelle_court), validité (mois, 0 = sans échéance)]
 export const TITLES: [string, string, number][] = [
-  ['accueil', 'Accueil sécurité', 0], ['elec', 'Habilitation électrique', 36], ['r484', 'CACES R484', 60], ['r489', 'CACES R489', 60],
-  ['sst', 'SST', 24], ['hauteur', 'Travail en hauteur', 36], ['atex', 'ATEX', 36], ['conduite', 'Autorisation de conduite', 60],
+  ['formation.accueil', 'Accueil sécurité', 0], ['habilitation.he', 'Habilitation électrique', 36], ['formation.caces484', 'CACES R484', 60],
+  ['formation.caces489', 'CACES R489', 60], ['formation.sst', 'SST', 24], ['habilitation.hauteur', 'Travail en hauteur', 36],
+  ['habilitation.atex', 'ATEX', 36], ['habilitation.ac489', 'Autorisation de conduite', 60],
 ];
 
 // Matrice : v valide · s expire sous 60 j · x expiré · r requis jamais suivi · n non requis
@@ -18,51 +22,47 @@ export const MATRIX: [string, string][] = [
   ['ylambert', 'vnnvvnnv'],
 ];
 // Échéances explicites des titres expirés ou proches de l'expiration.
-export const EXPIRIES: Record<string, string> = { 'tnguyen:hauteur': rel(-11), 'tnguyen:sst': rel(42), 'mgirard:elec': rel(50) };
-// Organismes de formation par titre (formations en cours).
-export const PROVIDERS: Record<string, string> = { elec: '[Apave]', r484: '[AFPA]', r489: '[AFPA]', sst: 'Formation interne', hauteur: '[Apave]', atex: '[Organisme notifié]', conduite: 'Formation interne' };
-// Formations antérieures (historique, jamais écrasé) [salarié, titre, obtention, échéance, organisme].
-export const PAST_TRAININGS: [string, string, string, string, string][] = [
-  ['tnguyen', 'hauteur', rel(-2202), rel(-1107), '[Apave]'],
-  ['sbenali', 'elec', rel(-1459), rel(-363), '[Apave]'],
-];
+export const EXPIRIES: Record<string, string> = {
+  'tnguyen:habilitation.hauteur': rel(-11), 'tnguyen:formation.sst': rel(42), 'mgirard:habilitation.he': rel(50),
+};
+// Organismes de formation (ou signataires d'une habilitation) par titre.
+export const PROVIDERS: Record<string, string> = {
+  'habilitation.he': '[Apave]', 'formation.caces484': '[AFPA]', 'formation.caces489': '[AFPA]', 'formation.sst': 'Formation interne',
+  'habilitation.hauteur': '[Apave]', 'habilitation.atex': '[Organisme notifié]', 'habilitation.ac489': 'Formation interne',
+};
 
 /** Titre de secourisme du jeu de démonstration (training_titles.first_aid). */
-export const FIRST_AID_TITLE = 'sst';
+export const FIRST_AID_TITLE = 'formation.sst';
 
-/** Titres (dont un archivé), exigences de la matrice, formations (dont une annulée), affectation Keystone. */
+/** Autorisation de conduite du jeu (exigée de [K. Bernard], délivrée sans CACES valide : suspendue dans Cursus). */
+export const DRIVING_TITLE = 'habilitation.ac489';
+
+/** Titre qui qualifie un auditeur interne (AUD-27, src/db/seeds/paquet13b.ts). */
+export const AUDITOR_TITLE = 'formation.auditeur_interne';
+
+/** Titre détenu d'une case de la matrice du jeu (obtention, échéance), d'après les constantes ci-dessus. */
+export function demoHeld(personIndex: number, titleIndex: number, personId: string): { obtainedOn: string; expiresOn: string | null } {
+  const [titleId, , validity] = TITLES[titleIndex];
+  const explicit = EXPIRIES[`${personId}:${titleId}`];
+  if (explicit) return { obtainedOn: iso(+explicit.slice(0, 4) - Math.round(validity / 12), +explicit.slice(5, 7), +explicit.slice(8, 10)), expiresOn: explicit };
+  const month = ((personIndex + titleIndex) % 12) + 1;
+  return { obtainedOn: iso(2025, month, 10 + titleIndex), expiresOn: validity ? iso(2025 + Math.ceil(validity / 12), month, 10 + titleIndex) : null };
+}
+
+/** Titres suivis (dont un qui ne l'est plus) et exigences de la matrice. */
 export async function seedSkills(tx: SeedTx) {
   // Titre SST : ses titulaires valides donnent les soins du registre des accidents bénins (EVT-04).
   await tx.insert(t.trainingTitles).values(TITLES.map(([id, label, validityMonths], sort) => ({ id, label, validityMonths, sort, firstAid: id === FIRST_AID_TITLE })));
-  // Titre retiré du suivi (archivé), sans exigence ni formation.
+  // Titre qui n'est plus suivi (archivé), sans exigence.
   await tx.insert(t.trainingTitles).values({
-    id: 'pont-ancien', label: 'Pontier (ancien référentiel)', validityMonths: 60, sort: TITLES.length,
+    id: 'formation.pontier', label: 'Pontier (ancien référentiel)', validityMonths: 60, sort: TITLES.length,
     archivedAt: new Date(`${rel(-267)}T10:00:00+01:00`), archivedById: 'clefevre', archiveReason: 'Remplacé par le CACES R484',
   });
   const reqs: { personId: string; titleId: string }[] = [];
-  // Formations antérieures d'abord (identifiants plus anciens), puis les formations en cours.
-  const quals: (typeof t.qualifications.$inferInsert)[] = PAST_TRAININGS.map(([personId, titleId, obtainedOn, expiresOn, provider]) => ({ personId, titleId, obtainedOn, expiresOn, provider }));
-  MATRIX.forEach(([personId, codes], pi) => {
-    [...codes].forEach((code, ti) => {
-      if (code === 'n') return;
-      const [titleId, , validity] = TITLES[ti];
-      reqs.push({ personId, titleId });
-      if (code === 'r') return;
-      const explicit = EXPIRIES[`${personId}:${titleId}`];
-      const obtainedOn = iso(2025, ((pi + ti) % 12) + 1, 10 + ti);
-      const expiresOn = explicit ?? (validity ? iso(2025 + Math.ceil(validity / 12), ((pi + ti) % 12) + 1, 10 + ti) : null);
-      quals.push({ personId, titleId, obtainedOn: explicit ? iso(+explicit.slice(0, 4) - Math.round(validity / 12), +explicit.slice(5, 7), +explicit.slice(8, 10)) : obtainedOn, expiresOn, provider: PROVIDERS[titleId] ?? null });
-    });
-  });
-  // Formation saisie par erreur puis annulée : sans effet sur l'état de la case.
-  quals.push({
-    personId: 'mgirard', titleId: 'elec', obtainedOn: rel(-8), expiresOn: rel(1088), provider: 'Formation interne', recordedById: 'clefevre',
-    cancelledAt: new Date(`${rel(-7)}T09:00:00Z`), cancelledById: 'clefevre', cancelReason: 'Saisie sur le mauvais salarié',
+  MATRIX.forEach(([personId, codes]) => {
+    [...codes].forEach((code, ti) => { if (code !== 'n') reqs.push({ personId, titleId: TITLES[ti][0] }); });
   });
   await tx.insert(t.qualificationRequirements).values(reqs);
-  await tx.insert(t.qualifications).values(quals);
-  // Recyclages : aucune action QSE (gérés par les RH, réponses du service QHSE du 15/10/2026) — plus de recyclage planifié
-  // par une action (ancienne A-207).
-  // Affectation de [T. Nguyen] (alerte d'habilitation) : lue dans keystone.pub_affectations (substitut src/db/seeds/foreign.ts),
-  // cache keystone_assignments rafraîchi à l'ouverture de la base (D04).
+  // Recyclages : aucune action QSE (gérés par les RH, réponses du service QHSE du 15/10/2026). Affectation de [T. Nguyen]
+  // (alerte d'habilitation) : lue dans keystone.pub_affectations (substitut src/db/seeds/foreign.ts, D04).
 }

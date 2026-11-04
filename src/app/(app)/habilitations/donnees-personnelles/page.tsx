@@ -81,14 +81,18 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
               {id.leftOn && <><dt>Sortie de l&apos;effectif</dt><dd>{fmtDate(id.leftOn)}{id.leftReason ? ` · ${id.leftReason}` : ''}</dd></>}
             </dl>
           </Section>
-          <Section num={++n} title="Habilitations et formations" count={data.qualifications.length}>
+          <Section num={++n} title="Habilitations et formations" count={data.qualifications?.length ?? 0}>
             {data.requiredTitles.length > 0 && <p style={{ margin: '0 0 6px', fontSize: 12 }}>Titres requis : {data.requiredTitles.join(', ')}</p>}
-            {data.qualifications.length ? (
+            {/* D09 : titres détenus tenus par Cursus (RH), lus par sa vue ; Vigie n'en conserve aucune copie. */}
+            <p className="pp-muted" style={{ margin: '0 0 6px', fontSize: 12 }}>Titres détenus lus dans Cursus (RH), qui les tient : demande d&apos;accès à adresser aussi au service RH.</p>
+            {data.qualifications === null ? (
+              <p role="status" style={{ margin: 0, fontSize: 12 }}>{data.qualificationsMessage}</p>
+            ) : data.qualifications.length ? (
               <table className="table pp-table">
-                <thead><tr><th>Titre</th><th>Obtenu le</th><th>Expire le</th><th>Organisme · portée</th><th>État</th></tr></thead>
+                <thead><tr><th>Titre</th><th>Obtenu le</th><th>Expire le</th><th>Organisme ou signataire</th><th>État</th></tr></thead>
                 <tbody>{data.qualifications.map((q) => (
-                  <tr key={q.id}><td>{q.title}</td><td>{fmtDate(q.obtainedOn)}</td><td>{q.expiresOn ? fmtDate(q.expiresOn) : '—'}</td>
-                    <td>{[q.provider, q.scope].filter(Boolean).join(' · ') || '—'}</td><td>{q.cancelled ? `Annulée le ${fmtDate(q.cancelled.on)} (${q.cancelled.reason})` : q.effectiveness ?? 'Enregistrée'}</td></tr>
+                  <tr key={q.id}><td>{q.title}</td><td>{q.obtainedOn ? fmtDate(q.obtainedOn) : '—'}</td><td>{q.expiresOn ? fmtDate(q.expiresOn) : '—'}</td>
+                    <td>{q.provider ?? '—'}</td><td>{q.suspended ? `Suspendu (${q.suspended})` : 'Détenu'}</td></tr>
                 ))}</tbody>
               </table>
             ) : <None />}

@@ -5,7 +5,7 @@ import { actionHref } from '@/lib/action-rules';
 import { fileIcon } from '@/lib/attachments';
 import { daysBetween, fmtDate } from '@/lib/dates';
 import { SKILL_STATES, type SkillState } from '@/lib/domain';
-import type { QualificationEntry, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
+import type { ArchivedRecord, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
 // Plan d'actions : aucun recyclage ni formation ne donne lieu à une action QSE (réponses du service QHSE du 15/10/2026,
@@ -46,8 +46,9 @@ export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtained
     case 's': return c.expiresOn ? `Expire le ${fmtDate(c.expiresOn)} · dans ${days} j` : 'Expire sous 60 jours';
     case 'v': return c.expiresOn ? `Valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Valide · sans échéance';
     case 'r': return 'Requis, jamais suivi';
-    case 'p': return c.expiresOn ? `Prérequis non valide · titre valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Prérequis non valide';
-    default: return c.obtainedOn ? 'Non requis pour ce salarié · formation enregistrée' : 'Non requis pour ce salarié';
+    case 'p': return c.expiresOn ? `Inutilisable d'après Cursus · échéance du titre le ${fmtDate(c.expiresOn)}` : "Inutilisable d'après Cursus";
+    case 'u': return 'Titres détenus de Cursus indisponibles : état non calculé';
+    default: return c.obtainedOn ? 'Non requis pour ce salarié · titre détenu' : 'Non requis pour ce salarié';
   }
 }
 
@@ -87,81 +88,29 @@ export function RenewalTag({ renewal, state }: { renewal: RenewalInfo; state: Sk
   );
 }
 
-const isoDay = (iso: string) => fmtDate(iso.slice(0, 10));
-
-/**
- * Historique des formations d'une case (annulées barrées, avec motif) ; attestations en lien.
- * `onCancel` : bouton « Annuler » sur chaque formation non annulée (case de la matrice, encadrement) ; absent en consultation seule.
- */
-export function HistoryTable({ entries, title = 'Historique des formations', onCancel, onCancelSession }: {
-  entries: QualificationEntry[]; title?: ReactNode; onCancel?: (e: QualificationEntry) => void;
-  /** HAB-06 : « Annuler la session » sur une formation issue d'une session collective encore en vigueur. */
-  onCancelSession?: (e: QualificationEntry) => void;
-}) {
+/** Tableau des titres conservés (consultation seule) : titre ou salarié, obtention, échéance, organisme, attestations reprises. */
+export function ArchiveTable({ records, first }: { records: ArchivedRecord[]; first: 'title' | 'person' }) {
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <h6 className="vg-h6">{title}{entries.length > 0 && <span style={{ color: 'var(--vg-text-muted)' }}> · {entries.length}</span>}</h6>
-      {entries.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune formation enregistrée.</div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ fontSize: 12 }}>
-            <thead>
-              <tr><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th>Efficacité</th><th>Saisie</th><th aria-label="Attestations" /></tr>
-            </thead>
-            <tbody>
-              {entries.map((e) => {
-                const struck = e.cancelled ? { textDecoration: 'line-through', color: 'var(--color-neutral-500)' } : undefined;
-                return (
-                  <tr key={e.id}>
-                    <td style={{ whiteSpace: 'nowrap', ...struck }}>{fmtDate(e.obtainedOn)}</td>
-                    <td style={{ whiteSpace: 'nowrap', ...struck }}>{e.expiresOn ? fmtDate(e.expiresOn) : 'Sans échéance'}</td>
-                    <td style={struck}>{e.provider ?? '—'}</td>
-                    {/* HAB-13 : évaluation à froid de l'efficacité. */}
-                    <td style={{ whiteSpace: 'nowrap', ...struck }}>
-                      {e.effectiveness ? <><ToneTag tone={e.cancelled ? 'neutral' : e.effectiveness.tone}>{e.effectiveness.label}</ToneTag><span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>le {fmtDate(e.effectiveness.on)}</span></> : <span style={{ color: 'var(--vg-text-muted)' }}>Non évaluée</span>}
-                    </td>
-                    <td>
-                      <span style={{ display: 'block', ...struck }}>{isoDay(e.recordedAt)} · {e.recordedBy}</span>
-                      {e.session && (
-                        <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>
-                          Session collective n° {e.session.id} · {e.session.participants} participant{e.session.participants > 1 ? 's' : ''}{e.session.cancelled ? ' · annulée' : ''}
-                        </span>
-                      )}
-                      {e.cancelled && (
-                        <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-                          Annulée le {isoDay(e.cancelled.at)} par {e.cancelled.by} — {e.cancelled.reason}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        {e.files.map((f) => (
-                          <a key={f.id} href={f.url} target="_blank" rel="noopener" title={f.name} aria-label={`Attestation ${f.name}`} className="vg-link">
-                            <Icon name={fileIcon(f.mime)} size={15} />
-                          </a>
-                        ))}
-                        {onCancelSession && e.session && !e.session.cancelled && !e.cancelled && (
-                          <button type="button" className="btn btn-ghost btn-icon" aria-label={`Annuler la session collective n° ${e.session.id}`}
-                            onClick={() => onCancelSession(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>
-                            <Icon name="ph-users-three" size={14} />
-                          </button>
-                        )}
-                        {onCancel && !e.cancelled && (
-                          <button type="button" className="btn btn-ghost btn-icon" title="Annuler cette formation" aria-label={`Annuler la formation du ${fmtDate(e.obtainedOn)}`}
-                            onClick={() => onCancel(e)} style={{ width: 24, height: 24, color: 'var(--color-neutral-400)' }}>
-                            <Icon name="ph-prohibit" size={14} />
-                          </button>
-                        )}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <div style={{ overflowX: 'auto' }}>
+      <table className="table" style={{ fontSize: 12 }}>
+        <thead><tr><th>{first === 'title' ? 'Titre' : 'Salarié'}</th><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th aria-label="Attestations" /></tr></thead>
+        <tbody>
+          {records.map((r) => (
+            <tr key={`${r.person.id}|${r.title.id}`}>
+              <td>{first === 'title' ? r.title.label : r.person.name}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{r.obtainedOn ? fmtDate(r.obtainedOn) : '—'}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{r.expiresOn ? fmtDate(r.expiresOn) : r.obtainedOn ? 'Sans échéance' : '—'}</td>
+              <td>{r.provider ?? '—'}</td>
+              <td style={{ textAlign: 'right' }}>
+                {r.files.map((f) => (
+                  <a key={f.id} href={f.url} target="_blank" rel="noopener" aria-label={`Attestation ${f.name}`} className="vg-link"><Icon name={fileIcon(f.mime)} size={15} /></a>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
+

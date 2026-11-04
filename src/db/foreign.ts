@@ -12,6 +12,7 @@ import { boolean, char, date, integer, numeric, pgSchema, text, timestamp, uuid 
 
 const matrix = pgSchema('matrix');
 const keystone = pgSchema('keystone');
+const cursus = pgSchema('cursus');
 
 /** matrix.pub_sites — contrat D14 v1 (+ filiale_code, latitude, longitude en fin de vue). Lecteur : vigie_app. */
 export const pubSites = matrix.view('pub_sites', {
@@ -82,6 +83,42 @@ export const pubFournisseurs = keystone.view('pub_fournisseurs', {
   isInternal: boolean('is_internal').notNull(),
 }).existing();
 
+/**
+ * cursus.pub_titres — contrat D08 v1 (catalogue des formations et habilitations de Cursus ; validite_mois NULL = sans
+ * échéance). Lecteurs : vigie_app, keystone_app, matrix_app.
+ */
+export const pubTitres = cursus.view('pub_titres', {
+  titreId: text('titre_id'),
+  nature: text('nature'),
+  code: text('code'),
+  libelle: text('libelle'),
+  libelleCourt: text('libelle_court'),
+  validiteMois: integer('validite_mois'),
+}).existing();
+
+/**
+ * cursus.pub_titres_detenus — contrat D09 v1, avenant du lot 8 de Cursus (migration 0011_pub_titres_valides) : dernière
+ * formation suivie non annulée, habilitations délivrées ; utilisable_jusqu_au borné par les prérequis, une suspension ou
+ * un retrait ; mesure et mesure_le en fin de vue. Aucune donnée de santé (aptitude médicale non publiée, C-02). Lecteurs :
+ * vigie_app, keystone_app, matrix_app.
+ */
+export const pubTitresDetenus = cursus.view('pub_titres_detenus', {
+  cursusRef: text('cursus_ref'),
+  matricule: text('matricule'),
+  titreId: text('titre_id'),
+  nature: text('nature'),
+  code: text('code'),
+  obtenuLe: date('obtenu_le', { mode: 'string' }),
+  expireLe: date('expire_le', { mode: 'string' }),
+  utilisableJusquAu: date('utilisable_jusqu_au', { mode: 'string' }),
+  prerequisManquant: boolean('prerequis_manquant'),
+  organisme: text('organisme'),
+  delivrePar: text('delivre_par'),
+  sessionPrevueLe: date('session_prevue_le', { mode: 'string' }),
+  mesure: text('mesure'),
+  mesureLe: date('mesure_le', { mode: 'string' }),
+}).existing();
+
 /** Vue lue : schéma, nom, et colonnes du contrat dans l'ordre (nom, type SQL tel que information_schema le donne). */
 export type ForeignContract = { schema: string; view: string; columns: readonly (readonly [name: string, type: string])[] };
 
@@ -111,6 +148,18 @@ export const FOREIGN_CONTRACTS = {
   },
   suppliers: {
     schema: 'keystone', view: 'pub_fournisseurs', columns: [['id', 'uuid'], ['name', 'text'], ['x3_code', 'text'], ['is_internal', 'boolean']],
+  },
+  titles: {
+    schema: 'cursus', view: 'pub_titres', columns: [
+      ['titre_id', 'text'], ['nature', 'text'], ['code', 'text'], ['libelle', 'text'], ['libelle_court', 'text'], ['validite_mois', 'integer'],
+    ],
+  },
+  heldTitles: {
+    schema: 'cursus', view: 'pub_titres_detenus', columns: [
+      ['cursus_ref', 'text'], ['matricule', 'text'], ['titre_id', 'text'], ['nature', 'text'], ['code', 'text'], ['obtenu_le', 'date'],
+      ['expire_le', 'date'], ['utilisable_jusqu_au', 'date'], ['prerequis_manquant', 'boolean'], ['organisme', 'text'], ['delivre_par', 'text'],
+      ['session_prevue_le', 'date'], ['mesure', 'text'], ['mesure_le', 'date'],
+    ],
   },
 } as const satisfies Record<string, ForeignContract>;
 

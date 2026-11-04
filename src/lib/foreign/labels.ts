@@ -7,6 +7,8 @@ export const SOURCES = {
   projects: { tool: 'Keystone', label: 'Projets', view: 'keystone.pub_projets', cache: false },
   assignments: { tool: 'Keystone', label: 'Affectations', view: 'keystone.pub_affectations', cache: true },
   suppliers: { tool: 'Keystone', label: 'Fournisseurs', view: 'keystone.pub_fournisseurs', cache: false },
+  titles: { tool: 'Cursus', label: 'Titres', view: 'cursus.pub_titres', cache: true },
+  heldTitles: { tool: 'Cursus', label: 'Titres détenus', view: 'cursus.pub_titres_detenus', cache: false },
 } as const;
 export type SourceKey = keyof typeof SOURCES;
 export const SOURCE_KEYS = Object.keys(SOURCES) as SourceKey[];
@@ -18,6 +20,16 @@ export const MATRIX_SITE_STATES = {
   absent: { label: 'Absent de Matrix', tone: 'warn' },
 } as const;
 export type MatrixSiteState = keyof typeof MATRIX_SITE_STATES;
+
+/** État d'un titre suivi par Vigie dans le catalogue de Cursus au dernier rafraîchissement (training_titles.cursus_state, D08). */
+export const CURSUS_TITLE_STATES = {
+  actif: { label: 'Au catalogue de Cursus', tone: 'ok' },
+  absent: { label: 'Absent du catalogue de Cursus', tone: 'warn' },
+} as const;
+export type CursusTitleState = keyof typeof CURSUS_TITLE_STATES;
+
+/** Mention des données de l'écran Habilitations, tenues par Cursus (décision CV-01 du 04/11/2026). */
+export const CURSUS_HELD_NOTICE = 'Données tenues par Cursus (RH) : formations, habilitations, sessions et attestations se saisissent dans Cursus ; Vigie les consulte.';
 
 /** Issue d'un passage de rafraîchissement ou d'une lecture contrôlée (sync_runs.status). */
 export const SYNC_STATUSES = {

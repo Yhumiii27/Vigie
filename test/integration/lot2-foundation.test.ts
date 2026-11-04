@@ -31,7 +31,7 @@ describe('jeu de démonstration du lot 2', () => {
     ]);
     expect(register[0].signedOn).toBeNull();
     const [sst] = await db.select().from(t.trainingTitles).where(eq(t.trainingTitles.firstAid, true));
-    expect(sst.id).toBe('sst');
+    expect(sst.id).toBe('formation.sst');
   });
 
   it('une seule inscription active par événement ; numéro unique par site', async () => {

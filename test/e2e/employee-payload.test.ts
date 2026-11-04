@@ -99,7 +99,7 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
     });
 
     it('habilitations, À faire : sa ligne et ses échéances', async () => {
-      for (const path of ['/habilitations', '/habilitations?salarie=mgirard&titre=elec', '/a-faire']) {
+      for (const path of ['/habilitations', '/habilitations?salarie=mgirard&titre=habilitation.he', '/a-faire']) {
         const { status, body } = await load(path, rsc);
         expect(status, path).toBe(200);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
