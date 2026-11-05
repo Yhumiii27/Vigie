@@ -11,6 +11,7 @@ import { loadDocumentSignals } from './documents';
 import { loadEmergencySignals } from './emergencies';
 import { loadEnvironmentSignals } from './environment';
 import { loadEventSignals } from './events';
+import { loadInboundSignals } from './inbound';
 import { loadPreventionSignals } from './prevention-signals';
 import { loadProcessSafetySignals } from './process-safety';
 import { loadReportPostSignals } from './report-posts';
@@ -39,6 +40,8 @@ export const loadTodo = cache(async (): Promise<TodoItem[]> => {
     loadEmergencySignals(), loadChangeSignals(),
     // VG-01 : séance passée d'une étude de sécurité des procédés encore planifiée.
     loadProcessSafetySignals(),
+    // D13 (CV-08) : demandes de Keystone refusées, en attente depuis plus d'un jour, ou vérification proposée au QHSE.
+    loadInboundSignals(),
   ]);
   return signals.flatMap((s) => s.todo).sort(byUrgency);
 });

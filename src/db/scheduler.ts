@@ -8,6 +8,7 @@
 // requête ou sonde de santé (HEALTHCHECK de l'image : 30 s après le démarrage).
 //
 // Tâches inscrites (scheduledTasks) : référentiels partagés (lot 0 de M-02, une fois par nuit, serveur Next.js seulement) ;
+// demandes reçues de Keystone (D13, CV-08 : à chaque passage, serveur Next.js seulement) ;
 // rappel du mercredi par e-mail (ACT-33), seulement quand un transport d'e-mail existe
 // (VIGIE_MAIL_TRANSPORT ≠ aucun) ; échéances par personne (PRD-12, src/lib/data/person-todo.ts), calculées toutes les heures
 // hors requête et gardées en mémoire pour un futur canal sortant, dans le serveur Next.js seulement (instrumentation :
@@ -89,6 +90,23 @@ export function sharedReferencesTask(startedAt = new Date()): ScheduledTask {
   };
 }
 
+/** Nom de la tâche des demandes reçues des autres outils (D13, décision CV-08, journal du serveur). */
+export const INBOUND_REQUESTS_TASK = 'Demandes reçues';
+
+/**
+ * Demandes reçues (D13, décision CV-08) : demandes déposées par Keystone avec vigie.pub_signaler_avancement_nc, traitées à
+ * chaque passage du planificateur (10 min) par les règles de Vigie (src/server/inbound.ts).
+ */
+export function inboundRequestsTask(): ScheduledTask {
+  return {
+    name: INBOUND_REQUESTS_TASK,
+    async run(db) {
+      const { processInboundRequests } = await import('@/server/inbound');
+      await processInboundRequests(db);
+    },
+  };
+}
+
 type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | 'reminderTime' | 'publicUrl' | 'demo' | 'today'>;
 
 /**
@@ -98,7 +116,7 @@ type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | '
 export function scheduledTasks(c: TaskConfig): ScheduledTask[] {
   const tasks: ScheduledTask[] = [];
   // Serveur Next.js seulement (sessions et chargements des écrans) : ni scripts (vigie-db), ni tests.
-  if (serverRuntime()) tasks.push(personTodoTask(), sharedReferencesTask());
+  if (serverRuntime()) tasks.push(personTodoTask(), sharedReferencesTask(), inboundRequestsTask());
   const transport = createTransport(c);
   if (transport) {
     tasks.push({

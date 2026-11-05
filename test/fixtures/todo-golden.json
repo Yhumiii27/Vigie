@@ -1,9 +1,9 @@
 {
  "Animateur QHSE|site_a": {
-  "todo": 84,
-  "visible": 76,
+  "todo": 85,
+  "visible": 77,
   "badges": {
-   "todo": 76,
+   "todo": 77,
    "docs": 6,
    "watch": 12,
    "audits": 11,
@@ -12,16 +12,16 @@
    "skills": 4,
    "risks": 10,
    "prevention": 12,
-   "events": 4
+   "events": 5
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
-  "visibleHash": "4e412576b3ac05d90e4a2f1d60ba2a49021e00592ce68971254900149a1ddddd"
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
+  "visibleHash": "86da874bc6263b729d79a57ed066a6a7a766f0149a94c0efdf5ed32e711c9dcb"
  },
  "Animateur QHSE|site_b": {
-  "todo": 84,
-  "visible": 54,
+  "todo": 85,
+  "visible": 55,
   "badges": {
-   "todo": 54,
+   "todo": 55,
    "docs": 5,
    "audits": 8,
    "actions": 4,
@@ -30,14 +30,14 @@
    "watch": 6,
    "risks": 2
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
-  "visibleHash": "d44e8c4c41d3b31e990822b4c4b4eb6c9489aca258e08df525f7b28b2768d70e"
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
+  "visibleHash": "a2a9147c1ad25a65ee57be47c1b32005572be73543bc040bccc02a693b1555b2"
  },
  "Animateur QHSE|all": {
-  "todo": 84,
-  "visible": 84,
+  "todo": 85,
+  "visible": 85,
   "badges": {
-   "todo": 84,
+   "todo": 85,
    "docs": 6,
    "watch": 14,
    "audits": 11,
@@ -46,16 +46,16 @@
    "skills": 4,
    "prevention": 14,
    "risks": 11,
-   "events": 4
+   "events": 5
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
-  "visibleHash": "a3d7416aa71895da3e2136430755186659696f8c30af92156dd294233a8ece3c"
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
+  "visibleHash": "5887db06c0e919ee9cff5281f289f9db3909dc712cf01da02c3ed5b46a26c2f1"
  },
  "Direction|site_a": {
-  "todo": 84,
-  "visible": 73,
+  "todo": 85,
+  "visible": 74,
   "badges": {
-   "todo": 73,
+   "todo": 74,
    "docs": 6,
    "watch": 12,
    "audits": 11,
@@ -64,13 +64,13 @@
    "skills": 4,
    "risks": 10,
    "prevention": 12,
-   "events": 4
+   "events": 5
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
-  "visibleHash": "e1231c642ef2ccca05d40c28acaf927f8c30df92b7e9936b3215f2b5c36e6662"
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
+  "visibleHash": "bbb909c8ef69510aa7234b77fec8c47e8ec4677a2f7cc877a921e10dd2d00dc2"
  },
  "Direction|site_b": {
-  "todo": 84,
+  "todo": 85,
   "visible": 32,
   "badges": {
    "todo": 32,
@@ -82,14 +82,14 @@
    "watch": 6,
    "risks": 2
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
   "visibleHash": "f0908aee5f34ee679270e10aa6e641c2c47b47386bc1244912433300906307b7"
  },
  "Direction|all": {
-  "todo": 84,
-  "visible": 84,
+  "todo": 85,
+  "visible": 85,
   "badges": {
-   "todo": 84,
+   "todo": 85,
    "docs": 6,
    "watch": 14,
    "audits": 11,
@@ -98,10 +98,10 @@
    "skills": 4,
    "prevention": 14,
    "risks": 11,
-   "events": 4
+   "events": 5
   },
-  "todoHash": "7cf509d6b20000a03e42bd0cccccaf38a6e050e2e6c2db9b7c777ddcf40d2811",
-  "visibleHash": "a3d7416aa71895da3e2136430755186659696f8c30af92156dd294233a8ece3c"
+  "todoHash": "7a2f65007de5ee2b490f6974f032af6b8ca12fbceb5fe0777c44b371c6a7f1b3",
+  "visibleHash": "5887db06c0e919ee9cff5281f289f9db3909dc712cf01da02c3ed5b46a26c2f1"
  },
  "Chef de service|site_a": {
   "todo": 80,

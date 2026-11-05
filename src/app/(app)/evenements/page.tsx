@@ -13,6 +13,7 @@ import { EventActions, type EventActionItem } from '@/components/events/EventAct
 import { EventAttachments } from '@/components/events/EventAttachments';
 import { EventEditButton, type EditableEvent, type EventFieldOptions } from '@/components/events/EventEditButton';
 import { EventHistory } from '@/components/events/EventHistory';
+import { EventInbound } from '@/components/InboundRequests';
 import { FieldGrid as Fields } from '@/components/events/FieldGrid';
 import { EventFilterBar } from '@/components/events/EventFilters';
 import { NewEventButton } from '@/components/events/NewEventButton';
@@ -35,6 +36,7 @@ import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
 import { NEW_EVENT_SOURCES, prefillKey, prefillType, sourceParam } from '@/lib/event-prefill';
 import { eventFilterParams, hasEventFilters, matchesEventFilters, parseEventFilters } from '@/lib/event-filters';
 import { eventView, isOpen, loadPeople } from '@/lib/queries';
+import { loadEventInbound } from '@/lib/data/inbound';
 import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination';
 import { Pagination } from '@/components/Pagination';
 
@@ -92,7 +94,9 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
       ? loadNewEventDefaults({ ...Object.fromEntries(NEW_EVENT_SOURCES.map((k) => [k, sourceParam(sp, k)])), type: prefillType(str(sp.type)) })
       : null,
   ]);
-  const log = detail && !employee ? await loadEventChangeLog(detail.event.id) : [];
+  const [log, inbound] = detail && !employee
+    ? await Promise.all([loadEventChangeLog(detail.event.id), detail.event.type === 'NC' ? loadEventInbound(detail.event.id) : null])
+    : [[], null];
   const baseParams = { etat: tab === 'ouverts' ? undefined : tab, type, origine: origin, q: q || undefined, taille: pageParams(1, pageSize).taille };
   const params = { ...baseParams, ...eventFilterParams(urlFilters), page: pageParams(paged.page, pageSize).page, sel: selParam };
 
@@ -203,7 +207,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
-            : <EventCard key={detail.event.id} detail={detail} log={log} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={manager} canRevert={canApprove(role)}
+            : <EventCard key={detail.event.id} detail={detail} log={log} inbound={inbound} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={manager} canRevert={canApprove(role)}
               canSeeRisks={canSee(role, 'risks')} canEditRisks={canEditScreen(role, 'risks')} canSeeEnv={canSee(role, 'env')} today={now} />)}
         </div>
       </div>
@@ -310,8 +314,11 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
   );
 }
 
-function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
-  detail: EventDetail; log: ChangeEntry[]; options: EventFieldOptions; actionOptions: ActionFormOptions; canEdit: boolean; canRevert: boolean;
+function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
+  detail: EventDetail; log: ChangeEntry[];
+  /** D13 (CV-08) : demandes reçues de Keystone pour une NC (null : autre type d'événement). */
+  inbound: Awaited<ReturnType<typeof loadEventInbound>> | null;
+  options: EventFieldOptions; actionOptions: ActionFormOptions; canEdit: boolean; canRevert: boolean;
   /** Service QHSE (canCreateAction) : crée et modifie les actions de l'événement ; les autres rôles les consultent. */
   qhse: boolean;
   /** Accès à l'écran « Évaluation des risques » : sinon le risque lié s'affiche sans lien. */
@@ -518,6 +525,7 @@ function EventCard({ detail, log, options, actionOptions, qhse, canEdit, canReve
         emptyNote={`Aucune action liée — l'analyse des causes doit en produire au moins une avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`}
         addBlocked={addActionBlocker(e.step, e.dismissed)} />
 
+      {inbound && <EventInbound items={inbound.items} qhse={inbound.qhse} />}
       <EventHistory entries={history} />
       <ChangeLogList entries={log} title="Journal des modifications" />
       {/* SEC-11 : consultations des données de santé et des pièces jointes, pour les rôles habilités seulement. */}

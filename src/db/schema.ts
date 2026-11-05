@@ -11,6 +11,7 @@ import {
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
   ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
+  INBOUND_KIND_CODES, INBOUND_RESULT_CODES, INBOUND_STATUS_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -213,7 +214,10 @@ export const events = pgTable('events', {
   // du texte libre keystone_project), volet NC de Keystone (D13), fournisseur Keystone (D16). Références croisées en
   // texte, sans clé étrangère vers un autre schéma (contrôle à la saisie, puis contrôle d'orphelins de Matrix).
   keystoneProjectCode: text('keystone_project_code'),
-  ncNumber: text('nc_number'), // « NCR-029 », unique par projet Keystone
+  // Numéro de la NC vu par Keystone (décision CV-07 du 04/11/2026) : la référence EV-… de l'événement, recopiée en base
+  // (déclencheur events_nc_number, migration 0026) pour toute NC portant un code projet, null sinon ; lue par la vue
+  // pub_non_conformites (colonne number, qui ne publie que les NC numérotées). Jamais saisie ni écrite par le code.
+  ncNumber: text('nc_number'),
   keystoneActivityCode: text('keystone_activity_code'), // keystone.pub_activites.code
   partRef: text('part_ref'), // keystone.pub_articles.ref
   keystoneDeliverableNumber: text('keystone_deliverable_number'), // keystone.pub_livrables.number
@@ -224,7 +228,7 @@ export const events = pgTable('events', {
   isoClause: text('iso_clause'), // « 8.7 Control of nonconforming outputs »
 }, (t) => [
   check('events_nc_quantity_check', sql`${t.ncQuantity} >= 0`),
-  check('events_nc_number_check', sql`${t.ncNumber} is null or (${t.ncNumber} ~ '^NCR-[0-9]{3,}$' and ${t.type} = 'NC' and ${t.keystoneProjectCode} is not null)`),
+  check('events_nc_number_check', sql`${t.ncNumber} is null or (${t.ncNumber} = ${t.id} and ${t.type} = 'NC' and ${t.keystoneProjectCode} is not null)`),
   check('events_nc_cost_keur_check', sql`${t.ncCostKeur} >= 0`),
   index('events_keystone_project_code_idx').on(t.keystoneProjectCode),
   index('events_zone_idx').on(t.zoneId),
@@ -253,6 +257,8 @@ export const eventSteps = pgTable('event_steps', {
   reason: text('reason'), // obligatoire pour revert, reopen, dismiss, restore
   byId: text('by_id').references(() => people.id),
   at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  // D13 (CV-08) : étape franchie à la demande d'un autre outil (Keystone), traitée par Vigie ; by_id vide.
+  inboundRequestId: integer('inbound_request_id').references((): AnyPgColumn => inboundRequests.id),
 }, (t) => [
   check('event_steps_kind_check', inList(t.kind, EVENT_STEP_KINDS)),
 ]);
@@ -1591,4 +1597,50 @@ export const syncRuns = pgTable('sync_runs', {
 }, (t) => [
   check('sync_runs_status_check', inList(t.status, SYNC_STATUS_CODES)),
   index('sync_runs_source_idx').on(t.source, t.startedAt),
+]);
+
+// ─── Demandes reçues des autres outils (D13, décision CV-08 du 04/11/2026) ──
+//
+// Un autre outil n'écrit jamais dans les tables de Vigie (M-17, M-18) : il appelle une fonction vigie.pub_<verbe>_<objet>
+// (migration 0026 : pub_signaler_avancement_nc, SECURITY DEFINER), qui contrôle l'appelant (session_user parmi
+// inbound_callers) et la forme des arguments, puis dépose seulement une ligne dans inbound_requests. Vigie la traite
+// ensuite avec ses propres règles et son journal (src/server/inbound.ts : tâche planifiée « Demandes reçues » et bouton
+// « Traiter maintenant » de l'onglet « Connecteurs ») ; état et motif lisibles par l'appelant quand Matrix les publiera.
+
+/** Rôles PostgreSQL admis à déposer une demande (session_user) ; la migration y inscrit keystone_app. */
+export const inboundCallers = pgTable('inbound_callers', {
+  role: text('role').primaryKey(), // keystone_app
+  tool: text('tool').notNull(), // keystone
+  label: text('label').notNull(), // Keystone
+});
+
+export const inboundRequests = pgTable('inbound_requests', {
+  id: serial('id').primaryKey(),
+  caller: text('caller').notNull(), // session_user de l'appel (keystone_app)
+  tool: text('tool').notNull(), // outil de l'appelant (inbound_callers.tool)
+  kind: text('kind').notNull(), // INBOUND_KIND_CODES
+  externalId: text('external_id').notNull(), // identifiant de la demande chez l'appelant (keystoneId) : idempotence
+  targetRef: text('target_ref').notNull(), // numéro de la NC transmis (référence EV-…, CV-07)
+  projectCode: text('project_code').notNull(), // code projet Keystone transmis
+  payload: jsonb('payload').notNull(), // contenu contrôlé (ncPayloadSchema, src/lib/rules/inbound.ts)
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  status: text('status').notNull().default('received'), // INBOUND_STATUS_CODES
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  resultCode: text('result_code'), // INBOUND_RESULT_CODES, demande refusée seulement
+  result: text('result'), // message du traitement (appliquée ou refusée)
+  eventId: text('event_id').references(() => events.id), // NC visée, si elle est une NC de projet de Vigie
+  // Refus pris en compte par le QHSE (fin de l'échéance) : motif obligatoire (QUA-22).
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
+  acknowledgedById: text('acknowledged_by_id').references(() => people.id),
+  acknowledgeReason: text('acknowledge_reason'),
+}, (t) => [
+  uniqueIndex('inbound_requests_external_idx').on(t.caller, t.externalId),
+  index('inbound_requests_status_idx').on(t.status, t.receivedAt),
+  index('inbound_requests_event_idx').on(t.eventId),
+  check('inbound_requests_status_check', inList(t.status, INBOUND_STATUS_CODES)),
+  check('inbound_requests_kind_check', inList(t.kind, INBOUND_KIND_CODES)),
+  check('inbound_requests_result_code_check', sql`${t.resultCode} is null or ${t.resultCode} in (${sql.raw(sqlList(INBOUND_RESULT_CODES))})`),
+  check('inbound_requests_processed_check', sql`(${t.status} = 'received') = (${t.processedAt} is null) and (${t.status} = 'rejected') = (${t.resultCode} is not null)`),
+  check('inbound_requests_ack_check', sql`${t.acknowledgedAt} is null or ${t.status} = 'rejected'`),
+  archiveState('inbound_requests_ack_state_check', t.acknowledgedAt, t.acknowledgedById, t.acknowledgeReason),
 ]);

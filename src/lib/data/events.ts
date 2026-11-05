@@ -321,11 +321,18 @@ export async function loadEventDetail(id: string) {
   const content = Object.fromEntries(analyses.map((a) => [a.method, a.content])) as Record<string, unknown>;
   const methodLabel = METHODS.find(([k]) => k === e.analysisMethod)?.[1] ?? e.analysisMethod;
   const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : 'Vigie');
+  // D13 (CV-08) : étape franchie à la demande d'un autre outil (Keystone), traitée par Vigie.
+  const inboundIds = steps.flatMap((r) => (r.inboundRequestId != null ? [r.inboundRequestId] : []));
+  const inbound = new Map(inboundIds.length
+    ? (await db.select({ id: t.inboundRequests.id, label: t.inboundCallers.label, caller: t.inboundRequests.caller }).from(t.inboundRequests)
+      .leftJoin(t.inboundCallers, eq(t.inboundCallers.role, t.inboundRequests.caller)).where(inArray(t.inboundRequests.id, inboundIds)))
+      .map((x) => [x.id, `${x.label ?? x.caller} (demande n° ${x.id})`])
+    : []);
   const history: EventHistoryEntry[] = steps.map((r) => {
     const kind = (r.kind in EVENT_TRANSITIONS ? r.kind : 'advance') as EventTransition;
     return {
       id: r.id, kind, ...EVENT_TRANSITIONS[kind], from: EVENT_STEPS[r.fromStep] ?? '—', to: EVENT_STEPS[r.toStep] ?? '—',
-      reason: r.reason, by: name(r.byId), at: r.at.toISOString(),
+      reason: r.reason, by: r.inboundRequestId != null ? inbound.get(r.inboundRequestId) ?? 'Vigie' : name(r.byId), at: r.at.toISOString(),
     };
   });
   const dismissStep = [...steps].reverse().find((r) => r.kind === 'dismiss');
