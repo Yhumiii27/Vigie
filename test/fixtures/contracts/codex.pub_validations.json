@@ -1,0 +1,5 @@
+{
+  "source": "Codex origin/main 8f41630, drizzle/0001_partage.sql (contrat D10 v1, une ligne par étape ; types des colonnes d’après drizzle/0000_init.sql ; lecteurs : Matrix infra/postgres/partage/90-droits.sql)",
+  "readers": ["keystone_app", "vigie_app", "arche_app", "matrix_app"],
+  "columns": [["workflow_id", "text"], ["doc_id", "text"], ["revision", "text"], ["requester_id", "text"], ["due", "date"], ["current_step", "integer"], ["outcome", "text"], ["created_at", "date"], ["idx", "integer"], ["function_key", "text"], ["step_label", "text"], ["assignee_id", "text"], ["assignee_name", "text"], ["done_on", "date"], ["assignee_matricule", "text"]]
+}

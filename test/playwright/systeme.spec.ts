@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { asRole, consoleErrors } from './helpers';
 
 // Paquet 13, seconde moitié (QUA-08) : audit hors programme (AUD-20) et impression du programme (AUD-26), carte de revue
-// (AUD-35), gestion des changements (CNF-11), situations d'urgence (CNF-08), revue documentaire sans modification
-// (DOC-15), données d'une personne (SEC-13).
+// (AUD-35), gestion des changements (CNF-11), situations d'urgence (CNF-08), document lu dans Codex (lot 4 de M-02, ex-DOC-15),
+// données d'une personne (SEC-13).
 
 test('Animateur QHSE : audit hors programme, programme imprimable, carte de revue avec perception client', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
@@ -55,15 +55,14 @@ test('Chef de service : situations d’urgence, exercice tenu ; Salarié : consi
   await expect(page.getByRole('button', { name: 'Identifier une situation' })).toHaveCount(0);
 });
 
-test('Animateur QHSE : revue documentaire sans modification ; données d’une personne', async ({ page, context, baseURL }) => {
+test('Animateur QHSE : document lu dans Codex (ancien identifiant) ; données d’une personne', async ({ page, context, baseURL }) => {
   await asRole(context, baseURL!, 'Animateur QHSE', 'all');
+  // Lot 4 de M-02 : la revue sans modification se fait dans Codex ; l'ancien identifiant de Vigie ouvre le document.
   await page.goto('/documents?doc=PR-QHSE-005');
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: 'Revue sans modification' }).first().click();
-  await dialog.getByLabel('Revu le').fill('2026-10-02');
-  await dialog.getByLabel('Conclusion de la revue').fill('Procédure toujours adaptée.');
-  await dialog.getByRole('button', { name: 'Enregistrer la revue' }).click();
-  await expect(dialog.getByText(/version B maintenue/)).toBeVisible();
+  await expect(dialog.getByText('PRO-HSE-0002', { exact: false }).first()).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Revue sans modification' })).toHaveCount(0);
+  await expect(dialog.getByText(/Revue périodique dépassée/)).toBeVisible();
   await page.goto('/habilitations/donnees-personnelles?salarie=sbenali');
   await expect(page.getByRole('heading', { level: 1, name: /Données personnelles · \[S\. Benali\]/ })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: /Habilitations et formations/ })).toBeVisible();

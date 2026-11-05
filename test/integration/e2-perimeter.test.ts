@@ -1,15 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { cookieJar, form } from '../next-mocks';
+import { cookieJar } from '../next-mocks';
 import { freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { Role } from '@/lib/domain';
 import { resetConfig } from '@/lib/env';
 import { loadWatch } from '@/lib/data/watch';
-import { reviseDocument, updateDraft } from '@/server/documents';
+import { linkAction, unlinkAction } from '@/server/links';
 
 // Périmètre de sites (SEC-02) des écrans du flux E2, en session Entra ID (pattern de perimeter-options) :
-// - Documents : rattacher à une version une action hors du périmètre, ou en détacher une, est refusé sans nommer son site ;
+// - Documents : rattacher à une révision de Codex une action hors du périmètre, ou en détacher une, est refusé sans nommer son site ;
 // - Veille : une exigence vaut pour toute l'entreprise, mais l'action qui lui est rattachée n'est décrite (libellé,
 //   avancement, date cible) qu'à qui peut la lire (canReadAction) : hors périmètre, numéro seul.
 // Sans VIGIE_TODAY (hors démonstration) : dates de test en 2027.
@@ -52,46 +52,32 @@ async function actAsEntra(pid: string, role: Role, sites: string[] | null, site:
   cookieJar.set('vigie_site', site);
 }
 
-/** Document commun à tous les sites, en vigueur, sans révision en cours (révisable). */
-async function commonDocument() {
-  const db = await getDb();
-  const [docs, versions] = await Promise.all([db.select().from(t.documents), db.select().from(t.documentVersions)]);
-  return docs.filter((d) => !d.siteId).map((d) => d.id).sort().find((id) => {
-    const vs = versions.filter((v) => v.documentId === id);
-    return vs.some((v) => v.status === 'approuve') && !vs.some((v) => v.status === 'brouillon' || v.status === 'en_revue');
-  })!;
-}
-const draftOf = async (documentId: string) => (await (await getDb()).select().from(t.documentVersions)
-  .where(and(eq(t.documentVersions.documentId, documentId), eq(t.documentVersions.status, 'brouillon'))))[0];
+/** Révision ouverte dans Codex d'un document commun à tous les sites (lot 4 de M-02), sans action. */
+const OPEN_REVISION = 'docversion:PRO-HSE-0001:C';
+const revisionAction = async () => (await (await getDb()).select().from(t.documentActions)
+  .where(and(eq(t.documentActions.codexId, 'PRO-HSE-0001'), eq(t.documentActions.revision, 'C'))))[0]?.actionId;
 
-describe('Documents : action d’une version hors du périmètre', () => {
-  it('rattachement à une révision refusé sans nommer le site, rien écrit', async () => {
-    const doc = await commonDocument();
+describe('Documents : action d’une révision hors du périmètre', () => {
+  it('rattachement refusé sans nommer le site, rien écrit', async () => {
     await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
-    const r = await reviseDocument({}, form({ documentId: doc, summary: 'Révision', actionId: 'A-T90' }));
-    expect(r.fieldErrors?.actionId).toBe(OUTSIDE);
+    const r = await linkAction(OPEN_REVISION, 'A-T90');
+    expect(r).toEqual({ error: OUTSIDE });
     expect(JSON.stringify(r)).not.toMatch(/site_b|Ville B/i);
-    expect(await draftOf(doc)).toBeUndefined();
+    expect(await revisionAction()).toBeUndefined();
     expect(await lastLog('action', 'A-T90')).toBeUndefined();
   });
 
-  it('détacher d’une version une action hors du périmètre : refusé, action conservée ; dans le périmètre : journalisé', async () => {
-    const doc = await commonDocument();
-    // Révision créée sous le périmètre complet avec l'action du site B.
+  it('détacher d’une révision une action hors du périmètre : refusé, action conservée ; dans le périmètre : journalisé', async () => {
     await actAsEntra('clefevre', 'Animateur QHSE', null, 'all');
-    expect(await reviseDocument({}, form({ documentId: doc, summary: 'Révision', actionId: 'A-T90' }))).toEqual({ ok: true, id: doc });
-    const v = await draftOf(doc);
-    expect(v.actionId).toBe('A-T90');
+    expect(await linkAction(OPEN_REVISION, 'A-T90')).toEqual({});
+    expect(await revisionAction()).toBe('A-T90');
     await actAsEntra('clefevre', 'Animateur QHSE', ['site_a'], 'site_a');
-    const r = await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: 'A-T91' }));
-    expect(r.fieldErrors?.actionId).toBe(OUTSIDE);
-    expect((await draftOf(doc)).actionId).toBe('A-T90');
-    expect(await lastLog('action', 'A-T91')).toBeUndefined();
-    // Retour au périmètre complet : remplacement accepté, journalisé sur les deux actions.
+    expect(await unlinkAction(OPEN_REVISION, 'A-T90')).toEqual({ error: OUTSIDE });
+    expect(await revisionAction()).toBe('A-T90');
     await actAsEntra('clefevre', 'Animateur QHSE', null, 'all');
-    expect(await updateDraft({}, form({ versionId: String(v.id), summary: v.summary, actionId: 'A-T91' }))).toEqual({ ok: true, id: doc });
-    expect(await lastLog('action', 'A-T90')).toMatchObject({ action: 'unlink', summary: `Détachée de ${doc} · version ${v.version}` });
-    expect(await lastLog('action', 'A-T91')).toMatchObject({ action: 'link', summary: `Rattachée à ${doc} · version ${v.version}` });
+    expect(await unlinkAction(OPEN_REVISION, 'A-T90')).toEqual({});
+    expect(await revisionAction()).toBeUndefined();
+    expect(await lastLog('action', 'A-T90')).toMatchObject({ action: 'unlink' });
   });
 });
 

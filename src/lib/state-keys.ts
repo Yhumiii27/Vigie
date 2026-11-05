@@ -18,8 +18,6 @@ export const PLAN_STATUS_CODES = ['brouillon', 'a_signer', 'signe', 'clos', 'ann
 export const PERMIT_STATUS_CODES = ['demande', 'delivre', 'clos', 'annule'] as const;
 /** permits.type : PERMIT_TYPES. */
 export const PERMIT_TYPE_CODES = ['feu', 'essai'] as const;
-/** document_versions.status : VERSION_STATUS_KEYS (src/lib/rules/documents.ts). */
-export const VERSION_STATUS_CODES = ['brouillon', 'en_revue', 'approuve', 'archive'] as const;
 /** requirements.evaluation, requirement_evaluations.evaluation : REQUIREMENT_EVAL. */
 export const EVALUATION_CODES = ['conforme', 'ecart', 'analyse', 'a_evaluer'] as const;
 /** audit_findings.kind : FINDING_KINDS. */
@@ -36,8 +34,6 @@ export const SAFETY_NOTICE_KIND_CODES = ['observation', 'mise_en_demeure'] as co
 export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
 /** risk_measure_links.kind : MEASURE_LINK_KINDS (src/lib/domain.ts) — DUE-19. */
 export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
-/** documents.origin : DOC_ORIGINS (src/lib/rules/documents.ts) — DOC-17, migration 0021. */
-export const DOC_ORIGIN_CODES = ['interne', 'externe'] as const;
 /** change_requests.kind : CHANGE_KINDS (src/lib/domain.ts) — CNF-11. */
 export const CHANGE_KIND_CODES = ['organisation', 'procede', 'equipement', 'produit', 'exigence', 'autre'] as const;
 /** change_requests.status : CHANGE_STATUS (src/lib/domain.ts) — CNF-11. */

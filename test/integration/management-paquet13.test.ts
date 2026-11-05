@@ -1,88 +1,26 @@
 import '../next-mocks';
 import { describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
 import { form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
-import { getDb, schema as t } from '@/db';
 import { loadChangeSignals, loadChanges } from '@/lib/data/changes';
-import { loadDocumentSignals, loadDocuments } from '@/lib/data/documents';
 import { loadEmergencies, loadEmergencySignals } from '@/lib/data/emergencies';
 import { loadPersonalData, loadPersonalDataPeople } from '@/lib/data/personal-data';
 import { loadVisibleTodo } from '@/lib/data/todo';
 import { cancelChangeRequest, completeChangeRequest, decideChangeRequest, saveChangeRequest } from '@/server/changes';
-import { cancelDocumentReview, recordDocumentReview, updateDocument } from '@/server/documents';
 import { archiveEmergencySituation, cancelEmergencyDrill, recordEmergencyDrill, saveEmergencySituation } from '@/server/emergencies';
 import { STALE_EDIT } from '@/server/versions';
 
-// Paquet 13, seconde moitié — revue périodique sans modification (DOC-15), conservation et documents externes (DOC-17),
-// situations d'urgence (CNF-08), gestion des changements (CNF-11), données d'une personne (SEC-13). Droits par rôle et
+// Paquet 13, seconde moitié — situations d'urgence (CNF-08), gestion des changements (CNF-11), données d'une personne (SEC-13). Droits par rôle et
 // site, motif, journal ; échéances : visibilité par rôle et site.
 
 freshDemoDatabase();
 
-const db = () => getDb();
 const DENIED = 'Votre rôle ne permet pas cette modification.';
 const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
 const REASON_REQUIRED = { fieldErrors: { reason: expect.any(String) } };
 
-describe('DOC-15 : revue périodique sans modification', () => {
-  it('propriétaire ou approbateurs ; la prochaine revue repart de la revue ; échéance levée ; annulation motivée', async () => {
-    const href = '/documents?doc=PR-QHSE-005';
-    actAs('Animateur QHSE', 'all');
-    expect((await loadDocumentSignals()).todo.some((x) => x.href === href && x.overdue)).toBe(true);
-    // Écran Documents en consultation (encadrement, Salarié) : refusé.
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
-      actAs(role, 'site_a');
-      expect((await recordDocumentReview({}, form({ documentId: 'PR-QHSE-005', reviewedOn: '2026-10-01', conclusion: 'x' }))).error, role).toMatch(/Consultation seule|Votre rôle/);
-    }
-    actAs('Animateur QHSE', 'all');
-    expect(await recordDocumentReview({}, form({ documentId: 'PR-QHSE-005', reviewedOn: '2026-10-10', conclusion: 'x' }))).toMatchObject({ fieldErrors: { reviewedOn: 'Date postérieure à aujourd’hui.' } });
-    expect(await recordDocumentReview({}, form({ documentId: 'PR-QHSE-005', reviewedOn: '2026-10-01', conclusion: 'Procédure toujours adaptée.' }))).toEqual({ ok: true, id: 'PR-QHSE-005' });
-    const row = (await loadDocuments()).rows.find((r) => r.id === 'PR-QHSE-005')!;
-    expect(row).toMatchObject({ lastReviewedOn: '2026-10-01', nextReviewOn: '2029-10-01', overdue: false });
-    expect(row.reviews[0]).toMatchObject({ version: 'B', reviewer: '[C. Lefèvre]', conclusion: 'Procédure toujours adaptée.', cancelled: null });
-    expect(await lastLog('document', 'PR-QHSE-005')).toMatchObject({ action: 'review', summary: 'Revue périodique sans modification · version B maintenue (01/10/2026)' });
-    expect((await loadDocumentSignals()).todo.some((x) => x.href === href)).toBe(false);
-    // Annulation : approbateurs, motif obligatoire ; l'échéance revient.
-    actAs('Chef de service', 'site_a');
-    expect(await cancelDocumentReview({}, form({ id: String(row.reviews[0].id), reason: 'x' }))).toEqual({ error: APPROVERS_ONLY });
-    actAs('Animateur QHSE', 'all');
-    expect(await cancelDocumentReview({}, form({ id: String(row.reviews[0].id) }))).toMatchObject(REASON_REQUIRED);
-    expect(await cancelDocumentReview({}, form({ id: String(row.reviews[0].id), reason: 'Saisie sur le mauvais document' }))).toMatchObject({ ok: true });
-    expect((await loadDocumentSignals()).todo.some((x) => x.href === href && x.overdue)).toBe(true);
-    expect(await lastLog('document', 'PR-QHSE-005')).toMatchObject({ action: 'cancel', reason: 'Saisie sur le mauvais document' });
-  });
-
-  it('refusée pendant une révision en cours ; site du document', async () => {
-    actAs('Direction', 'site_a');
-    expect(await recordDocumentReview({}, form({ documentId: 'FO-QHSE-010', reviewedOn: '2026-10-05', conclusion: 'Fiche toujours adaptée.' }))).toEqual({ ok: true, id: 'FO-QHSE-010' });
-    // FO-MON-003 : révision C en brouillon.
-    expect(await recordDocumentReview({}, form({ documentId: 'FO-MON-003', reviewedOn: '2026-10-05', conclusion: 'x' }))).toEqual({ error: 'Révision C en cours : son approbation tiendra lieu de revue.' });
-    // Document du site A depuis le site B : refusé.
-    actAs('Animateur QHSE', 'site_b');
-    expect(await recordDocumentReview({}, form({ documentId: 'IT-MON-012', reviewedOn: '2026-10-05', conclusion: 'x' }))).toEqual({ error: OTHER_SITE });
-  });
-});
-
-describe('DOC-17 : conservation des enregistrements et documents d’origine externe', () => {
-  it('origine, émetteur et durée de conservation enregistrés et journalisés', async () => {
-    actAs('Animateur QHSE', 'all');
-    const [d] = await (await db()).select().from(t.documents).where(eq(t.documents.id, 'PR-ACH-001'));
-    const base = { id: d.id, title: d.title, type: d.type, process: d.process, ownerId: d.ownerId, reviewMonths: String(d.reviewMonths), distribution: d.distribution, siteId: '' };
-    expect(await updateDocument({}, form({ ...base, origin: 'externe', retention: '' }))).toMatchObject({ fieldErrors: { issuer: expect.stringContaining("Indiquez l'émetteur") } });
-    expect(await updateDocument({}, form({ ...base, origin: 'externe', issuer: '[Client A]', retention: '10 ans' }))).toMatchObject({ ok: true });
-    expect(await lastLog('document', 'PR-ACH-001')).toMatchObject({ details: expect.arrayContaining([
-      { field: 'Origine', from: 'Interne', to: "D'origine externe" }, { field: 'Émetteur', from: null, to: '[Client A]' }, { field: 'Durée de conservation', from: null, to: '10 ans' },
-    ]) });
-    // Formulaire sans ces champs (appel antérieur) : valeurs conservées.
-    expect(await updateDocument({}, form({ ...base, title: 'Évaluation des fournisseurs et sous-traitants' }))).toMatchObject({ ok: true });
-    const row = (await loadDocuments()).rows.find((r) => r.id === 'PR-ACH-001')!;
-    expect(row).toMatchObject({ origin: 'externe', originLabel: "D'origine externe", issuer: '[Client A]', retention: '10 ans' });
-    // Jeu de démonstration : document externe et registre avec sa durée de conservation.
-    expect((await loadDocuments()).rows.find((r) => r.id === 'EXT-QHSE-001')).toMatchObject({ origin: 'externe', issuer: '[Client A]' });
-  });
-});
+// DOC-15 et DOC-17 : tenus par Codex depuis le lot 4 de M-02 (test/integration/codex-documents.test.ts).
 
 describe('CNF-08 : situations d’urgence et exercices', () => {
   it('jeu de démonstration : exercice de déversement en retard, au responsable de la situation, sur le site A', async () => {

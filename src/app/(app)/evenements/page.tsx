@@ -385,7 +385,16 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
       </span>
     ) : links.risk.label]);
   }
-  if (links.document) fields.push(['Document', link(links.document)]);
+  // Document de Codex (lot 4 de M-02) : lien vers le registre, ou vers Codex hors du registre ; identifiant seul sinon.
+  if (links.document) {
+    const d = links.document;
+    fields.push(['Document', (
+      <span key="document" style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
+        {!d.href ? d.label : d.href.startsWith('/') ? link(d) : <a href={d.href} target="_blank" rel="noopener noreferrer" className="vg-link" style={{ fontSize: 12.5 }}>{d.label}</a>}
+        {d.status && <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>{d.status.label}</span>}
+      </span>
+    )]);
+  }
   if (links.plan) fields.push(['Plan de prévention', link(links.plan)]);
   if (links.permit) fields.push(['Permis', link(links.permit)]);
   if (wasteEntries.length) {

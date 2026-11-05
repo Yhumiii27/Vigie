@@ -18,7 +18,7 @@ import { getSession, siteFilter } from '@/lib/session';
 export type HistoryEntity =
   | 'requirement' | 'control' | 'prevention_plan' | 'contractor'
   // Paquet 3 (traçabilité et journal) :
-  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption'
+  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'consumption'
   // Paquet 5 (conformité réglementaire) : objectifs QHSE (AUD-13), contexte du système de management (CNF-05).
   | 'qhse_objective' | 'context_item'
   // Paquet 13 : registre de sécurité (VEI-15), situations d'urgence (CNF-08), demandes de changement (CNF-11).
@@ -146,15 +146,6 @@ const RULES: Record<HistoryEntity, Rule> = {
     async load(id) {
       const [byQual, requirement] = await Promise.all([loadChangeLog('qualification', id), loadChangeLog('qualification_requirement', id)]);
       return [...byQual, ...requirement].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id);
-    },
-  },
-  // Documents maîtrisés (DOC-04) : cycle de vie des versions et métadonnées, montré à la saisie seulement.
-  document: {
-    screen: 'docs',
-    allow: (role) => canEdit(role, 'docs'),
-    async siteOf(id) {
-      const [d] = await (await db()).select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, id));
-      return d;
     },
   },
   // Relevés de consommation d'un mois et d'un site (DOC-10) : identifiant « site|AAAA-MM-01 ».

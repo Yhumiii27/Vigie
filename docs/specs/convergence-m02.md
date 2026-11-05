@@ -4,13 +4,14 @@
 migration `0024_convergence_m02`, voir § 7) ; le 04/11/2026 : **lot 2 développé** en consultation seule (D08, D09 ; décision
 CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6) ; le 05/11/2026 : **lot 3 développé**
 (D13 : numéro `EV-…`, fonction `vigie.pub_signaler_avancement_nc` et boîte de réception ; migration `0026_convergence_m02_nc_inbox`,
-voir § 7 ter). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
+voir § 7 ter) ; le 05/11/2026 aussi : **lot 4 développé** (D10 : documents lus dans Codex, décision CV-05 « avancer D10 » ;
+migration `0028_convergence_m02_documents`, voir § 7 quater). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
 lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
-03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026.
+03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4).
 
 ## 1. Objet, sources et état
 
@@ -77,7 +78,7 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
 | D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | **fait le 04/11** (§ 7 bis ; C-01 et CV-03 par défaut) |
 | D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | **fait le 04/11** en consultation seule (CV-01 tranché, § 7 bis) |
-| D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | à faire, lot 4, à arbitrer (CV-05) |
+| D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | **fait le 05/11** (§ 7 quater ; CV-05 tranché : avancer D10 ; C-06 par défaut) |
 | D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | à faire, lot 5, à confirmer (CV-06) |
 | D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | **fait le 05/11** (§ 7 ter : numéro `EV-…`, fonction `pub_` et boîte de réception ; volet projet de la fiche NC et `/signaler` de Keystone non faits) |
 | D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
@@ -362,6 +363,10 @@ entre J-90 et J-60. **Charge : 0,5 j.**
 - **Démonstration.** Substituts des quatre vues de Codex avec les documents de démonstration ; fichiers servis par Codex
   (lien), plus par `/fichiers`.
 - **Charge : 9 j** (plan : 7,5 j).
+- **Réalisé le 05/11/2026** (§ 7 quater) : lectures des quatre vues, registre en consultation, `document_actions`, clés
+  d'identifiant Codex sans clé étrangère, échéances d'après Codex, mesure de maîtrise « document » sur les vues, lien
+  profond `VIGIE_CODEX_URL` ; DOC-15 et DOC-17 retirés (Codex). Restent : Codex basculé sur le serveur commun, liens de
+  lecture (§ 5.1), documents QHSE saisis dans Codex (§ 5.3), demande de retrait depuis Vigie (D12, lot 5).
 
 ### 3.12 D12 · ECR et ECO (plan `:454`)
 
@@ -471,6 +476,18 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
   keystone.pub_jalons_projets (jalon pv_reception) ou keystone.pub_avancement_projets (fin_prevue_le), selon CV-11.
 - Validé par Guillaume le :
 
+## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app sur les quatre vues de Codex (D10, lot 4 livré le 05/11/2026)
+- Statut : OUVERTE
+- Demande : confirmer dans le registre matrix.liens les liens de nature lecture, lecteur vigie_app, sur
+  codex.pub_documents, codex.pub_revisions_document, codex.pub_validations et codex.pub_types_document (convention du
+  15/10/2026, partage/90-droits.sql:225-228, déjà inscrits) ; prévenir Vigie de toute évolution de leur contrat (Vigie en
+  fige la forme dans test/fixtures/contracts/codex.*.json et en tire ses substituts de démonstration).
+- Justification : décision M-02 (D10) et décision CV-05 de Vigie ; lecture par SELECT seulement depuis
+  src/lib/foreign/codex.ts, aucune écriture (M-17). Sans le lien, le registre des documents de Vigie affiche « source
+  indisponible » et refuse les nouveaux rattachements à un document.
+- Détails techniques : vérification en vigie_app : select count(*) from codex.pub_documents (idem pour les trois autres).
+- Validé par Guillaume le :
+
 ## [2026-11-xx] Vigie → Matrix — Lien d'exécution de keystone_app sur vigie.pub_signaler_avancement_nc (D13, CV-08)
 - Statut : OUVERTE
 - Demande : inscrire au registre matrix.liens un lien de nature execution : lecteur keystone_app, objet
@@ -543,13 +560,26 @@ pas envoyée »), que le lot 2 applique.
 ### 5.3 Codex
 
 ```markdown
-## [2026-11-xx] Vigie → Codex — Reprise des documents QHSE de Vigie (D10) — selon CV-05
-- Statut : OUVERTE
-- Demande : (1) sous-type « Instruction de travail » du type PRO et départements QUA / HSE dans le registre ;
-  (2) si des documents existent dans Vigie en production : POST /api/import étendu à l'historique des révisions
-  (lettres et dates d'approbation), à la liste de diffusion (distribution), à la périodicité de revue (review_months)
-  et au processus (process_code), et aux dernières revues sans modification.
-- Justification : D10 option A ; l'import actuel reprend une seule révision par document (docs/api.md).
+## [2026-11-xx] Vigie → Codex — Documents QHSE lus par Vigie (D10, lot 4 livré le 05/11/2026, décision CV-05)
+- Statut : OUVERTE (brouillon, à valider)
+- Demande :
+  1. Registre : confirmer que le sous-type « Instruction de travail » du type PRO et les départements QUA et HSE (déjà dans
+     origin/main de Codex : src/db/registry.ts, src/db/seed-org.ts) restent stables : Vigie lit comme registre QHSE les
+     documents sans rattachement (attachment = 'none') de ces deux départements (question C-06, choix par défaut).
+  2. Correspondance des types de Vigie (jeu de démonstration, et documents QHSE à créer dans Codex) : politique → POL ;
+     procédure → PRO (« Procédure standard ») ; instruction de travail → PRO (« Instruction de travail ») ; formulaire →
+     FRM ; enregistrement → REC ; document d'origine externe (exigences d'un client) → NRM (« Standard client »), organisme
+     source dans source_org. Processus de Vigie (QHSE, ACH, BE, MON, USI, ESS, DIR…) → process_code. Identifiants de
+     démonstration : PR-QHSE-002 → PRO-QUA-0002… (ancien identifiant en alias), voir src/db/seeds/documents.ts de Vigie.
+  3. Site des documents : pub_documents.site = code de site de Matrix (site_a…), vide = toute l'entreprise (Vigie filtre
+     dessus) ; matricule des propriétaires et valideurs renseigné (users.matricule : échéances de Vigie au propriétaire et
+     à la personne de l'étape en cours, pilote d'une action de revue).
+  4. review_due_at tenu à jour après une revue sans modification (recordReview) et une mise en vigueur : Vigie en tire
+     ses échéances de revue périodique (DOC-14).
+  5. Si des documents existent dans Vigie en production avant le basculement (P-03 : aucun à ce jour) : POST /api/import
+     étendu à l'historique des révisions, à la diffusion, à la périodicité de revue et au processus.
+- Justification : D10 option A, décision CV-05 de Vigie (05/11/2026) ; Vigie n'écrit rien chez Codex ; liens profonds
+  <codex>/documents/<id> (VIGIE_CODEX_URL de Vigie).
 - Validé par Guillaume le :
 
 ## [2026-11-xx] Vigie → Codex — Création des ECR dans Vigie (D12) — après CV-06
@@ -604,7 +634,7 @@ pas envoyée »), que le lot 2 applique.
 ## 6. Questions
 
 Questions du plan de Matrix encore ouvertes pour Vigie (§ 8 du plan) : **C-01** (sens de `elec`, `atex`, `hauteur`,
-`conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE),
+`conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE ; choix par défaut appliqué le 05/11/2026 : QUA / HSE sans rattachement, § 7 quater),
 **C-12** (horizon d'alerte 60 ou 90 jours), **C-13** (accueils sécurité de chantier). **C-03** et **C-08** ne portent
 plus que sur la démonstration (P-03) ; **C-04** (usage des applications Mac) fixe la durée de vie des substituts.
 
@@ -616,7 +646,7 @@ Questions nouvelles (CV : convergence de Vigie) :
 | CV-02 | **Tranché avec CV-01 le 04/11/2026 : fonctions retirées de Vigie** (aucune publication de l'efficacité demandée à Cursus pour l'instant). Question d'origine — Fonctions livrées après le 15/10 et contraires à D09 : sessions collectives et recyclage groupé (HAB-06, 31/10), évaluation à froid (HAB-13), indicateurs de formation de la revue (HAB-18). Les retirer (Cursus a sessions et évaluations, non publiées), ou garder l'évaluation à froid dans Vigie rattachée à `cursus_ref` ? Faut-il demander à Cursus de publier l'efficacité (sans avis nominatif) ? | QHSE, RH | lot 2 |
 | CV-03 | **Appliqué par défaut le 04/11/2026, à confirmer : attributs gardés dans le cache de Vigie ; titres créés par les RH seulement.** Question d'origine — Attributs propres au QHSE sur un titre du catalogue de Cursus (titre de secourisme, sensibilisation, auditeur interne, libellé de portée) : gardés dans le cache de Vigie (proposé) ou portés par Cursus ? Les titres ne se créent plus que par les RH (HAB-12) : accepté ? | QHSE, RH | lot 2 |
 | CV-04 | **Appliqué par défaut le 04/11/2026, à confirmer : portée abandonnée dans Vigie** (non publiée par Cursus ; `scope_label` gardé sans usage). Question d'origine — Portée des titres (catégories CACES, indices électriques, HAB-10) : à tenir et publier par Cursus, ou abandonnée dans Vigie ? | QHSE, RH | lot 2 |
-| CV-05 | D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
+| CV-05 | **Tranché le 05/11/2026 : « avancer D10 »** (lot 4 développé le même jour, § 7 quater ; création non fermée d'abord ; DOC-15 et DOC-17 passés à Codex, conservation par type, appliqué par défaut à confirmer). Question d'origine — D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
 | CV-06 | D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
 | CV-07 | **Tranché le 04/11/2026 : numéro propre de Vigie `EV-…` partout (aucun `NCR-nnn`)**, attribué par Vigie (lot 3) ; **appliqué le 05/11/2026** (§ 7 ter). Question d'origine — Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
 | CV-08 | **Tranché le 04/11/2026 : Keystone écrit par une fonction `vigie.pub_…` qui dépose la demande dans une table de réception traitée par Vigie** (réponse asynchrone, état lu dans une vue) ; **appliqué le 05/11/2026** (§ 7 ter : `vigie.pub_signaler_avancement_nc`, table `inbound_requests` ; vue de l'état à publier par Matrix, § 5.1). Question d'origine — Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
@@ -695,3 +725,23 @@ table de Vigie (`inbound_callers`) plutôt qu'en dur, pour que la démonstration
 sans paramètre de session (aucun affaiblissement : seul le propriétaire du schéma y écrit) ; une demande non traitée
 devient une échéance après un jour ; demandes de démonstration non ajoutées aux bases de démonstration existantes (jeu
 neuf seulement).
+
+## 7 quater. Réalisation du 05/11/2026 (lot 4 : D10 ; migration `0028_convergence_m02_documents`)
+
+Décision CV-05 du 05/11/2026 : **avancer D10** (« lance le lot 4 »), sans fermer d'abord la création de documents dans Vigie.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| Lectures | `codex.pub_documents`, `pub_revisions_document`, `pub_validations`, `pub_types_document` déclarées dans `src/db/foreign.ts` (contrats `test/fixtures/contracts/codex.*.json`, Codex `origin/main` `8f41630`), lues directement par `src/lib/foreign/codex.ts` (`readRegisterDocuments`, `readDocumentsByRef` par identifiant ou alias, `readDocumentRevisions`, `readDocumentValidations`, `readDocumentTypes`, `readDocumentsByOwner`) ; contrôlées par `refreshSharedReferences` (`sync_runs`) ; substituts construits d'après les anciens documents du jeu (`src/db/seeds/documents.ts`) | liens de lecture (§ 5.1) ; Codex sur le serveur commun |
+| Registre | `/documents` en consultation : périmètre QHSE (C-06 : `attachment = 'none'`, départements `QUA` / `HSE`), site (`pub_documents.site`), confidentialité (`confReadable` : confidentiel pour le QHSE et la direction), révision en vigueur, révisions, circuit en cours, actions et événements rattachés, conservation par type, lien « Ouvrir dans Codex » (`VIGIE_CODEX_URL`) ; ancien identifiant (alias) ouvre la fiche ; consultation seule des autres rôles (documents en vigueur) ; création d'une action (revue périodique ou action libre) par le QHSE | documents QHSE créés dans Codex (§ 5.3) |
+| Retiré | formulaires et 11 server actions de `src/server/documents.ts` (création, révision, brouillon, soumission, approbation, renvoi, abandon, « Rendre obsolète », revue sans modification et son annulation) ; DOC-15, DOC-17 ; journal du document montré par Vigie (celui de Codex fait foi) ; fichiers des documents servis par `/fichiers` | demande de retrait depuis Vigie (D12, lot 5) |
+| Données | tables `documents`, `document_versions`, `document_reviews` supprimées (aucune vue `pub_` ni requête de référence ne les lisait : garde-fou M-18 vert) ; `document_actions (codex_id, revision, action_id)` ; `events.document_id`, `actions.document_id`, `risk_measure_links.document_id` gardées en texte sans clé étrangère ; reprise de démonstration (identifiants recodés, journal rattaché, fichiers gardés non servis) | — |
+| Liens | `docversion:<identifiant>:<lettre>` (révision ouverte), source d'origine `document:<identifiant>` (alias admis, identifiant de Codex enregistré) ; événement (`?document=` prérempli, choix et contrôle) ; mesure de maîtrise DUE-19 (en vigueur, revue dépassée, « donnée indisponible ») ; procédure de l'écran Prévention (alias) ; références d'origine reprises (`reprise-liens`) ; données d'une personne (propriétaire par matricule) ; dossier de revue (revues en retard, révisions en validation) | — |
+| Échéances | `revue-documentaire\|<id>` (au propriétaire par matricule, sinon responsable QHSE du site), `validation-documentaire\|<id>\|<révision>` (personne de l'étape en cours, sinon propriétaire, sinon responsable QHSE), `documents-codex-indisponible` ; `test/fixtures/todo-golden.json` réécrit | — |
+| Tests | `test/integration/codex-documents.test.ts` (périmètre, confidentialité, Salarié, alias, résolution hors périmètre, événement, mesure, échéances, lien profond, source indisponible) ; tests des actions, de la migration 0005, de la reprise des liens et de l'ergonomie mis à jour ; `documents-actions.test.ts` et les tests du cycle de vie retirés | recette sur le serveur commun |
+
+Choix pris par défaut, à confirmer (tableau « Convergence M-02, lot 4 » du § 19 de `docs/RESTE-A-FAIRE.md`) : DOC-15 et
+DOC-17 passés à Codex (conservation par type) ; périmètre C-06 (QUA / HSE sans rattachement, site) ; confidentiel lu par le
+QHSE et la direction ; liens vers Codex seulement avec `VIGIE_CODEX_URL` ; destinataires par matricule (propriétaire,
+étape en cours), à défaut le responsable QHSE du site ; une action par révision ouverte ; identifiants de démonstration
+`TYPE-DÉPARTEMENT-SEQ` avec l'ancien identifiant en alias.

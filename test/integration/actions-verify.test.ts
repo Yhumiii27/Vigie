@@ -146,7 +146,7 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     const [next] = r.ids!;
     expect(await actionRow(next)).toMatchObject({ eventId: 'EV-2026-130', source: 'evenement' });
     expect((await db.select().from(t.findingActions).where(eq(t.findingActions.findingId, 2))).map((x) => x.actionId)).toEqual(['A-212']);
-    expect((await db.select().from(t.documentVersions).where(eq(t.documentVersions.id, 25)))[0].actionId).toBe(next);
+    expect((await db.select().from(t.documentActions).where(eq(t.documentActions.codexId, 'PRO-QUA-0006')))).toMatchObject([{ revision: 'C', actionId: next }]);
     expect((await actionRow('A-212')).eventId).toBe('EV-2026-130');
   });
 

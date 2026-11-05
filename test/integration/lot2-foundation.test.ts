@@ -84,7 +84,7 @@ describe('jeu de démonstration du lot 2', () => {
     // créées ; aucune action d'un jeu neuf ne porte de plan de prévention ni de permis (liens repris seulement).
     expect([...by.keys()].sort()).toEqual(['A-208', 'A-218', 'A-219']);
     expect((await db.select().from(t.actions)).filter((a) => a.preventionPlanId || a.permitId)).toEqual([]);
-    expect(by.get('A-208')?.documentId).toBe('PR-QHSE-002');
+    expect(by.get('A-208')?.documentId).toBe('PRO-QUA-0002');
     expect(by.get('A-219')?.wasteStreamId).toBe('FD-04');
     expect(by.get('A-218')?.wasteEntryId).toEqual(expect.any(Number));
   });

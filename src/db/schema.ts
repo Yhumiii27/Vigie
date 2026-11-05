@@ -8,8 +8,8 @@ import {
 import {
   BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
-  REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, VERSION_STATUS_CODES,
-  CHANGE_KIND_CODES, CHANGE_STATUS_CODES, DOC_ORIGIN_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
+  REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES,
+  CHANGE_KIND_CODES, CHANGE_STATUS_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
   ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
   INBOUND_KIND_CODES, INBOUND_RESULT_CODES, INBOUND_STATUS_CODES,
 } from '../lib/state-keys';
@@ -100,7 +100,7 @@ export const hoursWorked = pgTable('hours_worked', {
 // Pièces jointes (photos de signalement, documents maîtrisés, rapports de contrôle…), stockées dans .data/uploads.
 export const attachments = pgTable('attachments', {
   id: text('id').primaryKey(), // uuid
-  // event | event (health) | action | document_version | control_record | requirement_evaluation | prevention_plan | site_map
+  // event | event (health) | action | document_version (fichiers d'avant Codex, migration 0028 : gardés, non servis) | control_record | requirement_evaluation | prevention_plan | site_map
   // | qualification | audit_plan_item | certification | requirement | duerp_version | risk | review | review_item | waste_entry
   // (paquet 6 : ajout et retrait motivé par src/server/entity-files.ts) — droit de lecture : canReadAttachment (src/lib/uploads.ts). Preuve
   // d'une action (ACT-25) : entity_type « action », déposée seule ou avec un commentaire (comment_id, D10).
@@ -183,7 +183,8 @@ export const events = pgTable('events', {
   // Rattachements facultatifs vers les autres modules.
   controlId: integer('control_id').references((): AnyPgColumn => controls.id), // équipement soumis à contrôle périodique
   riskId: integer('risk_id').references((): AnyPgColumn => risks.id), // risque du DUERP concerné (réévaluation)
-  documentId: text('document_id').references((): AnyPgColumn => documents.id), // document maîtrisé concerné
+  // Document de Codex concerné (identifiant de Codex, lot 4 de M-02 : sans clé étrangère, contrôlé contre codex.pub_documents à la saisie).
+  documentId: text('document_id'),
   preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
   permitId: text('permit_id').references((): AnyPgColumn => permits.id),
   // EVT-19 : zone de la carte du site où l'événement s'est produit (QR code du poste ou choix du formulaire) ; le lieu en
@@ -319,7 +320,8 @@ export const actions = pgTable('actions', {
   // Plans de prévention et permis : liens repris seulement (plus d'action QSE depuis la Prévention, 15/10/2026).
   preventionPlanId: text('prevention_plan_id').references((): AnyPgColumn => preventionPlans.id),
   permitId: text('permit_id').references((): AnyPgColumn => permits.id),
-  documentId: text('document_id').references((): AnyPgColumn => documents.id),
+  // Document de Codex d'origine (identifiant de Codex depuis le lot 4 de M-02, sans clé étrangère).
+  documentId: text('document_id'),
   wasteStreamId: text('waste_stream_id').references((): AnyPgColumn => wasteStreams.id),
   wasteEntryId: integer('waste_entry_id').references((): AnyPgColumn => wasteEntries.id), // enlèvement du registre des déchets
   // VG-02 (migration 0023) : étude de sécurité des procédés dont l'action est une recommandation (source « HAZOP »), posée à
@@ -508,7 +510,7 @@ export const riskMeasureLinks = pgTable('risk_measure_links', {
   riskId: integer('risk_id').notNull().references(() => risks.id),
   kind: text('kind').notNull(), // MEASURE_LINK_KINDS : control | document | title
   controlId: integer('control_id').references((): AnyPgColumn => controls.id),
-  documentId: text('document_id').references((): AnyPgColumn => documents.id),
+  documentId: text('document_id'), // identifiant de Codex (lot 4 de M-02), sans clé étrangère
   titleId: text('title_id').references((): AnyPgColumn => trainingTitles.id, { onUpdate: 'cascade' }),
   createdById: text('created_by_id').references(() => people.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1286,65 +1288,22 @@ export const permits = pgTable('permits', {
   check('permits_cancel_check', sql`(${t.status} = 'annule') = (${t.cancelReason} is not null and btrim(${t.cancelReason}) <> '') and (${t.status} = 'annule' or ${t.cancelledById} is null)`),
 ]);
 
-// ─── Documents maîtrisés ────────────────────────────────────────────────────
+// ─── Documents (Codex) ──────────────────────────────────────────────────────
 
-export const documents = pgTable('documents', {
-  id: text('id').primaryKey(), // PR-QHSE-003
-  title: text('title').notNull(),
-  type: text('type').notNull(), // politique | procedure | instruction | formulaire | enregistrement
-  process: text('process').notNull(),
-  ownerId: text('owner_id').notNull().references(() => people.id),
-  reviewMonths: integer('review_months').notNull().default(36),
-  distribution: text('distribution').notNull().default(''), // services / postes destinataires
-  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null = tous sites
+// Lot 4 de M-02 (D10, décision CV-05 du 05/11/2026, migration 0028) : les documents sont tenus par Codex et lus dans ses
+// vues publiées (src/lib/foreign/codex.ts) ; les tables documents, document_versions et document_reviews sont supprimées.
+// Reste à Vigie le rattachement d'une action du plan à une révision d'un document de Codex (lien complémentaire
+// « docversion » du registre src/lib/action-links.ts, ancienne colonne document_versions.action_id) : une action par
+// révision (élément à action unique), identifiant de Codex en texte, sans clé étrangère vers un autre outil.
+export const documentActions = pgTable('document_actions', {
+  codexId: text('codex_id').notNull(),
+  revision: text('revision').notNull(), // lettre de la révision (A, B…)
+  actionId: text('action_id').notNull().references(() => actions.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  // DOC-17 (migration 0021, ISO 9001 §7.5.3.2) : origine (interne | externe : norme, document client ou fournisseur,
-  // texte d'un organisme), émetteur d'un document externe, durée de conservation (texte : « 5 ans après la fin du
-  // contrat », « 10 ans ») des enregistrements et des versions archivées.
-  origin: text('origin').notNull().default('interne'),
-  issuer: text('issuer'),
-  retention: text('retention'),
 }, (t) => [
-  check('documents_origin_check', inList(t.origin, DOC_ORIGIN_CODES)),
-]);
-
-// DOC-15 (migration 0021) : revue périodique d'un document sans modification (document toujours adapté) : date, auteur et
-// conclusion ; la prochaine revue repart de la plus récente (approbation de la version en vigueur ou revue). Jamais
-// supprimée : annulation motivée (revue saisie par erreur). Journal du document (`document`, action `review`).
-export const documentReviews = pgTable('document_reviews', {
-  id: serial('id').primaryKey(),
-  documentId: text('document_id').notNull().references(() => documents.id),
-  version: text('version').notNull(), // version en vigueur revue
-  reviewedOn: date('reviewed_on', { mode: 'string' }).notNull(),
-  reviewerId: text('reviewer_id').references(() => people.id),
-  conclusion: text('conclusion').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  cancelledById: text('cancelled_by_id').references(() => people.id),
-  cancelReason: text('cancel_reason'),
-}, (t) => [
-  index('document_reviews_document_idx').on(t.documentId, t.reviewedOn),
-  check('document_reviews_conclusion_check', sql`btrim(${t.conclusion}) <> ''`),
-  archiveState('document_reviews_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
-]);
-
-export const documentVersions = pgTable('document_versions', {
-  id: serial('id').primaryKey(),
-  documentId: text('document_id').notNull().references(() => documents.id),
-  version: text('version').notNull(), // A, B, C…
-  status: text('status').notNull(), // brouillon | en_revue | approuve | archive
-  summary: text('summary').notNull().default(''), // objet de la modification
-  authorId: text('author_id').references(() => people.id),
-  approverId: text('approver_id').references(() => people.id),
-  submittedOn: date('submitted_on', { mode: 'string' }),
-  approvedOn: date('approved_on', { mode: 'string' }),
-  actionId: text('action_id').references(() => actions.id), // action à l'origine de la révision
-  // Dernier renvoi en brouillon par l'approbateur (DOC-06) : date et motif, échéance de l'auteur tant que la version
-  // n'est pas soumise à nouveau (remis à null à la soumission).
-  returnedOn: date('returned_on', { mode: 'string' }),
-  returnReason: text('return_reason'),
-}, (t) => [
-  check('document_versions_status_check', inList(t.status, VERSION_STATUS_CODES)),
+  primaryKey({ columns: [t.codexId, t.revision] }),
+  index('document_actions_action_idx').on(t.actionId),
+  check('document_actions_revision_check', sql`btrim(${t.revision}) <> ''`),
 ]);
 
 // ─── Environnement et déchets ───────────────────────────────────────────────

@@ -1,5 +1,6 @@
 'use server';
 
+import { resolveDocuments } from '@/lib/data/documents';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
@@ -361,14 +362,15 @@ const submitsHealth = (fd: FormData) => HEALTH_FORM_FIELDS.some((k) => {
  * (projet saisi avant la synchronisation Keystone, équipement réformé depuis).
  */
 async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?: EventRow) {
-  const [people, projectError, [control], [risk], [doc], [plan], [permit], [zone]] = await Promise.all([
+  const [people, projectError, [control], [risk], docs, [plan], [permit], [zone]] = await Promise.all([
     db.select({ id: t.people.id, leftOn: t.people.leftOn }).from(t.people),
     unknownProjectError(db, v.keystoneProjectCode, current?.keystoneProjectCode),
     v.controlId != null ? db.select({ siteId: t.controls.siteId, archivedAt: t.controls.archivedAt }).from(t.controls).where(eq(t.controls.id, v.controlId)) : [],
     v.riskId != null
       ? db.select({ siteId: t.workUnits.siteId, archivedAt: t.risks.archivedAt }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.risks.id, v.riskId))
       : [],
-    v.documentId ? db.select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, v.documentId)) : [],
+    // Document de Codex (lot 4 de M-02) : identifiant ou ancien identifiant, quel que soit le périmètre du registre.
+    resolveDocuments([v.documentId], { db }),
     v.preventionPlanId ? db.select({ siteId: t.preventionPlans.siteId }).from(t.preventionPlans).where(eq(t.preventionPlans.id, v.preventionPlanId)) : [],
     v.permitId ? db.select({ siteId: t.permits.siteId, planId: t.permits.preventionPlanId }).from(t.permits).where(eq(t.permits.id, v.permitId)) : [],
     v.zoneId != null ? db.select({ siteId: t.mapZones.siteId, name: t.mapZones.name, archivedAt: t.mapZones.archivedAt }).from(t.mapZones).where(eq(t.mapZones.id, v.zoneId)) : [],
@@ -398,8 +400,15 @@ async function validateEventRefs(db: DbOrTx, f: Reader, v: EventValues, current?
     else if (risk.archivedAt && v.riskId !== current?.riskId) f.fail('riskId', 'Risque archivé : choisissez un risque du DUERP en vigueur.');
   }
   if (v.documentId) {
-    if (!doc) f.fail('documentId', 'Document inconnu.');
-    else if (!inSite(v.siteId, doc.siteId)) f.fail('documentId', 'Ce document concerne un autre site.');
+    // Valeur déjà enregistrée : admise telle quelle (Codex indisponible, document retiré de la publication) ; nouveau
+    // choix : document de Codex lisible par le rôle, du site de l'événement, jamais sans lecture de Codex.
+    const doc = docs.byRef.get(v.documentId);
+    const kept = v.documentId === current?.documentId;
+    if (doc) v.documentId = doc.id;
+    if (!docs.ok && !kept) f.fail('documentId', docs.message);
+    else if (!doc && !kept) f.fail('documentId', 'Document inconnu dans Codex.');
+    else if (doc && !kept && !doc.readable) f.fail('documentId', 'Document inconnu dans Codex.');
+    else if (doc && !inSite(v.siteId, doc.site)) f.fail('documentId', 'Ce document concerne un autre site.');
   }
   if (v.preventionPlanId) {
     if (!plan) f.fail('preventionPlanId', 'Plan de prévention inconnu.');

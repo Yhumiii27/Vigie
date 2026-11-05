@@ -67,6 +67,8 @@ export async function axeViolations(page: Page): Promise<string[]> {
 export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
   ...['/', '/a-faire', '/actions', '/actions?vue=kanban', '/actions?vue=statistiques', '/evenements', '/evenements?etat=tous', '/risques',
     '/risques?vue=ensemble', '/risques?vue=urgences', '/risques?vue=etudes', '/risques?vue=etudes&etude=ES-002', '/veille', '/veille?onglet=controles', '/veille?onglet=registre', '/documents',
+    // Lot 4 de M-02 : fiche d'un document lu dans Codex (révisions, circuit en cours).
+    '/documents?doc=PRO-HSE-0001',
     '/habilitations', '/habilitations?vue=a-prevoir', '/audits', '/environnement', '/environnement?onglet=filieres', '/prevention',
     '/prevention?onglet=permis', '/prevention?onglet=entreprises', '/prevention/carte', '/prevention/import', '/signaler/postes',
     '/evenements/registre-benin?site=site_a', '/habilitations/donnees-personnelles?salarie=tnguyen', '/veille/registre-securite',

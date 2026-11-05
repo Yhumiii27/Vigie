@@ -523,11 +523,11 @@ export function DossierView({ page, role, notice }: {
               </table>
             </ScrollTable>
           ) : <Empty>Aucune revue documentaire dépassée.</Empty>}
-          <h3 className="rd-h3">Versions en attente d&apos;approbation</h3>
+          <h3 className="rd-h3">Révisions en circuit de validation</h3>
           {d.documents.pending?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Version</th><th>Document</th><th>Soumise le</th></tr></thead>
+                <thead><tr><th>Réf.</th><th>Révision</th><th>Document</th><th>Soumise le</th></tr></thead>
                 <tbody>
                   {d.documents.pending.map((x) => (
                     <tr key={`${x.docId}-${x.version}`}>
@@ -540,7 +540,7 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune version en revue.</Empty>}
+          ) : <Empty>Aucune révision en validation.</Empty>}
         </Section>
       )}
 

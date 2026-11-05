@@ -169,10 +169,10 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
     const o = await created({ link: `reviewdecision:${d.id}`, source: 'objectif', originRef: '' });
     expect(o).toMatchObject({ reviewId: 3, originRef: expect.stringMatching(/^Décision de revue · /) });
 
-    // Version de document : la création pose aussi le document de l'action (ACT-01).
-    const v = await created({ link: 'docversion:23', source: 'revue_documentaire', originRef: '' });
-    expect(v).toMatchObject({ documentId: 'IT-USI-004', originRef: 'IT-USI-004 · version A' });
-    expect((await db.select().from(t.documentVersions).where(eq(t.documentVersions.id, 23)))[0].actionId).toBe(v.id);
+    // Révision d'un document de Codex : la création pose aussi le document de l'action (ACT-01, lot 4 de M-02).
+    const v = await created({ link: 'docversion:PRO-HSE-0001:C', source: 'revue_documentaire', originRef: '' });
+    expect(v).toMatchObject({ documentId: 'PRO-HSE-0001', originRef: 'PRO-HSE-0001 · révision C' });
+    expect((await db.select().from(t.documentActions).where(eq(t.documentActions.codexId, 'PRO-HSE-0001')))).toMatchObject([{ revision: 'C', actionId: v.id }]);
   });
 
   it('habilitation, plan de prévention, permis : aucune action QSE ; type inconnu refusé', async () => {

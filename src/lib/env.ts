@@ -54,6 +54,11 @@ export type VigieConfig = {
   backupBeforeMigrate: boolean;
   /** Origine publique (https://vigie.exemple.fr, sans « / » final) : QR codes, retour OIDC, hôtes admis. */
   publicUrl: string | null;
+  /**
+   * Adresse de Codex (VIGIE_CODEX_URL, lot 4 de M-02) : lien profond « Ouvrir dans Codex » d'un document
+   * (<adresse>/documents/<identifiant>) ; null = pas de lien (référence en texte seulement).
+   */
+  codexUrl: string | null;
   /** Hôtes admis (en-tête Host, minuscules, port compris s'il est donné) : VIGIE_ALLOWED_HOSTS + hôte de publicUrl. */
   allowedHosts: string[];
   /** Secret du cookie de session Entra (≥ 32 caractères). */
@@ -257,6 +262,13 @@ export function parseConfig(env: Env): VigieConfig {
     problems.push('VIGIE_PUBLIC_URL : https:// obligatoire hors démonstration (cookies Secure, HSTS) ; http:// admis pour localhost seulement (essai local).');
   }
 
+  // Lot 4 de M-02 (D10) : adresse de Codex pour les liens profonds vers ses documents ; chemin admis (Codex derrière un
+  // préfixe), ni paramètre ni ancre ; barre oblique finale retirée.
+  const codexUrl = read('VIGIE_CODEX_URL', z.url({ protocol: /^https?$/, error: 'URL http(s) attendue (ex. https://codex.exemple.fr)' })
+    .transform((v) => new URL(v))
+    .refine((u) => !u.search && !u.hash && !u.username && !u.password, { error: 'adresse attendue, sans paramètre, ancre ni identifiants (ex. https://codex.exemple.fr)' })
+    .transform((u) => `${u.origin}${u.pathname}`.replace(/\/+$/, ''))) ?? null;
+
   const hostList = read('VIGIE_ALLOWED_HOSTS', z.string().transform((v) => v.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean))
     .refine((l) => l.every((h) => /^(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(:\d{1,5})?$/.test(h)), { error: 'liste d’hôtes attendue (hote[:port],…), sans schéma ni chemin' })) ?? [];
   const allowedHosts = [...new Set([...hostList, ...(publicUrl ? [new URL(publicUrl).host] : [])])];
@@ -349,7 +361,7 @@ export function parseConfig(env: Env): VigieConfig {
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage, log, clamav, aiLimits, aiScan,
-    publicUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
+    publicUrl, codexUrl, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
     scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };
 }

@@ -252,7 +252,7 @@ describe('fiche (?action=)', () => {
   it('sources réelles (ACT-01) : document, enlèvement, filière, registre annuel, références sans fiche', async () => {
     actAs('Animateur QHSE', 'all');
     const sources = async (id: string) => (await loadActionDetail(id)).payload!.detail.sources;
-    expect((await sources('A-208'))[0]).toMatchObject({ label: 'PR-QHSE-002', href: '/documents?doc=PR-QHSE-002' });
+    expect((await sources('A-208'))[0]).toMatchObject({ label: 'PRO-QUA-0002', href: '/documents?doc=PRO-QUA-0002' });
     expect((await sources('A-218'))[0]).toMatchObject({ label: 'FD-11 · 19/08/2026', href: expect.stringMatching(/^\/environnement\?annee=2026&filiere=FD-11&enlevement=\d+$/) });
     expect((await sources('A-219'))[0]).toMatchObject({ label: 'FD-04', href: '/environnement?onglet=filieres&filiere=FD-04' });
     expect(await sources('A-178')).toEqual([{ kind: 'reference', label: 'Registre des déchets 2026', href: '/environnement?vue=bsd-manquants&annee=2026' }]);

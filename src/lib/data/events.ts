@@ -23,6 +23,7 @@ import { actionView, controlStatus, eventView, loadControls, loadEvents, loadPeo
 import { loadChangeLog } from './changelog';
 import { readPeopleHeldTitles } from './held-titles';
 import { loadQhseLeads } from './leads';
+import { documentRefLabel, loadDocumentChoices, resolveDocuments } from './documents';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
 import { attachmentUrl } from '../uploads';
 import { logAccess } from '@/server/access-log';
@@ -159,13 +160,15 @@ export type EventLinks = Partial<Record<'control' | 'risk' | 'document' | 'plan'
 /** Rattachements d'un événement vers les contrôles, le DUERP, les documents et la prévention (lus sans filtre de site). */
 async function loadLinks(e: typeof t.events.$inferSelect, now: string): Promise<EventLinks> {
   const db = await getDb();
-  const [[control], [risk], [doc], [plan], [permit]] = await Promise.all([
+  const [[control], [risk], docs, [plan], [permit]] = await Promise.all([
     e.controlId != null ? db.select().from(t.controls).where(eq(t.controls.id, e.controlId)) : [],
     e.riskId != null
       ? db.select({ id: t.risks.id, hazard: t.risks.hazard, situation: t.risks.situation, unitId: t.risks.unitId, unit: t.workUnits.label, archivedAt: t.risks.archivedAt })
         .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.risks.id, e.riskId))
       : [],
-    e.documentId ? db.select({ id: t.documents.id, title: t.documents.title }).from(t.documents).where(eq(t.documents.id, e.documentId)) : [],
+    // Document de Codex (lot 4 de M-02) : résolu quel que soit le périmètre du registre ; identifiant seul s'il est
+    // confidentiel pour le rôle ou si Codex est indisponible.
+    resolveDocuments([e.documentId]),
     e.preventionPlanId ? db.select({ id: t.preventionPlans.id, title: t.preventionPlans.title }).from(t.preventionPlans).where(eq(t.preventionPlans.id, e.preventionPlanId)) : [],
     e.permitId ? db.select({ id: t.permits.id, description: t.permits.description }).from(t.permits).where(eq(t.permits.id, e.permitId)) : [],
   ]);
@@ -178,7 +181,13 @@ async function loadLinks(e: typeof t.events.$inferSelect, now: string): Promise<
     };
   }
   if (risk) links.risk = { id: String(risk.id), label: clip(`${risk.archivedAt ? 'Archivé · ' : ''}${risk.unit} · ${risk.hazard} — ${risk.situation}`), href: `/risques?risque=${risk.id}` };
-  if (doc) links.document = { id: doc.id, label: `${doc.id} · ${doc.title}`, href: `/documents?doc=${encodeURIComponent(doc.id)}` };
+  if (e.documentId) {
+    const doc = docs.byRef.get(e.documentId);
+    links.document = {
+      id: doc?.id ?? e.documentId, label: clip(documentRefLabel(e.documentId, doc)), href: doc?.href ?? '',
+      ...(doc?.withdrawn ? { status: { label: 'Retiré dans Codex', tone: 'neutral' as Tone } } : !docs.ok ? { status: { label: 'Codex indisponible', tone: 'warn' as Tone } } : {}),
+    };
+  }
   if (plan) links.plan = { id: plan.id, label: clip(`${plan.id} · ${plan.title}`), href: `/prevention?plan=${encodeURIComponent(plan.id)}` };
   if (permit) links.permit = { id: permit.id, label: clip(`${permit.id} · ${permit.description}`), href: `/prevention?onglet=permis&permis=${encodeURIComponent(permit.id)}` };
   return links;
@@ -445,7 +454,8 @@ export const loadEventLinkOptions = cache(async () => {
     db.select({ id: t.risks.id, hazard: t.risks.hazard, situation: t.risks.situation, unit: t.workUnits.label, siteId: t.workUnits.siteId })
       .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id))
       .where(and(isNull(t.risks.archivedAt), isNull(t.workUnits.archivedAt))).orderBy(asc(t.workUnits.sort), asc(t.risks.sort)),
-    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
+    // Documents de Codex du registre (lot 4 de M-02), du périmètre, lisibles par le rôle.
+    loadDocumentChoices('perimeter').then((c) => c.rows),
     db.select({ id: t.preventionPlans.id, title: t.preventionPlans.title, siteId: t.preventionPlans.siteId, status: t.preventionPlans.status }).from(t.preventionPlans).orderBy(desc(t.preventionPlans.id)),
     db.select({ id: t.permits.id, description: t.permits.description, siteId: t.permits.siteId, status: t.permits.status }).from(t.permits).orderBy(desc(t.permits.id)),
     // EVT-19 : zones en service de la carte des sites actifs (le formulaire filtre sur le site choisi).
@@ -681,7 +691,8 @@ export async function loadNewEventDefaults(asked: Partial<Record<NewEventSource,
       .from(t.controls).where(eq(t.controls.id, controlId)) : [],
     riskId != null ? db.select({ id: t.risks.id, unit: t.workUnits.label, siteId: t.workUnits.siteId, archivedAt: t.risks.archivedAt, unitArchivedAt: t.workUnits.archivedAt })
       .from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id)).where(eq(t.risks.id, riskId)) : [],
-    asked.document ? db.select({ id: t.documents.id, siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, asked.document)) : [],
+    // Document du registre lu dans Codex (en vigueur ou en révision, lisible par le rôle) ; ancien identifiant admis.
+    asked.document ? loadDocumentChoices('perimeter').then((c) => c.rows.filter((x) => x.id === asked.document || x.aliases.includes(asked.document!)).map((x) => ({ id: x.id, siteId: x.siteId }))) : [],
   ]);
   const p = permit && permit.status !== 'annule' && visible(permit.siteId) ? permit : undefined;
   const pp = planRow && planRow.status !== 'annule' && visible(planRow.siteId) && (!p || p.siteId === planRow.siteId) ? planRow : undefined;

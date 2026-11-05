@@ -1,5 +1,6 @@
 import type { ForeignSourceKey } from '../foreign';
 import { rel } from './dates';
+import { demoCodexDocTypes, demoCodexDocuments, demoCodexRevisions, demoCodexValidations } from './documents';
 import { AUDITOR_TITLE, DRIVING_TITLE, MATRIX, PROVIDERS, TITLES, demoHeld } from './skills';
 
 // Contenu des substituts des vues des autres outils (lot 0 de M-02, src/db/foreign-substitutes.ts) : vues de même forme
@@ -142,5 +143,10 @@ export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
     suppliers: DEMO_SUPPLIERS,
     titles: demoCursusTitles(),
     heldTitles: demoHeldTitles(),
+    // D10 (lot 4) : documents de Codex construits d'après les anciens documents maîtrisés du jeu (src/db/seeds/documents.ts).
+    documents: demoCodexDocuments(DEMO_MATRICULES),
+    revisions: demoCodexRevisions(),
+    validations: demoCodexValidations(DEMO_MATRICULES),
+    docTypes: demoCodexDocTypes(),
   };
 }

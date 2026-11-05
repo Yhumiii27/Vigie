@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { nextVersion } from '@/lib/rules/documents';
 import { RISK_TODO_KIND, VACANT_QHSE_LEAD, type Avancement, type RiskFlag } from '@/lib/domain';
 import type { Recipients } from './leads';
 import {
@@ -8,7 +7,7 @@ import {
 } from './risks';
 
 // Règles du DUERP (QUA-03) : alerte calculée d'un risque, numéros de version, destinataires des alertes par unité (TDB-01),
-// programme annuel de prévention (DUE-02) ; indices de version des documents maîtrisés.
+// programme annuel de prévention (DUE-02).
 
 describe('riskFlag : alerte calculée d’un risque', () => {
   const risk = (g: number, p: number, rg: number, rp: number, residualReviewedOn: string | null = null) =>
@@ -43,15 +42,6 @@ describe('versions du DUERP (AAAA.n)', () => {
     expect(versionConflict([], 'v3')).toBe('Format attendu : AAAA.n (ex. 2026.2).');
     expect(suggestNextVersion(['2026.1', '2026.3', '2025.4'], '2026-10-09')).toBe('2026.4');
     expect(suggestNextVersion(['2026.3'], '2027-01-05')).toBe('2027.1');
-  });
-});
-
-describe('indices de version des documents maîtrisés', () => {
-  it('A → B, Z → AA, AZ → BA', () => {
-    expect(nextVersion([])).toBe('A');
-    expect(nextVersion(['A', 'C', 'B'])).toBe('D');
-    expect(nextVersion(['Y', 'Z'])).toBe('AA');
-    expect(nextVersion(['AZ', 'B'])).toBe('BA');
   });
 });
 

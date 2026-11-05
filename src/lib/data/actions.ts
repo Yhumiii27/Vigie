@@ -5,6 +5,8 @@ import { getDb, schema as t } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef } from '@/lib/rules/environment';
 import { studyLabel, type StudyType } from '@/lib/rules/process-safety';
+import { isOpenRevision } from '@/lib/rules/documents';
+import { loadDocumentChoices } from './documents';
 import { ACTION_LINKS, loadActionSources } from '../action-links';
 import {
   SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, isComplementaryLinkKind, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
@@ -188,7 +190,8 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     db.select({ id: t.requirements.id, text: t.requirements.text, actionId: t.requirements.actionId, archivedAt: t.requirements.archivedAt }).from(t.requirements).orderBy(asc(t.requirements.sort)),
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status }).from(t.reviews).orderBy(asc(t.reviews.reviewOn)),
     db.select({ id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, kind: t.reviewDecisions.kind, text: t.reviewDecisions.text, actionId: t.reviewDecisions.actionId }).from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort)),
-    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
+    // Documents de Codex du registre (lot 4 de M-02) : en vigueur ou en révision ; aucun si Codex est indisponible.
+    loadDocumentChoices('site').then((c) => c.rows),
     db.select({ id: t.wasteStreams.id, label: t.wasteStreams.label, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).orderBy(asc(t.wasteStreams.id)),
     db.select({ id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, siteId: t.wasteEntries.siteId, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries),
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
@@ -316,17 +319,15 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
  */
 async function complementaryTargets(a: ActionRow, sources: PlanSource[]): Promise<LinkTargetOption[]> {
   const db = await getDb();
-  const [targets, versions, statuses, decisionReviews] = await Promise.all([
+  const [targets, [documents, docActions], statuses, decisionReviews] = await Promise.all([
     loadActionTargets(),
-    db.select({ id: t.documentVersions.id, documentId: t.documentVersions.documentId, version: t.documentVersions.version, status: t.documentVersions.status, actionId: t.documentVersions.actionId, siteId: t.documents.siteId, title: t.documents.title })
-      .from(t.documentVersions).innerJoin(t.documents, eq(t.documentVersions.documentId, t.documents.id)).orderBy(asc(t.documentVersions.documentId), asc(t.documentVersions.id)),
+    Promise.all([loadDocumentChoices('site'), db.select().from(t.documentActions)]),
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
     db.select({ reviewId: t.reviewDecisions.reviewId }).from(t.reviewDecisions).where(eq(t.reviewDecisions.actionId, a.id)),
   ]);
   const linked = new Set(sources.map((s) => s.link).filter(Boolean));
   const reviewId = a.reviewId ?? decisionReviews[0]?.reviewId ?? null;
   const open = new Set(statuses.filter((s) => !isClosedActionStatus(s.status)).map((s) => s.id));
-  const keep = await siteFilter('site');
   const out: LinkTargetOption[] = [];
   for (const o of targets) {
     const kind = o.value.split(':')[0];
@@ -335,11 +336,16 @@ async function complementaryTargets(a: ActionRow, sources: PlanSource[]): Promis
     if (kind === 'reviewdecision' && reviewId != null && o.reviewId !== reviewId) continue;
     out.push({ value: o.value, label: o.label, kind });
   }
-  for (const v of versions) {
-    const value = `docversion:${v.id}`;
-    if ((v.status !== 'brouillon' && v.status !== 'en_revue') || linked.has(value) || (v.actionId && open.has(v.actionId))) continue;
-    if (!keep(v.siteId) || !inSite(v.siteId, a.siteId)) continue;
-    out.push({ value, label: clip(`${v.documentId} · version ${v.version} (${v.status === 'brouillon' ? 'brouillon' : 'en revue'}) — ${v.title}`), kind: 'docversion' });
+  // Révisions ouvertes dans Codex (brouillon, en validation, approuvée) sans action ouverte (lien « docversion »).
+  const slot = new Map(docActions.map((l) => [`${l.codexId}|${l.revision}`, l.actionId]));
+  for (const d of documents.rows) {
+    if (!inSite(d.siteId, a.siteId)) continue;
+    for (const r of d.revisions.filter((x) => isOpenRevision(x.status))) {
+      const value = `docversion:${d.id}:${r.letter}`;
+      const holder = slot.get(`${d.id}|${r.letter}`);
+      if (linked.has(value) || (holder && open.has(holder))) continue;
+      out.push({ value, label: clip(`${d.id} · révision ${r.letter} (${r.statusLabel.toLowerCase()}) — ${d.title}`), kind: 'docversion' });
+    }
   }
   return out;
 }

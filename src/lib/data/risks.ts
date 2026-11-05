@@ -24,6 +24,7 @@ import { entityVersions } from '@/server/versions';
 import { measureState, type MeasureView } from '../risk-measures';
 import { canSee, type Role } from '../domain';
 import { loadSkillData } from './skills';
+import { documentRefLabel, loadDocumentChoices, resolveDocuments } from './documents';
 
 // ─── Évaluation des risques (DUERP) ─────────────────────────────────────────
 
@@ -272,14 +273,14 @@ async function loadRiskMeasures(risks: { id: number; unitId: string }[], unitSit
   const controlIds = [...new Set(links.map((l) => l.controlId).filter((x): x is number => x != null))];
   const documentIds = [...new Set(links.map((l) => l.documentId).filter((x): x is string => !!x))];
   const titleIds = [...new Set(links.map((l) => l.titleId).filter((x): x is string => !!x))];
-  const [controls, records, docs, versions, titles, skills] = await Promise.all([
+  const [controls, records, docs, titles, skills] = await Promise.all([
     controlIds.length ? db.select().from(t.controls).where(inArray(t.controls.id, controlIds)) : [],
     controlIds.length
       ? db.select({ controlId: t.controlRecords.controlId, performedOn: t.controlRecords.performedOn, result: t.controlRecords.result }).from(t.controlRecords)
         .where(and(inArray(t.controlRecords.controlId, controlIds), isNull(t.controlRecords.cancelledAt))).orderBy(desc(t.controlRecords.performedOn), desc(t.controlRecords.id))
       : [],
-    documentIds.length ? db.select().from(t.documents).where(inArray(t.documents.id, documentIds)) : [],
-    documentIds.length ? db.select().from(t.documentVersions).where(and(inArray(t.documentVersions.documentId, documentIds), eq(t.documentVersions.status, 'approuve'))) : [],
+    // Documents de Codex (lot 4 de M-02), résolus quel que soit le périmètre du registre.
+    resolveDocuments(documentIds, { db, role }),
     titleIds.length ? db.select().from(t.trainingTitles).where(inArray(t.trainingTitles.id, titleIds)) : [],
     titleIds.length ? loadSkillData('perimeter') : null,
   ]);
@@ -294,11 +295,12 @@ async function loadRiskMeasures(risks: { id: number; unitId: string }[], unitSit
       const st = measureState({ kind: 'control', archived: !!c.archivedAt, nextOn: c.nextOn, lastResult: last && last.performedOn === c.lastOn ? last.result : null }, now);
       view = { id: l.id, kind: 'control', targetId: String(c.id), label: `${c.controlType} · ${c.equipment}`, href: canSee(role, 'watch') ? `/veille?onglet=controles&controle=${c.id}` : null, valid: st.valid, state: st.label, tone: st.tone };
     } else if (l.kind === 'document' && l.documentId) {
-      const d = docs.find((x) => x.id === l.documentId);
-      if (!d) continue;
-      const current = versions.filter((v) => v.documentId === d.id).sort((a, b) => (b.approvedOn ?? '').localeCompare(a.approvedOn ?? ''))[0];
-      const st = measureState({ kind: 'document', inForce: !!current, nextReviewOn: current?.approvedOn ? addMonths(current.approvedOn, d.reviewMonths) : null }, now);
-      view = { id: l.id, kind: 'document', targetId: d.id, label: `${d.id} · ${d.title}`, href: canSee(role, 'docs') ? `/documents?doc=${encodeURIComponent(d.id)}` : null, valid: st.valid, state: st.label, tone: st.tone };
+      // Codex indisponible : état « donnée indisponible », jamais une mesure signalée à tort ; document introuvable dans
+      // Codex (retiré de la publication) : mesure non valide.
+      const d = docs.byRef.get(l.documentId);
+      const st = measureState(!docs.ok ? { kind: 'document', inForce: null, nextReviewOn: null } : { kind: 'document', inForce: !!d?.inForce, nextReviewOn: d?.inForce ? d.reviewDueAt : null }, now);
+      const href = d && d.readable && canSee(role, 'docs') ? d.href : null;
+      view = { id: l.id, kind: 'document', targetId: d?.id ?? l.documentId, label: documentRefLabel(l.documentId, d), href, valid: st.valid, state: st.label, tone: st.tone };
     } else if (l.kind === 'title' && l.titleId) {
       const ti = titles.find((x) => x.id === l.titleId);
       if (!ti) continue;
@@ -509,22 +511,21 @@ export type ZoneOption = { id: number; name: string; siteId: string; unitId: str
 async function loadMeasureAndZoneOptions(): Promise<{ measureOptions: MeasureOptions; zoneOptions: ZoneOption[] }> {
   const db = await getDb();
   const keep = await siteFilter('perimeter');
-  const [controls, docs, approved, titles, zones] = await Promise.all([
+  const [controls, docs, titles, zones] = await Promise.all([
     db.select({ id: t.controls.id, equipment: t.controls.equipment, controlType: t.controls.controlType, siteId: t.controls.siteId })
       .from(t.controls).where(isNull(t.controls.archivedAt)).orderBy(asc(t.controls.sort), asc(t.controls.id)),
-    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
-    db.select({ documentId: t.documentVersions.documentId }).from(t.documentVersions).where(eq(t.documentVersions.status, 'approuve')),
+    // Documents de Codex du registre (lot 4 de M-02), lisibles par le rôle.
+    loadDocumentChoices('perimeter').then((c) => c.rows),
     db.select({ id: t.trainingTitles.id, label: t.trainingTitles.label }).from(t.trainingTitles).where(isNull(t.trainingTitles.archivedAt)).orderBy(asc(t.trainingTitles.sort)),
     db.select({ id: t.mapZones.id, name: t.mapZones.name, siteId: t.mapZones.siteId, unitId: t.mapZones.workUnitId })
       .from(t.mapZones).innerJoin(t.sites, eq(t.mapZones.siteId, t.sites.id))
       .where(and(isNull(t.mapZones.archivedAt), isNull(t.sites.archivedAt))).orderBy(asc(t.mapZones.name)),
   ]);
-  const inForce = new Set(approved.map((v) => v.documentId));
   return {
     measureOptions: {
       control: controls.filter((c) => keep(c.siteId)).map((c) => [String(c.id), `${c.controlType} · ${c.equipment}`, c.siteId] as const),
       // Documents en vigueur seulement : une mesure liée à un document jamais approuvé ne serait pas valide.
-      document: docs.filter((d) => keep(d.siteId) && inForce.has(d.id)).map((d) => [d.id, `${d.id} · ${d.title}`, d.siteId] as const),
+      document: docs.filter((d) => keep(d.siteId) && d.inForce).map((d) => [d.id, `${d.id} · ${d.title}`, d.siteId] as const),
       title: titles.map((ti) => [ti.id, ti.label, null] as const),
     },
     zoneOptions: zones.filter((z) => keep(z.siteId)),

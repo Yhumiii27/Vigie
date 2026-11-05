@@ -1,0 +1,5 @@
+{
+  "source": "Codex origin/main 8f41630, drizzle/0001_partage.sql (contrat D10 v1 ; types des colonnes d’après drizzle/0000_init.sql ; lecteurs : Matrix infra/postgres/partage/90-droits.sql)",
+  "readers": ["keystone_app", "vigie_app", "arche_app", "crucible_app", "matrix_app"],
+  "columns": [["revision_id", "integer"], ["doc_id", "text"], ["letter", "text"], ["status", "text"], ["created_at", "date"], ["effective_at", "date"], ["approved_at", "date"], ["in_force_at", "date"], ["superseded_at", "date"], ["modifier_id", "text"], ["change_ref", "text"], ["working_versions", "integer"], ["last_version_id", "integer"], ["last_version_n", "integer"], ["last_version_date", "date"], ["last_version_author_id", "text"], ["last_version_author_name", "text"], ["last_version_comment", "text"], ["file_name", "text"], ["mime", "text"], ["size", "integer"]]
+}

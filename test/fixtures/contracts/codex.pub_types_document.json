@@ -1,0 +1,5 @@
+{
+  "source": "Codex origin/main 8f41630, drizzle/0001_partage.sql (contrat D11 v1 ; types des colonnes d’après drizzle/0000_init.sql ; lecteurs : Matrix infra/postgres/partage/90-droits.sql)",
+  "readers": ["keystone_app", "vigie_app", "arche_app", "matrix_app"],
+  "columns": [["code", "text"], ["label_fr", "text"], ["label_en", "text"], ["family", "text"], ["family_label_fr", "text"], ["family_label_en", "text"], ["family_group", "text"], ["family_sort", "integer"], ["origins", "jsonb"], ["attachments", "jsonb"], ["subtypes", "jsonb"], ["circuit", "jsonb"], ["retention_years", "integer"], ["retention_trigger", "text"], ["retention_disposition", "text"], ["retention_basis", "text"], ["conf_allowed", "jsonb"], ["conf_default", "text"], ["iso", "text"], ["client_deliverable", "boolean"], ["active", "boolean"], ["source", "text"], ["sort", "integer"]]
+}

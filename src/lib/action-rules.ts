@@ -387,7 +387,7 @@ export type ComplementaryLinkKind = (typeof COMPLEMENTARY_LINK_KINDS)[number];
 export const isComplementaryLinkKind = (kind: string): kind is ComplementaryLinkKind => (COMPLEMENTARY_LINK_KINDS as readonly string[]).includes(kind);
 /** Libellé d'un type de lien complémentaire (liste « Type d'élément » de « Rattacher »). */
 export const COMPLEMENTARY_LINK_LABELS: Record<ComplementaryLinkKind, string> = {
-  risk: 'Risque du DUERP', requirement: 'Exigence de veille', control: 'Contrôle périodique', docversion: 'Version de document en révision',
+  risk: 'Risque du DUERP', requirement: 'Exigence de veille', control: 'Contrôle périodique', docversion: 'Révision de document (Codex)',
   review: 'Revue de direction', reviewdecision: 'Décision de revue',
 };
 

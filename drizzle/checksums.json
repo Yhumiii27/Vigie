@@ -140,6 +140,11 @@
       "when": 1793886209062,
       "sql": "5b9abaa3de1d145c9b7e7bc0f87b2aca300466c4e01455ed989f83b225f28501",
       "snapshot": "581d4842586894c7f40af099584f42dde3505cc26f160a2286a8c7a9bbbe152d"
+    },
+    "0028_convergence_m02_documents": {
+      "when": 1793888458783,
+      "sql": "83bfffd16919672fca93a9dd1bb722b563140919d25102ba7c687a82bb77bff4",
+      "snapshot": "606b7ad73a57c832f640edcc4eb355fae0baf188d577aa4bf64d98d90b7122a6"
     }
   }
 }

@@ -2,10 +2,11 @@
 // paquet 1, flux E2) : règle pure, testée dans action-defaults.test.ts. La création reste réservée au service QHSE
 // (ACT-22) : l'écran ne propose ces valeurs qu'à lui.
 //
-// Source « Revue documentaire » imposée, domaine Qualité. Élément lié : la révision en cours (docversion:<id>) quand elle
-// n'a pas encore d'action — l'action porte aussi son document (actions.document_id, posé à la création seulement, D15) —,
-// sinon le document lui-même (document:<id>, ACT-01). Site du document ; document commun à tous les sites : site choisi
-// par le QHSE.
+// Source « Revue documentaire » imposée, domaine Qualité. Élément lié : la révision ouverte dans Codex
+// (docversion:<identifiant Codex>:<lettre>, table document_actions, lot 4 de M-02) quand elle n'a pas encore d'action —
+// l'action porte aussi son document (actions.document_id, posé à la création seulement, D15) —, sinon le document lui-même
+// (document:<identifiant Codex>, ACT-01). Site du document ; document commun à tous les sites : site choisi par le QHSE.
+// Pilote proposé : le propriétaire du document rapproché par son matricule, sinon à choisir.
 
 import type { ActionDefaults } from '@/lib/action-view';
 import { addDays, fmtDate } from '@/lib/dates';
@@ -15,8 +16,9 @@ import { ORIGIN_REF_MAX } from '@/lib/domain';
 export const VERIFY_AFTER_DAYS = 30;
 
 type DocLike = {
-  id: string; title: string; ownerId: string; siteId: string | null; actionTitle: string; dueSoon: boolean; overdue: boolean; nextReviewOn: string | null;
-  pending: { id: number; version: string; action: unknown } | null;
+  id: string; title: string; ownerId: string | null; siteId: string | null; actionTitle: string; dueSoon: boolean; overdue: boolean; nextReviewOn: string | null;
+  /** Révision ouverte dans Codex (brouillon ou en validation) et son action éventuelle. */
+  pending: { letter: string; action: unknown } | null;
 };
 
 /**
@@ -32,13 +34,13 @@ export function documentActionDefaults(doc: DocLike, opts: { review: boolean; su
   return {
     source: 'revue_documentaire',
     lockSource: true,
-    link: onVersion ? `docversion:${onVersion.id}` : `document:${doc.id}`,
-    linkLabel: onVersion ? `${doc.id} · version ${onVersion.version}` : `Document · ${doc.id}`,
+    link: onVersion ? `docversion:${doc.id}:${onVersion.letter}` : `document:${doc.id}`,
+    linkLabel: onVersion ? `${doc.id} · révision ${onVersion.letter}` : `Document · ${doc.id}`,
     originRef: doc.id.slice(0, ORIGIN_REF_MAX),
     domain: 'qualite',
     problem,
     detail: opts.review ? doc.actionTitle : undefined,
-    pilotId: doc.ownerId,
+    pilotId: doc.ownerId ?? undefined,
     dueOn,
     verifyDueOn: addDays(dueOn, VERIFY_AFTER_DAYS),
     siteId: doc.siteId ?? undefined,

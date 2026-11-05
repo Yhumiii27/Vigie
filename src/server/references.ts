@@ -36,7 +36,7 @@ export async function nextReference(tx: DbOrTx, o: { prefix: string; pad?: numbe
 
 /** Tables à référence texte (colonne `id`) et type d'entité de leur journal (fiches supprimées : référence jamais réattribuée). */
 const REF_TABLES = {
-  contractor: t.contractors, prevention_plan: t.preventionPlans, permit: t.permits, document: t.documents,
+  contractor: t.contractors, prevention_plan: t.preventionPlans, permit: t.permits,
   waste_stream: t.wasteStreams, certification: t.certifications, event: t.events,
   // CNF-11 (paquet 13) : demandes de changement « MC-001 ».
   change_request: t.changeRequests,
@@ -48,7 +48,7 @@ export type RefEntity = keyof typeof REF_TABLES;
 /** Références déjà attribuées d'un préfixe : identifiants des fiches de `entity` et identifiants de son journal. */
 export function usedIds(entity: RefEntity, prefix: string) {
   return async (tx: DbOrTx): Promise<string[]> => {
-    const table = REF_TABLES[entity] as typeof t.documents; // colonne `id` texte, seule lue
+    const table = REF_TABLES[entity] as typeof t.permits; // colonne `id` texte, seule lue
     const rows = await tx.select({ id: table.id }).from(table).where(like(table.id, `${prefix}%`));
     const logged = await tx.selectDistinct({ id: t.changeLog.entityId }).from(t.changeLog)
       .where(and(eq(t.changeLog.entityType, entity), like(t.changeLog.entityId, `${prefix}%`)));

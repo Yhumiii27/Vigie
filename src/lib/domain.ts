@@ -440,7 +440,7 @@ export const CHANGE_STATUS_KEYS = Object.keys(CHANGE_STATUS) as ChangeStatus[];
 export type MeasureLinkKind = 'control' | 'document' | 'title';
 export const MEASURE_LINK_KINDS: Record<MeasureLinkKind, { label: string; icon: string }> = {
   control: { label: 'Contrôle périodique', icon: 'ph-calendar-check' },
-  document: { label: 'Document maîtrisé', icon: 'ph-file-text' },
+  document: { label: 'Document (Codex)', icon: 'ph-file-text' },
   title: { label: 'Habilitation ou formation', icon: 'ph-identification-badge' },
 };
 export const MEASURE_LINK_KIND_KEYS = Object.keys(MEASURE_LINK_KINDS) as MeasureLinkKind[];
@@ -559,7 +559,7 @@ export const REVIEW_SOURCES: Record<ReviewSource, { label: string; auto: boolean
   watch: { label: 'Vigie · veille et contrôles', auto: true },
   risks: { label: 'Vigie · DUERP', auto: true },
   prevention: { label: 'Vigie · prévention', auto: true },
-  documents: { label: 'Vigie · maîtrise documentaire', auto: true },
+  documents: { label: 'Codex · maîtrise documentaire', auto: true },
   environment: { label: 'Vigie · environnement', auto: true },
   skills: { label: 'Vigie · compétences', auto: true },
 };

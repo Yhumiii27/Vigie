@@ -95,10 +95,10 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
     tips: ['Les échéances de la revue vous mènent ici quand l’écran Audits ne vous est pas ouvert en saisie.'],
   },
   docs: {
-    intro: 'Documents maîtrisés : procédures, modes opératoires, enregistrements, avec versions, approbation et revue périodique.',
+    intro: 'Documents maîtrisés QHSE lus dans Codex (GED du groupe) : révision en vigueur, révisions en cours, circuit de validation et prochaine revue.',
     tips: [
-      'Une nouvelle version suit le circuit de validation ; « Revue sans modification » prolonge la validité.',
-      'Les événements liés au document et « Signaler un événement » figurent dans sa fiche.',
+      'Rédaction, nouvelle révision, circuit de validation, revue sans modification et retrait se font dans Codex (« Ouvrir dans Codex »).',
+      'Les actions et événements liés au document et « Signaler un événement » figurent dans sa fiche.',
     ],
   },
   env: {

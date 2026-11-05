@@ -10,6 +10,18 @@ import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, 
 import { requireInSite } from './guard';
 import { inSite } from './session';
 import { ORIGIN_LINKS, type OriginColumn } from './origin-links';
+import { readDocumentRevisions, readDocumentsByRef } from './foreign/codex';
+import { unavailableMessage } from './foreign/labels';
+import { confReadable, documentHref, isOpenRevision } from './rules/documents';
+
+/**
+ * Titres des documents de Codex cités par les actions (identifiant seul quand Codex est indisponible, et pour un document
+ * confidentiel : la fiche action est lue au-delà du QHSE).
+ */
+async function documentTitles(db: DbOrTx, ids: string[]): Promise<Map<string, string>> {
+  const read = await readDocumentsByRef(db, ids);
+  return new Map(read.ok ? read.rows.filter((d) => confReadable(d.conf, false)).map((d) => [d.id, d.title]) : []);
+}
 
 // ─── Rattachements d'une action du plan à sa source ─────────────────────────
 //
@@ -160,17 +172,21 @@ const ORIGIN_KINDS: Record<string, LinkKind> = {
     },
   }),
 
+  // Document de Codex (lot 4 de M-02) : identifiant de Codex, résolu aussi par un ancien identifiant (alias) ; Codex
+  // indisponible : rattachement refusé avec le message de la source.
   [ORIGIN_LINKS.documentId.kind]: originKind('documentId', {
     screen: 'docs',
     async find(tx, id) {
-      const [d] = await tx.select({ id: t.documents.id, siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, id));
-      return d && { ...d, reference: d.id };
+      const read = await readDocumentsByRef(tx, [id]);
+      if (!read.ok) return { id, siteId: null, reference: id, blocked: unavailableMessage('documents') };
+      const d = read.rows.find((x) => x.id === id) ?? read.rows.find((x) => x.aliases.includes(id));
+      return d && { id: d.id, siteId: d.site, reference: d.id };
     },
     logAs: ([id]) => (id ? { entityType: 'document', entityId: id } : null),
     async sources(db, ids) {
-      const rows = await db.select({ actionId: t.actions.id, id: t.documents.id, title: t.documents.title })
-        .from(t.actions).innerJoin(t.documents, eq(t.actions.documentId, t.documents.id));
-      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `document:${r.id}`, kind: 'document', label: r.id, detail: r.title, href: `/documents?doc=${enc(r.id)}` }));
+      const rows = only(ids)(await db.select({ actionId: t.actions.id, id: t.actions.documentId }).from(t.actions).where(isNotNull(t.actions.documentId)));
+      const titles = await documentTitles(db, rows.map((r) => r.id!));
+      return rows.map((r) => ({ actionId: r.actionId, link: `document:${r.id}`, kind: 'document', label: r.id!, detail: titles.get(r.id!), href: documentHref(r.id!) }));
     },
   }),
 
@@ -409,40 +425,47 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
     },
   },
 
+  // Révision d'un document de Codex (lot 4 de M-02, table document_actions) : `docversion:<identifiant Codex>:<lettre>`,
+  // une action par révision ; rattachement à une révision ouverte (brouillon, en validation, approuvée) seulement.
   docversion: {
     screen: 'docs',
-    async attach(tx, [a], actionId) {
-      const [row] = await tx.select({ actionId: t.documentVersions.actionId }).from(t.documentVersions).where(eq(t.documentVersions.id, num(a)));
-      if (!row) return NOT_FOUND;
-      const taken = await slotTaken(tx, row.actionId, actionId);
-      if (!taken) await tx.update(t.documentVersions).set({ actionId }).where(eq(t.documentVersions.id, num(a)));
-      return taken;
+    async attach(tx, [codexId = '', letter = ''], actionId) {
+      const read = await readDocumentRevisions(tx, [codexId]);
+      if (!read.ok) return unavailableMessage('revisions');
+      const rev = read.rows.find((r) => r.letter === letter);
+      if (!rev) return NOT_FOUND;
+      const [row] = await tx.select({ actionId: t.documentActions.actionId }).from(t.documentActions)
+        .where(and(eq(t.documentActions.codexId, codexId), eq(t.documentActions.revision, letter)));
+      if (!row && !isOpenRevision(rev.status)) return 'Révision close dans Codex (en vigueur, remplacée ou annulée) : rattachement impossible.';
+      const taken = await slotTaken(tx, row?.actionId ?? null, actionId);
+      if (taken) return taken;
+      if (row) await tx.update(t.documentActions).set({ actionId }).where(and(eq(t.documentActions.codexId, codexId), eq(t.documentActions.revision, letter)));
+      else await tx.insert(t.documentActions).values({ codexId, revision: letter, actionId });
+      return null;
     },
-    async detach(tx, [a], actionId) {
-      await tx.update(t.documentVersions).set({ actionId: null }).where(and(eq(t.documentVersions.id, num(a)), eq(t.documentVersions.actionId, actionId)));
+    async detach(tx, [codexId = '', letter = ''], actionId) {
+      await tx.delete(t.documentActions).where(and(eq(t.documentActions.codexId, codexId), eq(t.documentActions.revision, letter), eq(t.documentActions.actionId, actionId)));
     },
     async detachAll(tx, actionId) {
-      await tx.update(t.documentVersions).set({ actionId: null }).where(eq(t.documentVersions.actionId, actionId));
+      await tx.delete(t.documentActions).where(eq(t.documentActions.actionId, actionId));
     },
-    async siteOf(tx, [a]) {
-      const [d] = await tx.select({ siteId: t.documents.siteId }).from(t.documentVersions)
-        .innerJoin(t.documents, eq(t.documentVersions.documentId, t.documents.id)).where(eq(t.documentVersions.id, num(a)));
-      return d ? d.siteId : undefined;
+    async siteOf(tx, [codexId = '']) {
+      const read = await readDocumentsByRef(tx, [codexId]);
+      const d = read.ok ? read.rows.find((x) => x.id === codexId) : undefined;
+      return d ? d.site : undefined;
     },
-    async facts(db, [a]) {
-      const [d] = await db.select({ documentId: t.documentVersions.documentId, version: t.documentVersions.version, siteId: t.documents.siteId }).from(t.documentVersions)
-        .innerJoin(t.documents, eq(t.documentVersions.documentId, t.documents.id)).where(eq(t.documentVersions.id, num(a)));
-      return d ? { reference: ref(`${d.documentId} · version ${d.version}`), siteId: d.siteId, facts: {} } : null;
+    async facts(db, [codexId = '', letter = '']) {
+      const read = await readDocumentsByRef(db, [codexId]);
+      const d = read.ok ? read.rows.find((x) => x.id === codexId) : undefined;
+      return d && letter ? { reference: ref(`${d.id} · révision ${letter}`), siteId: d.site, facts: {} } : null;
     },
-    // Création depuis une version : l'action porte aussi son document (ACT-01, à la création seulement, D15).
-    async onCreate(tx, [a], actionId) {
-      const [v] = await tx.select({ documentId: t.documentVersions.documentId }).from(t.documentVersions).where(eq(t.documentVersions.id, num(a)));
-      if (v) await tx.update(t.actions).set({ documentId: v.documentId }).where(and(eq(t.actions.id, actionId), isNull(t.actions.documentId)));
+    // Création depuis une révision : l'action porte aussi son document (ACT-01, à la création seulement, D15).
+    async onCreate(tx, [codexId = ''], actionId) {
+      if (codexId) await tx.update(t.actions).set({ documentId: codexId }).where(and(eq(t.actions.id, actionId), isNull(t.actions.documentId)));
     },
     async sources(db, ids) {
-      const rows = await db.select({ actionId: t.documentVersions.actionId, id: t.documentVersions.id, documentId: t.documentVersions.documentId, version: t.documentVersions.version })
-        .from(t.documentVersions).where(isNotNull(t.documentVersions.actionId));
-      return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `docversion:${r.id}`, kind: 'docversion', label: `${r.documentId} · version ${r.version}`, href: `/documents?doc=${r.documentId}` }));
+      const rows = await db.select().from(t.documentActions);
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `docversion:${r.codexId}:${r.revision}`, kind: 'docversion', label: `${r.codexId} · révision ${r.revision}`, href: documentHref(r.codexId) }));
     },
   },
 
@@ -644,7 +667,7 @@ export type LinkChange = { parsed: NonNullable<ReturnType<typeof parseActionLink
 /**
  * Contrôles d'un rattachement (`link`) ou d'un détachement (`unlink`) d'un lien complémentaire sur une action existante,
  * communs à linkAction / unlinkAction (src/server/links.ts) et à l'action liée d'une version de document (DOC-13,
- * src/server/documents.ts), dans cet ordre (rien n'est révélé d'une action hors périmètre) : type connu, jamais l'événement
+ * src/server/links.ts), dans cet ordre (rien n'est révélé d'une action hors périmètre) : type connu, jamais l'événement
  * ou l'audit (EVENT_AUDIT_LOCKED), ni une source d'origine (ORIGIN_LOCKED), ni un élément sans action QSE ; action
  * existante, du site sélectionné et du périmètre (requireInSite) ; droits de la fiche (actionRights : canLink, action ni
  * Vérifiée ni Abandonnée ; canUnlink, sauf Abandonnée) ; écran de l'élément ouvert en saisie au rôle ; site de l'élément

@@ -1,4 +1,6 @@
 import 'server-only';
+import { readRegisterDocuments } from '@/lib/foreign/codex';
+import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { cache } from 'react';
 import { asc, desc, inArray, isNull } from 'drizzle-orm';
 import { loadProjectIndex } from '@/lib/foreign/keystone';
@@ -174,7 +176,8 @@ const loadAutoData = cache(async () => {
     db.select({ current: t.duerpVersions.current }).from(t.duerpVersions),
     db.select({ siteId: t.preventionPlans.siteId }).from(t.preventionPlans),
     db.select({ siteId: t.permits.siteId }).from(t.permits),
-    db.select({ siteId: t.documents.siteId }).from(t.documents),
+    // Documents QHSE de Codex (lot 4 de M-02) ; aucun si Codex est indisponible.
+    readRegisterDocuments(db, QHSE_DEPARTMENTS).then((r) => (r.ok ? r.rows.map((d) => ({ siteId: d.site })) : [])),
     db.select({ siteId: t.wasteEntries.siteId, removedOn: t.wasteEntries.removedOn, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries),
   ]);
   const inPeriod = (p: (typeof plan)[number]) => {
@@ -825,8 +828,9 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     overdue: documents.rows.filter((r) => r.overdue).sort((a, b) => (a.reviewDays ?? 0) - (b.reviewDays ?? 0)).map((r) => ({
       id: r.id, title: r.title, owner: r.owner, nextReviewOn: r.nextReviewOn, href: `/documents?doc=${encodeURIComponent(r.id)}`,
     })),
-    pending: documents.rows.flatMap((r) => r.versions.filter((x) => x.status === 'en_revue').map((x) => ({
-      docId: r.id, version: x.version, title: r.title, submittedOn: x.submittedOn, href: `/documents?doc=${encodeURIComponent(r.id)}`,
+    // Révisions en circuit de validation dans Codex.
+    pending: documents.rows.flatMap((r) => (r.circuit ? [r.circuit] : []).map((x) => ({
+      docId: r.id, version: x.revision ?? '', title: r.title, submittedOn: x.submittedOn, href: `/documents?doc=${encodeURIComponent(r.id)}`,
     }))),
   };
 

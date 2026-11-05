@@ -1,7 +1,8 @@
 import '../next-mocks';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { getDb, schema as t } from '@/db';
+import { substituteTable } from '@/db/foreign-substitutes';
 import { loadActionSignals } from '@/lib/data/actions';
 import { loadAuditSignals } from '@/lib/data/audits';
 import { loadDocumentSignals } from '@/lib/data/documents';
@@ -89,17 +90,15 @@ describe('relevés de consommation (DOC-19)', () => {
 describe('revue documentaire pendant une révision (DOC-14)', () => {
   it('échéance maintenue, révision indiquée, clé indépendante de l’avancement de la révision', async () => {
     actAs('Animateur QHSE', 'all');
-    const doc = (await loadDocumentSignals()).todo.find((x) => x.kind === 'Revue documentaire' && x.href === '/documents?doc=PR-QHSE-004')!;
-    expect(doc).toMatchObject({ kind: 'Revue documentaire', dueOn: '2026-10-14', title: 'PR-QHSE-004 · revue périodique « Signalement et analyse des événements » · révision C en revue' });
-    const key = todoKey(doc);
-    expect(key).toBe('Revue documentaire|/documents?doc=PR-QHSE-004|PR-QHSE-004 · revue périodique « Signalement et analyse des événements »|warn|2026-10-14');
-    // Revue dépassée pendant la révision : toujours une échéance (danger).
-    const db = await getDb();
-    const [v] = await db.select().from(t.documentVersions).where(eq(t.documentVersions.documentId, 'PR-QHSE-004')).then((rows) => rows.filter((r) => r.status === 'approuve'));
-    await db.update(t.documentVersions).set({ approvedOn: '2024-01-10' }).where(eq(t.documentVersions.id, v.id));
-    const late = (await loadDocumentSignals()).todo.find((x) => x.kind === 'Revue documentaire' && x.href === '/documents?doc=PR-QHSE-004')!;
+    const doc = (await loadDocumentSignals()).todo.find((x) => x.kind === 'Revue documentaire' && x.href === '/documents?doc=PRO-HSE-0001')!;
+    expect(doc).toMatchObject({ kind: 'Revue documentaire', dueOn: '2026-10-14', title: 'PRO-HSE-0001 · revue périodique « Signalement et analyse des événements » · révision C en validation' });
+    // Clé sans la suite donnée (DOC-14) : la révision peut avancer dans Codex sans rendre l'échéance non lue.
+    expect(todoKey(doc)).toBe('revue-documentaire|PRO-HSE-0001|warn|2026-10-14');
+    // Revue dépassée pendant la révision (date de Codex) : toujours une échéance (danger).
+    await (await getDb()).execute(sql.raw(`update codex.${substituteTable('pub_documents')} set review_due_at = '2026-09-01' where id = 'PRO-HSE-0001'`));
+    const late = (await loadDocumentSignals()).todo.find((x) => x.kind === 'Revue documentaire' && x.href === '/documents?doc=PRO-HSE-0001')!;
     expect(late).toMatchObject({ overdue: true, tone: 'danger' });
-    expect(late.title).toMatch(/revue dépassée depuis le .* · révision C en revue$/);
+    expect(late.title).toMatch(/revue dépassée depuis le .* · révision C en validation$/);
   });
 });
 

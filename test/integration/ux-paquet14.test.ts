@@ -28,8 +28,9 @@ describe('EVT-24 : « Nouvel événement » prérempli depuis une fiche', () => 
     const [risk] = await d.select({ id: t.risks.id, unit: t.workUnits.label }).from(t.risks).innerJoin(t.workUnits, eq(t.risks.unitId, t.workUnits.id))
       .where(and(eq(t.workUnits.siteId, 'site_a'), isNull(t.risks.archivedAt), isNull(t.workUnits.archivedAt))).limit(1);
     expect(await loadNewEventDefaults({ risque: String(risk.id) })).toMatchObject({ siteId: 'site_a', location: risk.unit, riskId: risk.id });
-    const [doc] = await d.select().from(t.documents).limit(1);
-    expect(await loadNewEventDefaults({ document: doc.id })).toMatchObject({ documentId: doc.id });
+    // Document de Codex du registre (lot 4 de M-02), aussi par son ancien identifiant (alias).
+    expect(await loadNewEventDefaults({ document: 'PRO-HSE-0003' })).toMatchObject({ siteId: 'site_a', documentId: 'PRO-HSE-0003' });
+    expect(await loadNewEventDefaults({ document: 'IT-MON-012' })).toMatchObject({ documentId: 'PRO-HSE-0003' });
     // Type proposé par l'écran Environnement ; jamais une maladie professionnelle.
     expect(await loadNewEventDefaults({ type: prefillType('ENV') })).toMatchObject({ type: 'ENV', controlId: null, riskId: null });
     expect(prefillType('MP')).toBeUndefined();

@@ -1,5 +1,7 @@
 import 'server-only';
-import { and, asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
+import { readDocumentsByRef } from '@/lib/foreign/codex';
+import { confReadable, documentHref } from '@/lib/rules/documents';
+import { asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { schema as t } from '@/db';
 import { loadProjectIndex, loadSuppliers } from '@/lib/foreign/keystone';
 import { projectText, unavailableMessage } from '@/lib/foreign/labels';
@@ -318,15 +320,18 @@ function parseFormData(raw: unknown): PpFormData | null {
 const periodLabel = (start: string, end: string) => (start.slice(0, 4) === end.slice(0, 4) ? `${fmtDayMonth(start)} → ${fmtDate(end)}` : `${fmtDate(start)} → ${fmtDate(end)}`);
 const byIdDesc = (a: { id: string }, b: { id: string }) => b.id.localeCompare(a.id, 'fr', { numeric: true });
 
-/** Procédure de référence de l'écran (domain.ts : SCREEN_PROCEDURES), résolue dans la gestion documentaire. */
+/**
+ * Procédure de référence de l'écran (domain.ts : SCREEN_PROCEDURES), résolue dans Codex par son identifiant ou un ancien
+ * identifiant (alias) ; lien vers le registre des documents, révision en vigueur dans l'intitulé. Null : introuvable,
+ * confidentielle pour le rôle ou Codex indisponible.
+ */
 async function loadProcedure(db: Rows['db']): Promise<ProcedureLink | null> {
   const id = SCREEN_PROCEDURES.prevention;
   if (!id) return null;
-  const [doc] = await db.select({ id: t.documents.id, title: t.documents.title }).from(t.documents).where(eq(t.documents.id, id));
-  if (!doc) return null;
-  const [version] = await db.select({ version: t.documentVersions.version }).from(t.documentVersions)
-    .where(and(eq(t.documentVersions.documentId, id), eq(t.documentVersions.status, 'approuve')));
-  return { id: doc.id, title: version ? `${doc.title} · version ${version.version}` : doc.title, href: `/documents?doc=${encodeURIComponent(doc.id)}` };
+  const read = await readDocumentsByRef(db, [id]);
+  const doc = read.ok ? read.rows.find((d) => d.id === id || d.aliases.includes(id)) : undefined;
+  if (!doc || !confReadable(doc.conf, false)) return null;
+  return { id: doc.id, title: doc.revInForce ? `${doc.title} · révision ${doc.revInForce}` : doc.title, href: documentHref(doc.id) };
 }
 
 /** Écran Plans de prévention et permis : vues sérialisables, indicateurs, écarts et règle des sites. */

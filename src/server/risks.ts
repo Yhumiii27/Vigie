@@ -1,5 +1,6 @@
 'use server';
 
+import { resolveDocuments } from '@/lib/data/documents';
 import { revalidatePath } from 'next/cache';
 import { and, asc, eq, inArray, isNull, max } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
@@ -290,10 +291,11 @@ export async function linkRiskMeasure(_prev: FormState, fd: FormData): Promise<F
     const [c] = Number.isNaN(id) ? [] : await db.select().from(t.controls).where(eq(t.controls.id, id));
     if (c && !c.archivedAt && sameSite(c.siteId)) { label = `${c.controlType} · ${c.equipment}`; target.controlId = c.id; }
   } else if (kind === 'document') {
-    const [d] = await db.select().from(t.documents).where(eq(t.documents.id, targetId));
-    const [inForce] = d ? await db.select({ id: t.documentVersions.id }).from(t.documentVersions)
-      .where(and(eq(t.documentVersions.documentId, d.id), eq(t.documentVersions.status, 'approuve'))) : [];
-    if (d && inForce && sameSite(d.siteId)) { label = `${d.id} · ${d.title}`; target.documentId = d.id; }
+    // Document de Codex (lot 4 de M-02) en vigueur, lisible par le rôle ; Codex indisponible : refus avec le message.
+    const docs = await resolveDocuments([targetId], { db, role: session.role });
+    if (!docs.ok) return { error: 'Certains champs sont à corriger.', fieldErrors: { targetId: docs.message } };
+    const d = docs.byRef.get(targetId);
+    if (d && d.readable && d.inForce && sameSite(d.site)) { label = `${d.id} · ${d.title}`; target.documentId = d.id; }
   } else {
     const [ti] = await db.select().from(t.trainingTitles).where(eq(t.trainingTitles.id, targetId));
     if (ti && !ti.archivedAt) { label = ti.label; target.titleId = ti.id; }
