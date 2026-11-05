@@ -1644,3 +1644,37 @@ export const inboundRequests = pgTable('inbound_requests', {
   check('inbound_requests_ack_check', sql`${t.acknowledgedAt} is null or ${t.status} = 'rejected'`),
   archiveState('inbound_requests_ack_state_check', t.acknowledgedAt, t.acknowledgedById, t.acknowledgeReason),
 ]);
+
+// ─── Édition depuis Matrix (demande M-19 de Matrix, décision du 05/11/2026) ──
+//
+// Matrix n'écrit jamais dans les tables de Vigie (M-18) : la DSI corrige depuis la visionneuse de Matrix en appelant
+// vigie.pub_editer (migration 0027, SECURITY DEFINER), qui n'ouvre que les tables et colonnes inscrites ci-dessous, applique
+// les contrôles que Vigie fait à la saisie (longueur, obligatoire, liste de valeurs, bornes, format) et écrit le journal de
+// Vigie (change_log) dans la même transaction. Registre rempli par la migration seulement (jamais par l'interface) ;
+// phase 1 : référentiels et registres sans circuit (docs/specs/edition-matrix-m19.md). Jamais une donnée de santé,
+// une référence, un état, un triplet d'archivage, une clé d'un autre outil (refus inscrits aussi dans la fonction).
+
+/** Tables ouvertes à l'édition depuis Matrix. */
+export const externalEditTables = pgTable('external_edit_tables', {
+  tableName: text('table_name').primaryKey(),
+  label: text('label').notNull(), // nom affiché (« Situation d'urgence »)
+  entityType: text('entity_type').notNull(), // change_log.entity_type de la fiche (historique de Vigie, version QUA-12)
+  keyColumn: text('key_column').notNull(), // clé primaire attendue dans p_cle
+  // Fiche du journal portée par une autre colonne (zones : journal de la carte du site, entity_id = site_id) ; null = la clé.
+  entityIdColumn: text('entity_id_column'),
+  canAdd: boolean('can_add').notNull().default(false), // « ajouter » : création sans référence, notification ni circuit
+  canRemove: boolean('can_remove').notNull().default(false), // « retirer » = archivage motivé, sans autre règle à l'archivage
+});
+
+/** Colonnes ouvertes, avec les contrôles de la saisie dans Vigie. */
+export const externalEditColumns = pgTable('external_edit_columns', {
+  tableName: text('table_name').notNull().references(() => externalEditTables.tableName),
+  columnName: text('column_name').notNull(),
+  label: text('label').notNull(), // libellé du journal de Vigie pour ce champ
+  maxLength: integer('max_length'), // texte : longueur maximale (après suppression des espaces de début et de fin)
+  required: boolean('required').notNull().default(false), // texte non vide exigé
+  choices: jsonb('choices').$type<Record<string, string>>(), // valeurs admises (clé → libellé du journal)
+  minValue: integer('min_value'), // entier : bornes incluses
+  maxValue: integer('max_value'),
+  pattern: text('pattern'), // texte : expression régulière (POSIX) à respecter
+}, (t) => [primaryKey({ columns: [t.tableName, t.columnName] })]);

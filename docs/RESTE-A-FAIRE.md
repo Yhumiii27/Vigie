@@ -2189,6 +2189,21 @@ Livré le 05/11/2026 (D13 ; décisions CV-07 — numéro `EV-…` partout, aucun
 
 **Référence des échéances (`test/fixtures/todo-golden.json`, QUA-17) réécrite** par `VIGIE_GOLDEN_UPDATE=1` : une échéance de plus, « EV-2026-121 · demande n° … de Keystone refusée » (demande de démonstration, responsable QHSE du site A) — +1 au total des échéances de chaque cas, +1 aux échéances visibles et au badge Événements (4 → 5) du QHSE et de la direction ; rien d'autre ne change.
 
+### M-19 : points appliqués par défaut, à confirmer
+
+Livré le 05/11/2026 (demande M-19 de Matrix : édition des données de Vigie par la DSI depuis la visionneuse de Matrix ; migration `0027_m19_matrix_edit` ; spec `docs/specs/edition-matrix-m19.md`). Choix réversibles ; non bloquants.
+
+| # | Point à confirmer | Élément | Bloquant |
+|--:|---|---|:-:|
+| 1 | **Fonction générique unique** `vigie.pub_editer` aiguillée par un registre en base (`external_edit_tables`, `external_edit_columns`, tenu par migration seulement), plutôt qu'une fonction par table. | M-19 | non |
+| 2 | **Périmètre de la phase 1** : référentiels et registres sans circuit (attributs propres des sites, zones de la carte, filières, entreprises extérieures, contexte, objectifs, exigences, contrôles, situations d'urgence, référentiels, attributs QHSE des titres), colonnes descriptives seulement ; fermés : événements, actions, plans, permis, risques, unités de travail, audits, revues, documents, enlèvements, études, personnes, journaux, caches des autres outils. | M-19 | non |
+| 3 | **Colonnes à règle propre non ouvertes** : libellé d'une filière ou d'une entreprise (unicité), codes déchet et SIRET, périodicité et dates d'un contrôle, évaluation et rattachements d'une exigence, engagement et dates d'un référentiel, indicateur et cible d'un objectif, responsable et exercice planifié d'une situation d'urgence. | M-19 | non |
+| 4 | **Ajout** limité aux éléments du contexte et aux situations d'urgence (création sans référence, notification ni circuit) ; auteur de création vide, ordre à la suite. | M-19 | non |
+| 5 | **Retrait = archivage motivé** limité aux filières, éléments du contexte, objectifs, contrôles et situations d'urgence ; non ouvert aux entreprises (plans ou permis en cours), zones (activités détachées, QR code), exigences (mise en avant), titres (recyclage ouvert), sites et référentiels ; jamais de réactivation depuis Matrix. | M-19 | non |
+| 6 | **Ligne archivée** : correction refusée (à réactiver d'abord dans Vigie). | M-19 | non |
+| 7 | **Journal** : auteur vide (`by_id` NULL), personne de Matrix et rôle de connexion nommés dans la phrase (« Corrigé depuis Matrix par … (matrix_app) »), motif de Matrix ; une correction rend périmé un formulaire ouvert dans Vigie (QUA-12). | M-19, QUA-12 | non |
+| 8 | **Refus par nom inscrits dans la fonction** (`external_edit_denied`), en plus de `droits.colonnes_sensibles` de Matrix : données de santé, identifiants, ordre, états, triplets, auteurs, clés des autres outils, site après création. | M-19, SEC-06 | non |
+
 ### Questions par élément (96 : 71 ouvertes — C2 : 57 · C3 : 14 — et 25 tranchées : 3 au lot 1, 12 au lot 2, 10 le 15/10/2026 ; 12 questions ajoutées le 26/10/2026 par l'analyse comparative avec les logiciels QHSE du commerce)
 
 **Tableau de bord, échéances et navigation**
