@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef, wasteEntryHref, wasteStreamHref } from '@/lib/rules/environment';
+import { engineeringHref } from '@/lib/rules/engineering';
 import { STUDY_MILESTONES, STUDY_TYPES, studyHref, studyLabel, type StudyMilestone, type StudyType } from '@/lib/rules/process-safety';
 import { NON_QSE_LINK_MESSAGE, actionRights, isNonQseLinkKind, type LinkFacts } from './action-rules';
 import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
@@ -69,7 +70,7 @@ type LinkKind = {
   /** Toutes les sources de ce type, par action (fiche action), avec le lien qui désigne chacune. */
   sources(db: DbOrTx, actionIds?: string[]): Promise<SourceRow[]>;
   /** Source d'origine portée par cette colonne de l'action : fixée à la création, jamais rattachée ni détachée ensuite. */
-  origin?: OriginColumn | 'safetyStudyId';
+  origin?: OriginColumn | 'safetyStudyId' | 'ecoActions';
   /** Faits de l'élément (référence d'origine par défaut, site, faits de la source admise) ; null : élément introuvable. */
   facts(db: DbOrTx, args: string[]): Promise<ElementFacts | null>;
   /** Écriture propre à la création d'une action depuis cet élément (après attach), ex. document de la version. */
@@ -570,6 +571,38 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
       const rows = await db.select({ actionId: t.reviewDecisions.actionId, id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, text: t.reviewDecisions.text, reviewOn: t.reviews.reviewOn })
         .from(t.reviewDecisions).innerJoin(t.reviews, eq(t.reviewDecisions.reviewId, t.reviews.id)).where(isNotNull(t.reviewDecisions.actionId));
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `reviewdecision:${r.id}`, kind: 'reviewdecision', label: `Décision de revue · ${r.text.slice(0, 60)}`, href: reviewHref(r.reviewId, r.reviewOn) }));
+    },
+  },
+
+  // D12 (lot 5 de M-02) : action d'un ordre de modification (table eco_actions, source « Modification technique ») —
+  // source d'origine posée à la création seulement (ORIGIN_LOCKED ensuite), conservée sur une action abandonnée ; un ordre
+  // porte plusieurs actions (reprise par une action de suite : followUpLinkMode 'multi'). Ordre annulé ou rejeté : refus.
+  eco: {
+    screen: 'engineering',
+    origin: 'ecoActions',
+    keptOnCancel: true,
+    async attach(tx, [id = ''], actionId) {
+      const [e] = await tx.select({ id: t.ecos.id, status: t.ecos.status, cancelledAt: t.ecos.cancelledAt }).from(t.ecos).where(eq(t.ecos.id, id));
+      if (!e) return NOT_FOUND;
+      if (e.cancelledAt || e.status === 'rejected') return 'Ordre de modification rejeté ou annulé : rattachement impossible.';
+      await tx.insert(t.ecoActions).values({ ecoId: e.id, actionId }).onConflictDoNothing();
+      return null;
+    },
+    async detach() { /* origine verrouillée */ },
+    async detachAll() { /* l'ordre reste lisible sur une action abandonnée */ },
+    async siteOf(tx, [id = '']) {
+      const [e] = await tx.select({ siteId: t.ecos.siteId }).from(t.ecos).where(eq(t.ecos.id, id));
+      return e ? e.siteId : undefined;
+    },
+    async facts(db, [id = '']) {
+      const [e] = await db.select({ id: t.ecos.id, title: t.ecos.title, siteId: t.ecos.siteId }).from(t.ecos).where(eq(t.ecos.id, id));
+      return e ? { reference: ref(`${e.id} · ${e.title}`), siteId: e.siteId, facts: {} } : null;
+    },
+    logAs: ([id]) => (id ? { entityType: 'eco', entityId: id } : null),
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.ecoActions.actionId, id: t.ecos.id, title: t.ecos.title })
+        .from(t.ecoActions).innerJoin(t.ecos, eq(t.ecoActions.ecoId, t.ecos.id));
+      return only(ids)(rows).map((r) => ({ actionId: r.actionId, link: `eco:${r.id}`, kind: 'eco', label: r.id, detail: r.title, href: engineeringHref(r.id) }));
     },
   },
 

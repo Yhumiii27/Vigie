@@ -326,7 +326,7 @@ export const NON_QSE_LINK_MESSAGE = 'Ce type d\'élément ne donne pas lieu à u
 export const isNonQseLinkKind = (kind: string) => (NON_QSE_LINK_KINDS as readonly string[]).includes(kind);
 /**
  * Sources admises pour un lien de création (D20 révisée le 15/10/2026) ; vide : ce type d'élément ne permet pas de créer
- * une action (NON_QSE_LINK_KINDS, ou type inconnu). Sans élément (`kind` null) : les 24 sources (référence d'origine
+ * une action (NON_QSE_LINK_KINDS, ou type inconnu). Sans élément (`kind` null) : les 25 sources (référence d'origine
  * obligatoire). Événement : Réclamation client (RC) ou Évènement QSE ; constat ou élément du programme : selon la ligne
  * (Certification, Visites sécurité, Audits internes, Fournisseurs ; élément de la ligne Revues de direction : Revue de
  * direction ; sans ligne ou ligne inconnue : les quatre sources d'audit) ; risque : DUERP ; exigence : Veille
@@ -350,6 +350,8 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
     case 'wastestream': case 'wasteentry': return ['dechets'];
     // VG-02 : recommandation d'une étude de sécurité des procédés (tous types : source « HAZOP », à confirmer par le QHSE).
     case 'safetystudy': return ['hazop'];
+    // D12 (lot 5 de M-02) : action d'un ordre de modification (source « Modification technique », à confirmer par le QHSE).
+    case 'eco': return ['modification_technique'];
     default: return [];
   }
 }
@@ -370,7 +372,7 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
 export type FollowUpLinkMode = 'source' | 'multi' | 'single' | 'none';
 const FOLLOW_UP_LINK_MODES: Record<string, FollowUpLinkMode> = {
   event: 'source', finding: 'source', plan: 'source',
-  risk: 'multi', review: 'multi', document: 'multi', wastestream: 'multi', wasteentry: 'multi', safetystudy: 'multi',
+  risk: 'multi', review: 'multi', document: 'multi', wastestream: 'multi', wasteentry: 'multi', safetystudy: 'multi', eco: 'multi',
   requirement: 'single', control: 'single', docversion: 'single', reviewdecision: 'single',
 };
 export const followUpLinkMode = (kind: string): FollowUpLinkMode =>

@@ -163,10 +163,11 @@ export const VERIFY_METHODS: Record<VerifyMethod, string> = { audit_visite: 'Aud
 export const FOLLOW_REASONS: Record<FollowReason, string> = { non_efficace: 'Non efficace', nouveau_risque: 'Nouveau risque' };
 
 /** Cible d'une source (§ 12) : type d'élément Vigie qui peut lui être lié (free : référence d'origine seulement). */
-export type SourceTarget = 'event' | 'audit' | 'risk' | 'control' | 'requirement' | 'review' | 'objective' | 'document' | 'environment' | 'safetystudy' | 'free';
+export type SourceTarget = 'event' | 'audit' | 'risk' | 'control' | 'requirement' | 'review' | 'objective' | 'document' | 'environment' | 'safetystudy' | 'eco' | 'free';
 /**
- * 24 sources (§ 12) dans l'ordre de la liste du QHSE : ses 22 sources, plus « Audit fournisseur » et « Déchets » (réponses
- * du service QHSE du 15/10/2026, ACT-37). `path` : écran d'arrivée sans élément lié (null : source libre, sans élément
+ * 25 sources (§ 12) dans l'ordre de la liste du QHSE : ses 22 sources, plus « Audit fournisseur » et « Déchets » (réponses
+ * du service QHSE du 15/10/2026, ACT-37), plus « Modification technique » (D12, lot 5 de M-02 : actions d'un ordre de
+ * modification, choix par défaut à confirmer par le QHSE). `path` : écran d'arrivée sans élément lié (null : source libre, sans élément
  * Vigie) ; `hint` : précision affichée sous la liste des sources du formulaire.
  */
 export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; target: SourceTarget; path: string | null; hint?: string }> = {
@@ -205,6 +206,11 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
     hint: 'Réserves de réception d\'un chantier ou d\'une installation.',
   },
   rex: { label: 'REX', icon: 'ph-arrow-u-up-left', target: 'free', path: null },
+  // D12 (lot 5 de M-02) : action d'un ordre de modification (ECO) — mise à jour de stock, rétrofit, formation, document…
+  modification_technique: {
+    label: 'Modification technique', icon: 'ph-git-branch', target: 'eco', path: '/modifications-techniques',
+    hint: 'Action d’un ordre de modification (ECO) : mise en œuvre, rétrofit, mise à jour d’un document ou d’un stock.',
+  },
 };
 /**
  * Types de lien (src/lib/action-links.ts) qui désignent l'élément de la source, par cible. Cohérent avec
@@ -214,7 +220,7 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
 export const SOURCE_LINK_KINDS: Record<SourceTarget, readonly string[]> = {
   event: ['event'], audit: ['finding', 'plan'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
   review: ['review', 'reviewdecision', 'plan'], objective: ['reviewdecision'], document: ['document', 'docversion'],
-  environment: ['wastestream', 'wasteentry', 'requirement'], safetystudy: ['safetystudy'], free: [],
+  environment: ['wastestream', 'wasteentry', 'requirement'], safetystudy: ['safetystudy'], eco: ['eco'], free: [],
 };
 /** L'unique événement ou audit d'une action : posé à la création seulement, jamais rattaché ni détaché ensuite (§ 12, D15). */
 export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan'] as const;
@@ -593,7 +599,7 @@ export const REVIEW_FOLLOW_UP = {
 
 export type ScreenKey =
   | 'dashboard' | 'todo' | 'events' | 'actions' | 'prevention' | 'risks' | 'skills'
-  | 'watch' | 'audits' | 'docs' | 'env' | 'mobile' | 'contributions';
+  | 'watch' | 'audits' | 'docs' | 'env' | 'engineering' | 'mobile' | 'contributions';
 
 export const SCREENS: Record<ScreenKey, { path: string; title: string; label: string; icon: string }> = {
   dashboard: { path: '/', title: 'Tableau de bord QHSE', label: 'Tableau de bord', icon: 'ph-gauge' },
@@ -607,6 +613,8 @@ export const SCREENS: Record<ScreenKey, { path: string; title: string; label: st
   audits: { path: '/audits', title: 'Audits et certifications', label: 'Audits et certifications', icon: 'ph-certificate' },
   docs: { path: '/documents', title: 'Documents maîtrisés', label: 'Documents maîtrisés', icon: 'ph-files' },
   env: { path: '/environnement', title: 'Environnement et déchets', label: 'Environnement et déchets', icon: 'ph-leaf' },
+  // D12 (lot 5 de M-02, décision CV-06 du 05/11/2026) : demandes (ECR) et ordres (ECO) de modification.
+  engineering: { path: '/modifications-techniques', title: 'Modifications techniques', label: 'Modifications techniques', icon: 'ph-git-branch' },
   mobile: { path: '/apercu-mobile', title: 'Signalement terrain', label: 'Aperçu mobile · signalement terrain', icon: 'ph-device-mobile' },
   // Hors navigation (AUD-04) : contributions, participations et décisions de la personne pour la revue de direction.
   contributions: { path: '/audits/contributions', title: 'Mes contributions à la revue de direction', label: 'Mes contributions', icon: 'ph-hand-arrow-up' },
@@ -616,7 +624,7 @@ export const NAV: { label: string; items: ScreenKey[] }[] = [
   { label: 'Pilotage', items: ['dashboard', 'todo'] },
   { label: 'Terrain', items: ['events', 'actions', 'prevention'] },
   { label: 'Prévention', items: ['risks', 'skills'] },
-  { label: 'Système', items: ['watch', 'audits', 'docs', 'env'] },
+  { label: 'Système', items: ['watch', 'audits', 'docs', 'env', 'engineering'] },
 ];
 
 export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de projet' | 'Salarié';
@@ -625,6 +633,8 @@ export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de
 // « docs » reste en dernier dans chaque liste : homeOf() prend le premier écran.
 // Évaluation des risques : consultation par tous les rôles (DUERP, R. 4121-4, DUE-01) ; saisie : canEdit(role, 'risks').
 // Audits et certifications : consultation par le chef de service et le chef de projet (AUD-02) ; saisie : canEdit(role, 'audits').
+// Modifications techniques (D12, CV-06) : consultation par l'encadrement (son périmètre), saisie, instruction, approbation
+// et libération par l'animateur QHSE et la direction ; un approbateur désigné décide sa propre clé ; Salarié : aucun accès.
 // Plan d'actions : consultation seule par l'encadrement hors QHSE (ACT-22 tranché le 15/10/2026 : lecture du plan de son
 // périmètre) ; création, saisie et avancement réservés au service QHSE, donc canEdit(role, 'actions') === canApprove(role)
 // pour tout rôle, depuis le plan comme depuis un écran source (canCreateAction, src/lib/action-rules.ts). Le Salarié ne
@@ -633,8 +643,8 @@ export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de
 export const ROLES: Record<Role, { screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
   'Animateur QHSE': { screens: null },
   Direction: { screens: null },
-  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'docs'], readOnly: ['actions', 'audits', 'docs'] },
-  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'docs'], readOnly: ['actions', 'risks', 'audits', 'docs'] },
+  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'engineering', 'docs'], readOnly: ['actions', 'audits', 'engineering', 'docs'] },
+  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'engineering', 'docs'], readOnly: ['actions', 'risks', 'audits', 'engineering', 'docs'] },
   Salarié: { screens: ['events', 'actions', 'risks', 'skills', 'docs'], readOnly: ['risks', 'docs'] },
 };
 export const ROLE_KEYS = Object.keys(ROLES) as Role[];

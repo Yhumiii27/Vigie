@@ -1,0 +1,5 @@
+{
+  "source": "Keystone origin/main b5891aa, drizzle/0040_share_installed_base.sql (contrat D12 v1 + type_machine_code, livree_le, maj_le) ; types : src/server/db/schema/aftersales.ts (machines, machine_part_revisions)",
+  "readers": ["vigie_app", "matrix_app", "arche_app"],
+  "columns": [["number", "text"], ["name", "text"], ["client_name", "text"], ["site_text", "text"], ["project_code", "text"], ["warranty_status", "text"], ["part_ref", "text"], ["fitted_revision", "text"], ["type_machine_code", "text"], ["livree_le", "date"], ["maj_le", "timestamp with time zone"]]
+}

@@ -151,7 +151,7 @@ describe('formulaire d’action : source et site', () => {
   it('plan, sans élément : les 24 sources ; « Tous les sites » jamais proposé', () => {
     const html = form({}, { ...OPTIONS, sites: [['all', 'Tous les sites'], ['site_a', 'Ville A']] });
     const select = [...html.matchAll(/<select id="source"[\s\S]*?<\/select>/g)][0][0];
-    expect(select.match(/<option value="[a-z_]+"/g)).toHaveLength(24);
+    expect(select.match(/<option value="[a-z_]+"/g)).toHaveLength(25);
     expect(html).not.toContain('Tous les sites');
   });
   it('modification d’une Vérifiée : vérification planifiée figée, pointage seul (nature et constat par « Rouvrir », D17)', () => {

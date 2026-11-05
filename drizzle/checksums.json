@@ -145,6 +145,11 @@
       "when": 1793888458783,
       "sql": "83bfffd16919672fca93a9dd1bb722b563140919d25102ba7c687a82bb77bff4",
       "snapshot": "606b7ad73a57c832f640edcc4eb355fae0baf188d577aa4bf64d98d90b7122a6"
+    },
+    "0029_convergence_m02_ecr_eco": {
+      "when": 1793894471104,
+      "sql": "e959635d1bf5bc2f0238e4eaeb4a5e543f2beca08a138b813d4bc96c46de1696",
+      "snapshot": "c37d278b82e81c939ae6943fdc7cfdde97d920f1bb4393d4de687780a07c5719"
     }
   }
 }

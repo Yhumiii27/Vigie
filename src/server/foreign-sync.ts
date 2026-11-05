@@ -2,7 +2,7 @@ import 'server-only';
 import { eq, inArray, isNotNull } from 'drizzle-orm';
 import { schema as t, type Db } from '@/db';
 import { addDays } from '@/lib/dates';
-import { readAssignments, readProjects, readSuppliers } from '@/lib/foreign/keystone';
+import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/lib/foreign/keystone';
 import { readCursusTitles, readHeldTitles } from '@/lib/foreign/cursus';
 import { readMatrixSites } from '@/lib/foreign/matrix';
 import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/lib/foreign/codex';
@@ -151,7 +151,7 @@ async function refreshAssignments(db: Db): Promise<SyncResult> {
 }
 
 /** Source lue directement : disponibilité et nombre de lignes. */
-async function checkDirect(source: 'projects' | 'suppliers' | 'heldTitles' | 'documents' | 'revisions' | 'validations' | 'docTypes', read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
+async function checkDirect(source: Exclude<SourceKey, 'sites' | 'assignments' | 'titles'>, read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
   const r = await read;
   return r.ok ? { ...empty(source), read: r.rows.length } : failed(source, r);
 }
@@ -166,6 +166,10 @@ export async function refreshSharedReferences(db: Db): Promise<SyncResult[]> {
     ['assignments', () => refreshAssignments(db)],
     ['projects', () => checkDirect('projects', readProjects(db))],
     ['suppliers', () => checkDirect('suppliers', readSuppliers(db))],
+    // D12 (lot 5) : articles, nomenclatures et parc installé lus directement (modifications techniques).
+    ['articles', () => checkDirect('articles', readArticles(db))],
+    ['bom', () => checkDirect('bom', readBomUsage(db))],
+    ['fleet', () => checkDirect('fleet', readFleet(db))],
     ['titles', () => refreshTitles(db)],
     ['heldTitles', () => checkDirect('heldTitles', readHeldTitles(db))],
     // D10 (lot 4) : documents de Codex lus directement (registre, révisions et circuits du périmètre QHSE, types).

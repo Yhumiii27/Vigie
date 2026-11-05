@@ -25,6 +25,8 @@ export type HistoryEntity =
   | 'safety_notice' | 'emergency_situation' | 'change_request'
   // VG-01 : études de sécurité des procédés.
   | 'process_safety_study'
+  // D12 (lot 5 de M-02) : ordres et demandes de modification.
+  | 'eco' | 'ecr'
   // Classe 1, lot A (fin de QUA-11) : risques et demandes d'accès au DUERP, audits, environnement.
   | 'risk' | 'duerp_access_request' | 'audit_plan_item' | 'audit_finding' | 'certification' | 'waste_stream' | 'waste_entry';
 
@@ -205,6 +207,21 @@ const RULES: Record<HistoryEntity, Rule> = {
     allow: (role) => !isEmployee(role),
     async siteOf(id) {
       const [o] = await (await db()).select({ siteId: t.processSafetyStudies.siteId }).from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
+      return o;
+    },
+  },
+  // Modifications techniques (D12) : lecteurs de l'écran (Salarié exclu) ; site de la fiche (null : entreprise).
+  eco: {
+    screen: 'engineering',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.ecos.siteId }).from(t.ecos).where(eq(t.ecos.id, id));
+      return o;
+    },
+  },
+  ecr: {
+    screen: 'engineering',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.ecrs.siteId }).from(t.ecrs).where(eq(t.ecrs.id, id));
       return o;
     },
   },

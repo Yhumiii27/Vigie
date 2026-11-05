@@ -33,11 +33,11 @@ const detail = (over: Partial<ActionDetailView> = {}): ActionDetailView => ({
 describe('source et élément lié (D20)', () => {
   it('liste des 24 sources dans l’ordre du QHSE, ou les seules sources admises', () => {
     expect(sourceOptions().map(([k]) => k)).toEqual([...SOURCE_KEYS]);
-    expect(sourceOptions().length).toBe(24);
+    expect(sourceOptions().length).toBe(25); // 25ᵉ : Modification technique (lot 5 de M-02)
     expect(sourceOptions(['audit_terrain', 'audit_certification'])).toEqual([
       ['audit_certification', ACTION_SOURCES.audit_certification.label], ['audit_terrain', ACTION_SOURCES.audit_terrain.label],
     ]);
-    expect(sourceOptions([])).toHaveLength(24);
+    expect(sourceOptions([])).toHaveLength(25);
   });
   it('précision sous la liste : AST-EST et Réserves', () => {
     expect(sourceHint('analyse_risque')).toMatch(/AST/);

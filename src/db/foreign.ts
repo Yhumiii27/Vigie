@@ -85,6 +85,46 @@ export const pubFournisseurs = keystone.view('pub_fournisseurs', {
 }).existing();
 
 /**
+ * keystone.pub_articles — contrat D12 v1 (articles du catalogue, sans prix, fabricant ni contrôle export ; Keystone
+ * drizzle/0035_share.sql). Lecteurs : vigie_app, matrix_app. Lot 5 de M-02 (modifications techniques).
+ */
+export const pubArticles = keystone.view('pub_articles', {
+  ref: text('ref').notNull(),
+  name: text('name').notNull(),
+  revision: text('revision'),
+  status: text('status').notNull(),
+  partType: text('part_type').notNull(),
+  makeBuy: text('make_buy').notNull(),
+}).existing();
+
+/** keystone.pub_nomenclatures — contrat D12 v1 (cas d'emploi des articles par projet, quantité totale). Lecteurs : vigie_app, matrix_app. */
+export const pubNomenclatures = keystone.view('pub_nomenclatures', {
+  projectCode: text('project_code').notNull(),
+  stage: text('stage').notNull(),
+  partRef: text('part_ref').notNull(),
+  quantity: numeric('quantity'),
+}).existing();
+
+/**
+ * keystone.pub_parc_machines — contrat D12 v1 + type_machine_code, livree_le, maj_le (Keystone drizzle/0040_share_installed_base.sql) :
+ * parc installé, une ligne par machine et article monté (part_ref et fitted_revision nuls sans configuration enregistrée).
+ * Lecteurs : vigie_app, matrix_app, arche_app.
+ */
+export const pubParcMachines = keystone.view('pub_parc_machines', {
+  number: text('number').notNull(),
+  name: text('name').notNull(),
+  clientName: text('client_name').notNull(),
+  siteText: text('site_text').notNull(),
+  projectCode: text('project_code'),
+  warrantyStatus: text('warranty_status').notNull(),
+  partRef: text('part_ref'),
+  fittedRevision: text('fitted_revision'),
+  typeMachineCode: text('type_machine_code').notNull(),
+  livreeLe: date('livree_le', { mode: 'string' }),
+  majLe: timestamp('maj_le', { withTimezone: true }).notNull(),
+}).existing();
+
+/**
  * cursus.pub_titres — contrat D08 v1 (catalogue des formations et habilitations de Cursus ; validite_mois NULL = sans
  * échéance). Lecteurs : vigie_app, keystone_app, matrix_app.
  */
@@ -267,6 +307,21 @@ export const FOREIGN_CONTRACTS = {
   },
   suppliers: {
     schema: 'keystone', view: 'pub_fournisseurs', columns: [['id', 'uuid'], ['name', 'text'], ['x3_code', 'text'], ['is_internal', 'boolean']],
+  },
+  // D12 (lot 5 de M-02) : effectivité proposée d'un ordre de modification, articles d'une demande.
+  articles: {
+    schema: 'keystone', view: 'pub_articles', columns: [
+      ['ref', 'text'], ['name', 'text'], ['revision', 'text'], ['status', 'text'], ['part_type', 'text'], ['make_buy', 'text'],
+    ],
+  },
+  bom: {
+    schema: 'keystone', view: 'pub_nomenclatures', columns: [['project_code', 'text'], ['stage', 'text'], ['part_ref', 'text'], ['quantity', 'numeric']],
+  },
+  fleet: {
+    schema: 'keystone', view: 'pub_parc_machines', columns: [
+      ['number', 'text'], ['name', 'text'], ['client_name', 'text'], ['site_text', 'text'], ['project_code', 'text'], ['warranty_status', 'text'],
+      ['part_ref', 'text'], ['fitted_revision', 'text'], ['type_machine_code', 'text'], ['livree_le', 'date'], ['maj_le', 'timestamp with time zone'],
+    ],
   },
   titles: {
     schema: 'cursus', view: 'pub_titres', columns: [

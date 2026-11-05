@@ -28,6 +28,8 @@ export const ROLE_ROUTES: readonly { path: string; screen: ScreenKey; subpaths: 
   { path: '/revue-de-direction', screen: 'audits', subpaths: true },
   { path: '/documents', screen: 'docs', subpaths: true },
   { path: '/environnement', screen: 'env', subpaths: true, except: ['/environnement/registre'] },
+  // D12 (lot 5 de M-02) : registre, fiche /modifications-techniques/<numéro> et « nouvelle » (liens de Codex et Keystone).
+  { path: '/modifications-techniques', screen: 'engineering', subpaths: true },
 ];
 
 /**

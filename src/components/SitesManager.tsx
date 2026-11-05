@@ -11,8 +11,10 @@ import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
 import type { ConnectorRow } from '@/lib/data/connectors';
 import { MATRIX_SITE_STATES, SOURCES, SYNC_STATUSES } from '@/lib/foreign/labels';
-import { processInboundNow, refreshConnectors } from '@/server/connectors';
+import { processInboundNow, refreshConnectors, sendOutboundNow } from '@/server/connectors';
 import type { InboundOverview } from '@/lib/data/inbound';
+import type { OutboundOverview } from '@/lib/data/engineering';
+import { OUTBOUND_STATUSES, OUTBOUND_TARGETS, type OutboundTarget } from '@/lib/rules/outbound';
 import { INBOUND_STATUSES } from '@/lib/rules/inbound';
 import { InboundItem } from './InboundRequests';
 import { TipButton } from '@/components/Tip';
@@ -28,7 +30,7 @@ export type MatrixChoices = { choices: Option[]; message: string | null };
  * Contenu de « Gérer les sites » : sites suivis (archivés compris), personnes proposées comme responsable QHSE, sites de
  * Matrix proposés au suivi et état des connecteurs (lectures des autres outils, lot 0 de M-02).
  */
-export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[]; matrix: MatrixChoices; connectors: ConnectorRow[]; inbound: InboundOverview };
+export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[]; matrix: MatrixChoices; connectors: ConnectorRow[]; inbound: InboundOverview; outbound: OutboundOverview };
 
 type View = 'list' | 'connectors' | { edit: SiteAdminRow | null } | { archive: SiteAdminRow };
 
@@ -60,7 +62,7 @@ export function QhseLeadField({ options, current }: { options: readonly Option[]
  * Fenêtre « Gérer les sites » (animateur QHSE, direction) : suivi d'un site de Matrix, responsable QHSE, Alsace-Moselle,
  * « ne plus suivre » (archivage avec motif), réactivation ; onglet « Connecteurs » (lectures des autres outils).
  */
-export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, onClose }: SiteAdmin & { onClose: () => void }) {
+export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, outbound, onClose }: SiteAdmin & { onClose: () => void }) {
   const [view, setView] = useState<View>('list');
   const back = () => setView('list');
   const active = sites.filter((s) => !s.archivedOn);
@@ -123,7 +125,7 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
         </div>
       )}
 
-      {view === 'connectors' && <Connectors rows={connectors} inbound={inbound} onBack={back} />}
+      {view === 'connectors' && <Connectors rows={connectors} inbound={inbound} outbound={outbound} onBack={back} />}
 
       {view !== 'list' && view !== 'connectors' && 'edit' in view && (
         <ActionForm action={saveSite} hidden={{ id: view.edit?.id ?? '', alsaceMoselleField: '1' }} onDone={back} onCancel={back}
@@ -168,7 +170,7 @@ function RestoreButton({ siteId }: { siteId: string }) {
 }
 
 /** Onglet « Connecteurs » (INT-01) : dernier passage de chaque source lue chez un autre outil ; « Actualiser » relit tout. */
-function Connectors({ rows, inbound, onBack }: { rows: ConnectorRow[]; inbound: InboundOverview; onBack: () => void }) {
+function Connectors({ rows, inbound, outbound, onBack }: { rows: ConnectorRow[]; inbound: InboundOverview; outbound: OutboundOverview; onBack: () => void }) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
@@ -200,6 +202,7 @@ function Connectors({ rows, inbound, onBack }: { rows: ConnectorRow[]; inbound: 
       </div>
       <ActionForm action={refreshConnectors} onCancel={onBack} submitLabel="Actualiser" submitIcon="ph-arrows-clockwise">{null}</ActionForm>
       <InboundBox inbound={inbound} />
+      <OutboxBox outbound={outbound} />
     </div>
   );
 }
@@ -212,9 +215,10 @@ function InboundBox({ inbound }: { inbound: InboundOverview }) {
   const { counts, rejected, lastReceivedAt } = inbound;
   return (
     <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
-      <h6 className="vg-h6">Boîte de réception Keystone</h6>
+      <h6 className="vg-h6">Boîte de réception (Keystone, Codex)</h6>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
-        Keystone signale l’avancement de ses NC de projet par la fonction vigie.pub_signaler_avancement_nc ; Vigie traite chaque demande
+        Keystone signale l’avancement de ses NC de projet et de ses ordres de modification (vigie.pub_signaler_avancement_nc,
+        vigie.pub_signaler_avancement_eco), Codex crée ses demandes de modification (vigie.pub_creer_demande_modification) ; Vigie traite chaque demande
         avec ses propres règles, toutes les 10 minutes.{lastReceivedAt ? ` Dernière demande reçue le ${fmtTime(lastReceivedAt)}.` : ' Aucune demande reçue.'}
       </p>
       <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -228,6 +232,48 @@ function InboundBox({ inbound }: { inbound: InboundOverview }) {
         </ul>
       )}
       <ActionForm action={processInboundNow} submitLabel="Traiter maintenant" submitIcon="ph-tray-arrow-down">{null}</ActionForm>
+    </div>
+  );
+}
+
+const fmtTimeOrDash = (iso: string | null) => (iso ? fmtTime(iso) : '—');
+
+/**
+ * File d'envoi (D12, lot 5 de M-02) : décisions transmises aux autres outils (webhook de Codex), nombres par état,
+ * messages à reprendre et refusés ; « Envoyer maintenant » sans attendre la tâche planifiée « Envois aux outils ».
+ */
+function OutboxBox({ outbound }: { outbound: OutboundOverview }) {
+  const { counts, failed, pending, lastSentAt } = outbound;
+  const line = (m: OutboundOverview['failed'][number]) => (
+    <li key={m.id} style={{ display: 'grid', gap: 2, fontSize: 12.5, padding: '6px 0', borderBottom: '1px solid var(--color-divider)' }}>
+      <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <span>{OUTBOUND_TARGETS[m.target as OutboundTarget]?.label ?? m.target} · {m.entityId}</span>
+        <ToneTag tone={OUTBOUND_STATUSES[m.status].tone} style={{ fontSize: 11, marginLeft: 'auto' }}>{OUTBOUND_STATUSES[m.status].label}</ToneTag>
+      </span>
+      <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>
+        Message n° {m.id} · {m.attempts} tentative(s){m.lastError ? ` · ${m.lastError}` : ''}{m.nextAttemptAt ? ` · prochain essai ${fmtTimeOrDash(m.nextAttemptAt)}` : ''}
+      </span>
+    </li>
+  );
+  return (
+    <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
+      <h6 className="vg-h6">File d’envoi (Codex)</h6>
+      <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
+        Les décisions sur les demandes de modification de Codex lui sont envoyées par son webhook (POST /api/integrations/vigie), toutes les
+        10 minutes, avec reprises espacées. Sans VIGIE_CODEX_URL et jeton ou secret du webhook, elles restent à envoyer.
+        {lastSentAt ? ` Dernier envoi le ${fmtTime(lastSentAt)}.` : ' Aucun envoi.'}
+      </p>
+      <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {(Object.keys(OUTBOUND_STATUSES) as (keyof typeof OUTBOUND_STATUSES)[]).map((k) => (
+          <ToneTag key={k} tone={counts[k] ? OUTBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{OUTBOUND_STATUSES[k].label} : {counts[k]}</ToneTag>
+        ))}
+      </span>
+      {(pending.length > 0 || failed.length > 0) && (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Messages à reprendre ou refusés">
+          {[...failed, ...pending].map(line)}
+        </ul>
+      )}
+      <ActionForm action={sendOutboundNow} submitLabel="Envoyer maintenant" submitIcon="ph-paper-plane-tilt">{null}</ActionForm>
     </div>
   );
 }

@@ -42,6 +42,9 @@ const REF_TABLES = {
   change_request: t.changeRequests,
   // VG-01 : études de sécurité des procédés « ES-001 ».
   process_safety_study: t.processSafetyStudies,
+  // D12 (lot 5 de M-02) : ordres « ECO-2026-001 » et demandes « ECR-2026-001 » de modification.
+  eco: t.ecos,
+  ecr: t.ecrs,
 } as const;
 export type RefEntity = keyof typeof REF_TABLES;
 

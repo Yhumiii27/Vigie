@@ -180,7 +180,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   const active = new Set(session.siteOptions.map((s) => s.id));
   const keep = (siteId: string | null) => inScope(siteId) && (!siteId || active.has(siteId));
   const year = Number(today().slice(0, 4));
-  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses, studies] = await Promise.all([
+  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses, studies, ecos] = await Promise.all([
     db.select({ id: t.events.id, title: t.events.title, type: t.events.type, step: t.events.step, dismissedAt: t.events.dismissedAt, siteId: t.events.siteId, occurredOn: t.events.occurredOn }).from(t.events),
     db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
     db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, track: t.auditPlanItems.track, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, month: t.auditPlanItems.month, actionId: t.auditPlanItems.actionId, cancelledAt: t.auditPlanItems.cancelledAt }).from(t.auditPlanItems),
@@ -197,6 +197,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
     db.select({ id: t.processSafetyStudies.id, siteId: t.processSafetyStudies.siteId, type: t.processSafetyStudies.type, capexCode: t.processSafetyStudies.capexCode, projectCode: t.processSafetyStudies.keystoneProjectCode, cancelledAt: t.processSafetyStudies.cancelledAt })
       .from(t.processSafetyStudies).orderBy(asc(t.processSafetyStudies.id)),
+    db.select({ id: t.ecos.id, title: t.ecos.title, siteId: t.ecos.siteId, status: t.ecos.status, cancelledAt: t.ecos.cancelledAt }).from(t.ecos).orderBy(asc(t.ecos.id)),
   ]);
   const openActions = new Set(statuses.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id));
   /** Élément à action unique encore libre (l'action qui le porte est close, ou aucune). */
@@ -247,6 +248,10 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   studies
     .filter((st) => !st.cancelledAt && keep(st.siteId))
     .forEach((st) => add('safetystudy', st.id, `${st.id} · ${studyLabel({ type: st.type as StudyType, capexCode: st.capexCode, projectCode: st.projectCode })}`, st.siteId));
+  // D12 (lot 5) : ordres de modification non rejetés ni annulés (plusieurs actions par ordre).
+  ecos
+    .filter((e) => !e.cancelledAt && e.status !== 'rejected' && keep(e.siteId))
+    .forEach((e) => add('eco', e.id, `${e.id} · ${e.title}`, e.siteId));
   return out;
 });
 
@@ -285,7 +290,7 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
   for (const s of links) {
     if (s.kind === 'event') continue;
     // VG-04 : études de sécurité des procédés fermées au Salarié (vue masquée) : référence seule.
-    const readable = !reader.restricted && canOpen(reader.role, s.href) && !(employee && s.kind === 'safetystudy');
+    const readable = !reader.restricted && canOpen(reader.role, s.href) && !(employee && (s.kind === 'safetystudy' || s.kind === 'eco'));
     list.push({
       kind: s.kind, label: s.label, href: readable ? s.href : null, ...(readable && s.detail ? { detail: s.detail } : {}),
       detachOnAbandon: !ACTION_LINKS[s.kind]?.keptOnCancel,

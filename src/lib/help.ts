@@ -108,6 +108,15 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Chaque enlèvement porte sa filière, sa quantité et son bordereau ; les manques sont signalés dans les échéances.',
     ],
   },
+  engineering: {
+    intro: 'Modifications techniques : demandes de modification (ECR) venues de Codex, de Keystone ou de Vigie, et ordres de modification (ECO) instruits, approuvés et libérés par Vigie.',
+    tips: [
+      'Une demande se décide (acceptée ou refusée) par le service QHSE ; la décision sur un document de Codex lui est transmise d’office (onglet « Connecteurs » de « Gérer les sites »).',
+      'Un ordre passe de « Brouillon » à « Analyse d’impact » puis « En approbation » (interchangeabilité évaluée) ; il est libéré d’office quand les trois clés sont approuvées et chaque cible de l’effectivité a sa disposition.',
+      '« Proposer l’effectivité » reprend les projets et machines de Keystone qui emploient les articles de l’ordre ; les mises à jour et rétrofits ont une échéance après la libération.',
+      'Un approbateur désigné décide sa propre clé ; Keystone transmet les décisions de l’ingénierie et des chefs de projet.',
+    ],
+  },
   mobile: {
     intro: 'Aperçu du parcours terrain (démonstration) : signalement en quelques étapes et suivi de « Mes signalements ».',
     tips: ['Sur téléphone, le même parcours est accessible par « Nouveau signalement ».'],
@@ -119,6 +128,7 @@ export const GLOSSARY: readonly { term: string; definition: string }[] = [
   { term: 'TF1', definition: 'Taux de fréquence : nombre d’accidents du travail avec arrêt × 1 000 000 / heures travaillées, sur les 12 derniers mois complets (accidents de trajet exclus).' },
   { term: 'TG', definition: 'Taux de gravité : nombre de jours d’arrêt × 1 000 / heures travaillées, sur la même période.' },
   { term: 'AT', definition: 'Accident du travail : déclaration à la CPAM sous 48 h (dimanches et jours fériés non compris) ; par l’entreprise de travail temporaire pour un intérimaire.' },
+  { term: 'ECR / ECO', definition: 'Demande de modification (Engineering Change Request) et ordre de modification (Engineering Change Order) : numérotés ECR-AAAA-NNN et ECO-AAAA-NNN par Vigie.' },
   { term: 'MP', definition: 'Maladie professionnelle : dossier réservé à l’animation QHSE et à la direction (données de santé).' },
   { term: 'PSSR', definition: 'Revue de sécurité avant démarrage (Pre-Startup Safety Review) d’une installation, avec la RSPDI ; jalon de la méthode DIG-PRODI avant la mise en service.' },
   { term: 'HazOp', definition: 'Étude de dangers et d’opérabilité d’un procédé (jalon HS 3) ; ses recommandations sont suivies comme actions QSE.' },

@@ -53,27 +53,28 @@ describe('avancement des actions (§ 5.1)', () => {
 });
 
 describe('sources des actions (§ 12)', () => {
-  it('24 sources dans l’ordre du QHSE (ses 22, plus Audit fournisseur et Déchets), avec leur cible', () => {
-    expect(SOURCE_KEYS).toHaveLength(24);
+  it('25 sources dans l’ordre du QHSE (ses 22, plus Audit fournisseur et Déchets ; Modification technique, lot 5 de M-02), avec leur cible', () => {
+    expect(SOURCE_KEYS).toHaveLength(25);
     expect(Object.keys(ACTION_SOURCES)).toEqual([...SOURCE_KEYS]);
     expect(SOURCE_KEYS.map((k) => ACTION_SOURCES[k].label)).toEqual([
       'Analyse de risque (AST-EST)', 'Analyse de risque chimique', 'Analyse environnementale', 'Audit de certification ISO', 'Audit fournisseur',
       'Audit interne ISO', 'Audit terrain', 'Autorité publique', 'Causerie QSE', 'COMEX', 'Contrôle réglementaire', 'Déchets', 'DUERP',
       'Évènement QSE', 'Objectif QSE', 'Réclamation client', 'Réunion opérationnelle', 'Revue de direction', 'Revue documentaire',
-      'Revue de processus', 'Veille réglementaire', 'HAZOP', 'Réserves', 'REX',
+      'Revue de processus', 'Veille réglementaire', 'HAZOP', 'Réserves', 'REX', 'Modification technique',
     ]);
     expect(Object.fromEntries(SOURCE_KEYS.map((k) => [k, ACTION_SOURCES[k].target]))).toEqual({
       analyse_risque: 'free', analyse_chimique: 'free', analyse_environnementale: 'free', audit_certification: 'audit', audit_fournisseur: 'audit',
       audit_interne: 'audit', audit_terrain: 'audit', autorite_publique: 'free', causerie: 'free', comex: 'free', controle_reglementaire: 'control',
       dechets: 'environment', duerp: 'risk', evenement: 'event', objectif: 'objective', reclamation_client: 'event', reunion_operationnelle: 'free',
       revue_direction: 'review', revue_documentaire: 'document', revue_processus: 'free', veille: 'requirement', hazop: 'safetystudy', reserves: 'free', rex: 'free',
+      modification_technique: 'eco',
     });
     for (const k of SOURCE_KEYS) expect(ACTION_SOURCES[k].path === null).toBe(ACTION_SOURCES[k].target === 'free');
     expect(ACTION_SOURCES.audit_fournisseur).toEqual({ label: 'Audit fournisseur', icon: 'ph-truck', target: 'audit', path: '/audits' });
     expect(ACTION_SOURCES.dechets).toEqual({ label: 'Déchets', icon: 'ph-recycle', target: 'environment', path: '/environnement' });
   });
   it('précisions affichées sous la liste des sources : AST-EST, HAZOP (études de sécurité des procédés, VG-02) et Réserves', () => {
-    expect(SOURCE_KEYS.filter((k) => ACTION_SOURCES[k].hint)).toEqual(['analyse_risque', 'hazop', 'reserves']);
+    expect(SOURCE_KEYS.filter((k) => ACTION_SOURCES[k].hint)).toEqual(['analyse_risque', 'hazop', 'reserves', 'modification_technique']);
     expect(ACTION_SOURCES.analyse_risque.hint).toBe('AST : analyse de sécurité des tâches en contexte pyrotechnique ; EST : étude de sécurité technique.');
     expect(ACTION_SOURCES.reserves.hint).toBe("Réserves de réception d'un chantier ou d'une installation.");
   });

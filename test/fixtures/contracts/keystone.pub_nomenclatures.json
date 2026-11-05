@@ -1,0 +1,5 @@
+{
+  "source": "Keystone origin/main b5891aa, drizzle/0035_share.sql (contrat D12 v1) ; quantity = sum(project_bom_lines.quantity numeric)",
+  "readers": ["vigie_app", "matrix_app"],
+  "columns": [["project_code", "text"], ["stage", "text"], ["part_ref", "text"], ["quantity", "numeric"]]
+}

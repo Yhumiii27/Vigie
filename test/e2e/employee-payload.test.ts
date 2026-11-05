@@ -138,6 +138,9 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         '/prevention/imprimer/permis', '/prevention/imprimer/permis/PF-2026-031', '/prevention/imprimer/plan/PP-2026-013',
         // Paquet 13 : impression du programme d'audit (AUD-26), demande de changement (CNF-11).
         '/audits/imprimer?annee=2026', '/audits?changement=MC-001',
+        // D12 (lot 5 de M-02) : modifications techniques, fiche et liens des autres outils.
+        '/modifications-techniques', '/modifications-techniques?sel=ECO-2026-001', '/modifications-techniques/ECR-2026-001',
+        '/modifications-techniques/nouvelle?part=ARB-MAL-045',
       ]) {
         const { status, location, body } = await load(path, rsc);
         // Renvoi par une redirection HTTP, ou dans la page déjà commencée (contrôle du rôle pendant le rendu, SEC-14).
@@ -145,6 +148,7 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         expect(found(body, EVENT_REF), path).toEqual([]);
         expect(found(body, ACTION_REF), path).toEqual([]);
         expect(found(body, PREVENTION_REF), path).toEqual([]);
+        expect(body, path).not.toMatch(/ECO-2026-00\d|ECR-2026-00\d|Arbre de malaxeur/);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
       }
     });

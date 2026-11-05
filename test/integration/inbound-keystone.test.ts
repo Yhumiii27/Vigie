@@ -263,7 +263,7 @@ describe('échéances, fiche et onglet « Connecteurs »', () => {
 
   it('démonstration : une demande appliquée et une refusée (échéance du responsable QHSE du site)', async () => {
     const db = await getDb();
-    const demo = await db.select().from(t.inboundRequests).where(and(eq(t.inboundRequests.caller, 'keystone_app'), sql`${t.inboundRequests.externalId} like 'demo-%'`));
+    const demo = await db.select().from(t.inboundRequests).where(and(eq(t.inboundRequests.caller, 'keystone_app'), sql`${t.inboundRequests.externalId} like 'demo-%'`, sql`${t.inboundRequests.kind} like 'nc%'`));
     expect(demo.map((r) => r.status).sort()).toEqual(['applied', 'rejected']);
     expect((await event('EV-2026-130')).partRef).toBe('ARB-MAL-045');
   });

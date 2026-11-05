@@ -5,7 +5,8 @@ import { getDb, schema as t } from '@/db';
 import { today } from '@/lib/today';
 import { parisDay, referenceNow } from '../dates';
 import { EVENT_STEPS, STEP_CLOSED, canApprove, isEmployee, type TodoItem } from '../domain';
-import { INBOUND_KINDS, INBOUND_PENDING_DAYS, INBOUND_RESULTS, INBOUND_STATUSES, inboundSummary, ncPayloadSchema, type InboundKind, type InboundResultCode, type InboundStatus } from '../rules/inbound';
+import { ENGINEERING_PATH, engineeringHref } from '../rules/engineering';
+import { INBOUND_KINDS, INBOUND_PENDING_DAYS, INBOUND_RESULTS, INBOUND_STATUSES, inboundSummary, isNcKind, ncPayloadSchema, type InboundKind, type InboundResultCode, type InboundStatus } from '../rules/inbound';
 import { INBOUND_STATUS_CODES } from '../state-keys';
 import { loadPeople } from '../queries';
 import { getSession, siteFilter } from '../session';
@@ -41,7 +42,12 @@ export type InboundView = {
 
 function view(r: Row, labels: ReadonlyMap<string, string>, people: ReadonlyMap<string, { name: string }>): InboundView {
   const p = ncPayloadSchema.safeParse(r.payload);
-  const actor = p.success ? p.data.actor : null;
+  // Demandes de D12 : acteur déclaré par Keystone (ordre) ; demandeur déclaré par Codex (création d'une demande).
+  const raw = (r.payload ?? {}) as { actor?: { name?: unknown; role?: unknown }; requester?: { name?: unknown } };
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
+  const actor = p.success ? p.data.actor
+    : text(raw.actor?.name) ? { name: text(raw.actor?.name), role: text(raw.actor?.role) }
+      : text(raw.requester?.name) ? { name: text(raw.requester?.name), role: null } : null;
   const status = r.status as InboundStatus;
   const code = (r.resultCode as InboundResultCode | null) ?? null;
   return {
@@ -133,21 +139,31 @@ export const loadInboundSignals = cache(async (): Promise<{ todo: TodoItem[] }> 
     callerLabels(), siteFilter('perimeter'), loadQhseLeads(),
   ]);
   const byId = new Map(events.map((e) => [e.id, e]));
+  // D12 (lot 5) : site des demandes et ordres de modification visés.
+  const engineering = rows.some((r) => !isNcKind(r.kind))
+    ? new Map([
+      ...(await db.select({ id: t.ecrs.id, siteId: t.ecrs.siteId }).from(t.ecrs)).map((x) => [x.id, x.siteId] as const),
+      ...(await db.select({ id: t.ecos.id, siteId: t.ecos.siteId }).from(t.ecos)).map((x) => [x.id, x.siteId] as const),
+    ])
+    : new Map<string, string | null>();
   const todo: TodoItem[] = rows.flatMap((r): TodoItem[] => {
-    // Site : celui de la NC visée (rattachée, ou NC de projet du numéro transmis) ; sinon élément commun.
+    // Site : celui de la NC visée (rattachée, ou NC de projet du numéro transmis), de la demande ou de l'ordre de
+    // modification visé ; sinon élément commun.
     const e = byId.get(r.eventId ?? r.targetRef);
-    const nc = e && e.type === 'NC' && e.projectCode === r.projectCode ? e : undefined;
-    const siteId = nc?.siteId ?? null;
+    const nc = isNcKind(r.kind) && e && e.type === 'NC' && e.projectCode === r.projectCode ? e : undefined;
+    const engRef = isNcKind(r.kind) ? null : r.ecrId ?? r.ecoId ?? null;
+    const siteId = nc?.siteId ?? (engRef ? engineering.get(engRef) ?? null : null);
     if (!keep(siteId)) return [];
     const tool = labels.get(r.caller) ?? r.tool;
     const to = leads.forSite(siteId);
-    const base = { who: to.who, ownerIds: to.ownerIds, siteId, href: inboundHref(nc?.id ?? null), kind: `Demande de ${tool}` } as const;
+    const href = isNcKind(r.kind) ? inboundHref(nc?.id ?? null) : engRef ? engineeringHref(engRef) : ENGINEERING_PATH;
+    const base = { who: to.who, ownerIds: to.ownerIds, siteId, href, kind: `Demande de ${tool}` } as const;
     if (r.status === 'rejected') {
       const day = parisDay(r.processedAt ?? r.receivedAt);
       return [{
         ...base, date: day, dueOn: day, tone: 'warn',
         title: `${r.targetRef} · demande n° ${r.id} de ${tool} refusée : ${INBOUND_RESULTS[r.resultCode as InboundResultCode] ?? 'refus'} — prenez-en connaissance`,
-        key: `keystone-refus|${r.id}`,
+        key: `${r.tool}-refus|${r.id}`,
       } satisfies TodoItem];
     }
     if (r.status === 'received') {
@@ -156,7 +172,7 @@ export const loadInboundSignals = cache(async (): Promise<{ todo: TodoItem[] }> 
       return [{
         ...base, date: now, dueOn: due, tone: 'danger', overdue: true,
         title: `${r.targetRef} · demande n° ${r.id} de ${tool} non traitée depuis plus d'un jour : vérifiez la tâche « Demandes reçues » (Connecteurs)`,
-        key: `keystone-attente|${r.id}`,
+        key: `${r.tool}-attente|${r.id}`,
       } satisfies TodoItem];
     }
     // Vérification appliquée : proposition au QHSE tant que la NC n'a pas changé d'étape depuis.

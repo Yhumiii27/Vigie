@@ -12,6 +12,9 @@ import {
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
   ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
   INBOUND_KIND_CODES, INBOUND_RESULT_CODES, INBOUND_STATUS_CODES,
+  ENGINEERING_INBOUND_KIND_CODES, ECO_TYPE_CODES, ECO_STATUS_CODES, ENGINEERING_SOURCE_CODES, ECR_KIND_CODES, ECR_SUBJECT_CODES, ECR_STATUS_CODES,
+  ECO_APPROVAL_KEY_CODES, ECO_DECISION_CODES, ECO_APPROVAL_VIA_CODES, EFFECTIVITY_TARGET_CODES, EFFECTIVITY_DISPOSITION_CODES,
+  OUTBOUND_STATUS_CODES, OUTBOUND_TARGET_CODES, OUTBOUND_KIND_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -310,7 +313,7 @@ export const actions = pgTable('actions', {
   dueOn: date('due_on', { mode: 'string' }).notNull(), // date cible actuelle
   initialDueOn: date('initial_due_on', { mode: 'string' }).notNull(), // date cible initiale, jamais modifiée
   doneOn: date('done_on', { mode: 'string' }), // date effective (passage « Terminée »)
-  source: text('source').$type<SourceKey>(), // une des 24 sources (§ 12) ; null = à compléter (reprise) ; verrouillée une fois posée
+  source: text('source').$type<SourceKey>(), // une des 25 sources (§ 12) ; null = à compléter (reprise) ; verrouillée une fois posée
   originRef: text('origin_ref').notNull(), // référence d'origine (texte) ; libellé quand la source n'a pas de fiche
   eventId: text('event_id').references(() => events.id),
   reviewId: integer('review_id').references((): AnyPgColumn => reviews.id), // revue de direction d'origine (décision, objectif, préparation)
@@ -1579,8 +1582,11 @@ export const inboundRequests = pgTable('inbound_requests', {
   tool: text('tool').notNull(), // outil de l'appelant (inbound_callers.tool)
   kind: text('kind').notNull(), // INBOUND_KIND_CODES
   externalId: text('external_id').notNull(), // identifiant de la demande chez l'appelant (keystoneId) : idempotence
-  targetRef: text('target_ref').notNull(), // numéro de la NC transmis (référence EV-…, CV-07)
-  projectCode: text('project_code').notNull(), // code projet Keystone transmis
+  // Élément visé : numéro de la NC transmis (référence EV-…, CV-07) ; ECO-… (avancement d'un ordre de modification, D12) ;
+  // ECR-… réservé par la fonction de Codex à la création d'une demande de modification (D12).
+  targetRef: text('target_ref').notNull(),
+  // Code projet Keystone transmis (NC de projet) ; vide pour les demandes de D12 (migration 0029).
+  projectCode: text('project_code'),
   payload: jsonb('payload').notNull(), // contenu contrôlé (ncPayloadSchema, src/lib/rules/inbound.ts)
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   status: text('status').notNull().default('received'), // INBOUND_STATUS_CODES
@@ -1592,12 +1598,18 @@ export const inboundRequests = pgTable('inbound_requests', {
   acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
   acknowledgedById: text('acknowledged_by_id').references(() => people.id),
   acknowledgeReason: text('acknowledge_reason'),
+  // D12 (lot 5 de M-02, migration 0029) : demande de modification créée (Codex) ou ordre de modification visé (Keystone).
+  ecrId: text('ecr_id').references((): AnyPgColumn => ecrs.id),
+  ecoId: text('eco_id').references((): AnyPgColumn => ecos.id),
 }, (t) => [
   uniqueIndex('inbound_requests_external_idx').on(t.caller, t.externalId),
   index('inbound_requests_status_idx').on(t.status, t.receivedAt),
   index('inbound_requests_event_idx').on(t.eventId),
   check('inbound_requests_status_check', inList(t.status, INBOUND_STATUS_CODES)),
-  check('inbound_requests_kind_check', inList(t.kind, INBOUND_KIND_CODES)),
+  check('inbound_requests_kind_check', inList(t.kind, [...INBOUND_KIND_CODES, ...ENGINEERING_INBOUND_KIND_CODES])),
+  check('inbound_requests_project_check', sql`${t.kind} not in (${sql.raw(sqlList(INBOUND_KIND_CODES))}) or ${t.projectCode} is not null`),
+  index('inbound_requests_ecr_idx').on(t.ecrId),
+  index('inbound_requests_eco_idx').on(t.ecoId),
   check('inbound_requests_result_code_check', sql`${t.resultCode} is null or ${t.resultCode} in (${sql.raw(sqlList(INBOUND_RESULT_CODES))})`),
   check('inbound_requests_processed_check', sql`(${t.status} = 'received') = (${t.processedAt} is null) and (${t.status} = 'rejected') = (${t.resultCode} is not null)`),
   check('inbound_requests_ack_check', sql`${t.acknowledgedAt} is null or ${t.status} = 'rejected'`),
@@ -1637,3 +1649,226 @@ export const externalEditColumns = pgTable('external_edit_columns', {
   maxValue: integer('max_value'),
   pattern: text('pattern'), // texte : expression régulière (POSIX) à respecter
 }, (t) => [primaryKey({ columns: [t.tableName, t.columnName] })]);
+
+// ─── Modifications techniques : demandes (ECR) et ordres (ECO) de modification ─
+//
+// D12 de Matrix (lot 5 de M-02, décision CV-06 du 05/11/2026, migration 0029 ; docs/specs/modifications-techniques.md) :
+// Vigie numérote, instruit, approuve et libère les demandes et ordres de modification, venus de Codex, de Keystone ou de
+// Vigie. Tables de la spécification de Matrix (infra/postgres/partage/60-vigie-ecr-eco.sql) avec EXACTEMENT les colonnes
+// que lisent les publications définies par Matrix (data/publications-depot.json : pub_ordres_modification,
+// pub_eco_approbations, pub_eco_effectivite, pub_demandes_modification ; requêtes de référence du document) : une colonne
+// publiée ne se supprime, ne se renomme ni ne change de type qu'après évolution de la publication par Matrix. Colonnes
+// propres à Vigie en fin de table (jamais publiées). Valeurs calculées, jamais stockées : dispositions à décider et
+// verrouillage (« locked ») d'un ordre. La table external_progress de la spécification n'est pas créée : les écritures
+// reçues passent par inbound_requests (décision CV-08, fonctions pub_ de la migration 0029).
+
+/** Ordres de modification (ECO-AAAA-NNN). */
+export const ecos = pgTable('ecos', {
+  id: text('id').primaryKey(), // « ECO-2026-015 » (nextEntityReference, portée « ref:ECO-2026- »)
+  title: text('title').notNull(),
+  ecoType: text('eco_type').notNull(), // ECO_TYPE_CODES
+  status: text('status').notNull().default('draft'), // ECO_STATUS_CODES
+  interchangeability: text('interchangeability'), // yes | no ; null = non évaluée (soumission à l'approbation refusée)
+  fromRevision: text('from_revision').notNull(),
+  toRevision: text('to_revision').notNull(),
+  costEur: numeric('cost_eur', { precision: 12, scale: 2, mode: 'number' }).notNull().default(0),
+  scheduleDays: integer('schedule_days').notNull().default(0),
+  stockImpact: text('stock_impact').notNull().default(''),
+  requestedByName: text('requested_by_name').notNull(),
+  requestedByMatricule: text('requested_by_matricule'), // D01 : matricule Cursus du demandeur
+  raisedOn: date('raised_on', { mode: 'string' }).notNull(),
+  pilotId: text('pilot_id').references(() => people.id), // pilote dans Vigie (plan d'actions, échéances)
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null = tous les sites
+  source: text('source').notNull().default('vigie'), // ENGINEERING_SOURCE_CODES
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  // Propres à Vigie (non publiées).
+  description: text('description').notNull().default(''),
+  approvalRequestedOn: date('approval_requested_on', { mode: 'string' }), // passage à « en approbation » (échéances)
+  createdById: text('created_by_id').references(() => people.id),
+  // Annulation motivée (saisie par erreur, ordre abandonné) : l'ordre est publié « rejected » (rejected_at), jamais supprimé.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  index('ecos_status_idx').on(t.status),
+  index('ecos_pilot_id_idx').on(t.pilotId),
+  check('ecos_id_check', sql`${t.id} ~ '^ECO-[0-9]{4}-[0-9]{3,}$'`),
+  check('ecos_eco_type_check', inList(t.ecoType, ECO_TYPE_CODES)),
+  check('ecos_status_check', inList(t.status, ECO_STATUS_CODES)),
+  check('ecos_interchangeability_check', sql`${t.interchangeability} in ('yes', 'no')`),
+  check('ecos_requested_by_matricule_check', sql`${t.requestedByMatricule} ~ '^EMP-[0-9]{4,}$'`),
+  check('ecos_source_check', inList(t.source, ENGINEERING_SOURCE_CODES)),
+  check('ecos_released_check', sql`${t.releasedAt} is null or ${t.status} = 'released'`),
+  check('ecos_rejected_check', sql`${t.rejectedAt} is null or ${t.status} = 'rejected'`),
+  check('ecos_cost_check', sql`${t.costEur} >= 0`),
+  check('ecos_cancelled_rejected_check', sql`${t.cancelledAt} is null or ${t.status} = 'rejected'`),
+  archiveState('ecos_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
+/** Demandes de modification (ECR-AAAA-NNN), nées dans Codex, Keystone ou Vigie. */
+export const ecrs = pgTable('ecrs', {
+  id: text('id').primaryKey(), // « ECR-2026-004 »
+  kind: text('kind').notNull(), // ECR_KIND_CODES
+  subject: text('subject').notNull(), // ECR_SUBJECT_CODES
+  title: text('title').notNull(),
+  reason: text('reason').notNull(),
+  description: text('description').notNull().default(''),
+  source: text('source').notNull(), // ENGINEERING_SOURCE_CODES
+  codexDocId: text('codex_doc_id'), // D10 : codex.pub_documents.id
+  keystoneProjectCode: text('keystone_project_code'), // D02 : keystone.pub_projets.code
+  partRef: text('part_ref'), // keystone.pub_articles.ref
+  eventId: text('event_id').references(() => events.id, { onUpdate: 'cascade' }), // NC à l'origine de la demande
+  requesterName: text('requester_name').notNull(),
+  requesterMatricule: text('requester_matricule'), // D01
+  requesterRef: text('requester_ref'), // identifiant dans l'outil émetteur (codex.users.id : « jwagner »)
+  status: text('status').notNull().default('submitted'), // ECR_STATUS_CODES
+  ecoId: text('eco_id').references(() => ecos.id),
+  modifierRef: text('modifier_ref'), // codex.users.id du rédacteur désigné (modifierId du webhook)
+  decisionNote: text('decision_note'),
+  decidedById: text('decided_by_id').references(() => people.id),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  implementedAt: timestamp('implemented_at', { withTimezone: true }), // réponse 200 du webhook de Codex
+  codexRevision: text('codex_revision'), // lettre de révision ouverte par Codex
+  notifyStatus: text('notify_status'), // pending | sent | failed (dernier envoi à Codex, outbound_messages)
+  notifyAttempts: integer('notify_attempts').notNull().default(0),
+  notifyError: text('notify_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  // Propres à Vigie (non publiées).
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null = toute l'entreprise
+  createdById: text('created_by_id').references(() => people.id),
+  // Annulation motivée d'une demande saisie par erreur dans Vigie : publiée « rejected », jamais supprimée.
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  // Une seule demande en cours par document (règle change_requests_pending de Codex).
+  uniqueIndex('ecrs_one_open_per_document').on(t.codexDocId).where(sql`${t.codexDocId} is not null and ${t.status} in ('submitted', 'accepted')`),
+  index('ecrs_eco_id_idx').on(t.ecoId),
+  index('ecrs_event_id_idx').on(t.eventId),
+  check('ecrs_id_check', sql`${t.id} ~ '^ECR-[0-9]{4}-[0-9]{3,}$'`),
+  check('ecrs_kind_check', inList(t.kind, ECR_KIND_CODES)),
+  check('ecrs_subject_check', inList(t.subject, ECR_SUBJECT_CODES)),
+  check('ecrs_objet_check', sql`(${t.subject} = 'document' and ${t.codexDocId} is not null) or (${t.subject} = 'part' and ${t.partRef} is not null) or (${t.subject} = 'project' and ${t.keystoneProjectCode} is not null) or (${t.subject} = 'event' and ${t.eventId} is not null)`),
+  check('ecrs_source_check', inList(t.source, ENGINEERING_SOURCE_CODES)),
+  check('ecrs_requester_matricule_check', sql`${t.requesterMatricule} ~ '^EMP-[0-9]{4,}$'`),
+  check('ecrs_status_check', inList(t.status, ECR_STATUS_CODES)),
+  check('ecrs_decision_check', sql`${t.status} = 'submitted' or ${t.decidedAt} is not null`),
+  check('ecrs_implemented_check', sql`${t.status} <> 'implemented' or ${t.implementedAt} is not null`),
+  check('ecrs_notify_status_check', inList(t.notifyStatus, OUTBOUND_STATUS_CODES)),
+  check('ecrs_notify_attempts_check', sql`${t.notifyAttempts} >= 0`),
+  check('ecrs_cancelled_rejected_check', sql`${t.cancelledAt} is null or ${t.status} = 'rejected'`),
+  archiveState('ecrs_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
+/** Approbations d'un ordre (trois clés : ingénierie, qualité, chefs des projets visés). */
+export const ecoApprovals = pgTable('eco_approvals', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  approvalKey: text('approval_key').notNull(), // ECO_APPROVAL_KEY_CODES
+  approverText: text('approver_text').notNull(), // « Antoine Girard » ; PM : « R. Aubert, C. Moreau »
+  decision: text('decision').notNull().default('pending'), // ECO_DECISION_CODES
+  decidedByName: text('decided_by_name'),
+  decidedByMatricule: text('decided_by_matricule'), // D01
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
+  comment: text('comment'),
+  via: text('via'), // vigie | keystone
+  // Propres à Vigie (non publiées) : approbateur désigné dans Vigie (il décide de sa clé), auteur d'une décision saisie dans Vigie.
+  approverId: text('approver_id').references(() => people.id),
+  decidedById: text('decided_by_id').references(() => people.id),
+}, (t) => [
+  primaryKey({ columns: [t.ecoId, t.approvalKey] }),
+  check('eco_approvals_approval_key_check', inList(t.approvalKey, ECO_APPROVAL_KEY_CODES)),
+  check('eco_approvals_decision_check', inList(t.decision, ECO_DECISION_CODES)),
+  check('eco_approvals_matricule_check', sql`${t.decidedByMatricule} ~ '^EMP-[0-9]{4,}$'`),
+  check('eco_approvals_via_check', inList(t.via, ECO_APPROVAL_VIA_CODES)),
+]);
+
+/** Articles Keystone visés par un ordre (référence texte de keystone.pub_articles). */
+export const ecoParts = pgTable('eco_parts', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  partRef: text('part_ref').notNull(),
+  position: integer('position').notNull(),
+}, (t) => [primaryKey({ columns: [t.ecoId, t.partRef] })]);
+
+/** Projets Keystone visés par un ordre (code de keystone.pub_projets). */
+export const ecoProjects = pgTable('eco_projects', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  keystoneProjectCode: text('keystone_project_code').notNull(),
+  position: integer('position').notNull(),
+}, (t) => [primaryKey({ columns: [t.ecoId, t.keystoneProjectCode] })]);
+
+/** Effectivité : disposition de chaque cible (projet, ou machine du parc installé). */
+export const ecoEffectivity = pgTable('eco_effectivity', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(), // EFFECTIVITY_TARGET_CODES
+  targetRef: text('target_ref').notNull(), // code projet, ou numéro de machine de keystone.pub_parc_machines
+  label: text('label').notNull(),
+  disposition: text('disposition'), // update | pinned | retrofit | na ; null = à décider
+  isAutomatic: boolean('is_automatic').notNull().default(false), // proposée d'après keystone.pub_nomenclatures ou pub_parc_machines
+  note: text('note'),
+  fittedPartRef: text('fitted_part_ref'),
+  fittedRevision: text('fitted_revision'),
+  position: integer('position').notNull(),
+  // Propres à Vigie (non publiées) : échéance et réalisation d'une mise à jour ou d'un rétrofit (échéances de l'ordre libéré).
+  dueOn: date('due_on', { mode: 'string' }),
+  doneOn: date('done_on', { mode: 'string' }),
+}, (t) => [
+  primaryKey({ columns: [t.ecoId, t.targetType, t.targetRef] }),
+  check('eco_effectivity_target_type_check', inList(t.targetType, EFFECTIVITY_TARGET_CODES)),
+  check('eco_effectivity_disposition_check', inList(t.disposition, EFFECTIVITY_DISPOSITION_CODES)),
+  check('eco_effectivity_retrofit_check', sql`${t.disposition} is distinct from 'retrofit' or ${t.targetType} = 'machine'`),
+]);
+
+/** Documents cités par un ordre, avec l'identifiant de Codex quand le document y est. */
+export const ecoDocuments = pgTable('eco_documents', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  refLabel: text('ref_label').notNull(), // « DWG-AS-9000 C »
+  codexDocId: text('codex_doc_id'), // D10 : codex.pub_documents.id
+  ecrId: text('ecr_id').references(() => ecrs.id), // demande transmise à Codex pour ce document
+}, (t) => [
+  primaryKey({ columns: [t.ecoId, t.position] }),
+  index('eco_documents_ecr_id_idx').on(t.ecrId),
+]);
+
+/** Actions du plan d'actions liées à un ordre (source « Modification technique », lien `eco:<numéro>` du registre). */
+export const ecoActions = pgTable('eco_actions', {
+  ecoId: text('eco_id').notNull().references(() => ecos.id, { onDelete: 'cascade' }),
+  actionId: text('action_id').notNull().references(() => actions.id),
+}, (t) => [
+  primaryKey({ columns: [t.ecoId, t.actionId] }),
+  index('eco_actions_action_id_idx').on(t.actionId),
+]);
+
+// ─── Envois aux autres outils (D12, lot 5 de M-02, migration 0029) ──────────
+//
+// File d'envoi : un message par décision à transmettre (ex. décision sur une demande de modification de Codex, envoyée à
+// son webhook POST <VIGIE_CODEX_URL>/api/integrations/vigie), écrit dans la transaction de la décision, envoyé par la tâche
+// planifiée « Envois aux outils » (src/server/outbound.ts) avec reprises espacées. Jamais supprimé ; lu par l'onglet
+// « Connecteurs ». Aucune donnée personnelle hors du corps attendu par le destinataire.
+export const outboundMessages = pgTable('outbound_messages', {
+  id: serial('id').primaryKey(),
+  target: text('target').notNull(), // OUTBOUND_TARGET_CODES
+  kind: text('kind').notNull(), // OUTBOUND_KIND_CODES
+  entityType: text('entity_type').notNull(), // fiche de Vigie (ecr)
+  entityId: text('entity_id').notNull(),
+  payload: jsonb('payload').notNull(), // corps envoyé tel quel
+  status: text('status').notNull().default('pending'), // pending (à envoyer, reprises comprises) | sent | failed (refus définitif)
+  attempts: integer('attempts').notNull().default(0),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+  lastError: text('last_error'), // message technique court (statut HTTP, code d'erreur du destinataire), jamais le corps
+  lastStatus: integer('last_status'), // dernier statut HTTP reçu
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+}, (t) => [
+  index('outbound_messages_status_idx').on(t.status, t.nextAttemptAt),
+  index('outbound_messages_entity_idx').on(t.entityType, t.entityId),
+  check('outbound_messages_status_check', inList(t.status, OUTBOUND_STATUS_CODES)),
+  check('outbound_messages_target_check', inList(t.target, OUTBOUND_TARGET_CODES)),
+  check('outbound_messages_kind_check', inList(t.kind, OUTBOUND_KIND_CODES)),
+  check('outbound_messages_sent_check', sql`(${t.status} = 'sent') = (${t.sentAt} is not null)`),
+  check('outbound_messages_attempts_check', sql`${t.attempts} >= 0`),
+]);
