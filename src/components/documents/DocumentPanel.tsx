@@ -178,7 +178,8 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
 
       <section style={{ display: 'grid', gap: 8 }}>
         <H6>{canManage ? 'Révisions' : 'Révision en vigueur'}</H6>
-        <div style={{ overflowX: 'auto' }}>
+        {/* Défilement horizontal sur téléphone : conteneur focalisable pour défiler au clavier (axe, scrollable-region-focusable). */}
+        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Révisions du document, défilement horizontal sur petit écran">
           <table className="table" style={{ fontSize: 12, minWidth: canManage ? 760 : 560 }}>
             <thead>
               <tr>

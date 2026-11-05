@@ -127,13 +127,14 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
             return (
               <Link key={k.key} href={hrefWith(PATH, params, { statut: on ? undefined : k.key })} scroll={false}
                 className="card vg-kcard" style={{ gap: 5, padding: '12px 14px', boxShadow: on ? '0 0 0 1px var(--color-accent)' : undefined }}
-                aria-label={`${k.label} : ${k.value}${on ? ' (filtre actif, retirer)' : ' (afficher ces documents)'}`}>
+                aria-current={on ? 'true' : undefined}>
                 <div className="vg-eyebrow" style={{ color: on ? 'var(--color-accent)' : 'var(--color-neutral-500)' }}>{k.label}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-.02em', lineHeight: 1.1, color: k.key === 'retard' && k.value > 0 ? TONE.danger.dot : undefined }}>{k.value}</span>
                   {k.sub && <span style={{ fontSize: 12, color: k.subTone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.subTone].dot }}>{k.sub}</span>}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
+                <span className="vg-sr-only">{on ? ' (filtre actif, retirer)' : ' (afficher ces documents)'}</span>
               </Link>
             );
           })}
