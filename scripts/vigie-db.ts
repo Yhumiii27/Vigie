@@ -533,8 +533,9 @@ async function check(flags: Set<string>) {
   for (const e of journal) {
     const text = await readFile(path.join(MIGRATIONS_DIR, `${e.tag}.sql`), 'utf8');
     rewrites += text.split('"public".').length - 1;
-    // Commentaires SQL (-- …) écartés : seul le code compte.
-    const left = toServerSchema(text).replace(/--[^\n]*/g, '').match(/.{0,30}\bpublic\b.{0,30}/i);
+    // Commentaires SQL (-- …) écartés : seul le code compte. Le mot-clé PUBLIC d'un droit (REVOKE EXECUTE … FROM PUBLIC
+    // d'une fonction pub_, M-17) désigne tous les rôles, pas le schéma : écarté aussi.
+    const left = toServerSchema(text).replace(/--[^\n]*/g, '').replace(/\b(?:FROM|TO) PUBLIC\b/g, '').match(/.{0,30}\bpublic\b.{0,30}/i);
     if (left) problems.push(`réécriture pour le schéma ${SERVER_SCHEMA} : ${e.tag} mentionne encore public (« ${left[0].trim()} ») — qualifier par "public". ou ne pas qualifier`);
   }
   const server = new PGlite('memory://');

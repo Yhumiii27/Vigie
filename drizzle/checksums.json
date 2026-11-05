@@ -130,6 +130,11 @@
       "when": 1793796103146,
       "sql": "c91c9616e8019c1a6213ad33fb750bdff416b2a7e07f22442f1fc8b6c29cd99d",
       "snapshot": "a8e224ff68b0cbe1672c1500f87b8324d2ff6cb845303437148ead49e4241f78"
+    },
+    "0026_convergence_m02_nc_inbox": {
+      "when": 1793870343647,
+      "sql": "79b4e26f6f6384e627e9a64a7f2b32f6a66de1a6267da03d7ec4492399e68078",
+      "snapshot": "e1adfa918559e208cc59387cd9f7f964b2e47201f2466ed898f4d715ba2b23a0"
     }
   }
 }

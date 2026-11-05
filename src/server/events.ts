@@ -8,7 +8,7 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import {
   BENIGN_REGISTER_FIELD, DECLARANT_MAX, FIVE_M, HEALTH_DENIED, HEALTH_FILE_FIELD, HEALTH_FORM_FIELDS, HEALTH_LABELS, INJURY_KEYS, LOCATION_UNSPECIFIED,
   MAX_BATCH_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
-  advanceBlocker, analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, declarationDuty, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
+  analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
   MP_DENIED, MP_TITLE, hasNcDisposition,
 } from '@/lib/rules/events';
@@ -33,6 +33,7 @@ import { readReportToken } from '@/lib/report-token';
 import { ALL_SITES, getOptionalSession, inSite, type Session } from '@/lib/session';
 import { checkUpload, checkUploadBatch, deleteAttachment, saveUpload } from '@/lib/uploads';
 import { diffFields, logChange } from './changelog';
+import { eventAdvanceBlocker, writeAdvance } from './event-workflow';
 import { notifyReportOutcome } from './notify';
 import { nextEntityReference } from './references';
 import { StaleEditError, VERSION_FIELD, assertFresh } from './versions';
@@ -95,25 +96,10 @@ export async function advanceEvent(id: string): Promise<{ error?: string }> {
   if (!ev) return { error: 'Événement introuvable.' };
   const siteError = await requireInSite(ev.siteId);
   if (siteError) return { error: siteError };
-  const [linked, [analysis], entry] = await Promise.all([
-    db.select({ status: t.actions.status }).from(t.actions).where(eq(t.actions.eventId, id)),
-    db.select({ content: t.eventAnalyses.content }).from(t.eventAnalyses).where(and(eq(t.eventAnalyses.eventId, id), eq(t.eventAnalyses.method, ev.analysisMethod))),
-    ev.type === 'AT' ? activeBenign(db, id) : undefined,
-  ]);
-  const health = canSeeHealth(session.role);
-  const blocker = advanceBlocker(ev.step, linked, {
-    pilotId: ev.pilotId, hasAnalysis: analysisFilled(ev.analysisMethod, analysis?.content), dismissed: !!ev.dismissedAt,
-    methodLabel: METHODS.find(([k]) => k === ev.analysisMethod)?.[1] ?? ev.analysisMethod,
-    missing: missingQualification(ev),
-    canCreateActions: canCreateAction(session.role),
-    accident: ev.type === 'AT' ? { health, cpamPending: cpamPending(ev, !!entry), benign: ev.injury === 'soins', duty: declarationDuty(ev) } : undefined,
-  });
+  const blocker = await eventAdvanceBlocker(db, ev, { health: canSeeHealth(session.role), canCreateActions: canCreateAction(session.role) });
   if (blocker) return { error: blocker };
   const moved = await db.transaction(async (tx) => {
-    const [row] = await tx.update(t.events).set({ step: ev.step + 1 })
-      .where(and(eq(t.events.id, id), eq(t.events.step, ev.step), isNull(t.events.dismissedAt))).returning({ id: t.events.id });
-    if (!row) return false;
-    await tx.insert(t.eventSteps).values({ eventId: id, kind: 'advance', fromStep: ev.step, toStep: ev.step + 1, byId: session.user.id });
+    if (!(await writeAdvance(tx, ev, { byId: session.user.id }))) return false;
     // TDB-06 : le déclarant est informé de la qualification et de la clôture de son signalement.
     const outcome = ev.step + 1 === STEP_QUALIFIED ? 'qualifie' : ev.step + 1 === STEP_CLOSED ? 'cloture' : null;
     if (outcome) await notifyReportOutcome(tx, ev, outcome, session.user);

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cookieJar } from '../next-mocks';
 import { actAs, freshDemoDatabase } from '../helpers';
 import { getDb } from '@/db';
-import { PERSON_TODO_TASK, SHARED_REFERENCES_TASK, personTodoTask, sharedReferencesTask, scheduledTasks, startScheduler, type ScheduledTask } from '@/db/scheduler';
+import { INBOUND_REQUESTS_TASK, PERSON_TODO_TASK, SHARED_REFERENCES_TASK, personTodoTask, sharedReferencesTask, scheduledTasks, startScheduler, type ScheduledTask } from '@/db/scheduler';
 import type { Db } from '@/db/types';
 import { DEMO_ROLE_PEOPLE } from '@/lib/demo';
 import type { Role } from '@/lib/domain';
@@ -52,7 +52,7 @@ describe('PRD-12 : échéances par personne sans session', () => {
 describe('PRD-12 : tâche planifiée', () => {
   it('inscrite dans le serveur Next.js (instrumentation) seulement, avec ou sans transport d’e-mail', () => {
     expect(serverRuntime()).toBeDefined();
-    expect(scheduledTasks(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun' })).map((t) => t.name)).toEqual([PERSON_TODO_TASK, SHARED_REFERENCES_TASK]);
+    expect(scheduledTasks(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun' })).map((t) => t.name)).toEqual([PERSON_TODO_TASK, SHARED_REFERENCES_TASK, INBOUND_REQUESTS_TASK]);
   });
 
   it('référentiels partagés (lot 0 de M-02) : une fois par nuit, à partir de 2 h (Paris), jamais le jour du démarrage', async () => {

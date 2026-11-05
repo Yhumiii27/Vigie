@@ -11,7 +11,10 @@ import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
 import type { ConnectorRow } from '@/lib/data/connectors';
 import { MATRIX_SITE_STATES, SOURCES, SYNC_STATUSES } from '@/lib/foreign/labels';
-import { refreshConnectors } from '@/server/connectors';
+import { processInboundNow, refreshConnectors } from '@/server/connectors';
+import type { InboundOverview } from '@/lib/data/inbound';
+import { INBOUND_STATUSES } from '@/lib/rules/inbound';
+import { InboundItem } from './InboundRequests';
 import { TipButton } from '@/components/Tip';
 import { ToneTag } from '@/components/ui';
 import { withCurrent } from '@/lib/form-options';
@@ -25,7 +28,7 @@ export type MatrixChoices = { choices: Option[]; message: string | null };
  * Contenu de « Gérer les sites » : sites suivis (archivés compris), personnes proposées comme responsable QHSE, sites de
  * Matrix proposés au suivi et état des connecteurs (lectures des autres outils, lot 0 de M-02).
  */
-export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[]; matrix: MatrixChoices; connectors: ConnectorRow[] };
+export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[]; matrix: MatrixChoices; connectors: ConnectorRow[]; inbound: InboundOverview };
 
 type View = 'list' | 'connectors' | { edit: SiteAdminRow | null } | { archive: SiteAdminRow };
 
@@ -57,7 +60,7 @@ export function QhseLeadField({ options, current }: { options: readonly Option[]
  * Fenêtre « Gérer les sites » (animateur QHSE, direction) : suivi d'un site de Matrix, responsable QHSE, Alsace-Moselle,
  * « ne plus suivre » (archivage avec motif), réactivation ; onglet « Connecteurs » (lectures des autres outils).
  */
-export function SitesManager({ sites, leadOptions, matrix, connectors, onClose }: SiteAdmin & { onClose: () => void }) {
+export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, onClose }: SiteAdmin & { onClose: () => void }) {
   const [view, setView] = useState<View>('list');
   const back = () => setView('list');
   const active = sites.filter((s) => !s.archivedOn);
@@ -120,7 +123,7 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, onClose }
         </div>
       )}
 
-      {view === 'connectors' && <Connectors rows={connectors} onBack={back} />}
+      {view === 'connectors' && <Connectors rows={connectors} inbound={inbound} onBack={back} />}
 
       {view !== 'list' && view !== 'connectors' && 'edit' in view && (
         <ActionForm action={saveSite} hidden={{ id: view.edit?.id ?? '', alsaceMoselleField: '1' }} onDone={back} onCancel={back}
@@ -165,7 +168,7 @@ function RestoreButton({ siteId }: { siteId: string }) {
 }
 
 /** Onglet « Connecteurs » (INT-01) : dernier passage de chaque source lue chez un autre outil ; « Actualiser » relit tout. */
-function Connectors({ rows, onBack }: { rows: ConnectorRow[]; onBack: () => void }) {
+function Connectors({ rows, inbound, onBack }: { rows: ConnectorRow[]; inbound: InboundOverview; onBack: () => void }) {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
@@ -196,6 +199,35 @@ function Connectors({ rows, onBack }: { rows: ConnectorRow[]; onBack: () => void
         })}
       </div>
       <ActionForm action={refreshConnectors} onCancel={onBack} submitLabel="Actualiser" submitIcon="ph-arrows-clockwise">{null}</ActionForm>
+      <InboundBox inbound={inbound} />
+    </div>
+  );
+}
+
+/**
+ * Boîte de réception Keystone (D13, décision CV-08) : demandes déposées par vigie.pub_signaler_avancement_nc, nombres par
+ * état, refus à prendre en compte ; « Traiter maintenant » sans attendre la tâche planifiée « Demandes reçues ».
+ */
+function InboundBox({ inbound }: { inbound: InboundOverview }) {
+  const { counts, rejected, lastReceivedAt } = inbound;
+  return (
+    <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
+      <h6 className="vg-h6">Boîte de réception Keystone</h6>
+      <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
+        Keystone signale l’avancement de ses NC de projet par la fonction vigie.pub_signaler_avancement_nc ; Vigie traite chaque demande
+        avec ses propres règles, toutes les 10 minutes.{lastReceivedAt ? ` Dernière demande reçue le ${fmtTime(lastReceivedAt)}.` : ' Aucune demande reçue.'}
+      </p>
+      <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {(Object.keys(INBOUND_STATUSES) as (keyof typeof INBOUND_STATUSES)[]).map((k) => (
+          <ToneTag key={k} tone={counts[k] ? INBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{INBOUND_STATUSES[k].label} : {counts[k]}</ToneTag>
+        ))}
+      </span>
+      {rejected.length > 0 && (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Refus à prendre en compte">
+          {rejected.map((r) => <InboundItem key={r.id} r={r} canAcknowledge showTarget />)}
+        </ul>
+      )}
+      <ActionForm action={processInboundNow} submitLabel="Traiter maintenant" submitIcon="ph-tray-arrow-down">{null}</ActionForm>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BSD_STATUS_KEYS } from '@/lib/rules/environment';
 import { ASSIGNMENT_SOURCES, CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SYNC_STATUSES } from '@/lib/foreign/labels';
 import { DOC_ORIGIN_KEYS, VERSION_STATUS_KEYS } from '@/lib/rules/documents';
+import { INBOUND_KINDS, INBOUND_RESULTS, INBOUND_STATUSES } from '@/lib/rules/inbound';
 import { STORED_STUDY_STATUS_KEYS, STUDY_CONCLUSION_KEYS, STUDY_MILESTONE_KEYS, STUDY_TYPE_KEYS } from '@/lib/rules/process-safety';
 import { PERMIT_STATE, PERMIT_TYPE_KEYS, PLAN_MEETING_KIND_KEYS, PLAN_STATUS } from '@/lib/rules/prevention';
 import {
@@ -13,6 +14,7 @@ import {
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES,
   STUDY_STATUS_CODES, STUDY_TYPE_CODES, VERSION_STATUS_CODES, ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
+  INBOUND_KIND_CODES, INBOUND_RESULT_CODES, INBOUND_STATUS_CODES,
 } from './state-keys';
 
 // QUA-23 : les listes des contraintes CHECK (migration 0017) sont celles de l'interface ; une valeur ajoutée d'un côté
@@ -55,5 +57,9 @@ describe('clés des colonnes d’état (QUA-23)', () => {
     same(CURSUS_TITLE_STATE_CODES, Object.keys(CURSUS_TITLE_STATES));
     same(SYNC_STATUS_CODES, Object.keys(SYNC_STATUSES));
     same(ASSIGNMENT_SOURCE_CODES, Object.keys(ASSIGNMENT_SOURCES));
+    // D13, décision CV-08 (migration 0026) : demandes reçues de Keystone.
+    same(INBOUND_STATUS_CODES, Object.keys(INBOUND_STATUSES));
+    same(INBOUND_KIND_CODES, Object.keys(INBOUND_KINDS));
+    same(INBOUND_RESULT_CODES, Object.keys(INBOUND_RESULTS));
   });
 });

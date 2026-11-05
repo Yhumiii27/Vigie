@@ -24,6 +24,7 @@ import { seedWatch } from './seeds/watch';
 import { seedComplianceFunctions } from './seeds/paquet13';
 import { seedManagementSystem } from './seeds/paquet13b';
 import { seedProcessSafety } from './seeds/process-safety';
+import { seedInbound } from './seeds/inbound';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -255,6 +256,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedManagementSystem(tx);
     // Études de sécurité des procédés (VG-01 à VG-05) : HazID, HazOp et ses recommandations, PSSR planifiée.
     await seedProcessSafety(tx);
+    // D13 (CV-08) : demandes de Keystone déjà traitées (une appliquée, une refusée).
+    await seedInbound(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

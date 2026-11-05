@@ -2,13 +2,15 @@
 
 État au 02/11/2026, mis à jour le 03/11/2026 : **lot 0 et lot 1 sans D01 développés** (D14, D02, D04, D16, contrôle D18 ;
 migration `0024_convergence_m02`, voir § 7) ; le 04/11/2026 : **lot 2 développé** en consultation seule (D08, D09 ; décision
-CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
+CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6) ; le 05/11/2026 : **lot 3 développé**
+(D13 : numéro `EV-…`, fonction `vigie.pub_signaler_avancement_nc` et boîte de réception ; migration `0026_convergence_m02_nc_inbox`,
+voir § 7 ter). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
 lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
-03/11/2026 · 7 bis. Réalisation du 04/11/2026.
+03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026.
 
 ## 1. Objet, sources et état
 
@@ -77,7 +79,7 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | **fait le 04/11** en consultation seule (CV-01 tranché, § 7 bis) |
 | D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | à faire, lot 4, à arbitrer (CV-05) |
 | D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | à faire, lot 5, à confirmer (CV-06) |
-| D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | à faire, lot 3 |
+| D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | **fait le 05/11** (§ 7 ter : numéro `EV-…`, fonction `pub_` et boîte de réception ; volet projet de la fiche NC et `/signaler` de Keystone non faits) |
 | D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
 | D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | **fait le 03/11** (choix dans la fiche ; proposition par le nom à l'import des plans : non faite) |
 | D18 Journal | journal à créer ; 3 j | `change_log` et `pub_journal` livrés | — | **fait** ; `qui_matricule` rempli pour les personnes de démonstration (matricules posés le 03/11), à recontrôler après D01 |
@@ -326,6 +328,11 @@ entre J-90 et J-60. **Charge : 0,5 j.**
   passer son connecteur à la lecture des vues (§ 5.4). C-13 (accueils sécurité de chantier).
 - **Démonstration.** NC de démonstration avec code et numéro (aujourd'hui `pub_non_conformites` est toujours vide).
 - **Charge : 8 j** (plan : 7,5 j ; API ou fonction d'écriture et authentification de machine en plus, partagées avec D12).
+- **Réalisé le 05/11/2026** (§ 7 ter) : CV-07 (numéro `EV-…`, `nc_number` tenu par la base) et CV-08 (fonction
+  `vigie.pub_signaler_avancement_nc`, table de réception `inbound_requests`, traitement par Vigie, échéances, fiche et
+  onglet « Connecteurs »). Restent : volet « Projet Keystone » saisi dans la fiche NC (activité, article, livrable,
+  fournisseur, cause racine, coût, clause ISO), paramètres de Keystone dans `/signaler`, types de permis `levage` et
+  `travail_ht`, C-13, et le basculement de Keystone (§ 5.4).
 
 ### 3.11 D10 · Documents (plan `:393`)
 
@@ -421,7 +428,7 @@ Hors charge : arbitrages métier (C-01, CV-01…), recette du service QHSE, trav
 | 0 | socle § 2 | oui, entièrement | contrats des vues dans le registre de Matrix (lecture de l'écran « Publications ») |
 | 1 | D14, D01, D02, D04, D16 (+ contrôle D18) — caches et lectures seules | oui, sur substituts ; recette réelle par outil | Vigie sur le serveur (étape 2) ; D14 : sites créés dans Matrix ; D02, D04, D16 : Keystone basculé (étape 3) ; D01 : Cursus basculé (étape 4) ; CV-09, CV-10, CV-11 |
 | 2 | D08, D09, D19 — **fait le 04/11/2026 (§ 7 bis), D19 attend C-12** | sur substituts (CV-01, CV-02 tranchés ; C-01 par défaut) | Cursus basculé ; trois titres créés dans Cursus ; C-02 ; C-12 pour D19 ; portée publiée si gardée |
-| 3 | D13 | oui (fiche NC, vues déjà là) | CV-07 (numéro), CV-08 (API ou fonction), connecteur Keystone par vues ; C-13 |
+| 3 | D13 — **numéro, fonction et boîte de réception faits le 05/11/2026 (§ 7 ter)** | oui (fiche NC, vues déjà là) | lien d'exécution et publication de l'état des demandes (Matrix, § 5.1) ; connecteur Keystone par vues et fonction (§ 5.4) ; C-13 ; volet projet de la fiche NC |
 | 4 | D10 | non avant CV-05, C-06 | Codex basculé ; import étendu seulement si des documents existent en production ; types et sous-types dans le registre de Codex |
 | 5 | D12 | non avant CV-06 | Codex (`submitChange` réel), Keystone (connecteur ECO par vues), publications du dépôt de Matrix appliquées après la migration de Vigie |
 | parallèle | D06 / H3 | colonnes et lecture sur substitut | M-03 ; vue `pub_heures_travaillees` de Cursus |
@@ -464,11 +471,37 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
   keystone.pub_jalons_projets (jalon pv_reception) ou keystone.pub_avancement_projets (fin_prevue_le), selon CV-11.
 - Validé par Guillaume le :
 
-## [2026-11-xx] Vigie → Matrix — Lien d'exécution de keystone_app (D13, D12) — après CV-08
+## [2026-11-xx] Vigie → Matrix — Lien d'exécution de keystone_app sur vigie.pub_signaler_avancement_nc (D13, CV-08)
 - Statut : OUVERTE
-- Demande : liens de nature execution pour keystone_app (et codex_app pour D12) sur les fonctions vigie.pub_… que Vigie
-  créera par migration (avancement d'une NC, avancement d'un ECO, création d'une ECR), si la réponse CV-08 retient les
-  fonctions plutôt qu'une API.
+- Demande : inscrire au registre matrix.liens un lien de nature execution : lecteur keystone_app, objet
+  vigie.pub_signaler_avancement_nc (signature : text, text, text, text, text, text, text, text, text, timestamptz, text,
+  text, text, text ; retour integer), et l'appliquer (droits.accorder_execution). La fonction est créée par la migration
+  0026_convergence_m02_nc_inbox de Vigie : propriétaire vigie_app, SECURITY DEFINER, search_path = vigie, pg_temp, sans SQL
+  dynamique, REVOKE EXECUTE … FROM PUBLIC dans la même migration ; nom unique (une nouvelle version prendra un autre nom).
+- Justification : décisions M-17 (règle R4) et M-18 ; décision CV-08 de Vigie (04/11/2026) : Keystone signale l'avancement
+  d'une NC de projet en déposant une demande, que Vigie traite avec ses règles et son journal. La fonction n'écrit que
+  dans vigie.inbound_requests (appelant contrôlé par session_user, table vigie.inbound_callers).
+- Détails techniques : vérification par select has_function_privilege('keystone_app',
+  'vigie.pub_signaler_avancement_nc(text, text, text, text, text, text, text, text, text, timestamptz, text, text, text, text)',
+  'EXECUTE') ; erreurs de la fonction : SQLSTATE P0V01 (appelant non admis), P0V02 (argument invalide). codex_app (D12)
+  fera l'objet d'une demande distincte avec le lot 5.
+- Validé par Guillaume le :
+
+## [2026-11-xx] Vigie → Matrix — Publication de l'état des demandes reçues (D13, CV-08)
+- Statut : OUVERTE (après le lien d'exécution)
+- Demande : publier, dans le schéma vigie, une vue de l'état des demandes déposées par un outil (nom proposé
+  vigie.pub_demandes_recues, contrat « Demandes reçues v1 »), lecteur keystone_app, d'après la table vigie.inbound_requests,
+  chaque outil ne voyant que ses propres demandes (filtre caller = session_user) :
+  id (integer, numéro rendu par la fonction), id_externe (external_id, text : keystoneId), nature (kind, text :
+  nc_step | nc_verification | nc_references), numero (target_ref, text : EV-…), projet_code (project_code, text),
+  statut (status, text : received | applied | rejected), recu_le (received_at, timestamptz), traite_le (processed_at,
+  timestamptz), code_resultat (result_code, text : stale | refused | not_found | invalid, nul si appliquée), resultat (result,
+  text : message du traitement), vigie_ref (event_id, text : NC rattachée, nulle si introuvable).
+  Ni payload (nom de la personne déclarée par l'outil, commentaire), ni prise en compte du refus par le QHSE
+  (acknowledged_*), ni donnée de santé (le message d'une demande visant un autre élément qu'une NC de projet est
+  toujours « introuvable »).
+- Justification : décision CV-08 (réponse asynchrone, état lu dans une vue) ; Vigie ne crée plus de vue pub_ (M-18). Vigie
+  tient ces colonnes et ne les modifie qu'après évolution de la publication.
 - Validé par Guillaume le :
 ```
 
@@ -529,12 +562,36 @@ pas envoyée »), que le lot 2 applique.
 ### 5.4 Keystone
 
 ```markdown
-## [2026-11-xx] Vigie → Keystone — Lire les NC et le registre HSE de Vigie par les vues (D13)
+## [2026-11-xx] Vigie → Keystone — NC de projet de Vigie : lecture par les vues, avancement par vigie.pub_signaler_avancement_nc (D13)
 - Statut : OUVERTE
-- Demande : rafraîchir vigie_ncrs et vigie_hse_items par SELECT sur vigie.pub_non_conformites et vigie.pub_hse_projet
-  (liens keystone_app déjà dans la convention) au lieu de GET /api/ncrs et /api/hse (quality-connector.ts) ; envoyer
-  l'avancement par l'API ou la fonction pub_ que Vigie fournira (CV-08) ; numéro de NC selon CV-07.
-- Justification : M-17 (lecture par vues) ; Vigie n'exposera pas de GET.
+- Demande :
+  1. Lecture : rafraîchir vigie_ncrs et vigie_hse_items par SELECT sur vigie.pub_non_conformites et vigie.pub_hse_projet
+     (liens keystone_app de la convention ; vues reprises par Matrix) au lieu de GET /api/ncrs et /api/hse
+     (quality-connector.ts) ; Vigie n'exposera pas de GET. Correspondance : pub_non_conformites.project_code →
+     projectCode, number → number, vigie_ref → vigieRef, status (open … closed : étapes 0 à 5 de Vigie), closed_on,
+     supplier_id, owner_matricule (voir le plan de Matrix, D13).
+  2. Numéro : décision CV-07 de Vigie (04/11/2026) — le numéro d'une NC est la référence EV-… de Vigie
+     (pub_non_conformites.number = vigie_ref, ex. EV-2026-130), unique ; plus de NCR-nnn (déjà accepté par le contrat
+     vigie-contract.md § 2.2). Seules les NC portant un code projet de keystone.pub_projets sont publiées.
+  3. Avancement (outbox vigie_ncr_progress) : au lieu de POST /api/ncrs/:project/:number/progress, appeler
+     select vigie.pub_signaler_avancement_nc(p_numero => number, p_projet => projectCode, p_nature => kind
+     ('step' | 'verification' | 'references'), p_etape_depuis => fromStatus, p_etape_cible => targetStatus,
+     p_decision => decision ('approved' | 'rejected'), p_commentaire => comment, p_acteur_nom => actor.name,
+     p_acteur_role => actor.role, p_enregistre_le => recordedAt, p_id_externe => keystoneId (même valeur au renvoi :
+     même demande), p_activite, p_article, p_livrable => null hors 'references') ; le résultat est le numéro de la demande
+     dans Vigie (à garder comme vigieRef de l'entrée). Erreur P0V01 (appelant non admis) ou P0V02 (argument invalide) :
+     entrée « failed », non renvoyée telle quelle.
+  4. Réponse asynchrone : la demande est traitée par Vigie dans les 10 minutes ; état et motif lus dans la publication de
+     l'état des demandes (demandée à Matrix : statut applied | rejected, code_resultat stale | refused | not_found |
+     invalid, resultat) ; rejected = état « refused » de l'outbox (fin des renvois) ; stale = l'état a changé dans Vigie
+     (renvoyer d'après le nouvel état lu dans pub_non_conformites).
+  5. Ce que Vigie applique (choix restrictifs, à confirmer avec Keystone) : étape suivante seulement depuis l'état vu
+     (ni « containment », qui est la qualification par le QHSE de Vigie, ni « closed ») et selon les règles de Vigie
+     (analyse saisie, action liée, actions vérifiées) ; vérification (approved / rejected) : proposition au QHSE de Vigie,
+     qui clôt ou renvoie la NC lui-même (la NC reste « verification » d'ici là) ; références activité / article /
+     livrable : posées si vides dans Vigie.
+  6. Liens profonds : fiche /evenements?etat=tous&sel=<EV-…> (inchangé, vigieRef = number).
+- Justification : M-17 (lecture par vues, écriture par fonction pub_ du propriétaire), décisions CV-07 et CV-08 de Vigie.
 - Validé par Guillaume le :
 
 ## [2026-11-xx] Vigie → Keystone — Lire les ECO par les vues (D12) — après le module de Vigie
@@ -561,8 +618,8 @@ Questions nouvelles (CV : convergence de Vigie) :
 | CV-04 | **Appliqué par défaut le 04/11/2026, à confirmer : portée abandonnée dans Vigie** (non publiée par Cursus ; `scope_label` gardé sans usage). Question d'origine — Portée des titres (catégories CACES, indices électriques, HAB-10) : à tenir et publier par Cursus, ou abandonnée dans Vigie ? | QHSE, RH | lot 2 |
 | CV-05 | D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
 | CV-06 | D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
-| CV-07 | **Tranché le 04/11/2026 : numéro propre de Vigie `EV-…` partout (aucun `NCR-nnn`)**, attribué par Vigie (lot 3). Question d'origine — Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
-| CV-08 | **Tranché le 04/11/2026 : Keystone écrit par une fonction `vigie.pub_…` qui dépose la demande dans une table de réception traitée par Vigie** (réponse asynchrone, état lu dans une vue ; lot 3, non réalisé). Question d'origine — Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
+| CV-07 | **Tranché le 04/11/2026 : numéro propre de Vigie `EV-…` partout (aucun `NCR-nnn`)**, attribué par Vigie (lot 3) ; **appliqué le 05/11/2026** (§ 7 ter). Question d'origine — Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
+| CV-08 | **Tranché le 04/11/2026 : Keystone écrit par une fonction `vigie.pub_…` qui dépose la demande dans une table de réception traitée par Vigie** (réponse asynchrone, état lu dans une vue) ; **appliqué le 05/11/2026** (§ 7 ter : `vigie.pub_signaler_avancement_nc`, table `inbound_requests` ; vue de l'état à publier par Matrix, § 5.1). Question d'origine — Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
 | CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache, ou réécrire les identifiants ? **Tranché le 03/11/2026 : réécrire les identifiants (identifiant de site = code de Matrix), pour ne rien doublonner.** | responsable produit | lot 1 |
 | CV-10 | **Tranché le 03/11/2026 : toutes les personnes viennent de Cursus ; intérimaires et extérieurs avec un matricule permanent `I` / `E`, pré-déclaration dans Cursus, liste du poste de garde dans Vigie (PRV-25).** Question d'origine — D01 : personnes sans matricule (comptes Entra hors Cursus, intérimaires, extérieurs) gardées comme fiches locales ? Lien compte Entra ↔ matricule : rattachement manuel par le QHSE, ou correspondance tenue par Matrix (`pub_correspondances`), ou e-mail publié par Cursus ? | responsable produit, RH | lot 1 |
 | CV-11 | Veille : « projets concernés » d'une exigence d'après une date de livraison que `pub_projets` ne publie pas. Lire `pub_jalons_projets` (PV de réception) ou `pub_avancement_projets` (fin prévue), ou ne garder que la surcharge manuelle ? | QHSE | lot 1 (D02) |
@@ -614,3 +671,27 @@ portée abandonnée (CV-04) ; substitut de démonstration construit d'après la 
 main, comme Cursus les calculerait) ; une ligne par salarié et titre (dernière formation) : l'historique des formations
 saisies avant la bascule reste au journal de la case.
 
+## 7 ter. Réalisation du 05/11/2026 (lot 3 : D13 ; migration `0026_convergence_m02_nc_inbox`)
+
+Décisions CV-07 (numéro `EV-…`) et CV-08 (fonction `pub_` et table de réception) du 04/11/2026.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| CV-07 numéro | `events.nc_number` gardée (lue par `pub_non_conformites`, colonne `number` et filtre « NC numérotées ») et tenue par la base : déclencheur `events_nc_number` (= identifiant de toute NC portant un code projet, null sinon), contrainte `events_nc_number_check` réécrite (`nc_number = id`), reprise des lignes existantes dans la migration ; aucune colonne publiée supprimée, renommée ni retypée (`published-columns-m18.test.ts` vert) ; les NC de projet de démonstration sont désormais publiées | Keystone : lecture par la vue (§ 5.4) |
+| CV-08 fonction | `vigie.pub_signaler_avancement_nc` (14 arguments typés, retour `integer`), `SECURITY DEFINER`, `search_path` = schéma de Vigie puis `pg_temp` (posé par la migration d'après `current_schema()` : `vigie` sur le serveur, `public` en PGlite), sans SQL dynamique, appelant `session_user` contrôlé dans `inbound_callers` (`keystone_app` inscrit par la migration ; P0V01), arguments contrôlés (P0V02), une ligne déposée dans `inbound_requests`, idempotente par `(caller, external_id)`, `REVOKE EXECUTE … FROM PUBLIC` ; commentaire « Contrat D13 v1 » | lien d'exécution de Matrix (§ 5.1) |
+| Traitement | `processInboundRequests` (`src/server/inbound.ts`) : tâche « Demandes reçues » à chaque passage du planificateur (serveur Next.js) et « Traiter maintenant » (onglet « Connecteurs », QHSE et direction) ; décision pure `decideNcRequest` (`src/lib/rules/inbound.ts`) ; passage d'étape par les fonctions communes à l'écran (`eventAdvanceBlocker`, `writeAdvance` de `src/server/event-workflow.ts`, `event_steps.inbound_request_id`) ; journal `logChange` (auteur vide, « Keystone (keystone_app) » dans l'intitulé, publié par `pub_journal` ; personne déclarée et commentaire dans le détail, non publiés) ; une demande traitée une fois (état relu dans la transaction) | — |
+| Écrans et échéances | fiche d'une NC : « Demandes reçues de Keystone » (refus et motifs pour le QHSE et la direction) ; historique des étapes : « Keystone (demande n° …) » ; onglet « Connecteurs » : boîte de réception (nombres par état, refus à prendre en compte, « Traiter maintenant ») ; échéances au responsable QHSE du site : demande refusée (jusqu'à « Prendre en compte », motivé, journal `inbound_request`), demande non traitée depuis plus d'un jour, vérification proposée par Keystone tant que la NC n'a pas changé d'étape | — |
+| Démonstration | deux demandes de Keystone traitées : références de EV-2026-130 (appliquée), passage de EV-2026-121 à « Efficacité vérifiée » refusé (actions non vérifiées : échéance du responsable QHSE) | — |
+| Tests | `src/lib/rules/inbound.test.ts`, `test/integration/inbound-keystone.test.ts` (PGlite et PostgreSQL : fonction protégée, aucune exécution pour PUBLIC ni pour un rôle quelconque, appelant inconnu, arguments invalides, idempotence, application et journal, refus santé / AT / MP / autre projet, échéances, prise en compte, « Traiter maintenant ») | — |
+
+Choix pris par défaut, à confirmer (tableau « Convergence M-02, lot 3 » du § 19 de `docs/RESTE-A-FAIRE.md`) : Keystone ne
+qualifie pas une NC (passage à « Qualifié » réservé au QHSE de Vigie) et ne la clôt pas (une vérification approuvée ou
+refusée est une proposition au QHSE, étape inchangée) ; passage d'étape selon les règles de l'écran Événements, sans droit
+propre (une NC dont les actions ne sont pas vérifiées reste à « Actions ») ; références Keystone posées seulement si vides
+(jamais d'écrasement, refus motivé), sans contrôle contre `pub_activites` / `pub_articles` / `pub_livrables` (non lues par
+Vigie) ; même réponse « introuvable » pour un numéro inconnu, un autre projet ou un autre type d'événement (AT, MP…) ;
+codes d'état et de nature en anglais, comme ceux de Keystone et de `pub_non_conformites` ; appelants admis tenus dans une
+table de Vigie (`inbound_callers`) plutôt qu'en dur, pour que la démonstration et les tests inscrivent leur `session_user`
+sans paramètre de session (aucun affaiblissement : seul le propriétaire du schéma y écrit) ; une demande non traitée
+devient une échéance après un jour ; demandes de démonstration non ajoutées aux bases de démonstration existantes (jeu
+neuf seulement).
