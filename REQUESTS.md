@@ -42,3 +42,29 @@ Format d'une entrée :
 - Détails techniques : publication `vigie.pub_etudes_securite` (définie par Matrix, M-18 ; une ligne par étude, contrat : colonnes jamais supprimées ni renommées, ajouts en fin ; aucune donnée de santé). Colonnes, dans cet ordre : `etude_ref` (text, identifiant de l'étude, clé), `capex_code` (text, ou null), `projet_code` (text, projet Keystone, ou null), `jalon` (text : `HS2`, `HS3`, `HS4`, `PSSR`, `HS6`), `type` (text : `hazid`, `hazop`, `amdec`, `controle_chantier`, `pssr`, `rspdi`, `aspd`), `statut` (text : `planifiee`, `realisee`, `validee`, `annulee`), `seance_le` (date), `conclue_le` (date de validation), `conclusion` (text : `favorable`, `reserves`, `defavorable`, ou null), `animateur` (text, nom affiché), `rapport_ref` (text, référence Codex), `recommandations` (integer, total), `recommandations_ouvertes` (integer), `recommandations_en_retard` (integer), `reserves_bloquantes` (integer), `lien` (text, lien profond VG-04), `maj_le` (timestamptz). Règle appliquée par Arche : un jalon est franchi quand une de ses études est `validee`, non `defavorable` et sans réserve bloquante ; en cours sinon ; les études annulées ne comptent pas. Contrat détaillé : `docs/CONTRATS.md` §2.5 du dépôt Arche ; lecteur Keystone possible ensuite (son R-192 : « PSSR obtenu »).
 - Validé par Guillaume le : 2026-11-01
 - Traitement (01/11/2026, migration `0023_process_safety_studies`, spec `docs/specs/etudes-securite.md`) : **VG-01** table `process_safety_studies` (référence `ES-001`, site de l'usine, code CAPEX `CPX-…` et / ou code projet Keystone, jalon `HS2` | `HS3` | `HS4` | `PSSR` | `HS6` et type compatible, statut planifiée / réalisée / validée — « annulée » calculée d'après l'annulation motivée —, séance, validation et conclusion, animateur de l'effectif ou extérieur, référence Codex du rapport), saisie par l'animateur QHSE et la direction, journalisée ; **VG-02** recommandations = actions QSE rattachées à l'étude à leur création (`actions.safety_study_id`, source « HAZOP » existante pour tous les types, à confirmer par le service QHSE) avec réserve bloquante (`actions.safety_study_blocking`), échéance, levée et retard du plan d'actions ; **VG-03** aucune vue créée par Vigie (décision M-18) : la vue `vigie.pub_etudes_securite` est à définir par Matrix d'après la requête de référence du § 6 de `docs/specs/etudes-securite.md` (colonnes du contrat dans l'ordre, une ligne par étude, annulées comprises, `lien` en chemin relatif à préfixer par l'adresse de Vigie, `maj_le` d'après le journal de l'étude et de ses recommandations), exécutée sur la base de démonstration par `test/integration/process-safety-contract.test.ts` ; lien de lecture d'`arche_app` : demande M-15 d'Arche à Matrix ; **VG-04** lien profond `/risques?vue=etudes&etude=ES-002` (fiche de l'étude et ses recommandations ; Salarié exclu) ; **VG-05** `sites.code` (facultatif, unique, format de `matrix.sites.code`, saisi dans « Gérer les sites ») : les usines des filiales deviennent des sites de Vigie portant ce code. Démonstration : CAPEX `CPX-APM-2026-01` d'Arche sur le site A (HazID validée, HazOp avec réserves et trois recommandations dont une bloquante, PSSR planifiée). Choix par défaut à confirmer : § 9 de la spec et § 19 de `docs/RESTE-A-FAIRE.md`.
+
+## [2026-11-05] Matrix → Vigie — M-19 · Fonction d'édition `vigie.pub_editer` : corriger les données de Vigie depuis Matrix, par vos règles
+- Statut : OUVERTE
+- Demande : fournir, par une migration de Vigie, la fonction
+  `vigie.pub_editer(p_table text, p_action text, p_cle jsonb, p_valeurs jsonb, p_par text, p_motif text) RETURNS jsonb`
+  (`SECURITY DEFINER`, `SET search_path = vigie, pg_temp`, `REVOKE EXECUTE … FROM PUBLIC`), qui ajoute, corrige ou retire une ligne
+  d'une table de Vigie en appliquant vos règles et votre journal :
+  - `p_action` = `ajouter` | `corriger` | `retirer` (un retrait peut être un archivage) ; `p_cle` = clé primaire de la ligne
+    (null pour `ajouter`) ; `p_valeurs` = colonnes à écrire (null pour `retirer`) ;
+  - `p_par` = nom de la personne connectée à Matrix (Microsoft Entra ID, rôle Administrateur) ; `p_motif` = motif saisi
+    (obligatoire) ;
+  - refus par `RAISE EXCEPTION` (message montré tel quel dans Matrix) ; la fonction renvoie la ligne après modification,
+    sans colonne sensible ;
+  - elle refuse les tables que Vigie ne veut pas ouvrir et toute colonne de `droits.colonnes_sensibles` (Matrix ne les
+    transmet jamais, mais la fonction ne doit pas en dépendre) ;
+  - règle propre à Vigie à respecter : traçabilité de Vigie : jamais de suppression physique d'un enregistrement métier tracé — « retirer » = archivage ou annulation avec motif, et `logChange()` dans la même transaction.
+  Une fonction par table (`vigie.pub_editer_<table>`, mêmes paramètres sans `p_table`) reste possible et passe avant la
+  générique. Une fois la migration passée, passer cette entrée à FAITE : la DSI autorise alors le lien d'écriture dans Matrix.
+- Justification : décision M-19 du 05/11/2026 (responsable produit) : « pour le moment, l'admin IT peut modifier toutes les
+  données à l'exception des données sensibles RGPD », **par les outils** : Matrix n'écrit jamais lui-même dans vos tables
+  (M-18) ; la DSI corrige depuis la visionneuse de Matrix, Vigie garde ses règles et son journal.
+- Détails techniques : convention complète et exemple dans `docs/edition-par-les-outils.md` du dépôt Matrix. Le droit
+  d'exécution est un lien « écriture » `matrix_app` → `vigie.pub_editer`, décidé dans Matrix (« Liens entre outils ») et posé
+  par `droits.accorder_execution` ; `droits.verifier()` signale une fonction `pub_` exécutable par tous ou sans
+  `search_path` fixé. Rien ne change pour Vigie tant que la fonction n'existe pas : la visionneuse reste en lecture seule.
+- Validé par Guillaume le : 2026-11-05
