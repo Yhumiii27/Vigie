@@ -393,9 +393,9 @@ describe('source imposée par l’élément lié (D20 révisée)', () => {
     expect(admissibleSources('plan', { track: 'Revues de direction' })).toEqual(['revue_direction']);
     expect(admissibleSources('finding', { track: 'Revues de direction' })).toEqual(['audit_certification', 'audit_fournisseur', 'audit_interne', 'audit_terrain']);
   });
-  it('sans élément lié : les 24 sources', () => {
+  it('sans élément lié : les 25 sources (Modification technique comprise, lot 5 de M-02)', () => {
     expect(admissibleSources(null)).toEqual(SOURCE_KEYS);
-    expect(admissibleSources(null, { eventType: 'RC' })).toHaveLength(24);
+    expect(admissibleSources(null, { eventType: 'RC' })).toHaveLength(25);
   });
   it('cohérence avec SOURCE_LINK_KINDS : le type de lien désigne l’élément de toute source qu’il admet', () => {
     const facts = [

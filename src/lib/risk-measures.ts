@@ -7,13 +7,15 @@ import { CONTROL_RESULTS, isBlockingControlResult, type ControlResult, type Meas
 /** Faits nécessaires au calcul, selon l'élément lié. */
 export type MeasureFacts =
   | { kind: 'control'; archived: boolean; nextOn: string; lastResult: string | null }
-  | { kind: 'document'; inForce: boolean; nextReviewOn: string | null }
+  /** inForce null : Codex indisponible (lot 4 de M-02) — jamais signalée à tort. */
+  | { kind: 'document'; inForce: boolean | null; nextReviewOn: string | null }
   | { kind: 'title'; archived: boolean; required: number; lapsed: number };
 
 /**
  * État d'une mesure liée : `valid` = false la signale (fiche du risque, échéance au responsable QHSE du site) —
  * - contrôle : équipement réformé, contrôle dépassé, ou dernier résultat défavorable / mise à l'arrêt / hors tolérance ;
- * - document : plus aucune version en vigueur (retiré, jamais approuvé) ; une revue périodique dépassée est signalée sans
+ * - document (lu dans Codex) : plus aucune révision en vigueur (retiré, jamais approuvé) ; Codex indisponible : état
+ *   « donnée indisponible », sans invalider ; une revue périodique dépassée est signalée sans
  *   invalider la mesure (le document reste applicable, son échéance est portée par l'écran Documents) ;
  * - habilitation : titre retiré du suivi, ou titre requis expiré, jamais suivi ou sans prérequis valide chez un salarié du
  *   site de l'unité (aucun salarié ne le détient comme exigence : signalé sans invalider).
@@ -26,6 +28,7 @@ export function measureState(f: MeasureFacts, now: string): { valid: boolean; la
     return { valid: true, label: `À jour · prochain contrôle le ${fmtDate(f.nextOn)}`, tone: 'ok' };
   }
   if (f.kind === 'document') {
+    if (f.inForce === null) return { valid: true, label: 'Donnée de Codex indisponible', tone: 'warn' };
     if (!f.inForce) return { valid: false, label: 'Plus aucune version en vigueur', tone: 'danger' };
     if (f.nextReviewOn && f.nextReviewOn < now) return { valid: true, label: `En vigueur · revue périodique dépassée depuis le ${fmtDate(f.nextReviewOn)}`, tone: 'warn' };
     return { valid: true, label: 'Version en vigueur', tone: 'ok' };

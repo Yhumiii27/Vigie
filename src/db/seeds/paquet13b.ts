@@ -9,7 +9,7 @@ import { AUDITOR_TITLE } from './skills';
 // - AUD-27 : titre « Auditeur interne » (qualification de [L. Moreau]) et auditeur interne des audits internes ;
 // - AUD-20, AUD-22 : audit client hors programme du site A (réalisé, constat d'observation sans action) ;
 // - AUD-21 : second élément sur la ligne « Visites sécurité » en octobre ;
-// - DOC-15, DOC-17 : revue sans modification du registre des accueils sécurité, durée de conservation, document externe ;
+// - (DOC-15, DOC-17 : revue sans modification et document externe tenus par Codex depuis le lot 4 de M-02 : src/db/seeds/documents.ts) ;
 // - CNF-08 : situations d'urgence du site A (exercice d'évacuation tenu, exercice de déversement en retard) ;
 // - CNF-11 : demandes de changement (à évaluer, acceptée à mettre en œuvre, mise en œuvre).
 
@@ -58,24 +58,6 @@ export async function seedManagementSystem(tx: SeedTx) {
     await tx.insert(t.auditPlanItems).values({
       year: visit.year, month: visit.month, track: 'Visites sécurité', label: 'Magasin · 29/10', plannedOn: rel(20), detail: 'Visite sécurité — magasin et quais', ownerId: 'sbenali', siteId: 'site_a',
     });
-  }
-
-  // DOC-15, DOC-17 : revue sans modification, durée de conservation, document d'origine externe.
-  const [reg] = await tx.select({ id: t.documents.id }).from(t.documents).where(eq(t.documents.id, 'EN-QHSE-001'));
-  if (reg) {
-    await tx.update(t.documents).set({ retention: "5 ans après la fin du contrat de l'arrivant" }).where(eq(t.documents.id, reg.id));
-    await tx.insert(t.documentReviews).values({
-      documentId: reg.id, version: 'B', reviewedOn: rel(-40), reviewerId: 'clefevre', createdAt: at(rel(-40)),
-      conclusion: 'Registre toujours adapté : rubriques et signatures conformes à la pratique de l’accueil.',
-    });
-  }
-  const [ext] = await tx.select({ id: t.documents.id }).from(t.documents).where(eq(t.documents.id, 'EXT-QHSE-001'));
-  if (!ext) {
-    await tx.insert(t.documents).values({
-      id: 'EXT-QHSE-001', title: 'Exigences qualité fournisseurs du [Client A]', type: 'instruction', process: 'QHSE', ownerId: 'lmoreau', reviewMonths: 12,
-      distribution: 'Qualité · bureau d’études · contrôle final', origin: 'externe', issuer: '[Client A]', retention: "Durée du contrat + 10 ans", createdAt: at(rel(-210)),
-    });
-    await tx.insert(t.documentVersions).values({ documentId: 'EXT-QHSE-001', version: 'A', status: 'approuve', summary: 'Édition 2026 reçue du client', authorId: 'lmoreau', approverId: 'clefevre', submittedOn: rel(-205), approvedOn: rel(-200) });
   }
 
   // CNF-08 : situations d'urgence du site A.

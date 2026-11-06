@@ -7,6 +7,8 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR } from '@/db/migrations';
+import { installForeignSubstitutes } from '@/db/foreign-substitutes';
+import type { Db } from '@/db/types';
 
 // Reprise des liens d'origine des actions (ACT-01, npm run db:reprise-liens = vigie-db reprise-liens), exécutée comme en production
 // (processus séparé, variables d'environnement) sur une base PGlite migrée : essai, application, relance idempotente.
@@ -44,10 +46,11 @@ beforeAll(async () => {
   Object.assign(env, { VIGIE_DATA_DIR: path.join(dir, 'pglite'), VIGIE_UPLOAD_DIR: path.join(dir, 'uploads'), VIGIE_BACKUP_DIR: path.join(dir, 'backups') });
   await withDb(async (db) => {
     await migrate(drizzle(db), { migrationsFolder: MIGRATIONS_DIR });
+    // Documents lus dans Codex (lot 4 de M-02) : substitut de démonstration de codex.pub_documents (PR-QHSE-002 = alias de PRO-QUA-0002).
+    await installForeignSubstitutes(drizzle(db) as unknown as Db, { engine: 'pglite', demo: true });
     await db.exec(`
       insert into sites (id, label, sort) values ('site_a', 'Site A', 1);
       insert into people (id, name, site_id) values ('clefevre', '[C. Lefèvre]', 'site_a');
-      insert into documents (id, title, type, process, owner_id) values ('PR-QHSE-002', 'Traitement des non-conformités', 'procedure', 'QHSE', 'clefevre');
       insert into actions (id, opened_on, detail, legacy_origin, source, origin_ref, site_id, pilot_id, due_on, initial_due_on, status) values
         ('A-001', '2026-10-01', 'Réviser la procédure', 'docs', 'revue_documentaire', 'PR-QHSE-002 après REX', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
         ('A-002', '2026-10-01', 'Plan supprimé', 'prevention', null, 'PP-2026-099', 'site_a', 'clefevre', '2026-11-15', '2026-11-15', 'a_faire'),
@@ -67,7 +70,7 @@ describe('npm run db:reprise-liens', () => {
     const dry = backfill();
     expect(dry.out).toContain('essai, aucune écriture');
     expect(dry.out).toContain('2 actions Prévention, Documents ou Environnement examinées, 0 déjà rattachée');
-    expect(dry.out).toContain('A-001 → document PR-QHSE-002');
+    expect(dry.out).toContain('A-001 → document PRO-QUA-0002');
     expect(dry.out).toContain('A-002 « PP-2026-099 » : Aucun plan de prévention ni permis de cette référence.');
     expect(dry.code).toBe(0);
     expect((await linksOf()).find((a) => a.id === 'A-001')?.document_id).toBeNull();
@@ -78,12 +81,12 @@ describe('npm run db:reprise-liens', () => {
     expect(applied.out).toContain('Rattachées (1) :');
     expect(applied.code).toBe(0);
     expect(await linksOf()).toEqual([
-      { id: 'A-001', document_id: 'PR-QHSE-002', prevention_plan_id: null },
+      { id: 'A-001', document_id: 'PRO-QUA-0002', prevention_plan_id: null },
       { id: 'A-002', document_id: null, prevention_plan_id: null },
       { id: 'A-003', document_id: null, prevention_plan_id: null },
       { id: 'A-004', document_id: null, prevention_plan_id: null },
     ]);
-    expect(await linkLogs()).toEqual([{ entity_id: 'A-001', summary: "Origine rattachée : document PR-QHSE-002 (reprise de la référence d'origine)", by_id: null }]);
+    expect(await linkLogs()).toEqual([{ entity_id: 'A-001', summary: "Origine rattachée : document PRO-QUA-0002 (reprise de la référence d'origine)", by_id: null }]);
 
     const again = backfill('--appliquer');
     expect(again.out).toContain('1 déjà rattachée');

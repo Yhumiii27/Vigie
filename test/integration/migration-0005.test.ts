@@ -9,6 +9,7 @@ import * as t from '@/db/schema';
 import { readCatalogue, shapeMismatches, type ShapeSnapshot } from '@/db/shape';
 import { parisDay } from '@/lib/dates';
 import { DEMO_ACTIONS, RETIRED_DEMO_ACTIONS, demoActionRow } from '@/db/seeds/actions';
+import { DEMO_DOCUMENT_IDS } from '@/db/seeds/documents';
 import { resetConfig } from '@/lib/env';
 import { nextActionNumber } from '@/server/action-core';
 import { DEMO_0004_MIGRATIONS, openLegacyBase, prepareDemo0004, readDemo0004, type LegacyBase } from '../fixtures/legacy-base';
@@ -244,7 +245,7 @@ describe('migration 0005 — base de démonstration 0004', () => {
       expect({ id, closedOn: a.closedOn, verifyDueOn: a.verifyDueOn, efficacyNote: a.efficacyNote, verifiedById: a.verifiedById, siteId: a.siteId, pilotId: a.pilotId, originRef: a.originRef })
         .toEqual({ id, closedOn: old.closed_on, verifyDueOn: old.verify_due_on, efficacyNote: old.efficacy_note, verifiedById: old.verified_by_id, siteId: matrixSite(old.site_id), pilotId: old.pilot_id, originRef: old.origin_ref });
       expect({ id, eventId: a.eventId, reviewId: a.reviewId, preventionPlanId: a.preventionPlanId, permitId: a.permitId, documentId: a.documentId, wasteStreamId: a.wasteStreamId, wasteEntryId: a.wasteEntryId })
-        .toEqual({ id, eventId: old.event_id, reviewId: old.review_id, preventionPlanId: old.prevention_plan_id, permitId: old.permit_id, documentId: old.document_id, wasteStreamId: old.waste_stream_id, wasteEntryId: old.waste_entry_id });
+        .toEqual({ id, eventId: old.event_id, reviewId: old.review_id, preventionPlanId: old.prevention_plan_id, permitId: old.permit_id, documentId: old.document_id ? DEMO_DOCUMENT_IDS[String(old.document_id)] ?? old.document_id : null, wasteStreamId: old.waste_stream_id, wasteEntryId: old.waste_entry_id });
       expect({ id, createdAt: a.createdAt.toISOString() }).toEqual({ id, createdAt: new Date(String(old.created_at)).toISOString() });
     }
     const a180 = action('A-180');
@@ -281,11 +282,15 @@ describe('migration 0005 — base de démonstration 0004', () => {
       // AUD-28 : action d'un constat reprise par 0016 dans finding_actions (une ligne par constat dans la base 0004).
       ['audit_findings', await base.db.select({ id: t.auditFindings.id, actionId: t.findingActions.actionId }).from(t.auditFindings)
         .leftJoin(t.findingActions, eq(t.findingActions.findingId, t.auditFindings.id))],
-      ['document_versions', await base.db.select({ id: t.documentVersions.id, actionId: t.documentVersions.actionId }).from(t.documentVersions)],
     ] as const) {
       const ids = byId(table);
       expect({ table, links: pick(list as { id: number | string; actionId: string | null }[], ids) }).toEqual({ table, links: Object.fromEntries(ids) });
     }
+    // D10 (0028) : action d'une version de document reprise dans document_actions (identifiant de Codex, lettre).
+    const versionLinks = (fixture.tables.document_versions as Row[]).filter((r) => r.action_id)
+      .map((r) => `${DEMO_DOCUMENT_IDS[String(r.document_id)] ?? r.document_id}|${r.version}|${r.action_id}`).sort();
+    expect(versionLinks.length).toBeGreaterThan(0);
+    expect((await base.db.select().from(t.documentActions)).map((r) => `${r.codexId}|${r.revision}|${r.actionId}`).sort()).toEqual(versionLinks);
     const risks = await base.db.select().from(t.riskActions);
     expect(risks.map((r) => `${r.riskId}:${r.actionId}`).sort()).toEqual((fixture.tables.risk_actions as Row[]).map((r) => `${r.risk_id}:${r.action_id}`).sort());
     // HAB-04 (0007) : le recyclage repris passe de l'exigence à l'action (case de la matrice conservée).
@@ -301,9 +306,9 @@ describe('migration 0005 — base de démonstration 0004', () => {
   it('données des autres tables inchangées (nombre de lignes)', async () => {
     const extra: Record<string, number> = { actions: RAW_IDS.length, audit_plan_items: 6, audit_findings: 3, review_decisions: 1 };
     for (const [table, list] of Object.entries(fixture.tables)) {
-      // Tables supprimées par les migrations 0024 (D02 : projets lus dans keystone.pub_projets) et 0025 (D09 : titres
-      // détenus lus dans cursus.pub_titres_detenus).
-      if (table === 'change_log' || table === 'keystone_projects' || table === 'qualifications' || table === 'training_sessions') continue;
+      // Tables supprimées par les migrations 0024 (D02 : projets lus dans keystone.pub_projets), 0025 (D09 : titres
+      // détenus lus dans cursus.pub_titres_detenus) et 0028 (D10 : documents lus dans Codex).
+      if (['change_log', 'keystone_projects', 'qualifications', 'training_sessions', 'documents', 'document_versions', 'document_reviews'].includes(table)) continue;
       const [{ n }] = (await base.query(`select count(*)::int as n from "${table}"`)).rows as { n: number }[];
       expect({ table, n }).toEqual({ table, n: list.length + (extra[table] ?? 0) });
     }

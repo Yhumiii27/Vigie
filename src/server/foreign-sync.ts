@@ -2,9 +2,11 @@ import 'server-only';
 import { eq, inArray, isNotNull } from 'drizzle-orm';
 import { schema as t, type Db } from '@/db';
 import { addDays } from '@/lib/dates';
-import { readAssignments, readProjects, readSuppliers } from '@/lib/foreign/keystone';
+import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/lib/foreign/keystone';
 import { readCursusTitles, readHeldTitles } from '@/lib/foreign/cursus';
 import { readMatrixSites } from '@/lib/foreign/matrix';
+import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/lib/foreign/codex';
+import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SOURCES, type CursusTitleState, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
 import type { SourceRead } from '@/lib/foreign/source';
 import { log } from '@/lib/log';
@@ -16,7 +18,7 @@ import { logChange, type ChangeDetail } from './changelog';
 // « Référentiels partagés » (src/db/scheduler.ts, une fois par nuit) et par le bouton « Actualiser » de l'onglet
 // « Connecteurs » (src/server/connectors.ts). Une transaction par cache ; chaque passage écrit une ligne de sync_runs
 // par source (nombres et message technique, aucune donnée personnelle). Les sources lues directement (projets,
-// fournisseurs) y sont seulement contrôlées (disponibilité, nombre de lignes).
+// fournisseurs, titres détenus, documents de Codex) y sont seulement contrôlées (disponibilité, nombre de lignes).
 //
 // - sites (D14, cache de matrix.pub_sites) : libellé et ordre repris de Matrix, état actif | ferme | absent ; un site absent
 //   de la vue n'est jamais supprimé ni archivé d'office (signal « fermé dans Matrix », loadSiteSignals) ; changement de
@@ -149,7 +151,7 @@ async function refreshAssignments(db: Db): Promise<SyncResult> {
 }
 
 /** Source lue directement : disponibilité et nombre de lignes. */
-async function checkDirect(source: 'projects' | 'suppliers' | 'heldTitles', read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
+async function checkDirect(source: Exclude<SourceKey, 'sites' | 'assignments' | 'titles'>, read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
   const r = await read;
   return r.ok ? { ...empty(source), read: r.rows.length } : failed(source, r);
 }
@@ -164,8 +166,17 @@ export async function refreshSharedReferences(db: Db): Promise<SyncResult[]> {
     ['assignments', () => refreshAssignments(db)],
     ['projects', () => checkDirect('projects', readProjects(db))],
     ['suppliers', () => checkDirect('suppliers', readSuppliers(db))],
+    // D12 (lot 5) : articles, nomenclatures et parc installé lus directement (modifications techniques).
+    ['articles', () => checkDirect('articles', readArticles(db))],
+    ['bom', () => checkDirect('bom', readBomUsage(db))],
+    ['fleet', () => checkDirect('fleet', readFleet(db))],
     ['titles', () => refreshTitles(db)],
     ['heldTitles', () => checkDirect('heldTitles', readHeldTitles(db))],
+    // D10 (lot 4) : documents de Codex lus directement (registre, révisions et circuits du périmètre QHSE, types).
+    ['documents', () => checkDirect('documents', readRegisterDocuments(db, QHSE_DEPARTMENTS))],
+    ['revisions', () => checkDirect('revisions', readRegisterDocuments(db, QHSE_DEPARTMENTS).then((d) => (d.ok ? readDocumentRevisions(db, d.rows.map((x) => x.id)) : d)))],
+    ['validations', () => checkDirect('validations', readRegisterDocuments(db, QHSE_DEPARTMENTS).then((d) => (d.ok ? readDocumentValidations(db, d.rows.map((x) => x.id)) : d)))],
+    ['docTypes', () => checkDirect('docTypes', readDocumentTypes(db))],
   ];
   const results: SyncResult[] = [];
   for (const [source, run] of steps) {

@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, gte } from 'drizzle-orm';
+import { asc, gte, inArray, or } from 'drizzle-orm';
 import { getDb, type DbOrTx } from '@/db';
-import { pubAffectations, pubFournisseurs, pubProjets } from '@/db/foreign';
+import { pubAffectations, pubArticles, pubFournisseurs, pubNomenclatures, pubParcMachines, pubProjets } from '@/db/foreign';
 import { unavailableMessage } from './labels';
 import { readSource, type SourceRead } from './source';
 
@@ -76,4 +76,55 @@ export async function supplierError(db: DbOrTx, id: string | null | undefined, c
   if (!read.ok) return unavailableMessage('suppliers');
   const s = read.rows.find((x) => x.id === id);
   return !s ? 'Fournisseur Keystone inconnu.' : s.internal ? 'Atelier interne : pas une entreprise extérieure.' : null;
+}
+
+// ─── D12 (lot 5 de M-02) : articles, nomenclatures et parc installé ─────────
+
+export type KeystoneArticle = { ref: string; name: string; revision: string | null; status: string };
+
+/** Articles de Keystone (tous, ou ceux des références données). */
+export function readArticles(db: DbOrTx, refs?: readonly string[]): Promise<SourceRead<KeystoneArticle>> {
+  return readSource(db, 'articles', async () => {
+    if (refs && !refs.length) return [];
+    const q = db.select({ ref: pubArticles.ref, name: pubArticles.name, revision: pubArticles.revision, status: pubArticles.status }).from(pubArticles);
+    return (refs ? q.where(inArray(pubArticles.ref, [...refs])) : q).orderBy(asc(pubArticles.ref));
+  });
+}
+
+/** Cas d'emploi (projet × article) des articles donnés (tous sans filtre). */
+export function readBomUsage(db: DbOrTx, partRefs?: readonly string[]): Promise<SourceRead<{ projectCode: string; partRef: string; stage: string }>> {
+  return readSource(db, 'bom', async () => {
+    if (partRefs && !partRefs.length) return [];
+    const q = db.select({ projectCode: pubNomenclatures.projectCode, partRef: pubNomenclatures.partRef, stage: pubNomenclatures.stage }).from(pubNomenclatures);
+    return partRefs ? q.where(inArray(pubNomenclatures.partRef, [...partRefs])) : q;
+  });
+}
+
+export type KeystoneMachinePart = { number: string; name: string; projectCode: string | null; partRef: string | null; fittedRevision: string | null };
+
+/** Parc installé (une ligne par machine et article monté) : machines qui portent un des articles ou livrées par un des projets. */
+export function readFleet(db: DbOrTx, filter?: { parts: readonly string[]; projects: readonly string[] }): Promise<SourceRead<KeystoneMachinePart>> {
+  return readSource(db, 'fleet', async () => {
+    const cols = { number: pubParcMachines.number, name: pubParcMachines.name, projectCode: pubParcMachines.projectCode, partRef: pubParcMachines.partRef, fittedRevision: pubParcMachines.fittedRevision };
+    if (!filter) return db.select(cols).from(pubParcMachines);
+    const conds = [
+      ...(filter.parts.length ? [inArray(pubParcMachines.partRef, [...filter.parts])] : []),
+      ...(filter.projects.length ? [inArray(pubParcMachines.projectCode, [...filter.projects])] : []),
+    ];
+    return conds.length ? db.select(cols).from(pubParcMachines).where(or(...conds)) : [];
+  });
+}
+
+/**
+ * Contrôle des articles saisis (pas de clé étrangère entre schémas) : références déjà enregistrées admises (`current`) ;
+ * sinon présentes dans keystone.pub_articles. Source indisponible : saisie refusée avec un message. Renvoie le message, ou null.
+ */
+export async function unknownArticlesError(db: DbOrTx, refs: readonly string[], current: readonly string[] = []): Promise<string | null> {
+  const asked = refs.filter((r) => !current.includes(r));
+  if (!asked.length) return null;
+  const read = await readArticles(db, asked);
+  if (!read.ok) return unavailableMessage('articles');
+  const known = new Set(read.rows.map((a) => a.ref));
+  const missing = asked.filter((r) => !known.has(r));
+  return missing.length ? `Article${missing.length > 1 ? 's' : ''} Keystone inconnu${missing.length > 1 ? 's' : ''} : ${missing.join(', ')}.` : null;
 }

@@ -18,13 +18,15 @@ import { getSession, siteFilter } from '@/lib/session';
 export type HistoryEntity =
   | 'requirement' | 'control' | 'prevention_plan' | 'contractor'
   // Paquet 3 (traçabilité et journal) :
-  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'document' | 'consumption'
+  | 'site' | 'site_map' | 'site_activity' | 'work_unit' | 'duerp_version' | 'person' | 'skill_cell' | 'consumption'
   // Paquet 5 (conformité réglementaire) : objectifs QHSE (AUD-13), contexte du système de management (CNF-05).
   | 'qhse_objective' | 'context_item'
   // Paquet 13 : registre de sécurité (VEI-15), situations d'urgence (CNF-08), demandes de changement (CNF-11).
   | 'safety_notice' | 'emergency_situation' | 'change_request'
   // VG-01 : études de sécurité des procédés.
   | 'process_safety_study'
+  // D12 (lot 5 de M-02) : ordres et demandes de modification.
+  | 'eco' | 'ecr'
   // Classe 1, lot A (fin de QUA-11) : risques et demandes d'accès au DUERP, audits, environnement.
   | 'risk' | 'duerp_access_request' | 'audit_plan_item' | 'audit_finding' | 'certification' | 'waste_stream' | 'waste_entry';
 
@@ -148,15 +150,6 @@ const RULES: Record<HistoryEntity, Rule> = {
       return [...byQual, ...requirement].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id);
     },
   },
-  // Documents maîtrisés (DOC-04) : cycle de vie des versions et métadonnées, montré à la saisie seulement.
-  document: {
-    screen: 'docs',
-    allow: (role) => canEdit(role, 'docs'),
-    async siteOf(id) {
-      const [d] = await (await db()).select({ siteId: t.documents.siteId }).from(t.documents).where(eq(t.documents.id, id));
-      return d;
-    },
-  },
   // Relevés de consommation d'un mois et d'un site (DOC-10) : identifiant « site|AAAA-MM-01 ».
   consumption: {
     screen: 'env',
@@ -214,6 +207,21 @@ const RULES: Record<HistoryEntity, Rule> = {
     allow: (role) => !isEmployee(role),
     async siteOf(id) {
       const [o] = await (await db()).select({ siteId: t.processSafetyStudies.siteId }).from(t.processSafetyStudies).where(eq(t.processSafetyStudies.id, id));
+      return o;
+    },
+  },
+  // Modifications techniques (D12) : lecteurs de l'écran (Salarié exclu) ; site de la fiche (null : entreprise).
+  eco: {
+    screen: 'engineering',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.ecos.siteId }).from(t.ecos).where(eq(t.ecos.id, id));
+      return o;
+    },
+  },
+  ecr: {
+    screen: 'engineering',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.ecrs.siteId }).from(t.ecrs).where(eq(t.ecrs.id, id));
       return o;
     },
   },

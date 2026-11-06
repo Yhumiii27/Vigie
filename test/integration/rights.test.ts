@@ -7,7 +7,6 @@ import type { AuthState } from '@/lib/auth';
 import { ROLE_KEYS } from '@/lib/domain';
 import { setSite } from '@/app/actions';
 import { cancelFinding } from '@/server/audits';
-import { obsoleteDocument } from '@/server/documents';
 import { cancelWasteEntry } from '@/server/environment';
 import { dismissEvent, restoreEvent, revertEvent } from '@/server/events';
 import { abandonAction } from '@/server/plan-ui';
@@ -84,7 +83,6 @@ describe('motif obligatoire des annulations, archivages et restaurations', () =>
     ['archiveControl', () => archiveControl({}, form({ id: '1', reason: '' }))],
     ['cancelControlRecord', () => cancelControlRecord({}, form({ id: '1', reason: '' }))],
     ['cancelFinding', () => cancelFinding({}, form({ id: '1', reason: '' }))],
-    ['obsoleteDocument', () => obsoleteDocument({}, form({ documentId: 'PR-QHSE-005', reason: '' }))],
     ['cancelWasteEntry', () => cancelWasteEntry({}, form({ id: '1', reason: '' }))],
     ['cancelReview', () => cancelReview({}, form({ id: '1', reason: '' }))],
     ['archiveSite', () => archiveSite({}, form({ siteId: 'site_b', reason: '' }))],

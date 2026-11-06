@@ -42,6 +42,8 @@ export const DETAIL_PARAMS = {
   '/veille': { exigence: 'exigence', controle: 'controle', observation: 'observation' },
   '/risques': { risque: 'risque', situation: 'situation', etude: 'etude' },
   '/documents': { document: 'doc' },
+  // D12 (lot 5) : ordre (ECO-…) ou demande (ECR-…, onglet « demandes ») de modification.
+  '/modifications-techniques': { modification: 'sel' },
   '/prevention': { plan: 'plan', permis: 'permis', entreprise: 'entreprise' },
   '/environnement': { enlevement: 'enlevement', filiere: 'filiere' },
   '/habilitations': { salarie: 'salarie' },

@@ -11,7 +11,7 @@ import { seedControlCodes } from './seeds/controls-share';
 import { DEMO_LAST_ROLES, DEMO_SIRET, PEOPLE, demoEmail, seedCore } from './seeds/core';
 import { rel } from './seeds/dates';
 import { DEMO_CONTRACTOR_SUPPLIERS, DEMO_MATRICULES, DEMO_PROJECTS } from './seeds/foreign';
-import { seedDocuments } from './seeds/documents';
+import { DEMO_DOCUMENT_ACTIONS, DEMO_DOCUMENT_IDS } from './seeds/documents';
 import { demoWasteStreamMentions, seedEnvironment } from './seeds/environment';
 import { BENIGN, EVENTS, EVENT_DETAILS, seedEvents } from './seeds/events';
 import { seedFieldMobile } from './seeds/field';
@@ -25,6 +25,7 @@ import { seedComplianceFunctions } from './seeds/paquet13';
 import { seedManagementSystem } from './seeds/paquet13b';
 import { seedProcessSafety } from './seeds/process-safety';
 import { seedInbound } from './seeds/inbound';
+import { seedChangesEco } from './seeds/changes-eco';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -213,14 +214,15 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedAudits(tx);
 
     await seedPrevention(tx);
-    await seedDocuments(tx);
     await seedEnvironment(tx);
     await seedSitemap(tx);
 
-    // Sources d'origine des actions Documents et Environnement (ACT-01), après l'insertion des documents et déchets.
+    // Documents tenus par Codex (lot 4 de M-02) : révisions rattachées à une action (lien « docversion »).
+    await tx.insert(t.documentActions).values(DEMO_DOCUMENT_ACTIONS.map(([codexId, revision, actionId]) => ({ codexId, revision, actionId })));
+    // Sources d'origine des actions Documents et Environnement (ACT-01), après l'insertion des déchets ; document de Codex.
     // A-178 (« Registre des déchets 2026 ») n'a pas de fiche source : elle reste repérée par sa référence. Plus d'action QSE
     // depuis la Prévention (anciennes A-206, A-216, A-220 : réponses du service QHSE du 15/10/2026).
-    await tx.update(t.actions).set({ documentId: 'PR-QHSE-002' }).where(eq(t.actions.id, 'A-208'));
+    await tx.update(t.actions).set({ documentId: DEMO_DOCUMENT_IDS['PR-QHSE-002'] }).where(eq(t.actions.id, 'A-208'));
     await tx.update(t.actions).set({ wasteStreamId: 'FD-04' }).where(eq(t.actions.id, 'A-219'));
     const [fd11] = await tx.select({ id: t.wasteEntries.id }).from(t.wasteEntries)
       .where(and(eq(t.wasteEntries.streamId, 'FD-11'), eq(t.wasteEntries.removedOn, rel(-51))));
@@ -228,15 +230,15 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
 
     // Rattachements facultatifs des événements (après l'insertion des contrôles, risques, documents, plans et permis).
     const EVENT_LINKS: [string, Partial<typeof t.events.$inferInsert>][] = [
-      ['EV-2026-131', { controlId: controlIds[0], riskId: riskId('montage', 'Manutention mécanique'), documentId: 'IT-MON-012' }],
-      ['EV-2026-130', { documentId: 'IT-USI-004' }],
+      ['EV-2026-131', { controlId: controlIds[0], riskId: riskId('montage', 'Manutention mécanique'), documentId: DEMO_DOCUMENT_IDS['IT-MON-012'] }],
+      ['EV-2026-130', { documentId: DEMO_DOCUMENT_IDS['IT-USI-004'] }],
       ['EV-2026-127', { riskId: riskId('usinage', 'Coupure') }],
       ['EV-2026-126', { riskId: riskId('magasin', 'Chimique / environnement') }],
       ['EV-2026-124', { riskId: riskId('montage', 'Incendie / explosion') }],
       ['EV-2026-120', { riskId: riskId('usinage', 'Projection') }],
       ['EV-2026-119', { riskId: riskId('essais', 'Chute de hauteur') }],
       ['EV-2026-115', { controlId: controlIds[1] }],
-      ['EV-2026-112', { documentId: 'FO-MON-003' }],
+      ['EV-2026-112', { documentId: DEMO_DOCUMENT_IDS['FO-MON-003'] }],
       ['EV-2026-132', { preventionPlanId: 'PP-2026-013' }],
       ['EV-2026-133', { permitId: 'PF-2026-031' }],
     ];
@@ -258,6 +260,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedProcessSafety(tx);
     // D13 (CV-08) : demandes de Keystone déjà traitées (une appliquée, une refusée).
     await seedInbound(tx);
+    // D12 (lot 5) : demandes et ordres de modification, demandes reçues de Codex et de Keystone, envoi à Codex.
+    await seedChangesEco(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

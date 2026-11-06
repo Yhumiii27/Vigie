@@ -95,10 +95,10 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
     tips: ['Les échéances de la revue vous mènent ici quand l’écran Audits ne vous est pas ouvert en saisie.'],
   },
   docs: {
-    intro: 'Documents maîtrisés : procédures, modes opératoires, enregistrements, avec versions, approbation et revue périodique.',
+    intro: 'Documents maîtrisés QHSE lus dans Codex (GED du groupe) : révision en vigueur, révisions en cours, circuit de validation et prochaine revue.',
     tips: [
-      'Une nouvelle version suit le circuit de validation ; « Revue sans modification » prolonge la validité.',
-      'Les événements liés au document et « Signaler un événement » figurent dans sa fiche.',
+      'Rédaction, nouvelle révision, circuit de validation, revue sans modification et retrait se font dans Codex (« Ouvrir dans Codex »).',
+      'Les actions et événements liés au document et « Signaler un événement » figurent dans sa fiche.',
     ],
   },
   env: {
@@ -106,6 +106,15 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
     tips: [
       '« Signaler » ouvre un nouvel événement de type Environnement (déversement, fuite, rejet…).',
       'Chaque enlèvement porte sa filière, sa quantité et son bordereau ; les manques sont signalés dans les échéances.',
+    ],
+  },
+  engineering: {
+    intro: 'Modifications techniques : demandes de modification (ECR) venues de Codex, de Keystone ou de Vigie, et ordres de modification (ECO) instruits, approuvés et libérés par Vigie.',
+    tips: [
+      'Une demande se décide (acceptée ou refusée) par le service QHSE ; la décision sur un document de Codex lui est transmise d’office (onglet « Connecteurs » de « Gérer les sites »).',
+      'Un ordre passe de « Brouillon » à « Analyse d’impact » puis « En approbation » (interchangeabilité évaluée) ; il est libéré d’office quand les trois clés sont approuvées et chaque cible de l’effectivité a sa disposition.',
+      '« Proposer l’effectivité » reprend les projets et machines de Keystone qui emploient les articles de l’ordre ; les mises à jour et rétrofits ont une échéance après la libération.',
+      'Un approbateur désigné décide sa propre clé ; Keystone transmet les décisions de l’ingénierie et des chefs de projet.',
     ],
   },
   mobile: {
@@ -119,6 +128,7 @@ export const GLOSSARY: readonly { term: string; definition: string }[] = [
   { term: 'TF1', definition: 'Taux de fréquence : nombre d’accidents du travail avec arrêt × 1 000 000 / heures travaillées, sur les 12 derniers mois complets (accidents de trajet exclus).' },
   { term: 'TG', definition: 'Taux de gravité : nombre de jours d’arrêt × 1 000 / heures travaillées, sur la même période.' },
   { term: 'AT', definition: 'Accident du travail : déclaration à la CPAM sous 48 h (dimanches et jours fériés non compris) ; par l’entreprise de travail temporaire pour un intérimaire.' },
+  { term: 'ECR / ECO', definition: 'Demande de modification (Engineering Change Request) et ordre de modification (Engineering Change Order) : numérotés ECR-AAAA-NNN et ECO-AAAA-NNN par Vigie.' },
   { term: 'MP', definition: 'Maladie professionnelle : dossier réservé à l’animation QHSE et à la direction (données de santé).' },
   { term: 'PSSR', definition: 'Revue de sécurité avant démarrage (Pre-Startup Safety Review) d’une installation, avec la RSPDI ; jalon de la méthode DIG-PRODI avant la mise en service.' },
   { term: 'HazOp', definition: 'Étude de dangers et d’opérabilité d’un procédé (jalon HS 3) ; ses recommandations sont suivies comme actions QSE.' },

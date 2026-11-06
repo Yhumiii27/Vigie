@@ -6,6 +6,7 @@ import { NAV, ROLE_KEYS, SCREENS, canApprove, canSee, initials } from '@/lib/dom
 import { loadCounters } from '@/lib/data/counters';
 import { loadConnectors } from '@/lib/data/connectors';
 import { loadInboundOverview } from '@/lib/data/inbound';
+import { loadOutboundOverview } from '@/lib/data/engineering';
 import { loadMatrixSiteChoices, loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
 import { getSession } from '@/lib/session';
 
@@ -24,8 +25,8 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   const [counters, siteAdmin] = await Promise.all([
     loadCounters(),
     canApprove(role)
-      ? Promise.all([loadSiteAdmin(), loadQhseLeadOptions(), loadMatrixSiteChoices(), loadConnectors(), loadInboundOverview()])
-        .then(([sites, leadOptions, matrix, connectors, inbound]) => ({ sites, leadOptions, matrix, connectors, inbound }))
+      ? Promise.all([loadSiteAdmin(), loadQhseLeadOptions(), loadMatrixSiteChoices(), loadConnectors(), loadInboundOverview(), loadOutboundOverview()])
+        .then(([sites, leadOptions, matrix, connectors, inbound, outbound]) => ({ sites, leadOptions, matrix, connectors, inbound, outbound }))
       : null,
   ]);
   const nav: NavSection[] = NAV.map((sec) => ({

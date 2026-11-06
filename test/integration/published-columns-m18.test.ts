@@ -21,6 +21,9 @@ const LAST_MIGRATION_WITH_VIEWS = 23;
 /** Requêtes de référence des publications définies par Matrix sur les tables de Vigie (bloc entre les marqueurs). */
 const REFERENCE_QUERIES: { view: string; doc: string }[] = [
   { view: 'pub_etudes_securite', doc: 'docs/specs/etudes-securite.md' },
+  // D12 (lot 5 de M-02) : les quatre publications de Matrix sur les tables des modifications techniques.
+  ...['pub_ordres_modification', 'pub_eco_approbations', 'pub_eco_effectivite', 'pub_demandes_modification']
+    .map((view) => ({ view, doc: 'docs/specs/modifications-techniques.md' })),
 ];
 
 type Row = Record<string, unknown>;
@@ -31,10 +34,15 @@ const journal = (JSON.parse(readFileSync(path.join(process.cwd(), 'drizzle', 'me
 }).entries;
 const migrationSql = (tag: string) => readFileSync(path.join(process.cwd(), 'drizzle', `${tag}.sql`), 'utf8');
 
-function referenceQuery(doc: string) {
+/**
+ * Requête de référence de `view` dans `doc` : bloc nommé (`<!-- requete-reference:debut <vue> -->`, plusieurs par document),
+ * sinon le bloc sans nom (un seul par document).
+ */
+function referenceQuery(doc: string, view: string) {
   const text = readFileSync(path.join(process.cwd(), doc), 'utf8');
-  const block = /<!-- requete-reference:debut -->\s*```sql\n([\s\S]*?)```\s*<!-- requete-reference:fin -->/.exec(text);
-  if (!block) throw new Error(`Requête de référence introuvable dans ${doc}`);
+  const block = new RegExp(String.raw`<!-- requete-reference:debut ${view} -->\s*\`\`\`sql\n([\s\S]*?)\`\`\`\s*<!-- requete-reference:fin -->`).exec(text)
+    ?? /<!-- requete-reference:debut -->\s*```sql\n([\s\S]*?)```\s*<!-- requete-reference:fin -->/.exec(text);
+  if (!block) throw new Error(`Requête de référence de ${view} introuvable dans ${doc}`);
   return block[1].trim();
 }
 
@@ -96,7 +104,7 @@ describe('décision M-18 : vues pub_ définies par Matrix', () => {
   it('aucune migration après la décision ne casse une colonne publiée (vues pub_ et requêtes de référence)', async () => {
     const db = await getDb();
     // Requêtes de référence : vues temporaires de la session, le temps de lire leurs dépendances.
-    for (const { view, doc } of REFERENCE_QUERIES) await db.execute(sql.raw(`create temporary view ${view} as ${referenceQuery(doc)}`));
+    for (const { view, doc } of REFERENCE_QUERIES) await db.execute(sql.raw(`create temporary view ${view} as ${referenceQuery(doc, view)}`));
     try {
       // Vues du schéma de Vigie seulement (substituts de démonstration des vues des autres outils exclus, lot 0 de M-02).
       const used = await rows(sql`select distinct u.view_name, u.table_name, u.column_name from information_schema.view_column_usage u
@@ -104,10 +112,14 @@ describe('décision M-18 : vues pub_ définies par Matrix', () => {
       const published = new Set(used.map((r) => `${r.table_name}.${r.column_name}`));
       const tables = new Set(used.map((r) => String(r.table_name)));
       // Les vues des migrations et la requête des études sont bien vues (sinon le garde-fou ne garderait rien).
-      expect([...new Set(used.map((r) => String(r.view_name)))].sort()).toEqual(
-        ['pub_controles', 'pub_etudes_securite', 'pub_hse_projet', 'pub_journal', 'pub_non_conformites'],
-      );
+      expect([...new Set(used.map((r) => String(r.view_name)))].sort()).toEqual([
+        'pub_controles', 'pub_demandes_modification', 'pub_eco_approbations', 'pub_eco_effectivite', 'pub_etudes_securite', 'pub_hse_projet',
+        'pub_journal', 'pub_non_conformites', 'pub_ordres_modification',
+      ]);
       expect(published.has('process_safety_studies.capex_code')).toBe(true);
+      expect(published.has('ecos.from_revision')).toBe(true);
+      expect(published.has('ecrs.requester_ref')).toBe(true);
+      expect(published.has('eco_effectivity.fitted_revision')).toBe(true);
       expect(published.has('actions.safety_study_blocking')).toBe(true);
       const problems = journal.filter((e) => e.idx > LAST_MIGRATION_WITH_VIEWS).flatMap((e) =>
         breakingChanges(migrationSql(e.tag))

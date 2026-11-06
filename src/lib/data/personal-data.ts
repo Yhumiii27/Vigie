@@ -1,4 +1,5 @@
 import 'server-only';
+import { readDocumentsByOwner } from '@/lib/foreign/codex';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { injuryLabel } from '@/lib/rules/events';
@@ -43,7 +44,8 @@ export async function loadPersonalData(personId: string) {
       .from(t.actionComments).where(eq(t.actionComments.authorId, personId)).orderBy(desc(t.actionComments.createdAt)),
     db.select({ id: t.attachments.id, entityType: t.attachments.entityType, entityId: t.attachments.entityId, fileName: t.attachments.fileName, createdAt: t.attachments.createdAt, health: t.attachments.health })
       .from(t.attachments).where(eq(t.attachments.uploadedBy, personId)).orderBy(desc(t.attachments.createdAt)),
-    db.select({ id: t.documents.id, title: t.documents.title }).from(t.documents).where(eq(t.documents.ownerId, personId)).orderBy(asc(t.documents.id)),
+    // Documents de Codex dont la personne est propriétaire (rapprochement par matricule, lot 4 de M-02).
+    person.matricule ? readDocumentsByOwner(db, person.matricule).then((r) => (r.ok ? r.rows : [])) : [],
     db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, ownerId: t.auditPlanItems.ownerId, auditorId: t.auditPlanItems.auditorId })
       .from(t.auditPlanItems).where(or(eq(t.auditPlanItems.ownerId, personId), eq(t.auditPlanItems.auditorId, personId))).orderBy(asc(t.auditPlanItems.id)),
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, participantIds: t.reviews.participantIds }).from(t.reviews)

@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { canReadPlan, isQhse } from './action-rules';
 import { config } from './config';
-import { canEdit, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, type Role } from './domain';
+import { canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, type Role } from './domain';
 import { trackTransactionFile } from '@/db/pending-files';
 import { scanWithClamd } from './antivirus';
 import { MAX_FILE_BYTES, fileBatchError, type BatchLimits } from './attachments';
@@ -112,7 +112,7 @@ export async function checkUploadBatch(files: File[], uploadedBy: string | null,
 }
 
 /**
- * Enregistre un fichier sur disque et le rattache à une entité (event, document_version, control_record…).
+ * Enregistre un fichier sur disque et le rattache à une entité (event, action, control_record…).
  * - contenu contrôlé par inspectUpload (déjà fait par checkUploadBatch pour le même fichier) : type réel enregistré, nom
  *   nettoyé (safeFileName) ; UploadRefusedError sinon ;
  * - `health` : pièce médicale (certificat, avis d'arrêt, réserves…), réservée aux rôles canSeeHealth (SEC-06) ;
@@ -219,9 +219,6 @@ async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
     case 'action': return one(db.select({ siteId: t.actions.siteId }).from(t.actions).where(eq(t.actions.id, row.entityId)));
     case 'prevention_plan': return one(db.select({ siteId: t.preventionPlans.siteId }).from(t.preventionPlans).where(eq(t.preventionPlans.id, row.entityId)));
     case 'site_map': return row.entityId;
-    case 'document_version':
-      return Number.isInteger(num) ? one(db.select({ siteId: t.documents.siteId }).from(t.documentVersions)
-        .innerJoin(t.documents, eq(t.documents.id, t.documentVersions.documentId)).where(eq(t.documentVersions.id, num))) : null;
     case 'control_record':
       return Number.isInteger(num) ? one(db.select({ siteId: t.controls.siteId }).from(t.controlRecords)
         .innerJoin(t.controls, eq(t.controls.id, t.controlRecords.controlId)).where(eq(t.controlRecords.id, num))) : null;
@@ -294,12 +291,10 @@ async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boo
       }
       return true;
     }
-    case 'document_version': {
-      if (!canSee(role, 'docs')) return false;
-      const [v] = await db.select({ status: t.documentVersions.status }).from(t.documentVersions).where(eq(t.documentVersions.id, Number(row.entityId)));
-      // Version en vigueur : consultable par tous ; brouillon, revue, archive : rédacteurs et approbateurs.
-      return !!v && (v.status === 'approuve' || canEdit(role, 'docs'));
-    }
+    // Fichiers des versions de documents saisis avant la bascule vers Codex (migration 0028, « <identifiant Codex>|<révision> ») :
+    // gardés en base et sur le disque, plus servis (les fichiers d'un document sont servis par Codex, lot 4 de M-02).
+    case 'document_version':
+      return false;
     case 'control_record':
     case 'requirement_evaluation':
       return canSee(role, 'watch');

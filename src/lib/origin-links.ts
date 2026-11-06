@@ -1,6 +1,8 @@
 import 'server-only';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { entryRef } from '@/lib/rules/environment';
+import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
+import { readDocumentsByRef, readRegisterDocuments } from '@/lib/foreign/codex';
 import * as t from '../db/schema';
 import type { DbOrTx } from '../db/types';
 
@@ -63,7 +65,8 @@ export function coactivityOriginHref(originRef: string, siteId: string | null): 
 export type OriginCatalog = {
   plans: ReadonlySet<string>;
   permits: ReadonlySet<string>;
-  documents: ReadonlySet<string>;
+  /** Documents de Codex : identifiant ou ancien identifiant (alias) → identifiant de Codex (lot 4 de M-02). */
+  documents: ReadonlyMap<string, string>;
   streams: ReadonlySet<string>;
   entries: readonly { id: number; streamId: string; removedOn: string }[];
 };
@@ -99,7 +102,7 @@ export function resolveOriginRef(origin: string, originRef: string, c: OriginCat
       }
       return { column: null, reason: /^Coactivité(\s|$)/.test(ref) ? 'Coactivité sans plan de prévention : aucune fiche source.' : 'Aucun plan de prévention ni permis de cette référence.' };
     case 'docs':
-      for (const id of [ref, first]) if (c.documents.has(id)) return { column: 'documentId', target: id };
+      for (const id of [ref, first]) if (c.documents.has(id)) return { column: 'documentId', target: c.documents.get(id)! };
       return { column: null, reason: 'Aucun document maîtrisé de cette référence.' };
     case 'env': {
       if (c.streams.has(ref)) return { column: 'wasteStreamId', target: ref };
@@ -145,12 +148,14 @@ function candidates(originRef: string) {
 export async function loadOriginCatalog(db: DbOrTx, originRef?: string): Promise<OriginCatalog> {
   const only = originRef === undefined ? null : candidates(originRef);
   const ids = only?.ids ?? [];
-  if (only && !ids.length) return { plans: new Set(), permits: new Set(), documents: new Set(), streams: new Set(), entries: [] };
+  if (only && !ids.length) return { plans: new Set(), permits: new Set(), documents: new Map(), streams: new Set(), entries: [] };
   const set = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
   // Requêtes successives : une transaction ou un client PostgreSQL unique (script de reprise) n'en exécute qu'une à la fois.
   const plans = set(await db.select({ id: t.preventionPlans.id }).from(t.preventionPlans).where(only ? inArray(t.preventionPlans.id, ids) : undefined));
   const permits = set(await db.select({ id: t.permits.id }).from(t.permits).where(only ? inArray(t.permits.id, ids) : undefined));
-  const documents = set(await db.select({ id: t.documents.id }).from(t.documents).where(only ? inArray(t.documents.id, ids) : undefined));
+  // Documents lus dans Codex (lot 4 de M-02) : aucun quand Codex est indisponible (références laissées sans lien).
+  const read = only ? await readDocumentsByRef(db, ids) : await readRegisterDocuments(db, QHSE_DEPARTMENTS);
+  const documents = new Map(read.ok ? read.rows.flatMap((d) => [d.id, ...d.aliases].map((k) => [k, d.id] as const)) : []);
   const streams = set(await db.select({ id: t.wasteStreams.id }).from(t.wasteStreams).where(only ? inArray(t.wasteStreams.id, ids) : undefined));
   const entries = await db.select({ id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn }).from(t.wasteEntries)
     .where(only ? (only.entryIds.length ? or(inArray(t.wasteEntries.streamId, ids), inArray(t.wasteEntries.id, only.entryIds)) : inArray(t.wasteEntries.streamId, ids)) : undefined);

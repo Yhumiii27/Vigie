@@ -226,7 +226,7 @@ describe('événements liés (EVT-14)', () => {
   });
   it('document : événements et actions clôturées pour les rédacteurs ; rien en consultation', async () => {
     actAs('Animateur QHSE', 'all');
-    const doc = (await loadDocuments()).rows.find((d) => d.id === 'IT-MON-012');
+    const doc = (await loadDocuments()).rows.find((d) => d.id === 'PRO-HSE-0003');
     expect(doc?.events.map((e) => e.id)).toContain('EV-2026-131');
     expect(doc?.closedActions.every((a) => !a.open)).toBe(true);
     actAs('Chef de service', 'all');

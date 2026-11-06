@@ -4,13 +4,14 @@
 migration `0024_convergence_m02`, voir § 7) ; le 04/11/2026 : **lot 2 développé** en consultation seule (D08, D09 ; décision
 CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6) ; le 05/11/2026 : **lot 3 développé**
 (D13 : numéro `EV-…`, fonction `vigie.pub_signaler_avancement_nc` et boîte de réception ; migration `0026_convergence_m02_nc_inbox`,
-voir § 7 ter). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
+voir § 7 ter) ; le 05/11/2026 aussi : **lot 4 développé** (D10 : documents lus dans Codex, décision CV-05 « avancer D10 » ;
+migration `0028_convergence_m02_documents`, voir § 7 quater). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
 lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
-03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026.
+03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4).
 
 ## 1. Objet, sources et état
 
@@ -77,8 +78,8 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
 | D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | **fait le 04/11** (§ 7 bis ; C-01 et CV-03 par défaut) |
 | D09 Titres détenus | `qualifications` supprimée, lecture de `pub_titres_detenus`, saisie par API de Cursus ; 3 j | réponse QHSE du 15/10 (« le RH gère, le QHSE consulte ») ; sessions et efficacité livrées dans Vigie ; avenant D09 de Cursus (lot 8) ; route Cursus absente | lecture de la vue | **fait le 04/11** en consultation seule (CV-01 tranché, § 7 bis) |
-| D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | à faire, lot 4, à arbitrer (CV-05) |
-| D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | à faire, lot 5, à confirmer (CV-06) |
+| D10 Documents | documents migrés dans Codex, registre en lecture ; 7,5 j | DOC-15, DOC-17, DUE-19, EVT-24 livrés ; P-03 ; import Codex à une seule révision | Codex fait foi | **fait le 05/11** (§ 7 quater ; CV-05 tranché : avancer D10 ; C-06 par défaut) |
+| D12 ECR / ECO | 9 tables, écran, API, webhook ; 14 j | vues définies par Matrix (M-18) ; aucun élément ECR / ECO au reste à faire de Vigie | Vigie fait foi | **fait le 05/11** (§ 7 quinquies ; CV-06 tranché : module construit dans Vigie ; 8 tables, `external_progress` remplacée par `inbound_requests`) |
 | D13 NC et HSE projet | fiche NC, API d'avancement ; 7,5 j | colonnes et vues faites (0008, 0009, 0013) ; Keystone lit encore par HTTP | Vigie fait foi | **fait le 05/11** (§ 7 ter : numéro `EV-…`, fonction `pub_` et boîte de réception ; volet projet de la fiche NC et `/signaler` de Keystone non faits) |
 | D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
 | D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | **fait le 03/11** (choix dans la fiche ; proposition par le nom à l'import des plans : non faite) |
@@ -362,6 +363,10 @@ entre J-90 et J-60. **Charge : 0,5 j.**
 - **Démonstration.** Substituts des quatre vues de Codex avec les documents de démonstration ; fichiers servis par Codex
   (lien), plus par `/fichiers`.
 - **Charge : 9 j** (plan : 7,5 j).
+- **Réalisé le 05/11/2026** (§ 7 quater) : lectures des quatre vues, registre en consultation, `document_actions`, clés
+  d'identifiant Codex sans clé étrangère, échéances d'après Codex, mesure de maîtrise « document » sur les vues, lien
+  profond `VIGIE_CODEX_URL` ; DOC-15 et DOC-17 retirés (Codex). Restent : Codex basculé sur le serveur commun, liens de
+  lecture (§ 5.1), documents QHSE saisis dans Codex (§ 5.3), demande de retrait depuis Vigie (D12, lot 5).
 
 ### 3.12 D12 · ECR et ECO (plan `:454`)
 
@@ -384,6 +389,11 @@ entre J-90 et J-60. **Charge : 0,5 j.**
   les vues (`eco-connector.ts:82-85`, HTTP simulé) ; reprise des 6 ECO de Keystone et 3 ECR de Codex (démonstration
   seulement, P-03) ; D13 avant D12.
 - **Charge : 16 j** (plan : 14 j ; authentification de machine et file d'envoi en plus si non faites au lot 3).
+- **État au 05/11/2026 : fait** (lot 5, migration `0029_convergence_m02_ecr_eco`, § 7 quinquies,
+  `docs/specs/modifications-techniques.md`) ; CV-06 tranché le 05/11/2026. Adresse retenue : `/modifications-techniques`
+  (fiche `?sel=<numéro>`, `/modifications-techniques/<numéro>` redirigé) ; Codex doit passer de `/changements/<ECR>` à
+  `/modifications-techniques/<ECR>` (§ 5.3). Écritures reçues par fonctions `pub_` (CV-08) plutôt que par l'API HTTP de la
+  spécification de Matrix (`POST /api/ecrs`, `POST /api/ecos/:number/progress`).
 
 ### 3.13 D06 / H3 · Heures travaillées (hors M-02, `remplacement-lucca.md` § 3.6, § 5.3)
 
@@ -430,7 +440,7 @@ Hors charge : arbitrages métier (C-01, CV-01…), recette du service QHSE, trav
 | 2 | D08, D09, D19 — **fait le 04/11/2026 (§ 7 bis), D19 attend C-12** | sur substituts (CV-01, CV-02 tranchés ; C-01 par défaut) | Cursus basculé ; trois titres créés dans Cursus ; C-02 ; C-12 pour D19 ; portée publiée si gardée |
 | 3 | D13 — **numéro, fonction et boîte de réception faits le 05/11/2026 (§ 7 ter)** | oui (fiche NC, vues déjà là) | lien d'exécution et publication de l'état des demandes (Matrix, § 5.1) ; connecteur Keystone par vues et fonction (§ 5.4) ; C-13 ; volet projet de la fiche NC |
 | 4 | D10 | non avant CV-05, C-06 | Codex basculé ; import étendu seulement si des documents existent en production ; types et sous-types dans le registre de Codex |
-| 5 | D12 | non avant CV-06 | Codex (`submitChange` réel), Keystone (connecteur ECO par vues), publications du dépôt de Matrix appliquées après la migration de Vigie |
+| 5 | D12 — **fait le 05/11/2026 (§ 7 quinquies)** | sur substituts (CV-06 tranché) | Codex (`submitChange` par la fonction), Keystone (connecteur ECO par vues et fonction), liens d'exécution et publications appliquées par Matrix après la migration 0029 |
 | parallèle | D06 / H3 | colonnes et lecture sur substitut | M-03 ; vue `pub_heures_travaillees` de Cursus |
 
 Ordre interne du lot 1 : D14 (les autres clés de site en dépendent), D01 (matricules), puis D02, D04, D16. Le lot 2
@@ -471,6 +481,18 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
   keystone.pub_jalons_projets (jalon pv_reception) ou keystone.pub_avancement_projets (fin_prevue_le), selon CV-11.
 - Validé par Guillaume le :
 
+## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app sur les quatre vues de Codex (D10, lot 4 livré le 05/11/2026)
+- Statut : OUVERTE
+- Demande : confirmer dans le registre matrix.liens les liens de nature lecture, lecteur vigie_app, sur
+  codex.pub_documents, codex.pub_revisions_document, codex.pub_validations et codex.pub_types_document (convention du
+  15/10/2026, partage/90-droits.sql:225-228, déjà inscrits) ; prévenir Vigie de toute évolution de leur contrat (Vigie en
+  fige la forme dans test/fixtures/contracts/codex.*.json et en tire ses substituts de démonstration).
+- Justification : décision M-02 (D10) et décision CV-05 de Vigie ; lecture par SELECT seulement depuis
+  src/lib/foreign/codex.ts, aucune écriture (M-17). Sans le lien, le registre des documents de Vigie affiche « source
+  indisponible » et refuse les nouveaux rattachements à un document.
+- Détails techniques : vérification en vigie_app : select count(*) from codex.pub_documents (idem pour les trois autres).
+- Validé par Guillaume le :
+
 ## [2026-11-xx] Vigie → Matrix — Lien d'exécution de keystone_app sur vigie.pub_signaler_avancement_nc (D13, CV-08)
 - Statut : OUVERTE
 - Demande : inscrire au registre matrix.liens un lien de nature execution : lecteur keystone_app, objet
@@ -485,6 +507,47 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
   'vigie.pub_signaler_avancement_nc(text, text, text, text, text, text, text, text, text, timestamptz, text, text, text, text)',
   'EXECUTE') ; erreurs de la fonction : SQLSTATE P0V01 (appelant non admis), P0V02 (argument invalide). codex_app (D12)
   fera l'objet d'une demande distincte avec le lot 5.
+- Validé par Guillaume le :
+
+## [2026-11-xx] Vigie → Matrix — Liens d'exécution des fonctions de D12 (lot 5 livré le 05/11/2026, CV-06, CV-08)
+- Statut : OUVERTE
+- Demande : inscrire au registre matrix.liens deux liens de nature execution et les appliquer (droits.accorder_execution) :
+  1. lecteur codex_app, objet vigie.pub_creer_demande_modification (signature : text, text, text, text, text, text, text,
+     text, text, timestamptz ; retour text : numéro ECR-AAAA-NNN réservé) — Codex crée une demande de modification d'un de
+     ses documents ;
+  2. lecteur keystone_app, objet vigie.pub_signaler_avancement_eco (signature : text, text, text, text, text, text, text,
+     text, text, timestamptz, text ; retour integer) — Keystone signale l'avancement d'un ordre ou la décision d'une clé.
+  Fonctions créées par la migration 0029_convergence_m02_ecr_eco de Vigie : propriétaire vigie_app, SECURITY DEFINER,
+  search_path = vigie, pg_temp, sans SQL dynamique, REVOKE EXECUTE … FROM PUBLIC ; appelant contrôlé par session_user
+  (vigie.inbound_callers : codex_app pour la première, keystone_app pour la seconde) ; erreurs P0V01 (appelant non admis),
+  P0V02 (argument invalide) ; noms uniques.
+- Justification : décisions M-17 (R4), M-18 ; CV-06 et CV-08 de Vigie. Les fonctions n'écrivent que dans
+  vigie.inbound_requests (et, pour la première, le compteur de numérotation vigie.action_counters).
+- Détails techniques : has_function_privilege('codex_app', 'vigie.pub_creer_demande_modification(text, text, text, text,
+  text, text, text, text, text, timestamptz)', 'EXECUTE') ; has_function_privilege('keystone_app',
+  'vigie.pub_signaler_avancement_eco(text, text, text, text, text, text, text, text, text, timestamptz, text)', 'EXECUTE').
+- Validé par Guillaume le :
+
+## [2026-11-xx] Vigie → Matrix — Appliquer les quatre publications de D12 sur les tables de Vigie (lot 5 livré le 05/11/2026)
+- Statut : OUVERTE (après la migration 0029 de Vigie sur le serveur commun)
+- Demande : appliquer vigie.pub_ordres_modification, pub_eco_approbations, pub_eco_effectivite et pub_demandes_modification
+  (data/publications-depot.json, contrat D12 v1, définitions inchangées) : les tables vigie.ecos, ecrs, eco_approvals,
+  eco_parts, eco_projects, eco_effectivity, eco_documents existent avec exactement les colonnes lues par ces définitions
+  (requêtes de référence exécutées par les tests de Vigie : docs/specs/modifications-techniques.md § 8). Lecteurs de la
+  convention : keystone_app, matrix_app (et codex_app pour pub_demandes_modification). Retirer le bandeau « À NE PAS
+  JOUER » de partage/60-vigie-ecr-eco.sql : vigie.external_progress n'est pas créée (écritures reçues par
+  vigie.inbound_requests, CV-08), et les colonnes propres de Vigie sont en fin de table (jamais publiées).
+- Justification : M-18 (Matrix définit et applique les vues pub_ du schéma vigie) ; D12.
+- Validé par Guillaume le :
+
+## [2026-11-xx] Vigie → Matrix — Liens de lecture de vigie_app sur les vues de Keystone de D12 (lot 5 livré le 05/11/2026)
+- Statut : OUVERTE
+- Demande : confirmer les liens de nature lecture, lecteur vigie_app, sur keystone.pub_articles, keystone.pub_nomenclatures
+  et keystone.pub_parc_machines (convention, partage/90-droits.sql ; déjà demandés en bloc par la deuxième demande de cette
+  liste) ; confirmer leurs contrats (Vigie les a relevés dans les migrations 0035 et 0040 de Keystone :
+  test/fixtures/contracts/keystone.pub_articles.json, pub_nomenclatures.json, pub_parc_machines.json).
+- Justification : effectivité proposée d'un ordre de modification (projets qui emploient un article, machines qui le
+  portent), contrôle des articles saisis ; lecture par SELECT depuis src/lib/foreign/keystone.ts seulement.
 - Validé par Guillaume le :
 
 ## [2026-11-xx] Vigie → Matrix — Publication de l'état des demandes reçues (D13, CV-08)
@@ -543,19 +606,49 @@ pas envoyée »), que le lot 2 applique.
 ### 5.3 Codex
 
 ```markdown
-## [2026-11-xx] Vigie → Codex — Reprise des documents QHSE de Vigie (D10) — selon CV-05
-- Statut : OUVERTE
-- Demande : (1) sous-type « Instruction de travail » du type PRO et départements QUA / HSE dans le registre ;
-  (2) si des documents existent dans Vigie en production : POST /api/import étendu à l'historique des révisions
-  (lettres et dates d'approbation), à la liste de diffusion (distribution), à la périodicité de revue (review_months)
-  et au processus (process_code), et aux dernières revues sans modification.
-- Justification : D10 option A ; l'import actuel reprend une seule révision par document (docs/api.md).
+## [2026-11-xx] Vigie → Codex — Documents QHSE lus par Vigie (D10, lot 4 livré le 05/11/2026, décision CV-05)
+- Statut : OUVERTE (brouillon, à valider)
+- Demande :
+  1. Registre : confirmer que le sous-type « Instruction de travail » du type PRO et les départements QUA et HSE (déjà dans
+     origin/main de Codex : src/db/registry.ts, src/db/seed-org.ts) restent stables : Vigie lit comme registre QHSE les
+     documents sans rattachement (attachment = 'none') de ces deux départements (question C-06, choix par défaut).
+  2. Correspondance des types de Vigie (jeu de démonstration, et documents QHSE à créer dans Codex) : politique → POL ;
+     procédure → PRO (« Procédure standard ») ; instruction de travail → PRO (« Instruction de travail ») ; formulaire →
+     FRM ; enregistrement → REC ; document d'origine externe (exigences d'un client) → NRM (« Standard client »), organisme
+     source dans source_org. Processus de Vigie (QHSE, ACH, BE, MON, USI, ESS, DIR…) → process_code. Identifiants de
+     démonstration : PR-QHSE-002 → PRO-QUA-0002… (ancien identifiant en alias), voir src/db/seeds/documents.ts de Vigie.
+  3. Site des documents : pub_documents.site = code de site de Matrix (site_a…), vide = toute l'entreprise (Vigie filtre
+     dessus) ; matricule des propriétaires et valideurs renseigné (users.matricule : échéances de Vigie au propriétaire et
+     à la personne de l'étape en cours, pilote d'une action de revue).
+  4. review_due_at tenu à jour après une revue sans modification (recordReview) et une mise en vigueur : Vigie en tire
+     ses échéances de revue périodique (DOC-14).
+  5. Si des documents existent dans Vigie en production avant le basculement (P-03 : aucun à ce jour) : POST /api/import
+     étendu à l'historique des révisions, à la diffusion, à la périodicité de revue et au processus.
+- Justification : D10 option A, décision CV-05 de Vigie (05/11/2026) ; Vigie n'écrit rien chez Codex ; liens profonds
+  <codex>/documents/<id> (VIGIE_CODEX_URL de Vigie).
 - Validé par Guillaume le :
 
-## [2026-11-xx] Vigie → Codex — Création des ECR dans Vigie (D12) — après CV-06
-- Statut : OUVERTE
-- Demande : submitChange (src/lib/vigie.ts) appelle Vigie (API ou fonction vigie.pub_creer_demande_modification) et
-  garde le numéro rendu par Vigie ; adresse des fiches dans Vigie à convenir (pas /changements/, voir CV-06).
+## [2026-11-xx] Vigie → Codex — Création des ECR dans Vigie et décisions par le webhook (D12, lot 5 livré le 05/11/2026)
+- Statut : OUVERTE (brouillon, à valider)
+- Demande :
+  1. submitChange (src/lib/vigie.ts) appelle, en codex_app, select vigie.pub_creer_demande_modification(p_id_externe =>
+     identifiant de la demande chez Codex (même valeur au renvoi : même numéro), p_nature => 'modification' |
+     'obsolescence', p_document => docId, p_motif => reason, p_description => description, p_demandeur_ref => requesterId,
+     p_demandeur_nom => nom du demandeur, p_demandeur_matricule => users.matricule ou null, p_remplacant =>
+     replacementId ou null, p_enregistre_le => horodatage) et garde comme identifiant le numéro ECR-AAAA-NNN rendu (au
+     lieu de numéroter lui-même) ; erreurs P0V01 / P0V02 : demande non transmise, message à l'utilisateur. La demande est
+     créée dans Vigie à son traitement (10 minutes au plus) : « submitted », ou « rejected » avec le motif (document
+     inconnu, retiré, ou déjà visé par une demande en cours) — lisible dans vigie.pub_demandes_modification et notifié par
+     le webhook.
+  2. Lien vers la fiche : vigieUrl(id) = <NEXT_PUBLIC_VIGIE_URL>/modifications-techniques/<ECR> (au lieu de /changements/).
+  3. Webhook POST /api/integrations/vigie : Vigie l'appelle avec le corps actuel { requestId, accepted, ecoRef, modifierId,
+     note } (refus et acceptation sans ordre aussitôt ; acceptation avec un ordre à sa libération, ecoRef = numéro de
+     l'ordre) ; jeton et / ou signature : Vigie pose VIGIE_CODEX_WEBHOOK_TOKEN / VIGIE_CODEX_WEBHOOK_SECRET aux valeurs de
+     VIGIE_WEBHOOK_TOKEN / VIGIE_WEBHOOK_SECRET de Codex (O-10 en partie répondue : Vigie envoie, signe et reprend ses envois).
+     Vigie lit la réponse 200 « implemented » (révision ouverte) ; 409, 404, 400 : refus définitif (signalé au QHSE).
+  4. Lien de lecture codex_app sur vigie.pub_demandes_modification (convention) pour le contrôle de cohérence de route.ts.
+- Justification : D12 (Vigie numérote et décide), décisions CV-06 et CV-08 de Vigie ; M-17 (écriture par fonction pub_ du
+  propriétaire).
 - Validé par Guillaume le :
 ```
 
@@ -594,17 +687,34 @@ pas envoyée »), que le lot 2 applique.
 - Justification : M-17 (lecture par vues, écriture par fonction pub_ du propriétaire), décisions CV-07 et CV-08 de Vigie.
 - Validé par Guillaume le :
 
-## [2026-11-xx] Vigie → Keystone — Lire les ECO par les vues (D12) — après le module de Vigie
-- Statut : OUVERTE
-- Demande : eco-connector.ts en lecture des publications vigie.pub_ordres_modification, pub_eco_approbations,
-  pub_eco_effectivite ; avancement par API ou fonction de Vigie ; état refused.
+## [2026-11-xx] Vigie → Keystone — Ordres de modification de Vigie : lecture par les vues, avancement par vigie.pub_signaler_avancement_eco (D12, lot 5 livré le 05/11/2026)
+- Statut : OUVERTE (brouillon, à valider)
+- Demande :
+  1. Lecture : rafraîchir vigie_ecos par SELECT sur vigie.pub_ordres_modification (number, title, eco_type → type,
+     status, interchangeability, from_revision, to_revision, cost_eur, schedule_days, stock_impact, document_refs,
+     requested_by_name → requestedBy, raised_on, pending_dispositions, locked, parts, projects, released_at,
+     vigie_updated_at → updatedAt), pub_eco_approbations (approvals : approval_key → key, decision, approver_text →
+     approver, decided_by_name → decidedBy, decided_at) et pub_eco_effectivite (effectivity, même noms en snake_case) au
+     lieu de GET /api/ecos?source=keystone ; projets = codes de keystone.pub_projets.
+  2. Avancement (outbox vigie_eco_progress) : au lieu de POST /api/ecos/:number/progress, select
+     vigie.pub_signaler_avancement_eco(p_numero => ecoNumber, p_nature => kind ('step' | 'approval'), p_cle => approvalKey,
+     p_decision => decision, p_etape_depuis => fromStatus, p_etape_cible => targetStatus, p_commentaire => comment,
+     p_acteur_nom => actor.name, p_acteur_role => actor.role, p_enregistre_le => recordedAt, p_id_externe => keystoneId) ;
+     résultat : numéro de la demande dans Vigie (vigieRef). P0V01 / P0V02 : entrée « failed », non renvoyée telle quelle.
+  3. Ce que Vigie applique (choix restrictifs, à confirmer) : étape suivante depuis l'état vu (draft → impact_analysis →
+     in_approval, interchangeabilité évaluée) ; clés englead et pm (quality décidée dans Vigie) ; jamais released (d'office)
+     ni rejected (une clé refusée rejette l'ordre). Réponse asynchrone : état lu dans la publication de l'état des demandes
+     (§ 5.1) ; refus « refused » = fin des renvois.
+  4. Liens : /modifications-techniques/<ECO> (inchangé, NEW-D4-1), /modifications-techniques/nouvelle?part=&project=&title=
+     &source=keystone (formulaire prérempli), filtres ?part= et ?project= (projet = code de Keystone).
+- Justification : M-17, M-18 ; CV-06 et CV-08 de Vigie.
 - Validé par Guillaume le :
 ```
 
 ## 6. Questions
 
 Questions du plan de Matrix encore ouvertes pour Vigie (§ 8 du plan) : **C-01** (sens de `elec`, `atex`, `hauteur`,
-`conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE),
+`conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE ; choix par défaut appliqué le 05/11/2026 : QUA / HSE sans rattachement, § 7 quater),
 **C-12** (horizon d'alerte 60 ou 90 jours), **C-13** (accueils sécurité de chantier). **C-03** et **C-08** ne portent
 plus que sur la démonstration (P-03) ; **C-04** (usage des applications Mac) fixe la durée de vie des substituts.
 
@@ -616,8 +726,8 @@ Questions nouvelles (CV : convergence de Vigie) :
 | CV-02 | **Tranché avec CV-01 le 04/11/2026 : fonctions retirées de Vigie** (aucune publication de l'efficacité demandée à Cursus pour l'instant). Question d'origine — Fonctions livrées après le 15/10 et contraires à D09 : sessions collectives et recyclage groupé (HAB-06, 31/10), évaluation à froid (HAB-13), indicateurs de formation de la revue (HAB-18). Les retirer (Cursus a sessions et évaluations, non publiées), ou garder l'évaluation à froid dans Vigie rattachée à `cursus_ref` ? Faut-il demander à Cursus de publier l'efficacité (sans avis nominatif) ? | QHSE, RH | lot 2 |
 | CV-03 | **Appliqué par défaut le 04/11/2026, à confirmer : attributs gardés dans le cache de Vigie ; titres créés par les RH seulement.** Question d'origine — Attributs propres au QHSE sur un titre du catalogue de Cursus (titre de secourisme, sensibilisation, auditeur interne, libellé de portée) : gardés dans le cache de Vigie (proposé) ou portés par Cursus ? Les titres ne se créent plus que par les RH (HAB-12) : accepté ? | QHSE, RH | lot 2 |
 | CV-04 | **Appliqué par défaut le 04/11/2026, à confirmer : portée abandonnée dans Vigie** (non publiée par Cursus ; `scope_label` gardé sans usage). Question d'origine — Portée des titres (catégories CACES, indices électriques, HAB-10) : à tenir et publier par Cursus, ou abandonnée dans Vigie ? | QHSE, RH | lot 2 |
-| CV-05 | D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
-| CV-06 | D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
+| CV-05 | **Tranché le 05/11/2026 : « avancer D10 »** (lot 4 développé le même jour, § 7 quater ; création non fermée d'abord ; DOC-15 et DOC-17 passés à Codex, conservation par type, appliqué par défaut à confirmer). Question d'origine — D10 et calendrier : tant que D10 n'est pas fait, des documents saisis dans Vigie en production devront être repris dans Codex (import à une révision aujourd'hui). Fermer la création de documents dans Vigie sur le serveur dès maintenant (consultation des documents de démonstration seulement), ou avancer D10 ? DOC-15 et DOC-17 ont leur pendant dans Codex (conservation par type et non par document) : accepté ? | responsable produit, QHSE | lot 4 |
+| CV-06 | **Tranché le 05/11/2026 : module construit dans Vigie** (« lance le lot 5 »), écran « Modifications techniques » à `/modifications-techniques/<numéro>` (fiche `?sel=`), « gestion des changements » MC-n inchangée ; **développé le même jour** (§ 7 quinquies ; droits, clés de Keystone, libération et envois à Codex par défaut, à confirmer : tableau « Convergence M-02, lot 5 » du § 19 de `docs/RESTE-A-FAIRE.md`). Question d'origine — D12 : le module ECR / ECO n'est pas au reste à faire de Vigie et l'écran n'existe pas dans la maquette : confirmer qu'il est à construire dans Vigie. Adresse et nom : Codex ouvre `/changements/<ECR>`, Keystone `/modifications-techniques/`, et Vigie a déjà une « gestion des changements » MC-n (CNF-11, `?changement=`). Proposé : `/modifications-techniques/<numéro>`, MC-n inchangé. | responsable produit | lot 5 |
 | CV-07 | **Tranché le 04/11/2026 : numéro propre de Vigie `EV-…` partout (aucun `NCR-nnn`)**, attribué par Vigie (lot 3) ; **appliqué le 05/11/2026** (§ 7 ter). Question d'origine — Numéro d'une NC de projet : `NCR-nnn` par projet (contrainte `events_nc_number_check`, plan D13) ou numéro propre de Vigie `EV-…` (contrat proposé par Keystone, `docs/integrations/vigie-contract.md` § 2.2) ? Saisi ou attribué par Vigie ? | responsable produit, QHSE, Keystone | lot 3 |
 | CV-08 | **Tranché le 04/11/2026 : Keystone écrit par une fonction `vigie.pub_…` qui dépose la demande dans une table de réception traitée par Vigie** (réponse asynchrone, état lu dans une vue) ; **appliqué le 05/11/2026** (§ 7 ter : `vigie.pub_signaler_avancement_nc`, table `inbound_requests` ; vue de l'état à publier par Matrix, § 5.1). Question d'origine — Écritures reçues (avancement d'une NC ou d'un ECO par Keystone, ECR par Codex) : API HTTP avec authentification de machine (clé par appelant, à créer dans Vigie), ou fonctions `vigie.pub_…` (M-18) ? Les règles de Vigie sont en TypeScript : une fonction devrait soit les recopier en SQL, soit déposer la demande dans une table de réception traitée par le planificateur de Vigie (réponse asynchrone, état lu dans une vue). Proposé : boîte de réception par fonction `pub_`. | responsable produit, Matrix | lots 3 et 5 |
 | CV-09 | D14 : garder les identifiants de Vigie et utiliser `sites.code` comme clé du cache, ou réécrire les identifiants ? **Tranché le 03/11/2026 : réécrire les identifiants (identifiant de site = code de Matrix), pour ne rien doublonner.** | responsable produit | lot 1 |
@@ -695,3 +805,40 @@ table de Vigie (`inbound_callers`) plutôt qu'en dur, pour que la démonstration
 sans paramètre de session (aucun affaiblissement : seul le propriétaire du schéma y écrit) ; une demande non traitée
 devient une échéance après un jour ; demandes de démonstration non ajoutées aux bases de démonstration existantes (jeu
 neuf seulement).
+
+## 7 quater. Réalisation du 05/11/2026 (lot 4 : D10 ; migration `0028_convergence_m02_documents`)
+
+Décision CV-05 du 05/11/2026 : **avancer D10** (« lance le lot 4 »), sans fermer d'abord la création de documents dans Vigie.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| Lectures | `codex.pub_documents`, `pub_revisions_document`, `pub_validations`, `pub_types_document` déclarées dans `src/db/foreign.ts` (contrats `test/fixtures/contracts/codex.*.json`, Codex `origin/main` `8f41630`), lues directement par `src/lib/foreign/codex.ts` (`readRegisterDocuments`, `readDocumentsByRef` par identifiant ou alias, `readDocumentRevisions`, `readDocumentValidations`, `readDocumentTypes`, `readDocumentsByOwner`) ; contrôlées par `refreshSharedReferences` (`sync_runs`) ; substituts construits d'après les anciens documents du jeu (`src/db/seeds/documents.ts`) | liens de lecture (§ 5.1) ; Codex sur le serveur commun |
+| Registre | `/documents` en consultation : périmètre QHSE (C-06 : `attachment = 'none'`, départements `QUA` / `HSE`), site (`pub_documents.site`), confidentialité (`confReadable` : confidentiel pour le QHSE et la direction), révision en vigueur, révisions, circuit en cours, actions et événements rattachés, conservation par type, lien « Ouvrir dans Codex » (`VIGIE_CODEX_URL`) ; ancien identifiant (alias) ouvre la fiche ; consultation seule des autres rôles (documents en vigueur) ; création d'une action (revue périodique ou action libre) par le QHSE | documents QHSE créés dans Codex (§ 5.3) |
+| Retiré | formulaires et 11 server actions de `src/server/documents.ts` (création, révision, brouillon, soumission, approbation, renvoi, abandon, « Rendre obsolète », revue sans modification et son annulation) ; DOC-15, DOC-17 ; journal du document montré par Vigie (celui de Codex fait foi) ; fichiers des documents servis par `/fichiers` | demande de retrait depuis Vigie (D12, lot 5) |
+| Données | tables `documents`, `document_versions`, `document_reviews` supprimées (aucune vue `pub_` ni requête de référence ne les lisait : garde-fou M-18 vert) ; `document_actions (codex_id, revision, action_id)` ; `events.document_id`, `actions.document_id`, `risk_measure_links.document_id` gardées en texte sans clé étrangère ; reprise de démonstration (identifiants recodés, journal rattaché, fichiers gardés non servis) | — |
+| Liens | `docversion:<identifiant>:<lettre>` (révision ouverte), source d'origine `document:<identifiant>` (alias admis, identifiant de Codex enregistré) ; événement (`?document=` prérempli, choix et contrôle) ; mesure de maîtrise DUE-19 (en vigueur, revue dépassée, « donnée indisponible ») ; procédure de l'écran Prévention (alias) ; références d'origine reprises (`reprise-liens`) ; données d'une personne (propriétaire par matricule) ; dossier de revue (revues en retard, révisions en validation) | — |
+| Échéances | `revue-documentaire\|<id>` (au propriétaire par matricule, sinon responsable QHSE du site), `validation-documentaire\|<id>\|<révision>` (personne de l'étape en cours, sinon propriétaire, sinon responsable QHSE), `documents-codex-indisponible` ; `test/fixtures/todo-golden.json` réécrit | — |
+| Tests | `test/integration/codex-documents.test.ts` (périmètre, confidentialité, Salarié, alias, résolution hors périmètre, événement, mesure, échéances, lien profond, source indisponible) ; tests des actions, de la migration 0005, de la reprise des liens et de l'ergonomie mis à jour ; `documents-actions.test.ts` et les tests du cycle de vie retirés | recette sur le serveur commun |
+
+Choix pris par défaut, à confirmer (tableau « Convergence M-02, lot 4 » du § 19 de `docs/RESTE-A-FAIRE.md`) : DOC-15 et
+DOC-17 passés à Codex (conservation par type) ; périmètre C-06 (QUA / HSE sans rattachement, site) ; confidentiel lu par le
+QHSE et la direction ; liens vers Codex seulement avec `VIGIE_CODEX_URL` ; destinataires par matricule (propriétaire,
+étape en cours), à défaut le responsable QHSE du site ; une action par révision ouverte ; identifiants de démonstration
+`TYPE-DÉPARTEMENT-SEQ` avec l'ancien identifiant en alias.
+
+## 7 quinquies. Réalisation du 05/11/2026 (lot 5 : D12 ; migration `0029_convergence_m02_ecr_eco`)
+
+Décision CV-06 du 05/11/2026 (« lance le lot 5 ») : **module ECR / ECO construit dans Vigie**, écran « Modifications
+techniques » à `/modifications-techniques`, gestion des changements MC-n inchangée. Détail : `docs/specs/modifications-techniques.md`.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| Tables | `ecos`, `ecrs`, `eco_approvals`, `eco_parts`, `eco_projects`, `eco_effectivity`, `eco_documents`, `eco_actions` aux colonnes exactes des quatre publications de Matrix (requêtes de référence nommées, `test/integration/ecr-eco-contract.test.ts`, garde-fou M-18 étendu), colonnes propres en fin de table ; `external_progress` non créée (`inbound_requests`) ; file `outbound_messages` | application des quatre publications par Matrix (§ 5.1) |
+| Écran | registre des ordres et des demandes, fiches (approbations, effectivité, demandes et actions liées, historique), formulaires ; liens `/modifications-techniques/<numéro>` et `/nouvelle` de Keystone et Codex ; navigation, aide, `ROLE_ROUTES`, axe | recette du service QHSE |
+| Règles | numérotation `ECO-AAAA-NNN` / `ECR-AAAA-NNN`, parcours et libération d'office, approbateur désigné, effectivité proposée d'après `keystone.pub_nomenclatures` et `pub_parc_machines`, annulation motivée, source d'action « Modification technique » | — |
+| Écritures reçues | `vigie.pub_creer_demande_modification` (Codex, numéro réservé et rendu) et `vigie.pub_signaler_avancement_eco` (Keystone), traitées par « Demandes reçues » (`decideEcrRequest`, `decideEcoRequest`) | liens d'exécution (§ 5.1) ; bascule de Codex et de Keystone (§ 5.3, § 5.4) |
+| Envois | décisions sur les demandes de Codex au webhook `POST /api/integrations/vigie` (jeton, signature HMAC, reprises), tâche « Envois aux outils », onglet « Connecteurs » | identifiants du webhook posés des deux côtés |
+| Lectures | `keystone.pub_articles`, `pub_nomenclatures`, `pub_parc_machines` (contrats relevés dans les migrations 0035 et 0040 de Keystone, substituts) | liens de lecture (§ 5.1) |
+| Échéances | `ecr-decision`, `eco-approbation`, `eco-dispositions`, `eco-effectivite` ; refus et attentes de Codex `codex-refus` / `codex-attente` | — |
+
+Choix pris par défaut, à confirmer : tableau « Convergence M-02, lot 5 » du § 19 de `docs/RESTE-A-FAIRE.md`.

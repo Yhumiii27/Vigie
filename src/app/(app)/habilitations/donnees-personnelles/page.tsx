@@ -131,7 +131,7 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
           </Section>
           <Section num={++n} title="Responsabilités dans le système de management">
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>
-              <li>Documents maîtrisés (propriétaire) : {data.documents.map((d) => `${d.id} · ${d.title}`).join(' ; ') || 'aucun'}</li>
+              <li>Documents de Codex (propriétaire) : {data.documents.map((d) => `${d.id} · ${d.title}`).join(' ; ') || 'aucun'}</li>
               <li>Programme d&apos;audit : {data.planItems.map((p) => `${p.label} — ${p.role}`).join(' ; ') || 'aucun'}</li>
               <li>Revues de direction (participant) : {data.reviews.map((r) => fmtDate(r.reviewOn)).join(', ') || 'aucune'}</li>
               <li>Situations d&apos;urgence (responsable) : {data.situations.map((x) => x.label).join(' ; ') || 'aucune'}</li>

@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { form } from '../next-mocks';
-import { actAs, changeLog, file, formWith, freshDemoDatabase, lastLog } from '../helpers';
+import { actAs, changeLog, file, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq, isNull, lt, ne } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { STEP_CLOSED } from '@/lib/domain';
-import { loadDocumentSignals } from '@/lib/data/documents';
 import { loadEventDetail } from '@/lib/data/events';
 import { loadSitemap } from '@/lib/data/sitemap';
 import { loadEventAccesses } from '@/server/access-history';
-import { approveVersion, returnToDraft, submitVersion, updateDraft, abandonDraft } from '@/server/documents';
 import { createReport, saveAnalysis, setAnalysisMethod } from '@/server/events';
 import { loadEntityHistory } from '@/server/history';
 import { linkAction, unlinkAction } from '@/server/links';
@@ -238,51 +236,7 @@ describe('veille : rattachements et contrôles journalisés (VEI-04, VEI-09)', (
   });
 });
 
-describe('documents : cycle de vie journalisé, fichier exigé, renvoi motivé (DOC-04, DOC-05, DOC-06)', () => {
-  const version = async (documentId: string, v: string) => (await (await db()).select().from(t.documentVersions)
-    .where(and(eq(t.documentVersions.documentId, documentId), eq(t.documentVersions.version, v))))[0];
-
-  it('approbation sans fichier refusée', async () => {
-    actAs('Animateur QHSE', 'site_a');
-    const v = await version('PR-QHSE-004', 'C');
-    expect(await approveVersion({}, form({ versionId: String(v.id) }))).toEqual({ error: expect.stringContaining('Joignez le fichier') });
-  });
-
-  it('renvoi en brouillon : validateurs, motif obligatoire, journal, échéance de l’auteur ; soumission après dépôt du fichier', async () => {
-    const v = await version('IT-USI-004', 'C');
-    actAs('Chef de service', 'site_a');
-    expect(await returnToDraft({}, form({ versionId: String(v.id), reason: 'Compléter' }))).toEqual({ error: "Réservé à l'animateur QHSE et à la direction." });
-    actAs('Animateur QHSE', 'site_a');
-    expect(await returnToDraft({}, form({ versionId: String(v.id), reason: '' }))).toMatchObject({ fieldErrors: { reason: expect.any(String) } });
-    expect(await returnToDraft({}, form({ versionId: String(v.id), reason: 'Préciser la fréquence de contrôle' }))).toMatchObject({ ok: true });
-    expect(await version('IT-USI-004', 'C')).toMatchObject({ status: 'brouillon', returnReason: 'Préciser la fréquence de contrôle', returnedOn: '2026-10-09' });
-    expect(await lastLog('document', 'IT-USI-004')).toMatchObject({ action: 'status', reason: 'Préciser la fréquence de contrôle', summary: 'Version C renvoyée en brouillon : corrections demandées' });
-    const todo = (await loadDocumentSignals()).todo.find((x) => x.title.startsWith('IT-USI-004 · version C renvoyée'));
-    expect(todo).toMatchObject({ ownerIds: ['lmoreau'], siteId: 'site_a' });
-
-    // Soumission sans fichier refusée (DOC-05), puis fichier joint (journal) et soumission : échéance levée.
-    expect(await submitVersion({}, form({ versionId: String(v.id) }))).toEqual({ error: expect.stringContaining('Joignez le fichier') });
-    expect(await updateDraft({}, formWith({ versionId: String(v.id), summary: v.summary }, { file: [file('it-usi-004-c.pdf')] }))).toMatchObject({ ok: true });
-    expect(await lastLog('document', 'IT-USI-004')).toMatchObject({ action: 'attach', details: [{ field: 'Fichier', from: null, to: 'it-usi-004-c.pdf' }] });
-    expect(await submitVersion({}, form({ versionId: String(v.id) }))).toMatchObject({ ok: true });
-    expect(await version('IT-USI-004', 'C')).toMatchObject({ status: 'en_revue', returnedOn: null, returnReason: null });
-    expect(await lastLog('document', 'IT-USI-004')).toMatchObject({ action: 'status', summary: 'Version C soumise en revue', byId: 'clefevre' });
-    expect((await loadDocumentSignals()).todo.some((x) => x.title.startsWith('IT-USI-004 · version C renvoyée'))).toBe(false);
-    expect(await approveVersion({}, form({ versionId: String(v.id) }))).toMatchObject({ ok: true });
-    expect(await lastLog('document', 'IT-USI-004')).toMatchObject({ summary: 'Version C approuvée et en vigueur · version B archivée' });
-  });
-
-  it('abandon d’un brouillon : motif obligatoire et journal ; historique du document à la saisie seulement', async () => {
-    actAs('Animateur QHSE', 'site_a');
-    const v = await version('FO-MON-003', 'C');
-    expect(await abandonDraft({}, form({ versionId: String(v.id), reason: '' }))).toMatchObject({ fieldErrors: { reason: expect.any(String) } });
-    expect(await abandonDraft({}, form({ versionId: String(v.id), reason: 'Correction reprise dans une autre révision' }))).toMatchObject({ ok: true });
-    expect(await lastLog('document', 'FO-MON-003')).toMatchObject({ action: 'archive', reason: 'Correction reprise dans une autre révision' });
-    expect(await loadEntityHistory('document', 'FO-MON-003')).toMatchObject({ entries: expect.arrayContaining([expect.objectContaining({ action: 'archive' })]) });
-    actAs('Chef de service', 'site_a'); // Documents en consultation seule pour l'encadrement
-    expect(await loadEntityHistory('document', 'FO-MON-003')).toEqual(NOT_FOUND);
-  });
-});
+// Documents (DOC-04 à DOC-06) : cycle de vie tenu par Codex depuis le lot 4 de M-02.
 
 describe('consultations tracées (SEC-11)', () => {
   const AT = 'EV-2026-118';

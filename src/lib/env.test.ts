@@ -105,6 +105,47 @@ describe('parseConfig', () => {
     expect(isWithinDir('/data', '/data2')).toBe(false);
   });
 
+  it('VIGIE_CODEX_URL : facultative, adresse de Codex sans paramètre (liens profonds des documents, lot 4 de M-02)', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1' }).codexUrl).toBeNull();
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_CODEX_URL: 'https://codex.exemple.fr/' }).codexUrl).toBe('https://codex.exemple.fr');
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_CODEX_URL: 'https://ged.exemple.fr/codex/' }).codexUrl).toBe('https://ged.exemple.fr/codex');
+    const refused = (v: string) => {
+      try {
+        parseConfig({ VIGIE_DEMO: '1', VIGIE_CODEX_URL: v });
+        return [];
+      } catch (e) {
+        return (e as ConfigError).problems.map((p) => p.split(' :')[0]);
+      }
+    };
+    expect(refused('ftp://codex.exemple.fr')).toEqual(['VIGIE_CODEX_URL']);
+    expect(refused('https://codex.exemple.fr/?x=1')).toEqual(['VIGIE_CODEX_URL']);
+  });
+
+  it('VIGIE_CODEX_WEBHOOK_TOKEN / _SECRET : facultatives, 32 caractères au moins, avec VIGIE_CODEX_URL (lot 5 de M-02)', () => {
+    expect(parseConfig({ VIGIE_DEMO: '1' }).codexWebhook).toEqual({ token: null, secret: null });
+    const token = 'j'.repeat(40);
+    const secretValue = 's'.repeat(48);
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_CODEX_URL: 'https://codex.exemple.fr', VIGIE_CODEX_WEBHOOK_TOKEN: token, VIGIE_CODEX_WEBHOOK_SECRET: secretValue }).codexWebhook)
+      .toEqual({ token, secret: secretValue });
+    const refused = (env: Record<string, string>) => {
+      try {
+        parseConfig({ VIGIE_DEMO: '1', ...env });
+        return [];
+      } catch (e) {
+        return (e as ConfigError).problems.map((p) => p.split(' :')[0]);
+      }
+    };
+    expect(refused({ VIGIE_CODEX_URL: 'https://codex.exemple.fr', VIGIE_CODEX_WEBHOOK_TOKEN: 'court' })).toEqual(['VIGIE_CODEX_WEBHOOK_TOKEN']);
+    expect(refused({ VIGIE_CODEX_URL: 'https://codex.exemple.fr', VIGIE_CODEX_WEBHOOK_TOKEN: `${'a'.repeat(32)} b` })).toEqual(['VIGIE_CODEX_WEBHOOK_TOKEN']);
+    expect(refused({ VIGIE_CODEX_WEBHOOK_SECRET: secretValue })).toEqual(['VIGIE_CODEX_URL']);
+    // Message sans la valeur du secret (jamais écrite dans une erreur de configuration).
+    try {
+      parseConfig({ VIGIE_DEMO: '1', VIGIE_CODEX_URL: 'https://codex.exemple.fr', VIGIE_CODEX_WEBHOOK_SECRET: 'secret-trop-court' });
+    } catch (e) {
+      expect((e as ConfigError).message).not.toContain('secret-trop-court');
+    }
+  });
+
   it('VIGIE_PUBLIC_URL : https:// hors démonstration, http:// pour localhost seulement (SEC-05)', () => {
     expect(() => parseConfig({ VIGIE_PUBLIC_URL: 'http://vigie.interne' })).toThrow(/VIGIE_PUBLIC_URL : https:\/\/ obligatoire hors démonstration/);
     expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_PUBLIC_URL: 'http://vigie.interne' }).publicUrl).toBe('http://vigie.interne');

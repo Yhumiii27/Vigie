@@ -75,12 +75,14 @@ describe('rattacher et détacher', () => {
     expect((await (await getDb()).select().from(t.requirements).where(eq(t.requirements.id, 6)))[0].actionId).toBe('A-T70');
   });
 
-  it('version de document rattachée après coup : le document de l’action reste inchangé (D15)', async () => {
+  it('révision de document rattachée après coup : le document de l’action reste inchangé (D15) ; révision close refusée', async () => {
     actAs('Animateur QHSE', 'site_a');
     await insertAction('A-T71');
-    expect(await linkAction('docversion:24', 'A-T71')).toEqual({});
+    expect(await linkAction('docversion:PRO-HSE-0001:B', 'A-T71')).toEqual({ error: expect.stringContaining('Révision close dans Codex') });
+    expect(await linkAction('docversion:PRO-HSE-0001:Z', 'A-T71')).toEqual({ error: expect.stringContaining('introuvable') });
+    expect(await linkAction('docversion:PRO-HSE-0001:C', 'A-T71')).toEqual({});
     expect((await actionRow('A-T71')).documentId).toBeNull();
-    expect((await (await getDb()).select().from(t.documentVersions).where(eq(t.documentVersions.id, 24)))[0].actionId).toBe('A-T71');
+    expect((await (await getDb()).select().from(t.documentActions).where(eq(t.documentActions.codexId, 'PRO-HSE-0001')))).toMatchObject([{ revision: 'C', actionId: 'A-T71' }]);
   });
 
   it('revue : une seule revue de direction par action', async () => {

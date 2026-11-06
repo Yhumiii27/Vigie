@@ -18,8 +18,6 @@ export const PLAN_STATUS_CODES = ['brouillon', 'a_signer', 'signe', 'clos', 'ann
 export const PERMIT_STATUS_CODES = ['demande', 'delivre', 'clos', 'annule'] as const;
 /** permits.type : PERMIT_TYPES. */
 export const PERMIT_TYPE_CODES = ['feu', 'essai'] as const;
-/** document_versions.status : VERSION_STATUS_KEYS (src/lib/rules/documents.ts). */
-export const VERSION_STATUS_CODES = ['brouillon', 'en_revue', 'approuve', 'archive'] as const;
 /** requirements.evaluation, requirement_evaluations.evaluation : REQUIREMENT_EVAL. */
 export const EVALUATION_CODES = ['conforme', 'ecart', 'analyse', 'a_evaluer'] as const;
 /** audit_findings.kind : FINDING_KINDS. */
@@ -36,8 +34,6 @@ export const SAFETY_NOTICE_KIND_CODES = ['observation', 'mise_en_demeure'] as co
 export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
 /** risk_measure_links.kind : MEASURE_LINK_KINDS (src/lib/domain.ts) — DUE-19. */
 export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
-/** documents.origin : DOC_ORIGINS (src/lib/rules/documents.ts) — DOC-17, migration 0021. */
-export const DOC_ORIGIN_CODES = ['interne', 'externe'] as const;
 /** change_requests.kind : CHANGE_KINDS (src/lib/domain.ts) — CNF-11. */
 export const CHANGE_KIND_CODES = ['organisation', 'procede', 'equipement', 'produit', 'exigence', 'autre'] as const;
 /** change_requests.status : CHANGE_STATUS (src/lib/domain.ts) — CNF-11. */
@@ -64,3 +60,37 @@ export const INBOUND_STATUS_CODES = ['received', 'applied', 'rejected'] as const
 export const INBOUND_KIND_CODES = ['nc_step', 'nc_verification', 'nc_references'] as const;
 /** inbound_requests.result_code (demande refusée) : INBOUND_RESULT_CODES_LABELS (src/lib/rules/inbound.ts). */
 export const INBOUND_RESULT_CODES = ['stale', 'refused', 'not_found', 'invalid'] as const;
+/**
+ * inbound_requests.kind, demandes de D12 (lot 5 de M-02, migration 0029) : création d'une demande de modification par Codex
+ * (vigie.pub_creer_demande_modification), avancement et approbation d'un ordre de modification par Keystone
+ * (vigie.pub_signaler_avancement_eco). Liste complète des natures : INBOUND_KIND_CODES + ENGINEERING_INBOUND_KIND_CODES.
+ */
+export const ENGINEERING_INBOUND_KIND_CODES = ['ecr_create', 'eco_step', 'eco_approval'] as const;
+/** ecos.eco_type : ECO_TYPES (src/lib/rules/engineering.ts) — D12, spécification partage/60-vigie-ecr-eco.sql de Matrix. */
+export const ECO_TYPE_CODES = ['rev', 'sub', 'asm', 'sup', 'obs'] as const;
+/** ecos.status : ECO_STATUSES. */
+export const ECO_STATUS_CODES = ['draft', 'impact_analysis', 'in_approval', 'released', 'rejected'] as const;
+/** ecos.source et ecrs.source : outil d'origine (ENGINEERING_SOURCES). */
+export const ENGINEERING_SOURCE_CODES = ['vigie', 'keystone', 'codex'] as const;
+/** ecrs.kind : ECR_KINDS. */
+export const ECR_KIND_CODES = ['modification', 'obsolescence'] as const;
+/** ecrs.subject : ECR_SUBJECTS. */
+export const ECR_SUBJECT_CODES = ['document', 'part', 'project', 'event'] as const;
+/** ecrs.status : ECR_STATUSES. */
+export const ECR_STATUS_CODES = ['submitted', 'accepted', 'rejected', 'implemented'] as const;
+/** eco_approvals.approval_key : ECO_APPROVAL_KEYS. */
+export const ECO_APPROVAL_KEY_CODES = ['englead', 'quality', 'pm'] as const;
+/** eco_approvals.decision : ECO_DECISIONS. */
+export const ECO_DECISION_CODES = ['pending', 'ok', 'rejected'] as const;
+/** eco_approvals.via : outil où la décision a été prise. */
+export const ECO_APPROVAL_VIA_CODES = ['vigie', 'keystone'] as const;
+/** eco_effectivity.target_type : EFFECTIVITY_TARGETS. */
+export const EFFECTIVITY_TARGET_CODES = ['project', 'machine'] as const;
+/** eco_effectivity.disposition : EFFECTIVITY_DISPOSITIONS, ou vide (à décider). */
+export const EFFECTIVITY_DISPOSITION_CODES = ['update', 'pinned', 'retrofit', 'na'] as const;
+/** ecrs.notify_status et outbound_messages.status : OUTBOUND_STATUSES (src/lib/rules/outbound.ts). */
+export const OUTBOUND_STATUS_CODES = ['pending', 'sent', 'failed'] as const;
+/** outbound_messages.target : outils destinataires (OUTBOUND_TARGETS). */
+export const OUTBOUND_TARGET_CODES = ['codex'] as const;
+/** outbound_messages.kind : OUTBOUND_KINDS. */
+export const OUTBOUND_KIND_CODES = ['ecr_decision'] as const;

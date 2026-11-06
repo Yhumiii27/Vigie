@@ -8,7 +8,8 @@
 // requête ou sonde de santé (HEALTHCHECK de l'image : 30 s après le démarrage).
 //
 // Tâches inscrites (scheduledTasks) : référentiels partagés (lot 0 de M-02, une fois par nuit, serveur Next.js seulement) ;
-// demandes reçues de Keystone (D13, CV-08 : à chaque passage, serveur Next.js seulement) ;
+// demandes reçues de Keystone (D13, CV-08 : à chaque passage, serveur Next.js seulement) ; envois aux outils (D12 : décisions
+// transmises à Codex, à chaque passage, serveur Next.js seulement) ;
 // rappel du mercredi par e-mail (ACT-33), seulement quand un transport d'e-mail existe
 // (VIGIE_MAIL_TRANSPORT ≠ aucun) ; échéances par personne (PRD-12, src/lib/data/person-todo.ts), calculées toutes les heures
 // hors requête et gardées en mémoire pour un futur canal sortant, dans le serveur Next.js seulement (instrumentation :
@@ -107,6 +108,23 @@ export function inboundRequestsTask(): ScheduledTask {
   };
 }
 
+/** Nom de la tâche des envois aux autres outils (D12, lot 5 de M-02, journal du serveur). */
+export const OUTBOUND_MESSAGES_TASK = 'Envois aux outils';
+
+/**
+ * Envois aux outils (D12) : messages de la file outbound_messages (décisions sur les demandes de modification de Codex),
+ * envoyés à chaque passage du planificateur (10 min) avec reprises espacées (src/server/outbound.ts).
+ */
+export function outboundMessagesTask(): ScheduledTask {
+  return {
+    name: OUTBOUND_MESSAGES_TASK,
+    async run(db) {
+      const { sendOutboundMessages } = await import('@/server/outbound');
+      await sendOutboundMessages(db);
+    },
+  };
+}
+
 type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | 'reminderTime' | 'publicUrl' | 'demo' | 'today'>;
 
 /**
@@ -116,7 +134,7 @@ type TaskConfig = Pick<VigieConfig, 'mailTransport' | 'mailDir' | 'mailFrom' | '
 export function scheduledTasks(c: TaskConfig): ScheduledTask[] {
   const tasks: ScheduledTask[] = [];
   // Serveur Next.js seulement (sessions et chargements des écrans) : ni scripts (vigie-db), ni tests.
-  if (serverRuntime()) tasks.push(personTodoTask(), sharedReferencesTask(), inboundRequestsTask());
+  if (serverRuntime()) tasks.push(personTodoTask(), sharedReferencesTask(), inboundRequestsTask(), outboundMessagesTask());
   const transport = createTransport(c);
   if (transport) {
     tasks.push({

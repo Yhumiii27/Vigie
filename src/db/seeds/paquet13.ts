@@ -3,6 +3,7 @@ import * as t from '../schema';
 import { rel } from './dates';
 import type { SeedTx } from './types';
 import { DRIVING_TITLE } from './skills';
+import { DEMO_DOCUMENT_IDS } from './documents';
 
 const ELEC_TITLE = 'habilitation.he';
 const WELCOME_TITLE = 'formation.accueil';
@@ -100,7 +101,8 @@ export async function seedComplianceFunctions(tx: SeedTx) {
   const risks = await tx.select({ id: t.risks.id, unitId: t.risks.unitId, hazard: t.risks.hazard }).from(t.risks).where(isNull(t.risks.archivedAt)).orderBy(asc(t.risks.id));
   const risk = (unitId: string, hazard: string) => risks.find((r) => r.unitId === unitId && r.hazard === hazard)?.id;
   const [elecControl] = await tx.select({ id: t.controls.id }).from(t.controls).where(eq(t.controls.equipment, 'Installations électriques'));
-  const [doc] = await tx.select({ id: t.documents.id }).from(t.documents).where(eq(t.documents.id, 'PR-QHSE-005'));
+  // Document de Codex (lot 4 de M-02) : procédure « Plans de prévention et permis ».
+  const doc = { id: DEMO_DOCUMENT_IDS['PR-QHSE-005'] };
   const titles = new Set((await tx.select({ id: t.trainingTitles.id }).from(t.trainingTitles).where(isNull(t.trainingTitles.archivedAt))).map((x) => x.id));
   const handling = risk('montage', 'Manutention mécanique');
   const electric = risk('montage', 'Électricité');
@@ -109,7 +111,7 @@ export async function seedComplianceFunctions(tx: SeedTx) {
     ...(handling && titles.has(DRIVING_TITLE) ? [{ riskId: handling, kind: 'title', titleId: DRIVING_TITLE }] : []),
     ...(electric && elecControl ? [{ riskId: electric, kind: 'control', controlId: elecControl.id }] : []),
     ...(electric && titles.has(ELEC_TITLE) ? [{ riskId: electric, kind: 'title', titleId: ELEC_TITLE }] : []),
-    ...(electric && doc ? [{ riskId: electric, kind: 'document', documentId: doc.id }] : []),
+    ...(electric ? [{ riskId: electric, kind: 'document', documentId: doc.id }] : []),
   ];
   if (measures.length) await tx.insert(t.riskMeasureLinks).values(measures.map((x) => ({ ...x, createdById: 'clefevre', createdAt: at(rel(-30)) })));
 

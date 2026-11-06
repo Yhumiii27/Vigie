@@ -9,6 +9,7 @@ import { SOURCES } from '@/lib/foreign/labels';
 import { logChange } from './changelog';
 import { refreshSharedReferences } from './foreign-sync';
 import { processInboundRequests } from './inbound';
+import { sendOutboundMessages } from './outbound';
 
 /**
  * « Actualiser » de l'onglet « Connecteurs » (« Gérer les sites », animateur QHSE et direction) : rafraîchit tout de suite
@@ -33,10 +34,10 @@ export async function processInboundNow(): Promise<FormState> {
   if (error) return { error };
   const r = await processInboundRequests(await getDb());
   revalidatePath('/', 'layout');
-  if (!r.processed && !r.failed) return { ok: true, message: 'Aucune demande à traiter.' };
+  if (!r.processed && !r.failed && !r.deferred) return { ok: true, message: 'Aucune demande à traiter.' };
   return {
     ok: true,
-    message: `${r.processed} demande(s) traitée(s) : ${r.applied} appliquée(s), ${r.rejected} refusée(s)${r.failed ? ` ; ${r.failed} en erreur, laissée(s) à traiter (journal du serveur)` : ''}.`,
+    message: `${r.processed} demande(s) traitée(s) : ${r.applied} appliquée(s), ${r.rejected} refusée(s)${r.failed ? ` ; ${r.failed} en erreur, laissée(s) à traiter (journal du serveur)` : ''}${r.deferred ? ` ; ${r.deferred} en attente d’une source indisponible` : ''}.`,
   };
 }
 
@@ -71,4 +72,18 @@ export async function acknowledgeInboundRequest(_prev: FormState, fd: FormData):
   if (!done) return { error: 'Refus déjà pris en compte.' };
   revalidatePath('/', 'layout');
   return { ok: true, message: 'Refus pris en compte.' };
+}
+
+/**
+ * « Envoyer maintenant » (onglet « Connecteurs », animateur QHSE et direction) : envoie tout de suite les messages de la
+ * file d'envoi dont l'heure de reprise est venue (D12 : décisions transmises à Codex), sans attendre « Envois aux outils ».
+ */
+export async function sendOutboundNow(): Promise<FormState> {
+  const { error } = await requireApprover();
+  if (error) return { error };
+  const r = await sendOutboundMessages(await getDb());
+  revalidatePath('/', 'layout');
+  if (r.skipped.length) return { ok: true, message: 'Envoi à Codex non configuré (VIGIE_CODEX_URL et jeton ou secret du webhook) : messages laissés à envoyer.' };
+  if (!r.sent && !r.retried && !r.failed) return { ok: true, message: 'Aucun message à envoyer pour l’instant.' };
+  return { ok: true, message: `${r.sent} message(s) envoyé(s), ${r.retried} à reprendre, ${r.failed} refusé(s).` };
 }

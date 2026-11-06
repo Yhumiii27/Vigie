@@ -6,7 +6,7 @@ import { coactivityOriginHref, formatBackfillReport, originLink, resolveOriginRe
 const catalog: OriginCatalog = {
   plans: new Set(['PP-2026-012', 'PP-2026-008']),
   permits: new Set(['PF-2026-031', 'PE-2026-008']),
-  documents: new Set(['PR-QHSE-002', 'IT-MON-012']),
+  documents: new Map([['PRO-QUA-0002', 'PRO-QUA-0002'], ['PR-QHSE-002', 'PRO-QUA-0002'], ['IT-MON-012', 'PRO-HSE-0003']]),
   streams: new Set(['FD-04', 'FD-11']),
   entries: [
     { id: 7, streamId: 'FD-11', removedOn: '2026-08-19' },
@@ -30,8 +30,10 @@ describe('resolveOriginRef', () => {
   });
 
   it('Documents : document de la référence ou de son premier mot', () => {
-    expect(resolve('docs', 'PR-QHSE-002')).toEqual({ column: 'documentId', target: 'PR-QHSE-002' });
-    expect(resolve('docs', 'IT-MON-012 révision C')).toEqual({ column: 'documentId', target: 'IT-MON-012' });
+    expect(resolve('docs', 'PRO-QUA-0002')).toEqual({ column: 'documentId', target: 'PRO-QUA-0002' });
+    // Ancien identifiant de Vigie (alias de Codex, lot 4 de M-02) : identifiant de Codex.
+    expect(resolve('docs', 'PR-QHSE-002')).toEqual({ column: 'documentId', target: 'PRO-QUA-0002' });
+    expect(resolve('docs', 'IT-MON-012 révision C')).toEqual({ column: 'documentId', target: 'PRO-HSE-0003' });
     expect(resolve('docs', 'Procédure accueil')).toEqual({ column: null, reason: 'Aucun document maîtrisé de cette référence.' });
   });
 

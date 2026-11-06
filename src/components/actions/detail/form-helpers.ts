@@ -21,7 +21,7 @@ import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent, type Option } from '@/l
 
 const isSourceKey = (s: string | null | undefined): s is SourceKey => !!s && (SOURCE_KEYS as readonly string[]).includes(s);
 
-/** Choix de la liste « Source » : les 24 sources dans l'ordre du QHSE, ou les seules sources admises par l'écran. */
+/** Choix de la liste « Source » : les 25 sources dans l’ordre du QHSE, ou les seules sources admises par l'écran. */
 export function sourceOptions(choices?: readonly SourceKey[] | null): Option[] {
   const keys = choices?.length ? SOURCE_KEYS.filter((k) => choices.includes(k)) : SOURCE_KEYS;
   return keys.map((k) => [k, ACTION_SOURCES[k].label] as Option);
@@ -69,7 +69,7 @@ export function kindSources(kind: string): SourceKey[] {
 }
 /**
  * Sources proposées à la création : celles de l'écran (`sourceChoices`, `lockSource`) ; élément imposé sans indication de
- * l'écran : les sources que son type admet (jamais les 24) ; sans élément : celles de l'écran ou les 24 (undefined).
+ * l'écran : les sources que son type admet (jamais les 25) ; sans élément : celles de l’écran ou les 25 (undefined).
  */
 export function creationSourceChoices(d: Pick<ActionDefaults, 'link' | 'lockSource' | 'source' | 'sourceChoices'>): readonly SourceKey[] | undefined {
   if (d.sourceChoices?.length) return d.sourceChoices;
@@ -78,7 +78,7 @@ export function creationSourceChoices(d: Pick<ActionDefaults, 'link' | 'lockSour
 }
 /**
  * Sources proposées pour compléter la source vide d'une action reprise : bornées par son événement et ses éléments
- * d'audit (le serveur les contrôle, D20) ; sans élément d'événement ni d'audit : les 24 (undefined).
+ * d'audit (le serveur les contrôle, D20) ; sans élément d'événement ni d'audit : les 25 (undefined).
  */
 export function editSourceChoices(d: Pick<ActionDetailView, 'source' | 'eventId' | 'sources'>): SourceKey[] | undefined {
   if (d.source !== null) return undefined;

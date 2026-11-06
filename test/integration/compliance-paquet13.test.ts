@@ -244,7 +244,7 @@ describe('DUE-19 : mesures de maîtrise liées aux contrôles, documents et habi
     const electric = await riskOf('montage', 'Électricité');
     const procedure = (await loadRisks()).risks.find((r) => r.id === electric.id)!.measures.find((m) => m.kind === 'document');
     // Procédure en vigueur dont la revue périodique est dépassée : signalée sans invalider la mesure.
-    expect(procedure).toMatchObject({ valid: true, tone: 'warn', targetId: 'PR-QHSE-005' });
+    expect(procedure).toMatchObject({ valid: true, tone: 'warn', targetId: 'PRO-HSE-0002' });
     const { todo } = await loadRiskSignals();
     expect(todo.find((x) => x.key === `duerp-mesure|${handling.id}`)).toMatchObject({ siteId: 'site_a', ownerIds: ['clefevre'], href: `/risques?risque=${handling.id}` });
     // Salarié : lecture du DUERP, sans lien vers l'écran de la veille ; pas d'échéance (non responsable).

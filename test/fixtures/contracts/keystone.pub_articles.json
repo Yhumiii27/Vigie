@@ -1,0 +1,5 @@
+{
+  "source": "Keystone origin/main b5891aa, drizzle/0035_share.sql (contrat D12 v1) ; types : src/server/db/schema/catalogue.ts (parts)",
+  "readers": ["vigie_app", "matrix_app"],
+  "columns": [["ref", "text"], ["name", "text"], ["revision", "text"], ["status", "text"], ["part_type", "text"], ["make_buy", "text"]]
+}

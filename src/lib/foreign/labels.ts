@@ -7,8 +7,15 @@ export const SOURCES = {
   projects: { tool: 'Keystone', label: 'Projets', view: 'keystone.pub_projets', cache: false },
   assignments: { tool: 'Keystone', label: 'Affectations', view: 'keystone.pub_affectations', cache: true },
   suppliers: { tool: 'Keystone', label: 'Fournisseurs', view: 'keystone.pub_fournisseurs', cache: false },
+  articles: { tool: 'Keystone', label: 'Articles', view: 'keystone.pub_articles', cache: false },
+  bom: { tool: 'Keystone', label: 'Nomenclatures des projets', view: 'keystone.pub_nomenclatures', cache: false },
+  fleet: { tool: 'Keystone', label: 'Parc installé', view: 'keystone.pub_parc_machines', cache: false },
   titles: { tool: 'Cursus', label: 'Titres', view: 'cursus.pub_titres', cache: true },
   heldTitles: { tool: 'Cursus', label: 'Titres détenus', view: 'cursus.pub_titres_detenus', cache: false },
+  documents: { tool: 'Codex', label: 'Documents', view: 'codex.pub_documents', cache: false },
+  revisions: { tool: 'Codex', label: 'Révisions des documents', view: 'codex.pub_revisions_document', cache: false },
+  validations: { tool: 'Codex', label: 'Circuits de validation', view: 'codex.pub_validations', cache: false },
+  docTypes: { tool: 'Codex', label: 'Types de document', view: 'codex.pub_types_document', cache: false },
 } as const;
 export type SourceKey = keyof typeof SOURCES;
 export const SOURCE_KEYS = Object.keys(SOURCES) as SourceKey[];
@@ -30,6 +37,9 @@ export type CursusTitleState = keyof typeof CURSUS_TITLE_STATES;
 
 /** Mention des données de l'écran Habilitations, tenues par Cursus (décision CV-01 du 04/11/2026). */
 export const CURSUS_HELD_NOTICE = 'Données tenues par Cursus (RH) : formations, habilitations, sessions et attestations se saisissent dans Cursus ; Vigie les consulte.';
+
+/** Mention de l'écran Documents, tenu par Codex (lot 4 de M-02, décision CV-05 du 05/11/2026). */
+export const CODEX_DOCUMENTS_NOTICE = 'Documents tenus par Codex (GED) : création, révisions, circuits de validation, revues et retraits se font dans Codex ; Vigie les consulte.';
 
 /** Issue d'un passage de rafraîchissement ou d'une lecture contrôlée (sync_runs.status). */
 export const SYNC_STATUSES = {

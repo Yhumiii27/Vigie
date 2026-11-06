@@ -7,7 +7,6 @@ import { toParisLocal } from '@/lib/dates';
 import type { FormState } from '@/lib/forms';
 import { loadAudits } from '@/lib/data/audits';
 import { loadContext } from '@/lib/data/context';
-import { loadDocuments } from '@/lib/data/documents';
 import { loadEnvironment } from '@/lib/data/environment';
 import { loadObjectives } from '@/lib/data/objectives';
 import { loadPrevention } from '@/lib/data/prevention';
@@ -18,7 +17,6 @@ import { loadSafetyNotices, loadWatch } from '@/lib/data/watch';
 import { saveCertification, saveFinding, savePlanItem } from '@/server/audits';
 import { saveContextItem } from '@/server/context';
 import { saveContractor } from '@/server/contractors';
-import { updateDocument, updateDraft } from '@/server/documents';
 import { saveWasteEntry, saveWasteStream } from '@/server/environment';
 import { saveObjective } from '@/server/objectives';
 import { savePermit } from '@/server/permits';
@@ -95,25 +93,7 @@ describe('QUA-12 : habilitations', () => {
   });
 });
 
-describe('QUA-12 : documents maîtrisés', () => {
-  it('informations du document et brouillon (journal du document)', async () => {
-    actAs('Animateur QHSE', 'site_a');
-    const db = await getDb();
-    const { rows } = await loadDocuments();
-    const d = rows.find((x) => x.id === 'IT-MON-012')!;
-    expect(d.version).toBe(await entityVersion(db, 'document', d.id));
-    const [doc] = await db.select().from(t.documents).where(eq(t.documents.id, d.id));
-    const base = { id: doc.id, title: doc.title, type: doc.type, process: doc.process, ownerId: doc.ownerId, reviewMonths: String(doc.reviewMonths), distribution: doc.distribution, siteId: doc.siteId ?? '' };
-    const opened = await staleCase('document', doc.id, updateDocument, base, [{ title: `${doc.title} (A)` }, { title: `${doc.title} (B)` }]);
-    // Le brouillon partage le journal du document : ouvert avant la modification ci-dessus, il est périmé aussi.
-    const [v] = await db.select().from(t.documentVersions).where(and(eq(t.documentVersions.documentId, doc.id), eq(t.documentVersions.status, 'brouillon')));
-    expect(await updateDraft({}, form({ versionId: String(v.id), summary: 'Objet B', version: opened }))).toEqual({ error: STALE_EDIT });
-    const fresh = await entityVersion(db, 'document', doc.id);
-    expect(await updateDraft({}, form({ versionId: String(v.id), summary: 'Objet A', version: fresh }))).toMatchObject({ ok: true });
-    expect(await updateDraft({}, form({ versionId: String(v.id), summary: 'Objet C', version: fresh }))).toEqual({ error: STALE_EDIT });
-    expect((await db.select().from(t.documentVersions).where(eq(t.documentVersions.id, v.id)))[0].summary).toBe('Objet A');
-  });
-});
+// Documents : tenus par Codex depuis le lot 4 de M-02 (plus de fiche éditée dans Vigie).
 
 describe('QUA-12 : revue de direction (journal de la revue)', () => {
   it('élément de la check-list et décision', async () => {

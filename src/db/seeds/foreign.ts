@@ -1,5 +1,6 @@
 import type { ForeignSourceKey } from '../foreign';
 import { rel } from './dates';
+import { demoCodexDocTypes, demoCodexDocuments, demoCodexRevisions, demoCodexValidations } from './documents';
 import { AUDITOR_TITLE, DRIVING_TITLE, MATRIX, PROVIDERS, TITLES, demoHeld } from './skills';
 
 // Contenu des substituts des vues des autres outils (lot 0 de M-02, src/db/foreign-substitutes.ts) : vues de même forme
@@ -56,6 +57,43 @@ export const DEMO_SUPPLIERS: Row[] = [
   { id: '5f000000-0000-4000-8000-000000000004', name: '[Fournisseur Hydraulique Nord]', x3_code: 'F-HYD04', is_internal: false },
   { id: '5f000000-0000-4000-8000-000000000009', name: '[Atelier interne de chaudronnerie]', x3_code: null, is_internal: true },
 ];
+
+/**
+ * Articles de keystone.pub_articles cités par les modifications techniques du jeu (D12, lot 5) ; l'arbre de malaxeur
+ * ARB-MAL-045 est aussi l'article de la NC EV-2026-130 (demande de Keystone du jeu, D13).
+ */
+export const DEMO_ARTICLES: Row[] = [
+  { ref: 'ARB-MAL-045', name: 'Arbre de malaxeur Ø45 h7', revision: 'B', status: 'validated', part_type: 'manufactured', make_buy: 'make' },
+  { ref: 'RED-RD5-010', name: 'Réducteur RD-5', revision: 'C', status: 'validated', part_type: 'purchased', make_buy: 'buy' },
+  { ref: 'JNT-MAL-012', name: 'Joint d’étanchéité de cuve', revision: 'A', status: 'validated', part_type: 'purchased', make_buy: 'buy' },
+  { ref: 'VER-HYD-300', name: 'Vérin hydraulique 300 t', revision: 'D', status: 'validated', part_type: 'purchased', make_buy: 'buy' },
+  { ref: 'CAP-PRS-400', name: 'Capot de presse PC-400', revision: 'A', status: 'obsolete', part_type: 'manufactured', make_buy: 'make' },
+];
+
+/** Cas d'emploi de keystone.pub_nomenclatures : articles des projets du jeu (effectivité proposée d'un ordre). */
+export const DEMO_BOM: Row[] = [
+  { project_code: 'K-2025-042', stage: 'commissioning', part_ref: 'ARB-MAL-045', quantity: 2 },
+  { project_code: 'K-2025-042', stage: 'commissioning', part_ref: 'RED-RD5-010', quantity: 1 },
+  { project_code: 'K-2025-042', stage: 'commissioning', part_ref: 'JNT-MAL-012', quantity: 4 },
+  { project_code: 'K-2025-077', stage: 'manufacturing', part_ref: 'ARB-MAL-045', quantity: 2 },
+  { project_code: 'K-2025-077', stage: 'manufacturing', part_ref: 'RED-RD5-010', quantity: 1 },
+  { project_code: 'K-2024-097', stage: 'warranty', part_ref: 'VER-HYD-300', quantity: 4 },
+  { project_code: 'K-2026-003', stage: 'design', part_ref: 'VER-HYD-300', quantity: 2 },
+];
+
+/** Parc installé de keystone.pub_parc_machines : une ligne par machine et article monté (révision montée). */
+export function demoFleet(): Row[] {
+  const m = (number: string, name: string, client: string, site: string, project: string | null, type: string, delivered: number, parts: [string, string][]): Row[] =>
+    (parts.length ? parts : [[null, null] as unknown as [string, string]]).map(([part, rev]) => ({
+      number, name, client_name: client, site_text: site, project_code: project, warranty_status: delivered > -730 ? 'in_warranty' : 'expired',
+      part_ref: part, fitted_revision: rev, type_machine_code: type, livree_le: rel(delivered), maj_le: `${rel(-3)}T07:30:00Z`,
+    }));
+  return [
+    ...m('MCH-031', 'Malaxeur MX-1', '[Client A]', '[Ville du client A] · atelier 2', 'K-2025-042', 'MAL', -40, [['ARB-MAL-045', 'A'], ['RED-RD5-010', 'B']]),
+    ...m('MCH-035', 'Malaxeur MX-1 (seconde machine)', '[Client B]', '[Ville du client B] · hall 1', null, 'MAL', -400, [['ARB-MAL-045', 'A']]),
+    ...m('MCH-022', 'Presse à cartoucher PC-400', '[Client C]', '[Ville du client C]', 'K-2024-097', 'PRS', -900, [['VER-HYD-300', 'C'], ['CAP-PRS-400', 'A']]),
+  ];
+}
 
 /** Fournisseur Keystone rattaché d'office à une entreprise extérieure du jeu (contractors.supplier_id). */
 export const DEMO_CONTRACTOR_SUPPLIERS: Record<string, string> = { 'EE-001': '5f000000-0000-4000-8000-000000000001' };
@@ -140,7 +178,15 @@ export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
       },
     ],
     suppliers: DEMO_SUPPLIERS,
+    articles: DEMO_ARTICLES,
+    bom: DEMO_BOM,
+    fleet: demoFleet(),
     titles: demoCursusTitles(),
     heldTitles: demoHeldTitles(),
+    // D10 (lot 4) : documents de Codex construits d'après les anciens documents maîtrisés du jeu (src/db/seeds/documents.ts).
+    documents: demoCodexDocuments(DEMO_MATRICULES),
+    revisions: demoCodexRevisions(),
+    validations: demoCodexValidations(DEMO_MATRICULES),
+    docTypes: demoCodexDocTypes(),
   };
 }

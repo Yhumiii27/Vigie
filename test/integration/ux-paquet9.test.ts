@@ -81,17 +81,17 @@ describe('élément introuvable (UX-13)', () => {
   it('documents : un document d’un site hors du périmètre n’est ni nommé ni expliqué (bandeau « introuvable »)', async () => {
     // Démonstration (tous les sites), site Ville-B sélectionné : un document de Ville-A est expliqué (« sélectionnez ce site »).
     actAs('Animateur QHSE', 'site_b');
-    expect((await loadDocuments()).elsewhere).toHaveProperty('IT-MON-012');
+    expect((await loadDocuments()).elsewhere).toHaveProperty('PRO-HSE-0003');
     // Personne rattachée à Ville-B seulement : le document de Ville-A est inconnu, son site n'est jamais nommé.
     auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Chef de service', siteIds: ['site_b'] } };
     cookieJar.set('vigie_site', 'site_b');
     const restricted = await loadDocuments();
-    expect(restricted.elsewhere).not.toHaveProperty('IT-MON-012');
-    expect(restricted.rows.some((r) => r.id === 'IT-MON-012')).toBe(false);
+    expect(restricted.elsewhere).not.toHaveProperty('PRO-HSE-0003');
+    expect(restricted.rows.some((r) => r.id === 'PRO-HSE-0003')).toBe(false);
     // Consultation seule (vue des documents en vigueur) : aucune raison donnée pour un document hors périmètre.
     const reader = await loadDocuments({ readOnly: true });
-    expect(Object.keys(reader.elsewhere)).not.toContain('IT-MON-012');
-    expect(Object.keys(reader.unavailable).filter((id) => id.startsWith('IT-MON-'))).toEqual([]);
+    expect(Object.keys(reader.elsewhere)).not.toContain('PRO-HSE-0003');
+    expect(Object.keys(reader.unavailable).filter((id) => ['PRO-HSE-0003', 'PRO-QUA-0007'].includes(id))).toEqual([]);
     auth.override = null;
   });
 });

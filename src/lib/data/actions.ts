@@ -5,6 +5,8 @@ import { getDb, schema as t } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef } from '@/lib/rules/environment';
 import { studyLabel, type StudyType } from '@/lib/rules/process-safety';
+import { isOpenRevision } from '@/lib/rules/documents';
+import { loadDocumentChoices } from './documents';
 import { ACTION_LINKS, loadActionSources } from '../action-links';
 import {
   SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, actionHref, isComplementaryLinkKind, actionLabel, actionRights, admissibleSources, canCreateAction, canReadAction,
@@ -178,7 +180,7 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   const active = new Set(session.siteOptions.map((s) => s.id));
   const keep = (siteId: string | null) => inScope(siteId) && (!siteId || active.has(siteId));
   const year = Number(today().slice(0, 4));
-  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses, studies] = await Promise.all([
+  const [events, findings, planItems, risks, controls, requirements, reviews, decisions, documents, streams, entries, statuses, studies, ecos] = await Promise.all([
     db.select({ id: t.events.id, title: t.events.title, type: t.events.type, step: t.events.step, dismissedAt: t.events.dismissedAt, siteId: t.events.siteId, occurredOn: t.events.occurredOn }).from(t.events),
     db.select({ id: t.auditFindings.id, audit: t.auditFindings.audit, clause: t.auditFindings.clause, text: t.auditFindings.text, kind: t.auditFindings.kind, planItemId: t.auditFindings.planItemId, cancelledAt: t.auditFindings.cancelledAt }).from(t.auditFindings).orderBy(asc(t.auditFindings.sort), asc(t.auditFindings.id)),
     db.select({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, track: t.auditPlanItems.track, label: t.auditPlanItems.label, detail: t.auditPlanItems.detail, month: t.auditPlanItems.month, actionId: t.auditPlanItems.actionId, cancelledAt: t.auditPlanItems.cancelledAt }).from(t.auditPlanItems),
@@ -188,12 +190,14 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
     db.select({ id: t.requirements.id, text: t.requirements.text, actionId: t.requirements.actionId, archivedAt: t.requirements.archivedAt }).from(t.requirements).orderBy(asc(t.requirements.sort)),
     db.select({ id: t.reviews.id, reviewOn: t.reviews.reviewOn, status: t.reviews.status }).from(t.reviews).orderBy(asc(t.reviews.reviewOn)),
     db.select({ id: t.reviewDecisions.id, reviewId: t.reviewDecisions.reviewId, kind: t.reviewDecisions.kind, text: t.reviewDecisions.text, actionId: t.reviewDecisions.actionId }).from(t.reviewDecisions).orderBy(asc(t.reviewDecisions.sort)),
-    db.select({ id: t.documents.id, title: t.documents.title, siteId: t.documents.siteId }).from(t.documents).orderBy(asc(t.documents.id)),
+    // Documents de Codex du registre (lot 4 de M-02) : en vigueur ou en révision ; aucun si Codex est indisponible.
+    loadDocumentChoices('site').then((c) => c.rows),
     db.select({ id: t.wasteStreams.id, label: t.wasteStreams.label, siteId: t.wasteStreams.siteId }).from(t.wasteStreams).orderBy(asc(t.wasteStreams.id)),
     db.select({ id: t.wasteEntries.id, streamId: t.wasteEntries.streamId, removedOn: t.wasteEntries.removedOn, siteId: t.wasteEntries.siteId, cancelledAt: t.wasteEntries.cancelledAt }).from(t.wasteEntries),
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
     db.select({ id: t.processSafetyStudies.id, siteId: t.processSafetyStudies.siteId, type: t.processSafetyStudies.type, capexCode: t.processSafetyStudies.capexCode, projectCode: t.processSafetyStudies.keystoneProjectCode, cancelledAt: t.processSafetyStudies.cancelledAt })
       .from(t.processSafetyStudies).orderBy(asc(t.processSafetyStudies.id)),
+    db.select({ id: t.ecos.id, title: t.ecos.title, siteId: t.ecos.siteId, status: t.ecos.status, cancelledAt: t.ecos.cancelledAt }).from(t.ecos).orderBy(asc(t.ecos.id)),
   ]);
   const openActions = new Set(statuses.filter((a) => !isClosedActionStatus(a.status)).map((a) => a.id));
   /** Élément à action unique encore libre (l'action qui le porte est close, ou aucune). */
@@ -244,6 +248,10 @@ export const loadActionTargets = cache(async (): Promise<ActionTargetOption[]> =
   studies
     .filter((st) => !st.cancelledAt && keep(st.siteId))
     .forEach((st) => add('safetystudy', st.id, `${st.id} · ${studyLabel({ type: st.type as StudyType, capexCode: st.capexCode, projectCode: st.projectCode })}`, st.siteId));
+  // D12 (lot 5) : ordres de modification non rejetés ni annulés (plusieurs actions par ordre).
+  ecos
+    .filter((e) => !e.cancelledAt && e.status !== 'rejected' && keep(e.siteId))
+    .forEach((e) => add('eco', e.id, `${e.id} · ${e.title}`, e.siteId));
   return out;
 });
 
@@ -282,7 +290,7 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
   for (const s of links) {
     if (s.kind === 'event') continue;
     // VG-04 : études de sécurité des procédés fermées au Salarié (vue masquée) : référence seule.
-    const readable = !reader.restricted && canOpen(reader.role, s.href) && !(employee && s.kind === 'safetystudy');
+    const readable = !reader.restricted && canOpen(reader.role, s.href) && !(employee && (s.kind === 'safetystudy' || s.kind === 'eco'));
     list.push({
       kind: s.kind, label: s.label, href: readable ? s.href : null, ...(readable && s.detail ? { detail: s.detail } : {}),
       detachOnAbandon: !ACTION_LINKS[s.kind]?.keptOnCancel,
@@ -316,17 +324,15 @@ async function sourcesOf(a: ActionRow, reader: Reader): Promise<PlanSource[]> {
  */
 async function complementaryTargets(a: ActionRow, sources: PlanSource[]): Promise<LinkTargetOption[]> {
   const db = await getDb();
-  const [targets, versions, statuses, decisionReviews] = await Promise.all([
+  const [targets, [documents, docActions], statuses, decisionReviews] = await Promise.all([
     loadActionTargets(),
-    db.select({ id: t.documentVersions.id, documentId: t.documentVersions.documentId, version: t.documentVersions.version, status: t.documentVersions.status, actionId: t.documentVersions.actionId, siteId: t.documents.siteId, title: t.documents.title })
-      .from(t.documentVersions).innerJoin(t.documents, eq(t.documentVersions.documentId, t.documents.id)).orderBy(asc(t.documentVersions.documentId), asc(t.documentVersions.id)),
+    Promise.all([loadDocumentChoices('site'), db.select().from(t.documentActions)]),
     db.select({ id: t.actions.id, status: t.actions.status }).from(t.actions),
     db.select({ reviewId: t.reviewDecisions.reviewId }).from(t.reviewDecisions).where(eq(t.reviewDecisions.actionId, a.id)),
   ]);
   const linked = new Set(sources.map((s) => s.link).filter(Boolean));
   const reviewId = a.reviewId ?? decisionReviews[0]?.reviewId ?? null;
   const open = new Set(statuses.filter((s) => !isClosedActionStatus(s.status)).map((s) => s.id));
-  const keep = await siteFilter('site');
   const out: LinkTargetOption[] = [];
   for (const o of targets) {
     const kind = o.value.split(':')[0];
@@ -335,11 +341,16 @@ async function complementaryTargets(a: ActionRow, sources: PlanSource[]): Promis
     if (kind === 'reviewdecision' && reviewId != null && o.reviewId !== reviewId) continue;
     out.push({ value: o.value, label: o.label, kind });
   }
-  for (const v of versions) {
-    const value = `docversion:${v.id}`;
-    if ((v.status !== 'brouillon' && v.status !== 'en_revue') || linked.has(value) || (v.actionId && open.has(v.actionId))) continue;
-    if (!keep(v.siteId) || !inSite(v.siteId, a.siteId)) continue;
-    out.push({ value, label: clip(`${v.documentId} · version ${v.version} (${v.status === 'brouillon' ? 'brouillon' : 'en revue'}) — ${v.title}`), kind: 'docversion' });
+  // Révisions ouvertes dans Codex (brouillon, en validation, approuvée) sans action ouverte (lien « docversion »).
+  const slot = new Map(docActions.map((l) => [`${l.codexId}|${l.revision}`, l.actionId]));
+  for (const d of documents.rows) {
+    if (!inSite(d.siteId, a.siteId)) continue;
+    for (const r of d.revisions.filter((x) => isOpenRevision(x.status))) {
+      const value = `docversion:${d.id}:${r.letter}`;
+      const holder = slot.get(`${d.id}|${r.letter}`);
+      if (linked.has(value) || (holder && open.has(holder))) continue;
+      out.push({ value, label: clip(`${d.id} · révision ${r.letter} (${r.statusLabel.toLowerCase()}) — ${d.title}`), kind: 'docversion' });
+    }
   }
   return out;
 }

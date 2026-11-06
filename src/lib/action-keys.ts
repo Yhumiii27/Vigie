@@ -10,8 +10,9 @@ export const SOURCE_KEYS = [
   'analyse_risque', 'analyse_chimique', 'analyse_environnementale', 'audit_certification', 'audit_fournisseur', 'audit_interne',
   'audit_terrain', 'autorite_publique', 'causerie', 'comex', 'controle_reglementaire', 'dechets', 'duerp', 'evenement', 'objectif',
   'reclamation_client', 'reunion_operationnelle', 'revue_direction', 'revue_documentaire', 'revue_processus', 'veille', 'hazop',
-  'reserves', 'rex',
-] as const; // ordre du § 12 : les 22 sources du QHSE, plus « Audit fournisseur » et « Déchets » (réponses du 15/10/2026, ACT-37)
+  'reserves', 'rex', 'modification_technique',
+] as const; // ordre du § 12 : les 22 sources du QHSE, plus « Audit fournisseur » et « Déchets » (réponses du 15/10/2026, ACT-37),
+// plus « Modification technique » (D12, lot 5 de M-02, migration 0029 : actions d'un ordre de modification, à confirmer par le QHSE)
 export type SourceKey = (typeof SOURCE_KEYS)[number];
 export const DOMAIN_KEYS = ['qualite', 'securite', 'sante', 'environnement', 'surete'] as const;
 export type ActionDomain = (typeof DOMAIN_KEYS)[number];
