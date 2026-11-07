@@ -113,6 +113,9 @@ describe('file d’envoi vers Codex', () => {
     expect((await messages()).some((x) => x.entityId === created.id)).toBe(false);
     const [m] = await db.insert(t.outboundMessages).values({
       target: 'codex', kind: 'ecr_decision', entityType: 'ecr', entityId: 'ECR-2026-002', payload: { requestId: 'ECR-2026-002', accepted: false, ecoRef: null, modifierId: null, note: null },
+      // Date fixée dans le passé : sinon `next_attempt_at` prend l'heure de la base (défaut now()), et un serveur
+      // PostgreSQL en avance de quelques millisecondes sur l'horloge du test laissait le message « pas encore dû » (CI).
+      nextAttemptAt: new Date(Date.now() - 60_000),
     }).returning();
     await sendOutboundMessages(db, { fetchImpl: async () => reply(409, { error: 'already_decided', status: 'implemented' }) });
     expect((await db.select().from(t.outboundMessages).where(eq(t.outboundMessages.id, m.id)))[0]).toMatchObject({ status: 'failed', attempts: 1, lastError: 'HTTP 409 already_decided' });

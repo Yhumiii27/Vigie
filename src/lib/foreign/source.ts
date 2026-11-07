@@ -47,3 +47,15 @@ export async function readSource<T>(db: DbOrTx, key: SourceKey, read: () => Prom
     return { ok: false, status: 'error', message: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300) };
   }
 }
+
+/**
+ * Colonnes présentes d'une vue (catalogue `pg_attribute`, lisible par tout rôle) : contrat à colonnes ajoutées en fin de vue
+ * et encore à publier (D01 v2), lu sans faire tomber la source quand le serveur publie la version précédente. À appeler
+ * dans `read` (vue présente et lisible).
+ */
+export async function viewColumns(db: DbOrTx, key: SourceKey): Promise<Set<string>> {
+  const c = FOREIGN_CONTRACTS[key];
+  const res = (await db.execute(sql`select a.attname as name from pg_attribute a
+    where a.attrelid = to_regclass(${`${c.schema}.${c.view}`}) and a.attnum > 0 and not a.attisdropped`)) as unknown as { rows: { name: string }[] };
+  return new Set(res.rows.map((r) => r.name));
+}

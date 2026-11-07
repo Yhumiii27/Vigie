@@ -29,6 +29,13 @@ export const PEOPLE: [id: string, name: string, job: string, matrix: boolean, se
   // Sorti de l'effectif (archivé) : filtre « Sortis » de la matrice, nom conservé dans l'historique.
   ['ylambert', '[Y. Lambert]', 'Usineur · atelier usinage', true, 'Atelier usinage'],
 ];
+/**
+ * Fiche ancienne sans matricule (créée à la première connexion Entra avant D01) : « à rattacher » par le QHSE. Cursus publie
+ * la même personne sous `cursusMatricule` ; le rafraîchissement en crée une fiche, que le rattachement remplace (D01).
+ */
+export const LEGACY_PEOPLE = [
+  { id: 'nlegrand', name: '[N. Legrand]', job: 'Technicienne méthodes', siteId: 'site_a', email: 'n.legrand@epc2i.example', cursusMatricule: 'EMP-9014' },
+];
 export const LEFT: Record<string, { leftOn: string; leftReason: string }> = { ylambert: { leftOn: rel(-9), leftReason: 'Fin de contrat' } };
 export const pid = (name: string) => {
   const p = PEOPLE.find((x) => x[1] === name);
@@ -61,6 +68,9 @@ export async function seedCore(tx: SeedTx) {
   await tx.insert(t.people).values(PEOPLE.map(([id, name, job, inSkillsMatrix, service], sort) => ({
     id, name, job, inSkillsMatrix, service, sort, siteId: SITE_B_PEOPLE.has(id) ? 'site_b' : 'site_a', ...LEFT[id],
     email: demoEmail(name), lastRole: DEMO_LAST_ROLES.get(id) ?? null, matricule: DEMO_MATRICULES[id] ?? null,
+  })));
+  await tx.insert(t.people).values(LEGACY_PEOPLE.map((p, i) => ({
+    id: p.id, name: p.name, job: p.job, siteId: p.siteId, email: p.email, sort: PEOPLE.length + i, lastRole: 'Salarié' as Role,
   })));
   // Responsable QHSE des deux sites actifs : l'animatrice QHSE de démonstration.
   await tx.update(t.sites).set({ qhseLeadId: DEMO_QHSE_LEAD }).where(inArray(t.sites.id, ['site_a', 'site_b']));

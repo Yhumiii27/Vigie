@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { fmtDate } from '@/lib/dates';
 import { canSeeHealth } from '@/lib/domain';
+import { PERSON_CATEGORIES, type PersonCategory } from '@/lib/foreign/labels';
 import { guard } from '@/lib/guard';
 import { loadPersonalData, loadPersonalDataPeople } from '@/lib/data/personal-data';
 import { logAccess } from '@/server/access-log';
@@ -36,6 +37,7 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
   const [people, data] = await Promise.all([loadPersonalDataPeople(), personId ? loadPersonalData(personId) : Promise.resolve(null)]);
   if (data) await logAccess({ kind: 'donnees_personnelles', entityType: 'person', entityId: data.identity.id, personId: session.user.id, health: data.events.some((e) => !!e.health) });
   const id = data?.identity;
+  const src = id ? (id.fromCursus ? ' (Cursus)' : ' (Vigie)') : '';
   let n = 0;
   return (
     <article className="pp-doc">
@@ -69,16 +71,25 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
       {data && id && (
         <>
           <Section num={++n} title="Identité et droits d'accès">
+            {/* D01 (décision CV-10) : origine de chaque donnée — Cursus (RH) pour une fiche tenue par Cursus, Vigie sinon. */}
+            <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>
+              {id.fromCursus
+                ? `Fiche tenue par Cursus (RH) : les données marquées « Cursus » y sont saisies et reprises par Vigie${id.cursusState === 'absent' ? ' (personne absente de la dernière lecture de Cursus)' : ''} ; demande d'accès à adresser aussi au service RH.`
+                : `Fiche ${id.replaced ? 'remplacée lors d’un rattachement à Cursus' : 'sans matricule Cursus (à rattacher)'} : données saisies dans Vigie.`}
+            </p>
             <dl className="pp-meta">
-              <dt>Nom</dt><dd>{id.name}</dd>
-              <dt>Fonction · service</dt><dd>{[id.job, id.service].filter(Boolean).join(' · ') || '—'}</dd>
-              <dt>Site de rattachement</dt><dd>{id.site}</dd>
-              <dt>Adresse e-mail</dt><dd>{id.email ?? '—'}</dd>
-              <dt>Matricule</dt><dd>{id.matricule ?? '—'}</dd>
+              <dt>Nom{src}</dt><dd>{id.name}</dd>
+              <dt>Fonction{src} · service (Vigie)</dt><dd>{[id.job, id.service].filter(Boolean).join(' · ') || '—'}</dd>
+              <dt>Site de rattachement{src}</dt><dd>{id.site}</dd>
+              <dt>Matricule{id.fromCursus ? ' (Cursus)' : ''}</dt><dd>{id.matricule ?? '—'}</dd>
+              {id.fromCursus && <><dt>Catégorie (Cursus)</dt><dd>{id.category ? PERSON_CATEGORIES[id.category as PersonCategory]?.label ?? id.category : '—'}</dd></>}
+              {id.fromCursus && <><dt>Agence ou entreprise (Cursus)</dt><dd>{id.company ?? '—'}</dd></>}
+              {id.fromCursus && <><dt>Adresse e-mail (Cursus)</dt><dd>{id.cursusEmail ?? '—'}</dd></>}
+              <dt>Adresse e-mail (compte Microsoft)</dt><dd>{id.email ?? '—'}</dd>
               <dt>Compte Microsoft</dt><dd>{id.entraLinked ? 'Rattaché (identifiant Entra ID conservé)' : 'Non rattaché'}</dd>
               <dt>Rôle Vigie</dt><dd>{id.lastRole ?? 'Aucune connexion'}{id.lastLoginAt ? ` · dernière connexion le ${id.lastLoginAt}` : ''}</dd>
-              <dt>Matrice des habilitations</dt><dd>{id.inSkillsMatrix ? 'Suivi' : 'Non suivi'}</dd>
-              {id.leftOn && <><dt>Sortie de l&apos;effectif</dt><dd>{fmtDate(id.leftOn)}{id.leftReason ? ` · ${id.leftReason}` : ''}</dd></>}
+              <dt>Matrice des habilitations (Vigie)</dt><dd>{id.inSkillsMatrix ? 'Suivi' : 'Non suivi'}</dd>
+              {id.leftOn && <><dt>Sortie de l&apos;effectif{src}</dt><dd>{fmtDate(id.leftOn)}{id.leftReason ? ` · ${id.leftReason}` : ''}</dd></>}
             </dl>
           </Section>
           <Section num={++n} title="Habilitations et formations" count={data.qualifications?.length ?? 0}>
@@ -158,7 +169,7 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
           </Section>
         </>
       )}
-      <div className="pp-foot">Extraction établie d&apos;après les données de Vigie · données des autres outils (Cursus, Keystone, Codex) non comprises.</div>
+      <div className="pp-foot">Extraction établie d&apos;après les données de Vigie · données des autres outils non comprises, sauf celles que Vigie reprend de Cursus (marquées) et les titres détenus lus dans Cursus.</div>
     </article>
   );
 }

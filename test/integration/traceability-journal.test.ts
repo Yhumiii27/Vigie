@@ -190,8 +190,10 @@ describe('habilitations : exigences, attestations et fiche salarié journalisée
   it('fiche salarié modifiée : champs changés au journal ; historique de la fiche', async () => {
     actAs('Chef de service', 'site_a');
     const [p] = await (await db()).select().from(t.people).where(eq(t.people.id, 'tnguyen'));
-    expect(await savePerson({}, form({ id: p.id, name: p.name, job: 'Monteur confirmé', service: p.service ?? '', siteId: p.siteId!, inSkillsMatrix: p.inSkillsMatrix ? 'on' : '' }))).toMatchObject({ ok: true });
-    expect(await lastLog('person', p.id)).toMatchObject({ action: 'update', details: [{ field: 'Poste', from: p.job || null, to: 'Monteur confirmé' }] });
+    // D01 (CV-10) : poste tenu par Cursus, jamais lu du formulaire ; service propre à Vigie.
+    expect(await savePerson({}, form({ id: p.id, name: p.name, job: 'Monteur confirmé', service: 'Atelier montage B', siteId: p.siteId!, inSkillsMatrix: p.inSkillsMatrix ? 'on' : '' }))).toMatchObject({ ok: true });
+    expect(await lastLog('person', p.id)).toMatchObject({ action: 'update', details: [{ field: 'Service', from: p.service || null, to: 'Atelier montage B' }] });
+    expect((await (await db()).select().from(t.people).where(eq(t.people.id, 'tnguyen')))[0]).toMatchObject({ job: p.job });
     expect(await loadEntityHistory('person', p.id)).toMatchObject({ entries: expect.arrayContaining([expect.objectContaining({ summary: 'Fiche salarié modifiée' })]) });
   });
 });

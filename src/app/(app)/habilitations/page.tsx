@@ -15,6 +15,8 @@ import { loadPeople } from '@/lib/queries';
 import { loadFormOptions, type Option } from '@/lib/data/options';
 import { loadSiteAdmin } from '@/lib/data/sites';
 import { loadSkillMatrix, loadTitleChoices } from '@/lib/data/skills';
+import { loadPeopleAdmin } from '@/lib/data/people';
+import { PeoplePanel } from '@/components/skills/PeoplePanel';
 
 export const metadata: Metadata = { title: SCREENS.skills.title };
 
@@ -33,8 +35,6 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   const [{ titles, archivedTitles, rows, lapses, others, departed, archive, versions, self, source }, { sites }, allSites, catalog] =
     await Promise.all([loadSkillMatrix(), loadFormOptions(), loadSiteAdmin(), manageTitles ? loadTitleChoices() : { choices: [], message: null }]);
   const now = today();
-  // Nouveau salarié : site sélectionné, ou le premier site en vue « Tous les sites ».
-  const defaultSiteId = session.site.id === ALL_SITES ? sites[0]?.[0] ?? '' : session.site.id;
   // Vue Salarié : aucune saisie, donc aucune liste de formulaire transmise au navigateur. Aucune liste du formulaire
   // d'action : l'écran ne crée pas d'action QSE (recyclages gérés par le service RH, réponses du service QHSE du 15/10/2026).
   const options = { sites: self ? [] : sites };
@@ -68,10 +68,14 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   // HAB-09 : vue « À prévoir » (?vue=a-prevoir) — recyclages et formations des 12 prochains mois, calculés à l'affichage.
   const forecastOn = str(sp.vue) === 'a-prevoir';
   const forecast = forecastOn ? renewalForecast(rows, now) : null;
+  // D01 (décision CV-10) : vue « Personnel (Cursus) » — fiches à rattacher et absentes de Cursus, QHSE et direction.
+  const peopleAdmin = manageTitles && str(sp.vue) === 'personnel' ? await loadPeopleAdmin() : null;
   const views = [
-    { href: '/habilitations', label: 'Matrice', on: !forecastOn, icon: 'ph-grid-four' },
+    { href: '/habilitations', label: 'Matrice', on: !forecastOn && !peopleAdmin, icon: 'ph-grid-four' },
     { href: '/habilitations?vue=a-prevoir', label: 'À prévoir · 12 mois', on: forecastOn, icon: 'ph-calendar-dots' },
+    ...(manageTitles ? [{ href: '/habilitations?vue=personnel', label: 'Personnel (Cursus)', on: !!peopleAdmin, icon: 'ph-users-three' }] : []),
   ];
+  const allSiteLabels = Object.fromEntries(allSites.map((x) => [x.id, x.label.split(' — ')[0]]));
 
   return (
     <>
@@ -97,7 +101,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
             </a>
           )}
         </div>
-        {forecast ? (
+        {peopleAdmin ? <PeoplePanel admin={peopleAdmin} siteLabels={allSiteLabels} /> : forecast ? (
           <div className="card" style={{ gap: 12 }}>
             <CardHead title="Recyclages et formations à prévoir" aside={(
               <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
@@ -116,7 +120,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         ) : (
           <SkillMatrix titles={titles} versions={versions} archivedTitles={archivedTitles} rows={rows} others={others} departed={departed} archive={archive}
             archivedSites={archivedSites} self={self}
-            canManage={manage} canManageTitles={manageTitles} catalog={catalog} options={options} today={now} defaultSiteId={defaultSiteId}
+            canManage={manage} canManageTitles={manageTitles} catalog={catalog} options={options} today={now}
             initialSel={initialSel} closeHref="/habilitations" siteLabels={siteLabels} />
         )}
       </div>

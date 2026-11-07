@@ -161,6 +161,47 @@ export const pubTitresDetenus = cursus.view('pub_titres_detenus', {
 }).existing();
 
 /**
+ * cursus.pub_salaries — contrat D01 v2 (Matrix data/contrats/cursus.pub_salaries-d01-v2.json) : colonnes du contrat v1
+ * (Cursus server/migrations-pg/0002_partage.sql, une ligne par salarié, sortis compris), puis categorie, entreprise et
+ * email ajoutées en fin de vue (décision CV-10 : intérimaires et extérieurs aux matricules I… et E…). Tant que le serveur
+ * publie le v1, les trois colonnes manquent : src/lib/foreign/cursus.ts ne lit que les colonnes présentes. Lecteurs :
+ * keystone_app, codex_app, vigie_app, matrix_app.
+ */
+export const pubSalaries = cursus.view('pub_salaries', {
+  matricule: text('matricule'),
+  nom: text('nom'),
+  poste: text('poste'),
+  uniteCode: text('unite_code'),
+  siteCode: text('site_code'),
+  entree: date('entree', { mode: 'string' }),
+  sortie: date('sortie', { mode: 'string' }),
+  actif: boolean('actif'),
+  categorie: text('categorie'),
+  entreprise: text('entreprise'),
+  email: text('email'),
+}).existing();
+
+/** Colonnes ajoutées par le contrat D01 v2 (lues seulement si la vue du serveur les porte). */
+export const SALARIES_V2_COLUMNS = ['categorie', 'entreprise', 'email'] as const;
+
+/**
+ * cursus.pub_presences_prevues — contrat Matrix data/contrats/cursus.pub_presences_prevues.json (décision CV-10, PRV-25) :
+ * présences sur site déclarées dans le formulaire public de Cursus et validées (ou annulées) par les RH, une ligne par
+ * déclaration ; aucune donnée de santé. Lecteurs : vigie_app, matrix_app.
+ */
+export const pubPresencesPrevues = cursus.view('pub_presences_prevues', {
+  declarationRef: text('declaration_ref'),
+  matricule: text('matricule'),
+  siteCode: text('site_code'),
+  entreprise: text('entreprise'),
+  du: date('du', { mode: 'string' }),
+  au: date('au', { mode: 'string' }),
+  objet: text('objet'),
+  statut: text('statut'),
+  majLe: timestamp('maj_le', { withTimezone: true }),
+}).existing();
+
+/**
  * codex.pub_documents — contrat D10 v1 (fiches documents de Codex, sans les « tres_confidentiel » ; le lecteur applique
  * `conf`). Lecteurs : keystone_app, vigie_app, arche_app, crucible_app, matrix_app. Lot 4 de M-02 (décision CV-05).
  */
@@ -333,6 +374,19 @@ export const FOREIGN_CONTRACTS = {
       ['cursus_ref', 'text'], ['matricule', 'text'], ['titre_id', 'text'], ['nature', 'text'], ['code', 'text'], ['obtenu_le', 'date'],
       ['expire_le', 'date'], ['utilisable_jusqu_au', 'date'], ['prerequis_manquant', 'boolean'], ['organisme', 'text'], ['delivre_par', 'text'],
       ['session_prevue_le', 'date'], ['mesure', 'text'], ['mesure_le', 'date'],
+    ],
+  },
+  // D01 et PRV-25 (décision CV-10) : personnes (contrat v2 complet ; le v1 en est le début) et présences prévues.
+  people: {
+    schema: 'cursus', view: 'pub_salaries', columns: [
+      ['matricule', 'text'], ['nom', 'text'], ['poste', 'text'], ['unite_code', 'text'], ['site_code', 'text'], ['entree', 'date'],
+      ['sortie', 'date'], ['actif', 'boolean'], ['categorie', 'text'], ['entreprise', 'text'], ['email', 'text'],
+    ],
+  },
+  presences: {
+    schema: 'cursus', view: 'pub_presences_prevues', columns: [
+      ['declaration_ref', 'text'], ['matricule', 'text'], ['site_code', 'text'], ['entreprise', 'text'], ['du', 'date'], ['au', 'date'],
+      ['objet', 'text'], ['statut', 'text'], ['maj_le', 'timestamp with time zone'],
     ],
   },
   documents: {

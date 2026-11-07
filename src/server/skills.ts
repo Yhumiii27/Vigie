@@ -1,6 +1,5 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
@@ -114,78 +113,70 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Champs de la fiche salarié suivis par le journal (HAB-03). */
 const PERSON_LABELS = {
-  name: 'Nom', job: 'Poste', service: 'Service', siteId: 'Site de rattachement', inSkillsMatrix: 'Suivi dans la matrice', email: 'E-mail', matricule: 'Matricule',
+  name: 'Nom', job: 'Poste', service: 'Service', siteId: 'Site de rattachement', inSkillsMatrix: 'Suivi dans la matrice', email: 'E-mail',
 } as const;
 
+/** Refus d'une création de fiche dans Vigie (D01, décision CV-10 : toutes les personnes viennent de Cursus). */
+const PERSON_CREATE_REFUSED = 'Les personnes se créent dans Cursus (RH), intérimaires et extérieurs compris : Vigie les reprend au rafraîchissement (décision CV-10).';
+/** Refus d'une sortie saisie pour une fiche tenue par Cursus. */
+const CURSUS_EXIT = 'Fiche tenue par Cursus : la sortie de l’effectif se déclare dans Cursus (RH), Vigie la reprend au rafraîchissement.';
+
 /**
- * Ajoute ou modifie un salarié (saisie provisoire, en attendant le connecteur Cursus). Fiche d'un salarié sorti : réintégrer d'abord.
- * Identifiant généré (jamais tiré du nom : deux homonymes sont deux fiches) ; doublons refusés sur l'e-mail (sans tenir compte
- * de la casse) et le matricule, clés de rapprochement avec Entra ID et Cursus.
+ * Modifie la fiche d'un salarié (D01, décision CV-10 : aucune création dans Vigie, PERSON_CREATE_REFUSED). Fiche tenue par
+ * Cursus (matricule posé) : seuls les attributs propres à Vigie se modifient (suivi dans la matrice, service) ; nom, poste,
+ * site, sortie, catégorie, entreprise et e-mail viennent de Cursus. Fiche ancienne sans matricule (« à rattacher ») : nom,
+ * poste, service, site et e-mail restent modifiables jusqu'au rattachement (attachPerson, src/server/people.ts). Fiche d'un
+ * salarié sorti : réintégrer d'abord. Doublon d'e-mail refusé (sans tenir compte de la casse : rapprochement Entra ID).
  */
 export async function savePerson(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
+  const f = formReader(fd);
+  const id = f.opt('id');
+  if (!id) return { error: PERSON_CREATE_REFUSED };
   const db = await getDb();
   const [sites, people] = await Promise.all([
     db.select({ id: t.sites.id, label: t.sites.label }).from(t.sites),
     db.select({
-      id: t.people.id, sort: t.people.sort, siteId: t.people.siteId, leftOn: t.people.leftOn, email: t.people.email, matricule: t.people.matricule,
+      id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn, email: t.people.email, matricule: t.people.matricule,
       name: t.people.name, job: t.people.job, service: t.people.service, inSkillsMatrix: t.people.inSkillsMatrix,
     }).from(t.people),
   ]);
-  const f = formReader(fd);
-  const id = f.opt('id');
-  const name = f.str('name', { required: true, max: 80 });
-  const job = f.str('job', { max: 80 });
+  const prev = people.find((p) => p.id === id);
+  if (!prev) return { error: 'Salarié introuvable.' };
+  if (hasLeft(prev)) return { error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." };
+  const cursus = !!prev.matricule;
   const service = f.str('service', { max: 60 });
-  const siteId = f.oneOf('siteId', sites.map((s) => s.id), { required: true });
   const inSkillsMatrix = f.bool('inSkillsMatrix');
-  const email = f.str('email', { max: 254 }).toLowerCase() || null;
-  const matricule = f.str('matricule', { max: 40 }) || null;
-  if (email && !EMAIL.test(email)) f.fail('email', 'Adresse e-mail invalide.');
-  if (email && people.some((p) => p.id !== id && p.email?.toLowerCase() === email)) f.fail('email', 'Une autre fiche porte déjà cet e-mail.');
-  if (matricule && people.some((p) => p.id !== id && p.matricule === matricule)) f.fail('matricule', 'Une autre fiche porte déjà ce matricule.');
+  // Champs tenus par Cursus : jamais lus du formulaire pour une fiche rattachée.
+  const name = cursus ? prev.name : f.str('name', { required: true, max: 80 });
+  const job = cursus ? prev.job : f.str('job', { max: 80 });
+  const siteId = cursus ? prev.siteId : f.oneOf('siteId', sites.map((s) => s.id), { required: true });
+  const email = cursus || !fd.has('email') ? prev.email : f.str('email', { max: 254 }).toLowerCase() || null;
+  if (!cursus && email && !EMAIL.test(email)) f.fail('email', 'Adresse e-mail invalide.');
+  if (!cursus && email && people.some((p) => p.id !== id && p.email?.toLowerCase() === email)) f.fail('email', 'Une autre fiche porte déjà cet e-mail.');
   if (!f.ok) return f.state();
 
-  // E-mail et matricule : champs absents du formulaire (saisie partielle) = inchangés.
-  const values = {
-    name, job, service, siteId, inSkillsMatrix,
-    ...(fd.has('email') ? { email } : {}),
-    ...(fd.has('matricule') ? { matricule } : {}),
-  };
-  if (id) {
-    const prev = people.find((p) => p.id === id);
-    if (!prev) return { error: 'Salarié introuvable.' };
-    if (hasLeft(prev)) return { error: "Salarié sorti de l'effectif : réintégrez-le pour modifier sa fiche." };
-    const blocked = (await requireInSite(prev.siteId)) ?? (siteId !== prev.siteId ? await requireInSite(siteId, { create: true }) : null);
-    if (blocked) return { error: blocked };
-    const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
-    const fmt = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
-    const details = diffFields({ ...prev, siteId: siteLabel(prev.siteId) }, { ...values, siteId: siteLabel(values.siteId) }, PERSON_LABELS, fmt);
-    const stale = await freshWrite(() => db.transaction(async (tx) => {
-      await assertFresh(tx, 'person', id, fd.get(VERSION_FIELD));
-      await tx.update(t.people).set(values).where(eq(t.people.id, id));
-      if (details.length) await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée', details });
-    }));
-    if (stale) return { error: stale };
-    done();
-    return { ok: true, id };
-  }
-  const blocked = await requireInSite(siteId, { create: true });
+  const values = { name, job, service, siteId, inSkillsMatrix, email };
+  const blocked = (await requireInSite(prev.siteId)) ?? (siteId !== prev.siteId ? await requireInSite(siteId, { create: true }) : null);
   if (blocked) return { error: blocked };
-  const newId = randomUUID();
-  const sort = nextSort(people);
-  await db.transaction(async (tx) => {
-    await tx.insert(t.people).values({ id: newId, ...values, sort });
-    await logChange(tx, { entityType: 'person', entityId: newId, action: 'create', summary: 'Salarié ajouté' });
-  });
+  const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
+  const fmt = (v: unknown) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'oui' : 'non') : String(v));
+  const details = diffFields({ ...prev, siteId: siteLabel(prev.siteId) }, { ...values, siteId: siteLabel(values.siteId) }, PERSON_LABELS, fmt);
+  const stale = await freshWrite(() => db.transaction(async (tx) => {
+    await assertFresh(tx, 'person', id, fd.get(VERSION_FIELD));
+    await tx.update(t.people).set(values).where(eq(t.people.id, id));
+    if (details.length) await logChange(tx, { entityType: 'person', entityId: id, action: 'update', summary: 'Fiche salarié modifiée', details });
+  }));
+  if (stale) return { error: stale };
   done();
-  return { ok: true, id: newId };
+  return { ok: true, id };
 }
 
 /**
  * Sortie de l'effectif (archivage, jamais de suppression) : date de sortie et motif. À partir de cette date, le salarié
- * quitte la matrice, les signaux et les listes ; ses exigences restent consultables (titres tenus par Cursus). Saisie provisoire (connecteur Cursus).
+ * quitte la matrice, les signaux et les listes ; ses exigences restent consultables (titres tenus par Cursus). Fiche ancienne
+ * sans matricule seulement (D01, CV-10) : la sortie d'une fiche tenue par Cursus vient de Cursus (refus CURSUS_EXIT).
  * Refusée tant qu'un recyclage rattaché à ses exigences est ouvert.
  */
 export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -199,8 +190,9 @@ export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<For
   if (leftOn && leftOn < addMonths(today(), -12)) f.fail('leftOn', "La date de sortie ne peut pas remonter à plus d'un an.");
   if (!f.ok) return f.state();
   const db = await getDb();
-  const [person] = await db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, id));
+  const [person] = await db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn, matricule: t.people.matricule }).from(t.people).where(eq(t.people.id, id));
   if (!person) return { error: 'Salarié introuvable.' };
+  if (person.matricule) return { error: CURSUS_EXIT };
   if (hasLeft(person)) return { error: "Salarié déjà sorti de l'effectif." };
   const blocked = await requireInSite(person.siteId);
   if (blocked) return { error: blocked };
@@ -214,7 +206,10 @@ export async function setPersonLeft(_prev: FormState, fd: FormData): Promise<For
   return { ok: true, id };
 }
 
-/** Réintègre un salarié sorti (ou annule une sortie déclarée), motif obligatoire (QUA-22) : il revient dans la matrice et les listes. */
+/**
+ * Réintègre un salarié sorti (ou annule une sortie déclarée), motif obligatoire (QUA-22) : il revient dans la matrice et les
+ * listes. Fiche ancienne sans matricule seulement (D01) : une fiche tenue par Cursus suit la sortie publiée par Cursus.
+ */
 export async function reinstatePerson(_prev: FormState, fd: FormData): Promise<FormState> {
   const { error } = await requireSkillsEditor();
   if (error) return { error };
@@ -223,8 +218,9 @@ export async function reinstatePerson(_prev: FormState, fd: FormData): Promise<F
   const reason = f.reason();
   if (!f.ok) return f.state();
   const db = await getDb();
-  const [person] = await db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn }).from(t.people).where(eq(t.people.id, id));
+  const [person] = await db.select({ id: t.people.id, siteId: t.people.siteId, leftOn: t.people.leftOn, matricule: t.people.matricule }).from(t.people).where(eq(t.people.id, id));
   if (!person) return { error: 'Salarié introuvable.' };
+  if (person.matricule) return { error: CURSUS_EXIT };
   if (!person.leftOn) return { error: 'Aucune sortie déclarée pour ce salarié.' };
   const blocked = await requireInSite(person.siteId);
   if (blocked) return { error: blocked };

@@ -1,0 +1,5 @@
+{
+  "source": "Matrix origin/main data/contrats/cursus.pub_presences_prevues.json (présences prévues sur site, déclarations validées ou annulées par les RH ; décision CV-10 et PRV-25 de Vigie ; en attente des tables de Cursus, vue à définir dans l'écran Publications de Matrix)",
+  "readers": ["vigie_app", "matrix_app"],
+  "columns": [["declaration_ref", "text"], ["matricule", "text"], ["site_code", "text"], ["entreprise", "text"], ["du", "date"], ["au", "date"], ["objet", "text"], ["statut", "text"], ["maj_le", "timestamp with time zone"]]
+}

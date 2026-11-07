@@ -2,6 +2,7 @@ import type { ForeignSourceKey } from '../foreign';
 import { rel } from './dates';
 import { demoCodexDocTypes, demoCodexDocuments, demoCodexRevisions, demoCodexValidations } from './documents';
 import { AUDITOR_TITLE, DRIVING_TITLE, MATRIX, PROVIDERS, TITLES, demoHeld } from './skills';
+import { LEFT, LEGACY_PEOPLE, PEOPLE, SITE_B_PEOPLE, demoEmail } from './core';
 
 // Contenu des substituts des vues des autres outils (lot 0 de M-02, src/db/foreign-substitutes.ts) : vues de même forme
 // que les publications de Matrix et de Keystone, créées seulement en PGlite ou en démonstration, quand le schéma de l'outil
@@ -153,8 +154,65 @@ export function demoHeldTitles(): Row[] {
   return rows;
 }
 
+/**
+ * Intérimaires (matricule « I… ») et salariés d'entreprises extérieures (« E… ») publiés par Cursus (décision CV-10) :
+ * matricule, nom, poste, site, catégorie, agence ou entreprise. Repris par le rafraîchissement (cache people).
+ */
+export const DEMO_VISITORS: [matricule: string, name: string, job: string, site: string, category: 'interimaire' | 'exterieur', company: string][] = [
+  ['I-9101', '[D. Garnier]', 'Cariste intérimaire', 'site_a', 'interimaire', '[Agence Intérim Ouest]'],
+  ['I-9102', '[C. Barbier]', 'Opérateur intérimaire', 'site_b', 'interimaire', '[Agence Intérim Ouest]'],
+  ['E-9201', '[F. Rousseau]', 'Technicien levage', 'site_a', 'exterieur', '[Entreprise Levage Ouest]'],
+  ['E-9202', '[B. Morel]', 'Soudeur', 'site_a', 'exterieur', '[Entreprise Chaudronnerie Soudure]'],
+  ['E-9203', '[L. Fabre]', 'Électricien', 'site_a', 'exterieur', '[Entreprise Élec Industrie]'],
+  ['E-9204', '[P. Henry]', 'Technicien incendie', 'site_a', 'exterieur', '[Entreprise Sécurité Incendie]'],
+];
+
+/**
+ * Personnes de cursus.pub_salaries (D01, contrat v2) : les salariés du jeu (matricules EMP-9…, sortie de [Y. Lambert]),
+ * les intérimaires et extérieurs, et le salarié dont Vigie garde une fiche ancienne sans matricule ([N. Legrand], fiche
+ * « à rattacher » : LEGACY_PEOPLE de src/db/seeds/core.ts). Base PGlite hors démonstration : aucune personne (le
+ * rafraîchissement créerait sinon des fiches fictives).
+ */
+export function demoCursusPeople(): Row[] {
+  const site = (id: string) => (SITE_B_PEOPLE.has(id) ? 'site_b' : 'site_a');
+  return [
+    ...PEOPLE.map(([id, name, job]) => ({
+      matricule: DEMO_MATRICULES[id], nom: name, poste: job, unite_code: null, site_code: site(id), entree: null, sortie: LEFT[id]?.leftOn ?? null,
+      actif: !LEFT[id], categorie: 'salarie', entreprise: null, email: demoEmail(name),
+    })),
+    ...LEGACY_PEOPLE.map((p) => ({
+      matricule: p.cursusMatricule, nom: p.name, poste: p.job, unite_code: null, site_code: p.siteId, entree: rel(-20), sortie: null, actif: true,
+      categorie: 'salarie', entreprise: null, email: p.email,
+    })),
+    ...DEMO_VISITORS.map(([matricule, nom, poste, siteCode, categorie, entreprise]) => ({
+      matricule, nom, poste, unite_code: null, site_code: siteCode, entree: null, sortie: null, actif: true, categorie, entreprise, email: null,
+    })),
+  ];
+}
+
+/**
+ * Présences prévues de cursus.pub_presences_prevues (PRV-25) : arrivées et départs autour de la date du jeu ; trois
+ * recoupent un plan de prévention de la même entreprise sur le même site (PP-2026-015, PP-2026-016, PP-2026-017), une est
+ * annulée, une porte un matricule inconnu de Vigie.
+ */
+export function demoPresences(): Row[] {
+  const row = (n: number, matricule: string, site: string, company: string | null, from: number, to: number, objet: string, statut = 'validee'): Row => ({
+    declaration_ref: `PRS-2026-${String(n).padStart(4, '0')}`, matricule, site_code: site, entreprise: company, du: rel(from), au: rel(to), objet, statut,
+    maj_le: `${rel(-2)}T09:00:00Z`,
+  });
+  return [
+    row(1, 'E-9202', 'site_a', '[Entreprise Chaudronnerie Soudure]', -3, 7, 'Renfort de la mezzanine du magasin'),
+    row(2, 'I-9101', 'site_a', '[Agence Intérim Ouest]', 2, 30, 'Renfort de l’atelier montage'),
+    row(3, 'E-9204', 'site_a', '[Entreprise Sécurité Incendie]', 4, 4, 'Vérification annuelle des extincteurs et RIA'),
+    row(4, 'E-9203', 'site_a', '[Entreprise Élec Industrie]', 10, 14, 'Travaux sur le TGBT et le poste d’essais'),
+    row(5, 'E-9201', 'site_a', '[Entreprise Levage Ouest]', 17, 19, 'Maintenance du pont roulant 5 t'),
+    row(6, 'I-9102', 'site_b', '[Agence Intérim Ouest]', 1, 5, 'Renfort de la zone d’essais', 'annulee'),
+    row(7, 'E-9299', 'site_b', '[Fournisseur Hydraulique Nord]', 3, 3, 'Livraison et mise en place d’un vérin'),
+  ];
+}
+
 /** Lignes de chaque substitut (même forme que la vue publiée). */
-export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
+export function demoForeignRows({ demo = true }: { demo?: boolean } = {}): Record<ForeignSourceKey, Row[]> {
   return {
     sites: DEMO_MATRIX_SITES,
     projects: DEMO_PROJECTS.map(([code, client, nom, phase]) => ({
@@ -183,6 +241,9 @@ export function demoForeignRows(): Record<ForeignSourceKey, Row[]> {
     fleet: demoFleet(),
     titles: demoCursusTitles(),
     heldTitles: demoHeldTitles(),
+    // D01 et PRV-25 (décision CV-10) : personnes et présences prévues, en démonstration seulement.
+    people: demo ? demoCursusPeople() : [],
+    presences: demo ? demoPresences() : [],
     // D10 (lot 4) : documents de Codex construits d'après les anciens documents maîtrisés du jeu (src/db/seeds/documents.ts).
     documents: demoCodexDocuments(DEMO_MATRICULES),
     revisions: demoCodexRevisions(),

@@ -1,12 +1,14 @@
 import 'server-only';
-import { eq, inArray, isNotNull } from 'drizzle-orm';
+import { eq, inArray, isNotNull, max } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { schema as t, type Db } from '@/db';
 import { addDays } from '@/lib/dates';
 import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/lib/foreign/keystone';
-import { readCursusTitles, readHeldTitles } from '@/lib/foreign/cursus';
+import { readCursusPeople, readCursusTitles, readHeldTitles, readPlannedPresences } from '@/lib/foreign/cursus';
 import { readMatrixSites } from '@/lib/foreign/matrix';
 import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/lib/foreign/codex';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
+import { cursusPersonSync, newCachedPerson, shouldCreate, type CachedPerson } from '@/lib/rules/people-sync';
 import { CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SOURCES, type CursusTitleState, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
 import type { SourceRead } from '@/lib/foreign/source';
 import { log } from '@/lib/log';
@@ -27,6 +29,11 @@ import { logChange, type ChangeDetail } from './changelog';
 //   échéance → 0) des titres suivis repris de Cursus, état actif | absent ; un titre absent du catalogue n'est jamais
 //   supprimé ni retiré du suivi d'office ; changement journalisé sur le titre (auteur vide). Les titres détenus
 //   (cursus.pub_titres_detenus, D09) sont lus directement : seulement contrôlés ici.
+// - personnes (D01, décision CV-10, cache de cursus.pub_salaries) : les fiches qui portent un matricule reprennent nom,
+//   poste, site suivi, sortie et (contrat v2) catégorie, entreprise, e-mail (src/lib/rules/people-sync.ts) ; une personne
+//   publiée encore inconnue est créée (présente ou sortie depuis moins d'un an) ; une personne retirée de la vue n'est jamais
+//   supprimée (état « absent », signal au QHSE). Journal sur la fiche (auteur vide, « Cursus » dans l'intitulé, jamais
+//   l'e-mail en clair) ; sync_runs ne porte que des nombres. Fiches sans matricule : « à rattacher » (src/server/people.ts).
 // - affectations (D04, cache de keystone.pub_affectations) : affectations finies depuis moins d'un an des salariés dont le
 //   matricule est connu ; une affectation disparue de la vue est retirée du cache (cache sans historique propre).
 
@@ -114,6 +121,47 @@ async function refreshTitles(db: Db): Promise<SyncResult> {
   return result;
 }
 
+/** Personnes de Vigie qui portent un matricule : cache de cursus.pub_salaries (D01) ; personnes publiées créées. */
+async function refreshPeople(db: Db): Promise<SyncResult> {
+  const read = await readCursusPeople(db);
+  if (!read.ok) return failed('people', read);
+  const byMatricule = new Map(read.rows.map((p) => [p.matricule, p]));
+  const result = { ...empty('people'), read: read.rows.length };
+  const now = today();
+  await db.transaction(async (tx) => {
+    const sites = await tx.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites);
+    const followed = new Set(sites.filter((x) => !x.archivedAt).map((x) => x.id));
+    const siteLabel = (id: string | null) => (id ? sites.find((x) => x.id === id)?.label ?? id : null);
+    const local = await tx.select({
+      id: t.people.id, matricule: t.people.matricule, name: t.people.name, job: t.people.job, siteId: t.people.siteId, leftOn: t.people.leftOn,
+      leftReason: t.people.leftReason, cursusState: t.people.cursusState, category: t.people.category, company: t.people.company, cursusEmail: t.people.cursusEmail,
+    }).from(t.people).where(isNotNull(t.people.matricule));
+    const known = new Set(local.map((p) => p.matricule!));
+    for (const p of local) {
+      const { patch, entries } = cursusPersonSync(p as CachedPerson, byMatricule.get(p.matricule!), followed, siteLabel);
+      if (!Object.keys(patch).length) continue;
+      await tx.update(t.people).set(patch).where(eq(t.people.id, p.id));
+      result.updated++;
+      if (patch.cursusState === 'absent') result.removed++;
+      for (const e of entries) {
+        await logChange(tx, { byId: null, entityType: 'person', entityId: p.id, action: e.action, summary: e.summary, reason: e.reason ?? null, details: e.details });
+      }
+    }
+    const fresh = read.rows.filter((r) => !known.has(r.matricule) && shouldCreate(r, now));
+    if (fresh.length) {
+      const [{ last }] = await tx.select({ last: max(t.people.sort) }).from(t.people);
+      let sort = (last ?? -1) + 1;
+      for (const r of fresh) {
+        const id = randomUUID();
+        await tx.insert(t.people).values({ id, matricule: r.matricule, sort: sort++, ...newCachedPerson(r, followed) });
+        await logChange(tx, { byId: null, entityType: 'person', entityId: id, action: 'create', summary: 'Fiche reprise de Cursus (référentiel du personnel)' });
+        result.added++;
+      }
+    }
+  });
+  return result;
+}
+
 /** Affectations des salariés rattachés par matricule, depuis keystone.pub_affectations. */
 async function refreshAssignments(db: Db): Promise<SyncResult> {
   const read = await readAssignments(db, addDays(today(), -ASSIGNMENT_HISTORY_DAYS));
@@ -151,7 +199,7 @@ async function refreshAssignments(db: Db): Promise<SyncResult> {
 }
 
 /** Source lue directement : disponibilité et nombre de lignes. */
-async function checkDirect(source: Exclude<SourceKey, 'sites' | 'assignments' | 'titles'>, read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
+async function checkDirect(source: Exclude<SourceKey, 'sites' | 'assignments' | 'titles' | 'people'>, read: Promise<SourceRead<unknown>>): Promise<SyncResult> {
   const r = await read;
   return r.ok ? { ...empty(source), read: r.rows.length } : failed(source, r);
 }
@@ -160,9 +208,12 @@ async function checkDirect(source: Exclude<SourceKey, 'sites' | 'assignments' | 
  * Rafraîchit les caches et contrôle les lectures directes ; jamais d'exception (erreur d'une source : ligne « error » de
  * sync_runs et journal du serveur, les autres sources continuent).
  */
-export async function refreshSharedReferences(db: Db): Promise<SyncResult[]> {
-  const steps: [SourceKey, () => Promise<SyncResult>][] = [
+export async function refreshSharedReferences(db: Db, opts: { only?: readonly SourceKey[] } = {}): Promise<SyncResult[]> {
+  const all: [SourceKey, () => Promise<SyncResult>][] = [
     ['sites', () => refreshSites(db)],
+    // D01 : avant les affectations (jointure par matricule des personnes créées).
+    ['people', () => refreshPeople(db)],
+    ['presences', () => checkDirect('presences', readPlannedPresences(db, today(), addDays(today(), 366)))],
     ['assignments', () => refreshAssignments(db)],
     ['projects', () => checkDirect('projects', readProjects(db))],
     ['suppliers', () => checkDirect('suppliers', readSuppliers(db))],
@@ -178,6 +229,7 @@ export async function refreshSharedReferences(db: Db): Promise<SyncResult[]> {
     ['validations', () => checkDirect('validations', readRegisterDocuments(db, QHSE_DEPARTMENTS).then((d) => (d.ok ? readDocumentValidations(db, d.rows.map((x) => x.id)) : d)))],
     ['docTypes', () => checkDirect('docTypes', readDocumentTypes(db))],
   ];
+  const steps = opts.only ? all.filter(([k]) => opts.only!.includes(k)) : all;
   const results: SyncResult[] = [];
   for (const [source, run] of steps) {
     const startedAt = new Date();

@@ -21,7 +21,8 @@ describe('moteur de la base de test', () => {
     const [[people], [activeSites], [events]] = await Promise.all([
       db.select({ n: count() }).from(t.people), db.select({ n: count() }).from(t.sites).where(isNull(t.sites.archivedAt)), db.select({ n: count() }).from(t.events),
     ]);
-    expect([people.n, activeSites.n, events.n]).toEqual([13, 2, 22]);
+    // D01 : 13 salariés du jeu, la fiche ancienne de [N. Legrand], sa fiche reprise de Cursus et 6 intérimaires ou extérieurs.
+    expect([people.n, activeSites.n, events.n]).toEqual([21, 2, 22]);
   });
   it('route de santé : 200 et moteur de la base, sans détail interne', async () => {
     const { GET } = await import('@/app/api/sante/route');

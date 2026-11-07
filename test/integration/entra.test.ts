@@ -129,6 +129,37 @@ describe('fiche à la connexion', () => {
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
     const [d] = await db.select().from(t.people).where(eq(t.people.entraObjectId, 'oid-d'));
     expect(d).toMatchObject({ siteId: 'site_a', email: 'd.martin@exemple.fr' });
+    // D01 (CV-10) : fiche créée sans matricule, donc « à rattacher » à un salarié de Cursus par le QHSE.
+    expect(created).toMatchObject({ matricule: null, cursusState: null });
+    const log = await db.select().from(t.changeLog).where(eq(t.changeLog.entityId, created.id));
+    expect(log.map((l) => l.summary)).toEqual(['Fiche créée à la première connexion (Microsoft Entra ID), à rattacher à Cursus']);
+  });
+
+  it('D01 : ordre du rapprochement — objectId, puis adresse publiée par Cursus, puis adresse de la fiche', async () => {
+    const { signInPerson } = await import('@/lib/auth/person');
+    const db = await getDb();
+    // Fiche tenue par Cursus (adresse publiée) et fiche ancienne qui porte la même adresse comme e-mail de fiche.
+    await db.insert(t.people).values([
+      { id: 'pc', name: 'C. Cursus', matricule: 'EMP-0101', cursusState: 'actif', cursusEmail: 'c.cursus@exemple.fr', siteId: 'site_a', sort: 10 },
+      { id: 'pd', name: 'C. Cursus (ancienne fiche)', email: 'c.cursus@exemple.fr', siteId: 'site_a', sort: 11 },
+      { id: 'pe', name: 'E. Sorti', matricule: 'EMP-0102', cursusState: 'actif', cursusEmail: 'e.sorti@exemple.fr', siteId: 'site_a', leftOn: '2026-09-01', sort: 12 },
+    ]);
+    const r = await signInPerson(db, { profile: profile({ oid: 'oid-c', email: 'C.Cursus@exemple.fr' }), role: 'Salarié', groupSites: [], today: TODAY, emailDomains: DOMAINS });
+    expect(r).toEqual({ ok: true, personId: 'pc', created: false, siteIds: ['site_a'] });
+    const [pc] = await db.select().from(t.people).where(eq(t.people.id, 'pc'));
+    // Adresse de la fiche non reprise : une autre fiche la porte (unicité).
+    expect(pc).toMatchObject({ entraObjectId: 'oid-c', email: null, lastRole: 'Salarié' });
+    expect((await db.select().from(t.changeLog).where(eq(t.changeLog.entityId, 'pc'))).map((l) => l.summary)).toEqual(['Fiche associée au compte Microsoft Entra ID (adresse publiée par Cursus)']);
+    const [pd] = await db.select().from(t.people).where(eq(t.people.id, 'pd'));
+    expect(pd.entraObjectId).toBeNull();
+    // Connexion suivante : par objectId.
+    expect(await signInPerson(db, { profile: profile({ oid: 'oid-c', email: 'c.cursus@exemple.fr' }), role: 'Salarié', groupSites: [], today: TODAY, emailDomains: DOMAINS }))
+      .toMatchObject({ ok: true, personId: 'pc' });
+    // Adresse publiée déjà associée à un autre compte, ou fiche sortie : refus.
+    expect(await signInPerson(db, { profile: profile({ oid: 'oid-c2', email: 'c.cursus@exemple.fr' }), role: 'Salarié', groupSites: [], today: TODAY, emailDomains: DOMAINS }))
+      .toMatchObject({ ok: false, motif: 'non-autorise', reason: expect.stringContaining('adresse publiée par Cursus') });
+    expect(await signInPerson(db, { profile: profile({ oid: 'oid-e', email: 'e.sorti@exemple.fr' }), role: 'Salarié', groupSites: [], today: TODAY, emailDomains: DOMAINS }))
+      .toMatchObject({ ok: false, motif: 'non-autorise', reason: expect.stringContaining('sortie') });
   });
 });
 

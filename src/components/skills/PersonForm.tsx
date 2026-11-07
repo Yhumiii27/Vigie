@@ -9,19 +9,19 @@ import { REASON_MAX } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
 import type { Person } from '@/lib/queries';
 import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
+import { CURSUS_PEOPLE_NOTICE, PERSON_CATEGORIES, type PersonCategory } from '@/lib/foreign/labels';
 
 type Props = {
-  person?: Person;
-  /** QUA-12 : version de la fiche à son ouverture (modification). */
+  /** Fiche modifiée (D01, décision CV-10 : aucune création dans Vigie, les personnes viennent de Cursus). */
+  person: Person;
+  /** QUA-12 : version de la fiche à son ouverture. */
   version?: string;
-  /** Sites actifs (seuls proposés pour un nouveau salarié ou un changement de site). */
+  /** Sites actifs (seuls proposés pour un changement de site d'une fiche ancienne sans matricule). */
   sites: readonly Option[];
   /** Sites archivés : le site actuel d'un salarié qui y est encore rattaché reste proposé (pas de changement implicite). */
   archivedSites: readonly Option[];
   /** Services déjà renseignés (suggestions). */
   services: readonly string[];
-  /** Site proposé pour un nouveau salarié (site sélectionné, ou le premier site). */
-  defaultSiteId: string;
   /** Date de référence (serveur). */
   today: string;
   onDone: () => void;
@@ -65,50 +65,81 @@ function LeaveSection({ person, today, onDone }: { person: Person; today: string
           <i className="ph ph-sign-out" style={{ fontSize: 13 }} aria-hidden />Déclarer la sortie
         </button>
       )}
-      {note('ph-plugs-connected', 'Saisie provisoire, le connecteur Cursus reprendra la date de sortie.')}
+      {note('ph-plugs-connected', 'Fiche ancienne sans matricule : à rattacher à un salarié de Cursus, qui tiendra ensuite la sortie.')}
     </div>
   );
 }
 
-/** Fiche salarié (saisie provisoire : Cursus deviendra la source de vérité des données personnelles). */
-export function PersonForm({ person, version, sites, archivedSites, services, defaultSiteId, today, onDone, onCancel }: Props) {
-  const siteId = person ? person.siteId ?? '' : defaultSiteId;
+/** Données de la fiche reprises de Cursus (D01) : affichées, jamais modifiées dans Vigie. */
+function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string }) {
+  const fact = (label: string, value: string | null | undefined) => (
+    <div style={{ display: 'grid', gap: 2 }}>
+      <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{label}</span>
+      <span style={{ fontSize: 12.5 }}>{value || '—'}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+        {fact('Nom', person.name)}
+        {fact('Matricule', person.matricule)}
+        {fact('Poste', person.job)}
+        {fact('Site de rattachement', siteLabel)}
+        {fact('Catégorie', person.category ? PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category : null)}
+        {person.company && fact('Agence ou entreprise', person.company)}
+        {fact('E-mail publié par Cursus', person.cursusEmail)}
+        {person.leftOn && fact("Sortie de l'effectif", `${fmtDate(person.leftOn)}${person.leftReason ? ` · ${person.leftReason}` : ''}`)}
+      </div>
+      {person.cursusState === 'absent' && note('ph-warning', 'Personne absente de la dernière lecture de Cursus : fiche conservée, à vérifier auprès du service RH.')}
+      {note('ph-plugs-connected', CURSUS_PEOPLE_NOTICE)}
+    </div>
+  );
+}
+
+/**
+ * Fiche salarié. Tenue par Cursus (matricule) : données de Cursus en lecture, attributs propres à Vigie modifiables (suivi
+ * dans la matrice, service). Fiche ancienne sans matricule : saisie gardée jusqu'au rattachement (vue « Personnel »).
+ */
+export function PersonForm({ person, version, sites, archivedSites, services, today, onDone, onCancel }: Props) {
+  const cursus = !!person.matricule;
+  const siteId = person.siteId ?? '';
   const current = siteId && !sites.some(([v]) => v === siteId) ? archivedSites.find(([v]) => v === siteId) ?? ([siteId, siteId] as const) : null;
   const siteOptions = current ? [...sites, current] : sites;
+  const siteLabel = siteOptions.find(([v]) => v === siteId)?.[1] ?? (siteId || 'Aucun site suivi');
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel={person ? 'Enregistrer' : 'Ajouter le salarié'} hidden={{ id: person?.id, version: person ? version : undefined }}>
-        <FormRow>
-          <Field name="name" label="Nom">
-            <Input name="name" defaultValue={person?.name} placeholder="Ex. [J. Dupont]" maxLength={80} autoFocus />
-          </Field>
-          <Field name="job" label="Poste">
-            <Input name="job" defaultValue={person?.job} placeholder="Ex. Monteur · atelier montage" maxLength={80} />
-          </Field>
-        </FormRow>
-        <FormRow>
-          <Field name="service" label="Service">
-            <Input name="service" list="vg-person-services" defaultValue={person?.service} placeholder="Ex. Atelier montage" maxLength={60} />
-            <datalist id="vg-person-services">{services.map((s) => <option key={s} value={s} />)}</datalist>
-          </Field>
-          <Field name="siteId" label="Site de rattachement">
-            <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : 'Choisir un site'} />
-          </Field>
-        </FormRow>
-        <FormRow>
-          <Field name="email" label="E-mail professionnel" hint="Rapproche la fiche du compte Microsoft à la première connexion.">
-            <Input name="email" type="email" defaultValue={person?.email ?? ''} placeholder="Ex. j.dupont@epc2i.fr" maxLength={254} autoComplete="off" />
-          </Field>
-          <Field name="matricule" label="Matricule" hint="Identifiant RH (Cursus, paie).">
-            <Input name="matricule" defaultValue={person?.matricule ?? ''} maxLength={40} autoComplete="off" />
-          </Field>
-        </FormRow>
-        <Checkbox name="inSkillsMatrix" label="Suivi dans la matrice des habilitations" defaultChecked={person ? person.inSkillsMatrix : true} />
-        {note('ph-plugs-connected', 'Saisie provisoire : le connecteur Cursus, propriétaire des données personnelles des salariés, alimentera cette fiche.')}
+      {cursus && <CursusFacts person={person} siteLabel={String(siteLabel)} />}
+      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer" hidden={{ id: person.id, version }}>
+        {!cursus && (
+          <>
+            <FormRow>
+              <Field name="name" label="Nom">
+                <Input name="name" defaultValue={person.name} placeholder="Ex. [J. Dupont]" maxLength={80} autoFocus />
+              </Field>
+              <Field name="job" label="Poste">
+                <Input name="job" defaultValue={person.job} placeholder="Ex. Monteur · atelier montage" maxLength={80} />
+              </Field>
+            </FormRow>
+            <FormRow>
+              <Field name="siteId" label="Site de rattachement">
+                <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : 'Choisir un site'} />
+              </Field>
+              <Field name="email" label="E-mail professionnel" hint="Rapproche la fiche du compte Microsoft à la première connexion.">
+                <Input name="email" type="email" defaultValue={person.email ?? ''} placeholder="Ex. j.dupont@epc2i.fr" maxLength={254} autoComplete="off" />
+              </Field>
+            </FormRow>
+          </>
+        )}
+        <Field name="service" label="Service" hint="Attribut propre à Vigie (filtre de la matrice).">
+          <Input name="service" list="vg-person-services" defaultValue={person.service} placeholder="Ex. Atelier montage" maxLength={60} />
+          <datalist id="vg-person-services">{services.map((s) => <option key={s} value={s} />)}</datalist>
+        </Field>
+        <Checkbox name="inSkillsMatrix" label="Suivi dans la matrice des habilitations" defaultChecked={person.inSkillsMatrix} />
+        {!cursus && note('ph-link-break', 'Fiche sans matricule Cursus : le service QHSE la rattache à un salarié de Cursus (vue « Personnel »), qui tiendra ensuite nom, poste, site et sortie.')}
       </ActionForm>
-      {person && <LeaveSection person={person} today={today} onDone={onDone} />}
+      {!cursus && <LeaveSection person={person} today={today} onDone={onDone} />}
       {/* Historique de la fiche (HAB-03), chargé à l'ouverture. */}
-      {person && <LazyChangeLog entity="person" id={person.id} title="Historique de la fiche" />}
+      <LazyChangeLog entity="person" id={person.id} title="Historique de la fiche" />
     </div>
   );
 }
