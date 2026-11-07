@@ -34,11 +34,11 @@ describe('lapseFor : manque du titre pour une affectation', () => {
 });
 
 describe('heldState', () => {
-  it('même règle que la matrice : expiré, sous 60 jours, valide', () => {
+  it('même règle que la matrice : expiré, sous 90 jours (C-12), valide', () => {
     expect(heldState(null, NOW)).toBe('v');
     expect(heldState('2026-10-08', NOW)).toBe('x');
-    expect(heldState('2026-12-08', NOW)).toBe('s');
-    expect(heldState('2026-12-09', NOW)).toBe('v');
+    expect(heldState('2027-01-07', NOW)).toBe('s');
+    expect(heldState('2027-01-08', NOW)).toBe('v');
   });
 });
 
@@ -63,10 +63,10 @@ describe('renewalDue : échéance proposée pour le recyclage à prévoir', () =
 });
 
 describe('coversNeed : la formation règle-t-elle le besoin ?', () => {
-  it('valide au-delà de 60 jours et couvrant les affectations à venir', () => {
+  it('valide au-delà de 90 jours et couvrant les affectations à venir', () => {
     expect(coversNeed('2027-10-08', [], NOW)).toBe(true);
     expect(coversNeed(null, [], NOW)).toBe(true); // titre sans échéance
-    expect(coversNeed('2026-11-30', [], NOW)).toBe(false); // expire sous 60 jours
+    expect(coversNeed('2026-11-30', [], NOW)).toBe(false); // expire sous 90 jours
     expect(coversNeed('2027-06-01', [span('2027-05-25', '2027-07-01')], NOW)).toBe(false);
     expect(coversNeed('2027-06-01', [span('2027-05-01', '2027-05-10')], NOW)).toBe(true);
   });

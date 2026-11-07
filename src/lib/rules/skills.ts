@@ -1,5 +1,6 @@
 import { addDays, addMonths, daysBetween, fmtDate, monthName } from '@/lib/dates';
-import { SKILL_SOON_DAYS, type SkillState } from '@/lib/domain';
+import type { SkillState } from '@/lib/domain';
+import { SKILL_SOON_DAYS } from '@/lib/horizons';
 
 // Règles métier des habilitations, partagées par le serveur (chargement, actions) et les formulaires.
 // L'échéance d'un titre est son dernier jour de validité (cf. skillState : expiré quand expiresOn < aujourd'hui).
@@ -42,7 +43,7 @@ export function heldState(expiresOn: string | null, now: string): SkillState {
 
 /**
  * Échéance du recyclage à prévoir (formation gérée par le service RH, hors actions QSE), null quand il n'y a rien à planifier.
- * À planifier : titre requis expiré, expirant sous 60 jours, jamais suivi, ou valide mais expirant avant la fin
+ * À planifier : titre requis expiré, expirant sous 90 jours, jamais suivi, ou valide mais expirant avant la fin
  * d'une affectation Keystone à venir.
  * - la veille du début de la première affectation Keystone à venir que le titre ne couvre pas (`upcoming` trié par date de début) ;
  * - sinon : l'échéance du titre, ou dans 30 jours pour un titre jamais suivi (formation initiale) ;
@@ -80,7 +81,7 @@ export function heldTitleState(required: boolean, held: HeldFacts | undefined, n
   return { state: heldState(usable, now), expiresOn: usable };
 }
 
-/** Une formation d'échéance `expiresOn` règle-t-elle le besoin (titre valide au-delà de 60 jours et couvrant les affectations) ? */
+/** Une formation d'échéance `expiresOn` règle-t-elle le besoin (titre valide au-delà de 90 jours et couvrant les affectations) ? */
 export function coversNeed(expiresOn: string | null, upcoming: readonly Span[], now: string) {
   return renewalDue(heldState(expiresOn, now), expiresOn, upcoming, now) === null;
 }
@@ -94,7 +95,7 @@ export type ForecastItem = {
   personId: string; person: string; titleId: string; title: string;
   /** Échéance du titre (dernier jour de validité) ; null : jamais suivi. */
   expiresOn: string | null;
-  /** État actuel du titre requis (r jamais suivi, x expiré, p suspendu, s expire sous 60 j, v valide). */
+  /** État actuel du titre requis (r jamais suivi, x expiré, p suspendu, s expire sous 90 j, v valide). */
   state: SkillState;
 };
 export type ForecastMonth = { month: string; items: ForecastItem[] };
@@ -210,7 +211,7 @@ export function skillLinkTarget(f: SkillLinkFacts): SkillLinkResult {
 
 /**
  * Indicateurs de compétences du dossier de revue (HAB-18, ISO 9001 §7.2 et §9.3.2 ; ISO 45001 §7.2), calculés, jamais
- * stockés : taux de conformité (titres requis valides, y compris expirant sous 60 jours, sur l'ensemble des titres requis
+ * stockés : taux de conformité (titres requis valides, y compris expirant sous 90 jours, sur l'ensemble des titres requis
  * lus), titres obtenus sur les 12 mois précédant `asOf` (dernière formation de chaque case d'après Cursus, tous titres),
  * recyclages en retard (titres requis expirés). L'efficacité des formations (évaluation à froid) est tenue par Cursus
  * (non publiée) : plus comptée dans Vigie (décision CV-01 du 04/11/2026). Cases d'état inconnu (Cursus indisponible) exclues.

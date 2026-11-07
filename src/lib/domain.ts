@@ -1,5 +1,6 @@
 // Référentiels métier partagés (serveur et client).
 
+import { SKILL_SOON_DAYS } from './horizons';
 import { ACTION_AVANCEMENTS, OPEN_AVANCEMENTS, type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type SourceKey, type VerifyMethod } from './action-keys';
 
 export type Tone = 'danger' | 'warn' | 'ok' | 'neutral' | 'accent';
@@ -478,7 +479,7 @@ export const requirementReviewMonths = (r: { reviewMonths?: number | null }) => 
 export type SkillState = 'v' | 's' | 'x' | 'r' | 'p' | 'u' | 'n';
 export const SKILL_STATES: Record<SkillState, { label: string; icon: string; bg: string; fg: string; border: string }> = {
   v: { label: 'Valide', icon: 'ph-check', bg: TONE.ok.bg, fg: TONE.ok.fg, border: '1px solid transparent' },
-  s: { label: 'Expire sous 60 jours', icon: 'ph-clock', bg: TONE.warn.bg, fg: TONE.warn.fg, border: '1px solid transparent' },
+  s: { label: `Expire sous ${SKILL_SOON_DAYS} jours`, icon: 'ph-clock', bg: TONE.warn.bg, fg: TONE.warn.fg, border: '1px solid transparent' },
   x: { label: 'Expiré', icon: 'ph-x', bg: TONE.danger.bg, fg: TONE.danger.fg, border: '1px solid transparent' },
   r: { label: 'Requis, jamais suivi', icon: 'ph-warning', bg: 'transparent', fg: TONE.danger.dot, border: `1px dashed ${TONE.danger.dot}` },
   // D09 (lot 2 de M-02) : titre détenu mais inutilisable d'après Cursus — prérequis manquant (prerequis_manquant, CACES d'une
@@ -488,7 +489,6 @@ export const SKILL_STATES: Record<SkillState, { label: string; icon: string; bg:
   u: { label: 'Donnée indisponible', icon: 'ph-question', bg: 'transparent', fg: 'var(--color-neutral-400)', border: '1px dashed var(--color-neutral-600)' },
   n: { label: 'Non requis', icon: 'ph-minus', bg: 'transparent', fg: 'var(--color-neutral-700)', border: '1px solid transparent' },
 };
-export const SKILL_SOON_DAYS = 60;
 
 /** Filtres de la matrice des habilitations. */
 export const SKILL_FILTERS = [

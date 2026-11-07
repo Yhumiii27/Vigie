@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
+import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import { CERT_TONE_LABELS, certDot, type CertTone } from '@/lib/rules/audits';
 import { Dot, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
@@ -573,7 +574,7 @@ export function DossierView({ page, role, notice }: {
         <Section n={n()} title="Ressources et compétences">
           {d.skills.counts && (
             <p className="rd-summary">
-              {d.skills.counts.people} salarié{d.skills.counts.people > 1 ? 's' : ''} suivi{d.skills.counts.people > 1 ? 's' : ''} dans la <Ref href={d.skills.href} role={role}>matrice</Ref> · {d.skills.counts.expired} titre{d.skills.counts.expired > 1 ? 's' : ''} expiré{d.skills.counts.expired > 1 ? 's' : ''} · {d.skills.counts.soon} expirant sous 60 jours · {d.skills.counts.never} requis jamais suivi{d.skills.counts.never > 1 ? 's' : ''}
+              {d.skills.counts.people} salarié{d.skills.counts.people > 1 ? 's' : ''} suivi{d.skills.counts.people > 1 ? 's' : ''} dans la <Ref href={d.skills.href} role={role}>matrice</Ref> · {d.skills.counts.expired} titre{d.skills.counts.expired > 1 ? 's' : ''} expiré{d.skills.counts.expired > 1 ? 's' : ''} · {d.skills.counts.soon} expirant sous {SKILL_SOON_DAYS} jours · {d.skills.counts.never} requis jamais suivi{d.skills.counts.never > 1 ? 's' : ''}
             </p>
           )}
           {/* HAB-18 : indicateurs de compétences (absents des dossiers figés avant le paquet 13). */}

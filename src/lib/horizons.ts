@@ -11,6 +11,11 @@ export const TODO_HORIZON_DAYS = 15;
 export const CONTROL_HORIZON_DAYS = 30;
 /** Certificat : fin de validité signalée 30 jours avant (AUD-08). */
 export const CERT_SOON_DAYS = 30;
+/**
+ * Habilitations : titre « expire bientôt » à 90 jours de sa fin (décision C-12 du 07/11/2026, D19 de M-02 : même horizon
+ * que Cursus ; aucun paramètre publié par Cursus à ce jour, `pub_parametres` n'existe pas).
+ */
+export const SKILL_SOON_DAYS = 90;
 /** Panneau de notifications : dépassements + échéances des 7 prochains jours. */
 export const NOTIFY_HORIZON_DAYS = 7;
 /** Groupe « Cette semaine » de la page À faire. */

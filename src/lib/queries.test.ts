@@ -84,11 +84,11 @@ describe('skillState : case de la matrice des habilitations', () => {
     expect(skillState(true, null, false, NOW)).toBe('r');
     expect(skillState(true, null, true, NOW)).toBe('v');
   });
-  it('l’échéance est le dernier jour de validité ; « expire bientôt » jusqu’à 60 jours', () => {
+  it('l’échéance est le dernier jour de validité ; « expire bientôt » jusqu’à 90 jours (C-12)', () => {
     expect(skillState(true, '2026-10-08', true, NOW)).toBe('x');
     expect(skillState(true, NOW, true, NOW)).toBe('s');
-    expect(skillState(true, '2026-12-08', true, NOW)).toBe('s'); // J+60
-    expect(skillState(true, '2026-12-09', true, NOW)).toBe('v'); // J+61
+    expect(skillState(true, '2027-01-07', true, NOW)).toBe('s'); // J+90
+    expect(skillState(true, '2027-01-08', true, NOW)).toBe('v'); // J+91
   });
 });
 
