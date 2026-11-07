@@ -83,7 +83,7 @@ describe('QUA-12 : habilitations', () => {
     const p = row.person;
     expect(matrix.versions.person[p.id]).toBe(await entityVersion(db, 'person', p.id));
     await staleCase('person', p.id, savePerson, { id: p.id, name: p.name, job: p.job ?? '', service: p.service ?? '', siteId: p.siteId ?? '', inSkillsMatrix: 'on' },
-      [{ job: 'Fonction A' }, { job: 'Fonction B' }]);
+      [{ service: 'Service A' }, { service: 'Service B' }]);
 
     // Titre suivi : seuls les attributs propres au QHSE se modifient (CV-03, lot 2 de M-02) ; formations tenues par Cursus.
     const title = matrix.titles.find((x) => !x.firstAid && !x.awareness)!;

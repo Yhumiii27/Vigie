@@ -150,6 +150,11 @@
       "when": 1793894471104,
       "sql": "e959635d1bf5bc2f0238e4eaeb4a5e543f2beca08a138b813d4bc96c46de1696",
       "snapshot": "c37d278b82e81c939ae6943fdc7cfdde97d920f1bb4393d4de687780a07c5719"
+    },
+    "0030_convergence_m02_people": {
+      "when": 1794045870654,
+      "sql": "bca8cf7b6d22c52ece121961cf83303a05d89c8d7e8ad1d4bbaadb138794b0bd",
+      "snapshot": "0ef776cfab8da76e993003f13d79b69cd5f4ee828016799e05ad8e48aee5d1a0"
     }
   }
 }

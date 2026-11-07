@@ -12,6 +12,9 @@ export const SOURCES = {
   fleet: { tool: 'Keystone', label: 'Parc installé', view: 'keystone.pub_parc_machines', cache: false },
   titles: { tool: 'Cursus', label: 'Titres', view: 'cursus.pub_titres', cache: true },
   heldTitles: { tool: 'Cursus', label: 'Titres détenus', view: 'cursus.pub_titres_detenus', cache: false },
+  // D01 et PRV-25 (décision CV-10) : salariés, intérimaires et extérieurs (cache people) ; présences prévues (poste de garde).
+  people: { tool: 'Cursus', label: 'Personnes', view: 'cursus.pub_salaries', cache: true },
+  presences: { tool: 'Cursus', label: 'Présences prévues', view: 'cursus.pub_presences_prevues', cache: false },
   documents: { tool: 'Codex', label: 'Documents', view: 'codex.pub_documents', cache: false },
   revisions: { tool: 'Codex', label: 'Révisions des documents', view: 'codex.pub_revisions_document', cache: false },
   validations: { tool: 'Codex', label: 'Circuits de validation', view: 'codex.pub_validations', cache: false },
@@ -34,6 +37,24 @@ export const CURSUS_TITLE_STATES = {
   absent: { label: 'Absent du catalogue de Cursus', tone: 'warn' },
 } as const;
 export type CursusTitleState = keyof typeof CURSUS_TITLE_STATES;
+
+/** État d'une personne de Vigie dans cursus.pub_salaries au dernier rafraîchissement (people.cursus_state, D01). */
+export const CURSUS_PERSON_STATES = {
+  actif: { label: 'Publiée par Cursus', tone: 'ok' },
+  absent: { label: 'Absente de Cursus', tone: 'warn' },
+} as const;
+export type CursusPersonState = keyof typeof CURSUS_PERSON_STATES;
+
+/** Catégorie d'une personne publiée par Cursus (people.category ; colonne categorie du contrat D01 v2, décision CV-10). */
+export const PERSON_CATEGORIES = {
+  salarie: { label: 'Salarié' },
+  interimaire: { label: 'Intérimaire' },
+  exterieur: { label: 'Salarié d’une entreprise extérieure' },
+} as const;
+export type PersonCategory = keyof typeof PERSON_CATEGORIES;
+
+/** Mention des fiches de personnes, tenues par Cursus (D01, décision CV-10 du 03/11/2026). */
+export const CURSUS_PEOPLE_NOTICE = 'Personnes tenues par Cursus (RH), intérimaires et salariés d’entreprises extérieures compris : nom, poste, site, sortie, catégorie, entreprise et e-mail se saisissent dans Cursus ; Vigie les reprend.';
 
 /** Mention des données de l'écran Habilitations, tenues par Cursus (décision CV-01 du 04/11/2026). */
 export const CURSUS_HELD_NOTICE = 'Données tenues par Cursus (RH) : formations, habilitations, sessions et attestations se saisissent dans Cursus ; Vigie les consulte.';

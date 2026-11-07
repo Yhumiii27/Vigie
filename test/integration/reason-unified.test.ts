@@ -64,16 +64,16 @@ describe('restaurations et réintégration avec motif', () => {
     expect(await restoreContractor({}, form({ id: 'EE-007', reason: 'Encore' }))).toEqual({ error: "Cette entreprise n'est pas archivée." });
   });
 
-  it('salarié : sortie (motif commun) puis réintégration avec motif, site contrôlé', async () => {
+  it('salarié (fiche ancienne sans matricule, D01) : sortie (motif commun) puis réintégration avec motif, site contrôlé', async () => {
     actAs('Animateur QHSE', 'site_a');
-    expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: '' }))).toMatchObject({ fieldErrors: { leftReason: 'Motif obligatoire.' } });
-    expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'w'.repeat(300) }))).toEqual({ ok: true, id: 'mgirard' });
-    expect(await reinstatePerson({}, form({ id: 'mgirard', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
+    expect(await setPersonLeft({}, form({ id: 'nlegrand', leftOn: '2026-10-09', leftReason: '' }))).toMatchObject({ fieldErrors: { leftReason: 'Motif obligatoire.' } });
+    expect(await setPersonLeft({}, form({ id: 'nlegrand', leftOn: '2026-10-09', leftReason: 'w'.repeat(300) }))).toEqual({ ok: true, id: 'nlegrand' });
+    expect(await reinstatePerson({}, form({ id: 'nlegrand', reason: '' }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     actAs('Animateur QHSE', 'site_b');
-    expect((await reinstatePerson({}, form({ id: 'mgirard', reason: 'Retour' }))).error).toMatch(/autre site/);
+    expect((await reinstatePerson({}, form({ id: 'nlegrand', reason: 'Retour' }))).error).toMatch(/autre site/);
     actAs('Animateur QHSE', 'site_a');
-    expect(await reinstatePerson({}, form({ id: 'mgirard', reason: 'Sortie saisie par erreur' }))).toEqual({ ok: true, id: 'mgirard' });
-    expect(await lastLog('person', 'mgirard')).toMatchObject({ action: 'restore', reason: 'Sortie saisie par erreur' });
+    expect(await reinstatePerson({}, form({ id: 'nlegrand', reason: 'Sortie saisie par erreur' }))).toEqual({ ok: true, id: 'nlegrand' });
+    expect(await lastLog('person', 'nlegrand')).toMatchObject({ action: 'restore', reason: 'Sortie saisie par erreur' });
   });
 
   it('report d’une revue : motif obligatoire, inscrit au journal de la revue', async () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useOptimistic, useRef, useState, useTransition, type KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Dialog, DialogButton } from '@/components/Dialog';
+import { Dialog } from '@/components/Dialog';
 import { Input, Select } from '@/components/form';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { Icon } from '@/components/ui';
@@ -17,9 +17,9 @@ import { reinstatePerson, setRequirement } from '@/server/skills';
 import { ArchiveTable, Fact, PlannedMark, RenewalLink, SkillDot, lcfirst, period, plannedLabel, renewalNoun, stateDetail, validityLabel } from './common';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { PersonForm } from './PersonForm';
+import { CursusRefreshButton } from './PeoplePanel';
 import { lapseFor } from '@/lib/rules/skills';
 import { TitlesButton } from './TitlesManager';
-import { TipButton } from '@/components/Tip';
 
 /** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
 type Opts = Pick<FormOptions, 'sites'>;
@@ -48,7 +48,6 @@ type Props = {
   catalog: { choices: readonly Option[]; message: string | null };
   options: Opts;
   today: string;
-  defaultSiteId: string;
   /** Lien profond ?salarie=…&titre=… : case ouverte (titre donné) ou ligne mise en évidence. */
   initialSel?: { personId: string; titleId?: string };
   /** URL rétablie à la fermeture d'une case ouverte par lien profond. */
@@ -107,12 +106,6 @@ function cellTip(c: SkillCell) {
   return `${c.title.label} — ${s.label}${c.expiresOn && c.state !== 'n' ? ` · échéance ${fmtDate(c.expiresOn)}` : ''}${action}`;
 }
 
-/** Bouton désactivé d'une fonction à venir (l'infobulle reste lisible sur le bouton inactif). */
-function Soon({ label, icon, tip }: { label: string; icon: string; tip: string }) {
-  return (
-    <TipButton className="btn btn-secondary vg-btn-sm" disabled tip={tip}><Icon name={icon} size={13} />{label}</TipButton>
-  );
-}
 
 /** Attestations jointes dans Vigie avant la bascule vers Cursus (migration 0025) : liens, consultation seule. */
 function LegacyFiles({ files }: { files: SkillCell['files'] }) {
@@ -264,7 +257,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 }
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
-export function SkillMatrix({ titles, versions, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, catalog, options, today, defaultSiteId, initialSel, closeHref, siteLabels = null }: Props) {
+export function SkillMatrix({ titles, versions, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, catalog, options, today, initialSel, closeHref, siteLabels = null }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -362,13 +355,9 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
         </span>
         {!self && (
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <Soon label="Importer le personnel (Lucca · CSV)" icon="ph-upload-simple" tip="Import à venir" />
+            {/* D01 (décision CV-10) : personnes lues dans Cursus, plus de création ni d'import dans Vigie (IMP-02 caduc). */}
+            {canManageTitles && <CursusRefreshButton />}
             <TitlesButton titles={titles} archivedTitles={archivedTitles} archive={archive} canManage={canManageTitles} versions={versions?.title} catalog={catalog} />
-            {canManage && (
-              <DialogButton label="Ajouter un salarié" icon="ph-user-plus" title="Ajouter un salarié" kicker="Personnel" width={540}>
-                {(close) => <PersonForm sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={close} onCancel={close} />}
-              </DialogButton>
-            )}
           </span>
         )}
       </div>
@@ -488,7 +477,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
       </Dialog>
 
       <Dialog open={!!editPerson} onClose={closeEdit} title={editPerson ? `Modifier ${editPerson.name}` : ''} kicker="Personnel" width={540}>
-        {editPerson && <PersonForm key={editPerson.id} person={editPerson} version={versions?.person[editPerson.id]} sites={options.sites} archivedSites={archivedSites} services={services} defaultSiteId={defaultSiteId} today={today} onDone={closeEdit} onCancel={closeEdit} />}
+        {editPerson && <PersonForm key={editPerson.id} person={editPerson} version={versions?.person[editPerson.id]} sites={options.sites} archivedSites={archivedSites} services={services} today={today} onDone={closeEdit} onCancel={closeEdit} />}
       </Dialog>
     </>
   );

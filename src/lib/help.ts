@@ -52,6 +52,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Filtrez les plans et les permis par phase, entreprise extérieure ou projet Keystone.',
       'Le nom de l’entreprise, dans la fiche d’un plan ou d’un permis, ouvre la fiche de l’entreprise.',
       'Un plan écrit est obligatoire dès 400 h de travaux sur 12 mois ou pour des travaux dangereux (dès la première minute sur un site Seveso).',
+      '« Poste de garde » : arrivées et départs à venir (1 à 30 jours) des intérimaires et extérieurs déclarés dans Cursus et validés par les RH, avec le plan ou le permis de la même entreprise ; liste imprimable.',
     ],
   },
   risks: {
@@ -72,6 +73,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Formations, habilitations, sessions et attestations se saisissent dans Cursus ; un nouveau titre se demande au service RH.',
       '« Titres suivis » (service QHSE et direction) : suivre un titre du catalogue de Cursus, ne plus le suivre, régler l’ordre des colonnes.',
       'Sur téléphone, « Mon espace » (menu) rassemble vos actions, vos habilitations et vos signalements.',
+      'Les personnes viennent de Cursus (intérimaires et extérieurs compris) : nom, poste, site et sortie y sont saisis ; Vigie garde le service et le suivi dans la matrice. « Personnel (Cursus) » (QHSE) : fiches anciennes à rattacher, fiches absentes de Cursus, « Actualiser depuis Cursus ».',
     ],
   },
   watch: {

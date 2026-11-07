@@ -60,13 +60,11 @@ describe('démonstration', () => {
     cookieJar.delete('vigie_site');
   });
 
-  it('fiche personne : identifiant généré, homonyme admis, e-mail et matricule uniques', async () => {
+  it('fiche personne : aucune création dans Vigie (D01, CV-10) ; e-mail unique d’une fiche ancienne', async () => {
     const { savePerson } = await import('@/server/skills');
     const base = { name: '[T. Nguyen]', job: 'Monteur', service: 'Atelier montage', siteId: 'site_a' };
-    const created = await savePerson({}, form({ ...base, email: 'Autre.Nguyen@epc2i.example', matricule: 'M-001' }));
-    expect(created.ok).toBe(true);
-    expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(await savePerson({}, form({ ...base, email: 'autre.nguyen@EPC2I.example' }))).toMatchObject({ fieldErrors: { email: expect.any(String) } });
-    expect(await savePerson({}, form({ ...base, matricule: 'M-001' }))).toMatchObject({ fieldErrors: { matricule: expect.any(String) } });
+    expect(await savePerson({}, form({ ...base, email: 'Autre.Nguyen@epc2i.example', matricule: 'M-001' }))).toEqual({ error: expect.stringContaining('se créent dans Cursus') });
+    // Fiche ancienne sans matricule : e-mail encore modifiable, unique sans tenir compte de la casse.
+    expect(await savePerson({}, form({ ...base, id: 'nlegrand', name: '[N. Legrand]', email: 'T.NGUYEN@epc2i.example' }))).toMatchObject({ fieldErrors: { email: expect.any(String) } });
   });
 });

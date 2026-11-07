@@ -5,13 +5,14 @@ migration `0024_convergence_m02`, voir § 7) ; le 04/11/2026 : **lot 2 développ
 CV-01 ; migration `0025_convergence_m02_titles`, voir § 7 bis), décisions CV-07 et CV-08 (§ 6) ; le 05/11/2026 : **lot 3 développé**
 (D13 : numéro `EV-…`, fonction `vigie.pub_signaler_avancement_nc` et boîte de réception ; migration `0026_convergence_m02_nc_inbox`,
 voir § 7 ter) ; le 05/11/2026 aussi : **lot 4 développé** (D10 : documents lus dans Codex, décision CV-05 « avancer D10 » ;
-migration `0028_convergence_m02_documents`, voir § 7 quater). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
+migration `0028_convergence_m02_documents`, voir § 7 quater) ; le 07/11/2026 : **D01 et PRV-25 développés** (personnes lues dans
+Cursus, liste du poste de garde ; décision CV-10 ; migration `0030_convergence_m02_people`, voir § 7 sexies). Rien n'est encore demandé aux autres outils. Les demandes du § 5 sont des
 textes prêts à coller, à valider par Guillaume ; les questions du § 6 attendent le responsable produit, le service QHSE
 ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
 lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
-03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4).
+03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4) · 7 quinquies. Réalisation du 05/11/2026 (lot 5) · 7 sexies. Réalisation du 07/11/2026 (D01, PRV-25).
 
 ## 1. Objet, sources et état
 
@@ -73,7 +74,7 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 
 | Déc. | Plan de Matrix (15/10) | Ce qui a changé | Reste valable | État |
 |---|---|---|---|---|
-| D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | à faire, lot 1 |
+| D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | **fait le 07/11** (§ 7 sexies ; CV-10 tranché ; colonnes v2 et vue des présences à créer par Cursus) |
 | D02 Projets | `keystone_projects` supprimée, `keystone_project_code` dans 4 tables ; 3,5 j | colonnes de code déjà posées (0008) mais jamais saisies ; 5ᵉ table (études) déjà en code ; la veille lit une date de livraison absente de `pub_projets` | lecture directe de `pub_projets` | **fait le 03/11** (veille : nombre saisi, CV-11 ouverte) |
 | D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
 | D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | **fait le 04/11** (§ 7 bis ; C-01 et CV-03 par défaut) |
@@ -193,6 +194,7 @@ démonstration · charge révisée. Les références `HAB-…`, `DOC-…` renvoi
   matricule passe par le rattachement manuel ou par `matrix.pub_correspondances` (CV-10).
 - **Démonstration.** Substitut `cursus.pub_salaries` avec les personnes de démonstration (matricules fictifs `EMP-9…`).
 - **Charge : 3,5 j** (plan : 3 j ; données personnelles, espace salarié et première connexion à revoir).
+- **Réalisé le 07/11/2026** (§ 7 sexies) : cache par matricule (contrat v1 lu seul tant que les colonnes v2 manquent), création des personnes publiées, aucune création dans Vigie, rattachement des fiches anciennes par le QHSE, première connexion rapprochée d'abord par l'adresse publiée par Cursus, liste du poste de garde (PRV-25). Service d'après l'unité (`pub_organigramme`) : non fait.
 
 ### 3.3 D02 · Projets (plan `:187`)
 
@@ -842,3 +844,25 @@ techniques » à `/modifications-techniques`, gestion des changements MC-n incha
 | Échéances | `ecr-decision`, `eco-approbation`, `eco-dispositions`, `eco-effectivite` ; refus et attentes de Codex `codex-refus` / `codex-attente` | — |
 
 Choix pris par défaut, à confirmer : tableau « Convergence M-02, lot 5 » du § 19 de `docs/RESTE-A-FAIRE.md`.
+
+## 7 sexies. Réalisation du 07/11/2026 (D01 et PRV-25 ; migration `0030_convergence_m02_people`)
+
+Décision CV-10 du 03/11/2026 (tranchée) : aucune fiche de personne propre à Vigie ; toutes viennent de Cursus,
+intérimaires (`I…`) et salariés d'entreprises extérieures (`E…`) compris ; Vigie produit la liste du poste de garde.
+
+| Élément | Fait | Attend |
+|---|---|---|
+| Lectures | `cursus.pub_salaries` déclarée au **contrat D01 v2** (`src/db/foreign.ts`, `test/fixtures/contracts/cursus.pub_salaries.json` : colonnes v1 de `0002_partage.sql` de Cursus puis `categorie`, `entreprise`, `email` du contrat de Matrix `cursus.pub_salaries-d01-v2.json`) ; `readCursusPeople` (`src/lib/foreign/cursus.ts`) sonde les colonnes présentes de la vue (`viewColumns`, catalogue `pg_attribute`) à chaque lecture et ne lit une colonne v2 que si elle existe : une vue au contrat v1 reste une source **disponible** (valeurs de Vigie gardées). `cursus.pub_presences_prevues` (contrat de Matrix, 9 colonnes) lue par `readPlannedPresences` ; vue absente = « source indisponible ». Substituts de démonstration (`demoCursusPeople`, `demoPresences` de `src/db/seeds/foreign.ts`), vides en PGlite hors démonstration | Cursus sur le serveur commun ; colonnes v2 et vue des présences créées par Cursus et publiées par Matrix ; liens de lecture de `vigie_app` (§ 5.1) |
+| Cache des personnes | étape « Personnes » de `refreshSharedReferences` (avant les affectations) : fiche de même matricule mise à jour (nom, poste, site suivi de même code sinon aucun, sortie avec « Sortie enregistrée dans Cursus », catégorie, entreprise, `cursus_email`) ; personne publiée inconnue créée (présente ou sortie depuis moins d'un an) ; personne retirée de la vue gardée, `cursus_state = 'absent'` ; règles pures `src/lib/rules/people-sync.ts` ; journal `person` sans auteur (« Cursus » dans l'intitulé, e-mail jamais en clair, première lecture des colonnes v2 sans entrée) ; `sync_runs` : nombres seulement | — |
+| Saisie retirée | création d'une fiche (`savePerson` sans identifiant refusé, « Ajouter un salarié » retiré), import Lucca (IMP-02 caduc) ; fiche tenue par Cursus : seuls le service et le suivi dans la matrice se modifient ; sortie et réintégration refusées (elles viennent de Cursus) | — |
+| Fiches anciennes | fiche sans matricule (saisie avant D01 ou créée à la première connexion Entra) gardée, « à rattacher » : vue `/habilitations?vue=personnel` (QHSE et direction), `attachPerson` (`src/server/people.ts`, motif, site de la fiche, journal des deux fiches) ; matricule déjà porté refusé, sauf par la fiche que le rafraîchissement avait créée sans historique propre (sortie, `replaced_by_id`, jamais supprimée) | — |
+| Première connexion | `src/lib/auth/person.ts` : objectId, puis adresse publiée par Cursus (`people.cursus_email`), puis adresse de la fiche ; sans fiche : création sans matricule (« à rattacher ») ; refus « Compte Microsoft non rattaché » inchangé | colonne `email` publiée (v2) |
+| Écrans | « Actualiser depuis Cursus » (Habilitations, QHSE et direction, `refreshFromCursus`) ; fiche salarié : données de Cursus en lecture ; données personnelles SEC-13 : origine (Cursus ou Vigie) de chaque donnée | — |
+| PRV-25 | vue `/prevention?vue=poste-de-garde&horizon=` et impression `/prevention/poste-de-garde/imprimer` : arrivées et départs validés des 1, 7 (défaut), 14 ou 30 prochains jours, annulées à part, nom d'après le cache (« matricule inconnu »), plan ou permis de la même entreprise sur le même site aux dates recoupées (`src/lib/rules/gate-house.ts`) ; lecteurs : QHSE, direction, encadrement | accueil sécurité (C-13) |
+| Échéances | `personne-a-rattacher\|<id>`, `cursus-personne-absente\|<id>` au responsable QHSE du site, `cursus-personnes-indisponible` (dernier passage en échec) ; QHSE et direction seulement ; `test/fixtures/todo-golden.json` réécrit (+1 échéance pour le QHSE et la direction : la fiche ancienne du jeu) | — |
+| Tests | `src/lib/rules/people-sync.test.ts`, `gate-house.test.ts`, `test/integration/cursus-people.test.ts` (vue v1 et v2, absente, indisponible, création refusée, rattachement, échéances, poste de garde par rôle et par site), `test/integration/entra.test.ts` (ordre du rapprochement), `test/e2e/employee-payload.test.ts`, Playwright `poste-de-garde.spec.ts`, `habilitations.spec.ts`, axe | recette sur le serveur commun |
+
+Choix pris par défaut, à confirmer : tableau « Convergence M-02, D01 et PRV-25 » du § 19 de `docs/RESTE-A-FAIRE.md`
+(création « à rattacher » à la première connexion, lecteurs et horizon de la liste, rapprochement d'un plan ou d'un permis,
+fiches anciennes gardées et rattachées à la main).
+

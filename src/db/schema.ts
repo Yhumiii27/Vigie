@@ -10,7 +10,7 @@ import {
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES,
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
-  ASSIGNMENT_SOURCE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, SYNC_STATUS_CODES,
+  ASSIGNMENT_SOURCE_CODES, CURSUS_PERSON_STATE_CODES, CURSUS_TITLE_STATE_CODES, MATRIX_STATE_CODES, PERSON_CATEGORY_CODES, SYNC_STATUS_CODES,
   INBOUND_KIND_CODES, INBOUND_RESULT_CODES, INBOUND_STATUS_CODES,
   ENGINEERING_INBOUND_KIND_CODES, ECO_TYPE_CODES, ECO_STATUS_CODES, ENGINEERING_SOURCE_CODES, ECR_KIND_CODES, ECR_SUBJECT_CODES, ECR_STATUS_CODES,
   ECO_APPROVAL_KEY_CODES, ECO_DECISION_CODES, ECO_APPROVAL_VIA_CODES, EFFECTIVITY_TARGET_CODES, EFFECTIVITY_DISPOSITION_CODES,
@@ -67,7 +67,7 @@ export const sites = pgTable('sites', {
   check('sites_matrix_state_check', inList(t.matrixState, MATRIX_STATE_CODES)),
 ]);
 
-// Personnel — saisie manuelle pour l'instant ; Cursus deviendra la source de vérité RH.
+// Personnel — cache de cursus.pub_salaries (D01, décision CV-10) : Cursus est la source de vérité RH.
 // Identifiant généré (jamais dérivé du nom) ; rapprochement Entra ID par objectId, puis par e-mail.
 export const people = pgTable('people', {
   id: text('id').primaryKey(),
@@ -90,7 +90,26 @@ export const people = pgTable('people', {
   // Dernier rôle Vigie connu (rôle applicatif Entra à la dernière connexion) et date de cette connexion.
   lastRole: text('last_role'),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
-}, (t) => [uniqueIndex('people_email_lower_unique').on(sql`lower(${t.email})`)]);
+  // D01 de Matrix, décision CV-10 (03/11/2026, migration 0030) : une fiche qui porte un matricule est un cache de
+  // cursus.pub_salaries (src/server/foreign-sync.ts : nom, poste, site, sortie et, contrat D01 v2, catégorie, entreprise,
+  // e-mail), jamais saisi dans Vigie. Fiche sans matricule (saisie avant D01, ou créée à la première connexion Entra) :
+  // « à rattacher » par le QHSE (attachPerson, src/server/people.ts). État lu au dernier rafraîchissement : actif | absent
+  // (plus dans la vue : jamais supprimée, signal au QHSE) ; null = jamais lu (pas de matricule, source indisponible).
+  cursusState: text('cursus_state'),
+  // Catégorie publiée par Cursus (salarie | interimaire | exterieur ; PERSON_CATEGORIES) et agence ou entreprise extérieure.
+  category: text('category'),
+  company: text('company'),
+  // Adresse professionnelle publiée par Cursus (donnée personnelle : jamais au journal du serveur ni dans sync_runs) ;
+  // rapprochement d'un compte Entra à la première connexion (src/lib/auth/person.ts), avant l'e-mail de la fiche.
+  cursusEmail: text('cursus_email'),
+  // Fiche créée par le rafraîchissement, sans historique propre, dont le matricule a été repris par la fiche ancienne de la
+  // même personne (attachPerson) : sortie de l'effectif, conservée (jamais supprimée), hors des fiches « à rattacher ».
+  replacedById: text('replaced_by_id').references((): AnyPgColumn => people.id),
+}, (t) => [
+  uniqueIndex('people_email_lower_unique').on(sql`lower(${t.email})`),
+  check('people_cursus_state_check', inList(t.cursusState, CURSUS_PERSON_STATE_CODES)),
+  check('people_category_check', inList(t.category, PERSON_CATEGORY_CODES)),
+]);
 
 // Heures travaillées par mois et par site — base du TF1 / TG (source RH).
 export const hoursWorked = pgTable('hours_worked', {

@@ -19,6 +19,9 @@ import { loadFormOptions } from '@/lib/data/options';
 import { loadPrevention, type PlanView, type SiteRuleView } from '@/lib/data/prevention';
 import { lcfirst } from '@/lib/queries';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
+import { GateHouseView } from '@/components/prevention/GateHouse';
+import { loadGateHouse } from '@/lib/data/gate-house';
+import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
 
 export const metadata: Metadata = { title: SCREENS.prevention.title };
 
@@ -50,7 +53,9 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   // UX-12 : ancien ?filtre=archivees (entreprises) lu puis réécrit en ?etat=archives.
   const canonical = canonicalHref('/prevention', sp);
   if (canonical) redirect(canonical);
-  const [d, formOptions] = await Promise.all([loadPrevention(), loadFormOptions()]);
+  // PRV-25 : liste du poste de garde (?vue=poste-de-garde&horizon=), lecteurs canReadGateHouse.
+  const gateOn = str(sp.vue) === GATE_HOUSE_VIEW && canReadGateHouse(role);
+  const [d, formOptions, gate] = await Promise.all([loadPrevention(), loadFormOptions(), gateOn ? loadGateHouse(parseHorizon(str(sp.horizon))) : null]);
   const manage = canManage(role);
   const approve = canApprove(role);
 
@@ -207,23 +212,30 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
 
         <div className="vg-tabs">
           {TABS.map(([key, label]) => (
-            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key ? ' is-on' : ''}`}>
+            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key && !gate ? ' is-on' : ''}`}>
               <span>{label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{tabCount[key]}</span>
             </Link>
           ))}
+          {canReadGateHouse(role) && (
+            <Link href={GATE_HOUSE_PATH} scroll={false} className={`vg-tab${gate ? ' is-on' : ''}`} aria-current={gate ? 'page' : undefined}>
+              <span>Poste de garde</span>
+            </Link>
+          )}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
-            {manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
-            {manage && tab === 'plans' && <NewPlanButton options={options} />}
-            {tab === 'permis' && (
+            {!gate && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
+            {!gate && manage && tab === 'plans' && <NewPlanButton options={options} />}
+            {!gate && tab === 'permis' && (
               // Lien HTML simple (nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application.
               <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer le registre</a>
             )}
-            {manage && tab === 'permis' && <NewPermitButton options={options} />}
-            {manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
+            {!gate && manage && tab === 'permis' && <NewPermitButton options={options} />}
+            {!gate && manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
           </span>
         </div>
 
+        {gate ? <GateHouseView gate={gate} /> : (
+          <>
         {missingPlan && <MissingNotice text="Plan de prévention introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
         {missingPermit && <MissingNotice text="Permis introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
         {tab === 'entreprises' && missingDetail(sp.entreprise, !!openContractor) && <MissingNotice text="Entreprise extérieure introuvable." closeHref={tabHref(tab)} />}
@@ -296,6 +308,8 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             </div>
             <ContractorsTable key={openContractor?.id ?? 'liste'} contractors={contractors} suppliers={manage ? d.suppliers : { options: [], message: null }} canManage={manage} openId={openContractor?.id}
               emptyLabel={showArchived ? 'Aucune entreprise archivée.' : 'Aucune entreprise extérieure enregistrée.'} />
+          </>
+        )}
           </>
         )}
       </div>
