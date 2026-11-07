@@ -93,10 +93,11 @@ export async function sweepOrphanUploads(db: DbOrTx, dir: string, now = new Date
 
 /**
  * Lance la maintenance : un premier passage immédiat, puis toutes les heures (minuterie qui ne retient pas le processus).
- * Une erreur est écrite dans le journal du serveur, jamais levée. Renvoie la fonction d'arrêt, à appeler avant de fermer
- * la base : elle arrête la minuterie et attend la fin du passage en cours.
+ * Une erreur est écrite dans le journal du serveur, jamais levée. Renvoie `firstPass` (fin du premier passage, attendue
+ * par l'ouverture de la base : aucune écriture ne court en même temps qu'une purge de démarrage) et `stop`, à appeler
+ * avant de fermer la base : il arrête la minuterie et attend la fin du passage en cours.
  */
-export function startMaintenance(db: Db, opts: { uploadDir?: string | null } = {}): () => Promise<void> {
+export function startMaintenance(db: Db, opts: { uploadDir?: string | null } = {}): { firstPass: Promise<void>; stop: () => Promise<void> } {
   let stopped = false;
   let current: Promise<void> = Promise.resolve();
   const run = () => {
@@ -124,11 +125,15 @@ export function startMaintenance(db: Db, opts: { uploadDir?: string | null } = {
     })();
   };
   run();
+  const firstPass = current;
   const timer = setInterval(run, MAINTENANCE_INTERVAL_MS);
   timer.unref();
-  return async () => {
-    stopped = true;
-    clearInterval(timer);
-    await current;
+  return {
+    firstPass,
+    stop: async () => {
+      stopped = true;
+      clearInterval(timer);
+      await current;
+    },
   };
 }
