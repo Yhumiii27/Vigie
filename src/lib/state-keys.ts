@@ -54,6 +54,10 @@ export const SYNC_STATUS_CODES = ['ok', 'error', 'unavailable'] as const;
 export const ASSIGNMENT_SOURCE_CODES = ['rotation', 'planning'] as const;
 /** training_titles.cursus_state : CURSUS_TITLE_STATES (src/lib/foreign/labels.ts) — D08, migration 0025. */
 export const CURSUS_TITLE_STATE_CODES = ['actif', 'absent'] as const;
+/** people.cursus_state : CURSUS_PERSON_STATES (src/lib/foreign/labels.ts) — D01, décision CV-10, migration 0030. */
+export const CURSUS_PERSON_STATE_CODES = ['actif', 'absent'] as const;
+/** people.category : PERSON_CATEGORIES (src/lib/foreign/labels.ts) — contrat cursus.pub_salaries D01 v2 (colonne categorie). */
+export const PERSON_CATEGORY_CODES = ['salarie', 'interimaire', 'exterieur'] as const;
 /** inbound_requests.status : INBOUND_STATUSES (src/lib/rules/inbound.ts) — D13, décision CV-08, migration 0026. */
 export const INBOUND_STATUS_CODES = ['received', 'applied', 'rejected'] as const;
 /** inbound_requests.kind : INBOUND_KINDS (src/lib/rules/inbound.ts) — demandes déposées par vigie.pub_signaler_avancement_nc. */

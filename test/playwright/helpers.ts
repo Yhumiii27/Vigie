@@ -71,15 +71,15 @@ export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
     '/documents?doc=PRO-HSE-0001',
     // Lot 5 de M-02 (D12) : modifications techniques, fiche d'un ordre et d'une demande.
     '/modifications-techniques', '/modifications-techniques?sel=ECO-2026-001', '/modifications-techniques?onglet=demandes&sel=ECR-2026-001',
-    '/habilitations', '/habilitations?vue=a-prevoir', '/audits', '/environnement', '/environnement?onglet=filieres', '/prevention',
-    '/prevention?onglet=permis', '/prevention?onglet=entreprises', '/prevention/carte', '/prevention/import', '/signaler/postes',
+    '/habilitations', '/habilitations?vue=a-prevoir', '/habilitations?vue=personnel', '/audits', '/environnement', '/environnement?onglet=filieres', '/prevention',
+    '/prevention?onglet=permis', '/prevention?onglet=entreprises', '/prevention?vue=poste-de-garde', '/prevention/poste-de-garde/imprimer', '/prevention/carte', '/prevention/import', '/signaler/postes',
     '/evenements/registre-benin?site=site_a', '/habilitations/donnees-personnelles?salarie=tnguyen', '/veille/registre-securite',
     // IMP-07 : fiches imprimables d'un événement (accident du travail) et d'une action.
     '/evenements/fiche/EV-2026-127', '/actions/fiche/A-214',
   ].map((url) => ({ role: 'Animateur QHSE' as Role, site: 'site_a', url })),
   ...['/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
   ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits', '/evenements/fiche/EV-2026-127'].map((url) => ({ role: 'Chef de service' as Role, site: 'site_a', url })),
-  ...['/', '/prevention', '/risques', '/risques?vue=etudes', '/modifications-techniques?sel=ECO-2026-001'].map((url) => ({ role: 'Chef de projet' as Role, site: 'site_a', url })),
+  ...['/', '/prevention', '/prevention?vue=poste-de-garde', '/risques', '/risques?vue=etudes', '/modifications-techniques?sel=ECO-2026-001'].map((url) => ({ role: 'Chef de projet' as Role, site: 'site_a', url })),
   ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215',
     // EVT-22 : espace salarié mobile.
     '/signaler/mon-espace']

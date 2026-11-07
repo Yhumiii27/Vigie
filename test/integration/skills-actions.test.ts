@@ -152,22 +152,42 @@ describe('setRequirement : titre requis pour un salarié', () => {
 });
 
 describe('personnel : sortie de l’effectif et réintégration', () => {
-  it('sortie refusée tant qu’un recyclage est ouvert ; date et motif obligatoires', async () => {
+  const CURSUS_EXIT = 'Fiche tenue par Cursus : la sortie de l’effectif se déclare dans Cursus (RH), Vigie la reprend au rafraîchissement.';
+  it('fiche tenue par Cursus (matricule) : sortie et réintégration refusées (D01, CV-10)', async () => {
     actAs('Animateur QHSE');
+    expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'Démission' }))).toEqual({ error: CURSUS_EXIT });
+    expect(await reinstatePerson({}, form({ id: 'ylambert', reason: 'Retour' }))).toEqual({ error: CURSUS_EXIT });
+  });
+  it('fiche ancienne sans matricule : sortie refusée tant qu’un recyclage est ouvert ; date et motif obligatoires', async () => {
+    actAs('Animateur QHSE');
+    // Fiche du jeu rendue « ancienne » le temps du test (recyclage A-907 rattaché à ses exigences).
+    await exec(`update people set matricule = null where id = 'mgirard'`);
     expect(await setPersonLeft({}, form({ id: 'mgirard', leftOn: '2026-10-09', leftReason: 'Démission' }))).toEqual({
       error: 'Recyclage encore ouvert (A-907) : le service QHSE doit clôturer ou abandonner ces actions avant la déclaration de sortie.',
     });
-    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Motif obligatoire.' } });
+    await exec(`update people set matricule = 'EMP-9002' where id = 'mgirard'`);
+    expect(await setPersonLeft({}, form({ id: 'nlegrand', leftOn: '', leftReason: '' }))).toMatchObject({ fieldErrors: { leftOn: 'Date obligatoire.', leftReason: 'Motif obligatoire.' } });
   });
-  it('sortie puis réintégration, journalisées ; titres du salarié sorti conservés en consultation (d’après Cursus)', async () => {
+  it('fiche ancienne : sortie puis réintégration, journalisées', async () => {
     actAs('Animateur QHSE');
-    expect(await setPersonLeft({}, form({ id: 'lmoreau', leftOn: '2026-10-09', leftReason: 'Mutation dans une autre filiale' }))).toEqual({ ok: true, id: 'lmoreau' });
-    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'archive', reason: 'Mutation dans une autre filiale', byId: 'clefevre' });
+    expect(await setPersonLeft({}, form({ id: 'nlegrand', leftOn: '2026-10-09', leftReason: 'Mutation dans une autre filiale' }))).toEqual({ ok: true, id: 'nlegrand' });
+    expect(await lastLog('person', 'nlegrand')).toMatchObject({ action: 'archive', reason: 'Mutation dans une autre filiale', byId: 'clefevre' });
+    expect(await reinstatePerson({}, form({ id: 'nlegrand', reason: 'Sortie annulée' }))).toEqual({ ok: true, id: 'nlegrand' });
+    expect(await person('nlegrand')).toMatchObject({ leftOn: null, leftReason: null });
+  });
+  it('salarié sorti d’après Cursus : titres conservés en consultation, exigences figées', async () => {
+    actAs('Animateur QHSE');
+    await exec(`update cursus.${substituteTable('pub_salaries')} set sortie = '2026-10-09', actif = false where matricule = 'EMP-9008'`);
+    await refreshSharedReferences(await db());
+    expect(await person('lmoreau')).toMatchObject({ leftOn: '2026-10-09', leftReason: 'Sortie enregistrée dans Cursus' });
+    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'archive', byId: null, summary: 'Sortie enregistrée dans Cursus (le 09/10/2026)' });
     const { archive } = await loadSkillData();
     expect(archive.filter((r) => r.person.id === 'lmoreau').map((r) => r.title.id)).toEqual(expect.arrayContaining(['formation.accueil', 'formation.sst', 'formation.auditeur_interne']));
     expect(await setRequirement('lmoreau', 'formation.sst', false)).toEqual({ error: "Salarié sorti de l'effectif." });
-    expect(await reinstatePerson({}, form({ id: 'lmoreau', reason: 'Sortie annulée' }))).toEqual({ ok: true, id: 'lmoreau' });
+    await reinstall();
+    await refreshSharedReferences(await db());
     expect(await person('lmoreau')).toMatchObject({ leftOn: null, leftReason: null });
+    expect(await lastLog('person', 'lmoreau')).toMatchObject({ action: 'restore', byId: null, summary: 'Sortie annulée dans Cursus' });
   });
 });
 

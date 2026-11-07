@@ -167,7 +167,10 @@ async function open(): Promise<Opened> {
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.
   // Pièces jointes orphelines (PRD-13) : serveur avec tâches planifiées et base persistante seulement (jamais les tests).
   const sweepUploads = c.scheduler && !building && !(opened.engine === 'pglite' && c.dataDir.startsWith('memory://'));
-  const stop = startMaintenance(opened.db, { uploadDir: sweepUploads ? c.uploadDir : null });
+  const { firstPass, stop } = startMaintenance(opened.db, { uploadDir: sweepUploads ? c.uploadDir : null });
+  // Premier passage attendu : sinon une purge de démarrage (date du jour réelle) court en même temps que les premières
+  // écritures (relevé sur PostgreSQL sous charge : test/integration/read-state-purge.test.ts).
+  await firstPass;
   // Tâches planifiées (PRD-12, src/db/scheduler.ts) : registre de la configuration (rappel du mercredi par e-mail quand un
   // transport existe) ; aucune avec VIGIE_SCHEDULER=0, un registre vide, ni pendant la construction (next build).
   // Démarrage à l'ouverture de la base, donc à la première requête ou sonde de santé : pas de rattrapage (D13).

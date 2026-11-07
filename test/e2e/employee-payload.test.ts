@@ -99,7 +99,8 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
     });
 
     it('habilitations, À faire : sa ligne et ses échéances', async () => {
-      for (const path of ['/habilitations', '/habilitations?salarie=mgirard&titre=habilitation.he', '/a-faire']) {
+      // D01 : la vue « Personnel (Cursus) » demandée par le Salarié retombe sur sa ligne, sans fiche d'autrui.
+      for (const path of ['/habilitations', '/habilitations?salarie=mgirard&titre=habilitation.he', '/habilitations?vue=personnel', '/a-faire']) {
         const { status, body } = await load(path, rsc);
         expect(status, path).toBe(200);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
@@ -141,6 +142,8 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         // D12 (lot 5 de M-02) : modifications techniques, fiche et liens des autres outils.
         '/modifications-techniques', '/modifications-techniques?sel=ECO-2026-001', '/modifications-techniques/ECR-2026-001',
         '/modifications-techniques/nouvelle?part=ARB-MAL-045',
+        // PRV-25 (D01, décision CV-10) : liste du poste de garde et son impression.
+        '/prevention?vue=poste-de-garde', '/prevention/poste-de-garde/imprimer?horizon=30',
       ]) {
         const { status, location, body } = await load(path, rsc);
         // Renvoi par une redirection HTTP, ou dans la page déjà commencée (contrôle du rôle pendant le rendu, SEC-14).
@@ -149,6 +152,7 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         expect(found(body, ACTION_REF), path).toEqual([]);
         expect(found(body, PREVENTION_REF), path).toEqual([]);
         expect(body, path).not.toMatch(/ECO-2026-00\d|ECR-2026-00\d|Arbre de malaxeur/);
+        expect(body, path).not.toMatch(/PRS-2026-\d{4}|E-92\d\d|I-91\d\d/);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
       }
     });

@@ -1,0 +1,6 @@
+{
+  "source": "Cursus origin/main, server/migrations-pg/0002_partage.sql (contrat D01 v1 : matricule à actif ; vue reprise par Matrix, registre des publications) + Matrix origin/main data/contrats/cursus.pub_salaries-d01-v2.json (categorie, entreprise, email ajoutées en fin de vue, décision CV-10 de Vigie ; en attente de Cursus). Vigie lit aussi une vue au contrat v1 seul (src/lib/foreign/cursus.ts).",
+  "readers": ["keystone_app", "codex_app", "vigie_app", "matrix_app"],
+  "v1Columns": [["matricule", "text"], ["nom", "text"], ["poste", "text"], ["unite_code", "text"], ["site_code", "text"], ["entree", "date"], ["sortie", "date"], ["actif", "boolean"]],
+  "columns": [["matricule", "text"], ["nom", "text"], ["poste", "text"], ["unite_code", "text"], ["site_code", "text"], ["entree", "date"], ["sortie", "date"], ["actif", "boolean"], ["categorie", "text"], ["entreprise", "text"], ["email", "text"]]
+}

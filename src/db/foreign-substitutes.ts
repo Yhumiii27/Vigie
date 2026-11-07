@@ -41,7 +41,7 @@ export async function installForeignSubstitutes(db: Db, opts: { engine: DbEngine
   for (const [key, c] of Object.entries(FOREIGN_CONTRACTS) as [ForeignSourceKey, (typeof FOREIGN_CONTRACTS)[ForeignSourceKey]][]) {
     bySchema.set(c.schema, [...(bySchema.get(c.schema) ?? []), key]);
   }
-  const data = demoForeignRows();
+  const data = demoForeignRows({ demo: opts.demo });
   const created: string[] = [];
   try {
     const [{ creatable }] = await rows<{ creatable: boolean }>(db, sql`select has_database_privilege(current_database(), 'CREATE') as creatable`);

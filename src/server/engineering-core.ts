@@ -52,6 +52,8 @@ export async function enqueueCodexDecision(tx: Tx, ecr: Pick<Ecr, 'id' | 'source
   await tx.insert(t.outboundMessages).values({
     target: 'codex', kind: 'ecr_decision', entityType: ECR_ENTITY, entityId: ecr.id,
     payload: codexDecisionPayload({ requestId: ecr.id, accepted: o.accepted, ecoRef: o.ecoRef, modifierId: o.accepted ? ecr.modifierRef : null, note: o.note }),
+    // Horloge du serveur Node, celle que compare sendOutboundMessages (le défaut now() de la base peut être en avance).
+    nextAttemptAt: new Date(),
   });
   await tx.update(t.ecrs).set({ notifyStatus: 'pending', notifyAttempts: 0, notifyError: null, updatedAt: new Date() }).where(eq(t.ecrs.id, ecr.id));
   return true;
