@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { ToneTag } from '@/components/ui';
 import { fmtDate, fmtMonthAbbr, monthName } from '@/lib/dates';
+import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import type { ForecastItem, RenewalForecast } from '@/lib/rules/skills';
 
 const STATE_LABEL: Record<string, { label: string; tone: 'danger' | 'warn' | 'neutral' }> = {
   r: { label: 'Jamais suivi', tone: 'danger' },
   x: { label: 'Expiré', tone: 'danger' },
   p: { label: 'Suspendu (Cursus)', tone: 'danger' },
-  s: { label: 'Expire sous 60 j', tone: 'warn' },
+  s: { label: `Expire sous ${SKILL_SOON_DAYS} j`, tone: 'warn' },
   v: { label: 'Valide', tone: 'neutral' },
 };
 const monthLabel = (ym: string) => `${monthName(+ym.slice(5, 7))} ${ym.slice(0, 4)}`;

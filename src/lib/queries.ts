@@ -1,4 +1,5 @@
 import 'server-only';
+import { SKILL_SOON_DAYS } from './horizons';
 import { cache } from 'react';
 import { and, asc, inArray, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -8,7 +9,7 @@ import { daysBetween, fmtDate, fmtDayMonth } from './dates';
 import { today } from '@/lib/today';
 import {
   ACTION_SOURCES, AVANCEMENT, CERT_SOON_DAYS, CONTROL_HORIZON_DAYS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, SAFETY_WINDOW_MONTHS,
-  SKILL_SOON_DAYS, STEP_CLOSED, canSeeEventType, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
+  STEP_CLOSED, canSeeEventType, initials, isClosedActionStatus, type EventType, type SkillState, type Tone,
 } from './domain';
 import { PERSON_COLUMNS, type Person } from './people';
 import { getSession, siteFilter, siteScopeIds, type SiteScope } from './session';

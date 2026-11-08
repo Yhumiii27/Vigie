@@ -15,7 +15,7 @@ export const TITLES: [string, string, number][] = [
   ['habilitation.atex', 'ATEX', 36], ['habilitation.ac489', 'Autorisation de conduite', 60],
 ];
 
-// Matrice : v valide · s expire sous 60 j · x expiré · r requis jamais suivi · n non requis
+// Matrice : v valide · s expire sous 90 j · x expiré · r requis jamais suivi · n non requis
 export const MATRIX: [string, string][] = [
   ['tnguyen', 'vvvnsxnv'], ['mgirard', 'vsnnvnnn'], ['proux', 'vnnvvnnv'], ['amartin', 'vvnnvvvn'], ['jpetit', 'vvnnvvvn'],
   ['rfontaine', 'vnnvvnnv'], ['edubois', 'vnnnvnnn'], ['lmoreau', 'vnnnvnnn'], ['sbenali', 'vvvvvvvv'], ['kbernard', 'rnnnnrnn'],

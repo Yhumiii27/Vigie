@@ -281,7 +281,7 @@ async function skillVersions(data: Awaited<ReturnType<typeof loadSkillData>>): P
 /**
  * Échéances habilitation, une au plus par case requise (titre requis, salarié présent, titre actif) :
  * - expiré, jamais suivi ou suspendu dans Cursus : danger, daté du jour ;
- * - expirant sous 60 jours (état s) : à l'échéance du titre, ou à la veille d'une affectation qu'il ne couvre pas, sous 15 jours ;
+ * - expirant sous 90 jours (état s) : à l'échéance du titre, ou à la veille d'une affectation qu'il ne couvre pas, sous 15 jours ;
  * - valide mais expirant avant la fin d'une affectation Keystone : à la veille de l'affectation, sous 15 jours.
  * Une action de recyclage reprise encore à réaliser (ni close ni Terminée, voir RenewalInfo) suffit : elle porte sa propre
  * échéance. Une action Terminée ne suffit pas (formation annulée depuis, par exemple) : le signal la mentionne. Aucune

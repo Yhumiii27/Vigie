@@ -4,6 +4,7 @@ import { Icon, ToneTag } from '@/components/ui';
 import { actionHref } from '@/lib/action-rules';
 import { fileIcon } from '@/lib/attachments';
 import { daysBetween, fmtDate } from '@/lib/dates';
+import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import { SKILL_STATES, type SkillState } from '@/lib/domain';
 import type { ArchivedRecord, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 
@@ -43,7 +44,7 @@ export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtained
   const days = c.expiresOn ? daysBetween(now, c.expiresOn) : null;
   switch (c.state) {
     case 'x': return c.expiresOn ? `Expiré depuis le ${fmtDate(c.expiresOn)} · ${-days!} j` : 'Expiré';
-    case 's': return c.expiresOn ? `Expire le ${fmtDate(c.expiresOn)} · dans ${days} j` : 'Expire sous 60 jours';
+    case 's': return c.expiresOn ? `Expire le ${fmtDate(c.expiresOn)} · dans ${days} j` : `Expire sous ${SKILL_SOON_DAYS} jours`;
     case 'v': return c.expiresOn ? `Valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Valide · sans échéance';
     case 'r': return 'Requis, jamais suivi';
     case 'p': return c.expiresOn ? `Inutilisable d'après Cursus · échéance du titre le ${fmtDate(c.expiresOn)}` : "Inutilisable d'après Cursus";

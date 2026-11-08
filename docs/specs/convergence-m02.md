@@ -85,7 +85,7 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 | D14 Sites | `sites` cache de `matrix.pub_sites`, **réécriture des identifiants** de 16 tables ; 2,5 j | `sites.code` existe ; 27 clés ; P-03 | cache, attributs Seveso locaux | **fait le 03/11** (CV-09 : identifiants réécrits) |
 | D16 Fournisseurs | `contractors.supplier_id` saisi et contrôlé ; 2,5 j | colonne faite (0008), sans écran | tout | **fait le 03/11** (choix dans la fiche ; proposition par le nom à l'import des plans : non faite) |
 | D18 Journal | journal à créer ; 3 j | `change_log` et `pub_journal` livrés | — | **fait** ; `qui_matricule` rempli pour les personnes de démonstration (matricules posés le 03/11), à recontrôler après D01 |
-| D19 Paramètres | constante `SKILL_SOON_DAYS` gardée jusqu'à C-12 | constante à `src/lib/domain.ts:491` (le plan cite `:88`), hors de `src/lib/horizons.ts` | tout | attend C-12 (constante gardée le 04/11, `pub_parametres` non lue) |
+| D19 Paramètres | constante `SKILL_SOON_DAYS` gardée jusqu'à C-12 | constante à `src/lib/domain.ts:491` (le plan cite `:88`), hors de `src/lib/horizons.ts` | tout | **fait le 07/11/2026** : 90 jours (C-12), `SKILL_SOON_DAYS` dans `src/lib/horizons.ts` |
 | D06 / H3 Heures | API `GET …/heures-travaillees` de Cursus ; 2,5 j | route absente de Cursus ; Cursus propose une vue `pub_heures_travaillees` ; planificateur de Vigie en place ; M-03 provisoire | Cursus fait foi | lot parallèle, attend M-03 |
 | D15, D17, D20, D21, D23 | sans charge pour Vigie | D23 fait (`pub_controles`, 0014) ; D21 : usines des filiales = sites de Vigie (VG-05) | — | voir § 3.13 |
 
@@ -307,6 +307,9 @@ fait, que `qui_matricule` est rempli. **Charge : 0,25 j** (plan : 3 j).
 - **Charge : 5 j** en lecture seule (plan : 3 j) ; **+2 j** si une saisie depuis Vigie est maintenue par l'API de Cursus.
 
 ### 3.9 D19 · Horizon d'alerte (plan `:645`)
+
+**Fait le 07/11/2026** (C-12 tranchée : 90 jours) : `SKILL_SOON_DAYS = 90` déplacé dans `src/lib/horizons.ts` (TDB-16), libellés « Expire sous 90 jours » tirés de la constante. Cursus ne publie pas de `pub_parametres` : la valeur est fixée dans Vigie ; à relire si Cursus publie un jour son horizon.
+
 
 Après C-12 seulement : lire `cursus.pub_parametres.horizon_alerte_jours` à la place de `SKILL_SOON_DAYS = 60`
 (`src/lib/domain.ts:491`, utilisé par `src/lib/rules/skills.ts:39` et `src/lib/queries.ts:120`), en passant la valeur
@@ -717,7 +720,7 @@ pas envoyée »), que le lot 2 applique.
 
 Questions du plan de Matrix encore ouvertes pour Vigie (§ 8 du plan) : **C-01** (sens de `elec`, `atex`, `hauteur`,
 `conduite` ; rapprochement par défaut appliqué au jeu de démonstration le 04/11/2026, § 7 bis), **C-02** (aptitude médicale dans `pub_titres_detenus`, DPO), **C-06** (périmètre des documents QHSE ; choix par défaut appliqué le 05/11/2026 : QUA / HSE sans rattachement, § 7 quater),
-**C-12** (horizon d'alerte 60 ou 90 jours), **C-13** (accueils sécurité de chantier). **C-03** et **C-08** ne portent
+**C-12** (horizon d'alerte : **tranché le 07/11/2026, 90 jours**, appliqué par D19), **C-13** (accueils sécurité de chantier). **C-03** et **C-08** ne portent
 plus que sur la démonstration (P-03) ; **C-04** (usage des applications Mac) fixe la durée de vie des substituts.
 
 Questions nouvelles (CV : convergence de Vigie) :
@@ -773,7 +776,7 @@ catalogue (D08) et les titres détenus (D09). Décisions du même jour pour la s
 |---|---|---|
 | D08 | `training_titles` = cache de `cursus.pub_titres` : identifiant = `titre_id` (démonstration recodée par la migration, clés `qualification_requirements.title_id`, `actions.qualification_title_id`, `risk_measure_links.title_id` en `ON UPDATE CASCADE`, journal, pièces jointes et états lus réécrits), intitulé ← `libelle_court`, validité ← `validite_mois` (nul → 0), `cursus_state` (`actif` \| `absent`) rafraîchis par `refreshSharedReferences` (source `titles`, journal `training_title` « sync ») ; « Suivre un titre » choisi dans le catalogue (`followTitle`, `loadTitleChoices`), « Ne plus suivre » / « Suivre à nouveau » motivés, ordre local (HAB-15) ; attributs propres gardés (CV-03, par défaut) ; `prerequisite_ids` supprimée | Cursus basculé ; trois titres à créer dans Cursus (§ 5.2) ; C-01 confirmé ; CV-03 confirmé |
 | D09 | `qualifications` et `training_sessions` supprimées (aucune vue `pub_` ni requête de référence ne les lisait) ; titres détenus lus dans `cursus.pub_titres_detenus` (`readHeldTitles`), joints par `people.matricule` (`src/lib/data/held-titles.ts`) ; état d'une case par `heldTitleState` (« Suspendu » = `prerequis_manquant` ou mesure de suspension / retrait, sinon `utilisable_jusqu_au`) ; matrice, alertes, échéances, prévision HAB-09, EVT-22, SEC-13, secouristes EVT-04, auditeurs AUD-27, bilan SSCT, HAB-18 (sans les formations évaluées), mesures « titre » DUE-19 relus sur la vue ; attestations et journal des formations rattachés à la case « personne\|titre » (lisibles, plus modifiables) ; retirés : saisie et attestations d'une formation, HAB-06, évaluation à froid HAB-13, portée (CV-04, par défaut) | Cursus basculé ; lien de lecture de `vigie_app` (§ 5.1) ; C-02 (aptitude médicale) ; CV-04 confirmé |
-| D19 | `SKILL_SOON_DAYS` (60 j) gardé, `cursus.pub_parametres` non lue | C-12 |
+| D19 | **fait le 07/11/2026** : `SKILL_SOON_DAYS` = 90 j dans `src/lib/horizons.ts` (C-12) ; `cursus.pub_parametres` n'existe pas chez Cursus | — |
 | Source indisponible | cases requises « Donnée indisponible » (`u`), bandeau, aucune échéance par case, une échéance commune `habilitations-cursus-indisponible` au QHSE ; suivi d'un titre et secouriste de l'effectif refusés avec le message ; auditeur interne jamais signalé | recette sur le serveur commun |
 
 Choix pris par défaut, à confirmer (tableau « Convergence M-02, lot 2 » du § 19 de `docs/RESTE-A-FAIRE.md`) : rapprochement
