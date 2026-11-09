@@ -1,5 +1,6 @@
 {
-  "source": "Matrix origin/main data/contrats/cursus.pub_presences_prevues.json (présences prévues sur site, déclarations validées ou annulées par les RH ; décision CV-10 et PRV-25 de Vigie ; en attente des tables de Cursus, vue à définir dans l'écran Publications de Matrix)",
+  "source": "Matrix origin/main data/contrats/cursus.pub_presences_prevues.json (présences prévues sur site, déclarations validées ou annulées par les RH ; décision CV-10 et PRV-25 de Vigie ; vue à définir dans l'écran Publications de Matrix) + Cursus origin/main docs/demandes/matrix-lot14-personnes-site.md (lot 14 : matricule = matricule Cursus EMP-…, matricule_site ajouté en fin ; variante : matricule = matricule de site, sans la dernière colonne ; en attente du propriétaire et de Matrix). Vigie lit les deux formes (optionalColumns ; personne rapprochée par people.matricule puis people.site_matricule).",
   "readers": ["vigie_app", "matrix_app"],
-  "columns": [["declaration_ref", "text"], ["matricule", "text"], ["site_code", "text"], ["entreprise", "text"], ["du", "date"], ["au", "date"], ["objet", "text"], ["statut", "text"], ["maj_le", "timestamp with time zone"]]
+  "optionalColumns": ["matricule_site"],
+  "columns": [["declaration_ref", "text"], ["matricule", "text"], ["site_code", "text"], ["entreprise", "text"], ["du", "date"], ["au", "date"], ["objet", "text"], ["statut", "text"], ["maj_le", "timestamp with time zone"], ["matricule_site", "text"]]
 }

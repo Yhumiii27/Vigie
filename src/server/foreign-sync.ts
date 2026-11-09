@@ -128,6 +128,7 @@ async function refreshPeople(db: Db): Promise<SyncResult> {
   const byMatricule = new Map(read.rows.map((p) => [p.matricule, p]));
   const result = { ...empty('people'), read: read.rows.length };
   const now = today();
+  let siteConflicts = 0;
   await db.transaction(async (tx) => {
     const sites = await tx.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites);
     const followed = new Set(sites.filter((x) => !x.archivedAt).map((x) => x.id));
@@ -135,10 +136,27 @@ async function refreshPeople(db: Db): Promise<SyncResult> {
     const local = await tx.select({
       id: t.people.id, matricule: t.people.matricule, name: t.people.name, job: t.people.job, siteId: t.people.siteId, leftOn: t.people.leftOn,
       leftReason: t.people.leftReason, cursusState: t.people.cursusState, category: t.people.category, company: t.people.company, cursusEmail: t.people.cursusEmail,
+      siteMatricule: t.people.siteMatricule,
     }).from(t.people).where(isNotNull(t.people.matricule));
     const known = new Set(local.map((p) => p.matricule!));
+    // Matricule de site unique (people_site_matricule_unique) : jamais posé s'il est déjà porté par une autre fiche (Cursus ne
+    // le réattribue pas ; garde contre une publication erronée, qui ferait sinon échouer tout le rafraîchissement).
+    const siteHolders = new Map((await tx.select({ id: t.people.id, siteMatricule: t.people.siteMatricule }).from(t.people).where(isNotNull(t.people.siteMatricule)))
+      .map((p) => [p.siteMatricule!, p.id]));
+    const takeSiteMatricule = (value: string | null | undefined, id: string) => {
+      if (!value) return true;
+      const holder = siteHolders.get(value);
+      if (holder && holder !== id) {
+        siteConflicts++;
+        return false;
+      }
+      siteHolders.set(value, id);
+      return true;
+    };
     for (const p of local) {
-      const { patch, entries } = cursusPersonSync(p as CachedPerson, byMatricule.get(p.matricule!), followed, siteLabel);
+      const src = byMatricule.get(p.matricule!);
+      const row = src && !takeSiteMatricule(src.siteMatricule, p.id) ? { ...src, siteMatricule: undefined } : src;
+      const { patch, entries } = cursusPersonSync(p as CachedPerson, row, followed, siteLabel);
       if (!Object.keys(patch).length) continue;
       await tx.update(t.people).set(patch).where(eq(t.people.id, p.id));
       result.updated++;
@@ -153,12 +171,14 @@ async function refreshPeople(db: Db): Promise<SyncResult> {
       let sort = (last ?? -1) + 1;
       for (const r of fresh) {
         const id = randomUUID();
-        await tx.insert(t.people).values({ id, matricule: r.matricule, sort: sort++, ...newCachedPerson(r, followed) });
+        const row = takeSiteMatricule(r.siteMatricule, id) ? r : { ...r, siteMatricule: undefined };
+        await tx.insert(t.people).values({ id, matricule: r.matricule, sort: sort++, ...newCachedPerson(row, followed) });
         await logChange(tx, { byId: null, entityType: 'person', entityId: id, action: 'create', summary: 'Fiche reprise de Cursus (référentiel du personnel)' });
         result.added++;
       }
     }
   });
+  if (siteConflicts) result.message = `${siteConflicts} matricule(s) de site publié(s) déjà porté(s) par une autre fiche de Vigie : non repris.`;
   return result;
 }
 

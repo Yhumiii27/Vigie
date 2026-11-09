@@ -6,7 +6,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { getDb, schema as t } from '@/db';
-import { FOREIGN_CONTRACTS, type ForeignSourceKey } from '@/db/foreign';
+import { FOREIGN_CONTRACTS, PRESENCES_OPTIONAL_COLUMNS, SALARIES_OPTIONAL_COLUMNS, type ForeignSourceKey } from '@/db/foreign';
 import { installForeignSubstitutes, substituteTable } from '@/db/foreign-substitutes';
 import { SOURCES } from '@/lib/foreign/labels';
 import { refreshSharedReferences } from '@/server/foreign-sync';
@@ -35,6 +35,16 @@ describe('contrats des vues lues et substituts de démonstration', () => {
         from pg_attribute a join pg_class r on r.oid = a.attrelid join pg_namespace n on n.oid = r.relnamespace
         where n.nspname = ${c.schema} and r.relname = ${c.view} and a.attnum > 0 and not a.attisdropped order by a.attnum`);
       expect(actual.map((r) => [r.name, r.type]), `${c.schema}.${c.view}`).toEqual(fixture.columns);
+    }
+  });
+
+  it('colonnes facultatives (encore à publier) : en fin de contrat, lues seulement si la vue les porte', () => {
+    const optional: Partial<Record<ForeignSourceKey, readonly string[]>> = { people: SALARIES_OPTIONAL_COLUMNS, presences: PRESENCES_OPTIONAL_COLUMNS };
+    for (const [key, c] of Object.entries(FOREIGN_CONTRACTS) as [ForeignSourceKey, (typeof FOREIGN_CONTRACTS)[ForeignSourceKey]][]) {
+      const fixture = JSON.parse(readFileSync(path.join(process.cwd(), 'test', 'fixtures', 'contracts', `${c.schema}.${c.view}.json`), 'utf8')) as { optionalColumns?: string[] };
+      const list = fixture.optionalColumns ?? [];
+      expect([...(optional[key] ?? [])], key).toEqual(list);
+      expect(c.columns.slice(c.columns.length - list.length).map(([n]) => n), key).toEqual(list);
     }
   });
 

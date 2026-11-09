@@ -152,7 +152,7 @@ describe.skipIf(!base)('Salarié : charge des pages (serveur construit)', () => 
         expect(found(body, ACTION_REF), path).toEqual([]);
         expect(found(body, PREVENTION_REF), path).toEqual([]);
         expect(body, path).not.toMatch(/ECO-2026-00\d|ECR-2026-00\d|Arbre de malaxeur/);
-        expect(body, path).not.toMatch(/PRS-2026-\d{4}|E-92\d\d|I-91\d\d/);
+        expect(body, path).not.toMatch(/PRS-2026-\d{4}|EMP-9[12]\d\d|[IE]00[12]\d\d/);
         OTHER_PEOPLE.forEach((name) => expect(body, `${path} ${name}`).not.toContain(name));
       }
     });

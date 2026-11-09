@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { asRole, consoleErrors } from './helpers';
 
 // PRV-25 (D01, décision CV-10) : liste du poste de garde — arrivées et départs à venir d'après les présences prévues de
-// Cursus, plan de prévention rapproché, horizon dans l'URL, impression ; fermée au Salarié.
+// Cursus, matricule de site, plan de prévention rapproché, horizon dans l'URL, impression ; fermée au Salarié.
 
 test('Chef de service : arrivées et départs à venir, plan rapproché, horizon et impression', async ({ page, context, baseURL }) => {
   const errors = consoleErrors(page);
@@ -13,6 +13,9 @@ test('Chef de service : arrivées et départs à venir, plan rapproché, horizon
   await expect(page.getByRole('heading', { name: /^Arrivées · \d+/ })).toBeVisible();
   const departures = page.getByRole('table', { name: 'Départs à venir' });
   await expect(departures).toContainText('[B. Morel]');
+  // Lot 14 de Cursus : matricule de site (badge) sous le nom, matricule Cursus à part.
+  await expect(departures).toContainText('Matricule de site E00202');
+  await expect(departures).toContainText('EMP-9202');
   await expect(departures.getByRole('link', { name: 'PP-2026-015' })).toBeVisible();
   await page.getByRole('radio', { name: '14 jours' }).click();
   await expect(page).toHaveURL(/horizon=14/);

@@ -82,6 +82,7 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
               <dt>Fonction{src} · service (Vigie)</dt><dd>{[id.job, id.service].filter(Boolean).join(' · ') || '—'}</dd>
               <dt>Site de rattachement{src}</dt><dd>{id.site}</dd>
               <dt>Matricule{id.fromCursus ? ' (Cursus)' : ''}</dt><dd>{id.matricule ?? '—'}</dd>
+              {id.fromCursus && <><dt>Matricule de site (Cursus)</dt><dd>{id.siteMatricule ?? '—'}</dd></>}
               {id.fromCursus && <><dt>Catégorie (Cursus)</dt><dd>{id.category ? PERSON_CATEGORIES[id.category as PersonCategory]?.label ?? id.category : '—'}</dd></>}
               {id.fromCursus && <><dt>Agence ou entreprise (Cursus)</dt><dd>{id.company ?? '—'}</dd></>}
               {id.fromCursus && <><dt>Adresse e-mail (Cursus)</dt><dd>{id.cursusEmail ?? '—'}</dd></>}

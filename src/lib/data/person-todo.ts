@@ -22,7 +22,7 @@ export type PersonTodoDigest = { computedAt: Date; today: string; people: Person
 const SCHEDULER_USER: Person = {
   id: '__vigie_scheduler__', name: 'Vigie (tâche planifiée)', job: '', siteId: null, inSkillsMatrix: false, sort: 0, service: '',
   leftOn: null, leftReason: null, email: null, matricule: null, lastRole: null,
-  cursusState: null, category: null, company: null, cursusEmail: null, replacedById: null,
+  cursusState: null, category: null, company: null, cursusEmail: null, siteMatricule: null, replacedById: null,
 };
 
 /** Session de la tâche : rôle Direction (toutes les échéances, données de santé comprises), tous les sites. */

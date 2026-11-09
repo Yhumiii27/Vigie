@@ -98,7 +98,7 @@ export function PeoplePanel({ admin, siteLabels }: { admin: PeopleAdmin; siteLab
         </p>
         {admin.absent.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {admin.absent.map((p) => <Row key={p.id} p={p} siteLabels={siteLabels}><span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>Matricule {p.matricule}</span></Row>)}
+            {admin.absent.map((p) => <Row key={p.id} p={p} siteLabels={siteLabels}><span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>Matricule {p.matricule}{p.siteMatricule ? ` · matricule de site ${p.siteMatricule}` : ''}</span></Row>)}
           </ul>
         ) : <p style={{ margin: 0, fontSize: 12, color: 'var(--vg-text-muted)' }}>Aucune fiche absente de Cursus.</p>}
       </div>

@@ -155,6 +155,11 @@
       "when": 1794045870654,
       "sql": "bca8cf7b6d22c52ece121961cf83303a05d89c8d7e8ad1d4bbaadb138794b0bd",
       "snapshot": "0ef776cfab8da76e993003f13d79b69cd5f4ee828016799e05ad8e48aee5d1a0"
+    },
+    "0031_cursus_site_matricule": {
+      "when": 1794213990111,
+      "sql": "06357f4187819469e04b695c0fb488376d9529208dcbe99600bd0af6d810e452",
+      "snapshot": "15ce27420e46503525c0acbd69d1ce5f8883ed19fcba762730b0a914e742ad5c"
     }
   }
 }

@@ -83,6 +83,7 @@ function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
         {fact('Nom', person.name)}
         {fact('Matricule', person.matricule)}
+        {person.siteMatricule && fact('Matricule de site', person.siteMatricule)}
         {fact('Poste', person.job)}
         {fact('Site de rattachement', siteLabel)}
         {fact('Catégorie', person.category ? PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category : null)}

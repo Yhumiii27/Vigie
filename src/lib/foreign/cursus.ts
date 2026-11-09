@@ -2,7 +2,8 @@ import 'server-only';
 import { cache } from 'react';
 import { and, asc, gte, lte } from 'drizzle-orm';
 import { getDb, type DbOrTx } from '@/db';
-import { SALARIES_V2_COLUMNS, pubPresencesPrevues, pubSalaries, pubTitres, pubTitresDetenus } from '@/db/foreign';
+import { PRESENCES_OPTIONAL_COLUMNS, SALARIES_OPTIONAL_COLUMNS, pubPresencesPrevues, pubSalaries, pubTitres, pubTitresDetenus } from '@/db/foreign';
+import { siteMatriculeOf } from '@/lib/rules/people-sync';
 import { readSource, viewColumns, type SourceRead } from './source';
 
 // Lectures de Cursus (lot 2 de M-02, décision CV-01 du 04/11/2026 : Vigie consulte, Cursus fait foi). D08 : catalogue des
@@ -66,9 +67,10 @@ export function readHeldTitles(db: DbOrTx): Promise<SourceRead<CursusHeldTitle>>
 }
 
 /**
- * Personne publiée par Cursus (salarié, intérimaire « I… » ou salarié d'entreprise extérieure « E… », CV-10). `category`,
- * `company`, `email` : `undefined` quand la vue du serveur ne porte pas encore la colonne (contrat D01 v1) — la valeur de
- * Vigie est alors gardée —, `null` quand elle est publiée vide.
+ * Personne publiée par Cursus (salarié, intérimaire ou salarié d'entreprise extérieure, CV-10 ; matricule Cursus « EMP-… »
+ * pour tous, matricule de site « I… » / « E… » à part, lot 14 de Cursus). `category`, `company`, `email`, `siteMatricule` :
+ * `undefined` quand la vue du serveur ne porte pas encore la colonne (contrat D01 v1, ou v2 sans `matricule_site`) — la
+ * valeur de Vigie est alors gardée —, `null` quand elle est publiée vide (ou, pour le matricule de site, hors format).
  */
 export type CursusPerson = {
   matricule: string;
@@ -83,28 +85,30 @@ export type CursusPerson = {
   category?: 'salarie' | 'interimaire' | 'exterieur' | null;
   company?: string | null;
   email?: string | null;
+  siteMatricule?: string | null;
 };
 
 const CATEGORY_CODES = new Set(['salarie', 'interimaire', 'exterieur']);
 
 /**
- * Personnes publiées par cursus.pub_salaries (lignes sans matricule ignorées). Colonnes du contrat v2 (categorie,
- * entreprise, email) lues seulement si la vue les porte (`viewColumns`, une fois par lecture) : une vue au contrat v1 reste
- * une source disponible.
+ * Personnes publiées par cursus.pub_salaries (lignes sans matricule ignorées). Colonnes ajoutées en fin de vue (contrat v2 :
+ * categorie, entreprise, email ; lot 14 de Cursus : matricule_site) lues seulement si la vue les porte (`viewColumns`, une
+ * fois par lecture) : une vue au contrat v1 reste une source disponible.
  */
 export function readCursusPeople(db: DbOrTx): Promise<SourceRead<CursusPerson>> {
   return readSource(db, 'people', async () => {
     const present = await viewColumns(db, 'people');
-    const has = Object.fromEntries(SALARIES_V2_COLUMNS.map((c) => [c, present.has(c)])) as Record<(typeof SALARIES_V2_COLUMNS)[number], boolean>;
+    const has = Object.fromEntries(SALARIES_OPTIONAL_COLUMNS.map((c) => [c, present.has(c)])) as Record<(typeof SALARIES_OPTIONAL_COLUMNS)[number], boolean>;
     const rows = await db.select({
       matricule: pubSalaries.matricule, name: pubSalaries.nom, job: pubSalaries.poste, unitCode: pubSalaries.uniteCode, siteCode: pubSalaries.siteCode,
       enteredOn: pubSalaries.entree, leftOn: pubSalaries.sortie, active: pubSalaries.actif,
       ...(has.categorie ? { category: pubSalaries.categorie } : {}),
       ...(has.entreprise ? { company: pubSalaries.entreprise } : {}),
       ...(has.email ? { email: pubSalaries.email } : {}),
+      ...(has.matricule_site ? { siteMatricule: pubSalaries.matriculeSite } : {}),
     }).from(pubSalaries).orderBy(asc(pubSalaries.matricule));
     return rows.flatMap((r) => {
-      const x = r as typeof r & { category?: string | null; company?: string | null; email?: string | null };
+      const x = r as typeof r & { category?: string | null; company?: string | null; email?: string | null; siteMatricule?: string | null };
       if (!x.matricule?.trim()) return [];
       const person: CursusPerson = {
         matricule: x.matricule.trim(), name: x.name?.trim() || x.matricule.trim(), job: x.job?.trim() ?? '', unitCode: x.unitCode, siteCode: x.siteCode,
@@ -113,15 +117,21 @@ export function readCursusPeople(db: DbOrTx): Promise<SourceRead<CursusPerson>> 
       if (has.categorie) person.category = x.category && CATEGORY_CODES.has(x.category) ? (x.category as CursusPerson['category']) : null;
       if (has.entreprise) person.company = x.company?.trim() || null;
       if (has.email) person.email = x.email?.trim().toLowerCase() || null;
+      if (has.matricule_site) person.siteMatricule = siteMatriculeOf(x.siteMatricule);
       return [person];
     });
   });
 }
 
-/** Présence prévue sur un site, déclarée dans Cursus et validée (ou annulée) par les RH (PRV-25). */
+/**
+ * Présence prévue sur un site, déclarée dans Cursus et validée (ou annulée) par les RH (PRV-25). `matricule` : matricule
+ * Cursus « EMP-… » ou, variante du lot 14 de Cursus, matricule de site ; `siteMatricule` : colonne `matricule_site` de fin
+ * de vue (null si la vue ne la porte pas ou la publie vide).
+ */
 export type PlannedPresence = {
   ref: string;
   matricule: string | null;
+  siteMatricule: string | null;
   siteCode: string | null;
   company: string | null;
   from: string;
@@ -130,15 +140,28 @@ export type PlannedPresence = {
   status: 'validee' | 'annulee';
 };
 
-/** Présences prévues qui recoupent la période [from, to] (arrivée ou départ, en jours), statut reconnu seulement. */
+/**
+ * Présences prévues qui recoupent la période [from, to] (arrivée ou départ, en jours), statut reconnu seulement. Colonne
+ * `matricule_site` lue seulement si la vue la porte.
+ */
 export function readPlannedPresences(db: DbOrTx, from: string, to: string): Promise<SourceRead<PlannedPresence>> {
-  return readSource(db, 'presences', async () => (await db.select({
-    ref: pubPresencesPrevues.declarationRef, matricule: pubPresencesPrevues.matricule, siteCode: pubPresencesPrevues.siteCode,
-    company: pubPresencesPrevues.entreprise, from: pubPresencesPrevues.du, to: pubPresencesPrevues.au, purpose: pubPresencesPrevues.objet,
-    status: pubPresencesPrevues.statut,
-  }).from(pubPresencesPrevues).where(and(lte(pubPresencesPrevues.du, to), gte(pubPresencesPrevues.au, from)))
-    .orderBy(asc(pubPresencesPrevues.du), asc(pubPresencesPrevues.declarationRef))).flatMap((r) => (
-    r.ref && r.from && r.to && (r.status === 'validee' || r.status === 'annulee')
-      ? [{ ...r, ref: r.ref, from: r.from, to: r.to, status: r.status, matricule: r.matricule?.trim() || null }] : []
-  )));
+  return readSource(db, 'presences', async () => {
+    const present = await viewColumns(db, 'presences');
+    const has = Object.fromEntries(PRESENCES_OPTIONAL_COLUMNS.map((c) => [c, present.has(c)])) as Record<(typeof PRESENCES_OPTIONAL_COLUMNS)[number], boolean>;
+    const rows = await db.select({
+      ref: pubPresencesPrevues.declarationRef, matricule: pubPresencesPrevues.matricule, siteCode: pubPresencesPrevues.siteCode,
+      company: pubPresencesPrevues.entreprise, from: pubPresencesPrevues.du, to: pubPresencesPrevues.au, purpose: pubPresencesPrevues.objet,
+      status: pubPresencesPrevues.statut,
+      ...(has.matricule_site ? { siteMatricule: pubPresencesPrevues.matriculeSite } : {}),
+    }).from(pubPresencesPrevues).where(and(lte(pubPresencesPrevues.du, to), gte(pubPresencesPrevues.au, from)))
+      .orderBy(asc(pubPresencesPrevues.du), asc(pubPresencesPrevues.declarationRef));
+    return rows.flatMap((r) => {
+      const x = r as typeof r & { siteMatricule?: string | null };
+      return x.ref && x.from && x.to && (x.status === 'validee' || x.status === 'annulee')
+        ? [{
+          ref: x.ref, matricule: x.matricule?.trim() || null, siteMatricule: siteMatriculeOf(x.siteMatricule), siteCode: x.siteCode, company: x.company,
+          from: x.from, to: x.to, purpose: x.purpose, status: x.status,
+        }] : [];
+    });
+  });
 }
