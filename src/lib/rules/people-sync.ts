@@ -1,7 +1,8 @@
 // Personnes lues dans Cursus (D01 de Matrix, décision CV-10 du 03/11/2026) : règles pures du rafraîchissement du cache
 // people (src/server/foreign-sync.ts) et du rattachement d'une fiche ancienne (src/server/people.ts). Sans import serveur.
 // Une fiche qui porte un matricule reprend de cursus.pub_salaries nom, poste, site (site suivi de même code, sinon aucun),
-// sortie et, contrat D01 v2, catégorie, entreprise et e-mail ; une personne absente de la vue n'est jamais supprimée (état
+// sortie et, contrat D01 v2, catégorie, entreprise et e-mail, puis le matricule de site « I… » / « E… » (lot 14 de Cursus,
+// jamais effacé : valeur publiée vide ou colonne absente = valeur gardée) ; une personne absente de la vue n'est jamais supprimée (état
 // « absent », signal au QHSE). L'e-mail n'apparaît jamais en clair au journal (donnée personnelle, publiée par pub_journal
 // pour le seul intitulé : l'intitulé n'en porte jamais).
 
@@ -14,16 +15,28 @@ export const CURSUS_LEFT_REASON = 'Sortie enregistrée dans Cursus';
 /** Une personne sortie depuis plus longtemps n'est pas créée dans Vigie (Cursus publie aussi les anciens salariés). */
 export const CURSUS_PEOPLE_HISTORY_DAYS = 365;
 
+/**
+ * Matricule de site publié par Cursus (lot 14) : « I » (intérimaire) ou « E » (extérieur) suivi de chiffres (`I00001`…).
+ * Format volontairement large (nombre de chiffres libre) : même règle que la contrainte people_site_matricule_check.
+ */
+export const SITE_MATRICULE_RE = /^[IE][0-9]+$/;
+
+/** Matricule de site lu dans une vue : valeur nettoyée au format SITE_MATRICULE_RE, sinon null (`undefined` gardé). */
+export function siteMatriculeOf(raw: string | null | undefined): string | null {
+  const v = raw?.trim().toUpperCase();
+  return v && SITE_MATRICULE_RE.test(v) ? v : null;
+}
+
 /** Personne publiée par Cursus, telle que la lit src/lib/foreign/cursus.ts (`undefined` : colonne non publiée, contrat v1). */
 export type CursusPersonRow = {
   matricule: string; name: string; job: string; siteCode: string | null; leftOn: string | null;
-  category?: PersonCategory | null; company?: string | null; email?: string | null;
+  category?: PersonCategory | null; company?: string | null; email?: string | null; siteMatricule?: string | null;
 };
 
 /** Champs d'une fiche de Vigie repris de Cursus. */
 export type CachedPerson = {
   name: string; job: string; siteId: string | null; leftOn: string | null; leftReason: string | null;
-  cursusState: string | null; category: string | null; company: string | null; cursusEmail: string | null;
+  cursusState: string | null; category: string | null; company: string | null; cursusEmail: string | null; siteMatricule: string | null;
 };
 
 export type PersonPatch = Partial<CachedPerson>;
@@ -50,6 +63,7 @@ export function newCachedPerson(src: CursusPersonRow, followed: ReadonlySet<stri
   return {
     name: src.name, job: src.job, siteId: followedSite(src.siteCode, followed), leftOn: src.leftOn, leftReason: src.leftOn ? CURSUS_LEFT_REASON : null,
     cursusState: 'actif', category: src.category ?? null, company: src.company ?? null, cursusEmail: src.email ?? null,
+    siteMatricule: src.siteMatricule ?? null,
   };
 }
 
@@ -71,6 +85,8 @@ export function cursusPersonSync(local: CachedPerson, src: CursusPersonRow | und
     ...(src.category !== undefined ? { category: src.category } : {}),
     ...(src.company !== undefined ? { company: src.company } : {}),
     ...(src.email !== undefined ? { cursusEmail: src.email } : {}),
+    // Matricule de site : permanent, jamais effacé (publié vide ou colonne absente : valeur de Vigie gardée).
+    ...(src.siteMatricule ? { siteMatricule: src.siteMatricule } : {}),
   };
   // Sortie : date de Cursus ; motif automatique quand la date change (une date égale garde le motif saisi avant D01).
   if ((src.leftOn ?? null) !== (local.leftOn ?? null)) {
@@ -88,6 +104,7 @@ export function cursusPersonSync(local: CachedPerson, src: CursusPersonRow | und
     ...('category' in patch && local.cursusState ? [{ field: 'Catégorie', from: categoryLabel(local.category), to: categoryLabel(next.category) }] : []),
     ...('company' in patch && local.cursusState ? [{ field: 'Agence ou entreprise', from: local.company, to: next.company }] : []),
     ...('cursusEmail' in patch && local.cursusState ? [{ field: 'E-mail publié par Cursus', from: masked(local.cursusEmail), to: masked(next.cursusEmail) }] : []),
+    ...('siteMatricule' in patch && local.cursusState ? [{ field: 'Matricule de site', from: local.siteMatricule, to: next.siteMatricule }] : []),
     // Premier état lu « publiée » : sans intérêt pour l'historique.
     ...('cursusState' in patch && local.cursusState ? [{ field: 'État dans Cursus', from: stateLabel(local.cursusState), to: stateLabel('actif') }] : []),
   ];

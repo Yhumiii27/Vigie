@@ -12,7 +12,7 @@ ou les RH.
 
 Sommaire : 1. Objet, sources et état · 2. Socle commun des lectures croisées · 3. Décision par décision · 4. Ordre des
 lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relevés dans le plan de Matrix · 7. Réalisation du
-03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4) · 7 quinquies. Réalisation du 05/11/2026 (lot 5) · 7 sexies. Réalisation du 07/11/2026 (D01, PRV-25).
+03/11/2026 · 7 bis. Réalisation du 04/11/2026 · 7 ter. Réalisation du 05/11/2026 · 7 quater. Réalisation du 05/11/2026 (lot 4) · 7 quinquies. Réalisation du 05/11/2026 (lot 5) · 7 sexies. Réalisation du 07/11/2026 (D01, PRV-25 ; matricule de site du 09/11/2026).
 
 ## 1. Objet, sources et état
 
@@ -74,7 +74,7 @@ apparaît, `docs/RESTE-A-FAIRE.md:115`) ; elles sont traitées ici par leur obje
 
 | Déc. | Plan de Matrix (15/10) | Ce qui a changé | Reste valable | État |
 |---|---|---|---|---|
-| D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | **fait le 07/11** (§ 7 sexies ; CV-10 tranché ; colonnes v2 et vue des présences à créer par Cursus) |
+| D01 Personnes | `people` cache de `cursus.pub_salaries` par `matricule` ; rattachement ; 3 j | `matricule` existe ; personnes créées par Entra ; P-03 | source Cursus, cache `name` / `job` / `site_id`, rattachement | **fait le 07/11** (§ 7 sexies ; CV-10 tranché ; colonnes v2 et vue des présences à créer par Cursus ; matricule de site lu le 09/11, migration 0031, publication proposée par Cursus en attente du propriétaire et de Matrix) |
 | D02 Projets | `keystone_projects` supprimée, `keystone_project_code` dans 4 tables ; 3,5 j | colonnes de code déjà posées (0008) mais jamais saisies ; 5ᵉ table (études) déjà en code ; la veille lit une date de livraison absente de `pub_projets` | lecture directe de `pub_projets` | **fait le 03/11** (veille : nombre saisi, CV-11 ouverte) |
 | D04 Affectations | `keystone_assignments` cache de `pub_affectations` ; 1 j | rien | tout | **fait le 03/11** (jointure par matricule : matricules de démonstration posés, D01 à faire) |
 | D08 Catalogue | `training_titles` cache de `cursus.pub_titres` ; 1,5 j | 5 attributs locaux ajoutés aux titres ; titres réservés au QHSE (HAB-12) | cache, `sort` local | **fait le 04/11** (§ 7 bis ; C-01 et CV-03 par défaut) |
@@ -573,6 +573,18 @@ D10 peut précéder le lot 3 si le service QHSE veut arrêter tôt la saisie de 
 - Validé par Guillaume le :
 ```
 
+```markdown
+## [2026-11-xx] Vigie → Matrix — Matricule de site dans pub_salaries et pub_presences_prevues (réponse à la note du lot 14 de Cursus)
+- Statut : BROUILLON (réponse suggérée, à valider par Guillaume ; rien n'est écrit dans le dépôt de Matrix)
+- Contexte : Cursus propose deux formes (`docs/demandes/matrix-lot14-personnes-site.md` de son dépôt).
+- Préférence de Vigie : la proposition principale — `cursus.pub_salaries.matricule` = matricule Cursus `EMP-…` pour tous,
+  `matricule_site` ajouté en fin du contrat D01 v2 ; `cursus.pub_presences_prevues.matricule` = `EMP-…` (jointure D01),
+  `matricule_site` ajouté en fin de son contrat.
+- Vigie lit déjà les deux formes (migration 0031, colonnes sondées à la lecture) : aucune date imposée ; la variante
+  (présence au matricule de site) reste lue, jointure sur `people.site_matricule`.
+- Aucun nouveau lien : `vigie_app` lit déjà les deux vues (liens D01 acceptés le 05/11/2026).
+```
+
 ### 5.2 Cursus
 
 ```markdown
@@ -868,4 +880,33 @@ intérimaires (`I…`) et salariés d'entreprises extérieures (`E…`) compris 
 Choix pris par défaut, à confirmer : tableau « Convergence M-02, D01 et PRV-25 » du § 19 de `docs/RESTE-A-FAIRE.md`
 (création « à rattacher » à la première connexion, lecteurs et horizon de la liste, rapprochement d'un plan ou d'un permis,
 fiches anciennes gardées et rattachées à la main).
+
+### Matricule de site (09/11/2026, migration `0031_cursus_site_matricule`)
+
+Cursus a livré son côté (lot 14 : `employes.matricule_site`, `exterieur`, `entreprise`, tables des déclarations de
+présence, migrations `0031_personnes_site.sql` et `0032_declarations_presence.sql` de Cursus) et propose à Matrix, dans
+`docs/demandes/matrix-lot14-personnes-site.md` de son dépôt, la forme des deux publications. **Proposition en attente du
+propriétaire et de Matrix** (Matrix définit les vues) :
+
+- proposition principale : `pub_salaries.matricule` reste le matricule Cursus `EMP-…` de tous (intérimaires et extérieurs
+  compris) ; `matricule_site` (`I00001`… intérimaire, `E00001`… extérieur, null pour un salarié ; permanent, jamais
+  réattribué) s'ajoute **en fin** du contrat D01 v2 ; `pub_presences_prevues.matricule` publie `EMP-…` (clé de jointure
+  avec `pub_salaries`) et `matricule_site` s'ajoute en fin de son contrat ;
+- variante : `pub_presences_prevues.matricule` = matricule de site, jointure de Vigie sur `pub_salaries.matricule_site`.
+
+Vigie fonctionne avec toutes ces formes, sans rien casser :
+
+| Élément | Fait |
+|---|---|
+| Contrats | `matricule_site` en fin de `cursus.pub_salaries` et de `cursus.pub_presences_prevues` (`src/db/foreign.ts`, `test/fixtures/contracts/*.json` : `optionalColumns`, colonnes facultatives en fin de contrat, `SALARIES_OPTIONAL_COLUMNS`, `PRESENCES_OPTIONAL_COLUMNS`, contrôlées par `test/integration/foreign-sources.test.ts`) ; chaque colonne facultative est sondée à la lecture (`viewColumns`) : vue v1, v2 sans `matricule_site` ou v2 avec, toutes « disponibles » |
+| Cache | `people.site_matricule` (texte, unique quand renseigné, format `^[IE][0-9]+$` en base, volontairement large) ← `matricule_site` (`siteMatriculeOf` : valeur hors format ignorée) ; changement journalisé « Matricule de site » (première lecture sans entrée) ; **jamais effacé** (colonne absente ou valeur publiée vide : valeur de Vigie gardée) ; jamais pris à une autre fiche (passage `ok` avec un message, sans donnée personnelle) ; rattachement d'une fiche ancienne : matricule de site repris de la fiche remplacée |
+| Poste de garde | personne d'une présence rapprochée par `people.matricule`, puis par `people.site_matricule` (variante, ou colonne `matricule_site` de la présence) : `gatePersonResolver` (`src/lib/rules/gate-house.ts`) ; matricule de site affiché sous le nom (vue et impression, lisible sur téléphone), colonne « Matricule Cursus » ; personne inconnue : « Personne inconnue de Vigie » et le matricule de site publié |
+| Écrans | fiche salarié (« Matricule de site »), vue « Personnel (Cursus) » (choix de rattachement, fiches absentes), données personnelles SEC-13 (« Matricule de site (Cursus) ») |
+| Démonstration | intérimaires et extérieurs du jeu au matricule `EMP-9101`… et au matricule de site `I00101`, `E00201`… ; présences au matricule `EMP-…` avec `matricule_site` (proposition principale) ; bases existantes (PGlite, application Mac) : anciens `I-9101`, `E-9201`… réécrits par la migration 0031 pour ces seules valeurs du jeu (matricule et nom) — aucun doublon, aucune fiche « absente » ; [N. Legrand] reste l'exemple « à rattacher » |
+| Tests | `people-sync.test.ts`, `gate-house.test.ts` (deux clés), `test/integration/cursus-people.test.ts` (vue sans `matricule_site`, avec, modification, conflit, réécriture de la migration, présences jointes par `EMP-…` ou par matricule de site, vue des présences sans `matricule_site`), `foreign-sources.test.ts`, Playwright `poste-de-garde.spec.ts` |
+
+Préférence de Vigie, **réponse suggérée** au propriétaire (rien n'est écrit dans les autres dépôts) : la proposition
+principale de Cursus — clé de jointure `EMP-…` dans les deux vues, `matricule_site` ajouté en fin des deux contrats. Elle
+ne touche aucun lecteur actuel de `pub_salaries`, garde une seule clé de personne entre outils (celle de Keystone et de
+Matrix) et laisse au poste de garde le matricule du badge ; la variante reste lue.
 

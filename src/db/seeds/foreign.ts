@@ -155,16 +155,18 @@ export function demoHeldTitles(): Row[] {
 }
 
 /**
- * Intérimaires (matricule « I… ») et salariés d'entreprises extérieures (« E… ») publiés par Cursus (décision CV-10) :
- * matricule, nom, poste, site, catégorie, agence ou entreprise. Repris par le rafraîchissement (cache people).
+ * Intérimaires et salariés d'entreprises extérieures publiés par Cursus (décision CV-10 ; lot 14 de Cursus, proposition
+ * principale) : matricule Cursus « EMP-… » comme tout le monde, matricule de site « I… » (intérimaire) ou « E… »
+ * (extérieur), nom, poste, site, catégorie, agence ou entreprise. Repris par le rafraîchissement (cache people). Anciens
+ * matricules du jeu (« I-9101 », « E-9201 »…) réécrits par la migration 0031.
  */
-export const DEMO_VISITORS: [matricule: string, name: string, job: string, site: string, category: 'interimaire' | 'exterieur', company: string][] = [
-  ['I-9101', '[D. Garnier]', 'Cariste intérimaire', 'site_a', 'interimaire', '[Agence Intérim Ouest]'],
-  ['I-9102', '[C. Barbier]', 'Opérateur intérimaire', 'site_b', 'interimaire', '[Agence Intérim Ouest]'],
-  ['E-9201', '[F. Rousseau]', 'Technicien levage', 'site_a', 'exterieur', '[Entreprise Levage Ouest]'],
-  ['E-9202', '[B. Morel]', 'Soudeur', 'site_a', 'exterieur', '[Entreprise Chaudronnerie Soudure]'],
-  ['E-9203', '[L. Fabre]', 'Électricien', 'site_a', 'exterieur', '[Entreprise Élec Industrie]'],
-  ['E-9204', '[P. Henry]', 'Technicien incendie', 'site_a', 'exterieur', '[Entreprise Sécurité Incendie]'],
+export const DEMO_VISITORS: [matricule: string, siteMatricule: string, name: string, job: string, site: string, category: 'interimaire' | 'exterieur', company: string][] = [
+  ['EMP-9101', 'I00101', '[D. Garnier]', 'Cariste intérimaire', 'site_a', 'interimaire', '[Agence Intérim Ouest]'],
+  ['EMP-9102', 'I00102', '[C. Barbier]', 'Opérateur intérimaire', 'site_b', 'interimaire', '[Agence Intérim Ouest]'],
+  ['EMP-9201', 'E00201', '[F. Rousseau]', 'Technicien levage', 'site_a', 'exterieur', '[Entreprise Levage Ouest]'],
+  ['EMP-9202', 'E00202', '[B. Morel]', 'Soudeur', 'site_a', 'exterieur', '[Entreprise Chaudronnerie Soudure]'],
+  ['EMP-9203', 'E00203', '[L. Fabre]', 'Électricien', 'site_a', 'exterieur', '[Entreprise Élec Industrie]'],
+  ['EMP-9204', 'E00204', '[P. Henry]', 'Technicien incendie', 'site_a', 'exterieur', '[Entreprise Sécurité Incendie]'],
 ];
 
 /**
@@ -178,14 +180,15 @@ export function demoCursusPeople(): Row[] {
   return [
     ...PEOPLE.map(([id, name, job]) => ({
       matricule: DEMO_MATRICULES[id], nom: name, poste: job, unite_code: null, site_code: site(id), entree: null, sortie: LEFT[id]?.leftOn ?? null,
-      actif: !LEFT[id], categorie: 'salarie', entreprise: null, email: demoEmail(name),
+      actif: !LEFT[id], categorie: 'salarie', entreprise: null, email: demoEmail(name), matricule_site: null,
     })),
     ...LEGACY_PEOPLE.map((p) => ({
       matricule: p.cursusMatricule, nom: p.name, poste: p.job, unite_code: null, site_code: p.siteId, entree: rel(-20), sortie: null, actif: true,
-      categorie: 'salarie', entreprise: null, email: p.email,
+      categorie: 'salarie', entreprise: null, email: p.email, matricule_site: null,
     })),
-    ...DEMO_VISITORS.map(([matricule, nom, poste, siteCode, categorie, entreprise]) => ({
+    ...DEMO_VISITORS.map(([matricule, matriculeSite, nom, poste, siteCode, categorie, entreprise]) => ({
       matricule, nom, poste, unite_code: null, site_code: siteCode, entree: null, sortie: null, actif: true, categorie, entreprise, email: null,
+      matricule_site: matriculeSite,
     })),
   ];
 }
@@ -193,21 +196,23 @@ export function demoCursusPeople(): Row[] {
 /**
  * Présences prévues de cursus.pub_presences_prevues (PRV-25) : arrivées et départs autour de la date du jeu ; trois
  * recoupent un plan de prévention de la même entreprise sur le même site (PP-2026-015, PP-2026-016, PP-2026-017), une est
- * annulée, une porte un matricule inconnu de Vigie.
+ * annulée, une porte une personne inconnue de Vigie. Forme de la proposition principale du lot 14 de Cursus : `matricule`
+ * = matricule Cursus « EMP-… », `matricule_site` en fin de ligne.
  */
 export function demoPresences(): Row[] {
-  const row = (n: number, matricule: string, site: string, company: string | null, from: number, to: number, objet: string, statut = 'validee'): Row => ({
-    declaration_ref: `PRS-2026-${String(n).padStart(4, '0')}`, matricule, site_code: site, entreprise: company, du: rel(from), au: rel(to), objet, statut,
-    maj_le: `${rel(-2)}T09:00:00Z`,
+  const site = new Map(DEMO_VISITORS.map(([m, s]) => [m, s]));
+  const row = (n: number, matricule: string, siteCode: string, company: string | null, from: number, to: number, objet: string, statut = 'validee'): Row => ({
+    declaration_ref: `PRS-2026-${String(n).padStart(4, '0')}`, matricule, site_code: siteCode, entreprise: company, du: rel(from), au: rel(to), objet, statut,
+    maj_le: `${rel(-2)}T09:00:00Z`, matricule_site: site.get(matricule) ?? (matricule === 'EMP-9299' ? 'E00299' : null),
   });
   return [
-    row(1, 'E-9202', 'site_a', '[Entreprise Chaudronnerie Soudure]', -3, 7, 'Renfort de la mezzanine du magasin'),
-    row(2, 'I-9101', 'site_a', '[Agence Intérim Ouest]', 2, 30, 'Renfort de l’atelier montage'),
-    row(3, 'E-9204', 'site_a', '[Entreprise Sécurité Incendie]', 4, 4, 'Vérification annuelle des extincteurs et RIA'),
-    row(4, 'E-9203', 'site_a', '[Entreprise Élec Industrie]', 10, 14, 'Travaux sur le TGBT et le poste d’essais'),
-    row(5, 'E-9201', 'site_a', '[Entreprise Levage Ouest]', 17, 19, 'Maintenance du pont roulant 5 t'),
-    row(6, 'I-9102', 'site_b', '[Agence Intérim Ouest]', 1, 5, 'Renfort de la zone d’essais', 'annulee'),
-    row(7, 'E-9299', 'site_b', '[Fournisseur Hydraulique Nord]', 3, 3, 'Livraison et mise en place d’un vérin'),
+    row(1, 'EMP-9202', 'site_a', '[Entreprise Chaudronnerie Soudure]', -3, 7, 'Renfort de la mezzanine du magasin'),
+    row(2, 'EMP-9101', 'site_a', '[Agence Intérim Ouest]', 2, 30, 'Renfort de l’atelier montage'),
+    row(3, 'EMP-9204', 'site_a', '[Entreprise Sécurité Incendie]', 4, 4, 'Vérification annuelle des extincteurs et RIA'),
+    row(4, 'EMP-9203', 'site_a', '[Entreprise Élec Industrie]', 10, 14, 'Travaux sur le TGBT et le poste d’essais'),
+    row(5, 'EMP-9201', 'site_a', '[Entreprise Levage Ouest]', 17, 19, 'Maintenance du pont roulant 5 t'),
+    row(6, 'EMP-9102', 'site_b', '[Agence Intérim Ouest]', 1, 5, 'Renfort de la zone d’essais', 'annulee'),
+    row(7, 'EMP-9299', 'site_b', '[Fournisseur Hydraulique Nord]', 3, 3, 'Livraison et mise en place d’un vérin'),
   ];
 }
 

@@ -102,6 +102,11 @@ export const people = pgTable('people', {
   // Adresse professionnelle publiée par Cursus (donnée personnelle : jamais au journal du serveur ni dans sync_runs) ;
   // rapprochement d'un compte Entra à la première connexion (src/lib/auth/person.ts), avant l'e-mail de la fiche.
   cursusEmail: text('cursus_email'),
+  // Matricule de site publié par Cursus (lot 14 de Cursus, colonne `matricule_site` en fin du contrat D01 v2, migration
+  // 0031) : « I… » pour un intérimaire, « E… » pour un salarié d'entreprise extérieure, permanent, jamais réattribué ; null
+  // pour un salarié. Clé de rapprochement des présences prévues (poste de garde) quand Cursus les publie par ce matricule.
+  // Jamais effacé par le rafraîchissement (valeur publiée vide ou colonne absente : valeur gardée).
+  siteMatricule: text('site_matricule'),
   // Fiche créée par le rafraîchissement, sans historique propre, dont le matricule a été repris par la fiche ancienne de la
   // même personne (attachPerson) : sortie de l'effectif, conservée (jamais supprimée), hors des fiches « à rattacher ».
   replacedById: text('replaced_by_id').references((): AnyPgColumn => people.id),
@@ -109,6 +114,8 @@ export const people = pgTable('people', {
   uniqueIndex('people_email_lower_unique').on(sql`lower(${t.email})`),
   check('people_cursus_state_check', inList(t.cursusState, CURSUS_PERSON_STATE_CODES)),
   check('people_category_check', inList(t.category, PERSON_CATEGORY_CODES)),
+  uniqueIndex('people_site_matricule_unique').on(t.siteMatricule).where(sql`${t.siteMatricule} is not null`),
+  check('people_site_matricule_check', sql`${t.siteMatricule} ~ '^[IE][0-9]+$'`),
 ]);
 
 // Heures travaillées par mois et par site — base du TF1 / TG (source RH).

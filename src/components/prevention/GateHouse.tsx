@@ -31,7 +31,7 @@ export function GateTable({ rows, caption, showSite, print, empty }: { rows: rea
         <caption className="vg-sr-only">{caption}</caption>
         <thead>
           <tr>
-            <th scope="col">Personne</th><th scope="col">Matricule</th><th scope="col">Entreprise ou agence</th>
+            <th scope="col">Personne</th><th scope="col">Matricule Cursus</th><th scope="col">Entreprise ou agence</th>
             {showSite && <th scope="col">Site</th>}
             <th scope="col">Présence</th><th scope="col">Objet</th><th scope="col">Plan ou permis</th>
           </tr>
@@ -39,7 +39,11 @@ export function GateTable({ rows, caption, showSite, print, empty }: { rows: rea
         <tbody>
           {rows.map((r) => (
             <tr key={r.ref}>
-              <td>{r.name ?? <span style={{ color: 'var(--tone-warn-fg)' }}>Matricule inconnu</span>}</td>
+              <td>
+                {r.name ?? <span style={{ color: 'var(--tone-warn-fg)' }}>Personne inconnue de Vigie</span>}
+                {/* Matricule de site (I… intérimaire, E… extérieur) : celui du badge, sous le nom pour rester lisible sur téléphone. */}
+                {r.siteMatricule && <span style={{ display: 'block', fontSize: 11.5, color: 'var(--vg-text-muted)', whiteSpace: 'nowrap' }}>Matricule de site <strong style={{ fontWeight: 600 }}>{r.siteMatricule}</strong></span>}
+              </td>
               <td style={{ whiteSpace: 'nowrap' }}>{r.matricule ?? '—'}</td>
               <td>{r.company ?? '—'}</td>
               {showSite && <td>{r.siteLabel.split(' — ')[0]}</td>}

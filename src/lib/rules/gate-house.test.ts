@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canReadGateHouse, gateHouseList, matchInterventions, parseHorizon, type GatePresence } from './gate-house';
+import { canReadGateHouse, gatePersonResolver, gateHouseList, matchInterventions, parseHorizon, type GatePresence } from './gate-house';
 
 // PRV-25 : liste du poste de garde d'après les présences prévues de Cursus.
 
@@ -23,10 +23,10 @@ describe('rapprochement d’un plan ou d’un permis', () => {
 
 describe('gateHouseList', () => {
   const sites = new Map([['site_a', 'Site A — ateliers']]);
-  const names = new Map([['E-1', '[F. Rousseau]'], ['E-2', '[B. Morel]']]);
+  const people = [{ matricule: 'E-1', siteMatricule: null, name: '[F. Rousseau]' }, { matricule: 'E-2', siteMatricule: null, name: '[B. Morel]' }];
   it('arrivées et départs de la période, triés par date ; annulées à part ; autre site et site non suivi écartés', () => {
     const list = gateHouseList({
-      today: '2026-10-09', to: '2026-10-16', sites, names, plans, permits: [],
+      today: '2026-10-09', to: '2026-10-16', sites, people, plans, permits: [],
       presences: [
         p('2', '2026-10-06', '2026-10-16'),
         p('1', '2026-10-10', '2026-10-11'),
@@ -40,9 +40,32 @@ describe('gateHouseList', () => {
     expect(list.departures.map((r) => r.ref)).toEqual(['1', '6', '2']);
     expect(list.cancelled.map((r) => r.ref)).toEqual(['4']);
     expect(list.arrivals[0]).toMatchObject({ name: '[F. Rousseau]', plans: ['PP-1'], siteLabel: 'Site A — ateliers' });
-    // Matricule inconnu de Vigie : nom vide (« matricule inconnu » à l'affichage).
-    expect(list.arrivals[1]).toMatchObject({ name: null, matricule: null });
+    // Personne inconnue de Vigie : nom vide (« Personne inconnue de Vigie » à l'affichage).
+    expect(list.arrivals[1]).toMatchObject({ name: null, matricule: null, siteMatricule: null });
     expect(list.cancelled[0].plans).toEqual([]);
+  });
+});
+
+describe('personne d’une présence : matricule Cursus, puis matricule de site (lot 14 de Cursus)', () => {
+  const resolve = gatePersonResolver([
+    { matricule: 'EMP-9101', siteMatricule: 'I00101', name: '[D. Garnier]' },
+    { matricule: 'EMP-9001', siteMatricule: null, name: '[T. Nguyen]' },
+    { matricule: null, siteMatricule: 'E00201', name: '[F. Rousseau]' },
+  ]);
+  it('proposition principale : matricule EMP-…, matricule de site en fin de vue', () => {
+    expect(resolve({ matricule: 'EMP-9101', siteMatricule: 'I00101' })).toEqual({ name: '[D. Garnier]', matricule: 'EMP-9101', siteMatricule: 'I00101' });
+    // Vue sans matricule_site : celui de la fiche.
+    expect(resolve({ matricule: 'EMP-9101' })).toEqual({ name: '[D. Garnier]', matricule: 'EMP-9101', siteMatricule: 'I00101' });
+    expect(resolve({ matricule: 'EMP-9001', siteMatricule: null })).toEqual({ name: '[T. Nguyen]', matricule: 'EMP-9001', siteMatricule: null });
+  });
+  it('variante : la présence porte le matricule de site', () => {
+    expect(resolve({ matricule: 'I00101' })).toEqual({ name: '[D. Garnier]', matricule: 'EMP-9101', siteMatricule: 'I00101' });
+    expect(resolve({ matricule: 'E00201' })).toEqual({ name: '[F. Rousseau]', matricule: null, siteMatricule: 'E00201' });
+  });
+  it('matricule Cursus inconnu mais matricule de site connu ; personne inconnue', () => {
+    expect(resolve({ matricule: 'EMP-7777', siteMatricule: 'E00201' })).toEqual({ name: '[F. Rousseau]', matricule: 'EMP-7777', siteMatricule: 'E00201' });
+    expect(resolve({ matricule: 'EMP-9299', siteMatricule: 'E00299' })).toEqual({ name: null, matricule: 'EMP-9299', siteMatricule: 'E00299' });
+    expect(resolve({ matricule: 'E00299' })).toEqual({ name: null, matricule: null, siteMatricule: 'E00299' });
   });
 });
 

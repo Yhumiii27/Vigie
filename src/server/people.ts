@@ -80,12 +80,17 @@ export async function attachPerson(_prev: FormState, fd: FormData): Promise<Form
   }
   const now = today();
   const sites = await db.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites);
-  const values = newCachedPerson(src, new Set(sites.filter((s) => !s.archivedAt).map((s) => s.id)));
+  // Matricule de site (lot 14 de Cursus) : repris de la fiche remplacée ; jamais pris à une autre fiche (unique).
+  const [siteHolder] = src.siteMatricule
+    ? await db.select({ id: t.people.id }).from(t.people).where(and(eq(t.people.siteMatricule, src.siteMatricule), ne(t.people.id, id)))
+    : [];
+  const kept = siteHolder && siteHolder.id !== holder?.id ? { ...src, siteMatricule: undefined } : src;
+  const values = newCachedPerson(kept, new Set(sites.filter((s) => !s.archivedAt).map((s) => s.id)));
   const siteLabel = (sid: string | null) => (sid ? sites.find((s) => s.id === sid)?.label ?? sid : null);
   await db.transaction(async (tx) => {
     if (holder) {
       await tx.update(t.people).set({
-        matricule: null, cursusState: null, replacedById: id,
+        matricule: null, siteMatricule: null, cursusState: null, replacedById: id,
         ...(holder.leftOn && holder.leftOn <= now ? {} : { leftOn: now, leftReason: 'Fiche en double, remplacée lors d’un rattachement à Cursus' }),
       }).where(eq(t.people.id, holder.id));
       await logChange(tx, {
@@ -100,6 +105,7 @@ export async function attachPerson(_prev: FormState, fd: FormData): Promise<Form
       ...(values.job !== person.job ? [{ field: 'Poste', from: person.job || null, to: values.job || null }] : []),
       ...(values.siteId !== person.siteId ? [{ field: 'Site de rattachement', from: siteLabel(person.siteId), to: siteLabel(values.siteId) }] : []),
       ...((values.leftOn ?? null) !== (person.leftOn ?? null) ? [{ field: 'Sortie', from: person.leftOn, to: values.leftOn }] : []),
+      ...(values.siteMatricule ? [{ field: 'Matricule de site', from: null, to: values.siteMatricule }] : []),
     ];
     await logChange(tx, { entityType: 'person', entityId: id, action: 'link', summary: `Fiche rattachée à Cursus (matricule ${matricule})`, reason, details, byId: session.user.id });
   });

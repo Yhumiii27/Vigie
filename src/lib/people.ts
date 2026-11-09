@@ -23,6 +23,7 @@ export const PERSON_COLUMNS = {
   category: t.people.category,
   company: t.people.company,
   cursusEmail: t.people.cursusEmail,
+  siteMatricule: t.people.siteMatricule,
   replacedById: t.people.replacedById,
 } satisfies Record<keyof Person, unknown>;
 

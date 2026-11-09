@@ -68,8 +68,9 @@ export async function loadPersonalData(personId: string) {
       id: person.id, name: person.name, job: person.job, service: person.service, site: siteLabel(person.siteId), email: person.email,
       matricule: person.matricule, entraLinked: !!person.entraObjectId, inSkillsMatrix: person.inSkillsMatrix,
       // D01 (décision CV-10) : fiche tenue par Cursus quand elle porte un matricule (nom, poste, site, sortie, catégorie,
-      // entreprise, e-mail publiés) ; sinon fiche ancienne « à rattacher ».
+      // entreprise, e-mail, matricule de site publiés) ; sinon fiche ancienne « à rattacher ».
       fromCursus: !!person.matricule, cursusState: person.cursusState, category: person.category, company: person.company, cursusEmail: person.cursusEmail,
+      siteMatricule: person.siteMatricule,
       replaced: !!person.replacedById,
       leftOn: person.leftOn, leftReason: person.leftReason,
       // Droits : rôle applicatif Entra relevé à la dernière connexion (jamais modifié depuis Vigie) et site de rattachement.

@@ -22,7 +22,7 @@ export type PeopleAdmin = {
   /** Fiches sans matricule (saisies avant D01 ou créées à la connexion Entra), à rattacher. */
   toAttach: PeopleAdminRow[];
   /** Fiches tenues par Cursus que sa vue ne publie plus (jamais supprimées). */
-  absent: (PeopleAdminRow & { matricule: string })[];
+  absent: (PeopleAdminRow & { matricule: string; siteMatricule: string | null })[];
   /** Matricules proposés au rattachement : non portés par une fiche, ou portés par une fiche créée par le rafraîchissement. */
   choices: Option[];
   message: string | null;
@@ -42,7 +42,7 @@ export async function loadPeopleAdmin(): Promise<PeopleAdmin | null> {
     db.select({
       id: t.people.id, name: t.people.name, job: t.people.job, siteId: t.people.siteId, email: t.people.email, lastRole: t.people.lastRole,
       matricule: t.people.matricule, replacedById: t.people.replacedById, leftOn: t.people.leftOn, cursusState: t.people.cursusState,
-      category: t.people.category, entraObjectId: t.people.entraObjectId,
+      category: t.people.category, entraObjectId: t.people.entraObjectId, siteMatricule: t.people.siteMatricule,
     }).from(t.people).orderBy(asc(t.people.name)),
     readCursusPeople(db),
     db.select().from(t.syncRuns).where(eq(t.syncRuns.source, SOURCES.people.view)).orderBy(desc(t.syncRuns.startedAt), desc(t.syncRuns.id)).limit(1),
@@ -56,13 +56,13 @@ export async function loadPeopleAdmin(): Promise<PeopleAdmin | null> {
   const choices: Option[] = read.ok ? read.rows.filter((r) => {
     const h = holders.get(r.matricule);
     return !h || (bySync.has(h.id) && !h.entraObjectId);
-  }).map((r) => [r.matricule, `${r.name} · ${r.matricule}${r.category ? ` · ${PERSON_CATEGORIES[r.category as PersonCategory].label.toLowerCase()}` : ''}${r.siteCode ? ` · ${r.siteCode}` : ''}`] as Option)
+  }).map((r) => [r.matricule, `${r.name} · ${r.matricule}${r.siteMatricule ? ` · ${r.siteMatricule}` : ''}${r.category ? ` · ${PERSON_CATEGORIES[r.category as PersonCategory].label.toLowerCase()}` : ''}${r.siteCode ? ` · ${r.siteCode}` : ''}`] as Option)
     .sort((a, b) => a[1].localeCompare(b[1], 'fr')) : [];
   const run = runs[0];
   const present = people.filter((p) => p.matricule && !hasLeft(p, now));
   return {
     toAttach: people.filter((p) => toAttach(p, now) && keep(p.siteId)).map(row),
-    absent: people.filter((p) => p.matricule && p.cursusState === 'absent' && !hasLeft(p, now) && keep(p.siteId)).map((p) => ({ ...row(p), matricule: p.matricule! })),
+    absent: people.filter((p) => p.matricule && p.cursusState === 'absent' && !hasLeft(p, now) && keep(p.siteId)).map((p) => ({ ...row(p), matricule: p.matricule!, siteMatricule: p.siteMatricule })),
     choices,
     message: read.ok ? null : unavailableMessage('people'),
     lastRun: run ? { at: (run.finishedAt ?? run.startedAt).toISOString(), status: run.status, added: run.added, updated: run.updated, removed: run.removed } : null,

@@ -164,8 +164,10 @@ export const pubTitresDetenus = cursus.view('pub_titres_detenus', {
  * cursus.pub_salaries — contrat D01 v2 (Matrix data/contrats/cursus.pub_salaries-d01-v2.json) : colonnes du contrat v1
  * (Cursus server/migrations-pg/0002_partage.sql, une ligne par salarié, sortis compris), puis categorie, entreprise et
  * email ajoutées en fin de vue (décision CV-10 : intérimaires et extérieurs aux matricules I… et E…). Tant que le serveur
- * publie le v1, les trois colonnes manquent : src/lib/foreign/cursus.ts ne lit que les colonnes présentes. Lecteurs :
- * keystone_app, codex_app, vigie_app, matrix_app.
+ * publie le v1, les trois colonnes manquent : src/lib/foreign/cursus.ts ne lit que les colonnes présentes. Puis
+ * `matricule_site` (lot 14 de Cursus, proposition en attente du propriétaire et de Matrix) : matricule de site « I… » ou
+ * « E… », null pour un salarié ; `matricule` reste le matricule Cursus « EMP-… » de tous. Lecteurs : keystone_app,
+ * codex_app, vigie_app, matrix_app.
  */
 export const pubSalaries = cursus.view('pub_salaries', {
   matricule: text('matricule'),
@@ -179,15 +181,21 @@ export const pubSalaries = cursus.view('pub_salaries', {
   categorie: text('categorie'),
   entreprise: text('entreprise'),
   email: text('email'),
+  matriculeSite: text('matricule_site'),
 }).existing();
 
-/** Colonnes ajoutées par le contrat D01 v2 (lues seulement si la vue du serveur les porte). */
-export const SALARIES_V2_COLUMNS = ['categorie', 'entreprise', 'email'] as const;
+/**
+ * Colonnes ajoutées en fin de cursus.pub_salaries par le contrat D01 v2 et le lot 14 de Cursus (lues seulement si la vue
+ * du serveur les porte ; `optionalColumns` du contrat figé).
+ */
+export const SALARIES_OPTIONAL_COLUMNS = ['categorie', 'entreprise', 'email', 'matricule_site'] as const;
 
 /**
  * cursus.pub_presences_prevues — contrat Matrix data/contrats/cursus.pub_presences_prevues.json (décision CV-10, PRV-25) :
  * présences sur site déclarées dans le formulaire public de Cursus et validées (ou annulées) par les RH, une ligne par
- * déclaration ; aucune donnée de santé. Lecteurs : vigie_app, matrix_app.
+ * déclaration ; aucune donnée de santé. `matricule` : matricule Cursus « EMP-… » (proposition principale du lot 14 de
+ * Cursus) ou matricule de site « I… » / « E… » (variante) ; `matricule_site` en fin de vue (proposition principale, lue
+ * seulement si la vue la porte). Lecteurs : vigie_app, matrix_app.
  */
 export const pubPresencesPrevues = cursus.view('pub_presences_prevues', {
   declarationRef: text('declaration_ref'),
@@ -199,7 +207,11 @@ export const pubPresencesPrevues = cursus.view('pub_presences_prevues', {
   objet: text('objet'),
   statut: text('statut'),
   majLe: timestamp('maj_le', { withTimezone: true }),
+  matriculeSite: text('matricule_site'),
 }).existing();
+
+/** Colonne ajoutée en fin de cursus.pub_presences_prevues par la proposition du lot 14 de Cursus (lue si présente). */
+export const PRESENCES_OPTIONAL_COLUMNS = ['matricule_site'] as const;
 
 /**
  * codex.pub_documents — contrat D10 v1 (fiches documents de Codex, sans les « tres_confidentiel » ; le lecteur applique
@@ -376,17 +388,18 @@ export const FOREIGN_CONTRACTS = {
       ['session_prevue_le', 'date'], ['mesure', 'text'], ['mesure_le', 'date'],
     ],
   },
-  // D01 et PRV-25 (décision CV-10) : personnes (contrat v2 complet ; le v1 en est le début) et présences prévues.
+  // D01 et PRV-25 (décision CV-10) : personnes (contrat v2 complet et matricule de site du lot 14 de Cursus ; le v1 en est le
+  // début) et présences prévues (matricule de site en fin, proposition du lot 14).
   people: {
     schema: 'cursus', view: 'pub_salaries', columns: [
       ['matricule', 'text'], ['nom', 'text'], ['poste', 'text'], ['unite_code', 'text'], ['site_code', 'text'], ['entree', 'date'],
-      ['sortie', 'date'], ['actif', 'boolean'], ['categorie', 'text'], ['entreprise', 'text'], ['email', 'text'],
+      ['sortie', 'date'], ['actif', 'boolean'], ['categorie', 'text'], ['entreprise', 'text'], ['email', 'text'], ['matricule_site', 'text'],
     ],
   },
   presences: {
     schema: 'cursus', view: 'pub_presences_prevues', columns: [
       ['declaration_ref', 'text'], ['matricule', 'text'], ['site_code', 'text'], ['entreprise', 'text'], ['du', 'date'], ['au', 'date'],
-      ['objet', 'text'], ['statut', 'text'], ['maj_le', 'timestamp with time zone'],
+      ['objet', 'text'], ['statut', 'text'], ['maj_le', 'timestamp with time zone'], ['matricule_site', 'text'],
     ],
   },
   documents: {
