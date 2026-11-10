@@ -223,6 +223,8 @@ describe('D02 et D16 : projet et fournisseur choisis dans les vues de Keystone',
     const { loadFormOptions } = await import('@/lib/data/options');
     expect(await loadFormOptions()).toMatchObject({ projects: [], projectsMessage: expect.stringContaining('Projets de Keystone indisponibles') });
     const edit = (code: string) => form({ ...base, id: r.id!, pilotId: 'sbenali', keystoneProjectCode: code });
+    // EVT-29 (09/11/2026) : l'encadrement déclare, l'animateur QHSE modifie.
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveEvent({}, edit('K-2026-012'))).toMatchObject({ fieldErrors: { keystoneProjectCode: expect.stringContaining('indisponibles') } });
     expect(await saveEvent({}, edit('K-2026-007'))).toEqual({ ok: true, id: r.id });
     await reinstall();

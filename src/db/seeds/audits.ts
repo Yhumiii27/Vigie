@@ -1,5 +1,6 @@
 import { eq, inArray } from 'drizzle-orm';
 import { monthName } from '../../lib/dates';
+import { inferAuditKind } from '@/lib/rules/audits';
 import * as t from '../schema';
 import { pid } from './core';
 import { rel } from './dates';
@@ -75,6 +76,8 @@ export async function seedAudits(tx: SeedTx) {
   await tx.insert(t.certifications).values(CERTS.map((c, sort) => ({ ...c, sort })));
   const planIds = (await tx.insert(t.auditPlanItems).values(PLAN.map(([track, month, label, plannedOn, detail, owner, actionId], i) => ({
     year: 2026, track, month, label, plannedOn: plannedOn ?? null, detail: detail ?? null, ownerId: owner ? pid(owner) : null, actionId: actionId ?? null, ...PLAN_EXTRA[i],
+    // D08-5 : type d'audit déduit comme pour les éléments repris par la migration 0032.
+    auditKind: inferAuditKind({ track, label, detail: detail ?? null, certificationId: PLAN_EXTRA[i]?.certificationId ?? null }),
   }))).returning({ id: t.auditPlanItems.id })).map((p) => p.id);
   const findingIds = (await tx.insert(t.auditFindings).values(FINDINGS.map(([pi, foundOn, kind, clause, text], sort) => {
     const [, month, label, , detail] = PLAN[pi];

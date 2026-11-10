@@ -42,7 +42,7 @@ export async function seedManagementSystem(tx: SeedTx) {
   // AUD-20, AUD-22 : audit client hors programme du site A, réalisé, avec un constat d'observation.
   const [audit] = await tx.insert(t.auditPlanItems).values({
     year: +rel(-45).slice(0, 4), month: +rel(-45).slice(5, 7), track: 'Audits clients', label: 'Client A', plannedOn: rel(-45), detail: CLIENT_AUDIT,
-    done: true, doneOn: rel(-45), auditor: '[Auditeur qualité du Client A]', scope: 'Fabrication et contrôle final des réducteurs', siteId: 'site_a', unplanned: true, ownerId: 'lmoreau',
+    done: true, doneOn: rel(-45), auditor: '[Auditeur qualité du Client A]', scope: 'Fabrication et contrôle final des réducteurs', siteId: 'site_a', unplanned: true, ownerId: 'lmoreau', auditKind: 'autre',
   }).returning({ id: t.auditPlanItems.id, year: t.auditPlanItems.year, month: t.auditPlanItems.month });
   const [{ n: findings }] = await tx.select({ n: count() }).from(t.auditFindings);
   await tx.insert(t.auditFindings).values({
@@ -56,7 +56,7 @@ export async function seedManagementSystem(tx: SeedTx) {
     .where(and(eq(t.auditPlanItems.track, 'Visites sécurité'), eq(t.auditPlanItems.label, 'Essais 12/10')));
   if (visit) {
     await tx.insert(t.auditPlanItems).values({
-      year: visit.year, month: visit.month, track: 'Visites sécurité', label: 'Magasin · 29/10', plannedOn: rel(20), detail: 'Visite sécurité — magasin et quais', ownerId: 'sbenali', siteId: 'site_a',
+      year: visit.year, month: visit.month, track: 'Visites sécurité', label: 'Magasin · 29/10', plannedOn: rel(20), detail: 'Visite sécurité — magasin et quais', ownerId: 'sbenali', siteId: 'site_a', auditKind: 'terrain',
     });
   }
 

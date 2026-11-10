@@ -2,7 +2,8 @@
 // composants client. Aucune dépendance serveur : imports limités à domain, action-keys et dates.
 //
 // Contrat du paquet 1 (figé pour les flux parallèles, plan § 2.2) :
-//   - libellé court actionLabel(detail), numéros formatActionNumber / parseActionNumber (« A-n », ACT-35), lien de la
+//   - libellé court actionLabel(detail), numéros formatActionNumber (« AC-AANNNN », ACT-36) / parseActionNumber (anciens
+//     « A-n », ACT-35) / actionNumberKey (tri), lien de la
 //     fiche actionHref(id), libellés « à compléter » (SOURCE_TO_COMPLETE, SITE_TO_COMPLETE_LABEL) ; longueur de la référence
 //     d'origine : ORIGIN_REF_MAX (src/lib/action-keys.ts, réexporté par domain) ;
 //   - retard : isLate / lateDays (ouvertes seulement, date cible passée), vérification : isVerificationLate /
@@ -38,7 +39,7 @@
 import type { ActionPriority, Avancement, SourceKey } from './action-keys';
 import { addDays, daysBetween, fmtDate } from './dates';
 import {
-  ACTION_AVANCEMENTS, ACTION_TEXT_MAX, AVANCEMENT, PRIORITY_KEYS, SOURCE_KEYS, TODO_HORIZON_DAYS, canApprove, canSee, isAvancement, isClosedActionStatus,
+  ACTION_AVANCEMENTS, ACTION_TEXT_MAX, AVANCEMENT, PRIORITY_KEYS, SOURCE_KEYS, TODO_HORIZON_DAYS, canSee, isAvancement, isClosedActionStatus,
   isEmployee, isOpenAvancement, type Role, type Tone,
 } from './domain';
 
@@ -51,12 +52,34 @@ export function actionLabel(detail: string | null | undefined): string {
   if (!line) return 'Action sans détail';
   return line.length > ACTION_LABEL_MAX ? `${line.slice(0, ACTION_LABEL_MAX - 1).trimEnd()}…` : line;
 }
-/** Numéro affiché d'une action (ACT-35) ; ACT-36 changera ce format (AC-AA####). */
-export const formatActionNumber = (n: number) => `A-${n}`;
-/** Numéro d'un identifiant « A-n » ; null pour tout autre format (même borne de 9 chiffres que la reprise 0005, R8). */
+/**
+ * Numéro d'une nouvelle action (ACT-36, ACT-P1, réponses du service QHSE du 09/11/2026) : « AC- », année de création sur
+ * deux chiffres (heure de Paris), puis compteur de l'année sur quatre chiffres au moins, qui repart à 0001 chaque année
+ * (AC-260140). Les anciens numéros « A-n » (ACT-35) sont gardés tels quels, jusqu'à la reprise des actions Power Apps (ACT-39).
+ */
+export const formatActionNumber = (yy: string, n: number) => `AC-${yy}${String(n).padStart(4, '0')}`;
+/** Année (deux chiffres) d'un jour « AAAA-MM-JJ » : portée du compteur annuel. */
+export const actionYear = (day: string) => day.slice(2, 4);
+const AC_NUMBER = /^AC-(\d{2})(\d{4,6})$/;
+/** Compteur d'un numéro « AC-AANNNN » de l'année `yy` ; null pour une autre année ou un autre format. */
+export const parseYearActionNumber = (id: string, yy: string): number | null => {
+  const m = AC_NUMBER.exec(id);
+  return m && m[1] === yy ? Number(m[2]) : null;
+};
+/** Numéro d'un ancien identifiant « A-n » ; null pour tout autre format (même borne de 9 chiffres que la reprise 0005, R8). */
 export const parseActionNumber = (id: string): number | null => {
   const m = /^A-(\d{1,9})$/.exec(id);
   return m ? Number(m[1]) : null;
+};
+/**
+ * Clé de tri d'un numéro d'action : anciens « A-n » d'abord (n), puis « AC-AANNNN » par année et compteur ; null pour un
+ * autre format (tri par libellé).
+ */
+export const actionNumberKey = (id: string): number | null => {
+  const legacy = parseActionNumber(id);
+  if (legacy !== null) return legacy;
+  const m = AC_NUMBER.exec(id);
+  return m ? 1e10 + Number(m[1]) * 1e7 + Number(m[2]) : null;
 };
 /** Lien vers la fiche d'une action (plan d'actions, ?action=) : notifications, échéances, écrans sources. */
 export const actionHref = (id: string) => `/actions?action=${encodeURIComponent(id)}`;
@@ -279,8 +302,12 @@ export const textTooLong = (next: string | null, stored: string | null | undefin
 
 // ─── Droits (ACT-22, D19) : règles pures, appliquées par le serveur et par les pages ───
 
-/** « QHSE » des actions : animateur QHSE et direction (canApprove, § 22.17). */
-export const isQhse = (role: Role) => canApprove(role);
+/**
+ * « QHSE » des actions : l'animateur QHSE seulement (ACT-P17 et EVT-16, réponses du service QHSE du 09/11/2026 : « les
+ * actions QSE ne sont gérées que par le service QSSE et pas par la Direction ») ; égal à canEdit(role, 'actions'). La
+ * direction lit le plan de son périmètre comme l'encadrement et garde les droits du responsable sur ses propres actions.
+ */
+export const isQhse = (role: Role) => role === 'Animateur QHSE';
 /**
  * Création d'une action (ACT-22, réponse du service QHSE du 15/10/2026 : « les actions QSE sont créées uniquement par le
  * service QHSE ») : QHSE seulement, depuis le plan comme depuis un écran source. Les autres rôles n'ont aucun bouton de
@@ -524,7 +551,7 @@ export function compareActions(a: { id: string; status: string; dueOn: string },
   const late = lateDays(b, today) - lateDays(a, today);
   if (late) return late;
   if (a.dueOn !== b.dueOn) return a.dueOn < b.dueOn ? -1 : 1;
-  const [na, nb] = [parseActionNumber(a.id), parseActionNumber(b.id)];
+  const [na, nb] = [actionNumberKey(a.id), actionNumberKey(b.id)];
   if (na !== null && nb !== null && na !== nb) return nb - na;
   return b.id.localeCompare(a.id, 'fr', { numeric: true });
 }

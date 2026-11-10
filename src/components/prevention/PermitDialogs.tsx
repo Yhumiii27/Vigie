@@ -14,7 +14,7 @@ import type { PermitView, PlanChoice } from '@/lib/data/prevention';
 import { cancelPermit, closePermit, deliverPermit, linkPermitPlan, savePermit, setPermitCheck } from '@/server/permits';
 import { SaveStatus, safeCall } from '@/components/feedback';
 import {
-  FIRE_WATCH_HOURS, PERMIT_TYPES, PERMIT_TYPE_KEYS, addHoursLocal, fmtLocalLong, lcfirst, missingPresets, permitNeedsSignedPlan, planCovers, ruleBasis,
+  FIRE_WATCH_HOURS, PERMIT_MAX_DAYS, PERMIT_TYPES, PERMIT_TYPE_KEYS, addHoursLocal, fmtLocalLong, lcfirst, missingPresets, permitNeedsSignedPlan, planCovers, ruleBasis,
   type ChecklistItem, type PermitType,
 } from '@/lib/rules/prevention';
 import {
@@ -146,7 +146,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
         <Field name="validFrom" label="Valide du">
           <Input name="validFrom" type="datetime-local" value={validFrom} onChange={(e) => { setValidFrom(e.target.value); repick({ from: e.target.value }); }} />
         </Field>
-        <Field name="validTo" label="Au (fin des travaux)">
+        <Field name="validTo" label="Au (fin des travaux)" hint={`Validité de ${PERMIT_MAX_DAYS} jours au plus.`}>
           <Input name="validTo" type="datetime-local" value={validTo} onChange={(e) => changeValidTo(e.target.value)} />
         </Field>
         {type === 'feu' && (
@@ -300,7 +300,7 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
   const deliverBlock = !permit.allChecked ? 'Tous les points de la check-list doivent être vérifiés.'
     : permit.planBlocker ? permit.planBlocker
       : expired ? 'La période de validité est dépassée.' : null;
-  const closeQuestion = permit.type === 'feu' ? 'Surveillance de 2 h après la fin des travaux assurée ?' : 'Essais terminés et zone remise en sécurité ?';
+  const closeQuestion = permit.type === 'feu' ? 'Surveillance après travaux terminée et zone vérifiée ?' : 'Essais terminés et zone remise en sécurité ?';
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -404,7 +404,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
           )}
           {delivered && (
             <ConfirmButton label="Clore" confirmLabel="Oui, clore" question={closeQuestion} icon="ph-check-square" pending={pending}
-              disabled={permit.state === 'delivre'} tooltip={permit.state === 'delivre' ? "Les travaux n'ont pas commencé : annulez le permis s'ils n'ont pas lieu." : undefined}
+              disabled={permit.state === 'delivre' || !!permit.closeBlock}
+              tooltip={permit.state === 'delivre' ? "Les travaux n'ont pas commencé : annulez le permis s'ils n'ont pas lieu." : permit.closeBlock ?? undefined}
               className="btn btn-primary vg-btn-sm" onConfirm={() => run(() => closePermit(permit.id))} />
           )}
           {requested && (

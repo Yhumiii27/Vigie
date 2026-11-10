@@ -47,7 +47,7 @@ describe('actions de la fiche événement', () => {
   });
 
   it('création depuis l’événement : service QHSE seulement, source imposée, événement lié, journal', async () => {
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role, 'site_a');
       expect(await saveAction({}, newAction({})), role).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
     }
@@ -56,7 +56,7 @@ describe('actions de la fiche événement', () => {
     expect(await saveAction({}, newAction({ source: 'reclamation_client' }))).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     const before = (await loadEventDetail('EV-2026-131'))!.actions.length;
     const r = await saveAction({}, newAction({}));
-    expect(r, JSON.stringify(r)).toMatchObject({ ok: true, id: expect.stringMatching(/^A-\d+$/) });
+    expect(r, JSON.stringify(r)).toMatchObject({ ok: true, id: expect.stringMatching(/^AC-26\d{4}$/) });
     const after = (await loadEventDetail('EV-2026-131'))!.actions;
     expect(after).toHaveLength(before + 1);
     expect(after.find((a) => a.id === r.id)).toMatchObject({ eventId: 'EV-2026-131', source: 'evenement', status: 'a_faire', siteId: 'site_a' });
@@ -90,7 +90,8 @@ describe('étape « Actions » sans action liée (ACT-22)', () => {
     const step = "Liez au moins une action avant le passage à l'étape « Actions ».";
     actAs('Chef de service', 'site_a');
     expect((await loadEventDetail('EV-2026-951'))!.blocker).toBe(`${step} ${QHSE_ONLY_CREATE_MESSAGE}`);
-    expect(await advanceEvent('EV-2026-951')).toEqual({ error: `${step} ${QHSE_ONLY_CREATE_MESSAGE}` });
+    // EVT-29 : l'encadrement ne fait plus avancer l'événement.
+    expect(await advanceEvent('EV-2026-951')).toEqual({ error: "Réservé à l'animateur QHSE." });
     actAs('Animateur QHSE', 'site_a');
     expect((await loadEventDetail('EV-2026-951'))!.blocker).toBe(step);
     expect(await advanceEvent('EV-2026-951')).toEqual({ error: step });

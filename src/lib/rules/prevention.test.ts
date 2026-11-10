@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PLAN_CONTENT, START_GAP_LABEL,
+  COMPANY_RULE_REASON, PLAN_CONTENT, PERMIT_MAX_DAYS, START_GAP_LABEL, gapMeasuresError, inspectionAfterStartError, permitCloseBlocker, permitValidityError,
   activityLinkIssues, addHoursLocal, firstFullSignatureOn, fmtLocalRange, fmtPeriod, fromParisLocal, fullSignatureOn, inGapWindow, isInProgress, isMandatory, lacksSignedPlan,
   lcfirst, legalReason, mandatoryReason, missingPlanContent, missingPresets, parseChecklist, permitDays, permitLacksSignedPlan, permitNeedsSignedPlan,
   permitActivityBlocker, permitPlanCheck, permitState, planContentStats, planEndIssue, planPhase, planSignIssue, planStatus, ruleBasis, sevesoLabel, signedBeforeStart, startGap,
@@ -23,8 +23,9 @@ const paris = (local: string) => fromParisLocal(local)!;
 const ms = (local: string) => paris(local).getTime();
 
 describe('plan de prévention : obligation et statut', () => {
-  it('obligation légale (≥ 400 h sur 12 mois ou travaux dangereux), sinon règle du site', () => {
-    expect(isMandatory(plan({ estimatedHours: 399 }), LEGAL)).toBe(false);
+  it('PRV-13 : plan écrit toujours obligatoire (règle de l’entreprise) ; fondement : règle du site, seuil légal, sinon entreprise', () => {
+    expect(isMandatory(plan({ estimatedHours: 399 }), LEGAL)).toBe(true);
+    expect(mandatoryReason(plan({ estimatedHours: 399 }), LEGAL)).toBe(COMPANY_RULE_REASON);
     expect(isMandatory(plan({ estimatedHours: 400 }), LEGAL)).toBe(true);
     expect(isMandatory(plan({ dangerousWork: true }), null)).toBe(true);
     expect(isMandatory(plan({ estimatedHours: 6 }), SEVESO)).toBe(true);
@@ -59,7 +60,7 @@ describe('plan de prévention : obligation et statut', () => {
   it('écart R. 4512-6 : intervention en cours sans plan obligatoire signé', () => {
     expect(isInProgress(plan(), NOW)).toBe(true);
     expect(lacksSignedPlan(plan({ dangerousWork: true }), NOW, LEGAL)).toBe(true);
-    expect(lacksSignedPlan(plan(), NOW, LEGAL)).toBe(false); // non obligatoire
+    expect(lacksSignedPlan(plan(), NOW, LEGAL)).toBe(true); // PRV-13 : toujours obligatoire
     expect(lacksSignedPlan(plan(), NOW, SEVESO)).toBe(true);
     expect(lacksSignedPlan(plan({ signedEuOn: '2026-10-02', signedEeOn: '2026-10-02' }), NOW, SEVESO)).toBe(false);
     expect(lacksSignedPlan(plan({ startOn: '2026-10-12' }), NOW, SEVESO)).toBe(false); // pas encore commencée
@@ -117,11 +118,11 @@ describe('écarts R. 4512-6 au démarrage (PRV-01) : plan signé après le débu
   });
   it('intervention terminée (ou en cours) sans plan signé : écart « non signé »', () => {
     expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, SEVESO)).toBe('non_signe');
-    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05', signedEuOn: '2026-09-01' }), NOW, LEGAL)).toBeNull(); // non obligatoire
+    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05', signedEuOn: '2026-09-01' }), NOW, LEGAL)).toBe('non_signe'); // PRV-13
     expect(startGap(plan(), NOW, SEVESO)).toBe('non_signe'); // en cours : écart courant (lacksSignedPlan)
   });
-  it('ni plan non obligatoire, ni plan annulé, ni intervention à venir', () => {
-    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, LEGAL)).toBeNull();
+  it('ni plan annulé, ni intervention à venir (PRV-13 : plus de plan non obligatoire)', () => {
+    expect(startGap(plan({ startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, LEGAL)).toBe('non_signe');
     expect(startGap(plan({ status: 'annule', startOn: '2026-09-01', endOn: '2026-09-05' }), NOW, SEVESO)).toBeNull();
     expect(startGap(plan({ startOn: '2026-10-12', endOn: '2026-10-14' }), NOW, SEVESO)).toBeNull();
     expect(startGap(plan({ startOn: NOW }), NOW, SEVESO)).toBe('non_signe'); // commencée aujourd'hui
@@ -218,7 +219,7 @@ describe('permis et plan de prévention', () => {
 
   it('plan signé exigé : entreprise extérieure sur un site « dès la première minute », ou permis de feu d’une entreprise extérieure', () => {
     expect(permitNeedsSignedPlan(permit({ type: 'essai' }), SEVESO)).toBe(true);
-    expect(permitNeedsSignedPlan(permit({ type: 'essai' }), LEGAL)).toBe(false);
+    expect(permitNeedsSignedPlan(permit({ type: 'essai' }), LEGAL)).toBe(true); // PRV-13 : toute entreprise extérieure
     expect(permitNeedsSignedPlan(permit(), LEGAL)).toBe(true);
     expect(permitNeedsSignedPlan(permit({ contractorId: null }), SEVESO)).toBe(false);
   });
@@ -233,13 +234,11 @@ describe('permis et plan de prévention', () => {
     expect(permitPlanCheck(permit(), linked({ status: 'annule' }), SEVESO)).toEqual({ kind: 'closed', message: 'Le plan de prévention PP-2026-015 est annulé.' });
     expect(permitPlanCheck(permit(), linked({ startOn: '2026-10-09' }), SEVESO)?.kind).toBe('dates');
     expect(permitPlanCheck(permit(), linked({ signedEeOn: null }), SEVESO)).toEqual({ kind: 'unsigned', message: "Le plan de prévention PP-2026-015 n'est pas signé par les deux entreprises." });
-    // Permis de feu hors règle du site, sur un plan non obligatoire par ailleurs : motif précisé.
-    expect(permitPlanCheck(permit(), linked({ signedEeOn: null }), LEGAL)?.message).toBe(
-      "Le plan de prévention PP-2026-015 n'est pas signé par les deux entreprises (permis de feu : travaux dangereux, plan écrit obligatoire).",
-    );
+    // PRV-13 : plan toujours obligatoire, le permis de feu n'a plus de motif propre.
+    expect(permitPlanCheck(permit(), linked({ signedEeOn: null }), LEGAL)?.message).toBe("Le plan de prévention PP-2026-015 n'est pas signé par les deux entreprises.");
     expect(permitPlanCheck(permit(), linked(), SEVESO)).toBeNull();
-    // Permis interne rattaché à un plan non obligatoire et non signé : en règle.
-    expect(permitPlanCheck(permit({ type: 'essai', contractorId: null }), linked({ signedEeOn: null, signedEuOn: null }), LEGAL)).toBeNull();
+    // Permis interne rattaché à un plan non signé : le plan reste exigé signé (PRV-13).
+    expect(permitPlanCheck(permit({ type: 'essai', contractorId: null }), linked({ signedEeOn: null, signedEuOn: null }), LEGAL)?.kind).toBe('unsigned');
   });
   it('écart « dès la première minute » : permis actif d’une entreprise extérieure sans plan signé', () => {
     const active = (over: Record<string, unknown> = {}) => ({ ...permit(over), status: 'demande', watchUntil: null, ...over });
@@ -316,5 +315,29 @@ describe('nextPeriodicMeeting : inspections et réunions périodiques (PRV-17)',
     expect(nextPeriodicMeeting(plan, [], '2025-12-31')).toBeNull();
     expect(nextPeriodicMeeting({ ...plan, status: 'clos' }, [], '2026-03-01')).toBeNull();
     expect(nextPeriodicMeeting({ ...plan, endOn: '2026-02-01' }, [], '2026-01-20')).toBeNull();
+  });
+});
+
+describe('réponses du service QHSE du 09/11/2026 (PRV-04, PRV-06, PRV-16, PRV-21)', () => {
+  it('PRV-06 : inspection commune au plus tard le premier jour', () => {
+    expect(inspectionAfterStartError('2026-10-05', '2026-10-05')).toBeNull();
+    expect(inspectionAfterStartError('2026-10-06', '2026-10-05')).toMatch(/premier jour/);
+    expect(inspectionAfterStartError(null, '2026-10-05')).toBeNull();
+  });
+  it('PRV-16 : validité de 7 jours au plus', () => {
+    expect(permitValidityError(paris('2026-10-01T08:00'), paris(`2026-10-0${1 + PERMIT_MAX_DAYS}T08:00`))).toBeNull();
+    expect(permitValidityError(paris('2026-10-01T08:00'), paris('2026-10-08T08:01'))).toMatch(/7 jours/);
+  });
+  it('PRV-04 : permis de feu clos après la surveillance', () => {
+    const feu = { type: 'feu', validTo: paris('2026-10-08T17:00'), watchUntil: paris('2026-10-08T19:00') };
+    expect(permitCloseBlocker(feu, ms('2026-10-08T18:59'))).toMatch(/Surveillance/);
+    expect(permitCloseBlocker(feu, ms('2026-10-08T19:00'))).toBeNull();
+    expect(permitCloseBlocker({ ...feu, watchUntil: null }, ms('2026-10-08T18:00'))).toMatch(/08\/10\/2026 à 19:00/);
+    expect(permitCloseBlocker({ ...feu, type: 'essai' }, ms('2026-10-08T17:30'))).toBeNull();
+  });
+  it('PRV-21 : mesures immédiates exigées après un écart', () => {
+    expect(gapMeasuresError(false, '')).toBeNull();
+    expect(gapMeasuresError(true, '  ')).toMatch(/mesures immédiates/);
+    expect(gapMeasuresError(true, 'Travaux arrêtés')).toBeNull();
   });
 });

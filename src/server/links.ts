@@ -3,13 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { getDb, type DbOrTx } from '@/db';
 import { checkLinkChange } from '@/lib/action-links';
-import { requireApprover } from '@/lib/guard';
+import { requireEditor } from '@/lib/guard';
 import { logChange } from './changelog';
 
 // Rattacher / détacher un lien complémentaire d'une action existante (risque, exigence, contrôle, revue, décision de revue,
 // version de document), pour le composant transverse LinkActionButton. Les types de liens sont décrits dans
 // src/lib/action-links.ts. Toute modification d'une action relève du service QHSE (ACT-22, réponses du 15/10/2026) :
-// requireApprover, puis les droits de la fiche (actionRights : canLink sur une action ni Vérifiée ni Abandonnée,
+// requireEditor('actions', { qhse: true }), puis les droits de la fiche (actionRights : canLink sur une action ni Vérifiée ni Abandonnée,
 // canUnlink sauf Abandonnée). Jamais ici :
 //   - l'événement ou l'audit de l'action (event, finding, plan), fixé à sa création (D15) ;
 //   - les sources d'origine (plan de prévention, permis, document, filière, enlèvement : ACT-01), fixées à la création ;
@@ -18,7 +18,7 @@ import { logChange } from './changelog';
 type Result = { error?: string };
 
 async function check(link: string, actionId: string, mode: 'link' | 'unlink') {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const db = await getDb();
   // Contrôles communs du registre (type, droits de la fiche, écran et site de l'élément, site de l'action) : checkLinkChange.

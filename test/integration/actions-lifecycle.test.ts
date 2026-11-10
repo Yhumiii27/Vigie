@@ -11,14 +11,14 @@ import { abandonAction, moveAction, reopenAction } from '@/server/plan-ui';
 
 freshDemoDatabase();
 
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE."; // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions
 const STALE = "L'action a changé entre-temps : la fiche est actualisée.";
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
 const move = (id: string, from: string, to: string, extra: Record<string, string> = {}) => moveAction({}, form({ id, from, to, ...extra }));
 
 describe('droits et avancement affiché', () => {
   it('hors QHSE : refusé, y compris le responsable salarié de A-215', async () => {
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role);
       expect(await move('A-215', 'a_faire', 'p20')).toEqual({ error: APPROVERS_ONLY });
       expect(await abandonAction({}, form({ id: 'A-215', from: 'a_faire', reason: 'Test' }))).toEqual({ error: APPROVERS_ONLY });

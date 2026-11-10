@@ -1,9 +1,11 @@
 import 'server-only';
 import { cache } from 'react';
-import { asc, isNull, sql } from 'drizzle-orm';
-import { getDb, schema as t } from '@/db';
+import { and, asc, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { getDb, schema as t, type DbOrTx } from '@/db';
+import { SITE_OPEN_KINDS, type SiteOpenCounts, type SiteOpenKind } from '../rules/site-transfer';
 import { today } from '@/lib/today';
-import { canApprove, type TodoItem } from '../domain';
+import { STEP_CLOSED, canApprove, type TodoItem } from '../domain';
 import { hasLeft } from '../people';
 import { loadPeople } from '../queries';
 import { getSession, siteFilter } from '../session';
@@ -29,16 +31,43 @@ export type SiteAdminRow = {
   /** Nom de la personne qui a archivé le site. */
   archivedBy: string | null;
   archiveReason: string | null;
+  /** TDB-08 : éléments ouverts du site (avertissement et transfert en masse avant l'archivage). */
+  openItems: SiteOpenCounts;
 };
+
+/**
+ * TDB-08 : identifiants des éléments ouverts d'un site, par type — événements non clôturés ni classés sans suite, actions
+ * QSE ni Vérifiées ni Abandonnées, contrôles périodiques non archivés, plans de prévention ni clos ni annulés, permis
+ * demandés ou délivrés. Lu par « Gérer les sites » (décompte) et par le transfert (archiveSite), dans sa transaction.
+ */
+export async function siteOpenItems(db: DbOrTx, siteIds?: readonly string[]): Promise<Record<SiteOpenKind, { id: string; siteId: string }[]>> {
+  const of = (col: AnyPgColumn) => (siteIds ? [inArray(col, [...siteIds])] : []);
+  const [events, actions, controls, plans, permits] = await Promise.all([
+    db.select({ id: t.events.id, siteId: t.events.siteId }).from(t.events)
+      .where(and(isNull(t.events.dismissedAt), lt(t.events.step, STEP_CLOSED), ...of(t.events.siteId))),
+    db.select({ id: t.actions.id, siteId: t.actions.siteId }).from(t.actions)
+      .where(and(notInArray(t.actions.status, ['verifiee', 'abandonnee']), ...of(t.actions.siteId))),
+    db.select({ id: t.controls.id, siteId: t.controls.siteId }).from(t.controls)
+      .where(and(isNull(t.controls.archivedAt), ...of(t.controls.siteId))),
+    db.select({ id: t.preventionPlans.id, siteId: t.preventionPlans.siteId }).from(t.preventionPlans)
+      .where(and(notInArray(t.preventionPlans.status, ['clos', 'annule']), ...of(t.preventionPlans.siteId))),
+    db.select({ id: t.permits.id, siteId: t.permits.siteId }).from(t.permits)
+      .where(and(inArray(t.permits.status, ['demande', 'delivre']), ...of(t.permits.siteId))),
+  ]);
+  const keep = (rows: { id: string | number; siteId: string | null }[]) => rows.filter((r): r is { id: string | number; siteId: string } => !!r.siteId).map((r) => ({ id: String(r.id), siteId: r.siteId }));
+  return { events: keep(events), actions: keep(actions), controls: keep(controls), plans: keep(plans), permits: keep(permits) };
+}
 
 /** Tous les sites, actifs d'abord puis archivés, dans l'ordre d'affichage (administration des sites, animateur QHSE et direction). */
 export const loadSiteAdmin = cache(async (): Promise<SiteAdminRow[]> => {
   const db = await getDb();
   const now = today();
-  const [sites, people] = await Promise.all([db.select().from(t.sites).orderBy(sql`${t.sites.archivedAt} asc nulls first`, asc(t.sites.sort)), loadPeople()]);
+  const [sites, people, open] = await Promise.all([db.select().from(t.sites).orderBy(sql`${t.sites.archivedAt} asc nulls first`, asc(t.sites.sort)), loadPeople(), siteOpenItems(db)]);
   return sites.map((s) => {
     const lead = s.qhseLeadId ? people.get(s.qhseLeadId) : undefined;
+    const openItems = Object.fromEntries(SITE_OPEN_KINDS.map((k) => [k, open[k].filter((r) => r.siteId === s.id).length])) as SiteOpenCounts;
     return {
+      openItems,
       id: s.id, label: s.label, sort: s.sort, seveso: s.seveso, matrixState: s.matrixState as MatrixSiteState | null,
       qhseLeadId: s.qhseLeadId,
       alsaceMoselle: s.alsaceMoselle,

@@ -15,12 +15,12 @@ import { linkAction, unlinkAction } from '@/server/links';
 
 freshDemoDatabase();
 
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE."; // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
 
 describe('droits et types refusés', () => {
   it('hors QHSE : refusé (rattacher comme détacher)', async () => {
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role);
       expect(await linkAction('risk:3', 'A-215')).toEqual({ error: APPROVERS_ONLY });
       expect(await unlinkAction('risk:1', 'A-215')).toEqual({ error: APPROVERS_ONLY });

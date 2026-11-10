@@ -114,7 +114,7 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
     await setPlan('PP-2026-013', { coordination });
   });
 
-  it('plan non obligatoire (site sans la règle « dès la première minute », 8 h, sans travaux dangereux) : signé sans les sections', async () => {
+  it('PRV-13 : plan toujours obligatoire (site sans la règle « dès la première minute », 8 h, sans travaux dangereux) : sections exigées', async () => {
     const db = await getDb();
     await db.update(t.sites).set({ ppFromFirstMinute: false }).where(eq(t.sites.id, 'site_b'));
     try {
@@ -124,10 +124,10 @@ describe('PRV-02 : contenu réglementaire du plan', () => {
         startOn: '2026-10-20', endOn: '2026-10-20', estimatedHours: '8', inspectionOn: '2026-10-09', measures: 'Accompagnement par le chef de zone.',
       }));
       expect(created).toEqual({ ok: true, id: 'PP-2026-019' });
-      expect((await planView('PP-2026-019'))).toMatchObject({ mandatory: false, contentMissing: [], contentStats: { filled: 0, total: 9 } });
-      expect(await signEu('PP-2026-019')).toEqual({ ok: true, id: 'PP-2026-019' });
-      expect(await recordPlanEeSignature({}, form({ id: 'PP-2026-019', signedEeName: '[Représentant EE]', signedEeQuality: 'Chef de chantier', signedEeOn: '2026-10-09' }))).toEqual({ ok: true, id: 'PP-2026-019' });
-      expect(await plan('PP-2026-019')).toMatchObject({ status: 'signe', firstSignedOn: '2026-10-09' });
+      expect((await planView('PP-2026-019'))).toMatchObject({
+        mandatory: true, mandatoryReason: expect.stringContaining("Règle de l'entreprise"), contentMissing: expect.arrayContaining(['phases dangereuses']), contentStats: { filled: 0, total: 9 },
+      });
+      expect((await signEu('PP-2026-019')).error).toMatch(/^Complétez le contenu du plan/);
     } finally {
       await db.update(t.sites).set({ ppFromFirstMinute: true }).where(eq(t.sites.id, 'site_b'));
     }
@@ -211,8 +211,8 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
 
     expect(await closePlan('PP-2026-015')).toEqual({ error: 'Permis rattachés encore actifs (PF-2026-032) : clôturez-les ou annulez-les avant de clore le plan.' });
     expect(await cancelPermit({}, form({ id: 'PF-2026-032', reason: 'Soudage réalisé sous le permis du jour, demande en double' }))).toEqual({ ok: true, id: 'PF-2026-032' });
-    expect(await closePlan('PP-2026-015')).toEqual({});
-    expect(await lastLog('prevention_plan', 'PP-2026-015')).toMatchObject({ action: 'status', summary: 'Plan clos', byId: 'clefevre' });
+    expect(await closePlan('PP-2026-015', 'Soudage suspendu jusqu’à la signature du plan')).toEqual({});
+    expect(await lastLog('prevention_plan', 'PP-2026-015')).toMatchObject({ action: 'status', summary: 'Plan clos après un écart R. 4512-6', byId: 'clefevre' });
   });
 
   it('signatures effacées puis recueillies à nouveau (PP-2025-041) : première signature conservée, pas d’écart', async () => {

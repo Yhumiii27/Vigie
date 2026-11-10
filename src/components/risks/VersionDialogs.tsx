@@ -10,7 +10,8 @@ import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import { LEFT_SUFFIX, withCurrent, type Option } from '@/lib/form-options';
 import type { DuerpVersionDetail, DuerpVersionView, RiskRecord } from '@/lib/data/risks';
-import { createDuerpVersion, updateCurrentDuerpVersion } from '@/server/risks';
+import { addDuerpVersionComment, createDuerpVersion, updateCurrentDuerpVersion } from '@/server/risks';
+import { DUERP_COMMENT_MAX } from '@/lib/rules/duerp';
 import { Cotation } from './RiskForm';
 
 const d = (iso: string | null | undefined) => (iso ? fmtDate(iso) : '—');
@@ -81,6 +82,10 @@ export function VersionsButton({ versions, canApprove, people, history = false }
             kicker={`DUERP · version ${v.version}`} files={v.files} canAdd={v.current && canApprove} emptyText="Aucun document signé joint."
             hint="Document unique daté et signé (PDF, scan) · 10 Mo par fichier." />
         ))}
+        {/* DUE-10 : commentaires ajoutés à une version (la version validée est figée, les commentaires restent possibles). */}
+        {view.kind === 'list' && versions.filter((v) => v.comments.length > 0 || canApprove).map((v) => (
+          <VersionComments key={`comments-${v.version}`} version={v} canAdd={canApprove} />
+        ))}
         {/* Historique des versions (DUE-06) : ouverture, compléments, archivage — à la saisie seulement. */}
         {view.kind === 'list' && history && versions.map((v) => (
           <LazyChangeLog key={v.version} entity="duerp_version" id={v.version} title={`Historique de la version ${v.version}`} />
@@ -99,7 +104,7 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-        Chaque mise à jour archive la version en vigueur avec un instantané de tous les risques (toutes unités, tous sites). Les versions antérieures à Vigie sont conservées hors de l&apos;application.
+        Une version est figée à sa validation (consultation du CSE) par un instantané de tous les risques (toutes unités, tous sites) ; seuls des commentaires s&apos;y ajoutent ensuite. Une version archivée sans validation est figée à son archivage. Les versions antérieures à Vigie sont conservées hors de l&apos;application.
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 720 }}>
@@ -125,16 +130,18 @@ function VersionList({ versions, canApprove, onShow, onEdit }: { versions: Duerp
                   {v.portalDepositedOn && <div style={{ fontSize: 11.5, color: 'var(--color-neutral-400)' }}>Portail : {fmtDate(v.portalDepositedOn)}</div>}
                 </td>
                 <td style={{ verticalAlign: 'top' }}>
-                  {v.current ? (
+                  {v.current && !v.hasSnapshot ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
-                      <span style={{ color: 'var(--color-neutral-500)' }}>Pris à l&apos;archivage</span>
+                      <span style={{ color: 'var(--color-neutral-500)' }}>Pris à la validation</span>
                       {canApprove && <button type="button" className="vg-text-btn" onClick={() => onEdit(v.version)}>Modifier</button>}
                       <PrintLink />
                     </span>
                   ) : v.hasSnapshot ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
                       <span style={{ color: TONE.ok.fg }}>Oui{v.riskCount != null && <span style={{ color: 'var(--color-neutral-500)' }}> · {v.riskCount} risque{v.riskCount > 1 ? 's' : ''}</span>}</span>
+                      {v.current && <span style={{ color: 'var(--color-neutral-500)' }}>figé à la validation</span>}
                       <button type="button" className="vg-text-btn" onClick={() => onShow(v.version)}>Consulter</button>
+                      {v.current && canApprove && <button type="button" className="vg-text-btn" onClick={() => onEdit(v.version)}>Modifier</button>}
                       <a href={csvHref(v.version)} download className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><i className="ph ph-download-simple" style={{ fontSize: 12 }} aria-hidden />CSV</a>
                       <PrintLink version={v.version} />
                     </span>
@@ -212,6 +219,8 @@ function SnapshotView({ loaded }: { loaded: Loaded }) {
 }
 
 type VersionDefaults = {
+  /** DUE-10 : version validée par le CSE : validateur, consultation et objet figés (envoyés tels quels). */
+  frozen?: boolean;
   version: string; validatedById?: string | null; validatedBy?: string; cseConsultedOn?: string | null; spstSentOn?: string | null; portalDepositedOn?: string | null; comment?: string | null;
 };
 
@@ -230,8 +239,16 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
   const validators = create ? people : withCurrent(people, defaults.validatedById, `${defaults.validatedBy || defaults.validatedById}${LEFT_SUFFIX}`);
   return (
     <ActionForm action={create ? createDuerpVersion : updateCurrentDuerpVersion} onDone={onDone} onCancel={onCancel}
-      submitLabel={create ? 'Archiver et créer la version' : 'Enregistrer'} hidden={create ? undefined : { version: defaults.version }}>
+      submitLabel={create ? 'Archiver et créer la version' : 'Enregistrer'}
+      hidden={create ? undefined : defaults.frozen
+        ? { version: defaults.version, validatedById: defaults.validatedById ?? '', cseConsultedOn: defaults.cseConsultedOn ?? '', comment: defaults.comment ?? '' }
+        : { version: defaults.version }}>
       {intro}
+      {defaults.frozen ? (
+        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
+          Version validée par {defaults.validatedBy || '—'} · CSE consulté le {d(defaults.cseConsultedOn)} : son contenu est figé. Seules les transmissions se complètent ; ajoutez un commentaire à la version au besoin.
+        </p>
+      ) : (
       <FormRow cols={create ? 3 : 2}>
         {create && (
           <Field name="version" label="Numéro de version" hint="Même année : AAAA.(n+1) ; nouvelle année : AAAA.1.">
@@ -241,10 +258,11 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
         <Field name="validatedById" label="Validée par">
           <Select name="validatedById" options={validators} defaultValue={defaults.validatedById ?? ''} placeholder="Choisir…" />
         </Field>
-        <Field name="cseConsultedOn" label="Consultation du CSE" hint={create ? undefined : 'Date de la réunion où le CSE a été consulté.'}>
+        <Field name="cseConsultedOn" label="Consultation du CSE" hint={create ? 'Valide la version et fige son contenu.' : 'Date de la réunion où le CSE a été consulté : valide la version et fige son contenu.'}>
           <Input name="cseConsultedOn" type="date" defaultValue={defaults.cseConsultedOn ?? ''} />
         </Field>
       </FormRow>
+      )}
       <FormRow>
         <Field name="spstSentOn" label="Transmise au SPST le" hint="Chaque mise à jour est transmise au service de prévention et de santé au travail (R. 4121-4).">
           <Input name="spstSentOn" type="date" defaultValue={defaults.spstSentOn ?? ''} />
@@ -253,10 +271,39 @@ function VersionFields({ mode, people, defaults, intro, onDone, onCancel }: {
           <Input name="portalDepositedOn" type="date" defaultValue={defaults.portalDepositedOn ?? ''} />
         </Field>
       </FormRow>
-      <Field name="comment" label="Commentaire" hint="Objet de la mise à jour : nouvelles unités, risques réévalués, suite d'accident…">
-        <TextArea name="comment" defaultValue={defaults.comment ?? ''} rows={3} maxLength={1000} />
-      </Field>
+      {!defaults.frozen && (
+        <Field name="comment" label="Commentaire" hint="Objet de la mise à jour : nouvelles unités, risques réévalués, suite d'accident…">
+          <TextArea name="comment" defaultValue={defaults.comment ?? ''} rows={3} maxLength={1000} />
+        </Field>
+      )}
     </ActionForm>
+  );
+}
+
+/** DUE-10 : commentaires d'une version du DUERP (jamais modifiés ni retirés) et ajout (animateur QHSE et direction). */
+function VersionComments({ version, canAdd }: { version: DuerpVersionView; canAdd: boolean }) {
+  const [adding, setAdding] = useState(false);
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 500 }}>Commentaires · version {version.version}{version.frozen ? ' (figée)' : ''}</span>
+        {canAdd && !adding && <button type="button" className="vg-text-btn" style={{ marginLeft: 'auto' }} onClick={() => setAdding(true)}>Ajouter un commentaire</button>}
+      </div>
+      {version.comments.length === 0 && !adding && <span style={{ fontSize: 12, color: 'var(--vg-text-muted)' }}>Aucun commentaire.</span>}
+      {version.comments.map((c) => (
+        <div key={c.id} style={{ fontSize: 12.5, textWrap: 'pretty' }}>
+          <span style={{ color: 'var(--vg-text-muted)' }}>{fmtDate(c.on)} · {c.author} — </span>{c.body}
+        </div>
+      ))}
+      {adding && (
+        <ActionForm action={addDuerpVersionComment} hidden={{ version: version.version }} submitLabel="Ajouter"
+          onDone={() => setAdding(false)} onCancel={() => setAdding(false)}>
+          <Field name="body" label="Commentaire">
+            <TextArea name="body" rows={3} maxLength={DUERP_COMMENT_MAX} />
+          </Field>
+        </ActionForm>
+      )}
+    </div>
   );
 }
 

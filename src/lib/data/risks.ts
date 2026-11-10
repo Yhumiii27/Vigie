@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
 import type { ChangeEntry } from '@/lib/change-entry';
 import { addMonths, daysBetween, fmtDayMonth, yearOf, parisDay } from '../dates';
@@ -22,6 +22,7 @@ import type { AttachmentItem } from '../attachments';
 import { fileSlug as slug, toCsv } from '@/lib/csv';
 import { entityVersions } from '@/server/versions';
 import { measureState, type MeasureView } from '../risk-measures';
+import { DUERP_REVIEW_WINDOW_MONTHS, duerpReviewDone, duerpReviewReason } from '../rules/duerp';
 import { canSee, type Role } from '../domain';
 import { loadSkillData } from './skills';
 import { documentRefLabel, loadDocumentChoices, resolveDocuments } from './documents';
@@ -147,6 +148,10 @@ export type DuerpVersionView = {
   /** Instantané des risques disponible dans Vigie (faux pour les versions archivées hors Vigie). */
   hasSnapshot: boolean;
   riskCount: number | null;
+  /** DUE-10 : commentaires ajoutés à la version (après sa validation notamment), du plus ancien au plus récent ; rempli par loadRisks. */
+  comments: { id: number; body: string; author: string; on: string }[];
+  /** DUE-10 : version validée par le CSE (consultation enregistrée) : contenu figé, commentaires seulement. */
+  frozen: boolean;
   /** DUERP signé de la version (DUE-09, pièces jointes 'duerp_version') ; rempli par loadRisks. */
   files: AttachmentItem[];
 };
@@ -409,7 +414,7 @@ const loadRiskBase = cache(async (scope: SiteScope = 'site') => {
         validatedById: v.validatedById, validatedBy: v.validatedById ? people.get(v.validatedById)?.name ?? '' : '',
         cseConsultedOn: v.cseConsultedOn, spstSentOn: v.spstSentOn, portalDepositedOn: v.portalDepositedOn,
         archivedOn: v.archivedOn, comment: v.comment ?? snap.comment ?? null,
-        hasSnapshot: !v.current && !!snap.risks, riskCount: snap.risks ? snap.risks.length : null, files: [],
+        hasSnapshot: !!snap.risks, riskCount: snap.risks ? snap.risks.length : null, files: [], comments: [], frozen: !!v.cseConsultedOn,
       };
     })
     .sort((a, b) => Number(b.current) - Number(a.current) || compareVersionsDesc(a.version, b.version));
@@ -453,12 +458,16 @@ export async function loadRisks() {
   // Historique d'un risque ou d'une unité archivée : chargé à l'ouverture de sa fiche (QUA-11, LazyChangeLog), pour qui
   // modifie le DUERP (src/server/history.ts).
   // DUE-09 : DUERP signé par version et justificatifs des risques, lisibles par tous les rôles de l'écran (Salarié compris).
-  const [versionFiles, riskFiles, riskVersions, unitVersions] = await Promise.all([
+  const [versionFiles, riskFiles, riskVersions, unitVersions, versionComments] = await Promise.all([
     loadEntityFiles('duerp_version', versionViews.map((v) => v.version)),
     loadEntityFiles('risk', [...base.risks, ...(edit ? base.archivedRisks : [])].map((r) => r.id)),
     edit ? entityVersions(await getDb(), 'risk', base.risks.map((r) => r.id)) : new Map<string, string>(),
     edit ? entityVersions(await getDb(), 'work_unit', base.units.map((u) => u.id)) : new Map<string, string>(),
+    (await getDb()).select().from(t.duerpVersionComments).orderBy(asc(t.duerpVersionComments.createdAt), asc(t.duerpVersionComments.id)),
   ]);
+  const people = await loadPeople();
+  const commentsOf = (version: string) => versionComments.filter((c) => c.version === version)
+    .map((c) => ({ id: c.id, body: c.body, author: c.authorId ? people.get(c.authorId)?.name ?? c.authorId : 'Vigie', on: parisDay(c.createdAt) }));
   const view = (r: Omit<RiskView, 'files'>): RiskView => ({
     ...r,
     ...(employee ? { events: [], actions: r.actions.map((a) => ({ ...a, pilot: '' })) } : {}),
@@ -481,7 +490,7 @@ export async function loadRisks() {
       daysToUpdate,
       updateTone,
     },
-    versions: versionViews.map((v) => ({ ...v, files: versionFiles.get(v.version) ?? [] })),
+    versions: versionViews.map((v) => ({ ...v, files: versionFiles.get(v.version) ?? [], comments: commentsOf(v.version) })),
     nextVersion: suggestNextVersion(versions.map((v) => v.version), now),
     nextUpdateOn: addMonths(now, 12),
     totals: base.totals,
@@ -1120,6 +1129,41 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
     });
   }
 
+  todo.push(...(await duerpReviewTodos(db, allowed, leads.forSite, now)));
+
   const visible = canEdit(role, 'risks') ? todo : todo.filter((i) => isMine(i, user));
   return { badge: visible.reduce((n, i) => n + (i.count ?? 1), 0), todo: visible };
 });
+
+/**
+ * DUE-07 (réponse du service QHSE du 09/11/2026 : « tout AT avec arrêt et toute gravité potentielle élevée ») : un
+ * événement du périmètre survenu dans les 12 derniers mois, de gravité potentielle G3 ou G4 ou accident du travail avec
+ * arrêt (duerpReviewReason), appelle « Réévaluer le DUERP » au responsable QHSE de son site jusqu'à ce qu'une version du
+ * DUERP soit validée (consultation du CSE) ou que le risque rattaché à l'événement soit recoté, le jour de l'événement ou
+ * après (duerpReviewDone). Intitulé neutre (référence seule, jamais la lésion) ; motif « arrêt » seul : échéance réservée
+ * aux rôles habilités aux données de santé (health).
+ */
+async function duerpReviewTodos(db: Db, allowed: string[] | null, forSite: (siteId: string | null) => Recipients, now: string): Promise<TodoItem[]> {
+  const [events, versions, risks] = await Promise.all([
+    db.select({
+      id: t.events.id, siteId: t.events.siteId, type: t.events.type, severity: t.events.severity, injury: t.events.injury, lostDays: t.events.lostDays,
+      occurredOn: t.events.occurredOn, dismissedAt: t.events.dismissedAt, riskId: t.events.riskId,
+    }).from(t.events).where(gte(t.events.occurredOn, addMonths(now, -DUERP_REVIEW_WINDOW_MONTHS))),
+    db.select({ cseConsultedOn: t.duerpVersions.cseConsultedOn }).from(t.duerpVersions),
+    db.select({ id: t.risks.id, residualReviewedOn: t.risks.residualReviewedOn }).from(t.risks),
+  ]);
+  const validated = versions.map((v) => v.cseConsultedOn);
+  const reviewedOn = new Map(risks.map((r) => [r.id, r.residualReviewedOn]));
+  return events.flatMap((e): TodoItem[] => {
+    if (!inPerimeter(allowed, e.siteId)) return [];
+    const reason = duerpReviewReason({ ...e, dismissed: !!e.dismissedAt }, now);
+    if (!reason || duerpReviewDone(e.occurredOn, validated, e.riskId != null ? reviewedOn.get(e.riskId) ?? null : null)) return [];
+    const to = forSite(e.siteId);
+    return [{
+      kind: RISK_TODO_KIND, who: to.who, ownerIds: to.ownerIds, siteId: e.siteId, date: now, tone: 'warn',
+      title: `Réévaluer le DUERP après l'événement ${e.id} du ${fmtDayMonth(e.occurredOn)}`,
+      href: e.riskId != null ? `/risques?risque=${e.riskId}` : '/risques', key: `duerp-reevaluation|${e.id}`,
+      ...(reason === 'arret' ? { health: true } : {}),
+    }];
+  });
+}

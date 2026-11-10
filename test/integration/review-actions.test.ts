@@ -38,7 +38,7 @@ describe('décisions et actions de la revue (ACT-28)', () => {
 
   it('création et rattachement : service QHSE seulement ; listes vides pour l’encadrement', async () => {
     const june = await reviewOn('2026-06-18');
-    for (const role of ['Animateur QHSE', 'Direction'] as const) {
+    for (const role of ['Animateur QHSE'] as const) {
       actAs(role, 'all');
       const card = await loadReviewCard({ revue: String(june.id) });
       expect(card.flags.canCreateActions, role).toBe(true);
@@ -46,6 +46,12 @@ describe('décisions et actions de la revue (ACT-28)', () => {
       expect(card.options.today, role).toBe('2026-10-09');
       expect(card.linkable.length, role).toBeGreaterThan(0);
     }
+    // ACT-P17 (09/11/2026) : la direction saisit la revue mais ne crée ni ne rattache d'action.
+    actAs('Direction', 'all');
+    const direction = await loadReviewCard({ revue: String(june.id) });
+    expect(direction.flags).toMatchObject({ canEdit: true, canCreateActions: false });
+    expect(direction.options.people).toEqual([]);
+    expect(direction.linkable).toEqual([]);
     for (const role of ['Chef de service', 'Chef de projet'] as const) {
       actAs(role, 'all');
       const card = await loadReviewCard({ revue: String(june.id) });

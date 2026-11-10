@@ -521,10 +521,10 @@ describe('migration 0005 — mise à niveau d’une base de démonstration 0004 
     expect(rows.has('A-221') || rows.has('A-222')).toBe(false);
   });
 
-  it('nextActionNumber après la mise à niveau : A-221', async () => {
+  it('nextActionNumber après la mise à niveau : AC-260001 (ACT-36), anciens numéros A-n gardés', async () => {
     const db = await getDb();
     await expect(db.transaction(async (tx) => {
-      expect(await nextActionNumber(tx)).toBe('A-221');
+      expect(await nextActionNumber(tx)).toBe('AC-260001');
       throw new Error('annulation');
     })).rejects.toThrow('annulation');
     expect(await db.select().from(t.actionCounters)).toEqual([{ scope: 'A', last: 220 }]);
@@ -617,7 +617,7 @@ describe('migration 0005 — base mise à niveau comparée à une base de démon
     expect((await freshDb.select().from(t.attachments).where(eq(t.attachments.entityType, 'action'))).length).toBe(4);
     expect(await freshDb.select().from(t.actionCounters)).toEqual([{ scope: 'A', last: 222 }]);
     expect(await freshDb.transaction((tx) => nextActionNumber(tx).then((id) => { throw Object.assign(new Error('annulation'), { id }); })).catch((e: { id?: string }) => e.id))
-      .toBe('A-223');
+      .toBe('AC-260001');
   });
 
 });

@@ -16,7 +16,7 @@ import type { PlanFormView, PlanView } from '@/lib/data/prevention';
 import type { PpFormData, PpImportFormat } from '@/lib/pp-form';
 import { addPlanAttachments, cancelPlan, closePlan, deletePlan, recordPlanEeSignature, removePlanAttachment, savePlan, signPlanEu } from '@/server/prevention';
 import {
-  DANGEROUS_WORK_HINT, EE_HEADCOUNT, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS,
+  DANGEROUS_WORK_HINT, EE_HEADCOUNT, GAP_MEASURES_LABEL, GAP_MEASURES_MAX, MANDATORY_HOURS, MAX_PLAN_FILES, PERMIT_TYPES, PLAN_CONTENT, PLAN_CONTENT_GROUPS,
   lcfirst, ruleBasis, type PlanContentField, type PlanContentGroup,
 } from '@/lib/rules/prevention';
 import { TipButton } from '@/components/Tip';
@@ -433,9 +433,13 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
         </Notice>
       )}
 
+      {plan.gapMeasures && (
+        <Notice tone="neutral" icon="ph-first-aid-kit">{GAP_MEASURES_LABEL} : {plan.gapMeasures}</Notice>
+      )}
+
       {plan.missingSignature && (
         <Notice tone="danger">
-          {plan.firstMinute ? `${plan.mandatoryReason}. L'intervention` : "Code du travail R. 4512-7 : l'intervention"} a commencé le {fmtDate(plan.startOn)} alors que le plan écrit obligatoire n&apos;est pas signé par les deux entreprises
+          {plan.legalMandatory && !plan.firstMinute ? "Code du travail R. 4512-7 : l'intervention" : `${plan.mandatoryReason}. L'intervention`} a commencé le {fmtDate(plan.startOn)} alors que le plan écrit obligatoire n&apos;est pas signé par les deux entreprises
           {plan.inspectionDone ? '.' : ' et que l\'inspection commune préalable n\'est pas enregistrée.'}
         </Notice>
       )}
@@ -448,7 +452,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
         ['Période', plan.period],
         ['Heures sur 12 mois', `${plan.estimatedHours} h`],
         ['Travaux dangereux', plan.dangerousWork ? 'Oui' : 'Non'],
-        plan.firstMinute ? ['Seuil légal R. 4512-7', plan.legalMandatory ? `Atteint (${plan.legalReason})` : 'Non atteint · plan exigé par la règle du site'] : null,
+        ['Seuil légal R. 4512-7', plan.legalMandatory ? `Atteint (${plan.legalReason})` : `Non atteint · plan exigé par la règle ${plan.firstMinute ? 'du site' : "de l'entreprise"}`],
         ['Inspection commune', plan.inspectionOn ? `${plan.inspectionDone ? 'Réalisée le' : 'Prévue le'} ${fmtDate(plan.inspectionOn)}` : 'Non réalisée'],
         ['Responsable', plan.owner ?? '—'],
         ['Projet Keystone', plan.keystoneProject ?? '—'],
@@ -564,15 +568,51 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
             : <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} tip={plan.cancelBlock} onClick={onCancelPlan}>
               <Icon name="ph-prohibit" size={13} />Annuler le plan
             </TipButton>}
-          <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
-            question={unsignedAfterWork ? "Clore ce plan non signé par les deux entreprises ? L'écart reste tracé dans les indicateurs et l'historique du plan."
-              : signedLate ? "Clore ce plan signé après le début de l'intervention ? L'écart R. 4512-6 reste tracé dans les indicateurs et l'historique du plan."
-                : 'Clore définitivement ce plan ?'}
-            disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
-            onConfirm={() => run(() => closePlan(plan.id))} />
+          {plan.startGap ? (
+            // PRV-21 : clôture après un écart R. 4512-6 avec la trace des mesures immédiates prises.
+            <GapCloseButton disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined} pending={pending}
+              question={unsignedAfterWork ? "Plan non signé par les deux entreprises : l'écart reste tracé dans les indicateurs et l'historique du plan."
+                : signedLate ? "Plan signé après le début de l'intervention : l'écart R. 4512-6 reste tracé dans les indicateurs et l'historique du plan." : "Écart R. 4512-6 constaté au démarrage."}
+              onClose={(measures) => run(() => closePlan(plan.id, measures))} />
+          ) : (
+            <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
+              question="Clore définitivement ce plan ?"
+              disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
+              onConfirm={() => run(() => closePlan(plan.id))} />
+          )}
         </div>
       )}
       {options.procedure && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><ProcedureNote procedure={options.procedure} /></div>}
+    </div>
+  );
+}
+
+/**
+ * Clôture d'un plan qui porte un écart R. 4512-6 (PRV-21) : les mesures immédiates prises sont décrites avant de clore
+ * (champ exigé, contrôlé aussi par le serveur : gapMeasuresError).
+ */
+function GapCloseButton({ question, onClose, disabled, tooltip, pending }: {
+  question: string; onClose: (measures: string) => void; disabled: boolean; tooltip?: string; pending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [measures, setMeasures] = useState('');
+  if (!open) {
+    return (
+      <TipButton className="btn btn-secondary vg-btn-sm" disabled={disabled || pending} tip={tooltip} onClick={() => setOpen(true)}>
+        <Icon name="ph-archive" size={13} />Clore le plan
+      </TipButton>
+    );
+  }
+  return (
+    <div style={{ display: 'grid', gap: 6, width: '100%' }}>
+      <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{question}</span>
+      <label htmlFor="plan-gap-measures" style={{ fontSize: 12 }}>{GAP_MEASURES_LABEL}</label>
+      <textarea id="plan-gap-measures" className="input" value={measures} maxLength={GAP_MEASURES_MAX} onChange={(e) => setMeasures(e.target.value)}
+        placeholder="Ex. Travaux arrêtés, inspection commune faite le jour même, plan signé avant la reprise" style={{ minHeight: 64 }} />
+      <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+        <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setOpen(false)}>Annuler</button>
+        <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending || !measures.trim()} onClick={() => onClose(measures)}>Clore</button>
+      </span>
     </div>
   );
 }

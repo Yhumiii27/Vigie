@@ -7,6 +7,7 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addMonths, fmtDate, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
 import { fmtEuro } from '@/lib/rules/risk-format';
+import { DUERP_COMMENT_MAX, frozenVersionError } from '@/lib/rules/duerp';
 import {
   buildDuerpSnapshot, buildProgramSnapshot, DUERP_RETENTION, loadProgramSources, programDefaultIds, riskLinkedActionIds, versionComment, versionConflict,
 } from '@/lib/data/risks';
@@ -614,15 +615,18 @@ export async function createDuerpVersion(_prev: FormState, fd: FormData): Promis
       const msg = versionConflict(existing.map((v) => v.version), version);
       if (msg) return msg;
       for (const c of existing.filter((v) => v.current)) {
-        // Le commentaire reste dans sa colonne (repris de l'ancien emplacement dans le JSON si besoin) ; l'instantané ne porte que les risques.
-        const snapshot = await buildDuerpSnapshot(tx, session.user.name);
+        // Le commentaire reste dans sa colonne (repris de l'ancien emplacement dans le JSON si besoin) ; l'instantané ne porte
+        // que les risques. DUE-10 : une version validée garde l'instantané pris à sa validation (consultation du CSE).
+        const snapshot = c.cseConsultedOn && c.snapshot ? c.snapshot : await buildDuerpSnapshot(tx, session.user.name);
         await tx.update(t.duerpVersions)
           .set({ current: false, archivedOn: now, comment: versionComment(c), snapshot })
           .where(eq(t.duerpVersions.version, c.version));
       }
+      // DUE-10 : nouvelle version déjà validée (consultation du CSE saisie) : son contenu est figé dès maintenant.
       await tx.insert(t.duerpVersions).values({
         version, current: true, updatedOn: now, nextUpdateOn: addMonths(now, 12), retention: DUERP_RETENTION,
-        validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, archivedOn: null, comment, snapshot: null,
+        validatedById, cseConsultedOn, spstSentOn, portalDepositedOn, archivedOn: null, comment,
+        snapshot: cseConsultedOn ? await buildDuerpSnapshot(tx, session.user.name) : null,
       });
       const previous = existing.find((v) => v.current)?.version;
       await logChange(tx, {
@@ -640,9 +644,14 @@ export async function createDuerpVersion(_prev: FormState, fd: FormData): Promis
   return { ok: true, id: version };
 }
 
-/** Complète la version en vigueur (validation, date de consultation du CSE, commentaire). Les versions archivées sont figées. */
+/**
+ * Complète la version en vigueur (validation, date de consultation du CSE, commentaire). Les versions archivées sont figées.
+ * DUE-10 (réponse du service QHSE du 09/11/2026) : la saisie de la consultation du CSE valide la version et fige son contenu
+ * (instantané des risques pris dans la transaction) ; ensuite, seules les transmissions (SPST, portail) se complètent, et
+ * des commentaires s'ajoutent (addDuerpVersionComment).
+ */
 export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { error } = await requireRiskApprover();
+  const { session, error } = await requireRiskApprover();
   if (error) return { error };
   const db = await getDb();
   const asked = typeof fd.get('version') === 'string' ? String(fd.get('version')).trim() : '';
@@ -661,17 +670,22 @@ export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData):
     if (v && v < row.updatedOn) f.fail(name, `Au plus tôt le ${fmtDate(row.updatedOn)} (mise à jour de la version).`);
   }
   if (!f.ok) return f.state();
+  const frozen = frozenVersionError({ ...row, comment: versionComment(row) }, { validatedById, cseConsultedOn, comment });
+  if (frozen) return { error: frozen };
+  const validating = !row.cseConsultedOn && !!cseConsultedOn;
   const people = await loadPeople();
-  // La version en vigueur n'a pas d'instantané (il est pris à l'archivage) : snapshot remis à null,
-  // ce qui efface aussi un commentaire hérité de l'ancien format.
+  // Version non validée : pas d'instantané (snapshot remis à null, ce qui efface un commentaire hérité de l'ancien format) ;
+  // validation (DUE-10) : instantané pris maintenant ; version déjà validée : instantané conservé.
   await db.transaction(async (tx) => {
+    const snapshot = validating ? await buildDuerpSnapshot(tx, session.user.name) : row.cseConsultedOn ? row.snapshot : null;
     await tx.update(t.duerpVersions)
-      .set({ validatedById, cseConsultedOn, spstSentOn: spst, portalDepositedOn: portal, comment, snapshot: null })
+      .set({ validatedById, cseConsultedOn, spstSentOn: spst, portalDepositedOn: portal, comment, snapshot })
       .where(eq(t.duerpVersions.version, version));
     const fmt = (v: unknown) => (v == null || v === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fmtDate(String(v)) : String(v));
     const name = (pid: string | null) => (pid ? people.get(pid)?.name ?? pid : null);
     await logChange(tx, {
-      entityType: 'duerp_version', entityId: version, action: 'update', summary: `Version ${version} complétée`,
+      entityType: 'duerp_version', entityId: version, action: 'update',
+      summary: validating ? `Version ${version} validée (CSE consulté) : contenu figé` : `Version ${version} complétée`,
       details: diffFields(
         { validatedBy: name(row.validatedById), cseConsultedOn: row.cseConsultedOn, spstSentOn: row.spstSentOn, portalDepositedOn: row.portalDepositedOn, comment: versionComment(row) },
         { validatedBy: name(validatedById), cseConsultedOn, spstSentOn: spst, portalDepositedOn: portal, comment },
@@ -684,6 +698,32 @@ export async function updateCurrentDuerpVersion(_prev: FormState, fd: FormData):
   });
   revalidatePath('/', 'layout');
   return { ok: true, id: version };
+}
+
+/**
+ * Ajoute un commentaire à une version du DUERP (DUE-10 : la version validée par le CSE est figée, des commentaires s'y
+ * ajoutent ensuite) : animateur QHSE et direction (comme la version), texte obligatoire, jamais modifié ni supprimé ;
+ * journal de la version dans la même transaction.
+ */
+export async function addDuerpVersionComment(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireRiskApprover();
+  if (error) return { error };
+  const f = formReader(fd);
+  const version = f.str('version', { required: true });
+  const body = f.str('body', { required: true, max: DUERP_COMMENT_MAX });
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const [row] = await db.select({ version: t.duerpVersions.version }).from(t.duerpVersions).where(eq(t.duerpVersions.version, version));
+  if (!row) return { error: 'Version introuvable.' };
+  await db.transaction(async (tx) => {
+    await tx.insert(t.duerpVersionComments).values({ version, body, authorId: session.user.id });
+    await logChange(tx, {
+      entityType: 'duerp_version', entityId: version, action: 'comment', summary: `Commentaire ajouté à la version ${version}`, byId: session.user.id,
+      details: [{ field: 'Commentaire', from: null, to: body }],
+    });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: version, message: 'Commentaire ajouté.' };
 }
 
 // ─── Registre des mises à disposition du DUERP (R. 4121-4, DUE-01) ─────────

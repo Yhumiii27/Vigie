@@ -11,7 +11,7 @@ import { Aside, MissingNotice, SegLinks } from '@/components/ui';
 import { isoWeek, monthName, monthOf, yearOf } from '@/lib/dates';
 import { canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
-import { ALL_SITES, SCREENS, canApprove, canEdit } from '@/lib/domain';
+import { ALL_SITES, AUDIT_KINDS, AUDIT_KIND_KEYS, SCREENS, canApprove, canEdit } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadAudits } from '@/lib/data/audits';
 import { loadContext } from '@/lib/data/context';
@@ -58,6 +58,16 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const planOptions = edit ? { people: options.people, sites: siteChoices } : { people: [], sites: [] };
   const closeHref = `/audits?annee=${year}`;
 
+  // D08-5 : filtre du programme par type d'audit (?type=), valeur inconnue ignorée ; l'année et le type se combinent.
+  const auditType = AUDIT_KIND_KEYS.find((k) => k === sp.type);
+  const shownPlan = auditType ? plan.filter((p) => p.auditKind === auditType) : plan;
+  const typeHref = (k?: string) => `/audits?annee=${year}${k ? `&type=${k}` : ''}`;
+  const typeNav = (
+    <SegLinks size={11} pad="3px 8px" options={[
+      { href: typeHref(), label: 'Tous types', on: !auditType },
+      ...AUDIT_KIND_KEYS.filter((k) => plan.some((p) => p.auditKind === k)).map((k) => ({ href: typeHref(k), label: AUDIT_KINDS[k].short, on: auditType === k })),
+    ]} />
+  );
   const yearNav = yearOptions.length > 1 && (
     <SegLinks size={11} pad="3px 8px" options={yearOptions.map((y) => ({ href: `/audits?annee=${y}`, label: String(y), on: y === year }))} />
   );
@@ -79,10 +89,10 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
         <ChangesCard key={openChange ?? 'changes'} rows={changes.rows} canEdit={edit} canApprove={approve} versions={changes.versions} today={now}
           options={edit ? { people: options.people, sites: siteChoices } : { people: [], sites: [] }} initialId={openChange} closeHref={closeHref} />
 
-        <ProgramTimeline key={openElement ?? 'prog'} year={year} curMonth={curMonth} tracks={tracks} allTracks={allTracks} items={plan} cancelled={cancelledPlan}
+        <ProgramTimeline key={openElement ?? 'prog'} year={year} curMonth={curMonth} tracks={tracks} allTracks={allTracks} items={shownPlan} cancelled={cancelledPlan}
           findings={planFindings} certs={certOptions} auditOptions={auditOptions} yearOptions={yearOptions} canEdit={edit} canCreate={canCreate} options={actionOptions}
           planOptions={planOptions} hiddenTracks={hiddenTracks} renewFrom={renewFrom}
-          initialId={openElement} closeHref={closeHref} aside={<><Aside>{period}</Aside>{yearNav}</>} />
+          initialId={openElement} closeHref={closeHref} aside={<><Aside>{period}</Aside>{typeNav}{yearNav}</>} />
 
         {/* Pas de `key` liée au lien profond : la fermeture retire ?constat= de l'URL sans remonter la carte ni changer de groupe. */}
         <FindingsCard groups={auditGroups} cancelled={cancelledFindings} auditOptions={auditOptions} canEdit={edit}

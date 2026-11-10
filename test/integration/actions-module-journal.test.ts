@@ -33,20 +33,20 @@ async function eventForm(id: string, over: Record<string, string> = {}) {
 
 describe('site d’un événement : ses actions le suivent et le tracent', () => {
   it('changement de site : chaque action du même site déplacée, une entrée « Site » dans son historique', async () => {
-    actAs('Chef de service', 'all');
+    actAs('Animateur QHSE', 'all'); // EVT-29 : l'animateur QHSE modifie l'événement
     // EV-2026-131 (site A) porte A-214 et A-215 ; ses rattachements facultatifs (risque…) sont retirés pour le site B.
     const r = await saveEvent({}, await eventForm('EV-2026-131', { siteId: 'site_b', riskId: '', controlId: '', documentId: '', preventionPlanId: '', permitId: '' }));
     expect(r, JSON.stringify(r)).toEqual({ ok: true, id: 'EV-2026-131' });
     for (const id of ['A-214', 'A-215']) {
       expect((await actionRow(id)).siteId).toBe('site_b');
       const log = await lastLog('action', id);
-      expect(log).toMatchObject({ action: 'update', summary: "Site modifié avec l'événement EV-2026-131", byId: 'sbenali' });
+      expect(log).toMatchObject({ action: 'update', summary: "Site modifié avec l'événement EV-2026-131", byId: 'clefevre' });
       expect(log!.details).toEqual([{ field: 'Site', from: expect.stringContaining('[Ville A]'), to: expect.stringContaining('[Ville B]') }]);
     }
   });
 
   it('sans changement de site : rien dans l’historique des actions', async () => {
-    actAs('Chef de service', 'all');
+    actAs('Animateur QHSE', 'all');
     const before = (await changeLog('action', 'A-214')).length;
     expect(await saveEvent({}, await eventForm('EV-2026-131', { title: 'Chute de charge (intitulé corrigé)' }))).toEqual({ ok: true, id: 'EV-2026-131' });
     expect((await changeLog('action', 'A-214')).length).toBe(before);

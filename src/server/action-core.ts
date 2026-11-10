@@ -1,8 +1,9 @@
 import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 import { schema as t, type DbOrTx } from '@/db';
-import { formatActionNumber, transitionKind, transitionSummary } from '@/lib/action-rules';
-import { ACTION_NUMBER_SCOPE, AVANCEMENT, type Avancement, type Role } from '@/lib/domain';
+import { actionYear, formatActionNumber, transitionKind, transitionSummary } from '@/lib/action-rules';
+import { today } from '@/lib/today';
+import { AVANCEMENT, actionYearScope, type Avancement, type Role } from '@/lib/domain';
 import type { ActionInsert, ActionRow } from '@/lib/queries';
 import { logChange, type ChangeDetail } from './changelog';
 
@@ -24,31 +25,35 @@ export class StaleActionError extends Error {
   }
 }
 
-/** Plus grand numéro « A-n » déjà vu (actions et journal), borne de 9 chiffres comme parseActionNumber et la reprise R8. */
-async function maxUsedNumber(tx: DbOrTx): Promise<number> {
-  const num = (col: unknown) => sql<number | null>`max(substring(${col} from '^A-([0-9]{1,9})$')::integer)`.mapWith(Number);
+/** Plus grand compteur « AC-AANNNN » de l'année `yy` déjà vu (actions et journal : fiche disparue comprise). */
+async function maxUsedNumber(tx: DbOrTx, yy: string): Promise<number> {
+  const pattern = `^AC-${yy}([0-9]{4,6})$`;
+  const num = (col: unknown) => sql<number | null>`max(substring(${col} from ${pattern})::integer)`.mapWith(Number);
   const [a] = await tx.select({ n: num(t.actions.id) }).from(t.actions);
   const [l] = await tx.select({ n: num(t.changeLog.entityId) }).from(t.changeLog).where(eq(t.changeLog.entityType, 'action'));
   return Math.max(a?.n || 0, l?.n || 0);
 }
 
 /**
- * Prochain numéro « A-n » (ACT-35, D14) : upsert du compteur action_counters('A') — la ligne reste verrouillée jusqu'à la
- * fin de la transaction, deux créations simultanées obtiennent deux numéros distincts (la seconde attend la première et
- * voit ensuite son action). Toujours au-delà du plus grand numéro déjà vu (actions, y compris insérées hors compteur, et
- * journal : fiche disparue) : la numérotation est croissante et un numéro n'est jamais réattribué ; un compteur en retard
- * est avancé à ce numéro. Dans la transaction de création seulement (un numéro tiré hors transaction serait perdu, jamais
- * réattribué).
+ * Prochain numéro « AC-AANNNN » (ACT-36, ACT-P1 : compteur annuel qui repart à 0001, année de création à l'heure de Paris,
+ * `day` = date du jour Vigie) : upsert du compteur action_counters('AC-AA') — la ligne reste verrouillée jusqu'à la fin de
+ * la transaction, deux créations simultanées obtiennent deux numéros distincts (la seconde attend la première et voit
+ * ensuite son action). Toujours au-delà du plus grand numéro de l'année déjà vu (actions, y compris insérées hors
+ * compteur, et journal : fiche disparue) : la numérotation est croissante et un numéro n'est jamais réattribué ; un
+ * compteur en retard est avancé à ce numéro. Dans la transaction de création seulement (un numéro tiré hors transaction
+ * serait perdu, jamais réattribué). Les anciens numéros « A-n » ne changent pas (compteur 'A' gardé).
  */
-export async function nextActionNumber(tx: DbOrTx): Promise<string> {
-  const [row] = await tx.insert(t.actionCounters).values({ scope: ACTION_NUMBER_SCOPE, last: 1 })
+export async function nextActionNumber(tx: DbOrTx, day: string = today()): Promise<string> {
+  const yy = actionYear(day);
+  const scope = actionYearScope(yy);
+  const [row] = await tx.insert(t.actionCounters).values({ scope, last: 1 })
     .onConflictDoUpdate({ target: t.actionCounters.scope, set: { last: sql`${t.actionCounters.last} + 1` } })
     .returning({ last: t.actionCounters.last });
-  const max = await maxUsedNumber(tx);
-  if (row.last > max) return formatActionNumber(row.last);
+  const max = await maxUsedNumber(tx, yy);
+  if (row.last > max) return formatActionNumber(yy, row.last);
   // Compteur en retard sur les numéros vus (import, base modifiée à la main) : numéro suivant le plus grand vu.
-  await tx.update(t.actionCounters).set({ last: max + 1 }).where(eq(t.actionCounters.scope, ACTION_NUMBER_SCOPE));
-  return formatActionNumber(max + 1);
+  await tx.update(t.actionCounters).set({ last: max + 1 }).where(eq(t.actionCounters.scope, scope));
+  return formatActionNumber(yy, max + 1);
 }
 
 /**

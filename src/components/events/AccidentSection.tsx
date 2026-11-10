@@ -73,7 +73,7 @@ export function AccidentSection({ detail, canEdit, today }: { detail: EventDetai
           {register && (register.entry || register.canRegister || (canEdit && register.hint)) && (
             <div style={{ display: 'grid', gap: 4, fontSize: 12.5 }}>
               <h6 className="vg-h6">Registre des accidents bénins</h6>
-              <BenignRegisterBlock eventId={e.id} entry={register.entry} canRegister={canEdit && register.canRegister} firstAiders={register.firstAiders}
+              <BenignRegisterBlock eventId={e.id} entry={register.entry} canRegister={canEdit && register.canRegister} canEdit={canEdit} firstAiders={register.firstAiders}
                 href={register.href} locked={!!lock} defaultCareAt={`${e.occurredOn}T${e.occurredTime ?? '00:00'}`} today={today}
                 hint={canEdit ? register.hint : null} />
             </div>

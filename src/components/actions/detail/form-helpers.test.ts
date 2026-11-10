@@ -152,7 +152,8 @@ describe('boutons et mentions de la fiche (droits)', () => {
   it('QHSE : boutons selon l’avancement', () => {
     expect(detailButtons(actionRights('Animateur QHSE', 'clefevre', { pilotId: 'tnguyen', status: 'p40' }))).toEqual(['edit', 'abandon', 'move']);
     expect(detailButtons(actionRights('Animateur QHSE', 'clefevre', { pilotId: 'tnguyen', status: 'terminee' }))).toEqual(['edit', 'abandon', 'move', 'verify']);
-    expect(detailButtons(actionRights('Direction', 'clefevre', { pilotId: 'tnguyen', status: 'verifiee' }))).toEqual(['edit', 'reopen']);
+    expect(detailButtons(actionRights('Animateur QHSE', 'clefevre', { pilotId: 'tnguyen', status: 'verifiee' }))).toEqual(['edit', 'reopen']);
+    expect(detailButtons(actionRights('Direction', 'clefevre', { pilotId: 'tnguyen', status: 'verifiee' }))).toEqual([]);
     expect(detailButtons(actionRights('Animateur QHSE', 'clefevre', { pilotId: 'tnguyen', status: 'abandonnee' }))).toEqual([]);
   });
   it('responsable et encadrement : aucun bouton d’écriture', () => {

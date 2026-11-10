@@ -115,6 +115,7 @@ async function ensurePlanItem(tx: DbOrTx, review: Pick<Review, 'id' | 'reviewOn'
   }
   const [row] = await tx.insert(t.auditPlanItems).values({
     track: REVIEW_TRACK, year, month, plannedOn: on, label: planLabel(kind, on), detail: planDetail(kind), ownerId: await directorId(tx, byId), reviewId: review.id,
+    auditKind: 'revue_direction',
   }).returning({ id: t.auditPlanItems.id });
   await logChange(tx, {
     entityType: 'audit_plan_item', entityId: row.id, action: 'create', byId,

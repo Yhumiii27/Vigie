@@ -6,7 +6,7 @@ import {
   type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type ReminderSendStatus, type SourceKey, type VerifyMethod,
 } from '../lib/action-keys';
 import {
-  BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
+  AUDIT_KIND_CODES, BSD_STATUS_CODES, CONTROL_CATEGORY_CODES, EVALUATION_CODES, EVENT_STEP_KINDS, EVENT_TYPE_CODES, FINDING_KIND_CODES,
   MEASURE_LINK_KIND_CODES, PERMIT_STATUS_CODES, PERMIT_TYPE_CODES, PLAN_MEETING_KIND_CODES, PLAN_STATUS_CODES, REQUIREMENT_LINK_CODES,
   REVIEW_DECISION_KIND_CODES, REVIEW_KIND_CODES, REVIEW_STATUS_CODES, SAFETY_NOTICE_KIND_CODES,
   CHANGE_KIND_CODES, CHANGE_STATUS_CODES, STUDY_CONCLUSION_CODES, STUDY_MILESTONE_CODES, STUDY_STATUS_CODES, STUDY_TYPE_CODES,
@@ -331,7 +331,7 @@ export const benignAccidents = pgTable('benign_accidents', {
 // CHECK dépendant de l'avancement ni des dates : les bases reprises en contiennent d'incohérentes (D22, D24), le serveur
 // applique ces règles.
 export const actions = pgTable('actions', {
-  id: text('id').primaryKey(), // « A-n » (formatActionNumber, ACT-35) ; jamais modifié ni réattribué
+  id: text('id').primaryKey(), // « AC-AANNNN » (formatActionNumber, ACT-36) ; anciens « A-n » (ACT-35) gardés ; jamais modifié ni réattribué
   openedOn: date('opened_on', { mode: 'string' }).notNull(), // Date (ouverture) : date de Paris à la création, non modifiable
   pilotId: text('pilot_id').notNull().references(() => people.id), // « Responsable » à l'écran
   status: text('status').$type<Avancement>().notNull().default('a_faire'), // avancement (§ 5.1) ; « en retard » est calculé
@@ -487,8 +487,23 @@ export const duerpVersions = pgTable('duerp_versions', {
   portalDepositedOn: date('portal_deposited_on', { mode: 'string' }),
   archivedOn: date('archived_on', { mode: 'string' }),
   comment: text('comment'), // objet de la mise à jour de la version
-  snapshot: jsonb('snapshot'), // risques figés à l'archivage (null pour les versions antérieures à Vigie)
+  // Risques figés à la validation de la version (consultation du CSE, DUE-10, réponse du service QHSE du 09/11/2026), sinon à
+  // son archivage ; null pour la version en vigueur non validée et pour les versions antérieures à Vigie.
+  snapshot: jsonb('snapshot'),
 });
+
+// DUE-10 (migration 0032) : commentaires ajoutés à une version du DUERP, notamment après sa validation par le CSE (contenu
+// alors figé) ; jamais modifiés ni supprimés, journal de la version (`duerp_version`, action « comment »).
+export const duerpVersionComments = pgTable('duerp_version_comments', {
+  id: serial('id').primaryKey(),
+  version: text('version').notNull().references(() => duerpVersions.version),
+  body: text('body').notNull(),
+  authorId: text('author_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('duerp_version_comments_version_idx').on(t.version),
+  check('duerp_version_comments_body_check', sql`length(btrim(${t.body})) > 0`),
+]);
 
 export const workUnits = pgTable('work_units', {
   id: text('id').primaryKey(),
@@ -943,6 +958,9 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   // AUD-20 (migration 0021) : audit hors programme (non planifié : audit client, inopiné…) enregistré comme un vrai audit,
   // déjà réalisé (date, auditeur, rapport, constats) ; hors échéances du programme.
   unplanned: boolean('unplanned').notNull().default(false),
+  // D08-5 (migration 0032) : type d'audit (AUDIT_KIND_CODES) — terrain, ISO de certification, ISO blanc, revue de processus,
+  // revue de direction (déduite de ses mots), autre ; éléments existants : type déduit par la migration (inferAuditKind).
+  auditKind: text('audit_kind').notNull().default('autre'),
   certificationId: text('certification_id').references(() => certifications.id), // référentiel (audit de certification / de suivi)
   // Revue de direction portée par l'élément (AUD-01) : sa date, sa réalisation et son annulation suivent la revue ; l'élément
   // est verrouillé dans le programme (« Ouvrir la revue »). Au plus un élément par revue.
@@ -956,6 +974,7 @@ export const auditPlanItems = pgTable('audit_plan_items', {
   cancelReason: text('cancel_reason'),
 }, (t) => [
   archiveState('audit_plan_items_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  check('audit_plan_items_audit_kind_check', inList(t.auditKind, AUDIT_KIND_CODES)),
   check('audit_plan_items_unplanned_check', sql`not ${t.unplanned} or (${t.done} and ${t.doneOn} is not null and ${t.reviewId} is null)`),
 ]);
 
@@ -1227,6 +1246,9 @@ export const preventionPlans = pgTable('prevention_plans', {
   // PRV-17 (migration 0020) : périodicité (jours) des inspections et réunions de coordination pendant l'intervention
   // (R. 4513-2) ; null = non fixée. Séances : prevention_plan_meetings.
   meetingPeriodDays: integer('meeting_period_days'),
+  // PRV-21 (migration 0032) : mesures immédiates prises après un écart R. 4512-6, saisies à la clôture du plan (exigées
+  // quand un écart est constaté, startGap) ; null = clos sans écart ou avant la règle.
+  gapMeasures: text('gap_measures'),
 }, (t) => [
   index('prevention_plans_keystone_project_code_idx').on(t.keystoneProjectCode),
   check('prevention_plans_meeting_period_check', sql`${t.meetingPeriodDays} is null or ${t.meetingPeriodDays} between 1 and 365`),

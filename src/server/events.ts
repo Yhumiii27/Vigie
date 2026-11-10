@@ -11,7 +11,7 @@ import {
   MAX_BATCH_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, MAX_TREE_LINES, MAX_WHYS, REPORTED_VIA, REPORT_TRAP_FIELD,
   analysisChangeBlocker, analysisFilled, benignRegisterBlocker, cpamPending, eventLockReason, hasNcOrigin, injuryLabel, missingQualification,
   neutralAccidentTitle, normalizeTree, qualificationInput, type D8Content, type ReportedVia, type TreeLine,
-  MP_DENIED, MP_TITLE, hasNcDisposition,
+  MP_DENIED, MP_TITLE, hasNcDisposition, reportOccurredError,
 } from '@/lib/rules/events';
 import { canCreateAction } from '@/lib/action-rules';
 import { REPORT_TOKEN_PARAM } from '@/lib/auth/paths';
@@ -26,7 +26,7 @@ import {
   HEALTH_EVENT_TYPES, NC_DISPOSITIONS, NC_DISPOSITION_KEYS, REPORT_TYPE_KEYS, canSeeEventType, type NcDisposition,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite, requireManager } from '@/lib/guard';
+import { requireEditor, requireInSite, requireManager } from '@/lib/guard';
 import { REPORT_LIMITS, ReportLimitError, checkedPhoto, cleanReportPhoto, clientIp, countPostReport, hitReportLimit } from '@/lib/report-guard';
 import { UserLimitError, consumeUserLimit, userLimitError } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
@@ -44,6 +44,14 @@ const done = () => revalidatePath('/', 'layout');
 const CONCURRENT = "L'événement vient d'être modifié par ailleurs : rechargez la page.";
 
 type EventRow = typeof t.events.$inferSelect;
+
+/**
+ * Suivi d'un événement déclaré (modification, qualification, étapes, clôture, réouverture, classement sans suite, analyse,
+ * pièces jointes, déclaration CPAM et registre des accidents bénins) : animateur QHSE seulement (EVT-29, EVT-16, réponses
+ * du service QHSE du 09/11/2026 ; canEdit(role, 'events')). L'encadrement et la direction déclarent (createEvent) et lisent.
+ * Les demandes reçues de Keystone (processInboundRequests) ne passent pas par cette garde.
+ */
+const requireEventEditor = () => requireEditor('events', { qhse: true });
 
 /**
  * Événement d'après son identifiant ; une maladie professionnelle (donnée de santé, EVT-09) n'existe pas pour une personne
@@ -90,8 +98,8 @@ function readLocalDateTime(f: Reader, name: string, opts: { required?: boolean; 
  * déclaration CPAM saisie, inscription au registre des accidents bénins ou absence de déclaration motivée) et trace la transition.
  */
 export async function advanceEvent(id: string): Promise<{ error?: string }> {
-  const { session, error } = await requireManager();
-  if (error) return { error: "Seuls l'animateur QHSE et l'encadrement font avancer un événement." };
+  const { session, error } = await requireEventEditor();
+  if (error) return { error };
   const db = await getDb();
   const ev = await findEvent(db, id);
   if (!ev) return { error: 'Événement introuvable.' };
@@ -116,7 +124,7 @@ export async function advanceEvent(id: string): Promise<{ error?: string }> {
  * Animateur QHSE et direction, motif obligatoire (historique du workflow).
  */
 export async function revertEvent(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -147,7 +155,7 @@ export async function revertEvent(_prev: FormState, fd: FormData): Promise<FormS
  * Vérifiée compte : elle reste rattachée à l'événement, qui ne peut plus être classé sans suite).
  */
 export async function dismissEvent(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -183,7 +191,7 @@ export async function dismissEvent(_prev: FormState, fd: FormData): Promise<Form
 
 /** Annule le classement sans suite : l'événement reprend son étape (animateur QHSE et direction, motif obligatoire). */
 export async function restoreEvent(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -211,7 +219,7 @@ export async function restoreEvent(_prev: FormState, fd: FormData): Promise<Form
 const methodLabel = (key: string | null) => METHODS.find(([k]) => k === key)?.[1] ?? key;
 
 export async function setAnalysisMethod(id: string, method: string): Promise<{ error?: string }> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   if (!METHOD_KEYS.includes(method as AnalysisMethod)) return { error: "Méthode d'analyse inconnue." };
   const db = await getDb();
@@ -453,7 +461,7 @@ const LONG: (keyof EventValues)[] = ['description', 'immediateMeasures', 'circum
  * et sa blessure « premiers soins » (bascule en déclaration CPAM : escalateBenignAccident).
  */
 export async function saveEvent(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   // Données de santé d'un AT (SEC-06) : saisies par l'animateur QHSE et la direction seulement.
   const health = canSeeHealth(session.role);
@@ -605,7 +613,7 @@ type Db = Awaited<ReturnType<typeof getDb>>;
 
 /** Contrôles communs aux actions sur les données de santé d'un AT : rôle validateur habilité, événement du site. */
 async function healthEvent(fd: FormData, opts: { reason?: boolean } = {}): Promise<Checked<{ session: Session; db: Db; ev: EventRow; reason: string; f: Reader }>> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { fail: { error } };
   if (!canSeeHealth(session.role)) return { fail: { error: HEALTH_DENIED } };
   const f = formReader(fd);
@@ -689,7 +697,7 @@ const ENTRY_NOT_FOUND = 'Inscription au registre introuvable.';
 
 /** Inscrit un accident bénin (premiers soins) au registre de son site. */
 export async function registerBenignAccident(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   if (!canSeeHealth(session.role)) return { error: HEALTH_DENIED };
   const f = formReader(fd);
@@ -748,7 +756,7 @@ export async function registerBenignAccident(_prev: FormState, fd: FormData): Pr
 
 /** Inscription active d'après son identifiant (formulaires du registre), avec les contrôles de rôle et de site. */
 async function benignEntry(fd: FormData, opts: { reason?: boolean } = {}): Promise<Checked<{ session: Session; db: Db; entry: BenignRow; reason: string; f: Reader }>> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEventEditor();
   if (error) return { fail: { error } };
   if (!canSeeHealth(session.role)) return { fail: { error: HEALTH_DENIED } };
   const f = formReader(fd);
@@ -858,7 +866,7 @@ const texts = (fd: FormData, name: string) => fd.getAll(name).map((v) => (typeof
 
 /** Enregistre le contenu de l'analyse des causes pour la méthode donnée (formats lus par la fiche événement). */
 export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const f = formReader(fd);
   const eventId = f.str('eventId', { required: true });
@@ -934,7 +942,7 @@ export async function saveAnalysis(_prev: FormState, fd: FormData): Promise<Form
  * (certificat, avis d'arrêt, réserves…), réservées à l'animateur QHSE et à la direction (SEC-06).
  */
 export async function addEventFiles(fd: FormData): Promise<{ error?: string; count?: number }> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const health = fd.get('health') === '1';
   if (health && !canSeeHealth(session.role)) return { error: HEALTH_DENIED };
@@ -963,7 +971,7 @@ export async function addEventFiles(fd: FormData): Promise<{ error?: string; cou
 
 /** Retire une pièce jointe ajoutée par erreur (seule suppression admise, avant clôture), tracée au journal. */
 export async function removeEventFile(attachmentId: string): Promise<{ error?: string }> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   const db = await getDb();
   const [row] = await db.select({ entityType: t.attachments.entityType, entityId: t.attachments.entityId, fileName: t.attachments.fileName, health: t.attachments.health })
@@ -988,7 +996,7 @@ export async function removeEventFile(attachmentId: string): Promise<{ error?: s
  * non habilités. Sans retour : une erreur se corrige en retirant la pièce. Animateur QHSE et direction.
  */
 export async function classifyEventFileAsMedical(attachmentId: string): Promise<{ error?: string }> {
-  const { session, error } = await requireManager();
+  const { session, error } = await requireEventEditor();
   if (error) return { error };
   if (!canSeeHealth(session.role)) return { error: HEALTH_DENIED };
   const db = await getDb();
@@ -1061,6 +1069,12 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
   if (description.length > 4000) return { error: 'La description est limitée à 4 000 caractères.' };
   const gravity = f.opt('gravity');
   const anonymous = f.bool('anonymous');
+  // EVT-21 : date et heure réelles des faits (facultatives, heure de Paris) ; vides, l'heure d'envoi fait foi.
+  const sentAt = referenceNow(today());
+  const occurredRaw = f.str('occurredAt');
+  const occurredAt = occurredRaw ? fromParisLocal(occurredRaw) : sentAt;
+  const occurredError = occurredRaw ? reportOccurredError(occurredAt, sentAt) : null;
+  if (occurredError) return { error: occurredError };
   const token = f.opt(REPORT_TOKEN_PARAM);
   const photos = f.files('photos');
   const maxPhotos = session ? MAX_PHOTOS : MAX_PUBLIC_PHOTOS;
@@ -1178,7 +1192,8 @@ export async function createReport(fd: FormData): Promise<ReportResult> {
         ...report,
         type: type as EventType,
         title,
-        occurredOn: today(),
+        occurredOn: parisDay(occurredAt!),
+        occurredTime: toParisLocal(occurredAt!).slice(11, 16),
         anonymous,
         severity,
         step: 0,

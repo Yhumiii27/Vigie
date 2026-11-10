@@ -52,13 +52,15 @@ describe('saisie et validation par rôle', () => {
     });
   });
 
-  it('requireApprover : abandon d’action, retour d’étape, classement sans suite réservés à l’animateur QHSE et à la direction', async () => {
+  it('abandon d’action, retour d’étape, classement sans suite : animateur QHSE seulement (ACT-P17, EVT-29) ; sites : QHSE et direction', async () => {
     for (const role of ROLE_KEYS) {
       actAs(role);
       const approver = role === 'Animateur QHSE' || role === 'Direction';
-      expect(await abandonAction({}, form({ id: 'A-inconnue', from: 'a_faire', reason: 'Test' }))).toEqual({ error: approver ? 'Action introuvable.' : APPROVERS_ONLY });
-      expect(await revertEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: approver ? 'Événement introuvable.' : APPROVERS_ONLY });
-      expect(await dismissEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: approver ? 'Événement introuvable.' : APPROVERS_ONLY });
+      const qhse = role === 'Animateur QHSE';
+      const QHSE_ONLY = "Réservé à l'animateur QHSE.";
+      expect(await abandonAction({}, form({ id: 'A-inconnue', from: 'a_faire', reason: 'Test' }))).toEqual({ error: qhse ? 'Action introuvable.' : QHSE_ONLY });
+      expect(await revertEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: qhse ? 'Événement introuvable.' : QHSE_ONLY });
+      expect(await dismissEvent({}, form({ id: 'EV-inconnu', reason: 'Test' }))).toEqual({ error: qhse ? 'Événement introuvable.' : QHSE_ONLY });
       expect(await archiveSite({}, form({ siteId: 'inconnu', reason: 'Test' }))).toMatchObject({ error: approver ? expect.not.stringContaining('Réservé') : APPROVERS_ONLY });
     }
   });
@@ -95,11 +97,11 @@ describe('motif obligatoire des annulations, archivages et restaurations', () =>
 
 describe('journal des modifications : auteur, motif, détail', () => {
   it('abandon d’une action : avancement, motif, auteur ; jamais supprimée', async () => {
-    actAs('Direction', 'all');
+    actAs('Animateur QHSE', 'all');
     expect(await abandonAction({}, form({ id: 'A-217', from: 'a_faire', reason: 'Fin de course remplacé lors de la VGP' }))).toEqual({ ok: true, id: 'A-217' });
     const [a] = await (await getDb()).select().from(t.actions).where(eq(t.actions.id, 'A-217'));
-    expect(a).toMatchObject({ status: 'abandonnee', cancelledById: 'hmarchand', cancelReason: 'Fin de course remplacé lors de la VGP' });
-    expect(await lastLog('action', 'A-217')).toMatchObject({ action: 'status', summary: 'Abandonnée', reason: 'Fin de course remplacé lors de la VGP', byId: 'hmarchand' });
+    expect(a).toMatchObject({ status: 'abandonnee', cancelledById: 'clefevre', cancelReason: 'Fin de course remplacé lors de la VGP' });
+    expect(await lastLog('action', 'A-217')).toMatchObject({ action: 'status', summary: 'Abandonnée', reason: 'Fin de course remplacé lors de la VGP', byId: 'clefevre' });
     expect(await abandonAction({}, form({ id: 'A-217', from: 'abandonnee', reason: 'Encore' }))).toEqual({ error: 'Action déjà abandonnée.' });
     expect(await abandonAction({}, form({ id: 'A-217', from: 'a_faire', reason: 'Encore' }))).toEqual({ error: "L'action a changé entre-temps : la fiche est actualisée." });
   });
