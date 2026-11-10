@@ -50,8 +50,9 @@ describe('EVT-09 : maladies professionnelles (données de santé) et accidents d
     expect((await loadVisibleEvents()).some((e) => e.id === MP)).toBe(false);
     expect((await loadEventSignals()).todo.some((x) => x.title.startsWith(MP))).toBe(false);
     // Server actions : l'événement n'existe pas pour un rôle non habilité.
-    expect(await saveEvent({}, baseEvent({ id: MP, type: 'MP' }))).toEqual({ error: MP_DENIED });
-    expect(await saveEvent({}, baseEvent({ id: MP, type: 'PA' }))).toEqual({ error: 'Événement introuvable.' });
+    // EVT-29 : modification réservée à l'animateur QHSE, même refus quel que soit l'événement (rien n'est révélé).
+    expect(await saveEvent({}, baseEvent({ id: MP, type: 'MP' }))).toEqual({ error: "Réservé à l'animateur QHSE." });
+    expect(await saveEvent({}, baseEvent({ id: MP, type: 'PA' }))).toEqual({ error: "Réservé à l'animateur QHSE." });
 
     actAs('Animateur QHSE', 'site_a');
     expect((await loadVisibleEvents()).some((e) => e.id === MP)).toBe(true);
@@ -123,6 +124,7 @@ describe('EVT-17 : traitement d’un produit non conforme', () => {
     expect(await createEvent({}, baseEvent({ ...nc, ncCostKeur: '-3' }))).toMatchObject({ fieldErrors: { ncCostKeur: expect.any(String) } });
     const r = await createEvent({}, baseEvent({ ...nc, ncDisposition: 'rebut', ncQuantity: '12', ncCostKeur: '1,25' }));
     expect(await event(r.id!)).toMatchObject({ ncDisposition: 'rebut', ncQuantity: 12, ncCostKeur: 1.25 });
+    actAs('Animateur QHSE', 'site_a'); // EVT-29 : l'animateur QHSE modifie
     expect(await saveEvent({}, baseEvent({ id: r.id!, ...nc, ncDisposition: 'derogation', ncDispositionNote: '[Client A], dérogation n° 12', ncQuantity: '12', ncCostKeur: '1.25' })))
       .toEqual({ ok: true, id: r.id });
     expect((await lastLog('event', r.id!))?.details).toEqual(expect.arrayContaining([

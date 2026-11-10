@@ -81,13 +81,24 @@ export function legalReason(p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'
 }
 
 /**
- * Plan écrit obligatoire selon la règle du site du plan : toujours sur un site « dès la première minute »
- * (établissement Seveso seuil haut), sinon règle légale R. 4512-7.
+ * Règle de l'entreprise (PRV-13, réponse du service QHSE du 09/11/2026 : « tous les travaux des entreprises extérieures
+ * sont soumis à plan de prévention peu importe le nombre d'heures ») : le plan écrit est exigé pour toute intervention.
  */
-export const isMandatory = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined) => firstMinuteRule(rule) || legalMandatory(p);
+export const COMPANY_RULE_REASON = "Règle de l'entreprise : plan écrit et signé pour toute intervention d'une entreprise extérieure, quel que soit le nombre d'heures";
+/** Règle de l'entreprise en vigueur (PRV-13) : toute intervention d'une entreprise extérieure exige un plan écrit et signé. */
+export const COMPANY_RULE_ALL_WORK: boolean = true;
 
+/**
+ * Plan écrit obligatoire : toujours (règle de l'entreprise, PRV-13). Le seuil légal R. 4512-7 (400 h sur 12 mois ou travaux
+ * dangereux, legalMandatory) et la règle « dès la première minute » du site restent affichés comme fondement
+ * (mandatoryReason) ; les heures prévues restent saisies.
+ */
+export const isMandatory = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined) =>
+  COMPANY_RULE_ALL_WORK || firstMinuteRule(rule) || legalMandatory(p);
+
+/** Fondement de l'obligation : règle du site, sinon seuil légal atteint, sinon règle de l'entreprise (PRV-13). */
 export const mandatoryReason = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined) =>
-  (firstMinuteRule(rule) ? firstMinuteReason(rule) : legalReason(p));
+  (firstMinuteRule(rule) ? firstMinuteReason(rule) : legalMandatory(p) ? legalReason(p) : COMPANY_RULE_REASON);
 
 export const isFullySigned = (p: Pick<PlanLike, 'signedEuOn' | 'signedEeOn'>) => !!(p.signedEuOn && p.signedEeOn);
 
@@ -455,9 +466,13 @@ export type PermitPlanIssueKind = 'missing' | 'closed' | 'dates' | 'unsigned';
  */
 export const hotWorkByContractor = (permit: Pick<PermitPlanLike, 'type' | 'contractorId'>) => permit.type === 'feu' && !!permit.contractorId;
 
-/** Plan écrit et signé exigé pour délivrer le permis : entreprise extérieure sur un site « dès la première minute », ou permis de feu d'une entreprise extérieure. */
+/**
+ * Plan écrit et signé exigé pour délivrer le permis : tout permis d'une entreprise extérieure (règle de l'entreprise,
+ * PRV-13 : toute intervention sous plan de prévention, quel que soit le nombre d'heures ; avant elle : site « dès la
+ * première minute » ou permis de feu).
+ */
 export const permitNeedsSignedPlan = (permit: Pick<PermitPlanLike, 'type' | 'contractorId'>, rule: SiteRule | null | undefined) =>
-  !!permit.contractorId && (firstMinuteRule(rule) || hotWorkByContractor(permit));
+  !!permit.contractorId && (COMPANY_RULE_ALL_WORK || firstMinuteRule(rule) || hotWorkByContractor(permit));
 
 /**
  * Défaut du plan de prévention d'un permis (null s'il est en règle), selon la règle du site du permis :
@@ -519,4 +534,48 @@ export const fmtLocalLong = (local: string) => `${local.slice(8, 10)}/${local.sl
 /** « 07/10 07:30 → 18:00 » ou « 06/10 08:00 → 09/10 18:00 ». */
 export function fmtLocalRange(from: string, to: string) {
   return from.slice(0, 10) === to.slice(0, 10) ? `${fmtLocalShort(from)} → ${to.slice(11, 16)}` : `${fmtLocalShort(from)} → ${fmtLocalShort(to)}`;
+}
+
+// ─── Règles du service QHSE du 09/11/2026 (PRV-04, PRV-06, PRV-16, PRV-21) ─────────────────────────────────
+
+/**
+ * PRV-06 : l'inspection commune préalable (R. 4512-2) a lieu au plus tard le premier jour de l'intervention ; une
+ * inspection datée après le début des travaux est refusée à l'enregistrement (création, ou date d'inspection ou de début
+ * modifiée).
+ */
+export function inspectionAfterStartError(inspectionOn: string | null, startOn: string | null): string | null {
+  return inspectionOn && startOn && inspectionOn > startOn
+    ? "L'inspection commune préalable doit avoir lieu au plus tard le premier jour de l'intervention."
+    : null;
+}
+
+/** PRV-16 : durée maximale de validité d'un permis, tous types (re-signature quotidienne comprise). */
+export const PERMIT_MAX_DAYS = 7;
+/** Refus d'une validité de permis de plus de PERMIT_MAX_DAYS jours (fin − début), ou null. */
+export function permitValidityError(validFrom: Date, validTo: Date): string | null {
+  return validTo.getTime() - validFrom.getTime() > PERMIT_MAX_DAYS * 86_400_000
+    ? `Un permis est valable ${PERMIT_MAX_DAYS} jours au plus, même s'il est signé de nouveau chaque jour : demandez un nouveau permis pour la suite des travaux.`
+    : null;
+}
+
+/**
+ * PRV-04 : un permis de feu ne se clôt qu'après la fin de la surveillance après travaux (watchUntil ; à défaut, fin de
+ * validité + FIRE_WATCH_HOURS) ; null si la clôture est permise à l'instant `nowMs`.
+ */
+export function permitCloseBlocker(p: { type: string; validTo: Date; watchUntil: Date | null }, nowMs: number): string | null {
+  if (p.type !== 'feu') return null;
+  const end = p.watchUntil ?? new Date(p.validTo.getTime() + FIRE_WATCH_HOURS * 3_600_000);
+  return nowMs < end.getTime()
+    ? `Surveillance après travaux par points chauds jusqu'au ${fmtLocalLong(toParisLocal(end))} : le permis de feu ne se clôt qu'après cette surveillance.`
+    : null;
+}
+
+/** PRV-21 : mesures immédiates prises après un écart R. 4512-6, exigées à la clôture du plan (texte, journalisé). */
+export const GAP_MEASURES_LABEL = 'Mesures immédiates (écart R. 4512-6)';
+export const GAP_MEASURES_MAX = 4000;
+/** Refus de la clôture d'un plan qui porte un écart R. 4512-6 sans trace des mesures immédiates, ou null. */
+export function gapMeasuresError(gap: boolean, measures: string): string | null {
+  if (!gap) return null;
+  if (!measures.trim()) return 'Écart R. 4512-6 : décrivez les mesures immédiates prises avant de clore le plan.';
+  return measures.length > GAP_MEASURES_MAX ? `Mesures immédiates : ${GAP_MEASURES_MAX} caractères au plus.` : null;
 }

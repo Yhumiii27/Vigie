@@ -98,6 +98,6 @@ describe('sites du périmètre (TDB-05)', () => {
     expect(x).toMatchObject({ source: 'dashboard', elsewhere: false });
     expect(x.href).toBeUndefined();
     const list = [item({ title: '1' }), item({ title: '2' }), item({ title: '3' })];
-    expect(visibleTodo(list, as('Direction')).map((t) => t.title)).toEqual(['1', '2', '3']);
+    expect(visibleTodo(list, as('Animateur QHSE')).map((t) => t.title)).toEqual(['1', '2', '3']);
   });
 });

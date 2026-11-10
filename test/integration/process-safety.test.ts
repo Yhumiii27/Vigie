@@ -147,32 +147,32 @@ describe('recommandations (VG-02)', () => {
     expect(await saveAction({}, form({ ...rec, source: 'comex' }))).toMatchObject({ fieldErrors: { source: expect.any(String) } });
     expect(await saveAction({}, form({ ...rec, siteId: 'site_b' }))).toMatchObject({ fieldErrors: { siteId: expect.any(String) } });
     const blocking = await saveAction({}, form({ ...rec, safetyBlocking: 'on' }));
-    expect(blocking).toEqual({ ok: true, id: 'A-223' });
-    expect(await actionRow('A-223')).toMatchObject({ source: 'hazop', safetyStudyId: 'ES-004', safetyStudyBlocking: true, originRef: 'ES-004 · AMDEC · CPX-APM-2026-02' });
-    expect(await lastLog('action', 'A-223')).toMatchObject({ details: expect.arrayContaining([{ field: 'Réserve bloquante', from: null, to: 'oui' }]) });
-    expect(await lastLog('process_safety_study', 'ES-004')).toMatchObject({ action: 'link', summary: 'Action A-223 créée et rattachée (réserve bloquante)' });
-    expect(await saveAction({}, form({ ...rec, dueOn: '2026-10-10' }))).toMatchObject({ ok: true, id: 'A-224' });
-    expect(await actionRow('A-224')).toMatchObject({ safetyStudyBlocking: false });
+    expect(blocking).toEqual({ ok: true, id: 'AC-260001' });
+    expect(await actionRow('AC-260001')).toMatchObject({ source: 'hazop', safetyStudyId: 'ES-004', safetyStudyBlocking: true, originRef: 'ES-004 · AMDEC · CPX-APM-2026-02' });
+    expect(await lastLog('action', 'AC-260001')).toMatchObject({ details: expect.arrayContaining([{ field: 'Réserve bloquante', from: null, to: 'oui' }]) });
+    expect(await lastLog('process_safety_study', 'ES-004')).toMatchObject({ action: 'link', summary: 'Action AC-260001 créée et rattachée (réserve bloquante)' });
+    expect(await saveAction({}, form({ ...rec, dueOn: '2026-10-10' }))).toMatchObject({ ok: true, id: 'AC-260002' });
+    expect(await actionRow('AC-260002')).toMatchObject({ safetyStudyBlocking: false });
     expect((await study('ES-004'))!.counts).toEqual({ total: 2, open: 2, late: 0, blocking: 1 });
     // Origine fixée à la création : jamais rattachée ensuite (ORIGIN_LOCKED).
-    expect(await linkAction('safetystudy:ES-001', 'A-224')).toEqual({ error: ORIGIN_LOCKED });
+    expect(await linkAction('safetystudy:ES-001', 'AC-260002')).toEqual({ error: ORIGIN_LOCKED });
     // Le registre ne propose une étude qu'à la création : un autre élément ne peut pas y rattacher l'action.
-    expect((await loadActionSources('A-224')).map((s) => s.link)).toEqual(['safetystudy:ES-004']);
+    expect((await loadActionSources('AC-260002')).map((s) => s.link)).toEqual(['safetystudy:ES-004']);
   });
 
   it('réserve bloquante posée ou levée (motif) par le QHSE, journal sur l’étude et l’action ; action close refusée', async () => {
     actAs('Chef de service');
-    expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ error: APPROVERS_ONLY });
+    expect(await markStudyReserve({}, form({ actionId: 'AC-260002' }))).toEqual({ error: APPROVERS_ONLY });
     actAs('Animateur QHSE', 'site_b');
-    expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ error: OTHER_SITE });
+    expect(await markStudyReserve({}, form({ actionId: 'AC-260002' }))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE');
-    expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ ok: true, id: 'ES-004' });
-    expect(await markStudyReserve({}, form({ actionId: 'A-224' }))).toEqual({ error: 'Réserve déjà bloquante.' });
-    expect(await lastLog('process_safety_study', 'ES-004')).toMatchObject({ action: 'blocking', summary: 'Recommandation A-224 marquée réserve bloquante' });
-    expect(await lastLog('action', 'A-224')).toMatchObject({ action: 'update', details: [{ field: 'Réserve bloquante', from: 'non', to: 'oui' }] });
-    expect(await liftStudyReserve({}, form({ actionId: 'A-224' }))).toMatchObject(REASON_REQUIRED);
-    expect(await liftStudyReserve({}, form({ actionId: 'A-224', reason: 'Mesure compensatoire validée par la SSE groupe' }))).toEqual({ ok: true, id: 'ES-004' });
-    expect(await lastLog('action', 'A-224')).toMatchObject({ reason: 'Mesure compensatoire validée par la SSE groupe', details: [{ field: 'Réserve bloquante', from: 'oui', to: 'non' }] });
+    expect(await markStudyReserve({}, form({ actionId: 'AC-260002' }))).toEqual({ ok: true, id: 'ES-004' });
+    expect(await markStudyReserve({}, form({ actionId: 'AC-260002' }))).toEqual({ error: 'Réserve déjà bloquante.' });
+    expect(await lastLog('process_safety_study', 'ES-004')).toMatchObject({ action: 'blocking', summary: 'Recommandation AC-260002 marquée réserve bloquante' });
+    expect(await lastLog('action', 'AC-260002')).toMatchObject({ action: 'update', details: [{ field: 'Réserve bloquante', from: 'non', to: 'oui' }] });
+    expect(await liftStudyReserve({}, form({ actionId: 'AC-260002' }))).toMatchObject(REASON_REQUIRED);
+    expect(await liftStudyReserve({}, form({ actionId: 'AC-260002', reason: 'Mesure compensatoire validée par la SSE groupe' }))).toEqual({ ok: true, id: 'ES-004' });
+    expect(await lastLog('action', 'AC-260002')).toMatchObject({ reason: 'Mesure compensatoire validée par la SSE groupe', details: [{ field: 'Réserve bloquante', from: 'oui', to: 'non' }] });
     expect(await lastLog('process_safety_study', 'ES-004')).toMatchObject({ action: 'lift', reason: 'Mesure compensatoire validée par la SSE groupe' });
     // A-193 (démonstration) : vérifiée, ne bloque plus.
     expect(await markStudyReserve({}, form({ actionId: 'A-193' }))).toMatchObject({ error: expect.stringContaining('vérifiée ou abandonnée') });

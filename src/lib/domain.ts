@@ -518,6 +518,23 @@ export const PLAN_TRACK_KINDS: Record<string, string> = {
 };
 export const planTrackKind = (track: string) => PLAN_TRACK_KINDS[track] ?? track;
 
+/**
+ * Type d'un élément du programme d'audit (D08-5, réponse du service QHSE du 09/11/2026 : « il existe 3 sortes d'audits :
+ * l'audit terrain (visite terrain), l'audit ISO de certification et l'audit ISO blanc », plus les revues de processus
+ * mensuelles) ; la revue de direction reste reconnue par ses mots (isReviewPlanItem) ; « autre » : audit interne,
+ * fournisseur… Clés stockées : AUDIT_KIND_CODES (src/lib/state-keys.ts).
+ */
+export type AuditKind = 'terrain' | 'iso_certification' | 'iso_blanc' | 'revue_processus' | 'revue_direction' | 'autre';
+export const AUDIT_KINDS: Record<AuditKind, { label: string; short: string }> = {
+  terrain: { label: 'Audit terrain (visite terrain)', short: 'Terrain' },
+  iso_certification: { label: 'Audit ISO de certification', short: 'ISO certification' },
+  iso_blanc: { label: 'Audit ISO blanc', short: 'ISO blanc' },
+  revue_processus: { label: 'Revue de processus', short: 'Revue de processus' },
+  revue_direction: { label: 'Revue de direction', short: 'Revue de direction' },
+  autre: { label: 'Autre audit (interne, fournisseur…)', short: 'Autre' },
+};
+export const AUDIT_KIND_KEYS = Object.keys(AUDIT_KINDS) as AuditKind[];
+
 /** État calculé d'un élément du programme : réalisé, échéance passée non confirmée, à venir, annulé (AUD-03). */
 export const PLAN_ITEM_STATES = {
   done: { label: 'Réalisé', tone: 'ok' },
@@ -635,16 +652,21 @@ export type Role = 'Animateur QHSE' | 'Direction' | 'Chef de service' | 'Chef de
 // Audits et certifications : consultation par le chef de service et le chef de projet (AUD-02) ; saisie : canEdit(role, 'audits').
 // Modifications techniques (D12, CV-06) : consultation par l'encadrement (son périmètre), saisie, instruction, approbation
 // et libération par l'animateur QHSE et la direction ; un approbateur désigné décide sa propre clé ; Salarié : aucun accès.
-// Plan d'actions : consultation seule par l'encadrement hors QHSE (ACT-22 tranché le 15/10/2026 : lecture du plan de son
-// périmètre) ; création, saisie et avancement réservés au service QHSE, donc canEdit(role, 'actions') === canApprove(role)
-// pour tout rôle, depuis le plan comme depuis un écran source (canCreateAction, src/lib/action-rules.ts). Le Salarié ne
-// voit que ses propres actions (canReadPlan, même module).
+// Plan d'actions : consultation seule par l'encadrement et la direction (ACT-22 tranché le 15/10/2026 : lecture du plan de
+// son périmètre ; ACT-P17 et EVT-16, réponses du service QHSE du 09/11/2026 : la direction n'est plus comptée « service
+// QHSE » pour les actions) ; création, saisie, avancement, vérification et rattachements réservés à l'animateur QHSE, donc
+// canEdit(role, 'actions') === isQhse(role) pour tout rôle, depuis le plan comme depuis un écran source (canCreateAction,
+// src/lib/action-rules.ts). Le Salarié ne voit que ses propres actions (canReadPlan, même module).
+// Événements (EVT-29, EVT-16, réponses du 09/11/2026) : modification, qualification, avancement, clôture, réouverture et
+// classement sans suite par l'animateur QHSE seulement (canEdit(role, 'events')) ; l'encadrement et la direction déclarent
+// (createEvent, requireManager) et lisent les événements de leur périmètre ; la direction garde la lecture des données de
+// santé et des registres (canSeeHealth).
 // Personnes de démonstration associées aux rôles : src/lib/demo.ts (mode démonstration seulement).
 export const ROLES: Record<Role, { screens: ScreenKey[] | null; readOnly?: ScreenKey[] }> = {
   'Animateur QHSE': { screens: null },
-  Direction: { screens: null },
-  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'engineering', 'docs'], readOnly: ['actions', 'audits', 'engineering', 'docs'] },
-  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'engineering', 'docs'], readOnly: ['actions', 'risks', 'audits', 'engineering', 'docs'] },
+  Direction: { screens: null, readOnly: ['events', 'actions'] },
+  'Chef de service': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'skills', 'watch', 'audits', 'engineering', 'docs'], readOnly: ['events', 'actions', 'audits', 'engineering', 'docs'] },
+  'Chef de projet': { screens: ['dashboard', 'events', 'actions', 'prevention', 'risks', 'audits', 'engineering', 'docs'], readOnly: ['events', 'actions', 'risks', 'audits', 'engineering', 'docs'] },
   Salarié: { screens: ['events', 'actions', 'risks', 'skills', 'docs'], readOnly: ['risks', 'docs'] },
 };
 export const ROLE_KEYS = Object.keys(ROLES) as Role[];
@@ -674,8 +696,8 @@ export const homeOf = (role: Role): ScreenKey => ROLES[role].screens?.[0] ?? 'da
 
 // Droits : l'encadrement saisit et modifie ; l'animateur QHSE et la direction valident
 // (vérification d'efficacité, approbation des documents, versions du DUERP).
-// Plan d'actions (docs/specs/actions-qse.md § 3, § 8) : « QHSE » = canApprove (animateur QHSE et direction, D6 § 22.17) :
-// seul à créer une action (ACT-22) ; tous les droits sur les actions de son périmètre (champs, avancement, vérification,
+// Plan d'actions (docs/specs/actions-qse.md § 3, § 8) : « QHSE » = animateur QHSE seulement (isQhse ; ACT-P17 du 09/11/2026,
+// la direction n'en fait plus partie) : seul à créer une action (ACT-22) ; tous les droits sur les actions de son périmètre (champs, avancement, vérification,
 // abandon, réouverture, rattachements). Le responsable d'une action (pilot_id), quel que soit son rôle, la consulte, la
 // commente et y joint des preuves, sans transition (src/lib/action-rules.ts : actionRights).
 export const canManage = (role: Role) => role !== 'Salarié';

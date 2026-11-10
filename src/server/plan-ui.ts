@@ -11,7 +11,7 @@ import {
   type FollowReason,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import type { ActionInsert, ActionRow } from '@/lib/queries';
 import { today } from '@/lib/today';
 import { HOURS_MAX, createActionRecord, fmtActionField, nameBook, newSiteProblem, pilotProblem, readNewActionFields } from './action-create';
@@ -19,7 +19,7 @@ import { StaleActionError, insertComment, writeAvancement } from './action-core'
 import { logChange, type ChangeDetail } from './changelog';
 
 // Cycle de vie d'une action (docs/specs/actions-qse.md § 6, § 7) : toutes les transitions sont faites par le service QHSE
-// (requireApprover) ; le responsable n'en fait aucune (D2). Chaque server action reçoit l'avancement que la fiche
+// (requireEditor('actions', { qhse: true }) : animateur QHSE) ; le responsable n'en fait aucune (D2). Chaque server action reçoit l'avancement que la fiche
 // affichait (`from`) : s'il a changé entre-temps, la demande est refusée et la fiche actualisée. Ordre des contrôles :
 // droits → validation → chargement → requireInSite → une transaction (writeAvancement : journal « status » structuré, D11).
 //   - moveAction : paliers libres, Reportée, reprise, Terminée (date effective), retour depuis Terminée (MOVE_KINDS) ;
@@ -61,7 +61,7 @@ const dateDetail = (field: string, from: string | null | undefined, to: string |
 
 /** Change l'avancement (transitions de MOVE_KINDS : step, report, resume, finish, unfinish), QHSE seulement (ACT-21). */
 export async function moveAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -154,7 +154,7 @@ async function carriedLinks(db: DbOrTx, a: ActionRow): Promise<Carried[]> {
 
 /** Vérification d'efficacité d'une action Terminée, actions de suite comprises (ACT-23). */
 export async function verifyAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -247,7 +247,7 @@ export async function verifyAction(_prev: FormState, fd: FormData): Promise<Form
 
 /** Rouvre une action Vérifiée (retour à Terminée — à vérifier, motif obligatoire). */
 export async function reopenAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });
@@ -284,7 +284,7 @@ export async function reopenAction(_prev: FormState, fd: FormData): Promise<Form
 
 /** Abandonne une action ouverte, Reportée ou Terminée (motif obligatoire, liens détachés). */
 export async function abandonAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const f = formReader(fd);
   const id = f.str('id', { required: true });

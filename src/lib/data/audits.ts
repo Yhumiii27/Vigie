@@ -18,7 +18,7 @@ import type { Option } from './options';
 import { missingDetail } from '@/lib/url-state';
 import { entityVersions } from '@/server/versions';
 import { currentSiteId, getSession, inPerimeter, inSite } from '../session';
-import { ALL_SITES } from '../domain';
+import { ALL_SITES, type AuditKind } from '../domain';
 
 // ─── Audits et certifications ───────────────────────────────────────────────
 
@@ -48,6 +48,8 @@ export type PlanItemView = {
   state: PlanItemState; reports: AttachmentBrief[]; findingCount: number;
   /** Nature de l'élément selon sa ligne (Audit interne, Visite sécurité…). */
   kind: string;
+  /** D08-5 : type d'audit (terrain, ISO de certification, ISO blanc, revue de processus, revue de direction, autre). */
+  auditKind: AuditKind;
   /** Échéance qui porte une revue de direction (ni auditeur ni constats). */
   isReview: boolean;
   /** Revue de direction rattachée (AUD-01) : sa date, sa réalisation et son annulation suivent la revue. */
@@ -248,7 +250,7 @@ const readAudits = cache(async () => {
       siteId: p.siteId, site: siteName(p.siteId), unplanned: p.unplanned,
       actionId: p.actionId, action: brief(p.actionId),
       state: planItemState(p, now), reports, findingCount: active.filter((f) => f.planItemId === p.id).length,
-      kind: planTrackKind(p.track), isReview: isReviewPlanItem(p),
+      kind: planTrackKind(p.track), auditKind: p.auditKind as AuditKind, isReview: isReviewPlanItem(p),
       reviewId: p.reviewId,
       review: r && st ? { id: r.id, statusLabel: st.label, statusTone: st.tone, href: `/audits?annee=${yearOf(r.reviewOn)}&revue=${r.id}#revue` } : null,
       locked,

@@ -1,13 +1,17 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { readCursusPeople } from '@/lib/foreign/cursus';
 import { SOURCES, unavailableMessage } from '@/lib/foreign/labels';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireEditor, requireInSite } from '@/lib/guard';
 import { newCachedPerson } from '@/lib/rules/people-sync';
+import { RESPONSIBILITY_KINDS, reassignTargetError, responsibilitySummary, type ResponsibilityCounts } from '@/lib/rules/responsibilities';
+import { openResponsibilities } from '@/lib/data/people';
+import { hasLeft } from '@/lib/people';
+import { notifyReassigned } from './action-create';
 import { today } from '@/lib/today';
 import { logChange } from './changelog';
 import { refreshSharedReferences } from './foreign-sync';
@@ -126,4 +130,79 @@ export async function refreshFromCursus(): Promise<FormState> {
   const people = results.find((r) => r.source === 'people');
   if (down.length) return { ok: true, message: `Cursus actualisé, sauf : ${down.join(', ')} (source indisponible).` };
   return { ok: true, message: `Cursus actualisé : ${people?.added ?? 0} fiche(s) reprise(s), ${people?.updated ?? 0} mise(s) à jour.` };
+}
+
+/**
+ * HAB-05 (réponse du service QHSE du 09/11/2026 : « proposer de les réaffecter en masse ») : réaffecte toutes les
+ * responsabilités ouvertes d'une personne sortie de l'effectif (openResponsibilities : actions QSE, événements, plans de
+ * prévention, éléments du programme d'audit, contrôles, exigences de veille) à une personne présente, en une transaction,
+ * motif obligatoire, journal sur chaque élément et sur les deux fiches. Animateur QHSE seulement (actions et événements
+ * modifiés : ACT-P17, EVT-29) ; chaque élément doit appartenir au site sélectionné ou être commun (requireInSite :
+ * « Tous les sites » pour une personne présente sur plusieurs sites). Chaque action réaffectée notifie « Action confiée ».
+ */
+export async function reassignResponsibilities(_prev: FormState, fd: FormData): Promise<FormState> {
+  const { session, error } = await requireEditor('actions', { qhse: true });
+  if (error) return { error };
+  const f = formReader(fd);
+  const personId = f.str('id', { required: true });
+  const targetId = f.str('targetId', { required: true });
+  const reason = f.reason();
+  if (!f.ok) return f.state();
+  const db = await getDb();
+  const now = today();
+  const people = await db.select({ id: t.people.id, name: t.people.name, leftOn: t.people.leftOn, siteId: t.people.siteId }).from(t.people)
+    .where(inArray(t.people.id, [personId, targetId]));
+  const person = people.find((p) => p.id === personId);
+  if (!person) return { error: 'Personne introuvable.' };
+  if (!hasLeft(person, now)) return { error: "Cette personne est encore à l'effectif : ses responsabilités se modifient fiche par fiche." };
+  const target = people.find((p) => p.id === targetId);
+  const targetError = reassignTargetError(personId, target && { id: target.id, left: hasLeft(target, now) });
+  if (targetError || !target) return { error: 'Certains champs sont à corriger.', fieldErrors: { targetId: targetError ?? 'Personne inconnue.' } };
+  const open = await openResponsibilities(db, [personId]);
+  const total = RESPONSIBILITY_KINDS.reduce((n, k) => n + open[k].length, 0);
+  if (!total) return { error: 'Aucune responsabilité ouverte à réaffecter.' };
+  for (const k of RESPONSIBILITY_KINDS) {
+    for (const item of open[k]) {
+      const siteError = await requireInSite(item.siteId);
+      if (siteError) return { error: `${siteError} (élément ${item.id}). Sélectionnez « Tous les sites » pour tout réaffecter.` };
+    }
+  }
+  const details = [{ field: 'Responsable', from: person.name, to: target.name }];
+  const summary = (what: string) => `${what} réaffecté(e) à ${target.name} (sortie de ${person.name})`;
+  const by = { id: session.user.id, name: session.user.name };
+  await db.transaction(async (tx) => {
+    // Relu dans la transaction : seuls les éléments encore ouverts et encore portés par la personne changent.
+    const live = await openResponsibilities(tx, [personId]);
+    for (const a of live.actions) {
+      await tx.update(t.actions).set({ pilotId: target.id }).where(and(eq(t.actions.id, a.id), eq(t.actions.pilotId, personId)));
+      await logChange(tx, { entityType: 'action', entityId: a.id, action: 'update', summary: summary('Action'), details, reason, byId: by.id });
+      const [row] = await tx.select({ id: t.actions.id, detail: t.actions.detail }).from(t.actions).where(eq(t.actions.id, a.id));
+      if (row) await notifyReassigned(tx, row, target.id, by);
+    }
+    for (const e of live.events) {
+      await tx.update(t.events).set({ pilotId: target.id }).where(and(eq(t.events.id, e.id), eq(t.events.pilotId, personId)));
+      await logChange(tx, { entityType: 'event', entityId: e.id, action: 'update', summary: summary('Pilote'), details: [{ field: 'Pilote', from: person.name, to: target.name }], reason, byId: by.id });
+    }
+    for (const p of live.plans) {
+      await tx.update(t.preventionPlans).set({ ownerId: target.id }).where(and(eq(t.preventionPlans.id, p.id), eq(t.preventionPlans.ownerId, personId)));
+      await logChange(tx, { entityType: 'prevention_plan', entityId: p.id, action: 'update', summary: summary('Responsable'), details, reason, byId: by.id });
+    }
+    for (const i of live.audits) {
+      await tx.update(t.auditPlanItems).set({ ownerId: target.id }).where(and(eq(t.auditPlanItems.id, Number(i.id)), eq(t.auditPlanItems.ownerId, personId)));
+      await logChange(tx, { entityType: 'audit_plan_item', entityId: i.id, action: 'update', summary: summary('Responsable'), details, reason, byId: by.id });
+    }
+    for (const c of live.controls) {
+      await tx.update(t.controls).set({ responsibleId: target.id }).where(and(eq(t.controls.id, Number(c.id)), eq(t.controls.responsibleId, personId)));
+      await logChange(tx, { entityType: 'control', entityId: c.id, action: 'update', summary: summary('Responsable'), details, reason, byId: by.id });
+    }
+    for (const r of live.requirements) {
+      await tx.update(t.requirements).set({ pilotId: target.id }).where(and(eq(t.requirements.id, Number(r.id)), eq(t.requirements.pilotId, personId)));
+      await logChange(tx, { entityType: 'requirement', entityId: r.id, action: 'update', summary: summary('Pilote'), details: [{ field: 'Pilote', from: person.name, to: target.name }], reason, byId: by.id });
+    }
+    const counts = Object.fromEntries(RESPONSIBILITY_KINDS.map((k) => [k, live[k].length])) as ResponsibilityCounts;
+    await logChange(tx, { entityType: 'person', entityId: personId, action: 'reassign', summary: `Responsabilités réaffectées à ${target.name} : ${responsibilitySummary(counts)}`, reason, byId: by.id });
+    await logChange(tx, { entityType: 'person', entityId: target.id, action: 'reassign', summary: `Responsabilités reprises de ${person.name} : ${responsibilitySummary(counts)}`, reason, byId: by.id });
+  });
+  revalidatePath('/', 'layout');
+  return { ok: true, id: personId, message: `${total} élément${total > 1 ? 's' : ''} réaffecté${total > 1 ? 's' : ''} à ${target.name}.` };
 }

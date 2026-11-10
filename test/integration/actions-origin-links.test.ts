@@ -157,7 +157,7 @@ describe('origine verrouillée après la création', () => {
     expect((await changeLog('action', 'A-219')).length).toBe(before);
     // Droits vérifiés d'abord : un Salarié reçoit le refus de son rôle.
     actAs('Salarié');
-    expect(await linkAction('document:PRO-QUA-0002', 'A-201')).toEqual({ error: "Réservé à l'animateur QHSE et à la direction." });
+    expect(await linkAction('document:PRO-QUA-0002', 'A-201')).toEqual({ error: "Réservé à l'animateur QHSE." });
   });
 
   it('abandon : la source d’origine reste rattachée, absente des liens détachés', async () => {

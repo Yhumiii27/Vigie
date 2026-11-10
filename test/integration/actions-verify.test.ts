@@ -12,7 +12,7 @@ import { moveAction, verifyAction } from '@/server/plan-ui';
 
 freshDemoDatabase();
 
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE."; // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
 const VERIFY = { from: 'terminee', verifyMethod: 'visuelle', efficacyNote: 'Constat sur place.', effective: 'efficace' };
 const section = (p: 'ne_' | 'nr_', extra: Record<string, string> = {}) => Object.fromEntries(Object.entries({
@@ -23,7 +23,7 @@ const verify = (id: string, extra: Record<string, string> = {}) => verifyAction(
 
 describe('droits, validation, site', () => {
   it('hors QHSE : refusé', async () => {
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role);
       expect(await verify('A-172')).toEqual({ error: APPROVERS_ONLY });
     }
@@ -112,7 +112,7 @@ describe('non efficace, nouveau risque : actions de suite (D21)', () => {
     await db.update(t.controls).set({ actionId: 'A-T30' }).where(eq(t.controls.id, 3));
     await db.insert(t.riskActions).values({ riskId: 2, actionId: 'A-T30' });
     const r = await verify('A-T30', { effective: 'non_efficace', efficacyNote: 'Écart encore constaté.', ...section('ne_') });
-    expect(r).toMatchObject({ ok: true, id: 'A-T30', ids: [expect.stringMatching(/^A-\d+$/)] });
+    expect(r).toMatchObject({ ok: true, id: 'A-T30', ids: [expect.stringMatching(/^AC-26\d{4}$/)] });
     const [next] = r.ids!;
     expect(await actionRow('A-T30')).toMatchObject({ status: 'verifiee', effective: false });
     expect(await actionRow(next)).toMatchObject({

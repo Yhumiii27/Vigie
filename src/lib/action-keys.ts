@@ -27,6 +27,8 @@ export const REMINDER_SEND_STATUSES = ['en_cours', 'envoye', 'echec', 'sans_adre
 export type ReminderSendStatus = (typeof REMINDER_SEND_STATUSES)[number];
 export const ACTION_TEXT_MAX = 4000; // problème, détail, constat, commentaire
 export const ORIGIN_REF_MAX = 120; // référence d'origine (saisie : plan du paquet 1 § 2.14)
-export const ACTION_NUMBER_SCOPE = 'A'; // portée du compteur tant qu'ACT-36 n'est pas tranché
+export const ACTION_NUMBER_SCOPE = 'A'; // portée du compteur des anciens numéros « A-n » (ACT-35), gardés tels quels
+/** ACT-36 / ACT-P1 (09/11/2026) : portée du compteur annuel « AC-AA » (repart à 1 chaque année). */
+export const actionYearScope = (yy: string) => `AC-${yy}`;
 /** Liste SQL « 'a', 'b' » pour les contraintes CHECK (clés constantes, jamais de saisie). */
 export const sqlList = (keys: readonly string[]) => keys.map((k) => `'${k}'`).join(', ');

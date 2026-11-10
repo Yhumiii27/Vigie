@@ -411,3 +411,23 @@ export function reportQuery(sp: Record<string, string | string[] | undefined>): 
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
+
+// ─── Date et heure des faits d'un signalement terrain (EVT-21, réponse du service QHSE du 09/11/2026) ───
+
+/** Antériorité admise de la date des faits saisie dans le formulaire terrain : 30 jours avant l'envoi. */
+export const REPORT_OCCURRED_MAX_DAYS = 30;
+/** Libellé du champ facultatif du formulaire terrain (vide : l'heure d'envoi fait foi). */
+export const REPORT_OCCURRED_LABEL = 'Date et heure des faits';
+
+/**
+ * Refus de la date et de l'heure des faits d'un signalement terrain (heure de Paris), ou null : ni postérieure à l'envoi
+ * (`now`), ni antérieure de plus de REPORT_OCCURRED_MAX_DAYS jours. `at` null : saisie invalide.
+ */
+export function reportOccurredError(at: Date | null, now: Date): string | null {
+  if (!at) return 'Date et heure des faits invalides.';
+  if (at.getTime() > now.getTime()) return 'La date des faits ne peut pas être postérieure à maintenant.';
+  if (at.getTime() < now.getTime() - REPORT_OCCURRED_MAX_DAYS * 86_400_000) {
+    return `La date des faits ne peut pas remonter à plus de ${REPORT_OCCURRED_MAX_DAYS} jours : signalez l'événement à l'animateur QHSE.`;
+  }
+  return null;
+}

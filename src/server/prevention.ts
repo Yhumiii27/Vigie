@@ -6,7 +6,7 @@ import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, MAX_PLAN_FILES, MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_CONTENT, PLAN_CONTENT_KEYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,
-  permitDays, planEndIssue, planSignIssue, planStatus, signedBeforeStart, type PlanContentKey,
+  GAP_MEASURES_LABEL, gapMeasuresError, inspectionAfterStartError, permitDays, planEndIssue, planSignIssue, planStatus, signedBeforeStart, startGap, type PlanContentKey,
 } from '@/lib/rules/prevention';
 import { fmtDate } from '@/lib/dates';
 import { today } from '@/lib/today';
@@ -90,6 +90,11 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
   const contractor = contractors.find((c) => c.id === contractorId);
   if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
   else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', ARCHIVED_CONTRACTOR);
+  // PRV-06 : inspection commune préalable datée après le début des travaux refusée (création, ou l'une des deux dates modifiée).
+  if (!existing || existing.inspectionOn !== inspectionOn || existing.startOn !== startOn) {
+    const late = inspectionAfterStartError(inspectionOn, startOn);
+    if (late) f.fail('inspectionOn', late);
+  }
   const keystoneProjectCode = fd.has('keystoneProjectCode') ? projectInput : existing?.keystoneProjectCode ?? null;
   const projectError = await unknownProjectError(db, keystoneProjectCode, existing?.keystoneProjectCode);
   if (projectError) f.fail('keystoneProjectCode', projectError);
@@ -312,8 +317,12 @@ async function planEndBlock(db: Db, plan: typeof t.preventionPlans.$inferSelect,
   return planEndIssue(plan, { mandatory: isMandatory(plan, rule), now: today(), verb, openPermitIds: permits.filter(isOpenPermit).map((p) => p.id) });
 }
 
-/** Clôture du plan en fin d'intervention (voir planEndBlock). */
-export async function closePlan(id: string): Promise<Result> {
+/**
+ * Clôture du plan en fin d'intervention (voir planEndBlock). PRV-21 : un plan qui porte un écart R. 4512-6 (startGap :
+ * signé après le début, ou intervention réalisée sans plan signé) exige la trace des mesures immédiates prises
+ * (`gapMeasures`, gapMeasuresError), enregistrée sur le plan et au journal de la clôture.
+ */
+export async function closePlan(id: string, gapMeasures = ''): Promise<Result> {
   const { session, error } = await requireManager();
   if (error) return { error };
   const { db, plan } = await loadPlan(id);
@@ -321,9 +330,16 @@ export async function closePlan(id: string): Promise<Result> {
   if (blocked || !plan) return { error: blocked ?? 'Plan de prévention introuvable.' };
   const issue = await planEndBlock(db, plan, 'clore');
   if (issue) return { error: issue };
+  const gap = startGap(plan, today(), await siteRule(db, plan.siteId));
+  const measures = typeof gapMeasures === 'string' ? gapMeasures.trim() : '';
+  const missing = gapMeasuresError(!!gap, measures);
+  if (missing) return { error: missing };
   await db.transaction(async (tx) => {
-    await tx.update(t.preventionPlans).set({ status: 'clos' }).where(eq(t.preventionPlans.id, plan.id));
-    await logChange(tx, { entityType: 'prevention_plan', entityId: plan.id, action: 'status', summary: 'Plan clos', byId: session.user.id });
+    await tx.update(t.preventionPlans).set({ status: 'clos', ...(gap ? { gapMeasures: measures } : {}) }).where(eq(t.preventionPlans.id, plan.id));
+    await logChange(tx, {
+      entityType: 'prevention_plan', entityId: plan.id, action: 'status', summary: gap ? 'Plan clos après un écart R. 4512-6' : 'Plan clos', byId: session.user.id,
+      details: gap ? [{ field: GAP_MEASURES_LABEL, from: null, to: measures }] : undefined,
+    });
   });
   return ok();
 }

@@ -62,7 +62,7 @@ describe('pub_journal : cycle d’une action née d’une maladie professionnell
       ne_detail: 'Aménager le poste', ne_pilotId: 'sbenali', ne_priority: 'urgent', ne_dueOn: '2026-10-30', ne_verifyDueOn: '2026-11-20',
       ne_domain: 'securite', ne_siteId: mp.siteId,
     }));
-    expect(r).toMatchObject({ ok: true, id, ids: [expect.stringMatching(/^A-\d+$/)] });
+    expect(r).toMatchObject({ ok: true, id, ids: [expect.stringMatching(/^AC-26\d{4}$/)] });
     const [next] = r.ids!;
     expect((await actionRow(next)).eventId).toBe(MP);
     // Une écriture sur la fiche de l'événement lui-même (pièce jointe ordinaire) : entrée au journal de l'événement.

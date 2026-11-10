@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_LABEL_MAX, COMPLEMENTARY_LINK_KINDS, COMPLEMENTARY_LINK_LABELS, KANBAN_COLUMNS, MISSING_LABELS, MOVE_KINDS, NON_QSE_LINK_KINDS, NON_QSE_LINK_MESSAGE, PLAN_SCOPES, PLAN_VIEWS,
   QHSE_ONLY_CREATE_MESSAGE, REASON_REQUIRED, SITE_TO_COMPLETE_LABEL, SOURCE_TO_COMPLETE, VERIFIED_WINDOW_DAYS, VERIFY_BEFORE_DUE_WARNING,
-  actionDateErrors, actionDateOrderErrors, actionFiltersParams, actionHref, actionLabel, actionRights, admissibleSources, canCreateAction,
+  actionDateErrors, actionDateOrderErrors, actionFiltersParams, actionHref, actionLabel, actionNumberKey, actionYear, parseYearActionNumber, actionRights, admissibleSources, canCreateAction,
   canReadAction, canReadPlan, canRemoveProof, canWithdrawComment, compareActions, followUpLinkMode, followUpProblem, formatActionNumber,
   isComplementaryLinkKind, isLate, isNonQseLinkKind, isQhse, isToComplete,
   isVerificationDueSoon, isVerificationLate, kanbanColumn, lateDays, matchesActionFilters, missingFields, moveTargets, parseActionFilters,
@@ -10,7 +10,7 @@ import {
   type FilterableAction, type TransitionKind,
 } from './action-rules';
 import {
-  ACTION_AVANCEMENTS, ACTION_SOURCES, OPEN_AVANCEMENTS, ROLE_KEYS, SOURCE_KEYS, SOURCE_LINK_KINDS, type Avancement, type Role,
+  ACTION_AVANCEMENTS, ACTION_SOURCES, OPEN_AVANCEMENTS, ROLE_KEYS, SOURCE_KEYS, canEdit, SOURCE_LINK_KINDS, type Avancement, type Role,
 } from './domain';
 
 // Règles pures du plan d'actions (docs/specs/actions-qse.md § 4–16 ; plan du paquet 1 § 2.2, amendé le 15/10/2026).
@@ -43,8 +43,21 @@ describe('libellé court et numéro', () => {
     expect(actionLabel(null)).toBe('Action sans détail');
     expect(actionLabel(undefined)).toBe('Action sans détail');
   });
-  it('formatActionNumber / parseActionNumber (A-n, 9 chiffres au plus comme la reprise R8)', () => {
-    expect(formatActionNumber(221)).toBe('A-221');
+  it('formatActionNumber : AC-AANNNN, compteur annuel sur quatre chiffres au moins (ACT-36, ACT-P1)', () => {
+    expect(formatActionNumber('26', 140)).toBe('AC-260140');
+    expect(formatActionNumber('27', 1)).toBe('AC-270001');
+    expect(formatActionNumber('26', 12345)).toBe('AC-2612345');
+    expect(actionYear('2026-10-09')).toBe('26');
+    expect(parseYearActionNumber('AC-260140', '26')).toBe(140);
+    expect(parseYearActionNumber('AC-260140', '27')).toBeNull();
+    expect(parseYearActionNumber('A-140', '26')).toBeNull();
+  });
+  it('actionNumberKey : anciens A-n avant les AC-AANNNN, puis par année et compteur', () => {
+    const ids = ['AC-270001', 'A-300', 'AC-260140', 'A-12', 'AC-260002'];
+    expect([...ids].sort((a, b) => actionNumberKey(a)! - actionNumberKey(b)!)).toEqual(['A-12', 'A-300', 'AC-260002', 'AC-260140', 'AC-270001']);
+    expect(actionNumberKey('X-1')).toBeNull();
+  });
+  it('parseActionNumber (anciens A-n, 9 chiffres au plus comme la reprise R8)', () => {
     expect(parseActionNumber('A-221')).toBe(221);
     expect(parseActionNumber('A-123456789')).toBe(123456789);
     expect(parseActionNumber('A-1234567890')).toBeNull();
@@ -270,8 +283,10 @@ describe('contrôles de dates (§ 4, D24)', () => {
 
 describe('droits (ACT-22 tranché le 15/10/2026, D19)', () => {
   it('QHSE = animateur QHSE et direction ; création réservée au QHSE', () => {
-    expect(ROLE_KEYS.filter(isQhse)).toEqual(['Animateur QHSE', 'Direction']);
-    expect(ROLE_KEYS.filter(canCreateAction)).toEqual(['Animateur QHSE', 'Direction']);
+    // ACT-P17 (09/11/2026) : la direction n'est plus comptée « service QHSE » pour les actions ; même règle que canEdit.
+    expect(ROLE_KEYS.filter(isQhse)).toEqual(['Animateur QHSE']);
+    expect(ROLE_KEYS.filter(canCreateAction)).toEqual(['Animateur QHSE']);
+    expect(ROLE_KEYS.filter((r) => canEdit(r, 'actions'))).toEqual(['Animateur QHSE']);
     expect(QHSE_ONLY_CREATE_MESSAGE).toBe('Les actions QSE sont créées par le service QHSE.');
   });
   it('canReadPlan : QHSE et encadrement ; le Salarié lit seulement ses actions', () => {
@@ -304,10 +319,13 @@ describe('droits (ACT-22 tranché le 15/10/2026, D19)', () => {
     expect(Object.fromEntries(ACTION_AVANCEMENTS.map((s) => [s, [r(s).canLink, r(s).canUnlink].map((b) => (b ? 1 : 0)).join('')]))).toEqual({
       a_faire: '11', initiee: '11', p20: '11', p40: '11', p60: '11', p80: '11', reportee: '11', terminee: '11', verifiee: '01', abandonnee: '00',
     });
-    for (const role of ['Salarié', 'Chef de service', 'Chef de projet'] as Role[]) {
+    for (const role of ['Salarié', 'Chef de service', 'Chef de projet', 'Direction'] as Role[]) {
       expect(actionRights(role, 'p', { pilotId: 'p', status: 'p40' })).toMatchObject({ canLink: false, canUnlink: false });
     }
-    expect(actionRights('Direction', 'q', { pilotId: 'p', status: 'terminee' }, { elsewhere: 'Ville B' })).toMatchObject({ qhse: true, canVerify: true, elsewhere: 'Ville B' });
+    expect(actionRights('Animateur QHSE', 'q', { pilotId: 'p', status: 'terminee' }, { elsewhere: 'Ville B' })).toMatchObject({ qhse: true, canVerify: true, elsewhere: 'Ville B' });
+    // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions ; responsable, elle commente et joint ses preuves.
+    expect(actionRights('Direction', 'q', { pilotId: 'p', status: 'terminee' })).toMatchObject({ qhse: false, canVerify: false, canComment: false });
+    expect(actionRights('Direction', 'p', { pilotId: 'p', status: 'p40' })).toMatchObject({ qhse: false, responsible: true, canComment: true, canAttach: true, canMove: false });
     // autovérification admise sans restriction (ACT-13) : le QHSE responsable vérifie son action
     expect(actionRights('Animateur QHSE', 'q', { pilotId: 'q', status: 'terminee' })).toMatchObject({ qhse: true, responsible: true, canVerify: true });
   });

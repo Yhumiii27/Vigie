@@ -33,6 +33,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
     intro: 'Déclaration et suivi des événements : accidents, presque-accidents, situations dangereuses, non-conformités, réclamations, événements environnementaux.',
     tips: [
       'Un événement suit les étapes Déclaré → Qualifié → Analysé → Actions → Clos ; « Classer sans suite » demande un motif.',
+      'Chacun déclare un événement ; son suivi (modification, étapes, clôture) est fait par l’animation QHSE.',
       'Les filtres (étape, pilote, période, gravité, ancienneté) sont gardés dans l’adresse de la page : un lien partagé montre la même liste.',
       '« Signaler un événement » depuis un contrôle, un risque, un document, un plan de prévention ou l’environnement ouvre le formulaire prérempli.',
       'Les données de santé d’un accident du travail ne sont visibles que de l’animation QHSE et de la direction.',
@@ -41,7 +42,8 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
   actions: {
     intro: 'Plan d’actions unique : toutes les actions correctives, préventives et d’amélioration, quelle que soit leur origine.',
     tips: [
-      'Le service QHSE crée, modifie et fait avancer les actions ; le responsable commente et joint ses preuves.',
+      'L’animation QHSE crée, modifie et fait avancer les actions ; le responsable commente et joint ses preuves.',
+      'Les nouvelles actions sont numérotées AC-AANNNN (année, puis numéro de l’année) ; les anciens numéros A-n sont gardés.',
       'Une action « Terminée » est ensuite vérifiée (efficacité) ; « Rouvrir » et « Abandonner » demandent un motif.',
       'Les vues Liste, Kanban et Statistiques sont accessibles par les onglets ; les filtres restent dans l’adresse.',
     ],

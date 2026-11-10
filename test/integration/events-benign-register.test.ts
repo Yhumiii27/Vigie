@@ -25,7 +25,8 @@ vi.mock('@/lib/auth', async (orig) => {
 
 freshDemoDatabase();
 
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+// EVT-29 (09/11/2026) : registre tenu par l'animateur QHSE ; la direction le consulte.
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE.";
 const OTHER_SITE = "Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.";
 const OUTSIDE = 'Cet élément appartient à un site hors de votre périmètre.';
 
@@ -57,9 +58,9 @@ const formOf = async (id: string, over: Record<string, string> = {}) => {
 
 describe('inscription au registre', () => {
   let id = '';
-  it('droits : animateur QHSE et direction seulement', async () => {
+  it('droits : animateur QHSE seulement', async () => {
     id = await benignAt();
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role, 'site_a');
       expect(await registerBenignAccident({}, inscription(id)), role).toEqual({ error: APPROVERS_ONLY });
     }
@@ -68,8 +69,8 @@ describe('inscription au registre', () => {
   it('site : site sélectionné, puis périmètre', async () => {
     actAs('Animateur QHSE', 'site_b');
     expect(await registerBenignAccident({}, inscription(id))).toEqual({ error: OTHER_SITE });
-    // Direction au périmètre restreint au site B ([J. Petit], rattaché au site B).
-    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Direction', siteIds: ['site_b'] } };
+    // Animateur QHSE au périmètre restreint au site B ([J. Petit], rattaché au site B).
+    auth.override = { status: 'authenticated', identity: { personId: 'jpetit', role: 'Animateur QHSE', siteIds: ['site_b'] } };
     cookieJar.set('vigie_site', 'site_b');
     expect(await registerBenignAccident({}, inscription(id))).toEqual({ error: OUTSIDE });
     expect(await loadBenignRegister('site_a')).toBeNull();

@@ -26,10 +26,11 @@ import { fmtDate, fmtDayMonth, toParisLocal } from '@/lib/dates';
 import { today } from '@/lib/today';
 import {
   ACTION_PRIORITIES, ALL_SITES, AVANCEMENT, D8_STEPS, EVENT_DISMISSED, EVENT_STEPS, EVENT_TYPES, EVENT_TYPE_KEYS, NC_DISPOSITIONS, NC_ORIGINS, SCREENS, SEVERITY, STEP_ACTIONS, STEP_CLOSED, TONE,
-  canApprove, canEdit as canEditScreen, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod, type NcDisposition,
+  canEdit as canEditScreen, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod, type NcDisposition,
 } from '@/lib/domain';
 import { reportPostHref } from '@/lib/auth/paths';
 import { guard } from '@/lib/guard';
+import { QHSE_ONLY } from '@/lib/edit-rights';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
 import { loadFormOptions, withCurrent, type FormOptions } from '@/lib/data/options';
 import { NC_ORIGIN_NONE, ncOriginOf } from '@/lib/dashboard-rules';
@@ -207,7 +208,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
-            : <EventCard key={detail.event.id} detail={detail} log={log} inbound={inbound} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={manager} canRevert={canApprove(role)}
+            : <EventCard key={detail.event.id} detail={detail} log={log} inbound={inbound} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={canEditScreen(role, 'events')} canRevert={canEditScreen(role, 'events')}
               canSeeRisks={canSee(role, 'risks')} canEditRisks={canEditScreen(role, 'risks')} canSeeEnv={canSee(role, 'env')} today={now} />)}
         </div>
       </div>
@@ -267,7 +268,7 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
-        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? ` à ${e.occurredTime}` : ''} · {statusText(e, stepDates)}</span>
         {/* IMP-07 : fiche imprimable du déclarant (sans pilote, analyse ni historique). */}
         <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
           <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
@@ -463,7 +464,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
   // Les actions abandonnées restent affichées mais ne retiennent plus l'événement (classement sans suite).
   const openLinked = actions.filter((a) => a.status !== 'abandonnee').length;
   const method = e.analysisMethod as AnalysisMethod;
-  const hint = !canEdit ? "Réservé à l'animateur QHSE et à l'encadrement." : closed && !e.dismissed ? undefined : blocker ?? undefined;
+  const hint = !canEdit ? QHSE_ONLY : closed && !e.dismissed ? undefined : blocker ?? undefined;
 
   return (
     <div className="card" style={{ gap: 16, padding: '18px 20px', minWidth: 0 }}>
@@ -472,7 +473,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
         {e.type === 'AT' && e.commute && <ToneTag tone="neutral">Trajet</ToneTag>}
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
-        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)} · {statusText(e, stepDates)}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? ` à ${e.occurredTime}` : ''} · {statusText(e, stepDates)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
           {/* IMP-07 : fiche imprimable (mêmes droits que la fiche) ; lien HTML simple (print.css). */}
           <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">

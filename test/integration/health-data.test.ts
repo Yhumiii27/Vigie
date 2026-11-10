@@ -86,19 +86,19 @@ describe('données de santé des accidents du travail', () => {
     }
   });
 
-  it('modification : refusée avec une donnée de santé, conservée sinon ; un AT garde son type', async () => {
+  it('modification : refusée aux rôles autres que l’animateur QHSE ; données de santé conservées', async () => {
     const { saveEvent } = await import('@/server/events');
+    // EVT-29 (09/11/2026) : seul l'animateur QHSE modifie un événement ; refus avant tout contrôle des données de santé.
     await as('Chef de service');
     const values: Record<string, string> = { injury: 'soins', lostDays: '0', cpamDeclaredOn: '2026-09-10', lesionNature: 'Entorse', lesionSite: 'Cheville', careGiven: 'Urgences', reservesOn: '2026-09-12' };
     for (const [field, value] of Object.entries(values)) {
       const r = await saveEvent({}, await editForm({ [field]: value }));
-      expect(r.error, field).toMatch(/données de santé/);
+      expect(r.error, field).toBe("Réservé à l'animateur QHSE.");
     }
-    expect(await saveEvent({}, await editForm({ type: 'PA' }))).toMatchObject({ fieldErrors: { type: expect.any(String) } });
-    expect(await saveEvent({}, await editForm({ title: 'Chute sur la plateforme PIRL' }))).toMatchObject({ ok: true });
+    await as('Animateur QHSE');
+    expect(await saveEvent({}, await editForm({ title: 'Chute sur la plateforme PIRL' }, { health: true }))).toMatchObject({ ok: true });
     expect(await stored()).toEqual({ title: 'Chute sur la plateforme PIRL', type: 'AT', injury: 'arret', lostDays: 3, cpamDeclaredOn: '2026-09-09' });
 
-    await as('Animateur QHSE');
     expect(await saveEvent({}, await editForm({ lostDays: '4' }, { health: true }))).toMatchObject({ ok: true });
     expect(await stored()).toMatchObject({ injury: 'arret', lostDays: 4 });
   });
@@ -135,7 +135,8 @@ describe('données de santé des accidents du travail', () => {
     await as('Animateur QHSE');
     // Pilote chef de service (non habilité) : l'échéance va au responsable QHSE du site.
     expect(cpam(await loadVisibleTodo())).toMatchObject({ health: true, who: '[C. Lefèvre]', ownerIds: ['clefevre'] });
+    // EVT-29 (09/11/2026) : la direction lit les événements sans les suivre ; l'échéance n'est pas à elle.
     await as('Direction');
-    expect(cpam(await loadVisibleTodo())).toBeDefined();
+    expect(cpam(await loadVisibleTodo())).toBeUndefined();
   });
 });

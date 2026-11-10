@@ -164,17 +164,18 @@ describe('écrans et droits par rôle', () => {
     expect(ROLE_KEYS.filter(canSeeHealth)).toEqual(['Animateur QHSE', 'Direction']);
     expect(ROLE_KEYS.filter(isEmployee)).toEqual(['Salarié']);
   });
-  it('plan d’actions : saisie réservée au QHSE (canEdit = canApprove), consultation seule pour l’encadrement (ACT-22, D3)', () => {
-    for (const r of ROLE_KEYS) expect(canEdit(r, 'actions')).toBe(canApprove(r));
+  it('plan d’actions : saisie réservée à l’animateur QHSE, consultation seule pour la direction et l’encadrement (ACT-22, ACT-P17)', () => {
+    expect(ROLE_KEYS.filter((r) => canEdit(r, 'actions'))).toEqual(['Animateur QHSE']);
     expect(isReadOnly('Chef de service', 'actions')).toBe(true);
     expect(isReadOnly('Chef de projet', 'actions')).toBe(true);
-    expect(ROLE_KEYS.filter((r) => isReadOnly(r, 'actions'))).toEqual(['Chef de service', 'Chef de projet']);
+    expect(ROLE_KEYS.filter((r) => isReadOnly(r, 'actions'))).toEqual(['Direction', 'Chef de service', 'Chef de projet']);
     expect(ROLE_KEYS.filter((r) => canSee(r, 'actions'))).toEqual(ROLE_KEYS);
   });
   it('documents en consultation seule hors validation ; écrans fermés jamais modifiables', () => {
     expect(ROLE_KEYS.filter((r) => canEdit(r, 'docs'))).toEqual(['Animateur QHSE', 'Direction']);
     expect(ROLE_KEYS.filter((r) => canEdit(r, 'skills'))).toEqual(['Animateur QHSE', 'Direction', 'Chef de service']);
-    expect(ROLE_KEYS.filter((r) => canEdit(r, 'events'))).toEqual(['Animateur QHSE', 'Direction', 'Chef de service', 'Chef de projet']);
+    // EVT-29 (09/11/2026) : suivi des événements par l'animateur QHSE seulement ; les autres déclarent (createEvent) et lisent.
+    expect(ROLE_KEYS.filter((r) => canEdit(r, 'events'))).toEqual(['Animateur QHSE']);
   });
   it('DUERP en consultation pour tous (DUE-01), audits en consultation pour l’encadrement (AUD-02)', () => {
     expect(ROLE_KEYS.filter((r) => canSee(r, 'risks'))).toEqual(ROLE_KEYS);

@@ -128,8 +128,13 @@ describe('closePlan et cancelPlan', () => {
     const view = (await loadPrevention()).plans.find((p) => p.id === 'PP-2026-019');
     expect(view).toMatchObject({ closeBlock: null, actions: [], startGap: { kind: 'non_signe' } });
     const before = (await (await getDb()).select({ id: t.actions.id }).from(t.actions)).length;
-    expect(await closePlan('PP-2026-019')).toEqual({});
-    expect((await plan('PP-2026-019')).status).toBe('clos');
+    // PRV-21 : mesures immédiates exigées après l'écart, enregistrées et journalisées.
+    expect(await closePlan('PP-2026-019')).toEqual({ error: 'Écart R. 4512-6 : décrivez les mesures immédiates prises avant de clore le plan.' });
+    expect(await closePlan('PP-2026-019', 'Travaux arrêtés, inspection commune faite le 15/09')).toEqual({});
+    expect(await plan('PP-2026-019')).toMatchObject({ status: 'clos', gapMeasures: 'Travaux arrêtés, inspection commune faite le 15/09' });
+    expect(await lastLog('prevention_plan', 'PP-2026-019')).toMatchObject({
+      summary: 'Plan clos après un écart R. 4512-6', details: [{ field: 'Mesures immédiates (écart R. 4512-6)', from: null, to: 'Travaux arrêtés, inspection commune faite le 15/09' }],
+    });
     // Aucune action créée par la Prévention.
     expect((await (await getDb()).select({ id: t.actions.id }).from(t.actions))).toHaveLength(before);
   });

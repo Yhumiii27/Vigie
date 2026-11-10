@@ -34,6 +34,12 @@ export const SAFETY_NOTICE_KIND_CODES = ['observation', 'mise_en_demeure'] as co
 export const PLAN_MEETING_KIND_CODES = ['inspection', 'reunion'] as const;
 /** risk_measure_links.kind : MEASURE_LINK_KINDS (src/lib/domain.ts) — DUE-19. */
 export const MEASURE_LINK_KIND_CODES = ['control', 'document', 'title'] as const;
+/**
+ * audit_plan_items.audit_kind : AUDIT_KINDS (src/lib/domain.ts) — D08-5, réponse du service QHSE du 09/11/2026, migration
+ * 0032 : audit terrain (visite terrain), audit ISO de certification, audit ISO blanc, revue de processus (mensuelle), revue
+ * de direction, autre audit (interne, fournisseur…).
+ */
+export const AUDIT_KIND_CODES = ['terrain', 'iso_certification', 'iso_blanc', 'revue_processus', 'revue_direction', 'autre'] as const;
 /** change_requests.kind : CHANGE_KINDS (src/lib/domain.ts) — CNF-11. */
 export const CHANGE_KIND_CODES = ['organisation', 'procede', 'equipement', 'produit', 'exigence', 'autre'] as const;
 /** change_requests.status : CHANGE_STATUS (src/lib/domain.ts) — CNF-11. */

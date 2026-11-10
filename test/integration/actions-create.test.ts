@@ -14,7 +14,7 @@ import { saveAction } from '@/server/plan';
 freshDemoDatabase();
 
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE."; // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions
 const create = (extra: Record<string, string> = {}) => saveAction({}, form({ ...NEW_ACTION, ...extra }));
 const created = async (extra: Record<string, string> = {}) => {
   const r = await create(extra);
@@ -23,7 +23,7 @@ const created = async (extra: Record<string, string> = {}) => {
 };
 
 describe('création : droits (ACT-22, service QHSE seulement)', () => {
-  it.each(['Chef de service', 'Chef de projet', 'Salarié'] as const)('%s : refusée, depuis le plan comme depuis un écran source', async (role) => {
+  it.each(['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const)('%s : refusée, depuis le plan comme depuis un écran source', async (role) => {
     actAs(role);
     const before = await actionCount();
     expect(await create()).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
@@ -34,26 +34,26 @@ describe('création : droits (ACT-22, service QHSE seulement)', () => {
   it('QHSE : numéro suivant, ouverture du jour, date cible initiale, À faire, journal détaillé, notification au responsable', async () => {
     actAs('Animateur QHSE');
     const r = await create();
-    expect(r).toEqual({ ok: true, id: 'A-223' });
-    expect(await actionRow('A-223')).toMatchObject({
+    expect(r).toEqual({ ok: true, id: 'AC-260001' });
+    expect(await actionRow('AC-260001')).toMatchObject({
       openedOn: '2026-10-09', status: 'a_faire', dueOn: '2026-11-15', initialDueOn: '2026-11-15', source: 'comex', originRef: 'COMEX du 08/10/2026',
       pilotId: 'sbenali', priority: 'moyen_terme', domain: 'securite', verifyDueOn: '2026-12-01', siteId: 'site_a', riskLevel: null, eventId: null,
     });
-    const log = await lastLog('action', 'A-223');
+    const log = await lastLog('action', 'AC-260001');
     expect(log).toMatchObject({ action: 'create', summary: 'Action créée', byId: 'clefevre' });
     expect(log!.details).toEqual(expect.arrayContaining([
       { field: 'Responsable', from: null, to: '[S. Benali]' }, { field: 'Source', from: null, to: 'COMEX' }, { field: 'Date cible', from: null, to: '15/11/2026' },
       { field: 'Site', from: null, to: 'Site de [Ville A]' }, { field: 'Description du problème', from: null, to: '(texte saisi)' },
     ]));
-    const [n] = (await notificationsOf('sbenali')).filter((x) => x.entityId === 'A-223');
-    expect(n).toMatchObject({ type: 'action_confiee', title: 'Action A-223 confiée par [C. Lefèvre] : Mettre en place le suivi mensuel', href: '/actions?action=A-223', byId: 'clefevre', readAt: null });
+    const [n] = (await notificationsOf('sbenali')).filter((x) => x.entityId === 'AC-260001');
+    expect(n).toMatchObject({ type: 'action_confiee', title: 'Action AC-260001 confiée par [C. Lefèvre] : Mettre en place le suivi mensuel', href: '/actions?action=AC-260001', byId: 'clefevre', readAt: null });
     // Responsable = auteur : pas de notification.
     const own = await created({ pilotId: 'clefevre' });
-    expect(own.id).toBe('A-224');
+    expect(own.id).toBe('AC-260002');
     expect((await notificationsOf('clefevre')).some((x) => x.entityId === own.id)).toBe(false);
-    // Direction : QHSE aussi (§ 22.17).
+    // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions.
     actAs('Direction');
-    expect((await created()).id).toBe('A-225');
+    expect(await create()).toEqual({ error: QHSE_ONLY_CREATE_MESSAGE });
   });
 });
 
@@ -124,8 +124,8 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
     expect(await actionCount()).toBe(before);
     expect(await logCount()).toBe(logs);
     const next = await created();
-    const numbers = (await (await getDb()).select({ id: t.actions.id }).from(t.actions)).map((x) => Number(x.id.slice(2))).filter(Number.isFinite);
-    expect(Number(next.id.slice(2))).toBe(Math.max(...numbers));
+    const numbers = (await (await getDb()).select({ id: t.actions.id }).from(t.actions)).map((x) => /^AC-26(\d{4})$/.exec(x.id)?.[1]).filter((n) => n != null).map(Number);
+    expect(Number(next.id.slice(5))).toBe(Math.max(...numbers));
   });
 
   it('audit : source selon la ligne du programme (Certification, Fournisseurs, Audits internes), journal du constat', async () => {
@@ -190,7 +190,7 @@ describe('création : élément lié et source imposée (D15, D20)', () => {
 describe('modification (QHSE, D16, D17, D24)', () => {
   it('rôles hors QHSE refusés ; abandonnée en consultation seule ; avancement affiché périmé', async () => {
     const a214 = await actionRow('A-214');
-    for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
+    for (const role of ['Direction', 'Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role);
       expect(await saveAction({}, form(editFields(a214, { detail: 'Autre' })))).toEqual({ error: APPROVERS_ONLY });
     }

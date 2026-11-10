@@ -3,11 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { CERT_TONES, CERT_TONE_LABELS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, isReviewPlanItem, type CertTone } from '@/lib/rules/audits';
+import { CERT_TONES, CERT_TONE_LABELS, CHOOSABLE_AUDIT_KINDS, FINDING_KEYS, NEW_TRACK, OTHER_AUDIT, auditKindOf, inferAuditKind, isReviewPlanItem, type CertTone } from '@/lib/rules/audits';
 import { planItemAuditLabel, planStart, relabelDay } from '@/lib/data/audits';
 import { addMonths, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { today } from '@/lib/today';
-import { CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS } from '@/lib/domain';
+import { AUDIT_KINDS, CERT_CYCLE_MONTHS, FINDING_GAP_KINDS, FINDING_KINDS, type AuditKind } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireEditor, requireInSite } from '@/lib/guard';
 import { hasLeft } from '@/lib/people';
@@ -296,11 +296,11 @@ export async function deleteCertification(id: string): Promise<Result> {
 // ─── Programme annuel ───────────────────────────────────────────────────────
 
 const PLAN_FIELDS = {
-  track: 'Ligne', month: 'Mois', label: 'Libellé court', plannedOn: 'Date prévue', detail: 'Intitulé', owner: 'Responsable',
+  track: 'Ligne', auditKind: "Type d'audit", month: 'Mois', label: 'Libellé court', plannedOn: 'Date prévue', detail: 'Intitulé', owner: 'Responsable',
   certification: 'Référentiel', auditorName: 'Auditeur interne', auditor: 'Auditeur externe', scope: 'Périmètre', site: 'Site', done: 'État', doneOn: 'Réalisé le',
 } as const;
 type PlanFields = {
-  track: string; month: number; label: string; plannedOn: string | null; detail: string | null; ownerId: string | null; done: boolean;
+  track: string; auditKind: string; month: number; label: string; plannedOn: string | null; detail: string | null; ownerId: string | null; done: boolean;
   doneOn: string | null; auditor: string | null; auditorId: string | null; scope: string | null; certificationId: string | null; siteId: string | null;
 };
 
@@ -349,6 +349,10 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
   // Revue de direction : ni auditeur, ni périmètre, ni rapport (même règle que le formulaire et les chargements) ; commune
   // à l'entreprise (AUD-22).
   const review = isReviewPlanItem({ track, label, detail });
+  // D08-5 : type d'audit choisi (jamais « revue de direction », reconnue par ses mots) ; absent du formulaire : type
+  // enregistré, sinon déduit (auditKindOf).
+  const chosenKind = fd.has('auditKind') ? f.oneOf('auditKind', CHOOSABLE_AUDIT_KINDS) : null;
+  const auditKind = auditKindOf({ track, label, detail, certificationId }, chosenKind ?? null, (before?.auditKind as AuditKind | undefined) ?? null);
   const siteId = review ? null : siteChoice;
   const auditor = review ? null : f.str('auditor', { max: 120 }) || null;
   const auditorId = review ? null : fd.has('auditorId') ? f.opt('auditorId') : before?.auditorId ?? null;
@@ -396,7 +400,7 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
 
   // Réalisé sans date : la date prévue si elle est passée, sinon aujourd'hui ; non réalisé : pas de date de réalisation.
   const doneOn = done ? doneOnInput ?? (unplanned ? before?.doneOn : null) ?? (plannedOn && plannedOn <= now ? plannedOn : now) : null;
-  const values = { year: year!, track, month: month!, label, plannedOn, detail, ownerId, done, doneOn, auditor, auditorId, scope, certificationId, siteId, unplanned };
+  const values = { year: year!, track, month: month!, label, plannedOn, detail, ownerId, done, doneOn, auditor, auditorId, scope, certificationId, siteId, unplanned, auditKind };
   let itemId = id;
   if (before) {
     const [people, certs, site] = await Promise.all([
@@ -406,7 +410,7 @@ export async function savePlanItem(_prev: FormState, fd: FormData): Promise<Form
       siteNames(),
     ]);
     const shown = (p: PlanFields) => ({
-      ...p, month: monthName(p.month), plannedOn: shownDate(p.plannedOn), doneOn: shownDate(p.doneOn), done: p.done ? 'Réalisé' : 'À réaliser',
+      ...p, auditKind: AUDIT_KINDS[p.auditKind as AuditKind]?.label ?? p.auditKind, month: monthName(p.month), plannedOn: shownDate(p.plannedOn), doneOn: shownDate(p.doneOn), done: p.done ? 'Réalisé' : 'À réaliser',
       owner: p.ownerId ? people.get(p.ownerId)?.name ?? p.ownerId : null,
       auditorName: p.auditorId ? people.get(p.auditorId)?.name ?? p.auditorId : null,
       certification: p.certificationId ? certs.find((c) => c.id === p.certificationId)?.standard ?? p.certificationId : null,
@@ -741,6 +745,7 @@ export async function renewProgram(_prev: FormState, fd: FormData): Promise<Form
       const [row] = await tx.insert(t.auditPlanItems).values({
         year: year!, track: r.track, month: r.month, label: relabelDay(r.label, r.plannedOn, plannedOn), plannedOn, detail: r.detail,
         ownerId: present(r.ownerId), auditor: r.auditor, auditorId: present(r.auditorId), scope: r.scope, certificationId: r.certificationId, siteId: r.siteId,
+        auditKind: r.auditKind,
       }).returning({ id: t.auditPlanItems.id });
       await logChange(tx, { entityType: 'audit_plan_item', entityId: row.id, action: 'create', byId, summary: `Reconduit du programme ${year! - 1} (${r.track}, ${monthName(r.month)})` });
     }
@@ -789,7 +794,10 @@ export async function convertFreeAudit(_prev: FormState, fd: FormData): Promise<
   const byId = session.user.id;
   const site = await siteNames();
   const id = await db.transaction(async (tx) => {
-    const values = { year: yearOf(doneOn!), month: monthOf(doneOn!), track, label, plannedOn: doneOn, detail: audit, done: true, doneOn, auditor, auditorId, scope, siteId, unplanned: true };
+    const values = {
+      year: yearOf(doneOn!), month: monthOf(doneOn!), track, label, plannedOn: doneOn, detail: audit, done: true, doneOn, auditor, auditorId, scope, siteId, unplanned: true,
+      auditKind: inferAuditKind({ track, label, detail: audit }),
+    };
     const [row] = await tx.insert(t.auditPlanItems).values(values).returning({ id: t.auditPlanItems.id });
     await logChange(tx, { entityType: 'audit_plan_item', entityId: row.id, action: 'create', byId, summary: `Audit hors programme enregistré (${track}, réalisé le ${fmtDate(doneOn!)}) · ${findings.length} constat${findings.length > 1 ? 's' : ''} repris` });
     const newLabel = planItemAuditLabel(values);

@@ -3,7 +3,7 @@ import { form } from '../next-mocks';
 import { actAs, file, freshDemoDatabase, lastLog } from '../helpers';
 import { and, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { AT_CLOSE_RESTRICTED, HEALTH_DENIED, LOCATION_UNSPECIFIED } from '@/lib/rules/events';
+import { AT_CLOSE_RESTRICTED, LOCATION_UNSPECIFIED } from '@/lib/rules/events';
 import { fromParisLocal, toParisLocal } from '@/lib/dates';
 import { loadEventChangeLog, loadEventDetail } from '@/lib/data/events';
 import { loadVisibleTodo } from '@/lib/data/todo';
@@ -17,7 +17,8 @@ import {
 
 freshDemoDatabase();
 
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+// EVT-29 (09/11/2026) : suivi des événements (modification, étapes, déclaration CPAM, pièces) par l'animateur QHSE seulement.
+const QHSE_ONLY = "Réservé à l'animateur QHSE.";
 const OTHER_SITE = "Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.";
 
 /** Formulaire « Modifier » d'un événement d'après la fiche enregistrée ; `health` : avec ses données de santé. */
@@ -54,12 +55,12 @@ async function created(fields: Record<string, string>) {
 describe('déclaration d’accident du travail (EVT-01, SEC-06)', () => {
   const AT = 'EV-2026-119'; // accident avec arrêt, site B, données de santé du jeu de démonstration
 
-  it('rubriques de la déclaration : saisies par l’encadrement ; lésions, soins et réserves refusés aux rôles non habilités', async () => {
-    actAs('Chef de service', 'site_b');
+  it('rubriques de la déclaration : saisies par l’animateur QHSE ; toute modification refusée aux autres rôles', async () => {
+    actAs('Animateur QHSE', 'site_b');
     const r = await saveEvent({}, await formOf(AT, {
       victimKind: 'interimaire', victimId: '', victimName: 'J. Martin', victimCompany: 'Intérim Plus', occurredTime: '15:40', workSchedule: '8 h – 16 h',
       circumstances: 'Faux pas sur la dernière marche en descendant.', witnesses: '[J. Petit]', thirdParty: '',
-    }));
+    }, { health: true }));
     expect(r).toEqual({ ok: true, id: AT });
     expect(await row(AT)).toMatchObject({
       victimKind: 'interimaire', victimId: null, victimName: 'J. Martin', victimCompany: 'Intérim Plus', occurredTime: '15:40', workSchedule: '8 h – 16 h',
@@ -70,10 +71,10 @@ describe('déclaration d’accident du travail (EVT-01, SEC-06)', () => {
       { field: 'Statut de la victime', from: "Salarié de l'effectif", to: 'Intérimaire' },
       { field: 'Circonstances', from: '(texte précédent)', to: '(texte modifié)' },
     ]));
-    for (const role of ['Chef de service', 'Chef de projet'] as const) {
+    for (const role of ['Chef de service', 'Chef de projet', 'Direction'] as const) {
       actAs(role, 'site_b');
-      for (const [field, value] of Object.entries({ lesionNature: 'Fracture', lesionSite: 'Poignet', careGiven: 'Urgences', reservesOn: '2026-09-12' })) {
-        expect(await saveEvent({}, await formOf(AT, { [field]: value })), `${role} ${field}`).toEqual({ error: HEALTH_DENIED });
+      for (const [field, value] of Object.entries({ lesionNature: 'Fracture', lesionSite: 'Poignet', careGiven: 'Urgences', reservesOn: '2026-09-12', witnesses: 'X' })) {
+        expect(await saveEvent({}, await formOf(AT, { [field]: value })), `${role} ${field}`).toEqual({ error: QHSE_ONLY });
       }
     }
     actAs('Animateur QHSE', 'site_b');
@@ -113,7 +114,7 @@ describe('déclaration d’accident du travail (EVT-01, SEC-06)', () => {
 
 describe('qualification : données propres au type (EVT-05)', () => {
   it('passage à « Qualifié » refusé tant qu’elles manquent, admis une fois saisies', async () => {
-    actAs('Chef de service', 'site_a');
+    actAs('Animateur QHSE', 'site_a');
     const cases: [Record<string, string>, string, Record<string, string>][] = [
       [{ type: 'PA', location: LOCATION_UNSPECIFIED }, 'lieu', { location: 'Atelier montage · poste M3' }],
       [{ type: 'NC' }, 'origine', { ncOrigin: 'Fabrication' }],
@@ -131,7 +132,7 @@ describe('qualification : données propres au type (EVT-05)', () => {
   });
 
   it('un événement qualifié garde ses données : enregistrement refusé si elles sont effacées', async () => {
-    actAs('Chef de service', 'site_a');
+    actAs('Animateur QHSE', 'site_a');
     expect(await saveEvent({}, await formOf('EV-2026-127', { circumstances: '' }))).toMatchObject({ fieldErrors: { circumstances: 'Requis pour un événement qualifié.' } });
     expect(await saveEvent({}, await formOf('EV-2026-127', { victimKind: '' }))).toMatchObject({ fieldErrors: { victimKind: 'Requis pour un événement qualifié.' } });
     expect(await saveEvent({}, await formOf('EV-2026-130', { ncOrigin: '' }))).toMatchObject({ fieldErrors: { ncOrigin: 'Requis pour un événement qualifié.' } });
@@ -155,13 +156,15 @@ describe('clôture d’un AT sans déclaration CPAM (EVT-02)', () => {
     expect(await advanceEvent(id)).toEqual({ error: "Saisissez la date de déclaration à la CPAM, ou indiquez pourquoi l'entreprise ne la déclare pas, avant la clôture." });
     expect(await cpamTodo(id)).toMatchObject({ health: true });
     actAs('Chef de service', 'site_a');
-    expect(await advanceEvent(id)).toEqual({ error: AT_CLOSE_RESTRICTED });
+    expect(await advanceEvent(id)).toEqual({ error: QHSE_ONLY });
     expect((await loadEventDetail(id))?.blocker).toBe(AT_CLOSE_RESTRICTED);
   });
 
   it('motif d’absence de déclaration : droits, site, motif obligatoire, journal réservé', async () => {
     actAs('Chef de service', 'site_a');
-    expect(await waiveCpamDeclaration({}, form({ id, reason: 'Déclaré par l’ETT' }))).toEqual({ error: APPROVERS_ONLY });
+    expect(await waiveCpamDeclaration({}, form({ id, reason: 'Déclaré par l’ETT' }))).toEqual({ error: QHSE_ONLY });
+    actAs('Direction', 'site_a');
+    expect(await waiveCpamDeclaration({}, form({ id, reason: 'Déclaré par l’ETT' }))).toEqual({ error: QHSE_ONLY });
     actAs('Animateur QHSE', 'site_b');
     expect(await waiveCpamDeclaration({}, form({ id, reason: 'Déclaré par l’ETT' }))).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'site_a');
@@ -197,7 +200,7 @@ describe('clôture d’un AT sans déclaration CPAM (EVT-02)', () => {
 
   it('annulation du motif : motif obligatoire, journal, l’échéance revient', async () => {
     actAs('Chef de service', 'site_a');
-    expect(await cancelCpamWaiver({}, form({ id, reason: 'Erreur' }))).toEqual({ error: APPROVERS_ONLY });
+    expect(await cancelCpamWaiver({}, form({ id, reason: 'Erreur' }))).toEqual({ error: QHSE_ONLY });
     actAs('Animateur QHSE', 'site_a');
     expect(await cancelCpamWaiver({}, form({ id }))).toMatchObject({ fieldErrors: { reason: 'Motif obligatoire.' } });
     expect(await cancelCpamWaiver({}, form({ id, reason: 'L’ETT n’a pas déclaré : déclaration à faire' }))).toEqual({ ok: true, id });
@@ -233,13 +236,14 @@ describe('pièces médicales (SEC-06)', () => {
   const EV = 'EV-2026-118'; // AT de [T. Nguyen] (Salarié de démonstration), site A
   let medical = '', plain = '';
 
-  it('ajout : réservé aux rôles habilités, pièce marquée « santé »', async () => {
+  it('ajout : réservé à l’animateur QHSE, pièce marquée « santé »', async () => {
     actAs('Chef de service', 'site_a');
     const certificate = () => file('certificat-medical.pdf');
     const fd = (health: boolean) => { const f = new FormData(); f.set('eventId', EV); if (health) f.set('health', '1'); f.append('files', certificate()); return f; };
-    expect(await addEventFiles(fd(true))).toEqual({ error: HEALTH_DENIED });
-    expect(await addEventFiles(fd(false))).toEqual({ count: 1 });
+    expect(await addEventFiles(fd(true))).toEqual({ error: QHSE_ONLY });
+    expect(await addEventFiles(fd(false))).toEqual({ error: QHSE_ONLY });
     actAs('Animateur QHSE', 'site_a');
+    expect(await addEventFiles(fd(false))).toEqual({ count: 1 });
     expect(await addEventFiles(fd(true))).toEqual({ count: 1 });
     const db = await getDb();
     const rows = await db.select().from(t.attachments).where(and(eq(t.attachments.entityType, 'event'), eq(t.attachments.entityId, EV)));
@@ -266,13 +270,13 @@ describe('pièces médicales (SEC-06)', () => {
       expect(JSON.stringify(d), role).not.toContain(medical);
     }
     actAs('Chef de service', 'site_a');
-    expect(await removeEventFile(medical)).toEqual({ error: 'Pièce jointe introuvable.' });
+    expect(await removeEventFile(medical)).toEqual({ error: QHSE_ONLY });
     expect(JSON.stringify(await loadEventChangeLog(EV))).not.toMatch(/pièces? médicales?/i);
   });
 
   it('reclassement en pièce médicale : droits, site, journal réservé, sans retour', async () => {
     actAs('Chef de service', 'site_a');
-    expect(await classifyEventFileAsMedical(plain)).toEqual({ error: HEALTH_DENIED });
+    expect(await classifyEventFileAsMedical(plain)).toEqual({ error: QHSE_ONLY });
     actAs('Animateur QHSE', 'site_b');
     expect(await classifyEventFileAsMedical(plain)).toEqual({ error: OTHER_SITE });
     actAs('Animateur QHSE', 'site_a');
@@ -290,7 +294,7 @@ describe('pièces médicales (SEC-06)', () => {
   it('reclassement : le nom de la pièce disparaît aussi de son ajout au journal, retrait compris', async () => {
     const SICK = 'arret-travail-15-jours-tnguyen.pdf';
     const names = async () => (await loadEventChangeLog(EV)).flatMap((e) => e.details.filter((d) => d.field === 'Fichier').map((d) => d.to ?? d.from));
-    actAs('Chef de service', 'site_a');
+    actAs('Animateur QHSE', 'site_a');
     const f = new FormData(); f.set('eventId', EV); f.append('files', file(SICK)); f.append('files', file('photo-poste.pdf'));
     expect(await addEventFiles(f)).toEqual({ count: 2 });
     expect(await names()).toEqual(expect.arrayContaining([SICK, 'photo-poste.pdf']));

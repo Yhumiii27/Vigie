@@ -6,6 +6,7 @@ import { ReasonButton, ReasonForm } from './ReasonDialog';
 import { Dialog } from './Dialog';
 import { LazyChangeLog } from './LazyChangeLog';
 import { SEVESO_LEVELS } from '@/lib/rules/prevention';
+import { openItemsSummary, openTotal } from '@/lib/rules/site-transfer';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
@@ -153,6 +154,17 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
 
       {view !== 'list' && view !== 'connectors' && 'archive' in view && (
         <ReasonForm action={archiveSite} hidden={{ siteId: view.archive.id }} onDone={back} onCancel={back} submitLabel="Ne plus suivre" submitIcon="ph-archive"
+          before={openTotal(view.archive.openItems) > 0 && (
+            // TDB-08 : avertissement avec le décompte et transfert en masse proposé (facultatif).
+            <>
+              <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--tone-warn-fg)', textWrap: 'pretty' }}>
+                Ce site porte encore {openItemsSummary(view.archive.openItems)}. Transférez-les vers un autre site, ou archivez sans transfert (ils restent rattachés au site archivé).
+              </p>
+              <Field name="transferTo" label="Transférer les éléments ouverts vers" hint="Facultatif · chaque élément transféré est journalisé avec le motif. Sélectionnez « Tous les sites » pour transférer.">
+                <Select name="transferTo" options={[['', 'Ne pas transférer'], ...active.filter((s) => s.id !== view.archive.id).map((s): [string, string] => [s.id, s.label])]} defaultValue="" />
+              </Field>
+            </>
+          )}
           hint="Le site est archivé dans Vigie : il disparaît des sélecteurs ; ses données restent consultables sous « Tous les sites ». Rien n’est changé dans Matrix." placeholder="Site fermé, cédé, hors du périmètre QHSE…" />
       )}
     </Dialog>

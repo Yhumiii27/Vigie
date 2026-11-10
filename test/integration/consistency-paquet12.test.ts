@@ -59,8 +59,10 @@ describe('DUE-12 : deux risques au même danger de la même unité', () => {
 });
 
 describe('DUE-15 : validateur de la version du DUERP sorti de l’effectif', () => {
-  const versionForm = (fields: Record<string, string>) => form({ version: '2026.1', cseConsultedOn: '2026-03-20', comment: '', ...fields });
+  // DUE-10 : une version validée par le CSE est figée ; la règle se vérifie sur la version avant sa validation.
+  const versionForm = (fields: Record<string, string>) => form({ version: '2026.1', cseConsultedOn: '', comment: '', ...fields });
   it('conservé à la modification de la version ; jamais choisi à nouveau ni pour une nouvelle version', async () => {
+    await (await db()).update(t.duerpVersions).set({ cseConsultedOn: null, snapshot: null }).where(eq(t.duerpVersions.version, '2026.1'));
     actAs('Animateur QHSE', 'all');
     expect(await updateCurrentDuerpVersion({}, versionForm({ validatedById: 'lmoreau' }))).toEqual({ ok: true, id: '2026.1' });
     await (await db()).update(t.people).set({ leftOn: '2026-10-01', leftReason: 'Mutation' }).where(eq(t.people.id, 'lmoreau'));
@@ -73,6 +75,7 @@ describe('DUE-15 : validateur de la version du DUERP sorti de l’effectif', () 
     const [v] = await (await db()).select().from(t.duerpVersions).where(eq(t.duerpVersions.version, '2026.1'));
     expect(v).toMatchObject({ current: true, validatedById: 'lmoreau', comment: 'Complément' });
     await (await db()).update(t.people).set({ leftOn: null, leftReason: null }).where(eq(t.people.id, 'lmoreau'));
+    await (await db()).update(t.duerpVersions).set({ cseConsultedOn: '2026-03-20' }).where(eq(t.duerpVersions.version, '2026.1'));
   });
 });
 

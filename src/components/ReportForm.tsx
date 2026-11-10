@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react';
 import {
-  DECLARANT_MAX, MAX_BATCH_BYTES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, REPORT_TRAP_FIELD,
+  DECLARANT_MAX, MAX_BATCH_BYTES, MAX_FILE_BYTES, MAX_PHOTOS, MAX_PUBLIC_PHOTOS, MAX_PUBLIC_PHOTO_BYTES, REPORT_OCCURRED_LABEL, REPORT_TRAP_FIELD,
 } from '@/lib/rules/events';
 import { createReport } from '@/server/events';
 import { shrinkPhoto } from '@/lib/photo-shrink';
@@ -70,6 +70,8 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
   const maxFileBytes = publicMode ? MAX_PUBLIC_PHOTO_BYTES : MAX_FILE_BYTES;
   const [type, setType] = useState<string | null>(defaultType ?? null);
   const [location, setLocation] = useState(defaultLocation);
+  // EVT-21 : date et heure réelles des faits (facultatives ; vides, l'heure d'envoi fait foi).
+  const [occurredAt, setOccurredAt] = useState('');
   const [editLocation, setEditLocation] = useState(!defaultLocation);
   const [zoneId, setZoneId] = useState(defaultZoneId && zones.some((z) => z.id === defaultZoneId) ? String(defaultZoneId) : '');
   // Lieu choisi dans les zones du site (EVT-19) : le texte reprend le nom de la zone tant qu'il n'est pas saisi.
@@ -201,6 +203,7 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
     if (riskId && riskOptions.some((r) => String(r.id) === riskId)) fd.set('riskId', riskId);
     if (siteId) fd.set('siteId', siteId);
     fd.set('description', description);
+    if (occurredAt) fd.set('occurredAt', occurredAt);
     if (grave) fd.set('gravity', grave);
     if (anonymous) fd.set('anonymous', '1');
     if (token) fd.set('jeton', token);
@@ -320,6 +323,15 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
           <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>Risques du document unique pour ce poste</span>
         </div>
       )}
+
+      <div className="field">
+        <label htmlFor="report-occurred">{REPORT_OCCURRED_LABEL} (facultatif)</label>
+        <input id="report-occurred" className="input" type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)}
+          aria-describedby="report-occurred-hint" style={{ fontSize: FIELD_FONT }} />
+        <span id="report-occurred-hint" style={{ fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
+          À renseigner si les faits sont antérieurs à l&apos;envoi (30 jours au plus) ; sinon, l&apos;heure d&apos;envoi fait foi.
+        </span>
+      </div>
 
       <div className="field">
         <label htmlFor="report-desc">Description</label>

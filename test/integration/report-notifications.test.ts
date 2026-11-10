@@ -29,12 +29,13 @@ describe('suite d’un signalement (TDB-06)', () => {
   it('qualifié : notification au déclarant, lien vers « Mes signalements », visible dans sa cloche', async () => {
     const id = await created();
     const before = (await suites('tnguyen')).length;
-    actAs('Chef de service', 'site_a');
+    // EVT-29 : l'animateur QHSE fait avancer l'événement.
+    actAs('Animateur QHSE', 'site_a');
     expect(await advanceEvent(id)).toEqual({});
     const mine = await suites('tnguyen');
     expect(mine).toHaveLength(before + 1);
     expect(mine.at(-1)).toMatchObject({
-      entityType: 'event', entityId: id, byId: 'sbenali', href: myReportHref(id), readAt: null,
+      entityType: 'event', entityId: id, byId: 'clefevre', href: myReportHref(id), readAt: null,
       title: expect.stringMatching(new RegExp(`^Votre signalement ${id} a été qualifié par .+ : Charge mal arrimée$`)),
     });
     actAs('Salarié', 'site_b');
@@ -58,14 +59,14 @@ describe('suite d’un signalement (TDB-06)', () => {
   it('signalement anonyme, déclarant auteur du changement, étape sans suite à signaler : aucune notification', async () => {
     const anonymous = await created();
     await (await getDb()).update(t.events).set({ anonymous: true, declarantId: null }).where(eq(t.events.id, anonymous));
-    const own = await created({ declarantId: 'sbenali' });
+    const own = await created({ declarantId: 'clefevre' });
     const beforeT = (await suites('tnguyen')).length;
-    const beforeS = (await suites('sbenali')).length;
-    actAs('Chef de service', 'site_a');
+    const beforeS = (await suites('clefevre')).length;
+    actAs('Animateur QHSE', 'site_a');
     expect(await advanceEvent(anonymous)).toEqual({});
     expect(await advanceEvent(own)).toEqual({});
     expect(await suites('tnguyen')).toHaveLength(beforeT);
-    expect(await suites('sbenali')).toHaveLength(beforeS);
+    expect(await suites('clefevre')).toHaveLength(beforeS);
   });
 
   it('autre personne : la notification d’un déclarant n’a pas de lien pour elle (et n’est jamais dans sa cloche)', async () => {

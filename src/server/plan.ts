@@ -13,7 +13,7 @@ import {
   SOURCE_LINK_KINDS, type SourceKey,
 } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';
-import { requireApprover, requireInSite } from '@/lib/guard';
+import { requireEditor, requireInSite } from '@/lib/guard';
 import type { ActionInsert } from '@/lib/queries';
 import { getSession, inSite } from '@/lib/session';
 import { today } from '@/lib/today';
@@ -147,7 +147,7 @@ async function sourcesOfElement(db: DbOrTx, actionId: string): Promise<readonly 
 }
 
 async function updateAction(id: string, fd: FormData): Promise<FormState> {
-  const { session, error } = await requireApprover();
+  const { session, error } = await requireEditor('actions', { qhse: true });
   if (error) return { error };
   const f = formReader(fd);
   const from = f.oneOf('from', ACTION_AVANCEMENTS, { required: true });

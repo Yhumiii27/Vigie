@@ -7,8 +7,9 @@ import { SaveStatus, announce, useActionRunner } from '@/components/feedback';
 import { CURSUS_PEOPLE_NOTICE, SYNC_STATUSES, type SyncStatus } from '@/lib/foreign/labels';
 import { fmtParisDateTime } from '@/lib/dates';
 import type { Option } from '@/lib/data/options';
-import type { PeopleAdmin, PeopleAdminRow } from '@/lib/data/people';
-import { attachPerson, refreshFromCursus } from '@/server/people';
+import type { DepartedRow, PeopleAdmin, PeopleAdminRow } from '@/lib/data/people';
+import { attachPerson, reassignResponsibilities, refreshFromCursus } from '@/server/people';
+import { fmtDate } from '@/lib/dates';
 
 // Personnes lues dans Cursus (D01, décision CV-10) : bouton « Actualiser depuis Cursus » de l'écran Habilitations et vue
 // « Personnel (Cursus) » (QHSE et direction) — fiches anciennes sans matricule à rattacher, fiches absentes de Cursus.
@@ -45,6 +46,23 @@ function AttachButton({ person, choices }: { person: PeopleAdminRow; choices: re
   );
 }
 
+/** HAB-05 : réaffectation en masse des responsabilités ouvertes d'une personne sortie (animateur QHSE). */
+function ReassignButton({ person, present, canReassign }: { person: DepartedRow; present: readonly Option[]; canReassign: boolean }) {
+  const choices = present.filter(([id]) => id !== person.id);
+  return (
+    <ReasonButton action={reassignResponsibilities} hidden={{ id: person.id }} label="Réaffecter" icon="ph-users-three"
+      title={`Réaffecter les responsabilités de ${person.name}`} kicker="Personnel (Cursus)" submitLabel="Réaffecter" width={520}
+      disabled={!canReassign || !choices.length} tooltip={!canReassign ? "Réservé à l'animateur QHSE." : choices.length ? undefined : 'Aucune personne présente à proposer.'}
+      message={`${person.summary} : repris par la personne choisie en une fois ; chaque élément garde son historique, le motif y est inscrit. Une personne présente sur plusieurs sites : sélectionnez « Tous les sites ».`}
+      placeholder="Ex. départ de la personne, reprise par son successeur"
+      before={(
+        <Field name="targetId" label="Repris par">
+          <Select name="targetId" options={choices} placeholder="Choisir une personne présente" />
+        </Field>
+      )} />
+  );
+}
+
 function Row({ p, siteLabels, children }: { p: PeopleAdminRow; siteLabels: Record<string, string>; children?: ReactNode }) {
   return (
     <li style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '6px 0', borderTop: '1px solid var(--color-divider)' }}>
@@ -60,7 +78,7 @@ function Row({ p, siteLabels, children }: { p: PeopleAdminRow; siteLabels: Recor
 }
 
 /** Vue « Personnel (Cursus) » : rafraîchissement, fiches à rattacher, fiches absentes de Cursus. */
-export function PeoplePanel({ admin, siteLabels }: { admin: PeopleAdmin; siteLabels: Record<string, string> }) {
+export function PeoplePanel({ admin, siteLabels, canReassign }: { admin: PeopleAdmin; siteLabels: Record<string, string>; canReassign: boolean }) {
   const run = admin.lastRun;
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -89,6 +107,23 @@ export function PeoplePanel({ admin, siteLabels }: { admin: PeopleAdmin; siteLab
             {admin.toAttach.map((p) => <Row key={p.id} p={p} siteLabels={siteLabels}><AttachButton person={p} choices={admin.choices} /></Row>)}
           </ul>
         ) : <p style={{ margin: 0, fontSize: 12, color: 'var(--vg-text-muted)' }}>Aucune fiche à rattacher.</p>}
+      </div>
+
+      <div id="sorties" className="card" style={{ gap: 6, scrollMarginTop: 16 }}>
+        <h2 className="vg-h6" style={{ margin: 0 }}>Sorties avec des responsabilités ouvertes · {admin.departed.length}</h2>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
+          Personnes sorties de l’effectif (sortie enregistrée dans Cursus) qui restent responsables d’actions, pilotes d’événements ou responsables de plans, d’audits, de contrôles ou d’exigences : à réaffecter en une fois à une personne présente.
+        </p>
+        {admin.departed.length ? (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {admin.departed.map((p) => (
+              <Row key={p.id} p={p} siteLabels={siteLabels}>
+                <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)', flex: '1 1 200px' }}>Sortie le {fmtDate(p.leftOn)} · {p.summary}</span>
+                <ReassignButton person={p} present={admin.present} canReassign={canReassign} />
+              </Row>
+            ))}
+          </ul>
+        ) : <p style={{ margin: 0, fontSize: 12, color: 'var(--vg-text-muted)' }}>Aucune responsabilité ouverte portée par une personne sortie.</p>}
       </div>
 
       <div className="card" style={{ gap: 6 }}>

@@ -86,6 +86,8 @@ describe('TDB-01 : alertes des unités au responsable QHSE du site de l’unité
 
     // Alerte du document unique (siteId null) : validateur de la version et responsables des deux sites.
     await setLead('site_b', 'sbenali');
+    // Version pas encore validée par le CSE (DUE-10 : une version validée est figée).
+    await (await getDb()).update(t.duerpVersions).set({ cseConsultedOn: null, snapshot: null }).where(eq(t.duerpVersions.version, '2026.1'));
     expect(await updateCurrentDuerpVersion({}, form({ version: '2026.1', validatedById: 'hmarchand', cseConsultedOn: '' }))).toMatchObject({ ok: true });
     ({ todo } = await loadRiskSignals());
     const cse = todo.find((x) => x.title === 'Consultation du CSE à renseigner · DUERP 2026.1');
@@ -96,7 +98,8 @@ describe('TDB-01 : alertes des unités au responsable QHSE du site de l’unité
     actAs('Chef de service', 'all');
     ({ todo } = await loadRiskSignals());
     const mine = todo.filter((x) => isMine(x, { id: 'sbenali', name: '[S. Benali]' }));
-    const mineUnits = mine.filter((x) => x.siteId !== null);
+    // Alertes des unités (hors réévaluation après un événement, DUE-07).
+    const mineUnits = mine.filter((x) => x.siteId !== null && !x.key?.startsWith('duerp-reevaluation|'));
     expect(mineUnits.length).toBe(essais.length);
     expect(mineUnits.every((x) => x.title.startsWith("Zone d'essais · "))).toBe(true);
     // Les alertes communes (document unique, PAPRIPACT) le visent aussi, comme responsable d'un site actif.

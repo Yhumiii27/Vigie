@@ -31,8 +31,8 @@ test('Animateur QHSE : crée une action, la retrouve dans le plan et ouvre sa fi
   await page.getByRole('textbox', { name: 'Rechercher une action' }).fill('rack R4');
   const row = page.getByRole('row', { name: new RegExp(DETAIL.slice(0, 30)) }).first();
   await expect(row).toBeVisible();
-  await row.getByRole('link', { name: /^A-\d+$/ }).click();
-  await expect(page).toHaveURL(/action=A-\d+/);
+  await row.getByRole('link', { name: /^AC-\d{6}$/ }).click();
+  await expect(page).toHaveURL(/action=AC-\d{6}/);
   await expect(page.getByText(DETAIL).first()).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -48,8 +48,8 @@ test('modifications simultanées : la seconde fenêtre est avertie au lieu d’�
   const b = await open();
   await a.page.goto('/actions');
   await a.page.getByRole('textbox', { name: 'Rechercher une action' }).fill('rack R4');
-  await a.page.getByRole('row', { name: new RegExp(DETAIL.slice(0, 30)) }).first().getByRole('link', { name: /^A-\d+$/ }).click();
-  await expect(a.page).toHaveURL(/action=A-\d+/);
+  await a.page.getByRole('row', { name: new RegExp(DETAIL.slice(0, 30)) }).first().getByRole('link', { name: /^AC-\d{6}$/ }).click();
+  await expect(a.page).toHaveURL(/action=AC-\d{6}/);
   await b.page.goto(a.page.url());
   for (const p of [a.page, b.page]) await p.getByRole('button', { name: 'Modifier' }).first().click();
   // Fenêtre de modification (la fiche de l'action est elle-même une fenêtre) : celle qui porte « Enregistrer ».

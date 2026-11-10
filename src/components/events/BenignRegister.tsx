@@ -138,6 +138,8 @@ export type BenignRegisterProps = {
   eventId: string;
   entry: BenignEntryView | null;
   canRegister: boolean;
+  /** Visas, bascule et annulation (EVT-29 : animateur QHSE) ; la direction consulte. */
+  canEdit?: boolean;
   firstAiders: readonly Option[];
   /** Registre imprimable du site. */
   href: string;
@@ -151,7 +153,7 @@ export type BenignRegisterProps = {
 };
 
 /** Inscription au registre des accidents bénins d'un AT (fiche, rôles habilités). */
-export function BenignRegisterBlock({ eventId, entry, canRegister, firstAiders, href, locked, defaultCareAt, today, hint }: BenignRegisterProps) {
+export function BenignRegisterBlock({ eventId, entry, canRegister, canEdit = true, firstAiders, href, locked, defaultCareAt, today, hint }: BenignRegisterProps) {
   const registerLink = <a href={href} target="_blank" rel="noreferrer" className="vg-link" style={{ fontSize: 12 }}>Registre du site</a>;
   if (!entry) {
     if (!canRegister) {
@@ -178,9 +180,9 @@ export function BenignRegisterBlock({ eventId, entry, canRegister, firstAiders, 
       </span>
       <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
         {registerLink}
-        <SignButton entryId={entry.id} eventId={eventId} signedOn={entry.signedOn} today={today} />
-        {!entry.escalatedAt && !locked && <EscalateButton eventId={eventId} />}
-        <CancelButton entryId={entry.id} eventId={eventId} number={entry.number} />
+        {canEdit && <SignButton entryId={entry.id} eventId={eventId} signedOn={entry.signedOn} today={today} />}
+        {canEdit && !entry.escalatedAt && !locked && <EscalateButton eventId={eventId} />}
+        {canEdit && <CancelButton entryId={entry.id} eventId={eventId} number={entry.number} />}
       </span>
     </span>
   );

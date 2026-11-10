@@ -6,7 +6,7 @@ import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
 import {
   FIRE_WATCH_HOURS, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, activityLinkIssues, addHoursLocal, firstMinuteReason,
-  firstMinuteRule, fmtPeriod, fromParisLocal, isPlanEnded, lcfirst, missingPresets, parseChecklist, permitDays, permitPlanIssue,
+  firstMinuteRule, fmtPeriod, fromParisLocal, isPlanEnded, lcfirst, missingPresets, parseChecklist, permitCloseBlocker, permitDays, permitPlanIssue, permitValidityError,
   planCovers, referenceNow, validityOver, type ChecklistItem,
 } from '@/lib/rules/prevention';
 import { today } from '@/lib/today';
@@ -86,6 +86,10 @@ export async function savePermit(_prev: FormState, fd: FormData): Promise<FormSt
   if (contractorId && !contractor) f.fail('contractorId', 'Entreprise introuvable.');
   else if (contractor?.archivedAt && contractor.id !== existing?.contractorId) f.fail('contractorId', ARCHIVED_CONTRACTOR);
   if (existing && existing.type !== type) f.fail('type', "Le type d'un permis ne change pas après sa création.");
+  // PRV-16 : validité de 7 jours au plus, contrôlée sur une création ou des dates modifiées (permis existants conservés).
+  const validityChanged = !existing || (!!validFrom && existing.validFrom.getTime() !== validFrom.getTime()) || (!!validTo && existing.validTo.getTime() !== validTo.getTime());
+  const tooLong = validityChanged && validFrom && validTo && validTo > validFrom ? permitValidityError(validFrom, validTo) : null;
+  if (tooLong) f.fail('validTo', tooLong);
   if (preventionPlanId) {
     const plan = plans.find((p) => p.id === preventionPlanId);
     if (!plan) f.fail('preventionPlanId', 'Plan de prévention introuvable.');
@@ -228,7 +232,7 @@ export async function linkPermitPlan(id: string, planId: string): Promise<Result
   return ok();
 }
 
-/** Clôt le permis en fin de travaux (après la ronde de surveillance pour un permis de feu, confirmée dans la fiche). */
+/** Clôt le permis en fin de travaux ; un permis de feu, seulement après la fin de la surveillance après travaux (PRV-04). */
 export async function closePermit(id: string): Promise<Result> {
   const { session, error } = await requireManager();
   if (error) return { error };
@@ -238,6 +242,9 @@ export async function closePermit(id: string): Promise<Result> {
   if (permit.status !== 'delivre') return { error: 'Seul un permis délivré peut être clos.' };
   const now = referenceNow(today());
   if (permit.validFrom > now) return { error: "Les travaux n'ont pas commencé : annulez le permis plutôt que de le clore." };
+  // PRV-04 : permis de feu clos seulement après la surveillance après travaux.
+  const watching = permitCloseBlocker(permit, now.getTime());
+  if (watching) return { error: watching };
   await db.transaction(async (tx) => {
     await tx.update(t.permits).set({ status: 'clos', closedAt: now }).where(eq(t.permits.id, permit.id));
     await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: 'Permis clos (fin des travaux)', byId: session.user.id });

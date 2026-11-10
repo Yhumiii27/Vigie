@@ -12,7 +12,7 @@ import { CardHead, ToneTag } from '@/components/ui';
 import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { MONTHS_SHORT, addDays, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
-import { FINDING_KINDS, PLAN_ITEM_STATES, TONE } from '@/lib/domain';
+import { AUDIT_KINDS, FINDING_KINDS, PLAN_ITEM_STATES, TONE } from '@/lib/domain';
 import type { FindingView, PlanItemView } from '@/lib/data/audits';
 import type { Option } from '@/lib/data/options';
 import { offeredOr, withCurrent } from '@/lib/form-options';
@@ -20,7 +20,7 @@ import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { cancelPlanItem, hideTrack, removePlanItemReport, renameTrack, renewProgram, reschedulePlanItem, savePlanItem, showTrack } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
 import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
-import { MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
+import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, inferAuditKind, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Opts = ActionFormOptions;
@@ -454,6 +454,13 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
       <Field name="detail" label="Intitulé détaillé" hint={outOfPlan ? 'Ex. Audit client [Client A] — exigences qualité fournisseur.' : 'Ex. Processus Conception BE, Audit de suivi ISO 9001.'}>
         <Input name="detail" defaultValue={item?.detail ?? ''} onChange={(e) => setDetail(e.target.value)} />
       </Field>
+      {!review && (
+        // D08-5 : type d'audit (la revue de direction est reconnue par ses mots, jamais choisie ici).
+        <Field name="auditKind" label="Type d'audit">
+          <Select name="auditKind" options={CHOOSABLE_AUDIT_KINDS.map((k) => [k, AUDIT_KINDS[k].label] as const)}
+            defaultValue={item && item.auditKind !== 'revue_direction' ? item.auditKind : inferAuditKind({ track: isNew ? newTrack : trackChoice, label, detail })} />
+        </Field>
+      )}
       <FormRow>
         <Field name="ownerId" label="Responsable">
           <Select name="ownerId" options={owners} defaultValue={item?.ownerId ?? ''} placeholder="Non désigné" />
@@ -610,6 +617,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
   const st = PLAN_ITEM_STATES[item.state];
   const rows: [string, ReactNode][] = [
     ['Nature', item.kind],
+    ["Type d'audit", AUDIT_KINDS[item.auditKind]?.label ?? item.auditKind],
     ['État', <ToneTag key="s" tone={st.tone}>{st.label}</ToneTag>],
     ['Date prévue', item.plannedOn ? fmtDate(item.plannedOn) : monthLabel(item.month, item.year)],
     ...(item.postponedFrom ? [['Initialement', firstPlanned(item.postponedFrom)] as [string, ReactNode]] : []),

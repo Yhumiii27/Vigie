@@ -23,7 +23,7 @@ import { saveActivity } from '@/server/sitemap';
 
 freshDemoDatabase();
 
-const DENIED = 'Votre rôle ne permet pas cette modification.';
+const DENIED = "Réservé à l'animateur QHSE.";
 const OTHER_SITE = 'Cet élément appartient à un autre site que celui sélectionné : changez de site pour le modifier.';
 const db = () => getDb();
 
@@ -71,7 +71,7 @@ describe('PRV-11 : plan, permis et activités de la carte', () => {
 
   it('activité : permis annulé ou hors période refusé ; permis en vigueur accepté et journalisé', async () => {
     actAs('Salarié', 'site_a');
-    expect(await saveActivity({}, activity({ permitId: 'PF-2026-030' }))).toEqual({ error: DENIED });
+    expect(await saveActivity({}, activity({ permitId: 'PF-2026-030' }))).toEqual({ error: 'Votre rôle ne permet pas cette modification.' });
     actAs('Chef de service', 'site_a');
     expect(await saveActivity({}, activity({ permitId: 'PF-2026-028' })))
       .toMatchObject({ fieldErrors: { permitId: 'Le permis PF-2026-028 est annulé : demandez un nouveau permis.' } });

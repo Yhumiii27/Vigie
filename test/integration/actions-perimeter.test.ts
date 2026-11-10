@@ -22,7 +22,7 @@ const ENTRA_ENV = {
   ENTRA_TENANT_ID: 'tenant', ENTRA_CLIENT_ID: 'client', ENTRA_CLIENT_SECRET: 'secret',
 };
 const OUTSIDE = 'Cet élément appartient à un site hors de votre périmètre.';
-const APPROVERS_ONLY = "Réservé à l'animateur QHSE et à la direction.";
+const APPROVERS_ONLY = "Réservé à l'animateur QHSE."; // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions
 
 freshDemoDatabase();
 beforeAll(async () => {

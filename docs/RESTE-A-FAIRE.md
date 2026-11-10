@@ -519,7 +519,7 @@ Au 22/10/2026 : 8 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05, TDB-06, TDB-07, T
 | TDB-05 | ✅ « Mes échéances » consolidées tous sites | **P1** | M | — | — |
 | TDB-06 | ✅ Notifications d'information (réaffectation d'une action, suite d'un signalement) | P2 | M | ACT-30 | — |
 | TDB-07 | ✅ État lu : clé avec date d'échéance et gravité, retards triés par ancienneté | P2 | M | — | — |
-| TDB-08 | Archivage d'un site : avertir des éléments encore ouverts | P2 | M | — | C2 |
+| TDB-08 | ✅ Archivage d'un site : avertir des éléments encore ouverts | P2 | M | — | C2 |
 | TDB-09 | ✅ Traçabilité des sites : journaliser la règle Seveso / PP et afficher l'historique | P2 | S | — | — |
 | TDB-10 | ✅ Purge des états lus et commentaire de schéma obsolète | P3 | S | TDB-07 | — |
 | TDB-11 | ✅ Marquer lue une échéance ouverte depuis À faire ou le tableau de bord | P3 | S | — | — |
@@ -552,6 +552,7 @@ Au 22/10/2026 : 8 livrés (✅ TDB-01, TDB-02, TDB-04, TDB-05, TDB-06, TDB-07, T
 - **TDB-07** — todoKey ignore la date et le ton : une échéance récurrente ou aggravée reste lue. Les retards ont tous la date du jour. Ajouter dueOn à TodoItem, à la clé et au tri. (preuve : src/lib/domain.ts:319-336 ; src/lib/data/watch.ts:265-298 ; src/lib/data/audits.ts:259-275 ; src/lib/data/review.ts:640-650)
   ✅ **Livré (17/10/2026, paquet 4)** — `TodoItem.dueOn` (date d'échéance réelle, aussi pour un retard daté du jour) renseigné par les signaux des actions, audits, certificats, contrôles, exigences, habilitations, DUERP, revues, plans et permis, documents, déchets et relevés, AT ; clé d'état lu `todoKey` = base (type|lien|intitulé ou `key`) | gravité | `dueOn` — une échéance aggravée (à venir → dépassée) ou récurrente (nouvelle date) redevient non lue, un retard garde sa clé de jour en jour ; retards triés par ancienneté (`byUrgency`, cloche), puis les échéances à venir par date. Sans migration : les états lus enregistrés avant (clés sans gravité ni date) ne correspondent plus, chaque échéance déjà lue réapparaît non lue une seule fois ; les anciennes clés restent dans `notification_reads` (purge : TDB-10).
 - **TDB-08** — archiveSite ne vérifie que le dernier site actif. Afficher le décompte des éléments ouverts, voire bloquer ou proposer un transfert. (preuve : src/server/sites.ts:71-94 ; src/components/SitesManager.tsx:84-90)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 « avertir et proposer le transfert en masse » : « Ne plus suivre » un site affiche le décompte de ses éléments ouverts (événements non clôturés, actions ouvertes, contrôles en vigueur, plans en cours, permis demandés ou délivrés : `siteOpenItems`) et propose leur transfert vers un autre site actif dans la transaction de l'archivage (`archiveSite` champ `transferTo`, `requireInSite` des deux sites, motif, journal de chaque élément et des deux sites) ; l'archivage sans transfert reste possible. Hors transfert : unités du DUERP, zones, exigences (plusieurs sites), éléments du programme d'audit.
   **À revoir avec ACT-20 (15/10/2026)** — un transfert en masse vers un autre site doit garder la règle du site unique des actions.
   *Question : Blocage ou avertissement ? Transfert en masse ?*
 - **TDB-09** — saveSiteRule n'appelle pas logChange alors qu'elle change rétroactivement les écarts ; l'historique des sites n'est affiché nulle part. (preuve : src/server/sites.ts:121-138 ; src/components/SitesManager.tsx:21-68)
@@ -605,14 +606,14 @@ Au 22/10/2026 : 18 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 | EVT-13 | ✅ Filtres de la liste : blessure, étape, pilote, période, gravité, ancienneté | P2 | M | — | — |
 | EVT-14 | ✅ Événements liés sur les fiches contrôle et document | P2 | M | — | — |
 | EVT-15 | ◐ Échéances événement manquantes | P2 | M | — | C2 · PA |
-| EVT-16 | Clôture d'un événement réservée aux approbateurs ? | P2 | S | — | C2 · PA |
+| EVT-16 | ✅ Clôture d'un événement réservée aux approbateurs ? | P2 | S | — | C2 · PA |
 | EVT-17 | ✅ Traitement des produits non conformes et coût de non-qualité | P2 | M | — | — |
 | EVT-18 | Formulaire terrain : choix du site et QR code périmé | P2 | M | — | C2 · PA |
 | EVT-19 | ✅ Rattacher l'événement à sa zone et protéger les zones porteuses de QR | P2 | M | — | — |
 | EVT-20 | ◐ Signalement installable (PWA) | P2 | M | HTTPS | C1 |
-| EVT-21 | File d'attente hors ligne des signalements | P2 | L | PWA | C2 · PA |
+| EVT-21 | ◐ File d'attente hors ligne des signalements | P2 | L | PWA | C2 · PA |
 | EVT-22 | ✅ Espace salarié mobile (mes actions, mes habilitations) | P2 | L | ACT-24, ACT-25 ; Entra ID (recette) | C1 · PA |
-| EVT-29 | Événement déclaré par tous, modifié et suivi par le service QHSE | P2 | S | Formulaire Power Apps Événements | C2 · PA |
+| EVT-29 | ✅ Événement déclaré par tous, modifié et suivi par le service QHSE | P2 | S | Formulaire Power Apps Événements | C2 · PA |
 | EVT-23 | ✅ Formulaire événement : le champ Site propose des sites refusés | P3 | S | — | — |
 | EVT-24 | ✅ « Nouvel événement » prérempli depuis contrôle, risque, document, environnement | P3 | S | — | — |
 | EVT-25 | ✅ Fiche événement : action annulée ou clôturée ouverte en modification | P3 | S | ACT-21 | — |
@@ -662,6 +663,7 @@ Au 22/10/2026 : 18 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
   *Question : Quels délais retenir ?*
   ◐ **Partiel (15/10/2026, paquet 1)** — livré : « Efficacité vérifiée » exige des actions liées Vérifiées ou Abandonnées ; action de suite ouverte sur un événement clos : échéance « Événement clos — action de suite ouverte : décider d'une réouverture » au responsable QHSE du site. Reste : délai d'analyse, pilote sorti, seule action abandonnée (questions au § 19).
 - **EVT-16** — advanceEvent n'exige que requireManager alors que réouverture et classement exigent requireApprover. (preuve : src/server/events.ts:38-40,71-73,101-103)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du service QHSE du 09/11/2026 : les actions QSE et les événements sont suivis par le seul service QHSE, pas par la direction. Clôture, avancement, qualification, réouverture et classement sans suite : animateur QHSE seulement (`requireEditor('events', { qhse: true })`, `canEdit(role, 'events')`).
   *Question : Qui valide la clôture ?*
 - **EVT-17** — Ajouter décision de traitement (retouche, rebut, dérogation, retour), quantités et coût (ISO 9001 §8.7). (preuve : src/db/schema.ts:73-107)
   ✅ **Livré (18/10/2026, paquet 5)** — NC et réclamation client : décision de traitement (retouche ou reprise, rebut, acceptation par dérogation, retour au fournisseur), quantité concernée, coût de non-qualité (k€ HT, colonne `nc_cost_keur` partagée avec Keystone par la vue `pub_non_conformites`) et précisions (autorité et conditions obligatoires pour une dérogation), journalisés ; coût de non-qualité repris par les objectifs QHSE (AUD-13).
@@ -674,6 +676,7 @@ Au 22/10/2026 : 18 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
   ◐ **Partiel (22/10/2026, paquet 7)** — livré : manifeste `/manifest.webmanifest` (`src/app/manifest.ts` : « Vigie · Signalement terrain », démarrage et portée `/signaler`, affichage autonome, couleurs du design system), lié aux seules pages `/signaler` ; icônes PNG 192 / 512, masquable et iOS 180 px, SVG (`public/pwa/`, `scripts/pwa-icons.mjs`, sans dépendance) ; service worker `public/signaler-sw.js` enregistré avec la portée `/signaler` (`Service-Worker-Allowed: /signaler`, `Cache-Control: no-cache, no-store`), qui n'intercepte que les navigations et ne met rien en cache — ni page, ni donnée authentifiée, ni server action — et répond hors ligne par une page « Vous êtes hors ligne, réessayez » (CSP fermée) ; manifeste, icônes et service worker ouverts sans session (`isPwaAsset`, fichiers statiques sans donnée), CSP à nonce inchangée ; iOS : `apple-mobile-web-app-capable`, icône d'écran d'accueil, `viewport-fit=cover` et zones sûres (`env(safe-area-inset-*)`), `theme-color`. Vérifié en démonstration sur localhost (construction, en-têtes, enregistrement du service worker, page hors ligne). Reste : recette d'installation sur l'hôte HTTPS cible (Android « Installer l'application », iOS « Sur l'écran d'accueil » ; le navigateur exige HTTPS hors localhost) ; file hors ligne des signalements : EVT-21.
   **Analyse comparative du 25/10/2026** — le mobile hors ligne (audits et signalements sur tablette sans réseau, synchronisation au retour) est avancé chez Quentic App et BlueKanGo, mais standard sur un chantier ; la PWA de Vigie reste limitée au signalement (`/signaler`), partielle jusqu'à la recette HTTPS, et ne met rien en cache. Priorité suggérée : P1 pour le signalement et les audits (AUD-37), avec EVT-21.
 - **EVT-21** — Brouillon IndexedDB renvoyé au retour du réseau, clé d'idempotence, date et heure réelles de l'événement. (preuve : src/components/ReportForm.tsx:169-180 ; src/server/events.ts:510)
+  ◐ **Partiel (10/11/2026, paquet R1)** — champ facultatif « Date et heure des faits » du formulaire terrain (heure de Paris, ni future ni antérieure de plus de 30 jours : `reportOccurredError`, `src/lib/rules/events.ts`), enregistré dans `events.occurred_on` / `occurred_time` (vide : heure d'envoi) et affiché sur la fiche. Reste : la file hors ligne (brouillon IndexedDB, clé d'idempotence).
   *Question : Ajouter date et heure au formulaire terrain ?*
   **Analyse comparative du 25/10/2026** — la file hors ligne des signalements est le standard du marché sur chantier (Quentic App, BlueKanGo, SafetyCulture) ; rien n'est encore mis en file dans Vigie (`ReportForm.tsx`). Priorité suggérée : P1 (avec EVT-20) ; les audits hors ligne font l'objet d'AUD-37.
 - **EVT-22** — Le parcours terrain n'offre que Signaler et Mes signalements ; ajouter Démarrer / Déclarer réalisée avec photo et ses échéances. (preuve : src/app/signaler/ (page.tsx, mes-signalements/, postes/) ; src/server/plan-ui.ts:18-22)
@@ -695,6 +698,7 @@ Au 22/10/2026 : 18 livrés (✅ EVT-01, EVT-02, EVT-03, EVT-04, EVT-05, EVT-06, 
 - **EVT-28** — Code secret remis à l'envoi, ouvrant un détail en lecture sans identifier l'auteur. (preuve : src/components/ReportForm.tsx:192-193 ; src/lib/data/events.ts:209-213)
   *Question : Risque de ré-identification acceptable ?*
 - **EVT-29** — Réponse du service QHSE du 15/10/2026 : « tout le monde a la possibilité de déclarer un évènement QSE, qui peut être modifié et suivi par QHSE ». Aujourd'hui l'encadrement (pilote) modifie et fait avancer l'événement (`requireManager`). Revoir les droits de modification et d'avancement de l'écran Événements avec son formulaire Power Apps. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md) § 22)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 « uniquement le service QSSE » : modification, qualification, étapes, clôture, réouverture, classement, analyse, pièces jointes, déclaration CPAM et registre des accidents bénins réservés à l'animateur QHSE (`ROLES` : écran `events` en consultation pour l'encadrement et la direction) ; l'encadrement et la direction déclarent (`createEvent`) et lisent ; les demandes reçues de Keystone ne changent pas.
   *Classe C2 — Question au service QHSE, avec le formulaire Power Apps Événements : l'encadrement garde-t-il la modification et l'avancement des événements de son site ?*
 
 ## 5. Plan d'actions (ACT)
@@ -745,7 +749,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 | ACT-33 | ✅ Rappel du mercredi par e-mail : contenu, planification, journal d'envoi | **P1** | M | ACT-32, PRD-12 | — |
 | ACT-34 | Compte d'envoi des e-mails | **P1** | S | ACT-33 | C4 |
 | ACT-35 | ✅ Numérotation unique, jamais réattribuée | **P1** | S | ACT-17 | — |
-| ACT-36 | Format des numéros AC-AA#### | **P1** | S | ACT-35 | C3 |
+| ACT-36 | ✅ Format des numéros AC-AA#### | **P1** | S | ACT-35 | C3 |
 | ACT-37 | ✅ Source des actions créées par Habilitations, Prévention, Environnement et audits fournisseurs | **P1** | S | ACT-18 | — |
 | ACT-39 | Import de l'extraction Power Apps | **P1** | L | ACT-17, ACT-18, ACT-20, ACT-24, ACT-26, ACT-35, ACT-36, ACT-37 | C3 |
 | ACT-40 | ✅ Tests de bout en bout et de migration de la refonte | **P1** | M | ACT-19, ACT-21, ACT-23, ACT-24, ACT-25, ACT-30, ACT-32, ACT-33 | — |
@@ -754,7 +758,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 | ACT-38 | ✅ Priorité proposée d'après le niveau de risque — sans objet | P2 | S | ACT-20 | — |
 | ACT-41 | Actions des projets Keystone remontées dans le plan d'actions | P2 | M | API Keystone (INT-02) | C4 |
 | ACT-42 | Rattacher une action à un équipement, un sous-équipement, un client ou un fournisseur | P3 | M | Référentiels à identifier (Keystone, Codex ?) | C3 |
-| ACT-43 | Escalade hiérarchique des actions en retard | **P1** | M | INT-04 (canaux sortants) ; ACT-34 | C2 |
+| ACT-43 | ✅ Escalade hiérarchique des actions en retard | **P1** | M | INT-04 (canaux sortants) ; ACT-34 | C2 |
 
 - **ACT-01** — Ces écrans retrouvent leurs actions par originRef : modifier la référence, la date ou la filière d'un enlèvement détache l'action sans trace. Ajouter des types plan, permit, document, waste, stream au registre action-links et migrer. (preuve : src/lib/data/prevention.ts:372,383,453,516 ; src/server/prevention.ts:321,386 ; src/lib/data/environment.ts:142-145,238-239,314 ; src/lib/data/documents.ts:157 ; src/lib/action-links.ts:52-311 (type `plan` = programme d'audit, lignes 132-153) ; src/components/actions/ActionDetail.tsx:64-67 (originRef modifiable))
   **À revoir avec ACT-17 et ACT-22 (15/10/2026)** — les colonnes de source restent les éléments liés ; `origin` est remplacé par `source` (22 valeurs) ; `reprise-liens` et `src/lib/origin-links.ts` sont adaptés aux sources ; la réserve « référence texte rattachée sans `canEdit` » tombe si la création reste réservée au QHSE (ACT-22).
@@ -858,6 +862,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 - **ACT-35** — Compteur en base (table action_counters, ACT-17) incrémenté sous verrou dans la transaction de création (aujourd'hui nextRef hors transaction, src/server/plan.ts:155 : doublon possible, PRD-08) ; contrainte d'unicité ; un numéro n'est jamais libéré (action abandonnée comprise) ; fonction de format isolée formatActionNumber() ; l'import positionne le compteur au-delà du plus grand numéro repris ; format actuel « A-n » conservé tant qu'ACT-36 n'est pas tranché ; actions existantes jamais renumérotées (liens, journal et rattachements en dépendent). (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
   ✅ **Livré (15/10/2026, paquet 1)** — compteur `action_counters('A')` incrémenté dans la transaction de création, toujours au-delà du plus grand numéro vu (actions et journal), jamais réattribué ; format « A-n » (`formatActionNumber`) gardé jusqu'à ACT-36.
 - **ACT-36** — Appliquer la règle de numérotation de Power Apps (AC + année sur deux chiffres + numéro, exemple AC-260150) dans formatActionNumber() et la portée du compteur (par année ou unique) ; aucun numéro AC émis par Vigie avant l'import de l'extraction (ACT-39), pour ne jamais attribuer un numéro déjà pris dans Power Apps. Hypothèse à vérifier : identifiant de l'élément de la liste SharePoint, donc compteur continu. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
+  ✅ **Livré (10/11/2026, paquet R1)** — réponses ACT-36 et ACT-P1 du 09/11/2026 : nouveaux numéros `AC-AANNNN` (année de création à l'heure de Paris, compteur annuel `action_counters('AC-AA')` qui repart à 0001, toujours au-delà du plus grand numéro de l'année vu dans `actions` et le journal : `nextActionNumber`, `formatActionNumber`, tri `actionNumberKey`). Les anciens numéros `A-n` sont gardés jusqu'à la reprise Power Apps (ACT-39), qui reprendra la numérotation. Valeurs seules : aucune colonne publiée ne change.
   *Classe C3 — Règle actuelle de numérotation AC à fournir par le service QHSE (recherche en cours, question gardée pour plus tard par l'utilisateur) : le compteur repart-il à 0001 chaque année (AC-270001 au début de 2027) ou continue-t-il, et combien de chiffres après l'année ?*
 - **ACT-37** — Les 22 sources du service QHSE n'ont pas d'équivalent pour des actions que Vigie crée aujourd'hui : recyclage planifié (origine skills), plan de prévention, permis et coactivité (prevention), filières, enlèvements et registre des déchets (env), audits fournisseurs (ligne « Fournisseurs » du programme). Décider la source imposée par ces écrans (ou les sources à ajouter à la liste) et le sens de « Réserves » (contrôle réglementaire ou réception de chantier) et d'« Analyse de risque (AST-EST) » pour leur élément lié ; compléter la reprise (ACT-19) des actions env, skills, prevention marquées « à compléter ». Proposition : Environnement → Analyse environnementale ; ajouter « Habilitations et formations » et « Prévention des entreprises extérieures », ou les rattacher à « Contrôle réglementaire » et « Analyse de risque (AST-EST) » ; audits fournisseurs → Audit interne ISO. Écrans concernés susceptibles d'évoluer avec leurs formulaires Power Apps. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md))
   ✅ **Livré (15/10/2026, paquet 1)** — décidé par le service QHSE le 15/10/2026 : 24 sources (les 22 + « Déchets » et « Audit fournisseur ») ; Environnement → Déchets ; ligne « Fournisseurs » du programme → Audit fournisseur ; aucune action QSE depuis Habilitations (recyclages gérés par le RH) ni depuis Prévention (actions immédiates des plans) ; « Réserves » = réserves de réception d'un chantier ou d'une installation ; AST = analyse de sécurité des tâches en contexte pyrotechnique, EST = étude de sécurité technique (précisions affichées sous la liste des sources) ; « Analyse environnementale » sans élément Vigie. Reprise : `env` → Déchets, `skills` et `prevention` → à compléter (abandon par le QHSE si besoin).
@@ -872,6 +877,7 @@ Refonte des actions QSE (ajoutés le 15/10/2026 ; spécification : [`docs/specs/
 - **ACT-42** — Souhait du service QHSE du 15/10/2026 : lier une action à un équipement, un sous-équipement, un client ou un fournisseur, en plus de son élément source et des liens complémentaires. Aucun référentiel d'équipements ni de clients et fournisseurs n'existe dans Vigie (champ texte « Équipement » des événements seulement). (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md) § 22)
   *Classe C3 — Référentiels à identifier : équipements et sous-équipements (Codex ?), clients et fournisseurs (Keystone ?), et leurs identifiants.*
 - **ACT-43** — Escalade d'une action en retard : après n jours de retard (seuil à valider, par priorité), avertir le supérieur hiérarchique du responsable, puis le responsable QHSE du site, puis la direction, dans la cloche et par le canal sortant d'INT-04 ; paliers, délais et destinataires tracés dans l'historique de l'action (journal `status` / `reprise` inchangé) ; jamais de transition automatique. Suppose un lien hiérarchique sur la fiche salarié (`people` n'a pas de responsable : à tenir dans Vigie ou lu dans Cursus par INT-03). Niveau marché : standard (Cority, BlueKanGo) ; état dans le code : rappel du mercredi seulement (ACT-32, ACT-33), sans escalade. Ajouté le 26/10/2026 (analyse comparative avec les logiciels QHSE du commerce) ; à valider avant de développer.
+  ✅ **Clos (09/11/2026)** — réponse du service QHSE : « non, pas d'escalade » ; rien à développer.
 
 ## 6. Prévention et carte du site (PRV)
 
@@ -884,24 +890,24 @@ Au 22/10/2026 : 7 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-10, PRV-11, P
 | PRV-01 | ✅ Écarts R. 4512-6 passés non comptés | **P1** | M | — | — |
 | PRV-02 | ✅ Contenu réglementaire du plan incomplet (R. 4512-8 et R. 4512-9) | **P1** | M | Migration drizzle | — |
 | PRV-03 | ✅ Fiche imprimable d'un permis et registre par période | **P1** | S | — | — |
-| PRV-04 | Traçabilité de la délivrance, de la check-list et de la clôture des permis | P2 | M | Migration drizzle | C2 · PA |
+| PRV-04 | ◐ Traçabilité de la délivrance, de la check-list et de la clôture des permis | P2 | M | Migration drizzle | C2 · PA |
 | PRV-05 | Protocoles de sécurité de chargement et déchargement | P2 | M | — | C2 · PA |
-| PRV-06 | Inspection commune « préalable » acceptée après le début des travaux | P2 | S | — | C2 · PA |
+| PRV-06 | ✅ Inspection commune « préalable » acceptée après le début des travaux | P2 | S | — | C2 · PA |
 | PRV-07 | ✅ Signataires du plan et date de signature EU | P2 | S | Migration drizzle | — |
 | PRV-08 | Intervenants des permis reliés au personnel et aux habilitations | P2 | M | Niveaux d'habilitation ; Cursus | C3 · PA |
-| PRV-09 | Dossier entreprise extérieure : pièces de vigilance, intervenants, accueil | P2 | L | Migration drizzle | C2 · PA |
+| PRV-09 | ✅ Dossier entreprise extérieure : pièces de vigilance, intervenants, accueil | P2 | L | Migration drizzle | C2 · PA |
 | PRV-10 | ✅ Situations de coactivité : état « maîtrisée » | P2 | M | — | — |
 | PRV-11 | ✅ Cohérence plan, permis et activités après modification | P2 | S | — | — |
 | PRV-12 | ✅ Carte du site : journal, annulation plutôt que suppression, sites archivés | P2 | M | — | — |
-| PRV-13 | Cumul des heures d'une entreprise extérieure sur 12 mois | P3 | S | — | C2 · PA |
+| PRV-13 | ✅ Cumul des heures d'une entreprise extérieure sur 12 mois | P3 | S | — | C2 · PA |
 | PRV-14 | ✅ Filtres projet et entreprise, accès direct à la fiche entreprise | P3 | S | — | — |
 | PRV-15 | Permis complémentaires : consignation, espace confiné, hauteur, fouille | P3 | M | — | C3 · PA |
-| PRV-16 | Validité des permis : durée maximale et prolongation | P3 | S | — | C2 · PA |
+| PRV-16 | ✅ Validité des permis : durée maximale et prolongation | P3 | S | — | C2 · PA |
 | PRV-17 | ✅ Interventions longues : inspections et réunions périodiques | P3 | M | — | — |
 | PRV-18 | Signature à distance ou envoi du plan à l'entreprise extérieure | P3 | L | Messagerie ou signature électronique | C4 · PA |
 | PRV-19 | ✅ Échéances de coactivité sans personne concernée | P3 | S | — | — |
 | PRV-20 | Plans de prévention reçus des clients | P3 | L | Keystone | C2 · PA |
-| PRV-21 | Clôture d'un plan après un écart R. 4512-6 : mesures immédiates hors actions QSE | P3 | S | Validation du service QHSE | C2 · PA |
+| PRV-21 | ✅ Clôture d'un plan après un écart R. 4512-6 : mesures immédiates hors actions QSE | P3 | S | Validation du service QHSE | C2 · PA |
 | PRV-22 | Consignations / isolations et opérations simultanées (SIMOPS) | P2 | L | PRV-15 (permis de consignation) ; carte du site | C2 · PA |
 | PRV-23 | Préqualification des entreprises extérieures et contrôle des prérequis avant accès au site | P2 | L | PRV-09 ; titres d'habilitation (HAB) | C2 · PA |
 | PRV-24 | Carte des sites géolocalisée | P3 | M | — | C2 · PA |
@@ -916,17 +922,20 @@ Au 22/10/2026 : 7 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-10, PRV-11, P
 - **PRV-03** — Un permis délivré ne s'imprime pas pour affichage ; le registre ne filtre pas par mois ou année. (preuve : src/components/prevention/PermitDialogs.tsx:331-342 (aucun lien d'impression) ; src/app/(app)/prevention/imprimer/permis/page.tsx:21-25 (filtres état et type seulement))
   ✅ **Livré (12/10/2026)** — fiche imprimable d'un permis (`/prevention/imprimer/permis/[id]`) ; registre filtré par année et mois (un permis compte dans chaque mois que couvre sa validité), « Tous, annulés compris », date de délivrance. Réserve : la date de délivrance est tirée du journal (« Permis délivré ») en attendant une colonne (**PRV-04**).
 - **PRV-04** — Ni date-heure de délivrance, ni acceptation, ni fin réelle, ni auteur de clôture ou de ronde ; check-list sans historique ; clôture possible avant la fin de surveillance. (preuve : src/server/prevention.ts:559-572 (setPermitCheck sans logChange), 642-656 (closePermit sans contrôle de watchUntil) ; src/db/schema.ts:483-501 (aucun champ acceptation ou ronde) ; déjà tracé : src/server/prevention.ts:600-603, 651-654 et src/components/prevention/PermitDialogs.tsx:409)
+  ◐ **Partiel (10/11/2026, paquet R1)** — réponse du 09/11/2026 : un permis de feu ne se clôt qu'après la fin de la surveillance après travaux (`permitCloseBlocker`, refus serveur et bouton « Clore » désactivé avec le motif). Reste : traçabilité de la délivrance, de la check-list et de la ronde.
   *Question : Interdire la clôture avant la fin des 2 h de surveillance ?*
   **Analyse comparative du 25/10/2026** — la vérification tracée avant démarrage et à la clôture d'un permis (check-list, auteur, date-heure) est le standard des modules « Control of Work » (Enablon, Quentic) ; voir aussi PRV-22 (isolations et opérations simultanées). Priorité suggérée : P2, inchangée.
 - **PRV-05** — Protocole écrit exigé pour les transporteurs (R. 4515-4 à 11), signé des deux parties, avec révision. (preuve : aucune occurrence de « protocole » ni de « R. 4515 » dans src/ ni dans design/Vigie.dc.html)
   *Question : Transporteurs gérés comme entreprises extérieures ?*
 - **PRV-06** — Seule la fin de l'intervention borne la date de l'inspection commune préalable. (preuve : src/server/prevention.ts:158)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 « refus à l'enregistrement » : inspection commune préalable datée après le premier jour de l'intervention refusée (`inspectionAfterStartError`, création ou date modifiée).
   *Question : Refus strict ou écart tracé ?*
 - **PRV-07** — Signature EU forcée au jour, sans nom ni qualité des signataires ; l'impression affiche le responsable du plan. (preuve : src/server/prevention.ts:259-276, 279-310 ; src/app/(app)/prevention/imprimer/plan/[id]/page.tsx:137-140)
   ✅ **Livré (18/10/2026, paquet 5)** — « Signer pour l'entreprise utilisatrice » ouvre un formulaire : date de signature (jamais future, jamais avant l'inspection commune), nom et qualité du signataire ; signature EE : nom et qualité obligatoires ; signataires journalisés, effacés avec les signatures par une modification, imprimés sur le plan (`signed_eu_name` / `signed_eu_quality`, `signed_ee_name` / `signed_ee_quality`).
 - **PRV-08** — performer est un texte libre : choisir les intervenants internes et contrôler leurs titres valides à la délivrance. (preuve : src/db/schema.ts:490 ; src/components/prevention/PermitDialogs.tsx:166-168 ; src/server/prevention.ts:470 ; src/components/prevention/model.ts:152)
   *Question : Quels titres par type de permis ?*
 - **PRV-09** — Ajouter assurance, attestation URSSAF (D. 8222-5), Kbis avec échéances, intervenants avec accueil sécurité, signaux d'expiration. (preuve : src/db/schema.ts:430-441 ; src/components/prevention/ContractorDialogs.tsx:62-68)
+  ✅ **Clos (09/11/2026)** — réponse : pièces de vigilance gérées par le service achats, hors de Vigie.
   *Question : Vigilance suivie par les achats ?*
   **Analyse comparative du 25/10/2026** — la préqualification des sous-traitants et le contrôle automatique des prérequis (formation, induction) avant l'accès au site sont un niveau avancé du marché (Cority, Ideagen) ; l'annuaire des entreprises extérieures de Vigie n'est lié qu'aux plans de prévention. Priorité suggérée : P2, inchangée ; la préqualification et le contrôle des prérequis font l'objet de PRV-23.
 - **PRV-10** — Une situation reste signalée après action ou report au plan, et des actions en double sont possibles. (preuve : src/lib/data/sitemap.ts:292-334 ; src/components/sitemap/SiteMapScreen.tsx:225-239 (originRef sans clé de situation), 637-638 ; src/server/sitemap.ts:392)
@@ -937,6 +946,7 @@ Au 22/10/2026 : 7 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-10, PRV-11, P
 - **PRV-12** — 11 mutations sur 12 sans logChange, activités supprimées physiquement, création acceptée sur un site archivé (pas de requireInSite). (preuve : src/server/sitemap.ts:67-75, 80-368 (aucun logChange hors 399), 110-123, 291-300 ; src/lib/guard.ts:32-37 (requireInSite non utilisé))
   ✅ **Livré (17/10/2026, paquet 3)** — toutes les écritures de la carte journalisées dans leur transaction : activités sur leur fiche (`site_activity` : création, modification avec le détail — entreprise, responsable, zone et voies par leur nom —, déplacement, annulation), zones, voies, plan de fond et échelle dans l'historique de la carte (`site_map`, identifiant du site) ; une activité ne se supprime plus : « Annuler l'activité » avec motif (`cancelActivity`, colonnes `cancelled_*`, migration `0006`), retirée de la carte, de la coactivité et des rattachements qui bloquent l'annulation d'un plan ; `requireInSite` après chargement partout (création sur un site actif du périmètre : plus de création sur un site archivé). Historiques à l'ouverture : fiche de l'activité, fenêtre « Échelle » (historique de la carte). Réserve : zones et voies (dessin du plan) restent supprimables, la suppression est journalisée sur la carte (et sur les activités concernées) ; le QR code d'une zone supprimée n'ouvre plus le signalement.
 - **PRV-13** — Le seuil de 400 h est évalué plan par plan. (preuve : src/components/prevention/model.ts:71 ; src/components/prevention/PlanDialogs.tsx:113-114 (saisie manuelle « Total estimé »))
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 : sur le site, tous les travaux d'entreprises extérieures sont soumis à plan de prévention, quel que soit le nombre d'heures. Plan écrit toujours obligatoire (`isMandatory`, règle de l'entreprise `COMPANY_RULE_ALL_WORK`), plan signé exigé pour délivrer tout permis d'une entreprise extérieure (`permitNeedsSignedPlan`) ; seuil légal R. 4512-7 et heures saisies gardés pour information. Le cumul sur 12 mois est sans objet.
   *Question : Par opération ou cumul ?*
 - **PRV-14** — Plans filtrés par phase seulement ; nom d'entreprise non cliquable. (preuve : src/app/(app)/prevention/page.tsx:61-64 ; src/components/prevention/PlanDialogs.tsx:337 ; src/components/prevention/PermitDialogs.tsx:372)
   ✅ **Livré (30/10/2026, paquet 14)** — filtres « Entreprise extérieure » (`?entreprise=`) et « Projet Keystone » (`?projet=`) des onglets Plans et Permis (`FilterBar`, choix tirés de la liste du site sélectionné, gardés avec la phase, l'état et le type ; une fiche ouverte par lien direct que ces filtres cacheraient les retire, `interventionFilters`) ; dans la fiche d'un plan ou d'un permis, le nom de l'entreprise ouvre sa fiche (`?onglet=entreprises&entreprise=<id>`, archivée comprise, bandeau commun si inconnue). Réserve : le registre imprimable des permis ignore ces deux filtres.
@@ -944,6 +954,7 @@ Au 22/10/2026 : 7 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-10, PRV-11, P
   *Question : Permis prévus par PR-QHSE-005 ?*
   **Analyse comparative du 25/10/2026** — les modules « Control of Work » du marché (Enablon, Quentic) couvrent en avancé les consignations et isolations, la visualisation des opérations simultanées et les vérifications avant démarrage et à clôture ; Vigie n'a que les permis feu et essai avec check-lists et la coactivité sur la carte. Priorité suggérée : P2 plutôt que P3 pour le permis de consignation, à traiter avec PRV-22.
 - **PRV-16** — Aucune durée maximale ; un permis délivré ne se prolonge pas. (preuve : src/server/prevention.ts:481-493, 505)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 : validité d'un permis de 7 jours au plus, tous types, même re-signé chaque jour (`permitValidityError`, création ou dates modifiées ; permis existants conservés). Pas de prolongation : nouveau permis.
 - **PRV-17** — Un contrat annuel n'a qu'une inspection préalable. (preuve : src/db/schema.ts:455)
   ✅ **Livré (29/10/2026, paquet 13)** — fiche du plan, section « Inspections et réunions périodiques » (R. 4513-2) : périodicité en jours fixée sur le plan (`prevention_plans.meeting_period_days`, 1 à 365, vide = non fixée), séances tenues (`prevention_plan_meetings` : inspection commune périodique ou réunion de coordination, date entre le début de l'intervention et aujourd'hui, participants, constats et mesures), annulation motivée d'une saisie erronée (jamais supprimée, barrée), journal du plan ; prochaine séance due calculée (`nextPeriodicMeeting`, `src/components/prevention/model.ts` : dernière séance tenue, sinon inspection préalable réalisée, sinon début de l'intervention, plus la périodicité, pendant l'intervention seulement), jamais stockée ; échéance « inspection ou réunion périodique de coordination » au responsable du plan, sinon au responsable QHSE du site (clé `pp-reunion|<plan>`). Jeu de démonstration : contrat annuel de nettoyage PP-2025-041, tous les 30 jours. Server actions `setPlanMeetingPeriod`, `recordPlanMeeting`, `cancelPlanMeeting` (`src/server/prevention.ts`). Réserves : pas de convocation ni de compte rendu signé (pièce jointe du plan au besoin) ; périodicité non proposée d'office pour un plan long (choix de l'entreprise utilisatrice).
 - **PRV-18** — La signature EE est saisie en interne. (preuve : src/server/prevention.ts:279-310 ; design/Vigie.dc.html:778)
@@ -954,6 +965,7 @@ Au 22/10/2026 : 7 livrés (✅ PRV-01, PRV-02, PRV-03, PRV-07, PRV-10, PRV-11, P
 - **PRV-20** — Les interventions EPC2i chez les clients ne sont pas suivies. (preuve : src/db/schema.ts:443-447)
   *Question : À suivre dans Vigie ?*
 - **PRV-21** — Depuis le paquet 1 (réponse du service QHSE du 15/10/2026 : « les plans de prévention donnent lieu à des actions immédiates non enregistrées dans les actions QSE »), un plan de prévention se clôt ou s'annule après un écart R. 4512-6 sans action QSE (`planEndIssue`, `src/components/prevention/model.ts`) ; l'écart reste tracé par le plan et ses indicateurs. Faut-il demander à la clôture un motif « mesures immédiates prises » ? (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md) § 22)
+  ✅ **Livré (10/11/2026, paquet R1)** — à la clôture d'un plan qui porte un écart R. 4512-6, les mesures immédiates prises sont exigées (`gapMeasuresError`), enregistrées dans `prevention_plans.gap_measures` (migration 0032), au journal de la clôture et sur la fiche.
   *Classe C2 — Question au service QHSE : trace des mesures immédiates à la clôture d'un plan après un écart ?*
 - **PRV-22** — Module « Control of Work » : consignations et isolations (énergie, fluide, mécanique) rattachées à un permis ou à une intervention, avec points d'isolement, poseur, vérificateur et levée tracés ; visualisation des opérations simultanées (SIMOPS) sur la carte du site et dans le temps, à partir des activités et des permis en cours (extension de `detectConflicts`, PRV-10) ; vérification avant démarrage et à clôture (PRV-04). Niveau marché : avancé (Enablon, Quentic) ; état dans le code : permis feu et essai avec check-lists, coactivité sur la carte, ni isolations ni SIMOPS. Ajouté le 26/10/2026 (analyse comparative avec les logiciels QHSE du commerce) ; à valider avant de développer.
 - **PRV-23** — Préqualification d'une entreprise extérieure (questionnaire, pièces, évaluation, validité) et contrôle automatique des prérequis d'un intervenant avant l'accès au site : accueil sécurité (induction) fait, titres exigés par le type d'intervention ou de permis en cours de validité (PRV-08), pièces de vigilance à jour (PRV-09) ; blocage ou écart tracé à la délivrance du permis ou à l'inspection commune. Niveau marché : avancé (Cority, Ideagen) ; état dans le code : annuaire des entreprises extérieures lié aux seuls plans de prévention. Ajouté le 26/10/2026 (analyse comparative avec les logiciels QHSE du commerce) ; à valider avant de développer.
@@ -974,10 +986,10 @@ Au 22/10/2026 : 8 livrés (✅ DUE-01, DUE-02, DUE-03, DUE-04, DUE-05, DUE-06, D
 | DUE-04 | ✅ Annulation d'une action : détachement absent de l'historique du risque | P2 | S | — | — |
 | DUE-05 | ✅ Unités sur un site archivé déplacées en silence | P2 | S | — | — |
 | DUE-06 | ✅ Historique des unités en vigueur et des versions jamais affiché | P2 | S | — | — |
-| DUE-07 | Réévaluation après accident et mise à jour du DUERP déclenchée | P2 | M | — | C2 · PA |
+| DUE-07 | ✅ Réévaluation après accident et mise à jour du DUERP déclenchée | P2 | M | — | C2 · PA |
 | DUE-08 | Facteurs de pénibilité et effectifs exposés | P2 | M | Effectifs (Cursus) | C4 · PA |
 | DUE-09 | ✅ Pièces jointes : DUERP signé par version et justificatifs des risques | P2 | M | — | — |
-| DUE-10 | Contenu d'une version figé à la validation | P2 | M | — | C2 · PA |
+| DUE-10 | ✅ Contenu d'une version figé à la validation | P2 | M | — | C2 · PA |
 | DUE-11 | ✅ Vue imprimable du document unique | P2 | M | — | — |
 | DUE-12 | ✅ Rattachement non tracé entre deux risques au même danger | P3 | S | — | — |
 | DUE-13 | ✅ Unités homonymes indiscernables sous « Tous les sites » | P3 | S | — | — |
@@ -1006,11 +1018,13 @@ Au 22/10/2026 : 8 livrés (✅ DUE-01, DUE-02, DUE-03, DUE-04, DUE-05, DUE-06, D
 - **DUE-06** — Ajouter ChangeLogList dans l'éditeur d'unité et « Versions du DUERP ». (preuve : src/lib/data/risks.ts:319-322 ; src/components/risks/UnitDialogs.tsx:81-130 ; src/components/risks/VersionDialogs.tsx (aucun ChangeLogList) ; src/server/risks.ts:432-435,468-475 (journalisé mais jamais affiché))
   ✅ **Livré (17/10/2026, paquet 3)** — historique de l'unité dans l'éditeur d'unité et de chaque version dans « Versions archivées », chargés à l'ouverture (`LazyChangeLog` « work_unit », « duerp_version »), à la saisie seulement (`canEdit` DUERP, comme l'historique des risques ; refusé au Salarié).
 - **DUE-07** — Aucun signal quand un AT/PA est rattaché à un risque ou révèle un risque nouveau (R. 4121-2), ni trace « réévalué suite à EV-… ». (preuve : src/lib/data/risks.ts:241-247,482-520 ; src/app/(app)/evenements/page.tsx:306 ; src/server/risks.ts:114-118)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 « tout AT avec arrêt et toute gravité potentielle élevée » : échéance « Réévaluer le DUERP » (`duerp-reevaluation|<événement>`, responsable QHSE du site) pour un événement des 12 derniers mois de gravité potentielle G3–G4 ou un AT avec arrêt (`duerpReviewReason`, `src/lib/rules/duerp.ts`), jusqu'à une version validée par le CSE ou le risque rattaché recoté le jour de l'événement ou après (`duerpReviewDone`) ; intitulé neutre, motif « arrêt » seul réservé aux rôles habilités aux données de santé.
   *Question : Seuil de gravité imposant une nouvelle version ?*
 - **DUE-08** — Ajouter effectif par unité et exposition par facteur au-delà des seuils (R. 4121-1-1). (preuve : src/db/schema.ts:170-198)
 - **DUE-09** — Types 'duerp_version' et 'risk' absents des pièces jointes et de /fichiers. (preuve : src/lib/uploads.ts:75-111 ; src/db/schema.ts:58-59 ; src/components/risks/VersionDialogs.tsx:102-116)
   ✅ **Livré (22/10/2026, paquet 6)** — DUERP signé joint à la version en vigueur (animateur QHSE et direction ; liste des versions) et justificatifs d'un risque (fiche du risque, rôles qui modifient le DUERP), par les pièces jointes génériques (`duerp_version`, `risk`) : site de l'unité contrôlé, retrait avec motif et journal de la version ou du risque ; figés une fois la version archivée ou le risque archivé. Lecture par `/fichiers` avec les droits de l'écran Risques (Salarié compris, DUERP en consultation), site de l'unité pour un justificatif.
 - **DUE-10** — L'instantané est pris à la création de N+1 et ne garde que les identifiants d'actions. (preuve : src/server/risks.ts:420-425 ; src/lib/data/risks.ts:35,392,398-402)
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 : la version est figée à sa validation par le CSE (instantané des risques pris quand la consultation du CSE est saisie, gardé à l'archivage ; validateur, consultation et objet ne changent plus : `frozenVersionError`) ; des commentaires s'ajoutent ensuite (`duerp_version_comments`, `addDuerpVersionComment`, jamais modifiés ni supprimés, journal de la version). Transmissions SPST et portail toujours saisissables ; DUERP signé toujours joignable à la version en vigueur (D02-4).
   *Question : État au jour de la validation ou de l'archivage ?*
 - **DUE-11** — Le DUERP ne sort qu'en CSV : page de garde, unités, cotations, plan d'actions, y compris versions archivées. (preuve : src/components/risks/ExportMenu.tsx:19-22 ; src/app/(app)/prevention/imprimer/print.css (modèle existant))
   ✅ **Livré (constaté le 15/10/2026)** — avec DUE-01 au lot 2 : `/risques/imprimer` (et `?version=n` pour une version archivée) imprime la mise à disposition, la méthode de cotation, les unités, les cotations brutes et résiduelles et les actions de prévention avec leur échéance et leur statut (références seulement pour une version archivée). Points éventuels de recette : page de garde distincte, récapitulatif du plan d'actions.
@@ -1046,7 +1060,7 @@ Au 22/10/2026 : 5 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-09, HAB-11) · 1 part
 | HAB-02 | Suivi de l'état de santé au travail : VIP, SIR, aptitude, reprise | P2 | L | Cursus | C2 · PA |
 | HAB-03 | ✅ Journal des habilitations : compléter et afficher | P2 | M | — | — |
 | HAB-04 | ✅ Les anciens recyclages perdent leur lien vers l'habilitation | P2 | M | — | — |
-| HAB-05 | Sortie d'un salarié : responsabilités ouvertes et échéances postérieures | P2 | M | — | C2 · PA |
+| HAB-05 | ✅ Sortie d'un salarié : responsabilités ouvertes et échéances postérieures | P2 | M | — | C2 · PA |
 | HAB-06 | ⊘ Session de formation collective et recyclage groupé (livrée le 31/10/2026, retirée le 04/11/2026 : CV-01, sessions tenues par Cursus) | P2 | L | ACT-20 | — |
 | HAB-07 | Exigences par poste ou par activité | P2 | L | Arbitrage (hors périmètre précédemment) | C2 · PA |
 | HAB-08 | Date d'entrée, contrat et formation sécurité à l'embauche | P2 | M | Cursus | C4 · PA |
@@ -1061,7 +1075,7 @@ Au 22/10/2026 : 5 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-09, HAB-11) · 1 part
 | HAB-16 | ✅ Matrice : filtre par titre, site visible, colonne figée | P3 | S | — | — |
 | HAB-17 | ✅ Lien profond : filtres mémorisés écrasés et messages imprécis | P3 | S | — | — |
 | HAB-18 | ✅ Indicateurs de compétences dans la revue (04/11/2026 : sans les formations évaluées) | P3 | S | — | — |
-| HAB-19 | Vue Salarié : titres archivés et dépôt de son attestation (04/11/2026 : dépôt sans objet dans Vigie, attestations tenues par Cursus) | P3 | M | — | C2 · PA |
+| HAB-19 | ✅ Vue Salarié : titres archivés et dépôt de son attestation (04/11/2026 : dépôt sans objet dans Vigie, attestations tenues par Cursus) | P3 | M | — | C2 · PA |
 | HAB-20 | Jeunes travailleurs : dérogation aux travaux réglementés | P3 | M | Cursus | C4 · PA |
 
 - **HAB-01** — Au-delà de 11 Mo la server action plante ; réutiliser checkPickedFiles. (preuve : src/components/skills/TrainingForm.tsx:115-117 (Input sans contrôle, consigne « 10 Mo par fichier ») ; src/components/watch/parts.tsx:15-24 (checkPickedFiles, FILES_HINT) ; next.config.ts:6 (bodySizeLimit 11mb) ; src/server/skills.ts:52-56,112 (checkFiles jamais atteint au-delà de la limite) ; src/components/form.tsx:32-38 (useActionState sans repli))
@@ -1074,6 +1088,7 @@ Au 22/10/2026 : 5 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-09, HAB-11) · 1 part
 - **HAB-04** — Le seul champ renewalActionId est écrasé ou supprimé. (preuve : src/db/schema.ts:297-301 (un seul renewalActionId) ; src/lib/action-links.ts:232-261 (attach écrase, detach/detachAll remettent à null, sources lit le seul champ courant) ; src/server/skills.ts:261 (delete de l'exigence) ; src/lib/data/skills.ts:128-129 (actions clôturées ignorées))
   ✅ **Livré (17/10/2026, paquet 4)** — l'habilitation d'une action de recyclage reprise est portée par l'action (`actions.qualification_person_id` / `qualification_title_id`, migration `0007_qualification_renewals` : reprise de `qualification_requirements.renewal_action_id`, colonne supprimée) ; jamais détachée (abandon compris, `keptOnCancel`) ni effacée quand le titre n'est plus requis ; la case de la matrice montre le recyclage ouvert et les « Actions de recyclage précédentes » (closes, la plus récente d'abord). Aucun nouveau lien (aucune action QSE pour un recyclage, 15/10/2026).
 - **HAB-05** — Seuls les recyclages ouverts sont vérifiés ; réintégration possible sur site archivé. (preuve : src/server/skills.ts:332-333 (seul openRenewals est vérifié), 343-358 (reinstatePerson sans contrôle de site actif) ; src/lib/guard.ts:32-37 ; src/lib/data/skills.ts:165-170 (leavingOn conservé, aucune borne de date), 259-285 (signaux sans comparaison à leftOn) ; src/lib/data/options.ts:33 (seules les listes de choix excluent les sortis))
+  ✅ **Livré (10/11/2026, paquet R1)** — réponse du 09/11/2026 « proposer de les réaffecter en masse » : échéance `personne-sortie-responsabilites|<personne>` (QHSE et direction) pour une personne sortie qui reste responsable d'actions ouvertes, pilote d'événements ou d'exigences, responsable de plans de prévention, d'éléments du programme d'audit ou de contrôles (`openResponsibilities`) ; « Réaffecter » dans la vue Personnel (`reassignResponsibilities` : animateur QHSE, personne présente, motif, journal de chaque élément et des deux fiches, une transaction, « Action confiée » notifiée).
   **À revoir avec ACT-20 (15/10/2026)** — le responsable d'une action reste obligatoire et pris dans le personnel actif : la sortie d'un salarié doit traiter ses actions ouvertes.
   *Question : Bloquer ou réaffecter en masse ?*
 - **HAB-06** — Saisie multi-salariés et action partagée (A-205). (preuve : src/components/skills/TrainingForm.tsx:92-100 (un seul personId et titleId) ; src/components/skills/SkillMatrix.tsx:190-205 (Planifier crée une action par case, pas de LinkActionButton) ; src/db/seed.ts:89 (A-205 collective) ; src/lib/action-links.ts:232-245)
@@ -1107,6 +1122,7 @@ Au 22/10/2026 : 5 livrés (✅ HAB-01, HAB-03, HAB-04, HAB-09, HAB-11) · 1 part
 - **HAB-18** — Ajouter à la revue : taux de conformité, formations sur 12 mois, recyclages en retard. (preuve : src/lib/data/review.ts:547-559 (skillCounts et skillAlerts seuls) ; src/components/review/DossierView.tsx:523-535)
   ✅ **Livré (29/10/2026, paquet 13)** — section « Ressources et compétences » du dossier de revue : taux de conformité des titres requis (valides, y compris expirant sous 60 jours, sur l'ensemble des titres requis), formations suivies sur les 12 mois précédant la date d'arrêt du dossier (dont évaluées à froid et non ou partiellement efficaces, HAB-13), recyclages en retard (titres requis expirés). Règle pure `skillIndicators` (`src/components/skills/rules.ts`), figée avec le dossier ; absente des dossiers figés avant le paquet 13. Réserve : état des titres pris au moment du calcul (comme les autres indicateurs d'état du dossier), sur le site sélectionné.
 - **HAB-19** — Archive transmise mais non affichée ; pas de dépôt avec validation. (preuve : src/lib/data/skills.ts:234 (archive filtrée et transmise) ; src/components/skills/SkillMatrix.tsx:177 (canAdd={canManage}), 280 et 394 (puce Sortis exclue pour self), 353-369 (TitlesButton sous !self))
+  ✅ **Clos (09/11/2026)** — réponse : le salarié ne dépose pas lui-même d'attestation (attestations tenues par Cursus).
 - **HAB-20** — Suivre la déclaration de dérogation, valable 3 ans (R. 4153-40). (preuve : src/db/schema.ts:24-39 (people sans date de naissance ni statut) ; aucune table de déclaration de dérogation dans src/db/schema.ts)
 - **HAB-21** — Réponse du service QHSE du 15/10/2026 : « c'est le service RH qui gère cette partie-là ; nous devons juste pouvoir consulter ces données ». Aucune action QSE n'est plus créée depuis l'écran (paquet 1) ; la saisie des formations et des exigences dans Vigie est à retirer quand Cursus fournira les données (INT-03, INT-09), l'écran devenant une consultation. (spécification : [`docs/specs/actions-qse.md`](specs/actions-qse.md) § 22)
   *Classe C4 — API Cursus (formations, titres) ; contenu selon le formulaire Power Apps Habilitations.*
@@ -1345,7 +1361,7 @@ Au 22/10/2026 : 10 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-08, 
 | DOC-18 | Séparation rédaction et approbation | P3 | S | — | C2 · PA |
 | DOC-19 | ✅ Relevés de consommation : responsable absent, sites sans relevé non suivis | P3 | S | — | — |
 | DOC-20 | ✅ Filières d'un site archivé proposées | P3 | S | — | — |
-| DOC-21 | Suivi des rejets eaux et air | P3 | L | — | C2 · PA |
+| DOC-21 | ✅ Suivi des rejets eaux et air | P3 | L | — | C2 · PA |
 | DOC-22 | Accès de l'encadrement à Environnement | P3 | S | — | C2 · PA |
 | DOC-23 | Aspects et impacts environnementaux | P3 | L | — | C3 · PA |
 | DOC-24 | Signature électronique de l'approbation des documents maîtrisés | P3 | M | Service de signature électronique ; Entra ID | C4 · PA |
@@ -1392,6 +1408,7 @@ Au 22/10/2026 : 10 livrés (✅ DOC-01, DOC-02, DOC-04, DOC-05, DOC-06, DOC-08, 
 - **DOC-20** — Les filières d'un site archivé sont proposées puis refusées après saisie. (preuve : src/lib/data/environment.ts:119 ; src/app/(app)/environnement/page.tsx:73,199 ; src/lib/guard.ts:36)
   ✅ **Livré (25/10/2026, paquet 12)** — `StreamView.siteArchived` : une filière d'un site archivé n'est plus proposée pour un nouvel enlèvement (« Nouvel enlèvement » désactivé s'il n'en reste aucune), seulement gardée par l'enlèvement qui la porte ; `saveWasteEntry` refuse une telle filière pour une nouvelle inscription ou un changement de filière avec un message du champ (« Filière d'un site archivé : choisissez une filière d'un site en service. »).
 - **DOC-21** — Suivi des rejets eaux et air annoncé par la maquette, sans modèle de données. (preuve : design/Vigie.dc.html:778 (env : « …consommations et rejets ») ; src/db/schema.ts:531-574)
+  ✅ **Retiré (09/11/2026)** — réponse : « retirer l'élément » ; pas de suivi des rejets eaux et air.
 - **DOC-22** — L'écran Environnement est réservé à la QHSE et à la direction : l'ouvrir à l'encadrement. (preuve : src/lib/domain.ts:267-269 ; src/server/environment.ts:21-24 ; src/lib/data/environment.ts:401)
 - **DOC-23** — Analyse aspects / impacts environnementaux absente (ISO 14001 §6.1.2). (preuve : src/db/seed.ts:257 ; src/db/schema.ts:531-574 (aucune table aspects/impacts))
   **À revoir avec ACT-37 (15/10/2026)** — les actions de source « Analyse environnementale » pourront se rattacher aux aspects et impacts.
@@ -1819,11 +1836,11 @@ Au 18/10/2026 : 2 livrés (✅ CNF-03, CNF-05) — reste 9 éléments ouverts (C
 | Réf | Élément | Priorité | Taille | Dépend de | Classe |
 |---|---|:-:|:-:|---|:-:|
 | CNF-01 | Registre des dangers graves et imminents | P2 | M | — | C2 · PA |
-| CNF-02 | Instances CSE / CSSCT | P2 | M | — | C2 |
+| CNF-02 | ✅ Instances CSE / CSSCT | P2 | M | — | C2 |
 | CNF-03 | ✅ Bilan annuel SSCT | P2 | M | — | — |
 | CNF-04 | Évaluation des fournisseurs | P2 | L | — | C3 · PA |
 | CNF-05 | ✅ Contexte et risques du système de management | P2 | M | — | — |
-| CNF-06 | Produits chimiques | P2 | L | — | C2 · PA |
+| CNF-06 | ◐ Produits chimiques | P2 | L | — | C2 · PA |
 | CNF-07 | Satisfaction client | P3 | M | — | C3 · PA |
 | CNF-08 | ✅ Situations d'urgence | P3 | M | — | — |
 | CNF-09 | Communication et sensibilisation | P3 | M | — | C2 · PA |
@@ -1835,6 +1852,7 @@ Au 18/10/2026 : 2 livrés (✅ CNF-03, CNF-05) — reste 9 éléments ouverts (C
 
 - **CNF-01** — Registre DGI (L. 4131-1 et L. 4132-2) : type d'événement, salariés exposés, représentant du CSE, avis. (preuve : src/lib/domain.ts:14-23 (EVENT_TYPES : AT, PA, SD, NC, RC, ENV, pas de type DGI) ; src/db/schema.ts:73-108 (events sans champs salariés exposés, représentant du CSE ou avis) ; rg « danger grave|imminent|L. 4132 » dans src : aucun résultat)
 - **CNF-02** — Réunions, ordres du jour et PV des instances. (preuve : src/db/schema.ts:164 (duerpVersions.cseConsultedOn, seule donnée CSE) ; src/db/schema.ts:388 (reviews.externalParticipants, texte libre) ; aucune table de réunion CSE/CSSCT parmi les pgTable de src/db/schema.ts)
+  ✅ **Clos (09/11/2026)** — réponse : les PV des réunions CSE et CSSCT sont des documents Word enregistrés dans Codex ; rien dans Vigie (la consultation du CSE sur le DUERP reste une date de la version).
 - **CNF-03** — Bilan annuel santé, sécurité et conditions de travail présenté au CSE (L. 2312-27). (preuve : src/components/review/DossierView.tsx:83-552 (sections ISO 9001 §9.3 uniquement, pas de rapport ni de programme SSCT) ; rg « PAPRIPACT|programme annuel de prévention|rapport annuel » dans src : aucun résultat ; src/lib/data/dashboard.ts (TF1/TG calculés sur hoursWorked du seed))
   **À revoir avec ACT-29 (15/10/2026)** — les statistiques de la refonte alimentent le bilan ; TF1/TG restent « — » sans heures travaillées (TDB-03).
   ✅ **Livré (18/10/2026, paquet 5)** — « Bilan SSCT » de l'écran Évaluation des risques (`/risques/bilan-ssct?annee=`, animateur QHSE et direction) : bilan imprimable de l'année (par défaut l'année écoulée, site sélectionné) — accidents du travail, de trajet, d'intérimaires et de personnes extérieures, jours perdus, TF1 / TG, maladies professionnelles, presque-accidents et situations dangereuses ; actions Sécurité et Santé du plan d'après les statistiques d'ACT-29 (ouvertes, vérifiées, efficacité, retard, liste des actions vérifiées) ; versions du DUERP (CSE, SPST) ; programmes annuels de prévention de l'année et de la suivante ; contrôles, plans de prévention, formations. Calculé, jamais stocké ; à compléter par l'employeur avant présentation au CSE.
@@ -1842,6 +1860,7 @@ Au 18/10/2026 : 2 livrés (✅ CNF-03, CNF-05) — reste 9 éléments ouverts (C
 - **CNF-05** — Enjeux, parties intéressées, risques et opportunités (ISO 9001 §4.1, §6.1). (preuve : src/components/review/DossierView.tsx:83-552 (sections listées : aucune pour les enjeux, parties intéressées ou risques et opportunités) ; rg « enjeu|parties int|opportunit » dans src : seulement l'aide de ReviewDialogs.tsx:84)
   ✅ **Livré (18/10/2026, paquet 5)** — carte « Contexte, risques et opportunités » de l'écran Audits (`context_items`) : enjeux externes et internes (§4.1), parties intéressées et leurs attentes (§4.2), risques et opportunités avec leur traitement obligatoire (§6.1) ; saisie par l'animateur QHSE et la direction, archivage motivé, historique ; section du dossier de revue (§9.3.2 b et e).
 - **CNF-06** — Inventaire des produits, FDS et repérage des CMR. (preuve : src/db/seed.ts:162 (« FDS » en texte libre dans existingMeasures d'un risque) ; aucune table produit chimique ou FDS dans src/db/schema.ts ; rg « CMR » : seulement prevention/model.ts:15 et pp-import/text.ts:32)
+  ◐ **Décidé (09/11/2026)** — réponse : produits chimiques, FDS et CMR tenus dans Seirich ; Vigie ne garde qu'un lien (statistiques et actions, source « Analyse de risque chimique »). Reste : forme du lien à préciser.
 - **CNF-07** — Enquêtes de satisfaction en plus du texte libre de la revue. (preuve : src/db/schema.ts:389 (reviews.customerPerception, texte libre) ; src/components/review/ReviewDialogs.tsx:134 ; src/components/review/DossierView.tsx:149-176 (section alimentée par les RC et le texte libre))
 - **CNF-08** — Situations d'urgence identifiées et exercices planifiés et tracés. (preuve : src/components/audits/ProgramTimeline.tsx:222 (exercices seulement suggérés comme ligne libre du programme) ; src/lib/domain.ts:167-170 (PLAN_TRACK_KINDS sans type exercice) ; aucune table pour les situations d'urgence dans src/db/schema.ts)
   ✅ **Livré (29/10/2026, paquet 13, migration 0021)** — écran Évaluation des risques, « Situations d'urgence » (`?vue=urgences&situation=`) : situation par site (intitulé, scénario, moyens et consignes, périodicité des exercices de 1 à 60 mois, exercice planifié facultatif, responsable), exercices tenus (date, participants, déroulement et enseignements) ; prochain exercice calculé (`drillDue` : dernier exercice tenu, sinon identification, + périodicité ; un exercice planifié plus tôt devient l'échéance, plus tard il est signalé) ; échéance « exercice à organiser » ou « en retard » (`urgence-exercice|<id>`, horizon de À faire) au responsable présent, sinon au responsable QHSE du site ; saisie par les rôles qui modifient le DUERP, archivage et annulation d'un exercice motivés par le service QHSE et la direction ; contrôle de version (QUA-12) ; Salarié : consignes en consultation, sans responsable ni détail des exercices. Réserve : les exercices ne sont pas reliés au programme d'audit ni à une action (enseignements à reprendre au besoin en action QSE).
@@ -2401,6 +2420,66 @@ Livré le 05/11/2026 (demande M-19 de Matrix : édition des données de Vigie pa
 - **CNF-09** *Communication et sensibilisation* — **C2** · Les causeries et quarts d'heure sécurité (thème, animateur, participants, émargement) sont-ils tenus dans Vigie, ou dans Cursus avec les formations ? Existe-t-il un support actuel (formulaire Power Apps, feuille d'émargement) à reprendre ?
 - **CNF-12**, **CNF-13**, **CNF-14** *Sécurité des procédés : HazID, HazOp / AMDEC, PSSR (méthodologie DIG-PRODI du groupe)* — **C2** · Les études HazID (HS 2), HazOp / AMDEC (HS 3) et la revue PSSR avec RSPDI (HS 4+5) et ASPD (HS 6), leurs recommandations et leur levée sont-elles tenues dans Vigie, ou dans des rapports (Codex), Vigie ne suivant que les actions issues des recommandations ? Qui anime les études et qui donne le quitus PSSR ? Existe-t-il des modèles ou grilles actuels (feuille HazOp, liste de contrôle PSSR) à reprendre ? (responsable produit, service QHSE, Direction SSE Groupe)
 - **CNF-10** *EPI* — **C2** · La dotation des EPI par salarié (remise, taille, renouvellement, émargement) est-elle tenue dans Vigie, dans Cursus ou dans l'outil de magasin ou d'achats ? Existe-t-il un support actuel à reprendre ?
+
+## 19 bis. Réponses du service QHSE du 09/11/2026
+
+Réponses au questionnaire produit du 09/11/2026 (« service QSSE » = service QHSE = rôle « Animateur QHSE »). Suite donnée : **R1** = livré au paquet R1 du 10/11/2026 (migration 0032) ; **plus tard** = paquet ultérieur ; **données** = données ou documents attendus ; **outil** = demande à un autre outil, à valider par le propriétaire avant toute écriture dans son `REQUESTS.md`.
+
+| Question | Réponse | Suite |
+|---|---|---|
+| ACT-P17 | Les actions sont créées uniquement par le service QSSE (la direction n'est plus comptée QHSE) | **R1** : création, modification, transitions, vérification, réouverture, abandon et liens réservés à l'animateur QHSE (`isQhse`, `requireEditor('actions', { qhse: true })`) ; la direction lit le plan de son périmètre comme l'encadrement et garde ses autres droits (visa de la revue, données de santé…) ; responsable d'une action, elle la commente et y joint des preuves |
+| EVT-16 | Les actions QSE et les événements ne sont gérés que par le service QSSE, pas par la direction | **R1** (voir EVT-29) |
+| EVT-29 | Uniquement le service QSSE | **R1** : suivi des événements par l'animateur QHSE seulement ; l'encadrement et la direction déclarent et lisent (la direction garde la lecture des données de santé et des registres) |
+| EVT-21 | Un champ pour la date et l'heure réelles des faits | **R1** (champ du formulaire terrain) ; file hors ligne : plus tard |
+| EVT-08 | Les périodes d'arrêt viendront de la paie | **plus tard / données** (import de la paie) |
+| IMP-01 | Import de la paie, intérimaires exclus | **plus tard / données** (exemple d'export à fournir) |
+| ACT-36, ACT-P1 | Format AC-260140, compteur qui repart à zéro chaque année ; numérotation reprise à l'import | **R1** : `AC-AANNNN` ; anciens `A-n` gardés jusqu'à ACT-39 |
+| ACT-P14 | « En cours » devient « Budgétée ou initiée » | **confirmé** (reprise du paquet 1 inchangée) |
+| ACT-P19 | OK (compte d'envoi, rappel du mercredi 7 h) | **confirmé** |
+| ACT-P18 | Extractions des événements QSE, du suivi des audits et du formulaire d'audit à prendre en compte | **données** (avec ACT-39) |
+| ACT-39, ACT-P2, ACT-P16, ACT-42 | Extractions et référentiels fournis plus tard | **données** |
+| ACT-43 | Pas d'escalade | **clos** |
+| AUD-37 | Audits terrain saisis sans réseau sur téléphone | **plus tard** (après EVT-21 et AUD-38) |
+| AUD-38 | Modèle de check-list d'audit déjà défini, fourni plus tard | **données** |
+| AUD-39 | Pas d'envoi, mais un PDF du rapport d'audit téléchargeable une fois enregistré | **plus tard** |
+| AUD-40 | Oui, grille d'auto-évaluation par référentiel | **plus tard** |
+| D08-5 | Revues de processus mensuelles ; trois sortes d'audits : terrain, ISO de certification, ISO blanc | **R1** : type d'audit `audit_plan_items.audit_kind` (terrain, ISO de certification, ISO blanc, revue de processus, revue de direction, autre ; reprise déduite par la migration 0032, `inferAuditKind`), choisi dans le formulaire, affiché dans la fiche, filtre `?type=` du programme |
+| CNF-01 | Registre des dangers graves et imminents dans Vigie, avec un accès spécifique pour les membres du CSE | **plus tard** (droit à concevoir) |
+| CNF-02 | PV CSE et CSSCT : documents Word enregistrés dans Codex | **clos** |
+| CNF-04 | Grille d'évaluation et liste des fournisseurs fournies par les achats | **données** |
+| CNF-06 | Seirich, avec un lien vers Vigie pour les statistiques et les actions | **décidé** (lien seulement) |
+| CNF-07 | Formulaires de satisfaction client (Microsoft Forms) fournis par le QHSE | **données** |
+| CNF-09 | Causeries dans Vigie, feuille d'émargement envoyée aux participants | **plus tard** |
+| CNF-10 | Dotation des EPI dans Vigie, catalogue fourni | **plus tard / données** |
+| D01-1 | Ouverture d'une maladie professionnelle par la direction et le RH ; actions générales par le service QSSE | **plus tard** (rôle de la direction sur MP à revoir avec EVT-29 : aujourd'hui, saisie par l'animateur QHSE) |
+| D01-2 | Délais d'une MP : à voir par le RH | **en attente** |
+| D01-5, D01-6, D01-7, D01-9, D01-11, D01-12, D02-3, D02-4, D03-2, D05-3, D06-1, D07-7 à D07-9, D08-2, D08-10, D08-11, D09-8, D10-6, D10-10, D10-12, D11-2, D11-8 | Défauts confirmés | **confirmés** |
+| D09-2 | Photo de la vue d'ensemble attendue (filtres) | **données** |
+| D10-11 | Formulaire et procédure de gestion des changements fournis plus tard | **données** |
+| D11-5 | Liste des risques du site fournie plus tard | **données** |
+| DOC-16, DOC-23, PRV-15 | Procédures, analyse environnementale et modèles de permis fournis plus tard | **données** |
+| DOC-18 | Approbateur et rédacteur différents | **outil** : l'approbation des documents relève de Codex (lot 4 de M-02) ; règle à demander à Codex |
+| DOC-21 | Retirer l'élément | **retiré** |
+| DUE-07 | Tout AT avec arrêt et toute gravité potentielle élevée | **R1** |
+| DUE-10 | DUERP figé après validation par le CSE, commentaires possibles ensuite | **R1** |
+| HAB-02 | Saisi dans Cursus ; Vigie doit savoir si la personne est apte et son type de suivi (SIR) | **outil** : aptitude et type de suivi à publier par Cursus (`pub_salaries` ou nouvelle vue), sans donnée médicale détaillée |
+| HAB-05 | Proposer de les réaffecter en masse | **R1** |
+| HAB-07 | Hors périmètre des exigences du poste saisi dans Cursus au travers des formations | **outil / plus tard** |
+| HAB-19 | Non | **clos** |
+| PRV-04 | Permis clôturé seulement après le délai de 2 h | **R1** |
+| PRV-05 | Modèle de protocole de chargement et déchargement à reprendre | **plus tard / données** |
+| PRV-06 | Refus à l'enregistrement | **R1** |
+| PRV-09 | Géré par le service achats | **clos** |
+| PRV-13 | Tous les travaux d'entreprises extérieures sous plan de prévention, quel que soit le nombre d'heures | **R1** |
+| PRV-16 | Durée maximale de 7 jours, même re-signé chaque jour | **R1** |
+| PRV-21 | Oui | **R1** |
+| PRV-22 | Oui (consignations, opérations simultanées) | **plus tard** |
+| PRV-23 | Alerte si l'accueil sécurité n'est pas à jour à la création du plan ; véto du QHSE si les habilitations ne sont pas à jour | **plus tard** |
+| PRV-24 | Oui (carte des sites) | **plus tard** |
+| TDB-08 | Avertir et proposer le transfert en masse | **R1** |
+| TDB-18 | Recherche tous modules | **plus tard** |
+| TDB-19 | Tableaux de bord configurables, accessibles à la direction | **plus tard** |
+| VEI-20 | Parc géré par le service Infrastructure (extraction fournie) ; actions créées par le QHSE | **données** |
 
 ## 20. Hors périmètre / décidé
 

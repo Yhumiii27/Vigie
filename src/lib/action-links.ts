@@ -706,7 +706,7 @@ export type LinkChange = { parsed: NonNullable<ReturnType<typeof parseActionLink
  * Vérifiée ni Abandonnée ; canUnlink, sauf Abandonnée) ; écran de l'élément ouvert en saisie au rôle ; site de l'élément
  * (`sourceSiteId` imposé quand l'élément n'existe pas encore : version créée dans la même écriture) dans le site
  * sélectionné ; au rattachement, action du site de l'élément (élément sans site : tout site). Le rôle QHSE est contrôlé par
- * l'appelant (requireApprover).
+ * l'appelant (requireEditor('actions', { qhse: true })).
  */
 export async function checkLinkChange(
   db: DbOrTx, who: { role: Role; userId: string }, link: string, actionId: string, mode: 'link' | 'unlink',

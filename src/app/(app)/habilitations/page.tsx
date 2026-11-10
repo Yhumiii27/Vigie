@@ -101,7 +101,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
             </a>
           )}
         </div>
-        {peopleAdmin ? <PeoplePanel admin={peopleAdmin} siteLabels={allSiteLabels} /> : forecast ? (
+        {peopleAdmin ? <PeoplePanel admin={peopleAdmin} siteLabels={allSiteLabels} canReassign={canEdit(session.role, 'actions')} /> : forecast ? (
           <div className="card" style={{ gap: 12 }}>
             <CardHead title="Recyclages et formations à prévoir" aside={(
               <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>

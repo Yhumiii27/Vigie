@@ -23,7 +23,7 @@ async function insertAction(db: DbOrTx, id: string, o: { status?: Avancement; si
     originRef: 'Réf. test', detail: `Action ${id}`, siteId: o.siteId === undefined ? 'site_a' : o.siteId,
   });
 }
-const counter = async () => (await (await getDb()).select().from(t.actionCounters))[0];
+const counter = async (scope: string) => (await (await getDb()).select().from(t.actionCounters).where(eq(t.actionCounters.scope, scope)))[0];
 /** Création réelle : numéro tiré et action insérée dans la même transaction. */
 const draw = async () => (await getDb()).transaction(async (tx) => {
   const id = await nextActionNumber(tx);
@@ -32,10 +32,11 @@ const draw = async () => (await getDb()).transaction(async (tx) => {
 });
 const row = async (id: string) => (await (await getDb()).select().from(t.actions).where(eq(t.actions.id, id)))[0];
 
-describe('nextActionNumber (ACT-35, D14)', () => {
-  it('numéros successifs après le compteur du jeu (222), dans la transaction de création', async () => {
+describe('nextActionNumber (ACT-36, ACT-P1 : AC-AANNNN, compteur annuel ; D14)', () => {
+  it('numéros successifs de l’année (compteur « AC-26 » neuf), dans la transaction de création ; anciens A-n inchangés', async () => {
     const db = await getDb();
-    expect(await counter()).toEqual({ scope: 'A', last: 222 });
+    expect(await counter('AC-26')).toBeUndefined();
+    expect(await counter('A')).toEqual({ scope: 'A', last: 222 });
     const first = await db.transaction(async (tx) => {
       const id = await nextActionNumber(tx);
       await insertAction(tx, id);
@@ -46,55 +47,59 @@ describe('nextActionNumber (ACT-35, D14)', () => {
       await insertAction(tx, id);
       return id;
     });
-    expect([first, second]).toEqual(['A-223', 'A-224']);
-    expect(await counter()).toEqual({ scope: 'A', last: 224 });
+    expect([first, second]).toEqual(['AC-260001', 'AC-260002']);
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 2 });
+    expect(await counter('A')).toEqual({ scope: 'A', last: 222 });
+  });
+
+  it('le compteur repart à 0001 chaque année (année de création à l’heure de Paris)', async () => {
+    const db = await getDb();
+    await expect(db.transaction(async (tx) => {
+      expect(await nextActionNumber(tx, '2027-01-01')).toBe('AC-270001');
+      throw new Error('annulation');
+    })).rejects.toThrow('annulation');
+    expect(await counter('AC-27')).toBeUndefined();
   });
 
   it('transaction annulée : le compteur revient en arrière, le numéro n’a jamais existé', async () => {
     const db = await getDb();
     await expect(db.transaction(async (tx) => {
-      expect(await nextActionNumber(tx)).toBe('A-225');
+      expect(await nextActionNumber(tx)).toBe('AC-260003');
       throw new Error('annulation');
     })).rejects.toThrow('annulation');
-    expect(await counter()).toEqual({ scope: 'A', last: 224 });
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 2 });
   });
 
-  it('numéro déjà vu (inséré hors compteur, ou présent au journal seulement) : saut au-delà du plus grand numéro vu', async () => {
+  it('numéro déjà vu (inséré hors compteur, ou présent au journal seulement) : saut au-delà du plus grand numéro vu de l’année', async () => {
     const db = await getDb();
-    await insertAction(db, 'A-225');
-    await db.insert(t.changeLog).values({ entityType: 'action', entityId: 'A-227', action: 'create', summary: 'Action créée', byId: 'clefevre' });
+    await insertAction(db, 'AC-260003');
+    await db.insert(t.changeLog).values({ entityType: 'action', entityId: 'AC-260005', action: 'create', summary: 'Action créée', byId: 'clefevre' });
+    // Numéro d'une autre année : ignoré.
+    await db.insert(t.changeLog).values({ entityType: 'action', entityId: 'AC-250900', action: 'create', summary: 'Action créée', byId: 'clefevre' });
     const ids = [await draw(), await draw()];
-    // A-225 existe (collision) : le plus grand numéro vu est A-227 (journal) ; A-226, jamais vu, reste un trou.
-    expect(ids).toEqual(['A-228', 'A-229']);
-    expect(await counter()).toEqual({ scope: 'A', last: 229 });
+    expect(ids).toEqual(['AC-260006', 'AC-260007']);
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 7 });
   });
 
-  it('compteur en retard : numérotation croissante, toujours au-delà du plus grand numéro vu (jamais un trou plus bas)', async () => {
+  it('compteur en retard : numérotation croissante, toujours au-delà du plus grand numéro vu', async () => {
     const db = await getDb();
-    // Compteur ramené à 5 : A-6, jamais vu, n'est pas donné après A-229 (spec § 14 : numéros dans l'ordre de création).
-    await db.update(t.actionCounters).set({ last: 5 });
-    expect(await draw()).toBe('A-230');
-    expect(await counter()).toEqual({ scope: 'A', last: 230 });
-    // Compteur revenu sous des numéros existants : idem (identifiant hors format ignoré).
-    await db.update(t.actionCounters).set({ last: 222 });
-    await insertAction(db, 'A-12345678901');
-    expect(await draw()).toBe('A-231');
-    expect(await counter()).toEqual({ scope: 'A', last: 231 });
+    await db.update(t.actionCounters).set({ last: 1 }).where(eq(t.actionCounters.scope, 'AC-26'));
+    expect(await draw()).toBe('AC-260008');
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 8 });
   });
 
-  it('compteur absent (base vide) : créé, puis porté au-delà du plus grand numéro vu', async () => {
+  it('compteur absent : créé, puis porté au-delà du plus grand numéro vu', async () => {
     const db = await getDb();
-    await db.delete(t.actionCounters);
-    await insertAction(db, 'A-1');
-    expect(await draw()).toBe('A-232');
-    expect(await counter()).toEqual({ scope: 'A', last: 232 });
+    await db.delete(t.actionCounters).where(eq(t.actionCounters.scope, 'AC-26'));
+    expect(await draw()).toBe('AC-260009');
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 9 });
   });
 
   it('cinq créations simultanées : cinq numéros distincts (verrou de la ligne du compteur)', async () => {
     const ids = await Promise.all(Array.from({ length: 5 }, () => draw()));
     expect(new Set(ids).size).toBe(5);
-    expect([...ids].sort()).toEqual(['A-233', 'A-234', 'A-235', 'A-236', 'A-237']);
-    expect(await counter()).toEqual({ scope: 'A', last: 237 });
+    expect([...ids].sort()).toEqual(['AC-260010', 'AC-260011', 'AC-260012', 'AC-260013', 'AC-260014']);
+    expect(await counter('AC-26')).toEqual({ scope: 'AC-26', last: 14 });
   });
 });
 
@@ -286,7 +291,8 @@ describe('preuves des actions : enregistrement et lecture (src/lib/uploads.ts, D
     expect(await canReadAttachment(proof, session('Chef de service', 'jpetit'))).toBe(false);
     expect(await canReadAttachment(proof, session('Chef de projet', 'edubois'))).toBe(false);
     expect(await canReadAttachment(proof, session('Animateur QHSE', 'clefevre'))).toBe(true);
-    expect(await canReadAttachment(proof, session('Direction', 'hmarchand'))).toBe(true);
+    // ACT-P17 (09/11/2026) : la direction n'est plus « QHSE » pour les actions.
+    expect(await canReadAttachment(proof, session('Direction', 'hmarchand'))).toBe(false);
     // Ligne construite hors base (sans commentId) : acceptée par le contrôle (type AttachmentAccess).
     const { commentId: _omit, ...plain } = await proofOf('A-214');
     void _omit;

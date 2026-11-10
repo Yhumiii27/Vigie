@@ -9,7 +9,7 @@ import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
   fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded, legalMandatory,
-  legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
+  legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitCloseBlocker, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
   PLAN_MEETING_KINDS, nextPeriodicMeeting, type PlanMeetingKind,
   planEndIssue, planPhase, planStatus, ruleBasis, sevesoLabel, startGap, toParisLocal, type ChecklistItem, type PermitPlanIssueKind,
   type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule, type StartGapKind,
@@ -106,6 +106,8 @@ export type PlanView = {
    * sinon ; past : écart qui n'est plus en cours (plan signé depuis, ou intervention terminée), compté dans les indicateurs.
    */
   startGap: { kind: StartGapKind; label: string; past: boolean; signedOn: string | null } | null;
+  /** PRV-21 : mesures immédiates prises après l'écart, saisies à la clôture (null sans écart ou avant la règle). */
+  gapMeasures: string | null;
   ownerId: string | null;
   owner: string | null;
   status: PlanStatus;
@@ -209,6 +211,8 @@ export type PermitView = {
   tone: Tone;
   /** Validité terminée, surveillance après travaux en cours. */
   watching: boolean;
+  /** PRV-04 : clôture refusée pendant la surveillance après travaux d'un permis de feu (permitCloseBlocker), null sinon. */
+  closeBlock: string | null;
   closedAt: string | null;
   closedLabel: string | null;
   /** Délivrance (dernière entrée « Permis délivré » du journal) : date-heure locale (Paris), null si le permis n'a pas été délivré. */
@@ -434,6 +438,7 @@ export async function loadPrevention() {
       stateLabel: PERMIT_STATE[state].label,
       tone: PERMIT_STATE[state].tone,
       watching: state === 'en_cours' && p.validTo.getTime() < nowMs,
+      closeBlock: permitCloseBlocker(p, nowMs),
       closedAt: p.closedAt ? toParisLocal(p.closedAt) : null,
       closedLabel: p.closedAt ? fmtLocalLong(toParisLocal(p.closedAt)) : null,
       deliveredAt,
@@ -502,6 +507,7 @@ export async function loadPrevention() {
         kind: gapKind, label: START_GAP_LABEL[gapKind], past: !gaps.planGaps.has(p.id),
         signedOn: gapKind === 'signe_apres' ? firstFullSignatureOn(p) : null,
       },
+      gapMeasures: p.gapMeasures,
       eeHeadcount: p.eeHeadcount,
       eeSupervisor: p.eeSupervisor,
       subcontracting: p.subcontracting,
@@ -523,7 +529,7 @@ export async function loadPrevention() {
       ruleBasis: firstMinute ? ruleBasis(rule) : null,
       mandatory,
       mandatoryReason: mandatoryReason(p, rule),
-      mandatoryShort: firstMinute ? `${sevesoShort(rule?.seveso ?? null)} · dès la première minute` : legalReason(p),
+      mandatoryShort: firstMinute ? `${sevesoShort(rule?.seveso ?? null)} · dès la première minute` : legalReason(p) || 'toute intervention',
       legalMandatory: legalMandatory(p),
       legalReason: legalReason(p),
       inProgress: isInProgress(p, now),

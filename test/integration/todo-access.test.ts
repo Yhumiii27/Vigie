@@ -96,7 +96,7 @@ describe('données de santé (non-régression SEC-06)', () => {
     });
   });
 
-  it('échéances CPAM : réservées à l\'animateur QHSE et à la direction', async () => {
+  it('échéances CPAM : réservées à l\'animateur QHSE (qui suit les événements)', async () => {
     for (const role of ['Chef de service', 'Chef de projet', 'Salarié'] as const) {
       actAs(role, 'all');
       expect((await loadVisibleTodo()).some(isCpam)).toBe(false);
@@ -104,8 +104,9 @@ describe('données de santé (non-régression SEC-06)', () => {
     }
     actAs('Animateur QHSE', 'all');
     expect((await loadVisibleTodo()).find(isCpam)).toMatchObject({ health: true, title: 'EV-2026-T01 · Chute de plain-pied' });
+    // EVT-29 (09/11/2026) : la direction lit les événements sans les suivre ; l'échéance n'est pas la sienne.
     actAs('Direction', 'site_a');
-    expect((await loadVisibleTodo()).some(isCpam)).toBe(true);
+    expect((await loadVisibleTodo()).some(isCpam)).toBe(false);
     cookieJar.clear();
   });
 });
