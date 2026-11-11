@@ -76,12 +76,18 @@ export const AXE_SCREENS: { role: Role; site: string; url: string }[] = [
     '/evenements/registre-benin?site=site_a', '/habilitations/donnees-personnelles?salarie=tnguyen', '/veille/registre-securite',
     // IMP-07 : fiches imprimables d'un événement (accident du travail) et d'une action.
     '/evenements/fiche/EV-2026-127', '/actions/fiche/A-214',
+    // Paquet R2 (réponses du 09/11/2026) : recherche globale, registre des DGI, causeries sécurité, intervenants d'un plan.
+    '/recherche?q=mezzanine', '/evenements/registre-dgi?site=site_a', '/evenements/registre-dgi/imprimer?site=site_a',
+    '/prevention?vue=causeries', '/prevention?vue=causeries&causerie=CS-002', '/prevention/imprimer/causerie/CS-002', '/prevention?plan=PP-2026-015',
   ].map((url) => ({ role: 'Animateur QHSE' as Role, site: 'site_a', url })),
-  ...['/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
+  // PRV-24 : carte des sites du tableau de bord sous « Tous les sites ».
+  ...['/', '/revue-de-direction', '/audits', '/risques/bilan-ssct'].map((url) => ({ role: 'Direction' as Role, site: 'all', url })),
   ...['/', '/evenements', '/actions', '/habilitations', '/veille', '/documents', '/audits', '/evenements/fiche/EV-2026-127'].map((url) => ({ role: 'Chef de service' as Role, site: 'site_a', url })),
-  ...['/', '/prevention', '/prevention?vue=poste-de-garde', '/risques', '/risques?vue=etudes', '/modifications-techniques?sel=ECO-2026-001'].map((url) => ({ role: 'Chef de projet' as Role, site: 'site_a', url })),
+  ...['/', '/prevention', '/prevention?vue=poste-de-garde', '/prevention?vue=causeries', '/risques', '/risques?vue=etudes', '/modifications-techniques?sel=ECO-2026-001', '/recherche?q=EV-2026'].map((url) => ({ role: 'Chef de projet' as Role, site: 'site_a', url })),
   ...['/evenements', '/actions', '/risques', '/habilitations', '/documents', '/signaler', '/signaler/mes-signalements', '/evenements/fiche/EV-2026-118', '/actions/fiche/A-215',
     // EVT-22 : espace salarié mobile.
-    '/signaler/mon-espace']
+    '/signaler/mon-espace',
+    // Paquet R2 : recherche ; registre des DGI (membre du CSE de la démonstration).
+    '/recherche?q=EV-2026', '/evenements/registre-dgi?site=site_a']
     .map((url) => ({ role: 'Salarié' as Role, site: 'all', url })),
 ];

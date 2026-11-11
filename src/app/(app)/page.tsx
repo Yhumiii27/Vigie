@@ -10,6 +10,8 @@ import { today } from '@/lib/today';
 import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, severityTone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { MAX_TODO, loadDashboard } from '@/lib/data/dashboard';
+import { loadSitesMap } from '@/lib/data/sites-map';
+import { SitesMap } from '@/components/dashboard/SitesMap';
 
 // TDB-17 : titre d'onglet de la page.
 export const metadata: Metadata = { title: SCREENS.dashboard.title };
@@ -17,7 +19,7 @@ export const metadata: Metadata = { title: SCREENS.dashboard.title };
 export default async function DashboardPage() {
   await guard('dashboard');
   const now = today();
-  const d = await loadDashboard();
+  const [d, sitesMap] = await Promise.all([loadDashboard(), loadSitesMap()]);
 
   return (
     <>
@@ -191,6 +193,8 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+        {/* PRV-24 : carte des sites et de leurs indicateurs, sous « Tous les sites » seulement. */}
+        {sitesMap && <SitesMap {...sitesMap} />}
       </div>
     </>
   );

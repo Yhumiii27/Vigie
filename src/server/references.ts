@@ -45,6 +45,8 @@ const REF_TABLES = {
   // D12 (lot 5 de M-02) : ordres « ECO-2026-001 » et demandes « ECR-2026-001 » de modification.
   eco: t.ecos,
   ecr: t.ecrs,
+  // CNF-09 : causeries et quarts d'heure sécurité « CS-001 ».
+  safety_talk: t.safetyTalks,
 } as const;
 export type RefEntity = keyof typeof REF_TABLES;
 

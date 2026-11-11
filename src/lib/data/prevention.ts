@@ -1,4 +1,7 @@
 import 'server-only';
+import { readPlanWorkers } from './plan-workers';
+import { INDUCTION_LABELS, inductionWarning, vetoAllowed, type InductionState } from '@/lib/rules/workers';
+import { hasLeft } from '@/lib/people';
 import { readDocumentsByRef } from '@/lib/foreign/codex';
 import { confReadable, documentHref } from '@/lib/rules/documents';
 import { asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
@@ -158,7 +161,19 @@ export type PlanView = {
   meetingPeriodDays: number | null;
   meetings: { id: number; kind: PlanMeetingKind; kindLabel: string; heldOn: string; participants: string; notes: string; by: string | null; cancelled: CancelInfo | null }[];
   nextMeeting: { dueOn: string; late: boolean } | null;
+  /** PRV-23 : intervenants en cours (personnes lues dans Cursus), accueil sécurité, titres requis et veto du service QHSE. */
+  workers: PlanWorkerView[];
+  /** PRV-23 : avertissement « accueil sécurité non à jour » (ou donnée de Cursus indisponible), null sinon. */
+  workerWarning: string | null;
 } & PlanContent;
+
+/** Intervenant d'un plan (PRV-23), tel qu'affiché dans la fiche. */
+export type PlanWorkerView = {
+  id: number; personId: string; name: string; company: string | null; siteMatricule: string | null;
+  induction: InductionState; inductionLabel: string; inductionTone: 'ok' | 'danger' | 'neutral' | 'warn';
+  lapsedTitles: string[]; titlesValid: boolean | null; vetoable: boolean;
+  veto: { reason: string; by: string | null; on: string } | null;
+};
 
 export type PermitView = {
   id: string;
@@ -350,7 +365,7 @@ export async function loadPrevention() {
   const permitIds = permits.map((p) => p.id);
   const importIds = plans.map((p) => p.importedFromId).filter((id): id is string => !!id);
 
-  const [preventionActions, attachments, imported, permitLogs, procedure, projects, suppliers] = await Promise.all([
+  const [preventionActions, attachments, imported, permitLogs, procedure, projects, suppliers, planWorkers] = await Promise.all([
     // Actions reprises (bases antérieures au 15/10/2026), abandonnées comprises : elles restent rattachées (un plan qui en
     // a une n'est plus un brouillon supprimable). Source par les colonnes posées à la création (ACT-01).
     planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
@@ -362,7 +377,14 @@ export async function loadPrevention() {
     loadProcedure(db),
     loadProjectIndex(),
     loadSuppliers(),
+    readPlanWorkers(db, now, planIds),
   ]);
+  const workersOf = (planId: string): PlanWorkerView[] => planWorkers.workers.filter((w) => w.planId === planId).map((w) => ({
+    id: w.id, personId: w.personId, name: w.name, company: w.company, siteMatricule: w.siteMatricule,
+    induction: w.check.induction, inductionLabel: INDUCTION_LABELS[w.check.induction].label, inductionTone: INDUCTION_LABELS[w.check.induction].tone,
+    lapsedTitles: w.check.lapsedTitles, titlesValid: w.check.titlesValid, vetoable: vetoAllowed(w.check),
+    veto: w.veto && { reason: w.veto.reason, by: w.veto.by, on: fmtInstant(w.veto.at) },
+  }));
   const supplierOf = new Map(suppliers.ok ? suppliers.rows.map((x) => [x.id, x.name]) : []);
   const linkedActions = preventionActions.filter((a) => a.status !== 'abandonnee');
   const importedIds = new Set(imported.map((f) => f.id));
@@ -478,6 +500,8 @@ export async function loadPrevention() {
         cancelled: m.cancelledAt ? { on: fmtInstant(m.cancelledAt), by: name(m.cancelledById), reason: m.cancelReason ?? '' } : null,
       })),
       nextMeeting: next && { dueOn: next.dueOn, late: next.late },
+      workers: workersOf(p.id),
+      workerWarning: inductionWarning(planWorkers.workers.filter((w) => w.planId === p.id)),
       id: p.id, version: planVersions.get(p.id) ?? '0',
       siteId: p.siteId,
       site: siteOf.get(p.siteId) ?? p.siteId,
@@ -702,6 +726,10 @@ export async function loadPrevention() {
       defaultSiteId,
       recordSites,
       siteLocked: !!selectedSite,
+      // PRV-23 : intervenants proposés (personnes présentes lues dans Cursus) : nom, entreprise, matricule de site.
+      workers: [...people.values()].filter((x) => !hasLeft(x, now))
+        .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+        .map((x): Option => [x.id, [x.name, x.company, x.siteMatricule].filter(Boolean).join(' · ')]),
     },
   };
 }

@@ -29,6 +29,7 @@ import {
   canEdit as canEditScreen, canManage, canSee, canSeeEventType, canSeeHealth, isEmployee, proposedDomain, severityTone, type AnalysisMethod, type NcDisposition,
 } from '@/lib/domain';
 import { reportPostHref } from '@/lib/auth/paths';
+import { DGI_REGISTER_PATH, canReadDgi } from '@/lib/rules/dgi';
 import { guard } from '@/lib/guard';
 import { QHSE_ONLY } from '@/lib/edit-rights';
 import { loadEventChangeLog, loadEventClosures, loadEventDetail, loadEventLinkOptions, loadNewEventDefaults, loadVisibleEvents, type EventDetail } from '@/lib/data/events';
@@ -48,7 +49,7 @@ const H6 = ({ children }: { children: React.ReactNode }) => <h6 className="vg-h6
 type Tab = 'ouverts' | 'tous' | 'classes';
 
 export default async function EventsPage({ searchParams }: PageProps<'/evenements'>) {
-  const { role, user, site, siteOptions } = await guard('events');
+  const { role, user, site, siteOptions, cse } = await guard('events');
   const sp = await searchParams;
   const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
   // ?type=AT, ou plusieurs types séparés par des virgules (?type=NC,RC depuis le tableau de bord).
@@ -125,10 +126,12 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
     label: <>{label}<span style={{ opacity: 0.6 }}>{n}</span></>, on: tab === etat,
   });
 
+  const dgiReader = canReadDgi({ role, cse });
+
   return (
     <>
       <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · ${employee ? 'vos signalements, tous vos sites' : 'tous types'}`}
-        actions={manager && (
+        actions={(manager || dgiReader) && (
           <>
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
             {health && (
@@ -136,13 +139,19 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
                 <i className="ph ph-notebook" style={{ fontSize: 14 }} aria-hidden />Registre des accidents bénins
               </a>
             )}
-            <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
+            {/* CNF-01 : registre des dangers graves et imminents (animateur QHSE, direction, membres du CSE). */}
+            {dgiReader && (
+              <Link href={`${DGI_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} className="btn btn-ghost vg-wide-only">
+                <i className="ph ph-siren" style={{ fontSize: 14 }} aria-hidden />Registre des DGI
+              </Link>
+            )}
+            {manager && <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
               health={health} initialOpen={sp.nouveau === '1'}
               defaults={{
                 siteId: newDefaults?.siteId ?? defaultSite, location: newDefaults?.location, equipment: newDefaults?.equipment, type: newDefaults?.type,
                 preventionPlanId: newDefaults?.preventionPlanId, permitId: newDefaults?.permitId, controlId: newDefaults?.controlId,
                 riskId: newDefaults?.riskId, documentId: newDefaults?.documentId, declarantId: user.id,
-              }} />
+              }} />}
           </>
         )} />
       {/* UX-07 : sur téléphone, la fiche demandée (?sel=) remplace la liste, avec « Retour à la liste ». */}

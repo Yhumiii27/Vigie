@@ -323,6 +323,43 @@ export const benignAccidents = pgTable('benign_accidents', {
   archiveState('benign_accidents_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
+// Registre spécial des dangers graves et imminents (CNF-01, L. 4131-2, L. 4132-2, D. 4132-1 et D. 4132-2, migration 0033) :
+// un registre par site, un avis par alerte d'un représentant du personnel au CSE (daté et signé : postes de travail
+// concernés, nature et cause du danger, noms des travailleurs exposés), mesures prises par l'employeur saisies par
+// l'animateur QHSE, puis clôture. Accès : animateur QHSE, direction et membres du CSE (groupe Entra VIGIE_CSE_GROUP).
+// Jamais supprimé : annulation motivée. Journal : `dgi_notice`. Échéance : avis sans mesures (loadDgiSignals).
+export const dgiNotices = pgTable('dgi_notices', {
+  id: serial('id').primaryKey(),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
+  number: integer('number').notNull(), // numéro d'ordre dans le registre du site
+  reportedAt: timestamp('reported_at', { withTimezone: true }).notNull(), // date et heure de l'alerte
+  workstations: text('workstations').notNull(), // poste(s) de travail concerné(s)
+  danger: text('danger').notNull(), // nature et cause du danger
+  exposedWorkers: text('exposed_workers').notNull(), // noms des travailleurs exposés
+  representativeName: text('representative_name').notNull(), // représentant du personnel au CSE qui consigne l'avis
+  eventId: text('event_id').references(() => events.id), // événement lié (facultatif)
+  // Signature de l'avis par un membre du CSE (lui-même, à la saisie, ou plus tard pour un avis recopié par le QHSE).
+  signedAt: timestamp('signed_at', { withTimezone: true }),
+  signedById: text('signed_by_id').references(() => people.id),
+  // Mesures prises par l'employeur (animateur QHSE) et clôture.
+  measures: text('measures'),
+  measuresAt: timestamp('measures_at', { withTimezone: true }),
+  measuresById: text('measures_by_id').references(() => people.id),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  closedById: text('closed_by_id').references(() => people.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  uniqueIndex('dgi_notices_site_number_unique').on(t.siteId, t.number),
+  check('dgi_notices_measures_check', sql`(${t.measures} is null) = (${t.measuresAt} is null)`),
+  check('dgi_notices_signed_check', sql`(${t.signedAt} is null) = (${t.signedById} is null)`),
+  check('dgi_notices_closed_check', sql`${t.closedAt} is null or ${t.measuresAt} is not null`),
+  archiveState('dgi_notices_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
 // ─── Plan d'actions unique ──────────────────────────────────────────────────
 
 // Modèle du service QHSE (docs/specs/actions-qse.md § 4–5, migration 0005 : ACT-17, ACT-18, ACT-19, ACT-35). Les listes
@@ -876,6 +913,9 @@ export const trainingTitles = pgTable('training_titles', {
   // AUD-27 (migration 0021) : titre qui qualifie un auditeur interne (formation d'auditeur ISO 19011…) ; l'auditeur interne
   // d'un audit du programme sans titre valide de ce type est signalé (jamais refusé).
   internalAuditor: boolean('internal_auditor').notNull().default(false),
+  // PRV-23 (migration 0033) : titre d'accueil sécurité du site (sensibilisation d'arrivée) ; un intervenant d'un plan de
+  // prévention sans titre valide de ce type est signalé à la création du plan (jamais refusé).
+  safetyInduction: boolean('safety_induction').notNull().default(false),
   // État du titre dans le catalogue de Cursus au dernier rafraîchissement (null : jamais lu).
   cursusState: text('cursus_state'),
   // Titre qui n'est plus suivi (historique conservé).
@@ -1277,6 +1317,75 @@ export const preventionPlanMeetings = pgTable('prevention_plan_meetings', {
   archiveState('prevention_plan_meetings_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
   index('prevention_plan_meetings_plan_idx').on(t.planId, t.heldOn),
 ]);
+
+// PRV-23 (migration 0033) : intervenants d'un plan de prévention, choisis dans le personnel lu dans Cursus (salariés
+// d'entreprise extérieure « E… », intérimaires « I… », salariés). Accueil sécurité et titres requis lus dans les titres
+// détenus (src/lib/rules/workers.ts), jamais stockés. Retrait motivé (jamais supprimé) ; journal du plan.
+export const preventionPlanWorkers = pgTable('prevention_plan_workers', {
+  id: serial('id').primaryKey(),
+  planId: text('plan_id').notNull().references(() => preventionPlans.id),
+  personId: text('person_id').notNull().references(() => people.id),
+  addedById: text('added_by_id').references(() => people.id),
+  addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  uniqueIndex('prevention_plan_workers_active_unique').on(t.planId, t.personId).where(sql`cancelled_at is null`),
+  archiveState('prevention_plan_workers_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
+// PRV-23 : veto du service QHSE sur un intervenant dont les titres requis ne sont pas à jour (motif) ; tant qu'il n'est pas
+// levé (motif), le plan ne se signe pas et ses permis ne se délivrent pas. Un veto levé reste (historique) ; un seul en cours.
+export const preventionWorkerVetoes = pgTable('prevention_worker_vetoes', {
+  id: serial('id').primaryKey(),
+  workerId: integer('worker_id').notNull().references(() => preventionPlanWorkers.id),
+  reason: text('reason').notNull(),
+  vetoedById: text('vetoed_by_id').references(() => people.id),
+  vetoedAt: timestamp('vetoed_at', { withTimezone: true }).notNull().defaultNow(),
+  liftedAt: timestamp('lifted_at', { withTimezone: true }),
+  liftedById: text('lifted_by_id').references(() => people.id),
+  liftReason: text('lift_reason'),
+}, (t) => [
+  uniqueIndex('prevention_worker_vetoes_active_unique').on(t.workerId).where(sql`lifted_at is null`),
+  check('prevention_worker_vetoes_reason_check', sql`btrim(${t.reason}) <> ''`),
+  archiveState('prevention_worker_vetoes_lift_check', t.liftedAt, t.liftedById, t.liftReason),
+]);
+
+// CNF-09 (migration 0033) : causeries et quarts d'heure sécurité (référence « CS-001 »), par site, animées par une personne
+// de l'effectif ; participants = personnes du cache de Cursus. Feuille d'émargement envoyée aux participants (notification
+// et e-mail), signée par chacun depuis son espace (/signaler/mon-espace). Annulation motivée, jamais supprimée ; journal
+// `safety_talk`. Nombre par site et par mois, taux d'émargement : calculés (src/lib/rules/safety-talks.ts).
+export const safetyTalks = pgTable('safety_talks', {
+  id: text('id').primaryKey(), // CS-001
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
+  heldOn: date('held_on', { mode: 'string' }).notNull(),
+  theme: text('theme').notNull(),
+  animatorId: text('animator_id').notNull().references(() => people.id),
+  durationMinutes: integer('duration_minutes').notNull(),
+  notes: text('notes').notNull().default(''),
+  // Dernier envoi de la feuille d'émargement (null : jamais envoyée).
+  sheetSentAt: timestamp('sheet_sent_at', { withTimezone: true }),
+  sheetSentById: text('sheet_sent_by_id').references(() => people.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  check('safety_talks_duration_check', sql`${t.durationMinutes} between 1 and 480`),
+  archiveState('safety_talks_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+  index('safety_talks_site_idx').on(t.siteId, t.heldOn),
+]);
+
+// Participants d'une causerie (CNF-09) : émargement horodaté par le participant lui-même (sa session seulement) ; un
+// participant qui a signé ne se retire plus.
+export const safetyTalkParticipants = pgTable('safety_talk_participants', {
+  talkId: text('talk_id').notNull().references(() => safetyTalks.id),
+  personId: text('person_id').notNull().references(() => people.id),
+  notifiedAt: timestamp('notified_at', { withTimezone: true }),
+  signedAt: timestamp('signed_at', { withTimezone: true }),
+}, (t) => [primaryKey({ columns: [t.talkId, t.personId] })]);
 
 // Modèles d'import du formulaire de plan de prévention : correspondance entre les champs
 // détectés dans le fichier (PDF remplissable, Word, scan) et les champs de Vigie.

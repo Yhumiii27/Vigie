@@ -6,6 +6,10 @@ import type { MySpace } from '@/lib/data/my-space';
 import { fmtDate } from '@/lib/dates';
 import { SKILL_STATES } from '@/lib/domain';
 import type { ForecastItem } from '@/lib/rules/skills';
+import type { MyTalk } from '@/lib/data/safety-talks';
+import { MY_TALKS_ANCHOR } from '@/lib/rules/safety-talks';
+import { DGI_REGISTER_PATH } from '@/lib/rules/dgi';
+import { MyTalks } from './MyTalks';
 
 const card = { display: 'grid', gap: 8, padding: 12, background: 'var(--color-surface)', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', color: 'inherit', textDecoration: 'none' } as const;
 const muted = { fontSize: 12, color: 'var(--color-neutral-500)' } as const;
@@ -39,7 +43,13 @@ const Empty = ({ children }: { children: ReactNode }) => (
  * Espace salarié mobile (EVT-22) : mes actions (consultation, fil et preuves dans la fiche), mes habilitations (ma ligne
  * de la matrice, recyclages à prévoir) et mes signalements. Les seules données de la personne connectée (loadMySpace).
  */
-export function MySpaceView({ space, reportHref, myReportsHref }: { space: MySpace; reportHref: string; myReportsHref: string }) {
+export function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse = false }: {
+  space: MySpace; reportHref: string; myReportsHref: string;
+  /** CNF-09 : feuilles d'émargement des causeries de la personne. */
+  talks?: MyTalk[];
+  /** CNF-01 : membre du CSE, lien vers le registre des dangers graves et imminents. */
+  cse?: boolean;
+}) {
   const { actions, skills, renewals, reports, skillsMessage } = space;
   const late = actions.filter((a) => a.late).length;
   return (
@@ -119,6 +129,22 @@ export function MySpaceView({ space, reportHref, myReportsHref }: { space: MySpa
           </>
         )}
       </Section>
+
+      {talks.length > 0 && (
+        <Section id={MY_TALKS_ANCHOR} title="Feuilles d'émargement" icon="ph-signature"
+          count={`${talks.filter((x) => !x.signedAt).length} à signer`}>
+          <MyTalks talks={talks} />
+        </Section>
+      )}
+
+      {cse && (
+        <Section id="registre-dgi" title="Registre des dangers graves et imminents" icon="ph-siren">
+          <Link href={DGI_REGISTER_PATH} style={{ ...card, gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center' }}>
+            <span style={{ fontSize: 14 }}>Consigner ou signer un avis (membres du CSE)</span>
+            <i className="ph ph-caret-right" aria-hidden />
+          </Link>
+        </Section>
+      )}
 
       <Section id="mes-signalements" title="Mes signalements" icon="ph-warning"
         count={reports.total ? `${reports.total} · ${reports.open} en cours` : undefined}>

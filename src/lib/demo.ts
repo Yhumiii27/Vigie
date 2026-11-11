@@ -16,6 +16,12 @@ export const DEMO_ROLE_PEOPLE: Record<Role, string> = {
   Salarié: 'tnguyen',
 };
 
+/**
+ * Membres du CSE de la démonstration (CNF-01, registre des dangers graves et imminents) : la personne du rôle Salarié et
+ * celle du chef de service ; hors démonstration, le groupe Entra VIGIE_CSE_GROUP.
+ */
+export const DEMO_CSE_PEOPLE: readonly string[] = [DEMO_ROLE_PEOPLE['Salarié'], DEMO_ROLE_PEOPLE['Chef de service']];
+
 /** Rôle par défaut de la démonstration, sans cookie. */
 export const DEMO_DEFAULT_ROLE: Role = 'Animateur QHSE';
 

@@ -27,6 +27,8 @@ export type HistoryEntity =
   | 'process_safety_study'
   // D12 (lot 5 de M-02) : ordres et demandes de modification.
   | 'eco' | 'ecr'
+  // CNF-09 : causeries et quarts d'heure sécurité (vue de l'écran Prévention).
+  | 'safety_talk'
   // Classe 1, lot A (fin de QUA-11) : risques et demandes d'accès au DUERP, audits, environnement.
   | 'risk' | 'duerp_access_request' | 'audit_plan_item' | 'audit_finding' | 'certification' | 'waste_stream' | 'waste_entry';
 
@@ -188,6 +190,14 @@ const RULES: Record<HistoryEntity, Rule> = {
       const n = num(id);
       if (n === null) return undefined;
       const [o] = await (await db()).select({ siteId: t.safetyNotices.siteId }).from(t.safetyNotices).where(eq(t.safetyNotices.id, n));
+      return o;
+    },
+  },
+  // Causerie sécurité d'un site (CNF-09) : lecteurs de l'écran Prévention.
+  safety_talk: {
+    screen: 'prevention',
+    async siteOf(id) {
+      const [o] = await (await db()).select({ siteId: t.safetyTalks.siteId }).from(t.safetyTalks).where(eq(t.safetyTalks.id, id));
       return o;
     },
   },

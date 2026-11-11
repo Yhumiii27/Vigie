@@ -18,5 +18,5 @@ export async function readEntraAuth(): Promise<AuthState> {
   const session = await openSession(token, c.sessionSecret!);
   if (!session) return { status: 'anonymous' };
   if (!ROLE_KEYS.includes(session.role)) return { status: 'forbidden', reason: 'rôle inconnu' };
-  return { status: 'authenticated', identity: { personId: session.pid, role: session.role, siteIds: session.sites } };
+  return { status: 'authenticated', identity: { personId: session.pid, role: session.role, siteIds: session.sites, cse: !!session.cse } };
 }

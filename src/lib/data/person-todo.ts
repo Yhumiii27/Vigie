@@ -31,7 +31,7 @@ async function schedulerSession(): Promise<Session> {
   const sites = await db.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites).orderBy(asc(t.sites.sort));
   const active = sites.filter((s) => !s.archivedAt).map((s) => ({ id: s.id, label: s.label }));
   const all = { id: ALL_SITES, label: 'Tous les sites' };
-  return { role: 'Direction', user: SCHEDULER_USER, site: all, siteOptions: [...active, all], allowedSiteIds: null, bootstrap: !active.length, demo: isDemo() };
+  return { role: 'Direction', user: SCHEDULER_USER, site: all, siteOptions: [...active, all], allowedSiteIds: null, bootstrap: !active.length, demo: isDemo(), cse: false };
 }
 
 const LATEST = Symbol.for('vigie.personTodo');

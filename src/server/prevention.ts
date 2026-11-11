@@ -18,6 +18,8 @@ import { diffFields, logChange } from './changelog';
 import { nextEntityReference } from './references';
 import { STALE_EDIT, VERSION_FIELD, staleEditError } from './versions';
 import { ARCHIVED_CONTRACTOR, done, isOpenPermit, linkedActivities, ok, siteRule, type Db, type Result } from './prevention-shared';
+import { readPlanWorkers, vetoedWorkerNames } from '@/lib/data/plan-workers';
+import { inductionWarning, vetoBlocker } from '@/lib/rules/workers';
 
 // Plans de prévention (QUA-26 : entreprises extérieures dans src/server/contractors.ts, permis dans src/server/permits.ts).
 
@@ -166,7 +168,9 @@ export async function savePlan(_prev: FormState, fd: FormData): Promise<FormStat
       revalidatePath('/', 'layout');
       return { error: STALE_EDIT };
     }
-    return done(existing.id);
+    // PRV-23 : avertissement (non bloquant) — intervenants du plan sans accueil sécurité à jour.
+    const warning = inductionWarning((await readPlanWorkers(db, now, [existing.id])).workers);
+    return { ...done(existing.id), ...(warning ? { message: `Plan enregistré. ${warning}`, warnings: [warning] } : {}) };
   }
 
   const status = planStatus({ ...values, signedEuOn: null, signedEeOn: null, status: 'brouillon' }, now);
@@ -247,6 +251,9 @@ export async function signPlanEu(_prev: FormState, fd: FormData): Promise<FormSt
   const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
   const issue = planSignIssue(plan, { now, mandatory, verb: 'signer' });
   if (issue) return { error: issue };
+  // PRV-23 : veto du service QHSE en cours sur un intervenant du plan.
+  const vetoed = vetoBlocker(await vetoedWorkerNames(db, plan.id), 'signer le plan');
+  if (vetoed) return { error: vetoed };
   if (plan.inspectionOn && signedOn < plan.inspectionOn) {
     return { error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEuOn: `Au plus tôt le jour de l'inspection commune.` } };
   }
@@ -286,6 +293,8 @@ export async function recordPlanEeSignature(_prev: FormState, fd: FormData): Pro
   const mandatory = isMandatory(plan, await siteRule(db, plan.siteId));
   const issue = planSignIssue(plan, { now, mandatory, verb: 'recueillir' });
   if (issue) return { error: issue };
+  const vetoed = vetoBlocker(await vetoedWorkerNames(db, plan.id), 'signer le plan');
+  if (vetoed) return { error: vetoed };
   if (plan.inspectionOn && signedOn! < plan.inspectionOn) {
     return { error: "La signature ne peut pas précéder l'inspection commune.", fieldErrors: { signedEeOn: `Au plus tôt le jour de l'inspection commune.` } };
   }

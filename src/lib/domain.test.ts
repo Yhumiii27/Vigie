@@ -102,7 +102,7 @@ describe('autres listes des actions (§ 5)', () => {
     expect(REVIEW_FOLLOW_UP.cancelled.label).toBe('Action abandonnée');
     expect(NOTIFICATION_KINDS).toEqual({
       action_confiee: 'Action confiée', action_commentaire: 'Commentaire du responsable', action_preuve: 'Preuve ajoutée',
-      signalement_suite: 'Suite de votre signalement',
+      signalement_suite: 'Suite de votre signalement', causerie_emargement: 'Feuille d’émargement à signer',
     });
     expect(sqlList(['a', 'b'])).toBe("'a', 'b'");
   });

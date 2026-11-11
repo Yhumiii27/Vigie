@@ -14,6 +14,8 @@ export type AuthIdentity = {
    * les sites (Direction, Animateur QHSE, démonstration). La session y ajoute le site de rattachement actuel de la fiche.
    */
   siteIds: string[] | null;
+  /** Membre du CSE (groupe Entra VIGIE_CSE_GROUP ; démonstration : DEMO_CSE_PEOPLE) : registre des DGI (CNF-01). */
+  cse?: boolean;
 };
 
 /** Raison d'un refus d'accès (page /auth/acces?motif=…). */

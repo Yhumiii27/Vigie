@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { vetoedWorkerNames } from '@/lib/data/plan-workers';
+import { vetoBlocker } from '@/lib/rules/workers';
 import { eq } from 'drizzle-orm';
 import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
@@ -191,6 +193,9 @@ export async function deliverPermit(id: string): Promise<Result> {
     const reason = firstMinuteRule(rule) ? firstMinuteReason(rule) : '';
     return { error: `${issue} Délivrance impossible${reason ? ` (${lcfirst(reason)})` : ''}.` };
   }
+  // PRV-23 : intervenant du plan rattaché sous veto du service QHSE.
+  const vetoed = plan ? vetoBlocker(await vetoedWorkerNames(db, plan.id), 'délivrer le permis') : null;
+  if (vetoed) return { error: vetoed };
   await db.transaction(async (tx) => {
     await tx.update(t.permits).set({ status: 'delivre', issuerId: session.user.id }).where(eq(t.permits.id, permit.id));
     await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: PERMIT_DELIVERED, byId: session.user.id });

@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { getDb } from '@/db';
-import { hasAllSites, profileFromClaims, roleFromEntra, sitesFromGroups } from '@/lib/auth/claims';
+import { hasAllSites, isCseMember, profileFromClaims, roleFromEntra, sitesFromGroups } from '@/lib/auth/claims';
 import { oidcCookieName, openTransaction, sealSession, sessionCookieName, sessionMaxAge, type SessionClaims } from '@/lib/auth/cookie';
 import { finishLogin } from '@/lib/auth/oidc';
 import { accessHref, type AccessMotif } from '@/lib/auth/paths';
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
   const now = Math.floor(Date.now() / 1000);
   const session: SessionClaims = {
     pid: outcome.personId, role, sites: outcome.siteIds, oid: profile.oid,
+    ...(isCseMember(profile.groups, c.cseGroup) ? { cse: true } : {}),
     ...(profile.loginHint ? { hint: profile.loginHint } : {}), auth: now, seen: now,
   };
   const res = redirectTo(tx.retour, req);

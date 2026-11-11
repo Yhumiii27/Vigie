@@ -15,7 +15,7 @@ import { ArchiveTable } from './common';
 // Titres suivis par Vigie (D08, décision CV-01 du 04/11/2026) : un titre se choisit dans le catalogue de Cursus, qui en tient
 // l'intitulé et la validité ; Vigie garde l'ordre des colonnes (HAB-15) et ses attributs propres au QHSE (CV-03).
 
-/** Attributs propres au QHSE (secourisme, sensibilisation, auditeur interne), communs à l'ajout et à la modification. */
+/** Attributs propres au QHSE (secourisme, sensibilisation, auditeur interne, accueil sécurité), communs à l'ajout et à la modification. */
 function LocalFlags({ title }: { title?: TrainingTitle }) {
   return (
     <>
@@ -24,6 +24,9 @@ function LocalFlags({ title }: { title?: TrainingTitle }) {
       </Field>
       <Field name="internalAuditor" label="Auditeur interne" hint="Formation d'auditeur interne (ISO 19011…) : l'auditeur interne d'un audit sans titre valide de ce type est signalé.">
         <Checkbox name="internalAuditor" label="Qualifie un auditeur interne" defaultChecked={title?.internalAuditor ?? false} />
+      </Field>
+      <Field name="safetyInduction" label="Accueil sécurité" hint="Accueil sécurité du site : un intervenant d'un plan de prévention sans titre valide de ce type est signalé (PRV-23).">
+        <Checkbox name="safetyInduction" label="Accueil sécurité des intervenants" defaultChecked={title?.safetyInduction ?? false} />
       </Field>
       <Field name="firstAid" label="Secourisme" hint="Titulaires en cours de validité proposés comme donneurs de soins du registre des accidents bénins.">
         <Checkbox name="firstAid" label="Sauveteur secouriste du travail (SST) ou équivalent" defaultChecked={title?.firstAid ?? false} />
@@ -36,7 +39,7 @@ function LocalFlags({ title }: { title?: TrainingTitle }) {
 function TitleForm({ title, version, onDone }: { title: TrainingTitle; version?: string; onDone: () => void }) {
   return (
     <ActionForm action={saveTitle} onDone={onDone} onCancel={onDone} submitLabel="Enregistrer"
-      hidden={{ id: title.id, version, firstAidField: '1', awarenessField: '1', internalAuditorField: '1' }}>
+      hidden={{ id: title.id, version, firstAidField: '1', awarenessField: '1', internalAuditorField: '1', safetyInductionField: '1' }}>
       <LocalFlags title={title} />
     </ActionForm>
   );
@@ -127,7 +130,8 @@ function TitlesManager({ titles, archivedTitles, archive, canManage, versions, c
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{t.id}{t.cursusState === 'absent' ? ' · absent du catalogue de Cursus' : ''}</span>
                 {t.firstAid && <span className="tag tag-outline" style={{ fontSize: 11, marginRight: 6 }}>Secourisme</span>}
                 {t.awareness && <span className="tag tag-outline" style={{ fontSize: 11, marginRight: 6 }}>Sensibilisation</span>}
-                {t.internalAuditor && <span className="tag tag-outline" style={{ fontSize: 11 }}>Auditeur interne</span>}
+                {t.internalAuditor && <span className="tag tag-outline" style={{ fontSize: 11, marginRight: 6 }}>Auditeur interne</span>}
+                {t.safetyInduction && <span className="tag tag-outline" style={{ fontSize: 11 }}>Accueil sécurité</span>}
               </td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t.validityMonths ? `${t.validityMonths} mois` : 'Sans échéance'}</td>
               {canManage && (

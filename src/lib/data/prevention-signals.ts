@@ -9,6 +9,7 @@ import { byUrgency, type TodoItem, type Tone } from '../domain';
 import { TODO_HORIZON_DAYS } from '../horizons';
 import { gapSummary, loadRows, plural } from './prevention-rows';
 import { loadQhseLeads } from './leads';
+import { readPlanWorkers } from './plan-workers';
 
 // Échéances de la prévention et indicateur de la veille (R. 4512-6) — QUA-26 : extrait de src/lib/data/prevention.ts.
 
@@ -88,6 +89,22 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     } else if (!isFullySigned(p) && p.inspectionOn && p.inspectionOn > now && p.inspectionOn <= horizon) {
       todo.push({ date: p.inspectionOn, dueOn: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
     }
+  });
+  // PRV-23 : intervenants sans accueil sécurité à jour sur un plan en cours ou qui démarre sous l'horizon, au responsable QHSE
+  // du site (avertissement, jamais un blocage) ; Cursus indisponible : rien (pas de fausse alerte, la fiche le dit).
+  const soon = plans.filter((p) => !isPlanEnded(p) && p.endOn >= now && p.startOn <= horizon);
+  const { workers } = await readPlanWorkers(rows.db, now, soon.map((p) => p.id));
+  soon.forEach((p) => {
+    const missing = workers.filter((w) => w.planId === p.id && w.check.induction === 'missing');
+    if (!missing.length) return;
+    const to = leads.forSite(p.siteId);
+    const started = p.startOn <= now;
+    todo.push({
+      date: started ? now : p.startOn, dueOn: p.startOn, kind: 'Plan de prévention', tone: started ? 'danger' : 'warn', overdue: started || undefined,
+      title: `${p.id} · ${plural(missing.length, 'intervenant sans accueil sécurité à jour', 'intervenants sans accueil sécurité à jour')} — ${p.title}`,
+      who: [contractorName(p.contractorId), to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: p.siteId,
+      href: `/prevention?plan=${p.id}`, key: `pp-accueil|${p.id}`,
+    });
   });
   permits.forEach((p) => {
     const type: PermitType = p.type === 'essai' ? 'essai' : 'feu';

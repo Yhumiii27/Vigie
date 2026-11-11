@@ -26,6 +26,7 @@ import { seedManagementSystem } from './seeds/paquet13b';
 import { seedProcessSafety } from './seeds/process-safety';
 import { seedInbound } from './seeds/inbound';
 import { seedChangesEco } from './seeds/changes-eco';
+import { seedReponsesR2 } from './seeds/reponses-r2';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -66,6 +67,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await db.transaction((tx) => seedProcessSafety(tx));
   // Convergence M-02 (migration 0024) : matricules, codes des projets Keystone et fournisseur d'une entreprise du jeu.
   await upgradeDemoConvergence(db);
+  // Réponses du 09/11/2026, paquet R2 (migration 0033) : intervenants, registre des DGI, causeries, une seule fois.
+  await db.transaction((tx) => seedReponsesR2(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -262,6 +265,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedInbound(tx);
     // D12 (lot 5) : demandes et ordres de modification, demandes reçues de Codex et de Keystone, envoi à Codex.
     await seedChangesEco(tx);
+    // Réponses du 09/11/2026, paquet R2 : intervenants d'un plan, registre des DGI, causeries sécurité.
+    await seedReponsesR2(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.
