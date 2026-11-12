@@ -3,7 +3,7 @@
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import type { ChangeEntry } from '@/lib/change-entry';
-import { loadChangeLog } from '@/lib/data/changelog';
+import { loadChangeLog, loadChangeLogs } from '@/lib/data/changelog';
 import { canApprove, canEdit, canSee, isEmployee, type Role, type ScreenKey } from '@/lib/domain';
 import { getSession, siteFilter } from '@/lib/session';
 
@@ -29,6 +29,8 @@ export type HistoryEntity =
   | 'eco' | 'ecr'
   // CNF-09 : causeries et quarts d'heure sécurité (vue de l'écran Prévention).
   | 'safety_talk'
+  // AUD-40 : campagnes d'auto-évaluation par référentiel (en-tête, évaluations des exigences, preuves, commentaires).
+  | 'self_assessment'
   // Classe 1, lot A (fin de QUA-11) : risques et demandes d'accès au DUERP, audits, environnement.
   | 'risk' | 'duerp_access_request' | 'audit_plan_item' | 'audit_finding' | 'certification' | 'waste_stream' | 'waste_entry';
 
@@ -47,6 +49,19 @@ const ISO_MONTH = /^\d{4}-\d{2}-01$/;
 const db = () => getDb();
 
 const RULES: Record<HistoryEntity, Rule> = {
+  // AUD-40 : campagne d'auto-évaluation (site de la campagne, null = entreprise) ; journal de la campagne et de ses lignes.
+  self_assessment: {
+    screen: 'audits',
+    async siteOf(id) {
+      const [a] = await (await db()).select({ siteId: t.selfAssessments.siteId }).from(t.selfAssessments).where(eq(t.selfAssessments.id, id));
+      return a;
+    },
+    async load(id) {
+      const lines = await (await db()).select({ id: t.selfAssessmentLines.id }).from(t.selfAssessmentLines).where(eq(t.selfAssessmentLines.assessmentId, id));
+      const [own, byLine] = await Promise.all([loadChangeLog('self_assessment', id), loadChangeLogs('self_assessment_line', lines.map((l) => l.id))]);
+      return [...own, ...[...byLine.values()].flat()].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id);
+    },
+  },
   requirement: {
     screen: 'watch',
     async siteOf(id) {

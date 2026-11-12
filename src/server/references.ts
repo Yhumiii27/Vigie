@@ -47,6 +47,9 @@ const REF_TABLES = {
   ecr: t.ecrs,
   // CNF-09 : causeries et quarts d'heure sécurité « CS-001 ».
   safety_talk: t.safetyTalks,
+  // Paquet R3 (réponses du 09/11/2026) : campagnes d'auto-évaluation « AE-001 » (AUD-40), consignations « CSG-001 » (PRV-22).
+  self_assessment: t.selfAssessments,
+  lockout: t.lockouts,
 } as const;
 export type RefEntity = keyof typeof REF_TABLES;
 

@@ -15,6 +15,7 @@ import {
   ENGINEERING_INBOUND_KIND_CODES, ECO_TYPE_CODES, ECO_STATUS_CODES, ENGINEERING_SOURCE_CODES, ECR_KIND_CODES, ECR_SUBJECT_CODES, ECR_STATUS_CODES,
   ECO_APPROVAL_KEY_CODES, ECO_DECISION_CODES, ECO_APPROVAL_VIA_CODES, EFFECTIVITY_TARGET_CODES, EFFECTIVITY_DISPOSITION_CODES,
   OUTBOUND_STATUS_CODES, OUTBOUND_TARGET_CODES, OUTBOUND_KIND_CODES,
+  ASSESSMENT_STANDARD_CODES, ASSESSMENT_STATUS_CODES, CONFORMITY_LEVEL_CODES, LOCKOUT_ENERGY_CODES, LOCKOUT_STATUS_CODES, DASHBOARD_ROLE_CODES,
 } from '../lib/state-keys';
 
 // Conventions de traçabilité (jamais de suppression physique d'un enregistrement métier tracé) :
@@ -1064,6 +1065,96 @@ export const findingActions = pgTable('finding_actions', {
   actionId: text('action_id').notNull().references(() => actions.id),
 }, (t) => [primaryKey({ columns: [t.findingId, t.actionId] }), index('finding_actions_action_idx').on(t.actionId)]);
 
+// ─── Auto-évaluation par référentiel (AUD-40, réponses du service QHSE du 09/11/2026, migration 0034) ───
+//
+// Catalogue des exigences par référentiel (ISO 45001, ISO 14001, ISO 9001) : numéro de l'article et intitulé court rédigé
+// pour Vigie (jamais le texte des normes, protégé), articles 4 à 10 et leurs principaux sous-articles ; données de référence
+// posées par la migration 0034 (aussi en production), intitulés modifiables, exigences ajoutées ou archivées (motif) par
+// l'animateur QHSE ; journal `assessment_requirement`.
+export const assessmentRequirements = pgTable('assessment_requirements', {
+  id: serial('id').primaryKey(),
+  standard: text('standard').notNull(), // ASSESSMENT_STANDARD_CODES
+  clause: text('clause').notNull(), // « 6.1.2 »
+  heading: text('heading').notNull(), // intitulé court, rédigé pour Vigie
+  sort: integer('sort').notNull().default(0),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedById: text('archived_by_id').references(() => people.id),
+  archiveReason: text('archive_reason'),
+}, (t) => [
+  uniqueIndex('assessment_requirements_clause_unique').on(t.standard, t.clause),
+  check('assessment_requirements_standard_check', inList(t.standard, ASSESSMENT_STANDARD_CODES)),
+  check('assessment_requirements_clause_check', sql`${t.clause} ~ '^[0-9]+(\\.[0-9]+)*$'`),
+  check('assessment_requirements_heading_check', sql`btrim(${t.heading}) <> ''`),
+  archiveState('assessment_requirements_archive_check', t.archivedAt, t.archivedById, t.archiveReason),
+]);
+
+// Campagne d'auto-évaluation (« AE-001 ») d'un référentiel, pour un site ou toute l'entreprise (site null) : une ligne par
+// exigence du catalogue en vigueur à la création (numéro et intitulé recopiés : la campagne ne change pas si le catalogue
+// évolue). Brouillon modifiable par les rôles qui saisissent sur l'écran Audits ; clôturée = figée (seuls les actions et les
+// commentaires s'ajoutent ensuite) ; annulation motivée d'un brouillon. Synthèse calculée à l'affichage (jamais stockée).
+export const selfAssessments = pgTable('self_assessments', {
+  id: text('id').primaryKey(), // AE-001
+  standard: text('standard').notNull(),
+  siteId: text('site_id').references(() => sites.id, { onUpdate: 'cascade' }), // null : toute l'entreprise
+  assessedOn: date('assessed_on', { mode: 'string' }).notNull(),
+  assessorId: text('assessor_id').notNull().references(() => people.id),
+  scope: text('scope').notNull().default(''), // périmètre évalué, précisions
+  conclusion: text('conclusion').notNull().default(''),
+  status: text('status').notNull().default('brouillon'),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  closedById: text('closed_by_id').references(() => people.id),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  index('self_assessments_standard_idx').on(t.standard, t.assessedOn),
+  check('self_assessments_standard_check', inList(t.standard, ASSESSMENT_STANDARD_CODES)),
+  check('self_assessments_status_check', inList(t.status, ASSESSMENT_STATUS_CODES)),
+  check('self_assessments_closed_check', sql`(${t.status} = 'cloturee') = (${t.closedAt} is not null)`),
+  check('self_assessments_cancel_status_check', sql`${t.cancelledAt} is null or ${t.status} = 'brouillon'`),
+  archiveState('self_assessments_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
+]);
+
+// Ligne d'une campagne : niveau de conformité (vide : non évaluée), justification (exigée pour « non applicable » et « non
+// conforme »), constat ; preuves jointes (pièces `self_assessment_line`, ENTITY_FILE_KINDS) ; journal `self_assessment_line`.
+export const selfAssessmentLines = pgTable('self_assessment_lines', {
+  id: serial('id').primaryKey(),
+  assessmentId: text('assessment_id').notNull().references(() => selfAssessments.id),
+  requirementId: integer('requirement_id').notNull().references(() => assessmentRequirements.id),
+  clause: text('clause').notNull(),
+  heading: text('heading').notNull(),
+  sort: integer('sort').notNull().default(0),
+  level: text('level'),
+  justification: text('justification').notNull().default(''),
+  finding: text('finding').notNull().default(''),
+  assessedById: text('assessed_by_id').references(() => people.id),
+  assessedAt: timestamp('assessed_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('self_assessment_lines_unique').on(t.assessmentId, t.requirementId),
+  check('self_assessment_lines_level_check', sql`${t.level} is null or ${inList(t.level, CONFORMITY_LEVEL_CODES)}`),
+  check('self_assessment_lines_justification_check', sql`${t.level} is null or ${t.level} not in ('non_conforme', 'non_applicable') or btrim(${t.justification}) <> ''`),
+]);
+
+// Actions QSE d'une ligne d'auto-évaluation (lien « selfassessment:<ligne> » du registre src/lib/action-links.ts, source
+// « Audit interne ISO » imposée) : posé à la création de l'action seulement, plusieurs actions par ligne (comme un constat).
+export const selfAssessmentLineActions = pgTable('self_assessment_line_actions', {
+  lineId: integer('line_id').notNull().references(() => selfAssessmentLines.id),
+  actionId: text('action_id').notNull().references(() => actions.id),
+}, (t) => [primaryKey({ columns: [t.lineId, t.actionId] }), index('self_assessment_line_actions_action_idx').on(t.actionId)]);
+
+// Commentaires d'une campagne (avant comme après sa clôture), jamais modifiés ni supprimés.
+export const selfAssessmentComments = pgTable('self_assessment_comments', {
+  id: serial('id').primaryKey(),
+  assessmentId: text('assessment_id').notNull().references(() => selfAssessments.id),
+  authorId: text('author_id').references(() => people.id),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [check('self_assessment_comments_body_check', sql`btrim(${t.body}) <> ''`)]);
+
 // ─── Revue de direction (ISO 9001 §9.3)─────────────────────────────────────
 
 // Une revue par séance : préparation (planifiée), compte rendu (tenue), puis visa de la direction et dossier figé (clôturée).
@@ -1446,6 +1537,47 @@ export const permits = pgTable('permits', {
   check('permits_status_check', inList(t.status, PERMIT_STATUS_CODES)),
   check('permits_type_check', inList(t.type, PERMIT_TYPE_CODES)),
   check('permits_cancel_check', sql`(${t.status} = 'annule') = (${t.cancelReason} is not null and btrim(${t.cancelReason}) <> '') and (${t.status} = 'annule' or ${t.cancelledById} is null)`),
+]);
+
+// PRV-22 (réponses du service QHSE du 09/11/2026, migration 0034) : consignation d'une énergie ou d'un fluide rattachée à un
+// permis (et facultativement à un plan de prévention du même site) : points d'isolement (repère, n° de cadenas ou dispositif),
+// poseur et vérificateur désignés (personnes du cache de Cursus, distincts), pose, vérification et levée horodatées.
+// États : préparée → posée → vérifiée → levée, ou annulée (motif). Le permis ne se délivre qu'avec ses consignations vérifiées
+// et ne se clôt qu'une fois elles levées (src/lib/rules/lockouts.ts). Procédure PR-QHSE-005 à venir : champs génériques.
+// Journal sur le permis (`permit`) et sur la consignation (`lockout`, version QUA-12).
+export const lockouts = pgTable('lockouts', {
+  id: text('id').primaryKey(), // CSG-001
+  permitId: text('permit_id').notNull().references(() => permits.id),
+  preventionPlanId: text('prevention_plan_id').references(() => preventionPlans.id),
+  siteId: text('site_id').notNull().references(() => sites.id, { onUpdate: 'cascade' }),
+  energy: text('energy').notNull(), // LOCKOUT_ENERGY_CODES
+  equipment: text('equipment').notNull(), // installation ou équipement consigné
+  points: jsonb('points').notNull().default([]), // [{ label, device }]
+  applierId: text('applier_id').notNull().references(() => people.id), // poseur désigné
+  verifierId: text('verifier_id').notNull().references(() => people.id), // vérificateur désigné
+  status: text('status').notNull().default('preparee'),
+  appliedAt: timestamp('applied_at', { withTimezone: true }),
+  appliedById: text('applied_by_id').references(() => people.id), // personne qui enregistre la pose
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  verifiedById: text('verified_by_id').references(() => people.id),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+  removedById: text('removed_by_id').references(() => people.id), // personne qui lève la consignation
+  notes: text('notes').notNull().default(''),
+  createdById: text('created_by_id').references(() => people.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelledById: text('cancelled_by_id').references(() => people.id),
+  cancelReason: text('cancel_reason'),
+}, (t) => [
+  index('lockouts_permit_idx').on(t.permitId),
+  check('lockouts_energy_check', inList(t.energy, LOCKOUT_ENERGY_CODES)),
+  check('lockouts_status_check', inList(t.status, LOCKOUT_STATUS_CODES)),
+  check('lockouts_people_check', sql`${t.applierId} <> ${t.verifierId}`),
+  check('lockouts_applied_check', sql`${t.status} in ('preparee', 'annulee') or ${t.appliedAt} is not null`),
+  check('lockouts_verified_check', sql`${t.status} <> 'verifiee' or ${t.verifiedAt} is not null`),
+  check('lockouts_removed_check', sql`${t.status} <> 'levee' or ${t.removedAt} is not null`),
+  check('lockouts_cancel_status_check', sql`(${t.status} = 'annulee') = (${t.cancelledAt} is not null)`),
+  archiveState('lockouts_cancel_check', t.cancelledAt, t.cancelledById, t.cancelReason),
 ]);
 
 // ─── Documents (Codex) ──────────────────────────────────────────────────────
@@ -2028,4 +2160,24 @@ export const outboundMessages = pgTable('outbound_messages', {
   check('outbound_messages_kind_check', inList(t.kind, OUTBOUND_KIND_CODES)),
   check('outbound_messages_sent_check', sql`(${t.status} = 'sent') = (${t.sentAt} is not null)`),
   check('outbound_messages_attempts_check', sql`${t.attempts} >= 0`),
+]);
+
+// ─── Tableaux de bord configurables (TDB-19, réponses du service QHSE du 09/11/2026, migration 0034) ───
+//
+// Disposition du tableau de bord : cartes choisies dans le catalogue fermé (src/lib/dashboard-cards.ts), dans l'ordre, avec
+// leur période et leur périmètre ; par personne (animateur QHSE, direction), ou disposition par défaut d'un rôle (person_id
+// null, tenue par l'animateur QHSE), appliquée à qui n'a pas la sienne. Les indicateurs restent calculés à l'affichage, jamais
+// stockés. Journal `dashboard_layout` (identifiant : la personne, ou « role:<rôle> »).
+export const dashboardLayouts = pgTable('dashboard_layouts', {
+  id: serial('id').primaryKey(),
+  personId: text('person_id').references(() => people.id),
+  role: text('role'),
+  cards: jsonb('cards').notNull().default([]), // [{ id, period, scope }]
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedById: text('updated_by_id').references(() => people.id),
+}, (t) => [
+  uniqueIndex('dashboard_layouts_person_unique').on(t.personId).where(sql`person_id is not null`),
+  uniqueIndex('dashboard_layouts_role_unique').on(t.role).where(sql`person_id is null`),
+  check('dashboard_layouts_owner_check', sql`(${t.personId} is null) <> (${t.role} is null)`),
+  check('dashboard_layouts_role_check', sql`${t.role} is null or ${inList(t.role, DASHBOARD_ROLE_CODES)}`),
 ]);

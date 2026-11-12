@@ -10,6 +10,7 @@ import { TODO_HORIZON_DAYS } from '../horizons';
 import { gapSummary, loadRows, plural } from './prevention-rows';
 import { loadQhseLeads } from './leads';
 import { readPlanWorkers } from './plan-workers';
+import { lockoutSignal } from '@/lib/rules/lockouts';
 
 // Échéances de la prévention et indicateur de la veille (R. 4512-6) — QUA-26 : extrait de src/lib/data/prevention.ts.
 
@@ -135,6 +136,29 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
       const validity = fmtLocalRange(toParisLocal(p.validFrom), toParisLocal(p.validTo));
       todo.push({ date: from > now ? from : now, dueOn: from, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
     }
+  });
+
+  // PRV-22 : consignation posée ou préparée et non vérifiée alors que la validité du permis a commencé ; consignation non
+  // levée à la fin du permis (validité échue, clos ou annulé) — au responsable du permis (délivreur), sinon au responsable
+  // QHSE du site.
+  permits.forEach((p) => {
+    rows.lockoutsOf(p.id).forEach((l) => {
+      const kind = lockoutSignal(l, p, nowMs);
+      if (!kind) return;
+      const to = p.issuerId ? { who: owner(p.issuerId), ownerIds: [p.issuerId] } : leads.forSite(p.siteId);
+      const start = toParisLocal(p.validFrom).slice(0, 10);
+      const validEnd = toParisLocal(p.validTo).slice(0, 10);
+      const closedOn = p.closedAt ? toParisLocal(p.closedAt).slice(0, 10) : null;
+      const end = closedOn && closedOn < validEnd ? closedOn : validEnd;
+      todo.push({
+        date: now, dueOn: kind === 'verification' ? start : end, kind: 'Permis', tone: 'danger', overdue: true,
+        title: kind === 'verification'
+          ? `${l.id} · consignation non vérifiée, permis ${p.id} en cours de validité — ${l.equipment}`
+          : `${l.id} · consignation non levée à la fin du permis ${p.id} — ${l.equipment}`,
+        who: [contractorName(p.contractorId), to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: p.siteId,
+        href: `/prevention?onglet=permis&permis=${p.id}`, key: `consignation-${kind}|${l.id}`,
+      });
+    });
   });
 
   return { badge: todo.length, todo: todo.sort(byUrgency) };

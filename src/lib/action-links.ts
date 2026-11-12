@@ -5,6 +5,7 @@ import { getDb, schema as t, type DbOrTx } from '@/db';
 import { addActionBlocker } from '@/lib/rules/events';
 import { entryRef, wasteEntryHref, wasteStreamHref } from '@/lib/rules/environment';
 import { engineeringHref } from '@/lib/rules/engineering';
+import { ASSESSMENT_STANDARDS, selfAssessmentHref, type AssessmentStandard } from '@/lib/rules/self-assessment';
 import { STUDY_MILESTONES, STUDY_TYPES, studyHref, studyLabel, type StudyMilestone, type StudyType } from '@/lib/rules/process-safety';
 import { NON_QSE_LINK_MESSAGE, actionRights, isNonQseLinkKind, type LinkFacts } from './action-rules';
 import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, type Role, type ScreenKey } from './domain';
@@ -331,6 +332,50 @@ export const ACTION_LINKS: Record<string, LinkKind> = {
         .where(ids ? inArray(t.findingActions.actionId, ids) : undefined);
       // Un constat annulé garde ses actions : la source reste lisible (filtre « Annulés » de l'écran Audits).
       return only(ids)(rows).map((r) => ({ actionId: r.actionId!, link: `finding:${r.id}`, kind: 'finding', label: `Constat${r.cancelledAt ? ' annulé' : ''} · ${r.audit}`, href: `/audits?constat=${r.id}` }));
+    },
+  },
+
+  // AUD-40 : ligne d'une campagne d'auto-évaluation par référentiel (self_assessment_line_actions) : plusieurs actions par
+  // ligne, une ligne par action, posée à la création seulement (EVENT_AUDIT_LOCKED), comme un constat ; une campagne
+  // clôturée accepte encore des actions (elle est figée pour ses évaluations seulement), une campagne annulée non.
+  selfassessment: {
+    screen: 'audits',
+    async attach(tx, [a], actionId) {
+      const [row] = await tx.select({ id: t.selfAssessmentLines.id, cancelledAt: t.selfAssessments.cancelledAt }).from(t.selfAssessmentLines)
+        .innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId)).where(eq(t.selfAssessmentLines.id, num(a)));
+      if (!row) return NOT_FOUND;
+      if (row.cancelledAt) return 'Campagne d’auto-évaluation annulée : rattachement impossible.';
+      await tx.insert(t.selfAssessmentLineActions).values({ lineId: row.id, actionId }).onConflictDoNothing();
+      return null;
+    },
+    async detach(tx, [a], actionId) {
+      await tx.delete(t.selfAssessmentLineActions).where(and(eq(t.selfAssessmentLineActions.lineId, num(a)), eq(t.selfAssessmentLineActions.actionId, actionId)));
+    },
+    async detachAll(tx, actionId) {
+      await tx.delete(t.selfAssessmentLineActions).where(eq(t.selfAssessmentLineActions.actionId, actionId));
+    },
+    // Site de la campagne (null : toute l'entreprise), imposé à l'action.
+    async siteOf(tx, [a]) {
+      const [r] = await tx.select({ siteId: t.selfAssessments.siteId }).from(t.selfAssessmentLines)
+        .innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId)).where(eq(t.selfAssessmentLines.id, num(a)));
+      return r?.siteId;
+    },
+    async facts(db, [a]) {
+      const [r] = await db.select({ id: t.selfAssessments.id, standard: t.selfAssessments.standard, siteId: t.selfAssessments.siteId, clause: t.selfAssessmentLines.clause, heading: t.selfAssessmentLines.heading })
+        .from(t.selfAssessmentLines).innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId)).where(eq(t.selfAssessmentLines.id, num(a)));
+      return r ? { reference: ref(`${r.id} · ${ASSESSMENT_STANDARDS[r.standard as AssessmentStandard]?.short ?? r.standard} · ${r.clause} ${r.heading}`), siteId: r.siteId, facts: {} } : null;
+    },
+    logAs: ([a]) => (Number.isInteger(num(a)) ? { entityType: 'self_assessment_line', entityId: num(a) } : null),
+    async sources(db, ids) {
+      const rows = await db.select({ actionId: t.selfAssessmentLineActions.actionId, lineId: t.selfAssessmentLines.id, id: t.selfAssessments.id, standard: t.selfAssessments.standard, clause: t.selfAssessmentLines.clause, heading: t.selfAssessmentLines.heading })
+        .from(t.selfAssessmentLineActions).innerJoin(t.selfAssessmentLines, eq(t.selfAssessmentLines.id, t.selfAssessmentLineActions.lineId))
+        .innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId))
+        .where(ids ? inArray(t.selfAssessmentLineActions.actionId, ids) : undefined);
+      return only(ids)(rows).map((r) => ({
+        actionId: r.actionId, link: `selfassessment:${r.lineId}`, kind: 'selfassessment',
+        label: `Auto-évaluation ${r.id} · ${ASSESSMENT_STANDARDS[r.standard as AssessmentStandard]?.short ?? r.standard} · ${r.clause}`, detail: r.heading,
+        href: `${selfAssessmentHref(r.id)}&ligne=${r.lineId}`,
+      }));
     },
   },
 

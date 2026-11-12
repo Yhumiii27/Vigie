@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import { CERT_TONE_LABELS, certDot, type CertTone } from '@/lib/rules/audits';
+import { fmtDelta } from '@/lib/rules/self-assessment';
 import { Dot, ToneTag } from '@/components/ui';
 import { daysBetween, fmtDate, monthName, yearOf } from '@/lib/dates';
 import { TONE, type Role } from '@/lib/domain';
@@ -316,6 +317,32 @@ export function DossierView({ page, role, notice }: {
 
           <h3 className="rd-h3">Constats d&apos;audit</h3>
           {d.audits.auditGroups?.length ? <FindingGroups groups={d.audits.auditGroups} role={role} /> : <Empty>Aucun constat enregistré.</Empty>}
+
+          {/* AUD-40 : auto-évaluation par référentiel (dossiers figés avant le paquet R3 : section absente). */}
+          {d.selfAssessments && (
+            <>
+              <h3 className="rd-h3">Auto-évaluation par référentiel</h3>
+              {d.selfAssessments.length ? (
+                <ScrollTable>
+                  <table className="table rd-table">
+                    <thead><tr><th>Référentiel</th><th>Campagne</th><th className="rd-num-cell">Conformité</th><th className="rd-num-cell">Évolution</th><th className="rd-num-cell">Écarts</th><th>Articles les plus faibles</th></tr></thead>
+                    <tbody>
+                      {d.selfAssessments.map((a) => (
+                        <tr key={a.id}>
+                          <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{a.standard}<div className="rd-muted" style={{ fontSize: 11 }}>{a.site}</div></td>
+                          <td style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · {fmtDate(a.assessedOn)}</td>
+                          <td className="rd-num-cell">{a.rate == null ? '—' : `${a.rate} %`}</td>
+                          <td className="rd-num-cell">{a.previousOn ? fmtDelta(a.delta) : 'première'}</td>
+                          <td className="rd-num-cell">{a.gaps}</td>
+                          <td className="rd-muted">{[...a.clauses].filter((c) => c.rate != null).sort((x, y) => (x.rate ?? 0) - (y.rate ?? 0)).slice(0, 2).map((c) => `${c.clause} ${c.heading} (${c.rate} %)`).join(' · ') || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollTable>
+              ) : <Empty>Aucune campagne d&apos;auto-évaluation clôturée.</Empty>}
+            </>
+          )}
         </Section>
       )}
 

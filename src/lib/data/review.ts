@@ -25,6 +25,8 @@ import { loadQhseLeads } from './leads';
 import { ALL_SITES, currentSiteId, getSession, inSite } from '../session';
 import { findingActionsBy, planItemAuditLabel, planItemState } from './audits';
 import { loadEntityFiles } from './entity-files';
+import { latestAssessments } from './self-assessment';
+import { selfAssessmentHref } from '@/lib/rules/self-assessment';
 import { loadChangeLog } from './changelog';
 import { loadContext } from './context';
 import { loadObjectives, tf1Target } from './objectives';
@@ -596,6 +598,10 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     loadAllActions('perimeter'),
   ]);
   const { rec, header, record } = parts;
+  // AUD-40 : dernière campagne d'auto-évaluation clôturée de chaque référentiel à la date d'arrêt (site sélectionné et
+  // entreprise), taux global et par article, écart avec la précédente.
+  const selfAssessments = (await latestAssessments({ site, allowed: (await getSession()).allowedSiteIds, asOf }))
+    .map((a) => ({ ...a, href: selfAssessmentHref(a.id) }));
   // AUD-22 : programme, constats et certifications du site sélectionné (les éléments communs à l'entreprise valent pour tous
   // les sites) ; le dossier de séance, figé sous « Tous les sites », les couvre tous.
   const certs = allCerts.filter((c) => inSite(site, c.siteId));
@@ -877,6 +883,8 @@ export async function buildReviewDossier(review: Review, reviews: Review[], opts
     prevention: preventionView,
     documents: documentView,
     environment,
+    // AUD-40 : auto-évaluation par référentiel (absente des dossiers figés avant le paquet R3).
+    selfAssessments,
     // HAB-18 : taux de conformité, formations sur 12 mois (efficacité évaluée à froid, HAB-13), recyclages en retard.
     skills: { counts: skillCounts, alerts: skillAlerts, indicators: skillIndicators(skills.rows, asOf), href: '/habilitations' },
     // §9.3.2 c (AUD-13) : degré de réalisation des objectifs ; valeurs calculées à la date d'arrêt du dossier.

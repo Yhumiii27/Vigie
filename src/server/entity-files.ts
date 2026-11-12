@@ -11,6 +11,7 @@ import { requireInSite } from '@/lib/guard';
 import { getSession } from '@/lib/session';
 import { deleteAttachment, removeStoredFile, saveUpload } from '@/lib/uploads';
 import { filesProblem } from './action-create';
+import { frozenAssessmentError } from '@/lib/rules/self-assessment';
 import { logChange } from './changelog';
 
 // Pièces jointes génériques des fiches (paquet 6 : DUE-09, VEI-08, AUD-17, DOC-11) : ajout et retrait après la saisie.
@@ -48,6 +49,7 @@ function roleError(kind: EntityFileKind, role: Role): string | null {
     case 'review': return canEdit(role, 'audits') ? null : DENIED;
     case 'review_item': return null; // contributeur de l'élément, quel que soit son rôle (contrôlé au chargement)
     case 'waste_entry': return canEdit(role, 'env') ? null : DENIED;
+    case 'self_assessment_line': return canEdit(role, 'audits') ? null : DENIED;
   }
 }
 
@@ -115,6 +117,14 @@ async function ownerOf(db: DbOrTx, kind: EntityFileKind, id: string, session: Se
         .from(t.wasteEntries).where(eq(t.wasteEntries.id, num));
       if (!e) return null;
       return { siteId: e.siteId, journalId: num, frozen: e.cancelledAt ? 'Enlèvement annulé : ses pièces sont conservées pour la trace.' : null };
+    }
+    // AUD-40 : preuve d'une exigence d'une campagne d'auto-évaluation (site de la campagne ; null : toute l'entreprise) ;
+    // campagne clôturée ou annulée : preuves figées.
+    case 'self_assessment_line': {
+      const [l] = await db.select({ assessmentId: t.selfAssessments.id, siteId: t.selfAssessments.siteId, status: t.selfAssessments.status, cancelledAt: t.selfAssessments.cancelledAt, clause: t.selfAssessmentLines.clause })
+        .from(t.selfAssessmentLines).innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId)).where(eq(t.selfAssessmentLines.id, num));
+      if (!l) return null;
+      return { siteId: l.siteId, journalId: l.assessmentId, context: `exigence ${l.clause}`, frozen: frozenAssessmentError(l) };
     }
   }
 }

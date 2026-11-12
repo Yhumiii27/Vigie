@@ -27,6 +27,7 @@ import { seedProcessSafety } from './seeds/process-safety';
 import { seedInbound } from './seeds/inbound';
 import { seedChangesEco } from './seeds/changes-eco';
 import { seedReponsesR2 } from './seeds/reponses-r2';
+import { seedReponsesR3 } from './seeds/reponses-r3';
 
 // Jeu de données initial, repris de la maquette « Vigie UI mockups review » (design/Vigie.dc.html), par domaine dans
 // src/db/seeds/ (QUA-26) : sites et personnes (core), événements (events), plan d'actions QSE (actions), DUERP (risks),
@@ -69,6 +70,8 @@ async function upgradeDemo(db: Db, opts: { files?: boolean } = {}) {
   await upgradeDemoConvergence(db);
   // Réponses du 09/11/2026, paquet R2 (migration 0033) : intervenants, registre des DGI, causeries, une seule fois.
   await db.transaction((tx) => seedReponsesR2(tx));
+  // Réponses du 09/11/2026, paquet R3 (migration 0034) : auto-évaluations, consignations, une seule fois.
+  await db.transaction((tx) => seedReponsesR3(tx));
   const [[lead], [withLead], [withRole]] = await Promise.all([
     db.select({ n: count() }).from(t.people).where(eq(t.people.id, DEMO_QHSE_LEAD)),
     db.select({ n: count() }).from(t.sites).where(isNotNull(t.sites.qhseLeadId)),
@@ -267,6 +270,8 @@ export async function seed(db: Db, opts: { files?: boolean } = {}) {
     await seedChangesEco(tx);
     // Réponses du 09/11/2026, paquet R2 : intervenants d'un plan, registre des DGI, causeries sécurité.
     await seedReponsesR2(tx);
+    // Réponses du 09/11/2026, paquet R3 : auto-évaluations ISO 45001, consignations des permis.
+    await seedReponsesR3(tx);
 
     // Journal des modifications : quelques entrées de démonstration (annulations, archivages) ; celles des actions sont
     // écrites par seedActions.

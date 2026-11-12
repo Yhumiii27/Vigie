@@ -219,12 +219,13 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
  * Environnement), Revue de direction l'élément du programme de la ligne « Revues de direction ».
  */
 export const SOURCE_LINK_KINDS: Record<SourceTarget, readonly string[]> = {
-  event: ['event'], audit: ['finding', 'plan'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
+  event: ['event'], audit: ['finding', 'plan', 'selfassessment'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
   review: ['review', 'reviewdecision', 'plan'], objective: ['reviewdecision'], document: ['document', 'docversion'],
   environment: ['wastestream', 'wasteentry', 'requirement'], safetystudy: ['safetystudy'], eco: ['eco'], free: [],
 };
 /** L'unique événement ou audit d'une action : posé à la création seulement, jamais rattaché ni détaché ensuite (§ 12, D15). */
-export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan'] as const;
+// AUD-40 : ligne d'une auto-évaluation par référentiel (« selfassessment »), comme un constat.
+export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan', 'selfassessment'] as const;
 /** Ancienne origine (avant 0005) → libellé : historique, indication d'une source à compléter (legacy_origin, D9). */
 export const LEGACY_ORIGIN_LABELS: Record<string, string> = {
   ev: 'Événement', audit: 'Audit', risk: 'Risques', watch: 'Veille', client: 'Client', rev: 'Revue de direction',

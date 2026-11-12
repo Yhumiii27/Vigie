@@ -29,6 +29,7 @@ const WITHOUT_MOTIF: Record<string, string> = {
   removeActionFile: 'retrait d’une preuve avant « Vérifiée » (canRemoveProof, § 8 de la spécification des actions) : sans motif',
   removePlanAttachment: 'retrait d’une pièce d’un plan modifiable, journalisé (detach) — motif à décider (QUA-22, choix à valider)',
   removeProgramAction: 'retrait d’une ligne du programme de prévention en préparation (avant son arrêt), journalisé',
+  removeLockout: 'levée d’une consignation (PRV-22) : étape opérationnelle horodatée (qui lève, quand), journalisée sur le permis — pas un retrait d’enregistrement',
 };
 
 type ServerAction = { file: string; name: string; params: string; body: string };

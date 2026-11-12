@@ -24,6 +24,10 @@ import { loadPrevention, type PlanView, type SiteRuleView } from '@/lib/data/pre
 import { lcfirst } from '@/lib/queries';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 import { GateHouseView } from '@/components/prevention/GateHouse';
+import { SimopsView } from '@/components/prevention/SimopsView';
+import { loadSimops } from '@/lib/data/simops';
+import { SIMOPS_VIEW, parseSimopsDay, simopsHref } from '@/lib/rules/simops';
+import { today } from '@/lib/today';
 import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
 
@@ -61,10 +65,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   const gateOn = str(sp.vue) === GATE_HOUSE_VIEW && canReadGateHouse(role);
   // CNF-09 : causeries et quarts d'heure sécurité (?vue=causeries&causerie=CS-001).
   const talksOn = !gateOn && str(sp.vue) === SAFETY_TALKS_VIEW;
-  const [d, formOptions, gate, talks] = await Promise.all([
+  // PRV-22 : opérations simultanées par zone et par heure (?vue=simops&jour=AAAA-MM-JJ), en lecture.
+  const simopsOn = !gateOn && !talksOn && str(sp.vue) === SIMOPS_VIEW;
+  const [d, formOptions, gate, talks, simops] = await Promise.all([
     loadPrevention(), loadFormOptions(), gateOn ? loadGateHouse(parseHorizon(str(sp.horizon))) : null, talksOn ? loadSafetyTalks() : null,
+    simopsOn ? loadSimops(parseSimopsDay(str(sp.jour), today())) : null,
   ]);
-  const alt = !!gate || !!talks;
+  const alt = !!gate || !!talks || !!simops;
   const manage = canManage(role);
   const approve = canApprove(role);
 
@@ -235,6 +242,9 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           <Link href={SAFETY_TALKS_HREF} scroll={false} className={`vg-tab${talks ? ' is-on' : ''}`} aria-current={talks ? 'page' : undefined}>
             <span>Causeries sécurité</span>
           </Link>
+          <Link href={simopsHref()} scroll={false} className={`vg-tab${simops ? ' is-on' : ''}`} aria-current={simops ? 'page' : undefined}>
+            <span>Opérations simultanées</span>
+          </Link>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
             {!alt && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
@@ -248,7 +258,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           </span>
         </div>
 
-        {gate ? <GateHouseView gate={gate} /> : talks ? (
+        {gate ? <GateHouseView gate={gate} /> : simops ? <SimopsView data={simops} today={d.now} /> : talks ? (
           <SafetyTalksView data={talks} canManage={manage} openId={str(sp.causerie)} sites={formOptions.sites} defaultSite={d.choices.defaultSiteId} />
         ) : (
           <>

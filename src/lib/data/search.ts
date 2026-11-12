@@ -20,6 +20,9 @@ import { loadRows } from './prevention-rows';
 import { loadProcessSafetyStudies } from './process-safety';
 import { loadRisks } from './risks';
 import { loadSafetyTalks } from './safety-talks';
+import { loadSelfAssessments } from './self-assessment';
+import { selfAssessmentHref } from '../rules/self-assessment';
+import { readPoints } from '../rules/lockouts';
 import { loadWatch } from './watch';
 
 // Recherche globale (TDB-18) : chaque module est cherché dans les éléments que charge son propre écran pour la personne
@@ -87,7 +90,11 @@ export async function loadSearch(q: string): Promise<SearchGroup[]> {
         const plans = rows.plans.map((p) => ({ ref: p.id, title: p.title, extra: `${contractor.get(p.contractorId) ?? ''} ${p.location}`, sub: contractor.get(p.contractorId) ?? null, href: `/prevention?plan=${enc(p.id)}` }));
         const permits = rows.permits.map((p) => ({ ref: p.id, title: p.description, extra: `${p.location} ${p.performer}`, sub: p.location, href: `/prevention?onglet=permis&permis=${enc(p.id)}` }));
         const contractors = rows.contractors.map((c) => ({ ref: c.id, title: c.name, extra: c.trade, sub: c.trade, href: `/prevention?onglet=entreprises&entreprise=${enc(c.id)}` }));
-        return [...plans, ...permits, ...contractors];
+        // PRV-22 : consignations des permis du site sélectionné (fiche du permis).
+        const lockouts = rows.permits.flatMap((p) => rows.lockoutsOf(p.id).map((l) => ({
+          ref: l.id, title: `Consignation · ${l.equipment}`, extra: `${p.id} ${readPoints(l.points).map((x) => `${x.label} ${x.device}`).join(' ')}`, sub: p.id, href: `/prevention?onglet=permis&permis=${enc(p.id)}`,
+        })));
+        return [...plans, ...permits, ...contractors, ...lockouts];
       },
     });
     modules.push({
@@ -131,6 +138,8 @@ export async function loadSearch(q: string): Promise<SearchGroup[]> {
           ...a.plan.map((p) => ({ ref: `Audit ${p.year}-${p.id}`, title: p.detail ?? p.label, extra: `${p.track} ${p.auditorLabel}`, sub: p.track, href: `/audits?annee=${p.year}&element=${p.id}` })),
           ...a.auditGroups.flatMap((g) => g.findings).map((f) => ({ ref: `Constat ${f.id}`, title: f.text, extra: `${f.clause ?? ''} ${f.audit}`, href: `/audits?constat=${f.id}` })),
           ...changes.rows.map((c) => ({ ref: c.id, title: c.title, extra: c.description, sub: c.statusLabel, href: `/audits?changement=${enc(c.id)}#changements` })),
+          // AUD-40 : campagnes d'auto-évaluation visibles (loadSelfAssessments, comme la vue de l'écran).
+          ...((await loadSelfAssessments())?.summaries ?? []).map((x) => ({ ref: x.id, title: `Auto-évaluation ${x.standardLabel} · ${x.site}`, extra: `${x.scope} ${x.assessor}`, sub: x.statusLabel, href: selfAssessmentHref(x.id) })),
         ];
       },
     });

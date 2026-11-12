@@ -22,6 +22,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Le sélecteur de site, en haut de la barre latérale, change le périmètre de tous les écrans.',
       'Sous « Tous les sites », la carte des sites situe chaque site (coordonnées publiées par Matrix) avec ses indicateurs ; le tableau qui la suit reprend les mêmes chiffres.',
       'Le champ « Rechercher », sous le sélecteur de site, cherche dans tous les modules qui vous sont ouverts.',
+      'Animation QHSE et direction : « Personnaliser » choisit les cartes (catalogue des indicateurs de Vigie), leur ordre, leur période et leur périmètre ; « Revenir à la disposition par défaut » rétablit celle du rôle.',
     ],
   },
   todo: {
@@ -60,6 +61,8 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       '« Poste de garde » : arrivées et départs à venir (1 à 30 jours) des intérimaires et extérieurs déclarés dans Cursus et validés par les RH, avec le plan ou le permis de la même entreprise ; liste imprimable.',
       'Intervenants d’un plan : accueil sécurité et habilitations lus dans Cursus ; un accueil non à jour est signalé, le veto du service QHSE bloque la signature du plan et la délivrance de ses permis.',
       '« Causeries sécurité » : causeries et quarts d’heure sécurité, feuille d’émargement envoyée aux participants (cloche et e-mail), signée depuis « Mon espace » ; indicateurs par site et par mois.',
+      'Consignations d’un permis : énergie, points d’isolement, poseur et vérificateur (deux personnes distinctes) ; le permis ne se délivre qu’avec ses consignations vérifiées et ne se clôt qu’une fois elles levées.',
+      '« Opérations simultanées » : pour un jour, permis valables (avec leurs consignations) et activités de la carte par zone, et heures où plusieurs opérations se recouvrent.',
     ],
   },
   risks: {
@@ -97,6 +100,8 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'La liste des constats se filtre par nature ; les audits réalisés sans constat y figurent aussi.',
       'Un lien vers un référentiel (échéance de certification) ouvre directement sa fiche.',
       'Le dossier de revue se consulte aussi sur téléphone : les tableaux défilent horizontalement.',
+      '« Auto-évaluation ISO » : grille ISO 45001, ISO 14001 ou ISO 9001 par site ou pour l’entreprise ; niveau de conformité, constat et preuves par exigence, actions QSE « Audit interne ISO », synthèse par article comparée à la campagne précédente, reprise dans le dossier de revue.',
+      'Une campagne clôturée est figée : seuls des actions et des commentaires s’y ajoutent ensuite.',
     ],
   },
   contributions: {

@@ -2,6 +2,12 @@ import 'server-only';
 import { readPlanWorkers } from './plan-workers';
 import { INDUCTION_LABELS, inductionWarning, vetoAllowed, type InductionState } from '@/lib/rules/workers';
 import { hasLeft } from '@/lib/people';
+import { isQhse } from '@/lib/action-rules';
+import { getSession } from '@/lib/session';
+import {
+  LOCKOUT_ENERGIES, LOCKOUT_STATUSES, isLockoutStatus, lockoutCloseBlocker, lockoutDeliverBlocker, pointsText, readPoints, verifyRightError,
+  type IsolationPoint, type LockoutEnergy, type LockoutStatus,
+} from '@/lib/rules/lockouts';
 import { readDocumentsByRef } from '@/lib/foreign/codex';
 import { confReadable, documentHref } from '@/lib/rules/documents';
 import { asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
@@ -244,6 +250,22 @@ export type PermitView = {
   /** Événements rattachés au permis. */
   events: LinkedEvent[];
   history: ChangeEntry[];
+  /** PRV-22 : consignations du permis (annulées comprises), et blocages de la délivrance et de la clôture qu'elles portent. */
+  lockouts: LockoutView[];
+  lockoutDeliverBlock: string | null;
+  lockoutCloseBlock: string | null;
+};
+
+/** Consignation d'un permis (PRV-22). */
+export type LockoutView = {
+  id: string; version: string; permitId: string; preventionPlanId: string | null;
+  energy: LockoutEnergy; energyLabel: string; equipment: string; points: IsolationPoint[]; pointsText: string;
+  applierId: string; applier: string; verifierId: string; verifier: string;
+  status: LockoutStatus; statusLabel: string; tone: Tone;
+  appliedLabel: string | null; verifiedLabel: string | null; removedLabel: string | null; notes: string;
+  /** La personne connectée peut vérifier (vérificateur désigné ou animateur QHSE, jamais le poseur) : null, sinon le motif. */
+  verifyBlock: string | null;
+  cancelled: { on: string; by: string | null; reason: string } | null;
 };
 
 /** Événement rattaché à un plan ou à un permis (lien /evenements?sel=…). */
@@ -355,7 +377,7 @@ async function loadProcedure(db: Rows['db']): Promise<ProcedureLink | null> {
 
 /** Écran Plans de prévention et permis : vues sérialisables, indicateurs, écarts et règle des sites. */
 export async function loadPrevention() {
-  const rows = await loadRows();
+  const [rows, session] = await Promise.all([loadRows(), getSession()]);
   const { db, now, nowMs, people, contractors, sites, selectedSite, ruleOf, allPlans, allPermits, activities, eventPlanIds, linkedEvents, plans, permits, meetingsOf } = rows;
   const { gaps, pastGaps } = gapSummary(rows);
   const name = (id: string | null) => (id ? people.get(id)?.name ?? null : null);
@@ -405,6 +427,24 @@ export async function loadPrevention() {
       stepLabel: e.dismissedAt ? EVENT_DISMISSED : EVENT_STEPS[e.step] ?? '',
       tone: e.dismissedAt || e.step >= STEP_CLOSED ? 'neutral' : 'warn',
     }));
+
+  // PRV-22 : consignations des permis affichés, avec le droit de vérification de la personne connectée.
+  const lockoutRows = permits.flatMap((p) => rows.lockoutsOf(p.id));
+  const lockoutVersions = await entityVersions(db, 'lockout', lockoutRows.map((l) => l.id));
+  const stamp = (at: Date | null, by: string | null) => (at ? `${fmtLocalLong(toParisLocal(at))}${by ? ` · ${name(by) ?? by}` : ''}` : null);
+  const lockoutViews = (permitId: string): LockoutView[] => rows.lockoutsOf(permitId).map((l) => {
+    const status = (isLockoutStatus(l.status) ? l.status : 'preparee') as LockoutStatus;
+    const points = readPoints(l.points);
+    return {
+      id: l.id, version: lockoutVersions.get(l.id) ?? '0', permitId: l.permitId, preventionPlanId: l.preventionPlanId,
+      energy: l.energy as LockoutEnergy, energyLabel: LOCKOUT_ENERGIES[l.energy as LockoutEnergy] ?? l.energy, equipment: l.equipment, points, pointsText: pointsText(points),
+      applierId: l.applierId, applier: name(l.applierId) ?? l.applierId, verifierId: l.verifierId, verifier: name(l.verifierId) ?? l.verifierId,
+      status, statusLabel: LOCKOUT_STATUSES[status].label, tone: LOCKOUT_STATUSES[status].tone,
+      appliedLabel: stamp(l.appliedAt, l.applierId), verifiedLabel: stamp(l.verifiedAt, l.verifiedById), removedLabel: stamp(l.removedAt, l.removedById), notes: l.notes,
+      verifyBlock: verifyRightError({ userId: session.user.id, qhse: isQhse(session.role) }, l),
+      cancelled: l.cancelledAt ? { on: fmtDate(toParisLocal(l.cancelledAt).slice(0, 10)), by: name(l.cancelledById), reason: l.cancelReason ?? '' } : null,
+    };
+  });
 
   const permitViews: PermitView[] = permits.map((p) => {
     const type: PermitType = p.type === 'essai' ? 'essai' : 'feu';
@@ -471,6 +511,9 @@ export async function loadPrevention() {
       planActions: p.preventionPlanId ? linkedActions.filter((a) => a.preventionPlanId === p.preventionPlanId).length : 0,
       events: eventsOf('permitId', p.id),
       history,
+      lockouts: lockoutViews(p.id),
+      lockoutDeliverBlock: lockoutDeliverBlocker(rows.lockoutsOf(p.id)),
+      lockoutCloseBlock: lockoutCloseBlocker(rows.lockoutsOf(p.id)),
     };
   });
   const PERMIT_ORDER: PermitState[] = ['en_cours', 'expire', 'delivre', 'demande', 'clos', 'annule'];

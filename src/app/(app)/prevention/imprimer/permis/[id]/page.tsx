@@ -142,7 +142,26 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
           )}
       </Section>
 
-      <Section num={4} title="Visas">
+      {/* PRV-22 : consignations et isolations du permis (annulées exclues). */}
+      {permit.lockouts.some((l) => l.status !== 'annulee') && (
+        <Section num={4} title="Consignations">
+          <table className="table pp-table">
+            <thead><tr><th>Consignation</th><th>Points d&apos;isolement</th><th>Poseur · vérificateur</th><th>État</th></tr></thead>
+            <tbody>
+              {permit.lockouts.filter((l) => l.status !== 'annulee').map((l) => (
+                <tr key={l.id}>
+                  <td>{l.id} · {l.energyLabel}<div className="pp-muted">{l.equipment}</div></td>
+                  <td>{l.points.map((p) => (p.device ? `${p.label} (${p.device})` : p.label)).join(' ; ')}</td>
+                  <td>{l.applier} · {l.verifier}</td>
+                  <td>{l.statusLabel}{l.verifiedLabel ? <div className="pp-muted">vérifiée le {l.verifiedLabel}</div> : null}{l.removedLabel ? <div className="pp-muted">levée le {l.removedLabel}</div> : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      <Section num={permit.lockouts.some((l) => l.status !== 'annulee') ? 5 : 4} title="Visas">
         <div className="pp-sign">
           <VisaBox title="Délivré par" who={permit.issuer} fields={['Signature']} />
           <VisaBox title="Intervenant(s) : consignes reçues" fields={['Nom', 'Signature']} />
