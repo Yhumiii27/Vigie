@@ -19,7 +19,7 @@ import { currentSiteId, siteFilter, type SiteScope } from '../session';
  */
 export const loadRows = cache(async (scope: SiteScope = 'site') => {
   const [db, site, people, keep] = await Promise.all([getDb(), currentSiteId(), loadPeople(), siteFilter(scope)]);
-  const [contractors, plans, permits, sites, activities, linkedEvents, meetings] = await Promise.all([
+  const [contractors, plans, permits, sites, activities, linkedEvents, meetings, lockouts] = await Promise.all([
     db.select().from(t.contractors),
     db.select().from(t.preventionPlans),
     db.select().from(t.permits),
@@ -32,6 +32,8 @@ export const loadRows = cache(async (scope: SiteScope = 'site') => {
     }).from(t.events).where(or(isNotNull(t.events.preventionPlanId), isNotNull(t.events.permitId))),
     // PRV-17 : inspections et réunions périodiques tenues pendant les interventions (annulées comprises, barrées).
     db.select().from(t.preventionPlanMeetings).orderBy(desc(t.preventionPlanMeetings.heldOn), desc(t.preventionPlanMeetings.id)),
+    // PRV-22 : consignations des permis (annulées comprises).
+    db.select().from(t.lockouts).orderBy(t.lockouts.createdAt, t.lockouts.id),
   ]);
   const now = today();
   const rules = new Map(sites.map((s): [string, SiteRule] => [s.id, { seveso: s.seveso, ppFromFirstMinute: s.ppFromFirstMinute }]));
@@ -53,6 +55,8 @@ export const loadRows = cache(async (scope: SiteScope = 'site') => {
     meetings,
     /** Séances d'un plan (PRV-17), dans la forme de nextPeriodicMeeting. */
     meetingsOf: (planId: string) => meetings.filter((m) => m.planId === planId),
+    /** Consignations d'un permis (PRV-22), dans l'ordre de création. */
+    lockoutsOf: (permitId: string) => lockouts.filter((l) => l.permitId === permitId),
     plans: plans.filter((p) => keep(p.siteId)),
     permits: permits.filter((p) => keep(p.siteId)),
   };

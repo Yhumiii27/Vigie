@@ -7,6 +7,7 @@ import { visibleTodo, type VisibleTodo } from '../todo-visibility';
 import { loadActionSignals } from './actions';
 import { loadAuditSignals } from './audits';
 import { loadChangeSignals } from './changes';
+import { loadDgiSignals } from './dgi';
 import { loadDocumentSignals } from './documents';
 import { loadEmergencySignals } from './emergencies';
 import { loadEnvironmentSignals } from './environment';
@@ -48,6 +49,8 @@ export const loadTodo = cache(async (): Promise<TodoItem[]> => {
     loadEngineeringSignals(),
     // D01 (CV-10) : fiches sans matricule Cursus à rattacher, personnes absentes de Cursus, source indisponible.
     loadPeopleSignals(),
+    // CNF-01 : avis de danger grave et imminent sans mesures de l'employeur (lecteurs du registre seulement).
+    loadDgiSignals(),
   ]);
   return signals.flatMap((s) => s.todo).sort(byUrgency);
 });

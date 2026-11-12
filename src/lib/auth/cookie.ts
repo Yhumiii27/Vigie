@@ -25,6 +25,8 @@ export type SessionClaims = {
   sites: string[] | null;
   /** objectId Entra (oid). */
   oid: string;
+  /** Membre du CSE à la connexion (groupe VIGIE_CSE_GROUP, CNF-01) ; absent = non. */
+  cse?: boolean;
   /** Revendication login_hint (facultative) : déconnexion Microsoft sans sélecteur de compte. */
   hint?: string;
   /** Début de la session (secondes epoch). */
@@ -90,11 +92,12 @@ export async function openSession(token: string | undefined, secret: string, now
     const valid = typeof p.pid === 'string' && p.pid && typeof p.role === 'string' && typeof p.oid === 'string'
       && typeof p.auth === 'number' && typeof p.seen === 'number'
       && (sites === null || (Array.isArray(sites) && sites.every((s) => typeof s === 'string')))
-      && (p.hint === undefined || typeof p.hint === 'string');
+      && (p.hint === undefined || typeof p.hint === 'string')
+      && (p.cse === undefined || typeof p.cse === 'boolean');
     if (!valid) return null;
     const claims: SessionClaims = {
       pid: p.pid as string, role: p.role as Role, sites: sites as string[] | null, oid: p.oid as string,
-      ...(p.hint ? { hint: p.hint as string } : {}), auth: p.auth as number, seen: p.seen as number,
+      ...(p.hint ? { hint: p.hint as string } : {}), ...(p.cse ? { cse: true } : {}), auth: p.auth as number, seen: p.seen as number,
     };
     // Horloges : une session « du futur » (au-delà d'une minute) est refusée.
     if (claims.auth > now + 60 || claims.seen > now + 60 || sessionExpiresAt(claims) <= now) return null;

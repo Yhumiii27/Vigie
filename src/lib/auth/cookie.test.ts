@@ -15,6 +15,8 @@ describe('cookie de session', () => {
     expect(token.split('.')).toHaveLength(5);
     expect(token).not.toContain('oid-1');
     expect(await openSession(token, SECRET, NOW)).toEqual(claims({ hint: 'h' }));
+    // Membre du CSE (CNF-01) : gardé au renouvellement du cookie.
+    expect(await openSession(await sealSession(claims({ cse: true }), SECRET), SECRET, NOW)).toEqual(claims({ cse: true }));
     expect(await openSession(token, `${SECRET}-autre`, NOW)).toBeNull();
     const [h, k, iv, ct, tag] = token.split('.');
     expect(await openSession([h, k, iv, ct.slice(0, -2) + (ct.endsWith('AA') ? 'BB' : 'AA'), tag].join('.'), SECRET, NOW)).toBeNull();

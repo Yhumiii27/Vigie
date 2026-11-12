@@ -431,6 +431,20 @@ export async function loadAudits({ year: askedYear, element, constat }: { year?:
 }
 
 /**
+ * Rapport d'audit (AUD-39) d'un élément du programme : élément visible (site sélectionné et périmètre, AUD-22), en vigueur,
+ * réalisé, hors revue de direction ; constats en vigueur avec leurs actions (numéro seul hors périmètre). null sinon.
+ * Mêmes lecteurs que l'écran Audits (la route vérifie canSee(role, 'audits')).
+ */
+export async function loadAuditReport(id: number) {
+  const [base, selected, { allowedSiteIds }] = await Promise.all([readAudits(), currentSiteId(), getSession()]);
+  const visible = auditVisible(selected, allowedSiteIds);
+  const item = base.allPlan.find((p) => p.id === id);
+  if (!item || !visible(item.siteId) || item.cancelled || !item.done || item.isReview) return null;
+  const findings = base.findings.filter((f) => f.planItemId === id && !f.cancelled);
+  return { item, findings, now: base.now };
+}
+
+/**
  * Programme annuel imprimable (AUD-26, ISO 9001 §9.2.2) : éléments en vigueur de l'année (site sélectionné et périmètre,
  * AUD-22), par ligne et par mois, avec l'état, l'auditeur, le périmètre et le nombre de constats ; éléments annulés comptés.
  */

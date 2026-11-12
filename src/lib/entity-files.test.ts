@@ -5,7 +5,7 @@ import { ENTITY_FILE_KIND_KEYS, attachSummary, detachSummary, isEntityFileKind, 
 
 describe('entity-files', () => {
   it('types admis', () => {
-    expect(ENTITY_FILE_KIND_KEYS).toEqual(['duerp_version', 'risk', 'requirement', 'requirement_evaluation', 'control_record', 'review', 'review_item', 'waste_entry']);
+    expect(ENTITY_FILE_KIND_KEYS).toEqual(['duerp_version', 'risk', 'requirement', 'requirement_evaluation', 'control_record', 'review', 'review_item', 'waste_entry', 'self_assessment_line']);
     expect(isEntityFileKind('risk')).toBe(true);
     expect(isEntityFileKind('event')).toBe(false);
     expect(isEntityFileKind('action')).toBe(false);

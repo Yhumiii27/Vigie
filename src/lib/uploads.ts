@@ -235,6 +235,10 @@ async function attachmentSiteId(row: AttachmentAccess): Promise<string | null> {
     case 'audit_plan_item':
       return Number.isInteger(num) ? one(db.select({ siteId: t.auditPlanItems.siteId }).from(t.auditPlanItems).where(eq(t.auditPlanItems.id, num))) : null;
     case 'certification': return one(db.select({ siteId: t.certifications.siteId }).from(t.certifications).where(eq(t.certifications.id, row.entityId)));
+    // AUD-40 : preuve d'une exigence d'une campagne d'auto-évaluation (site de la campagne ; null : toute l'entreprise).
+    case 'self_assessment_line':
+      return Number.isInteger(num) ? one(db.select({ siteId: t.selfAssessments.siteId }).from(t.selfAssessmentLines)
+        .innerJoin(t.selfAssessments, eq(t.selfAssessments.id, t.selfAssessmentLines.assessmentId)).where(eq(t.selfAssessmentLines.id, num))) : null;
     default: return null;
   }
 }
@@ -309,6 +313,7 @@ async function canReadEntity(row: AttachmentAccess, s: FileSession): Promise<boo
     case 'audit_plan_item':
     case 'certification':
     case 'review':
+    case 'self_assessment_line':
       return canSee(role, 'audits');
     case 'review_item': {
       // Pièce d'un élément d'entrée de la revue (AUD-17) : lecteurs de l'écran Audits, ou son contributeur (« Mes contributions »).

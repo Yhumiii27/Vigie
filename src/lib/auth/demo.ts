@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { DEMO_ROLE_COOKIE, DEMO_ROLE_PEOPLE } from '../demo';
+import { DEMO_CSE_PEOPLE, DEMO_ROLE_COOKIE, DEMO_ROLE_PEOPLE } from '../demo';
 import { demoRoleOf } from './route-access';
 import type { AuthState } from './types';
 
@@ -8,5 +8,6 @@ import type { AuthState } from './types';
 export async function readDemoAuth(): Promise<AuthState> {
   // Même règle que le proxy (redirections de rôle avant le rendu, SEC-14) : demoRoleOf.
   const role = demoRoleOf((await cookies()).get(DEMO_ROLE_COOKIE)?.value);
-  return { status: 'authenticated', identity: { personId: DEMO_ROLE_PEOPLE[role], role, siteIds: null } };
+  const personId = DEMO_ROLE_PEOPLE[role];
+  return { status: 'authenticated', identity: { personId, role, siteIds: null, cse: DEMO_CSE_PEOPLE.includes(personId) } };
 }

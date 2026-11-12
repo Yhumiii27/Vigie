@@ -22,7 +22,7 @@ const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
  * (TDB-06), rappel du mercredi (ACT-32).
  */
 const FAMILY_ICON: Record<Exclude<NotificationFamily, 'todo'>, string> = {
-  action_confiee: 'ph-user-plus', action_commentaire: 'ph-chat-circle-text', action_preuve: 'ph-paperclip', signalement_suite: 'ph-megaphone', rappel: 'ph-calendar-check',
+  action_confiee: 'ph-user-plus', action_commentaire: 'ph-chat-circle-text', action_preuve: 'ph-paperclip', signalement_suite: 'ph-megaphone', causerie_emargement: 'ph-signature', rappel: 'ph-calendar-check',
   information: 'ph-info',
 };
 

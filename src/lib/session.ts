@@ -34,6 +34,8 @@ export type Session = {
   bootstrap: boolean;
   /** Mode démonstration (VIGIE_DEMO=1) : sélecteur de rôle, aperçu mobile. */
   demo: boolean;
+  /** Membre du CSE (groupe Entra VIGIE_CSE_GROUP, CNF-01) : registre des dangers graves et imminents. */
+  cse: boolean;
 };
 
 type Resolved = { session: Session; denied?: never } | { session: null; denied: string };
@@ -55,7 +57,7 @@ const resolveSession = cache(async (): Promise<Resolved> => {
   if (scheduled) return { session: scheduled };
   const auth = await getAuthState();
   if (auth.status !== 'authenticated') return { session: null, denied: authFailureHref(auth) };
-  const { role, personId, siteIds } = auth.identity;
+  const { role, personId, siteIds, cse } = auth.identity;
   const db = await getDb();
   const [[user], sites] = await Promise.all([
     db.select(PERSON_COLUMNS).from(t.people).where(eq(t.people.id, personId)),
@@ -78,7 +80,7 @@ const resolveSession = cache(async (): Promise<Resolved> => {
   ];
   const wanted = (await cookies()).get(SITE_COOKIE)?.value;
   const site = siteOptions.find((s) => s.id === wanted) ?? siteOptions.find((s) => s.id === user.siteId) ?? siteOptions[0];
-  return { session: { role, user, site, siteOptions, allowedSiteIds, bootstrap: !active.length, demo } };
+  return { session: { role, user, site, siteOptions, allowedSiteIds, bootstrap: !active.length, demo, cse: !!cse } };
 });
 
 /**

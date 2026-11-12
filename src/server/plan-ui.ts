@@ -136,7 +136,7 @@ async function carriedLinks(db: DbOrTx, a: ActionRow): Promise<Carried[]> {
     const parsed = parseActionLink(link);
     return (parsed && (await parsed.def.siteOf?.(db, parsed.args))) ?? null;
   };
-  const sourceAudit = ['finding', 'plan'].map((k) => links.find((l) => l.kind === k && sourceKinds.includes(k))).find(Boolean);
+  const sourceAudit = ['finding', 'selfassessment', 'plan'].map((k) => links.find((l) => l.kind === k && sourceKinds.includes(k))).find(Boolean);
   for (const l of links) {
     const mode = followUpLinkMode(l.kind);
     if (mode === 'none') continue;

@@ -104,3 +104,18 @@ export const OUTBOUND_STATUS_CODES = ['pending', 'sent', 'failed'] as const;
 export const OUTBOUND_TARGET_CODES = ['codex'] as const;
 /** outbound_messages.kind : OUTBOUND_KINDS. */
 export const OUTBOUND_KIND_CODES = ['ecr_decision'] as const;
+/**
+ * Réponses du service QHSE du 09/11/2026, paquet R3 (migration 0034).
+ * assessment_requirements.standard et self_assessments.standard : ASSESSMENT_STANDARDS (src/lib/rules/self-assessment.ts) — AUD-40.
+ */
+export const ASSESSMENT_STANDARD_CODES = ['iso45001', 'iso14001', 'iso9001'] as const;
+/** self_assessments.status : ASSESSMENT_STATUSES (« annulée » : triplet cancelled_*). */
+export const ASSESSMENT_STATUS_CODES = ['brouillon', 'cloturee'] as const;
+/** self_assessment_lines.level : CONFORMITY_LEVELS, ou vide (exigence non encore évaluée). */
+export const CONFORMITY_LEVEL_CODES = ['conforme', 'partiel', 'non_conforme', 'non_applicable'] as const;
+/** lockouts.energy : LOCKOUT_ENERGIES (src/lib/rules/lockouts.ts) — PRV-22. */
+export const LOCKOUT_ENERGY_CODES = ['electrique', 'mecanique', 'hydraulique', 'pneumatique', 'fluide', 'chimique', 'thermique', 'autre'] as const;
+/** lockouts.status : LOCKOUT_STATUSES. */
+export const LOCKOUT_STATUS_CODES = ['preparee', 'posee', 'verifiee', 'levee', 'annulee'] as const;
+/** dashboard_layouts.role : rôles dont le tableau de bord est configurable (DASHBOARD_ROLES, src/lib/dashboard-cards.ts) — TDB-19. */
+export const DASHBOARD_ROLE_CODES = ['Animateur QHSE', 'Direction'] as const;
