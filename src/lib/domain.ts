@@ -219,12 +219,13 @@ export const ACTION_SOURCES: Record<SourceKey, { label: string; icon: string; ta
  * Environnement), Revue de direction l'élément du programme de la ligne « Revues de direction ».
  */
 export const SOURCE_LINK_KINDS: Record<SourceTarget, readonly string[]> = {
-  event: ['event'], audit: ['finding', 'plan'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
+  event: ['event'], audit: ['finding', 'plan', 'selfassessment'], risk: ['risk'], control: ['control'], requirement: ['requirement'],
   review: ['review', 'reviewdecision', 'plan'], objective: ['reviewdecision'], document: ['document', 'docversion'],
   environment: ['wastestream', 'wasteentry', 'requirement'], safetystudy: ['safetystudy'], eco: ['eco'], free: [],
 };
 /** L'unique événement ou audit d'une action : posé à la création seulement, jamais rattaché ni détaché ensuite (§ 12, D15). */
-export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan'] as const;
+// AUD-40 : ligne d'une auto-évaluation par référentiel (« selfassessment »), comme un constat.
+export const EVENT_AUDIT_LINK_KINDS = ['event', 'finding', 'plan', 'selfassessment'] as const;
 /** Ancienne origine (avant 0005) → libellé : historique, indication d'une source à compléter (legacy_origin, D9). */
 export const LEGACY_ORIGIN_LABELS: Record<string, string> = {
   ev: 'Événement', audit: 'Audit', risk: 'Risques', watch: 'Veille', client: 'Client', rev: 'Revue de direction',
@@ -282,6 +283,7 @@ export const NOTIFICATION_KINDS = {
   action_commentaire: 'Commentaire du responsable',
   action_preuve: 'Preuve ajoutée',
   signalement_suite: 'Suite de votre signalement', // TDB-06 : qualifié, classé sans suite ou clôturé, au déclarant
+  causerie_emargement: 'Feuille d’émargement à signer', // CNF-09 : causerie ou quart d'heure sécurité, au participant
 } as const;
 export type NotificationType = keyof typeof NOTIFICATION_KINDS;
 /** Clés d'état lu de la cloche : notification stockée « notification:<id> », rappel du mercredi « rappel-actions|2026-W42 ». */
@@ -616,7 +618,7 @@ export const REVIEW_FOLLOW_UP = {
 
 export type ScreenKey =
   | 'dashboard' | 'todo' | 'events' | 'actions' | 'prevention' | 'risks' | 'skills'
-  | 'watch' | 'audits' | 'docs' | 'env' | 'engineering' | 'mobile' | 'contributions';
+  | 'watch' | 'audits' | 'docs' | 'env' | 'engineering' | 'mobile' | 'contributions' | 'search';
 
 export const SCREENS: Record<ScreenKey, { path: string; title: string; label: string; icon: string }> = {
   dashboard: { path: '/', title: 'Tableau de bord QHSE', label: 'Tableau de bord', icon: 'ph-gauge' },
@@ -635,6 +637,8 @@ export const SCREENS: Record<ScreenKey, { path: string; title: string; label: st
   mobile: { path: '/apercu-mobile', title: 'Signalement terrain', label: 'Aperçu mobile · signalement terrain', icon: 'ph-device-mobile' },
   // Hors navigation (AUD-04) : contributions, participations et décisions de la personne pour la revue de direction.
   contributions: { path: '/audits/contributions', title: 'Mes contributions à la revue de direction', label: 'Mes contributions', icon: 'ph-hand-arrow-up' },
+  // Hors navigation (TDB-18) : recherche globale, champ de la barre latérale ; chaque module filtré comme son écran.
+  search: { path: '/recherche', title: 'Recherche', label: 'Recherche', icon: 'ph-magnifying-glass' },
 };
 
 export const NAV: { label: string; items: ScreenKey[] }[] = [
@@ -679,10 +683,11 @@ export const ALL_SITES = 'all';
 // écrans que le rôle modifie, plus les échéances de la personne (ownerIds) sur tous les sites de son périmètre, sans lien
 // quand l'écran source lui est fermé (TDB-02, TDB-05).
 // « Mes contributions » (/audits/contributions) : ouvert à tous, la page ne montre que les contributions, participations
-// et décisions de la personne (AUD-04).
+// et décisions de la personne (AUD-04). « Recherche » (/recherche, TDB-18) : ouverte à tous, chaque module n'est cherché
+// que si son écran est ouvert au rôle, dans les éléments que cet écran montre (src/lib/data/search.ts).
 export const canSee = (role: Role, screen: ScreenKey) => {
   const allowed = ROLES[role].screens;
-  return screen === 'mobile' || screen === 'todo' || screen === 'contributions' || !allowed || allowed.includes(screen);
+  return screen === 'mobile' || screen === 'todo' || screen === 'contributions' || screen === 'search' || !allowed || allowed.includes(screen);
 };
 /** Écran correspondant à un lien interne (filtre des échéances selon les droits du rôle, badges) : le chemin le plus long l'emporte. */
 export function screenOfHref(href: string): ScreenKey {

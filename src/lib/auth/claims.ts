@@ -61,6 +61,11 @@ export function roleFromEntra(roles: string[], mapping: Record<Role, string>): R
 /** Direction et animateur QHSE voient tous les sites ; les autres rôles, leur site de rattachement et les sites accordés. */
 export const hasAllSites = (role: Role) => role === 'Direction' || role === 'Animateur QHSE';
 
+/** Membre du CSE (CNF-01) : le groupe VIGIE_CSE_GROUP figure dans la revendication groups. */
+export function isCseMember(groups: string[], cseGroup: string | null): boolean {
+  return !!cseGroup && groups.some((g) => g.toLowerCase() === cseGroup);
+}
+
 /** Sites accordés par les groupes Entra (VIGIE_SITE_GROUPS), sans doublon, dans l'ordre de la configuration. */
 export function sitesFromGroups(groups: string[], siteGroups: { groupId: string; siteId: string }[]): string[] {
   const mine = new Set(groups.map((g) => g.toLowerCase()));

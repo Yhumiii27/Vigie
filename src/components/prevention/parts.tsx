@@ -29,6 +29,10 @@ export type PreventionOptions = Pick<FormOptions, 'people' | 'sites' | 'projects
   today: string;
   /** Procédure de référence (PR-QHSE-005), rappelée au pied des fiches. */
   procedure?: ProcedureLink | null;
+  /** PRV-23 : intervenants proposés (personnes présentes lues dans Cursus). */
+  workers?: Option[];
+  /** PRV-23 : veto sur un intervenant (animateur QHSE). */
+  canVeto?: boolean;
 };
 
 export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as const;

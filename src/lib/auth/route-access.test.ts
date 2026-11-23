@@ -107,6 +107,14 @@ describe('décision du proxy (SEC-14)', () => {
     expect(routeDecision(`${ACTION_PRINT_PATH}/A-1`, 'Salarié', false)).toEqual({ kind: 'pass' });
   });
 
+  it('TDB-18 : recherche ouverte à tout rôle ; AUD-39 : rapport PDF (route handler, 403 / 404 lui-même) ; CNF-01 : registre des DGI sous Événements', () => {
+    for (const role of ROLE_KEYS) expect(routeDecision('/recherche', role, false), role).toEqual({ kind: 'pass' });
+    expect(screenOfPath('/audits/rapport/12')).toBeNull();
+    expect(screenOfPath('/evenements/registre-dgi')).toBe('events');
+    // Le registre des DGI vérifie lui-même l'appartenance au CSE (canReadDgi) : le Salarié passe le proxy.
+    expect(routeDecision('/evenements/registre-dgi', 'Salarié', false)).toEqual({ kind: 'pass' });
+  });
+
   it('rôle de démonstration : cookie reconnu, sinon le rôle par défaut', () => {
     expect(demoRoleOf('Direction')).toBe('Direction');
     expect(demoRoleOf('Salarié')).toBe('Salarié');

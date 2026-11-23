@@ -20,6 +20,9 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Chaque carte ouvre la liste filtrée correspondante (événements, actions, contrôles…).',
       'Le TF1 et le TG sont calculés sur les 12 derniers mois complets ; un mois sans heures travaillées est signalé.',
       'Le sélecteur de site, en haut de la barre latérale, change le périmètre de tous les écrans.',
+      'Sous « Tous les sites », la carte des sites situe chaque site (coordonnées publiées par Matrix) avec ses indicateurs ; le tableau qui la suit reprend les mêmes chiffres.',
+      'Le champ « Rechercher », sous le sélecteur de site, cherche dans tous les modules qui vous sont ouverts.',
+      'Animation QHSE et direction : « Personnaliser » choisit les cartes (catalogue des indicateurs de Vigie), leur ordre, leur période et leur périmètre ; « Revenir à la disposition par défaut » rétablit celle du rôle.',
     ],
   },
   todo: {
@@ -37,6 +40,7 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Les filtres (étape, pilote, période, gravité, ancienneté) sont gardés dans l’adresse de la page : un lien partagé montre la même liste.',
       '« Signaler un événement » depuis un contrôle, un risque, un document, un plan de prévention ou l’environnement ouvre le formulaire prérempli.',
       'Les données de santé d’un accident du travail ne sont visibles que de l’animation QHSE et de la direction.',
+      '« Registre des DGI » : registre des dangers graves et imminents, ouvert à l’animation QHSE, à la direction et aux membres du CSE (avis signé par le représentant, mesures de l’employeur).',
     ],
   },
   actions: {
@@ -55,6 +59,10 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Le nom de l’entreprise, dans la fiche d’un plan ou d’un permis, ouvre la fiche de l’entreprise.',
       'Un plan écrit est obligatoire dès 400 h de travaux sur 12 mois ou pour des travaux dangereux (dès la première minute sur un site Seveso).',
       '« Poste de garde » : arrivées et départs à venir (1 à 30 jours) des intérimaires et extérieurs déclarés dans Cursus et validés par les RH, avec le plan ou le permis de la même entreprise ; liste imprimable.',
+      'Intervenants d’un plan : accueil sécurité et habilitations lus dans Cursus ; un accueil non à jour est signalé, le veto du service QHSE bloque la signature du plan et la délivrance de ses permis.',
+      '« Causeries sécurité » : causeries et quarts d’heure sécurité, feuille d’émargement envoyée aux participants (cloche et e-mail), signée depuis « Mon espace » ; indicateurs par site et par mois.',
+      'Consignations d’un permis : énergie, points d’isolement, poseur et vérificateur (deux personnes distinctes) ; le permis ne se délivre qu’avec ses consignations vérifiées et ne se clôt qu’une fois elles levées.',
+      '« Opérations simultanées » : pour un jour, permis valables (avec leurs consignations) et activités de la carte par zone, et heures où plusieurs opérations se recouvrent.',
     ],
   },
   risks: {
@@ -92,6 +100,8 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'La liste des constats se filtre par nature ; les audits réalisés sans constat y figurent aussi.',
       'Un lien vers un référentiel (échéance de certification) ouvre directement sa fiche.',
       'Le dossier de revue se consulte aussi sur téléphone : les tableaux défilent horizontalement.',
+      '« Auto-évaluation ISO » : grille ISO 45001, ISO 14001 ou ISO 9001 par site ou pour l’entreprise ; niveau de conformité, constat et preuves par exigence, actions QSE « Audit interne ISO », synthèse par article comparée à la campagne précédente, reprise dans le dossier de revue.',
+      'Une campagne clôturée est figée : seuls des actions et des commentaires s’y ajoutent ensuite.',
     ],
   },
   contributions: {
@@ -119,6 +129,13 @@ export const SCREEN_HELP: Partial<Record<ScreenKey, HelpTopic>> = {
       'Un ordre passe de « Brouillon » à « Analyse d’impact » puis « En approbation » (interchangeabilité évaluée) ; il est libéré d’office quand les trois clés sont approuvées et chaque cible de l’effectivité a sa disposition.',
       '« Proposer l’effectivité » reprend les projets et machines de Keystone qui emploient les articles de l’ordre ; les mises à jour et rétrofits ont une échéance après la libération.',
       'Un approbateur désigné décide sa propre clé ; Keystone transmet les décisions de l’ingénierie et des chefs de projet.',
+    ],
+  },
+  search: {
+    intro: 'Recherche dans tous les modules qui vous sont ouverts, par référence (EV-…, AC-…, PP-…, ECO-…, ES-…, MC-…) ou par intitulé.',
+    tips: [
+      'Chaque module est cherché sur le site sélectionné et avec vos droits, comme son propre écran : rien d’autre n’apparaît.',
+      'Au moins 2 caractères ; 20 résultats par module, « Voir dans l’écran » pour la suite quand l’écran a sa propre recherche.',
     ],
   },
   mobile: {

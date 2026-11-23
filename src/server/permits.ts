@@ -1,6 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { vetoedWorkerNames } from '@/lib/data/plan-workers';
+import { vetoBlocker } from '@/lib/rules/workers';
+import { lockoutCloseBlocker, lockoutDeliverBlocker } from '@/lib/rules/lockouts';
 import { eq } from 'drizzle-orm';
 import { unknownProjectError } from '@/lib/foreign/keystone';
 import { getDb, schema as t } from '@/db';
@@ -191,6 +194,12 @@ export async function deliverPermit(id: string): Promise<Result> {
     const reason = firstMinuteRule(rule) ? firstMinuteReason(rule) : '';
     return { error: `${issue} Délivrance impossible${reason ? ` (${lcfirst(reason)})` : ''}.` };
   }
+  // PRV-23 : intervenant du plan rattaché sous veto du service QHSE.
+  const vetoed = plan ? vetoBlocker(await vetoedWorkerNames(db, plan.id), 'délivrer le permis') : null;
+  if (vetoed) return { error: vetoed };
+  // PRV-22 : consignations du permis posées et vérifiées avant la délivrance.
+  const unverified = lockoutDeliverBlocker(await db.select({ id: t.lockouts.id, status: t.lockouts.status }).from(t.lockouts).where(eq(t.lockouts.permitId, permit.id)));
+  if (unverified) return { error: unverified };
   await db.transaction(async (tx) => {
     await tx.update(t.permits).set({ status: 'delivre', issuerId: session.user.id }).where(eq(t.permits.id, permit.id));
     await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: PERMIT_DELIVERED, byId: session.user.id });
@@ -245,6 +254,9 @@ export async function closePermit(id: string): Promise<Result> {
   // PRV-04 : permis de feu clos seulement après la surveillance après travaux.
   const watching = permitCloseBlocker(permit, now.getTime());
   if (watching) return { error: watching };
+  // PRV-22 : consignations levées (ou annulées si jamais posées) avant la clôture.
+  const locked = lockoutCloseBlocker(await db.select({ id: t.lockouts.id, status: t.lockouts.status }).from(t.lockouts).where(eq(t.lockouts.permitId, permit.id)));
+  if (locked) return { error: locked };
   await db.transaction(async (tx) => {
     await tx.update(t.permits).set({ status: 'clos', closedAt: now }).where(eq(t.permits.id, permit.id));
     await logChange(tx, { entityType: 'permit', entityId: permit.id, action: 'status', summary: 'Permis clos (fin des travaux)', byId: session.user.id });

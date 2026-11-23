@@ -20,7 +20,7 @@ import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { cancelPlanItem, hideTrack, removePlanItemReport, renameTrack, renewProgram, reschedulePlanItem, savePlanItem, showTrack } from '@/server/audits';
 import { FindingForm } from './FindingsCard';
 import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
-import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, inferAuditKind, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
+import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, auditReportAvailable, auditReportHref, inferAuditKind, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
 import styles from './audits.module.css';
 
 type Opts = ActionFormOptions;
@@ -575,6 +575,7 @@ function ReportSection({ item, findings, onAddFinding, onLeave }: { item: PlanIt
         <span style={muted}>Aucun rapport joint.</span>
       )}
       <FindingList findings={findings} year={item.year} onLeave={onLeave} />
+      <ReportPdfLink item={item} />
       {/* AUD-11 : un constat suit la réalisation de l'audit. */}
       {item.done ? (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={onAddFinding}>
@@ -582,6 +583,19 @@ function ReportSection({ item, findings, onAddFinding, onLeave }: { item: PlanIt
         </button>
       ) : <span style={muted}>Déclarez l&apos;audit réalisé pour saisir ses constats.</span>}
     </div>
+  );
+}
+
+/**
+ * AUD-39 : rapport d'audit en PDF (élément, constats et actions), téléchargeable une fois l'audit réalisé ; lien simple
+ * (téléchargement, pas de navigation de l'application).
+ */
+function ReportPdfLink({ item }: { item: PlanItemView }) {
+  if (!auditReportAvailable(item)) return null;
+  return (
+    <a href={auditReportHref(item.id)} download className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }}>
+      <i className="ph ph-file-pdf" style={{ fontSize: 13 }} aria-hidden />Télécharger le rapport d&apos;audit (PDF)
+    </a>
   );
 }
 
@@ -659,6 +673,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
           <span className="card-kicker">Rapport et constats</span>
           {item.reports.length ? <FileList files={item.reports} /> : <span style={muted}>Aucun rapport joint.</span>}
           <FindingList findings={findings} year={item.year} onLeave={onLeave} />
+          <ReportPdfLink item={item} />
         </div>
       )}
       <LazyChangeLog entity="audit_plan_item" id={item.id} />

@@ -7,24 +7,35 @@ import { Aside, CardHead, Dot, ToneTag } from '@/components/ui';
 import { fmtDate, fmtDay, fmtDayMonth, fmtLong, fmtMonthAbbr, isoWeek } from '@/lib/dates';
 import { isDemo } from '@/lib/config';
 import { today } from '@/lib/today';
-import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, severityTone } from '@/lib/domain';
+import { SEVERITY, SCREENS, TODO_HORIZON_DAYS, TONE, canSeeHealth, severityTone } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { MAX_TODO, loadDashboard } from '@/lib/data/dashboard';
+import { loadSitesMap } from '@/lib/data/sites-map';
+import { SitesMap } from '@/components/dashboard/SitesMap';
+import { DashboardCustomizer } from '@/components/dashboard/DashboardCustomizer';
+import { loadDashboardCards } from '@/lib/data/dashboard-cards';
+import { CARD_IDS, cardAllowed } from '@/lib/dashboard-cards';
+import { canReadDgi } from '@/lib/rules/dgi';
 
 // TDB-17 : titre d'onglet de la page.
 export const metadata: Metadata = { title: SCREENS.dashboard.title };
 
 export default async function DashboardPage() {
-  await guard('dashboard');
+  const session = await guard('dashboard');
   const now = today();
-  const d = await loadDashboard();
+  // TDB-19 : animateur QHSE et direction — cartes choisies dans le catalogue (disposition personnelle, du rôle ou de Vigie).
+  const [d, sitesMap, custom] = await Promise.all([loadDashboard(), loadSitesMap(), loadDashboardCards()]);
+  const kpis = custom ? custom.cards.map((c) => ({ ...c, subHref: null as string | null })) : d.kpis.map((k) => ({ ...k, options: null as string | null }));
+  const viewer = { health: canSeeHealth(session.role), dgi: canReadDgi(session) };
 
   return (
     <>
-      <PageHeader title={SCREENS.dashboard.title} sub={`Semaine ${isoWeek(now)} · données au ${fmtLong(now)}`} />
+      <PageHeader title={SCREENS.dashboard.title} sub={`Semaine ${isoWeek(now)} · données au ${fmtLong(now)}`}
+        actions={custom ? <DashboardCustomizer layout={custom.layout} allowed={CARD_IDS.filter((id) => cardAllowed(id, viewer))} roleLayouts={custom.roleLayouts} /> : undefined} />
       <div className="vg-page" style={{ gap: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-          {d.kpis.map((k) => {
+          {custom && kpis.length === 0 && <div className="card"><span className="vg-muted" style={{ fontSize: 12 }}>Aucune carte choisie : « Personnaliser » pour en ajouter.</span></div>}
+          {kpis.map((k) => {
             const body = (
               <>
                 <div className="vg-eyebrow" style={{ color: 'var(--color-neutral-500)' }}>{k.label}</div>
@@ -38,6 +49,7 @@ export default async function DashboardPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
+                {k.options && <div style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{k.options}</div>}
               </>
             );
             const style = { gap: 5, padding: '12px 14px' } as const;
@@ -191,6 +203,8 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+        {/* PRV-24 : carte des sites et de leurs indicateurs, sous « Tous les sites » seulement. */}
+        {sitesMap && (!custom || custom.showSitesMap) && <SitesMap {...sitesMap} />}
       </div>
     </>
   );

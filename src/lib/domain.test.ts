@@ -80,11 +80,11 @@ describe('sources des actions (§ 12)', () => {
   });
   it('types de lien de l’élément de la source ; événement ou audit unique', () => {
     expect(SOURCE_LINK_KINDS.event).toEqual(['event']);
-    expect(SOURCE_LINK_KINDS.audit).toEqual(['finding', 'plan']);
+    expect(SOURCE_LINK_KINDS.audit).toEqual(['finding', 'plan', 'selfassessment']);
     expect(SOURCE_LINK_KINDS.free).toEqual([]);
     expect(SOURCE_LINK_KINDS.safetystudy).toEqual(['safetystudy']); // VG-02 : recommandation d'une étude de sécurité des procédés
     expect(SOURCE_LINK_KINDS.environment).toEqual(['wastestream', 'wasteentry', 'requirement']); // action BSD (Déchets + exigence)
-    expect(EVENT_AUDIT_LINK_KINDS).toEqual(['event', 'finding', 'plan']);
+    expect(EVENT_AUDIT_LINK_KINDS).toEqual(['event', 'finding', 'plan', 'selfassessment']); // AUD-40
     expect(Object.keys(LEGACY_ORIGIN_LABELS).sort()).toEqual(['audit', 'client', 'docs', 'env', 'ev', 'prevention', 'rev', 'risk', 'skills', 'watch']);
   });
 });
@@ -102,7 +102,7 @@ describe('autres listes des actions (§ 5)', () => {
     expect(REVIEW_FOLLOW_UP.cancelled.label).toBe('Action abandonnée');
     expect(NOTIFICATION_KINDS).toEqual({
       action_confiee: 'Action confiée', action_commentaire: 'Commentaire du responsable', action_preuve: 'Preuve ajoutée',
-      signalement_suite: 'Suite de votre signalement',
+      signalement_suite: 'Suite de votre signalement', causerie_emargement: 'Feuille d’émargement à signer',
     });
     expect(sqlList(['a', 'b'])).toBe("'a', 'b'");
   });

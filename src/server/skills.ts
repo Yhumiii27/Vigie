@@ -254,9 +254,9 @@ export async function followTitle(_prev: FormState, fd: FormData): Promise<FormS
   if (!f.ok || !src) return f.state();
   const values = {
     id, label: src.shortLabel, validityMonths: src.validityMonths ?? 0, sort: nextSort(titles), cursusState: 'actif',
-    firstAid: f.bool('firstAid'), awareness: f.bool('awareness'), internalAuditor: f.bool('internalAuditor'),
+    firstAid: f.bool('firstAid'), awareness: f.bool('awareness'), internalAuditor: f.bool('internalAuditor'), safetyInduction: f.bool('safetyInduction'),
   };
-  const flags = [values.firstAid && 'secourisme', values.awareness && 'sensibilisation', values.internalAuditor && 'auditeur interne'].filter(Boolean);
+  const flags = [values.firstAid && 'secourisme', values.awareness && 'sensibilisation', values.internalAuditor && 'auditeur interne', values.safetyInduction && 'accueil sécurité'].filter(Boolean);
   await db.transaction(async (tx) => {
     await tx.insert(t.trainingTitles).values(values);
     await logChange(tx, { entityType: 'training_title', entityId: id, action: 'create', summary: `Titre « ${src.shortLabel} » suivi (catalogue de Cursus : ${id})${flags.length ? ` — ${flags.join(', ')}` : ''}` });
@@ -267,7 +267,7 @@ export async function followTitle(_prev: FormState, fd: FormData): Promise<FormS
 
 /**
  * Modifie les attributs propres au QHSE d'un titre suivi (CV-03) : secourisme (`firstAid`, titulaires donneurs de soins du
- * registre des accidents bénins, EVT-04), sensibilisation (HAB-13), auditeur interne (AUD-27). Intitulé et validité sont
+ * registre des accidents bénins, EVT-04), sensibilisation (HAB-13), auditeur interne (AUD-27), accueil sécurité (PRV-23). Intitulé et validité sont
  * ceux de Cursus (jamais modifiés ici). Champ absent du formulaire : valeur enregistrée conservée.
  */
 export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -283,16 +283,18 @@ export async function saveTitle(_prev: FormState, fd: FormData): Promise<FormSta
   const firstAid = fd.has('firstAidField') ? f.bool('firstAid') : prev.firstAid;
   const awareness = fd.has('awarenessField') ? f.bool('awareness') : prev.awareness;
   const internalAuditor = fd.has('internalAuditorField') ? f.bool('internalAuditor') : prev.internalAuditor;
+  const safetyInduction = fd.has('safetyInductionField') ? f.bool('safetyInduction') : prev.safetyInduction;
   const yes = (v: boolean) => (v ? 'oui' : 'non');
   const details = [
     ...(prev.firstAid !== firstAid ? [{ field: 'Secourisme', from: yes(prev.firstAid), to: yes(firstAid) }] : []),
     ...(prev.awareness !== awareness ? [{ field: 'Sensibilisation', from: yes(prev.awareness), to: yes(awareness) }] : []),
     ...(prev.internalAuditor !== internalAuditor ? [{ field: 'Auditeur interne', from: yes(prev.internalAuditor), to: yes(internalAuditor) }] : []),
+    ...(prev.safetyInduction !== safetyInduction ? [{ field: 'Accueil sécurité', from: yes(prev.safetyInduction), to: yes(safetyInduction) }] : []),
   ];
   const stale = await freshWrite(() => db.transaction(async (tx) => {
     await assertFresh(tx, 'training_title', id, fd.get(VERSION_FIELD));
     if (!details.length) return;
-    await tx.update(t.trainingTitles).set({ firstAid, awareness, internalAuditor }).where(eq(t.trainingTitles.id, id));
+    await tx.update(t.trainingTitles).set({ firstAid, awareness, internalAuditor, safetyInduction }).where(eq(t.trainingTitles.id, id));
     await logChange(tx, { entityType: 'training_title', entityId: id, action: 'update', summary: `Titre « ${prev.label} » modifié`, details });
   }));
   if (stale) return { error: stale };

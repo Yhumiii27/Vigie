@@ -28,11 +28,13 @@ describe('parseConfig', () => {
       VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr/', VIGIE_ALLOWED_HOSTS: 'Vigie.interne:8443',
       DATABASE_URL: 'postgres://vigie@db/vigie', ENTRA_TENANT_ID: 't', ENTRA_CLIENT_ID: 'c', ENTRA_CLIENT_SECRET: 's',
       VIGIE_SESSION_SECRET: 'x'.repeat(32), VIGIE_SITE_GROUPS: 'g1:site_a, g2:site_b', VIGIE_UPLOAD_KEY: 'ab'.repeat(32),
+      VIGIE_CSE_GROUP: '3F2C1A00-0000-4000-8000-00000000000A',
     });
     expect(c.publicUrl).toBe('https://vigie.exemple.fr');
     expect(c.allowedHosts).toEqual(['vigie.interne:8443', 'vigie.exemple.fr']);
     expect(c.entra?.issuer).toBe('https://login.microsoftonline.com/t/v2.0');
     expect(c.siteGroups).toEqual([{ groupId: 'g1', siteId: 'site_a' }, { groupId: 'g2', siteId: 'site_b' }]);
+    expect(c.cseGroup).toBe('3f2c1a00-0000-4000-8000-00000000000a');
     expect(c.uploadKey?.length).toBe(32);
     expect(c.reportSecret).toBeNull();
     expect(entraMissing(c)).toEqual([]);
@@ -63,6 +65,8 @@ describe('parseConfig', () => {
     expect(problems({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr/vigie' })).toEqual(['VIGIE_PUBLIC_URL']);
     expect(problems({ VIGIE_DEMO: '1', VIGIE_ALLOWED_HOSTS: 'https://vigie.exemple.fr/' })).toEqual(['VIGIE_ALLOWED_HOSTS']);
     expect(problems({ VIGIE_DEMO: '1', VIGIE_SITE_GROUPS: 'groupe-sans-site' })).toEqual(['VIGIE_SITE_GROUPS']);
+    expect(problems({ VIGIE_DEMO: '1', VIGIE_CSE_GROUP: 'membres du CSE' })).toEqual(['VIGIE_CSE_GROUP']);
+    expect(parseConfig({ VIGIE_DEMO: '1' }).cseGroup).toBeNull();
     expect(problems({ VIGIE_DEMO: '1', VIGIE_TODAY: '2026-02-30' })).toEqual(['VIGIE_TODAY']);
     expect(problems({ VIGIE_DEMO: '1', DATABASE_URL: 'mysql://db/vigie' })).toEqual(['DATABASE_URL']);
     expect(problems({ VIGIE_DEMO: '1', VIGIE_UPLOAD_KEY_PREVIOUS: 'ab'.repeat(32) })).toEqual(['VIGIE_UPLOAD_KEY_PREVIOUS']);

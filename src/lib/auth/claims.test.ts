@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfig } from '../env';
-import { TRUSTED_EMAIL_REFUSALS, hasAllSites, profileFromClaims, roleFromEntra, sitesFromGroups, trustedEmail } from './claims';
+import { TRUSTED_EMAIL_REFUSALS, hasAllSites, isCseMember, profileFromClaims, roleFromEntra, sitesFromGroups, trustedEmail } from './claims';
 
 const roles = parseConfig({ VIGIE_DEMO: '1' }).entraRoles;
 
@@ -60,5 +60,11 @@ describe('revendications Entra ID', () => {
     expect(sitesFromGroups([], map)).toEqual([]);
     expect(hasAllSites('Direction') && hasAllSites('Animateur QHSE')).toBe(true);
     expect(hasAllSites('Chef de service') || hasAllSites('Chef de projet') || hasAllSites('Salarié')).toBe(false);
+  });
+
+  it('membre du CSE (CNF-01) : groupe VIGIE_CSE_GROUP dans la revendication groups, sans tenir compte de la casse', () => {
+    expect(isCseMember(['G-1', 'CSE-0001'], 'cse-0001')).toBe(true);
+    expect(isCseMember(['g-1'], 'cse-0001')).toBe(false);
+    expect(isCseMember(['cse-0001'], null)).toBe(false);
   });
 });

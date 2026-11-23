@@ -81,3 +81,13 @@ export function auditKindOf(p: { track: string; label: string; detail: string | 
   const pick = chosen ?? (stored && stored !== 'revue_direction' ? stored : null);
   return pick && pick !== 'revue_direction' ? pick : inferAuditKind(p);
 }
+
+// ─── Rapport d'audit en PDF (AUD-39) ────────────────────────────────────────
+
+/** Chemin du rapport PDF d'un élément réalisé du programme (route /audits/rapport/<id>). */
+export const AUDIT_REPORT_PATH = '/audits/rapport';
+export const auditReportHref = (id: number) => `${AUDIT_REPORT_PATH}/${id}`;
+/** Référence affichée dans le rapport : « AUD-<année>-<identifiant> ». */
+export const auditReportRef = (p: { id: number; year: number }) => `AUD-${p.year}-${p.id}`;
+/** Rapport téléchargeable : élément réalisé, en vigueur, hors revue de direction. */
+export const auditReportAvailable = (p: { done: boolean; cancelled: unknown; isReview: boolean }) => p.done && !p.cancelled && !p.isReview;

@@ -21,6 +21,7 @@ import {
 } from '@/lib/rules/prevention';
 import { TipButton } from '@/components/Tip';
 import { PlanMeetings } from './PlanMeetings';
+import { PlanWorkers } from './PlanWorkers';
 import {
   ConfirmButton, ErrorLine, Facts, LinkedEvents, Notice, ProcedureNote, SITE_LOCK_HINT, SectionTitle, SignChip,
   contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
@@ -512,6 +513,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
           </div>
         )}
       </div>
+
+      <PlanWorkers plan={plan} editable={editable} options={options} />
 
       <PlanMeetings plan={plan} editable={editable} today={options.today} />
 

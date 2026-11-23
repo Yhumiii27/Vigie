@@ -22,6 +22,7 @@ import {
   contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
 import { withCurrent } from '@/lib/form-options';
+import { PermitLockouts } from './PermitLockouts';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -299,7 +300,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
   const expired = permit.state === 'expire';
   const deliverBlock = !permit.allChecked ? 'Tous les points de la check-list doivent être vérifiés.'
     : permit.planBlocker ? permit.planBlocker
-      : expired ? 'La période de validité est dépassée.' : null;
+      : expired ? 'La période de validité est dépassée.'
+        : permit.lockoutDeliverBlock;
   const closeQuestion = permit.type === 'feu' ? 'Surveillance après travaux terminée et zone vérifiée ?' : 'Essais terminés et zone remise en sécurité ?';
 
   return (
@@ -368,6 +370,9 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
 
       <PermitChecklist permit={permit} editable={canManage && requested} />
 
+      {/* PRV-22 : consignations et isolations du permis. */}
+      <PermitLockouts permit={permit} canManage={canManage} options={options} />
+
       {/* Actions reprises seulement (consultation) : la Prévention ne crée plus d'action QSE (15/10/2026). */}
       {(permit.actions.length > 0 || (permit.plan && permit.planActions > 0)) && (
         <div style={{ display: 'grid', gap: 6 }}>
@@ -404,8 +409,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
           )}
           {delivered && (
             <ConfirmButton label="Clore" confirmLabel="Oui, clore" question={closeQuestion} icon="ph-check-square" pending={pending}
-              disabled={permit.state === 'delivre' || !!permit.closeBlock}
-              tooltip={permit.state === 'delivre' ? "Les travaux n'ont pas commencé : annulez le permis s'ils n'ont pas lieu." : permit.closeBlock ?? undefined}
+              disabled={permit.state === 'delivre' || !!permit.closeBlock || !!permit.lockoutCloseBlock}
+              tooltip={permit.state === 'delivre' ? "Les travaux n'ont pas commencé : annulez le permis s'ils n'ont pas lieu." : permit.closeBlock ?? permit.lockoutCloseBlock ?? undefined}
               className="btn btn-primary vg-btn-sm" onConfirm={() => run(() => closePermit(permit.id))} />
           )}
           {requested && (

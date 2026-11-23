@@ -85,7 +85,8 @@ async function loadStored(): Promise<Notification[]> {
   return [...unread, ...read].map((r): Notification => {
     const elsewhere = !!siteId && !!r.siteId && r.siteId !== siteId;
     // Suite d'un signalement (TDB-06) : « Mes signalements », tous sites, tant que la personne en est le déclarant nominatif.
-    const readable = r.entityType === 'event'
+    // CNF-09 : feuille d'émargement d'une causerie, signée depuis « Mon espace » (ouvert à toute personne connectée).
+    const readable = r.entityType === 'safety_talk' ? true : r.entityType === 'event'
       ? r.declarantId === user.id && r.anonymous === false
       : r.pilotId !== null && canReadAction(role, user.id, { pilotId: r.pilotId, siteId: r.siteId }, allowedSiteIds);
     return {

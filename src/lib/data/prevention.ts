@@ -1,4 +1,13 @@
 import 'server-only';
+import { readPlanWorkers } from './plan-workers';
+import { INDUCTION_LABELS, inductionWarning, vetoAllowed, type InductionState } from '@/lib/rules/workers';
+import { hasLeft } from '@/lib/people';
+import { isQhse } from '@/lib/action-rules';
+import { getSession } from '@/lib/session';
+import {
+  LOCKOUT_ENERGIES, LOCKOUT_STATUSES, isLockoutStatus, lockoutCloseBlocker, lockoutDeliverBlocker, pointsText, readPoints, verifyRightError,
+  type IsolationPoint, type LockoutEnergy, type LockoutStatus,
+} from '@/lib/rules/lockouts';
 import { readDocumentsByRef } from '@/lib/foreign/codex';
 import { confReadable, documentHref } from '@/lib/rules/documents';
 import { asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
@@ -158,7 +167,19 @@ export type PlanView = {
   meetingPeriodDays: number | null;
   meetings: { id: number; kind: PlanMeetingKind; kindLabel: string; heldOn: string; participants: string; notes: string; by: string | null; cancelled: CancelInfo | null }[];
   nextMeeting: { dueOn: string; late: boolean } | null;
+  /** PRV-23 : intervenants en cours (personnes lues dans Cursus), accueil sécurité, titres requis et veto du service QHSE. */
+  workers: PlanWorkerView[];
+  /** PRV-23 : avertissement « accueil sécurité non à jour » (ou donnée de Cursus indisponible), null sinon. */
+  workerWarning: string | null;
 } & PlanContent;
+
+/** Intervenant d'un plan (PRV-23), tel qu'affiché dans la fiche. */
+export type PlanWorkerView = {
+  id: number; personId: string; name: string; company: string | null; siteMatricule: string | null;
+  induction: InductionState; inductionLabel: string; inductionTone: 'ok' | 'danger' | 'neutral' | 'warn';
+  lapsedTitles: string[]; titlesValid: boolean | null; vetoable: boolean;
+  veto: { reason: string; by: string | null; on: string } | null;
+};
 
 export type PermitView = {
   id: string;
@@ -229,6 +250,22 @@ export type PermitView = {
   /** Événements rattachés au permis. */
   events: LinkedEvent[];
   history: ChangeEntry[];
+  /** PRV-22 : consignations du permis (annulées comprises), et blocages de la délivrance et de la clôture qu'elles portent. */
+  lockouts: LockoutView[];
+  lockoutDeliverBlock: string | null;
+  lockoutCloseBlock: string | null;
+};
+
+/** Consignation d'un permis (PRV-22). */
+export type LockoutView = {
+  id: string; version: string; permitId: string; preventionPlanId: string | null;
+  energy: LockoutEnergy; energyLabel: string; equipment: string; points: IsolationPoint[]; pointsText: string;
+  applierId: string; applier: string; verifierId: string; verifier: string;
+  status: LockoutStatus; statusLabel: string; tone: Tone;
+  appliedLabel: string | null; verifiedLabel: string | null; removedLabel: string | null; notes: string;
+  /** La personne connectée peut vérifier (vérificateur désigné ou animateur QHSE, jamais le poseur) : null, sinon le motif. */
+  verifyBlock: string | null;
+  cancelled: { on: string; by: string | null; reason: string } | null;
 };
 
 /** Événement rattaché à un plan ou à un permis (lien /evenements?sel=…). */
@@ -340,7 +377,7 @@ async function loadProcedure(db: Rows['db']): Promise<ProcedureLink | null> {
 
 /** Écran Plans de prévention et permis : vues sérialisables, indicateurs, écarts et règle des sites. */
 export async function loadPrevention() {
-  const rows = await loadRows();
+  const [rows, session] = await Promise.all([loadRows(), getSession()]);
   const { db, now, nowMs, people, contractors, sites, selectedSite, ruleOf, allPlans, allPermits, activities, eventPlanIds, linkedEvents, plans, permits, meetingsOf } = rows;
   const { gaps, pastGaps } = gapSummary(rows);
   const name = (id: string | null) => (id ? people.get(id)?.name ?? null : null);
@@ -350,7 +387,7 @@ export async function loadPrevention() {
   const permitIds = permits.map((p) => p.id);
   const importIds = plans.map((p) => p.importedFromId).filter((id): id is string => !!id);
 
-  const [preventionActions, attachments, imported, permitLogs, procedure, projects, suppliers] = await Promise.all([
+  const [preventionActions, attachments, imported, permitLogs, procedure, projects, suppliers, planWorkers] = await Promise.all([
     // Actions reprises (bases antérieures au 15/10/2026), abandonnées comprises : elles restent rattachées (un plan qui en
     // a une n'est plus un brouillon supprimable). Source par les colonnes posées à la création (ACT-01).
     planIds.length || permitIds.length ? db.select().from(t.actions).where(or(isNotNull(t.actions.preventionPlanId), isNotNull(t.actions.permitId))) : [],
@@ -362,7 +399,14 @@ export async function loadPrevention() {
     loadProcedure(db),
     loadProjectIndex(),
     loadSuppliers(),
+    readPlanWorkers(db, now, planIds),
   ]);
+  const workersOf = (planId: string): PlanWorkerView[] => planWorkers.workers.filter((w) => w.planId === planId).map((w) => ({
+    id: w.id, personId: w.personId, name: w.name, company: w.company, siteMatricule: w.siteMatricule,
+    induction: w.check.induction, inductionLabel: INDUCTION_LABELS[w.check.induction].label, inductionTone: INDUCTION_LABELS[w.check.induction].tone,
+    lapsedTitles: w.check.lapsedTitles, titlesValid: w.check.titlesValid, vetoable: vetoAllowed(w.check),
+    veto: w.veto && { reason: w.veto.reason, by: w.veto.by, on: fmtInstant(w.veto.at) },
+  }));
   const supplierOf = new Map(suppliers.ok ? suppliers.rows.map((x) => [x.id, x.name]) : []);
   const linkedActions = preventionActions.filter((a) => a.status !== 'abandonnee');
   const importedIds = new Set(imported.map((f) => f.id));
@@ -383,6 +427,24 @@ export async function loadPrevention() {
       stepLabel: e.dismissedAt ? EVENT_DISMISSED : EVENT_STEPS[e.step] ?? '',
       tone: e.dismissedAt || e.step >= STEP_CLOSED ? 'neutral' : 'warn',
     }));
+
+  // PRV-22 : consignations des permis affichés, avec le droit de vérification de la personne connectée.
+  const lockoutRows = permits.flatMap((p) => rows.lockoutsOf(p.id));
+  const lockoutVersions = await entityVersions(db, 'lockout', lockoutRows.map((l) => l.id));
+  const stamp = (at: Date | null, by: string | null) => (at ? `${fmtLocalLong(toParisLocal(at))}${by ? ` · ${name(by) ?? by}` : ''}` : null);
+  const lockoutViews = (permitId: string): LockoutView[] => rows.lockoutsOf(permitId).map((l) => {
+    const status = (isLockoutStatus(l.status) ? l.status : 'preparee') as LockoutStatus;
+    const points = readPoints(l.points);
+    return {
+      id: l.id, version: lockoutVersions.get(l.id) ?? '0', permitId: l.permitId, preventionPlanId: l.preventionPlanId,
+      energy: l.energy as LockoutEnergy, energyLabel: LOCKOUT_ENERGIES[l.energy as LockoutEnergy] ?? l.energy, equipment: l.equipment, points, pointsText: pointsText(points),
+      applierId: l.applierId, applier: name(l.applierId) ?? l.applierId, verifierId: l.verifierId, verifier: name(l.verifierId) ?? l.verifierId,
+      status, statusLabel: LOCKOUT_STATUSES[status].label, tone: LOCKOUT_STATUSES[status].tone,
+      appliedLabel: stamp(l.appliedAt, l.applierId), verifiedLabel: stamp(l.verifiedAt, l.verifiedById), removedLabel: stamp(l.removedAt, l.removedById), notes: l.notes,
+      verifyBlock: verifyRightError({ userId: session.user.id, qhse: isQhse(session.role) }, l),
+      cancelled: l.cancelledAt ? { on: fmtDate(toParisLocal(l.cancelledAt).slice(0, 10)), by: name(l.cancelledById), reason: l.cancelReason ?? '' } : null,
+    };
+  });
 
   const permitViews: PermitView[] = permits.map((p) => {
     const type: PermitType = p.type === 'essai' ? 'essai' : 'feu';
@@ -449,6 +511,9 @@ export async function loadPrevention() {
       planActions: p.preventionPlanId ? linkedActions.filter((a) => a.preventionPlanId === p.preventionPlanId).length : 0,
       events: eventsOf('permitId', p.id),
       history,
+      lockouts: lockoutViews(p.id),
+      lockoutDeliverBlock: lockoutDeliverBlocker(rows.lockoutsOf(p.id)),
+      lockoutCloseBlock: lockoutCloseBlocker(rows.lockoutsOf(p.id)),
     };
   });
   const PERMIT_ORDER: PermitState[] = ['en_cours', 'expire', 'delivre', 'demande', 'clos', 'annule'];
@@ -478,6 +543,8 @@ export async function loadPrevention() {
         cancelled: m.cancelledAt ? { on: fmtInstant(m.cancelledAt), by: name(m.cancelledById), reason: m.cancelReason ?? '' } : null,
       })),
       nextMeeting: next && { dueOn: next.dueOn, late: next.late },
+      workers: workersOf(p.id),
+      workerWarning: inductionWarning(planWorkers.workers.filter((w) => w.planId === p.id)),
       id: p.id, version: planVersions.get(p.id) ?? '0',
       siteId: p.siteId,
       site: siteOf.get(p.siteId) ?? p.siteId,
@@ -702,6 +769,10 @@ export async function loadPrevention() {
       defaultSiteId,
       recordSites,
       siteLocked: !!selectedSite,
+      // PRV-23 : intervenants proposés (personnes présentes lues dans Cursus) : nom, entreprise, matricule de site.
+      workers: [...people.values()].filter((x) => !hasLeft(x, now))
+        .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+        .map((x): Option => [x.id, [x.name, x.company, x.siteMatricule].filter(Boolean).join(' · ')]),
     },
   };
 }

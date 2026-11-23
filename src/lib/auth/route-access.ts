@@ -23,13 +23,16 @@ export const ROLE_ROUTES: readonly { path: string; screen: ScreenKey; subpaths: 
   { path: '/risques', screen: 'risks', subpaths: true, except: ['/risques/export'] },
   { path: '/habilitations', screen: 'skills', subpaths: true },
   { path: '/veille', screen: 'watch', subpaths: true },
-  { path: '/audits', screen: 'audits', subpaths: true },
+  // AUD-39 : rapport d'audit en PDF, route handler qui répond lui-même 403 / 404.
+  { path: '/audits', screen: 'audits', subpaths: true, except: ['/audits/rapport'] },
   { path: '/audits/contributions', screen: 'contributions', subpaths: true },
   { path: '/revue-de-direction', screen: 'audits', subpaths: true },
   { path: '/documents', screen: 'docs', subpaths: true },
   { path: '/environnement', screen: 'env', subpaths: true, except: ['/environnement/registre'] },
   // D12 (lot 5 de M-02) : registre, fiche /modifications-techniques/<numéro> et « nouvelle » (liens de Codex et Keystone).
   { path: '/modifications-techniques', screen: 'engineering', subpaths: true },
+  // TDB-18 : recherche globale, ouverte à tout rôle connecté.
+  { path: '/recherche', screen: 'search', subpaths: false },
 ];
 
 /**

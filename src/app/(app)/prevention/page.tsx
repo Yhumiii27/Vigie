@@ -14,12 +14,20 @@ import { ProcedureNote, type PreventionOptions } from '@/components/prevention/p
 import { Icon, MissingNotice, SegLinks, hrefWith } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import { SCREENS, TONE, canApprove, canManage } from '@/lib/domain';
+import { isQhse } from '@/lib/action-rules';
+import { SAFETY_TALKS_HREF, SAFETY_TALKS_VIEW } from '@/lib/rules/safety-talks';
+import { loadSafetyTalks } from '@/lib/data/safety-talks';
+import { SafetyTalksView } from '@/components/prevention/SafetyTalks';
 import { guard } from '@/lib/guard';
 import { loadFormOptions } from '@/lib/data/options';
 import { loadPrevention, type PlanView, type SiteRuleView } from '@/lib/data/prevention';
 import { lcfirst } from '@/lib/queries';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 import { GateHouseView } from '@/components/prevention/GateHouse';
+import { SimopsView } from '@/components/prevention/SimopsView';
+import { loadSimops } from '@/lib/data/simops';
+import { SIMOPS_VIEW, parseSimopsDay, simopsHref } from '@/lib/rules/simops';
+import { today } from '@/lib/today';
 import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
 
@@ -55,7 +63,15 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   if (canonical) redirect(canonical);
   // PRV-25 : liste du poste de garde (?vue=poste-de-garde&horizon=), lecteurs canReadGateHouse.
   const gateOn = str(sp.vue) === GATE_HOUSE_VIEW && canReadGateHouse(role);
-  const [d, formOptions, gate] = await Promise.all([loadPrevention(), loadFormOptions(), gateOn ? loadGateHouse(parseHorizon(str(sp.horizon))) : null]);
+  // CNF-09 : causeries et quarts d'heure sécurité (?vue=causeries&causerie=CS-001).
+  const talksOn = !gateOn && str(sp.vue) === SAFETY_TALKS_VIEW;
+  // PRV-22 : opérations simultanées par zone et par heure (?vue=simops&jour=AAAA-MM-JJ), en lecture.
+  const simopsOn = !gateOn && !talksOn && str(sp.vue) === SIMOPS_VIEW;
+  const [d, formOptions, gate, talks, simops] = await Promise.all([
+    loadPrevention(), loadFormOptions(), gateOn ? loadGateHouse(parseHorizon(str(sp.horizon))) : null, talksOn ? loadSafetyTalks() : null,
+    simopsOn ? loadSimops(parseSimopsDay(str(sp.jour), today())) : null,
+  ]);
+  const alt = !!gate || !!talks || !!simops;
   const manage = canManage(role);
   const approve = canApprove(role);
 
@@ -112,6 +128,8 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
     siteLocked: d.choices.siteLocked,
     today: d.now,
     procedure: d.procedure,
+    workers: manage ? d.choices.workers : [],
+    canVeto: isQhse(role),
   };
   const tabHref = (k: Tab) => (k === 'plans' ? '/prevention' : `/prevention?onglet=${k}`);
   // Lien direct (?plan=, ?permis=) sans fiche sur le site sélectionné (brouillon supprimé, autre site) : bandeau au-dessus de la liste.
@@ -212,7 +230,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
 
         <div className="vg-tabs">
           {TABS.map(([key, label]) => (
-            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key && !gate ? ' is-on' : ''}`}>
+            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key && !alt ? ' is-on' : ''}`}>
               <span>{label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{tabCount[key]}</span>
             </Link>
           ))}
@@ -221,20 +239,28 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               <span>Poste de garde</span>
             </Link>
           )}
+          <Link href={SAFETY_TALKS_HREF} scroll={false} className={`vg-tab${talks ? ' is-on' : ''}`} aria-current={talks ? 'page' : undefined}>
+            <span>Causeries sécurité</span>
+          </Link>
+          <Link href={simopsHref()} scroll={false} className={`vg-tab${simops ? ' is-on' : ''}`} aria-current={simops ? 'page' : undefined}>
+            <span>Opérations simultanées</span>
+          </Link>
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
-            {!gate && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
-            {!gate && manage && tab === 'plans' && <NewPlanButton options={options} />}
-            {!gate && tab === 'permis' && (
+            {!alt && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
+            {!alt && manage && tab === 'plans' && <NewPlanButton options={options} />}
+            {!alt && tab === 'permis' && (
               // Lien HTML simple (nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application.
               <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer le registre</a>
             )}
-            {!gate && manage && tab === 'permis' && <NewPermitButton options={options} />}
-            {!gate && manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
+            {!alt && manage && tab === 'permis' && <NewPermitButton options={options} />}
+            {!alt && manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
           </span>
         </div>
 
-        {gate ? <GateHouseView gate={gate} /> : (
+        {gate ? <GateHouseView gate={gate} /> : simops ? <SimopsView data={simops} today={d.now} /> : talks ? (
+          <SafetyTalksView data={talks} canManage={manage} openId={str(sp.causerie)} sites={formOptions.sites} defaultSite={d.choices.defaultSiteId} />
+        ) : (
           <>
         {missingPlan && <MissingNotice text="Plan de prévention introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
         {missingPermit && <MissingNotice text="Permis introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}

@@ -368,6 +368,8 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
   switch (kind) {
     case 'event': return facts.eventType === 'RC' ? ['reclamation_client'] : ['evenement'];
     case 'finding': case 'plan': return trackSources(kind, facts.track);
+    // AUD-40 : ligne d'une auto-évaluation par référentiel (préparation d'une certification) : Audit interne ISO.
+    case 'selfassessment': return ['audit_interne'];
     case 'risk': return ['duerp'];
     case 'requirement': return ['veille', 'dechets'];
     case 'control': return ['controle_reglementaire'];
@@ -398,7 +400,7 @@ export function admissibleSources(kind: string | null, facts: LinkFacts = {}): r
  */
 export type FollowUpLinkMode = 'source' | 'multi' | 'single' | 'none';
 const FOLLOW_UP_LINK_MODES: Record<string, FollowUpLinkMode> = {
-  event: 'source', finding: 'source', plan: 'source',
+  event: 'source', finding: 'source', plan: 'source', selfassessment: 'source',
   risk: 'multi', review: 'multi', document: 'multi', wastestream: 'multi', wasteentry: 'multi', safetystudy: 'multi', eco: 'multi',
   requirement: 'single', control: 'single', docversion: 'single', reviewdecision: 'single',
 };

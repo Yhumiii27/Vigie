@@ -16,8 +16,9 @@ type Row = Record<string, string | number | boolean | null>;
  * un site encore non suivi par Vigie (choix proposé par « Gérer les sites »).
  */
 export const DEMO_MATRIX_SITES: Row[] = [
-  { code: 'site_a', libelle: 'Site de [Ville A] — siège et ateliers', ville: '[Ville A]', pays_iso2: 'FR', ordre: 1, actif: true },
-  { code: 'site_b', libelle: "Site de [Ville B] — zone d'essais", ville: '[Ville B]', pays_iso2: 'FR', ordre: 2, actif: true },
+  // PRV-24 : coordonnées de démonstration (carte des sites) ; site_c et site_d sans coordonnées.
+  { code: 'site_a', libelle: 'Site de [Ville A] — siège et ateliers', ville: '[Ville A]', pays_iso2: 'FR', ordre: 1, actif: true, latitude: 47.3216, longitude: 5.0415 },
+  { code: 'site_b', libelle: "Site de [Ville B] — zone d'essais", ville: '[Ville B]', pays_iso2: 'FR', ordre: 2, actif: true, latitude: 45.1885, longitude: 5.7245 },
   { code: 'site_c', libelle: 'Site de [Ville C] — ancien dépôt logistique', ville: '[Ville C]', pays_iso2: 'FR', ordre: 3, actif: false },
   { code: 'site_d', libelle: 'Site de [Ville D] — atelier de maintenance', ville: '[Ville D]', pays_iso2: 'FR', ordre: 4, actif: true },
 ];

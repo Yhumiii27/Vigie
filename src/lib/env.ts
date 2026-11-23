@@ -78,6 +78,11 @@ export type VigieConfig = {
   /** Sites accordés par groupe Entra (VIGIE_SITE_GROUPS=groupObjectId:siteId,…). */
   siteGroups: { groupId: string; siteId: string }[];
   /**
+   * Groupe Entra des membres du CSE (VIGIE_CSE_GROUP, objectId ; CNF-01) : registre des dangers graves et imminents ouvert
+   * à ses membres, quel que soit leur rôle ; null = aucun membre du CSE reconnu hors démonstration.
+   */
+  cseGroup: string | null;
+  /**
    * Domaines de messagerie de l'entreprise (VIGIE_EMAIL_DOMAINS, minuscules, sans « @ ») : une première connexion ne
    * rapproche ou ne crée une fiche que par une adresse vérifiée (revendications email et xms_edov) de l'un d'eux.
    * Vide : toute première connexion est refusée (les comptes déjà associés se connectent toujours).
@@ -312,6 +317,9 @@ export function parseConfig(env: Env): VigieConfig {
     .refine((l) => l.every((p) => p.length === 2 && p[0] && p[1]), { error: 'liste attendue : groupObjectId:siteId,…' })
     .transform((l) => l.map(([groupId, siteId]) => ({ groupId, siteId })))) ?? [];
 
+  const cseGroup = read('VIGIE_CSE_GROUP', z.string().regex(/^[0-9a-f-]{8,64}$/i, { error: 'objectId du groupe Entra attendu (ex. 3f2c1a…)' })
+    .transform((v) => v.toLowerCase())) ?? null;
+
   const emailDomains = read('VIGIE_EMAIL_DOMAINS', z.string()
     .transform((v) => [...new Set(v.split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean))])
     .refine((l) => l.length > 0 && l.every((d) => EMAIL_DOMAIN.test(d)), { error: 'liste de noms de domaine attendue (ex. epc2i.fr,epc2i.com)' })) ?? [];
@@ -377,7 +385,7 @@ export function parseConfig(env: Env): VigieConfig {
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage, log, clamav, aiLimits, aiScan,
-    publicUrl, codexUrl, codexWebhook, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, emailDomains, trustedProxies, aiImport, anthropicEnv,
+    publicUrl, codexUrl, codexWebhook, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, cseGroup, emailDomains, trustedProxies, aiImport, anthropicEnv,
     scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };
 }

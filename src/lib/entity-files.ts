@@ -10,7 +10,8 @@
  * - `requirement_evaluation` (VEI-08) : preuves d'une évaluation de conformité ;
  * - `control_record` (VEI-08) : rapport d'un contrôle réalisé ;
  * - `review` / `review_item` (AUD-17) : pièces de la revue de direction et d'un élément d'entrée ;
- * - `waste_entry` (DOC-11) : bordereau, certificat d'acceptation ou de traitement d'un enlèvement.
+ * - `waste_entry` (DOC-11) : bordereau, certificat d'acceptation ou de traitement d'un enlèvement ;
+ * - `self_assessment_line` (AUD-40) : preuve d'une exigence d'une campagne d'auto-évaluation (journal de la campagne).
  */
 export const ENTITY_FILE_KINDS = {
   duerp_version: { label: 'DUERP signé', journal: 'duerp_version' },
@@ -21,6 +22,7 @@ export const ENTITY_FILE_KINDS = {
   review: { label: 'Pièce de la revue', journal: 'review' },
   review_item: { label: "Pièce d'un élément d'entrée", journal: 'review' },
   waste_entry: { label: "Pièce de l'enlèvement", journal: 'waste_entry' },
+  self_assessment_line: { label: 'Preuve', journal: 'self_assessment' },
 } as const satisfies Record<string, { label: string; journal: string }>;
 
 export type EntityFileKind = keyof typeof ENTITY_FILE_KINDS;

@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { MySpaceView } from '@/components/events/MySpaceView';
 import { reportQuery } from '@/lib/rules/events';
 import { loadMySpace } from '@/lib/data/my-space';
+import { loadMyTalks } from '@/lib/data/safety-talks';
+import { getSession } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Mon espace' };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#161826' };
@@ -10,11 +12,11 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 // données (loadMySpace). Parcours terrain sans la coque de l'application (portée /signaler de l'application installable,
 // EVT-20) ; session obligatoire (getSession redirige vers la connexion : le proxy n'ouvre sans session que /signaler?jeton=).
 export default async function MySpacePage({ searchParams }: PageProps<'/signaler/mon-espace'>) {
-  const [sp, space] = await Promise.all([searchParams, loadMySpace()]);
+  const [sp, space, talks, { cse }] = await Promise.all([searchParams, loadMySpace(), loadMyTalks(), getSession()]);
   const qs = reportQuery(sp);
   return (
     <main id="contenu" style={{ minHeight: '100dvh', maxWidth: 480, margin: '0 auto' }}>
-      <MySpaceView space={space} reportHref={`/signaler${qs}`} myReportsHref={`/signaler/mes-signalements${qs}`} />
+      <MySpaceView space={space} reportHref={`/signaler${qs}`} myReportsHref={`/signaler/mes-signalements${qs}`} talks={talks} cse={cse} />
     </main>
   );
 }

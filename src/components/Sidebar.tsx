@@ -9,6 +9,7 @@ import { SaveStatus, useActionRunner } from './feedback';
 import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
 import { HelpButton } from './HelpDialog';
+import { SEARCH_MIN, SEARCH_PATH } from '@/lib/rules/search';
 import { Icon } from './ui';
 
 export type NavSection = { label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
@@ -100,6 +101,13 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
           <div style={{ padding: '4px 2px 0' }}><SaveStatus pending={pending} label="Changement en cours…" /></div>
           {error && !pending && <div role="alert" className="vg-form-error" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>}
         </div>
+
+        {/* TDB-18 : recherche globale (tous les modules ouverts au rôle, site sélectionné), bureau et tiroir du téléphone. */}
+        <form action={SEARCH_PATH} role="search" className="vg-side-search" onSubmit={onNavigate}>
+          <label htmlFor="vg-side-search" className="vg-sr-only">Rechercher dans Vigie</label>
+          <Icon name="ph-magnifying-glass" size={14} style={{ color: 'var(--color-neutral-500)' }} />
+          <input id="vg-side-search" name="q" type="search" placeholder="Rechercher…" minLength={SEARCH_MIN} maxLength={100} autoComplete="off" />
+        </form>
 
         <nav className="vg-nav" aria-label="Navigation principale">
           {nav.map((sec) => (
