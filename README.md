@@ -107,7 +107,7 @@ Le **site** choisi en haut de la barre latérale filtre les données (événemen
 
 ## Pas encore branché
 
-- Imports (Excel, Lucca CSV) et connecteurs Keystone / Cursus / Trackdéchets : boutons désactivés « à venir ». Suite du développement : [`docs/RESTE-A-FAIRE.md`](docs/RESTE-A-FAIRE.md).
+- Imports (Excel, Lucca CSV) et connecteurs Keystone / Cursus / Trackdéchets : boutons désactivés « à venir ». Suite du développement : liste de la suite tenue dans Norma (`reste-a-faire/vigie.json`, page https://claude.ai/artifact/Rs7kooJdowShdYUqNS8jQf) ; [`docs/RESTE-A-FAIRE.md`](docs/RESTE-A-FAIRE.md) est archivé (décisions et notes de livraison).
 - Lecture des formulaires scannés : désactivée par défaut, car le document est envoyé à l'API Claude (Anthropic). Pour l'activer : `VIGIE_AI_IMPORT=1` et une clé `ANTHROPIC_API_KEY`. Les PDF remplissables et les fichiers Word sont lus localement. Des formulaires d'exemple sont dans `samples/` (`node scripts/pp-samples.mjs` pour les régénérer).
 - Authentification Microsoft Entra ID : en démonstration, le rôle se choisit dans le menu utilisateur (`src/lib/auth/demo.ts`) ; hors démonstration, connexion OIDC (code + PKCE, `/auth/connexion`, `/auth/retour`, `/auth/deconnexion`), session dans un cookie chiffré (`src/lib/auth/`), rôle tiré des rôles applicatifs Entra et sites des groupes (`VIGIE_SITE_GROUPS`). `src/proxy.ts` refuse les hôtes inconnus, renvoie vers la connexion sans session et pose la CSP. Test sans tenant : `node scripts/oidc-mock.mjs` (fournisseur factice) et `scripts/e2e-auth.sh` (parcours complet avec curl).
 - Données Keystone (projets, affectations) : référentiel local en attendant l'intégration.
