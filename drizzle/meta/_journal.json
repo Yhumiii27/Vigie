@@ -246,6 +246,13 @@
       "when": 1794489772270,
       "tag": "0034_reponses_qhse_r3",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795533962600,
+      "tag": "0035_journals_append_only",
+      "breakpoints": true
     }
   ]
 }
