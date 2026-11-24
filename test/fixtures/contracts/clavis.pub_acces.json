@@ -1,0 +1,6 @@
+{
+  "source": "Clavis src/server/publications/definitions.ts (PUB_ACCES), Matrix origin/main e5e8833 data/publications-depot.json (clavis.pub_acces, lien de lecture vigie_app)",
+  "readers": ["keystone_app", "codex_app", "cursus_app", "vigie_app", "arche_app", "crucible_app", "matrix_app"],
+  "columns": [["personne_id", "uuid"], ["application", "text"], ["autorise", "boolean"], ["niveau", "text"], ["domaine", "text"], ["role", "text"],
+    ["ouvert", "boolean"], ["maj_le", "timestamp with time zone"]]
+}

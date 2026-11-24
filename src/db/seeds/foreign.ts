@@ -255,5 +255,7 @@ export function demoForeignRows({ demo = true }: { demo?: boolean } = {}): Recor
     revisions: demoCodexRevisions(),
     validations: demoCodexValidations(DEMO_MATRICULES),
     docTypes: demoCodexDocTypes(),
+    // Connexion par Clavis : vue vide (la démonstration se connecte par le sélecteur de rôle ; les essais y ajoutent leurs lignes).
+    access: [],
   };
 }

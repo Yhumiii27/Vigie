@@ -19,6 +19,8 @@ export const SOURCES = {
   revisions: { tool: 'Codex', label: 'Révisions des documents', view: 'codex.pub_revisions_document', cache: false },
   validations: { tool: 'Codex', label: 'Circuits de validation', view: 'codex.pub_validations', cache: false },
   docTypes: { tool: 'Codex', label: 'Types de document', view: 'codex.pub_types_document', cache: false },
+  // Connexion par Clavis (VIGIE_ACCESS_FROM_CLAVIS=on) : rôle et ouverture de Vigie, lus à la connexion et pendant la session.
+  access: { tool: 'Clavis', label: 'Accès', view: 'clavis.pub_acces', cache: false },
 } as const;
 export type SourceKey = keyof typeof SOURCES;
 export const SOURCE_KEYS = Object.keys(SOURCES) as SourceKey[];

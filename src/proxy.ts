@@ -115,9 +115,11 @@ export async function proxy(req: NextRequest) {
   const { deny, renew, role } = await authCheck(req, c);
   if (deny) return refusal(deny, https);
 
-  // Écran fermé au rôle (SEC-14) : décidé avant le rendu, pour les pages seulement (jamais les server actions).
+  // Écran fermé au rôle (SEC-14) : décidé avant le rendu, pour les pages seulement (jamais les server actions). Droits lus
+  // dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on) : le rôle du cookie est celui de la connexion, peut-être changé depuis dans
+  // Clavis ; la redirection selon le rôle revient alors à la page seule (guard(), d'après le rôle relu par la session).
   const decision = role && (req.method === 'GET' || req.method === 'HEAD') ? routeDecision(req.nextUrl.pathname, role, c.demo) : null;
-  if (decision?.kind === 'redirect') {
+  if (decision?.kind === 'redirect' && !(c.accessFromClavis && !c.demo)) {
     const res = refusal(NextResponse.redirect(absolute(decision.to, req, c)), https);
     await renew?.(res);
     return res;

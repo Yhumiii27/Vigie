@@ -6,6 +6,7 @@ import { addDays } from '@/lib/dates';
 import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/lib/foreign/keystone';
 import { readCursusPeople, readCursusTitles, readHeldTitles, readPlannedPresences } from '@/lib/foreign/cursus';
 import { readMatrixSites } from '@/lib/foreign/matrix';
+import { readClavisAccessRows } from '@/lib/foreign/clavis';
 import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/lib/foreign/codex';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { cursusPersonSync, newCachedPerson, shouldCreate, type CachedPerson } from '@/lib/rules/people-sync';
@@ -248,6 +249,8 @@ export async function refreshSharedReferences(db: Db, opts: { only?: readonly So
     ['revisions', () => checkDirect('revisions', readRegisterDocuments(db, QHSE_DEPARTMENTS).then((d) => (d.ok ? readDocumentRevisions(db, d.rows.map((x) => x.id)) : d)))],
     ['validations', () => checkDirect('validations', readRegisterDocuments(db, QHSE_DEPARTMENTS).then((d) => (d.ok ? readDocumentValidations(db, d.rows.map((x) => x.id)) : d)))],
     ['docTypes', () => checkDirect('docTypes', readDocumentTypes(db))],
+    // Connexion par Clavis : droits lus à chaque requête (src/lib/auth/clavis-access.ts) ; ici, contrôle de la lecture seulement.
+    ['access', () => checkDirect('access', readClavisAccessRows(db))],
   ];
   const steps = opts.only ? all.filter(([k]) => opts.only!.includes(k)) : all;
   const results: SyncResult[] = [];

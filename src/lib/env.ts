@@ -71,8 +71,20 @@ export type VigieConfig = {
   sessionSecret: string | null;
   /** Secret HMAC des jetons de poste (QR codes) ; en démonstration, repli sur un secret fixe. */
   reportSecret: string | null;
-  /** Inscription de l'application Entra ID ; null tant que les trois variables ne sont pas renseignées. */
-  entra: { tenantId: string; clientId: string; clientSecret: string; issuer: string } | null;
+  /**
+   * Inscription de l'application Entra ID (ou de Vigie dans Clavis) ; null tant qu'elle n'est pas complète : identifiant et
+   * secret du client, et ENTRA_TENANT_ID — facultative avec ENTRA_ISSUER (Clavis, fournisseur de test). tenantId : contrôle
+   * de la revendication tid du jeton quand l'émetteur est remplacé (tidMismatch de src/lib/auth/claims.ts) ; null : aucun.
+   */
+  entra: { tenantId: string | null; clientId: string; clientSecret: string; issuer: string } | null;
+  /**
+   * Droits lus dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on, décision du propriétaire du 23/11/2026 : une seule base) : rôle et
+   * ouverture de Vigie lus dans clavis.pub_acces à la connexion et pendant la session (src/lib/auth/clavis-access.ts),
+   * jamais dans le jeton ; lecture impossible = refus. false (défaut) : rôles applicatifs du jeton, comme avant.
+   */
+  accessFromClavis: boolean;
+  /** Durée (secondes, VIGIE_ACCESS_FROM_CLAVIS_SECONDS, 60 par défaut) pendant laquelle une lecture de clavis.pub_acces sert. */
+  accessFromClavisSeconds: number;
   /** Valeur du rôle applicatif Entra par rôle Vigie. */
   entraRoles: Record<Role, string>;
   /** Sites accordés par groupe Entra (VIGIE_SITE_GROUPS=groupObjectId:siteId,…). */
@@ -303,11 +315,22 @@ export function parseConfig(env: Env): VigieConfig {
   // Émetteur de remplacement (cloud souverain, fournisseur OIDC de test) : http:// réservé à un fournisseur local.
   const issuerOverride = read('ENTRA_ISSUER', z.url({ protocol: /^https?$/, error: 'URL http(s) attendue' })
     .refine((v) => v.startsWith('https://') || isLoopbackHost(new URL(v).host), { error: 'http:// réservé à un fournisseur de test local (localhost, 127.0.0.1)' }));
-  const entraParts = [tenantId, clientId, clientSecret].filter(Boolean).length;
-  if (entraParts > 0 && entraParts < 3) problems.push('ENTRA_TENANT_ID, ENTRA_CLIENT_ID et ENTRA_CLIENT_SECRET : à renseigner ensemble.');
-  const entra = tenantId && clientId && clientSecret
-    ? { tenantId, clientId, clientSecret, issuer: (issuerOverride ?? `https://login.microsoftonline.com/${tenantId}/v2.0`).replace(/\/$/, '') }
+  // Avec un émetteur de remplacement (Clavis, fournisseur de test), ENTRA_TENANT_ID est facultative : l'émetteur ne s'en
+  // déduit plus ; renseignée, elle est comparée à la revendication tid du jeton.
+  const entraAny = [tenantId, clientId, clientSecret].some(Boolean);
+  const entraComplete = !!clientId && !!clientSecret && (!!tenantId || !!issuerOverride);
+  if (entraAny && !entraComplete) {
+    problems.push(issuerOverride
+      ? 'ENTRA_CLIENT_ID et ENTRA_CLIENT_SECRET : à renseigner ensemble (ENTRA_TENANT_ID facultative avec ENTRA_ISSUER).'
+      : 'ENTRA_TENANT_ID, ENTRA_CLIENT_ID et ENTRA_CLIENT_SECRET : à renseigner ensemble.');
+  }
+  const entra = entraComplete
+    ? { tenantId: tenantId ?? null, clientId: clientId!, clientSecret: clientSecret!, issuer: (issuerOverride ?? `https://login.microsoftonline.com/${tenantId}/v2.0`).replace(/\/$/, '') }
     : null;
+  const accessFromClavis = read('VIGIE_ACCESS_FROM_CLAVIS', z.enum(['on', 'off'], { error: 'valeur attendue : on (ou off, ou variable absente)' })
+    .transform((v) => v === 'on')) ?? false;
+  const accessFromClavisSeconds = read('VIGIE_ACCESS_FROM_CLAVIS_SECONDS', z.string().regex(/^\d+$/, { error: 'nombre entier de secondes attendu (60 par défaut)' })
+    .transform(Number).refine((n) => n <= 3600, { error: 'au plus 3600 secondes' })) ?? 60;
   const entraRoles = Object.fromEntries(
     (Object.entries(ENTRA_ROLE_VARS) as [Role, { env: string; fallback: string }][]).map(([role, v]) => [role, blank(env[v.env]) ?? v.fallback]),
   ) as Record<Role, string>;
@@ -385,7 +408,7 @@ export function parseConfig(env: Env): VigieConfig {
   if (problems.length) throw new ConfigError(problems);
   return {
     demo, today, ...storage, log, clamav, aiLimits, aiScan,
-    publicUrl, codexUrl, codexWebhook, allowedHosts, sessionSecret, reportSecret, entra, entraRoles, siteGroups, cseGroup, emailDomains, trustedProxies, aiImport, anthropicEnv,
+    publicUrl, codexUrl, codexWebhook, allowedHosts, sessionSecret, reportSecret, entra, accessFromClavis, accessFromClavisSeconds, entraRoles, siteGroups, cseGroup, emailDomains, trustedProxies, aiImport, anthropicEnv,
     scheduler, mailTransport, mailDir, mailFrom: mailFromValue, reminderTime, matrix,
   };
 }

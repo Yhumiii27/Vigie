@@ -14,6 +14,7 @@ const matrix = pgSchema('matrix');
 const keystone = pgSchema('keystone');
 const cursus = pgSchema('cursus');
 const codex = pgSchema('codex');
+const clavis = pgSchema('clavis');
 
 /** matrix.pub_sites — contrat D14 v1 (+ filiale_code, latitude, longitude en fin de vue). Lecteur : vigie_app. */
 export const pubSites = matrix.view('pub_sites', {
@@ -331,6 +332,23 @@ export const pubTypesDocument = codex.view('pub_types_document', {
   sort: integer('sort'),
 }).existing();
 
+/**
+ * clavis.pub_acces — accès de chaque personne à chaque application, réglés par la DSI dans Clavis (publication de Clavis
+ * du 23/11/2026, définie par Matrix ; requête de référence src/server/publications/definitions.ts de Clavis). personne_id =
+ * oid du jeton de connexion de Clavis ; role = rôle propre de Vigie (Vigie.Direction…). Lue par vigie_app quand
+ * VIGIE_ACCESS_FROM_CLAVIS=on (src/lib/foreign/clavis.ts). Aucune donnée personnelle au-delà de l'identifiant.
+ */
+export const pubAcces = clavis.view('pub_acces', {
+  personneId: uuid('personne_id').notNull(),
+  application: text('application').notNull(),
+  autorise: boolean('autorise').notNull(),
+  niveau: text('niveau'),
+  domaine: text('domaine'),
+  role: text('role'),
+  ouvert: boolean('ouvert'),
+  majLe: timestamp('maj_le', { withTimezone: true }).notNull(),
+}).existing();
+
 /** Vue lue : schéma, nom, et colonnes du contrat dans l'ordre (nom, type SQL tel que information_schema le donne). */
 export type ForeignContract = { schema: string; view: string; columns: readonly (readonly [name: string, type: string])[] };
 
@@ -437,6 +455,13 @@ export const FOREIGN_CONTRACTS = {
       ['retention_years', 'integer'], ['retention_trigger', 'text'], ['retention_disposition', 'text'], ['retention_basis', 'text'],
       ['conf_allowed', 'jsonb'], ['conf_default', 'text'], ['iso', 'text'], ['client_deliverable', 'boolean'], ['active', 'boolean'],
       ['source', 'text'], ['sort', 'integer'],
+    ],
+  },
+  // Connexion par Clavis (décision du propriétaire du 23/11/2026) : droits de la personne pour l'application « vigie ».
+  access: {
+    schema: 'clavis', view: 'pub_acces', columns: [
+      ['personne_id', 'uuid'], ['application', 'text'], ['autorise', 'boolean'], ['niveau', 'text'], ['domaine', 'text'], ['role', 'text'],
+      ['ouvert', 'boolean'], ['maj_le', 'timestamp with time zone'],
     ],
   },
 } as const satisfies Record<string, ForeignContract>;

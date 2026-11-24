@@ -64,9 +64,9 @@ describe('PRD-12 : tâche planifiée', () => {
     await task.run(db, new Date('2026-10-09T23:30:00Z')); // 01 h 30 à Paris le 10/10 : trop tôt
     expect(await count()).toBe(n0);
     await task.run(db, new Date('2026-10-10T00:30:00Z')); // 02 h 30 à Paris
-    expect(await count()).toBe(n0 + 15); // une ligne par source lue (15 depuis D01 : personnes et présences prévues de Cursus)
+    expect(await count()).toBe(n0 + 16); // une ligne par source lue (16 : personnes et présences prévues de Cursus depuis D01, accès de Clavis)
     await task.run(db, new Date('2026-10-10T12:00:00Z')); // même jour : rien
-    expect(await count()).toBe(n0 + 15);
+    expect(await count()).toBe(n0 + 16);
   });
 
   it('calcul au premier passage puis au plus une fois par heure', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfig } from '../env';
-import { TRUSTED_EMAIL_REFUSALS, hasAllSites, isCseMember, profileFromClaims, roleFromEntra, sitesFromGroups, trustedEmail } from './claims';
+import { TRUSTED_EMAIL_REFUSALS, hasAllSites, isCseMember, profileFromClaims, roleFromClavisAccess, roleFromEntra, sitesFromGroups, tidMismatch, trustedEmail } from './claims';
 
 const roles = parseConfig({ VIGIE_DEMO: '1' }).entraRoles;
 
@@ -66,5 +66,22 @@ describe('revendications Entra ID', () => {
     expect(isCseMember(['G-1', 'CSE-0001'], 'cse-0001')).toBe(true);
     expect(isCseMember(['g-1'], 'cse-0001')).toBe(false);
     expect(isCseMember(['cse-0001'], null)).toBe(false);
+  });
+
+  it('rôle accordé par Clavis : ligne ouverte et rôle propre de Vigie connu seulement', () => {
+    expect(roleFromClavisAccess({ role: 'Vigie.AnimateurQHSE', open: true }, roles)).toBe('Animateur QHSE');
+    expect(roleFromClavisAccess({ role: 'Vigie.Salarie', open: true }, roles)).toBe('Salarié');
+    expect(roleFromClavisAccess({ role: 'Vigie.Direction', open: false }, roles)).toBeNull();
+    expect(roleFromClavisAccess({ role: null, open: true }, roles)).toBeNull();
+    expect(roleFromClavisAccess({ role: 'Keystone.admin', open: true }, roles)).toBeNull();
+    expect(roleFromClavisAccess(null, roles)).toBeNull();
+  });
+
+  it('annuaire du jeton (tid) : contrôlé seulement quand il est attendu', () => {
+    expect(tidMismatch({ tid: 'abc' }, null)).toBe(false);
+    expect(tidMismatch({}, null)).toBe(false);
+    expect(tidMismatch({ tid: 'ABC' }, 'abc')).toBe(false);
+    expect(tidMismatch({ tid: 'autre' }, 'abc')).toBe(true);
+    expect(tidMismatch({}, 'abc')).toBe(true);
   });
 });
