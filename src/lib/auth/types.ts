@@ -16,6 +16,11 @@ export type AuthIdentity = {
   siteIds: string[] | null;
   /** Membre du CSE (groupe Entra VIGIE_CSE_GROUP ; démonstration : DEMO_CSE_PEOPLE) : registre des DGI (CNF-01). */
   cse?: boolean;
+  /**
+   * Identifiant du compte chez le fournisseur (oid du jeton ; avec Clavis, personne_id de clavis.pub_acces) : clé de la
+   * relecture des droits dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on). Absent en démonstration.
+   */
+  oid?: string;
 };
 
 /** Raison d'un refus d'accès (page /auth/acces?motif=…). */

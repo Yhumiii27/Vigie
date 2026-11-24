@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getDb } from '@/db';
-import { hasAllSites, isCseMember, profileFromClaims, roleFromEntra, sitesFromGroups } from '@/lib/auth/claims';
+import { hasAllSites, isCseMember, profileFromClaims, roleFromEntra, sitesFromGroups, tidMismatch } from '@/lib/auth/claims';
+import { clavisGrant } from '@/lib/auth/clavis-access';
 import { oidcCookieName, openTransaction, sealSession, sessionCookieName, sessionMaxAge, type SessionClaims } from '@/lib/auth/cookie';
 import { finishLogin } from '@/lib/auth/oidc';
 import { accessHref, type AccessMotif } from '@/lib/auth/paths';
@@ -11,7 +12,8 @@ import { today } from '@/lib/today';
 import { log } from '@/lib/log';
 
 // URI de retour OIDC (SEC-01, SEC-02) : <VIGIE_PUBLIC_URL>/auth/retour?code=…&state=…
-// Code → jetons (PKCE), rôle Vigie (rôles applicatifs, le plus élevé), sites (groupes Entra), fiche rapprochée ou créée,
+// Code → jetons (PKCE), rôle Vigie (rôles applicatifs, le plus élevé ; ou clavis.pub_acces avec VIGIE_ACCESS_FROM_CLAVIS=on),
+// sites (groupes Entra, quand le jeton en porte), fiche rapprochée ou créée,
 // puis cookie de session chiffré (8 h glissantes, 12 h au plus). Aucun rôle Vigie : « Accès non autorisé » ; première
 // connexion sans adresse vérifiée d'un domaine de l'entreprise (VIGIE_EMAIL_DOMAINS) : « Compte Microsoft non rattaché ».
 
@@ -48,8 +50,21 @@ export async function GET(req: NextRequest) {
   }
   const profile = profileFromClaims(claims);
   if (!profile) return fail('echec', "jeton d'identité sans oid (portée profile ?)");
-  const role = roleFromEntra(profile.roles, c.entraRoles);
-  if (!role) return fail('non-autorise', `aucun rôle applicatif Vigie pour ${profile.oid} (rôles reçus : ${profile.roles.join(', ') || 'aucun'})`);
+  // Émetteur remplacé (Clavis, fournisseur de test) avec ENTRA_TENANT_ID : l'annuaire du jeton doit être celui attendu.
+  if (c.entra!.tenantId && !c.entra!.issuer.startsWith('https://login.microsoftonline.com/') && tidMismatch(claims, c.entra!.tenantId)) {
+    return fail('echec', `annuaire du jeton (tid ${typeof claims.tid === 'string' ? claims.tid : 'absent'}) différent de ENTRA_TENANT_ID`);
+  }
+  // Rôle : lu dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on : clavis.pub_acces, les rôles du jeton ne sont pas lus ; accès
+  // fermé = « Accès non autorisé », vue illisible = échec, jamais d'accès par défaut), sinon rôles applicatifs du jeton.
+  let role;
+  if (c.accessFromClavis) {
+    const grant = await clavisGrant(profile.oid, { fresh: true });
+    if (!grant.ok) return fail(grant.reason === 'unreadable' ? 'echec' : 'non-autorise', `droits de ${profile.oid} lus dans Clavis : ${grant.detail}`);
+    role = grant.role;
+  } else {
+    role = roleFromEntra(profile.roles, c.entraRoles);
+    if (!role) return fail('non-autorise', `aucun rôle applicatif Vigie pour ${profile.oid} (rôles reçus : ${profile.roles.join(', ') || 'aucun'})`);
+  }
   if (profile.groupsOverage && !hasAllSites(role)) {
     log.warn('auth.groups-overage', "Jeton sans groupes (trop nombreux) : sites accordés par VIGIE_SITE_GROUPS ignorés. Limiter la revendication aux groupes affectés à l'application.", { oid: profile.oid });
   }

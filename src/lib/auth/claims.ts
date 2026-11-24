@@ -58,6 +58,27 @@ export function roleFromEntra(roles: string[], mapping: Record<Role, string>): R
   return ROLE_PRECEDENCE.find((r) => roles.includes(mapping[r])) ?? null;
 }
 
+/**
+ * Rôle Vigie accordé par Clavis (VIGIE_ACCESS_FROM_CLAVIS=on) : ligne de clavis.pub_acces de la personne pour « vigie »,
+ * prise seulement si l'accès s'ouvre maintenant (`ouvert`) et que le rôle propre de Vigie est connu (même correspondance
+ * que les rôles applicatifs, ENTRA_ROLE_*) ; null sinon (aucune ligne, accès fermé, rôle inconnu). Les rôles du jeton
+ * ne sont jamais lus dans ce mode.
+ */
+export function roleFromClavisAccess(access: { role: string | null; open: boolean } | null | undefined, mapping: Record<Role, string>): Role | null {
+  if (!access?.open || !access.role) return null;
+  return ROLE_PRECEDENCE.find((r) => mapping[r] === access.role) ?? null;
+}
+
+/**
+ * Annuaire du jeton différent de celui attendu (revendication tid, comparée sans casse) : contrôle utile quand l'émetteur
+ * est remplacé (ENTRA_ISSUER : Clavis, fournisseur de test) et ENTRA_TENANT_ID renseignée ; avec l'émetteur Microsoft par
+ * défaut, l'annuaire est déjà dans l'émetteur contrôlé par openid-client. `expected` null : aucun contrôle.
+ */
+export function tidMismatch(claims: Record<string, unknown>, expected: string | null): boolean {
+  if (!expected) return false;
+  return typeof claims.tid !== 'string' || claims.tid.toLowerCase() !== expected.toLowerCase();
+}
+
 /** Direction et animateur QHSE voient tous les sites ; les autres rôles, leur site de rattachement et les sites accordés. */
 export const hasAllSites = (role: Role) => role === 'Direction' || role === 'Animateur QHSE';
 

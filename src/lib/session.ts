@@ -6,8 +6,10 @@ import { redirect } from 'next/navigation';
 import { asc, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { authFailureHref, getAuthState } from './auth';
+import { hasAllSites } from './auth/claims';
+import { clavisGrant } from './auth/clavis-access';
 import { accessHref } from './auth/paths';
-import { isDemo } from './config';
+import { config, isDemo } from './config';
 import { ALL_SITES, type Role } from './domain';
 import { PERSON_COLUMNS, hasLeft, type Person } from './people';
 import { today } from './today';
@@ -57,14 +59,27 @@ const resolveSession = cache(async (): Promise<Resolved> => {
   if (scheduled) return { session: scheduled };
   const auth = await getAuthState();
   if (auth.status !== 'authenticated') return { session: null, denied: authFailureHref(auth) };
-  const { role, personId, siteIds, cse } = auth.identity;
+  const { personId, cse, oid } = auth.identity;
+  let { role, siteIds } = auth.identity;
+  const demo = isDemo();
+  // Droits lus dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on) : le rôle de la vue remplace celui du cookie (rôle changé dans
+  // Clavis : appliqué à la page suivante, après VIGIE_ACCESS_FROM_CLAVIS_SECONDS) ; accès fermé ou vue illisible : refus.
+  if (!demo && config().accessFromClavis) {
+    const grant = oid ? await clavisGrant(oid) : { ok: false as const, reason: 'closed' as const };
+    if (!grant.ok) return { session: null, denied: accessHref(grant.reason === 'unreadable' ? 'echec' : 'non-autorise') };
+    if (grant.role !== role) {
+      // Périmètre recalculé pour le nouveau rôle : tous les sites (direction, animateur QHSE), sinon les sites accordés à la
+      // connexion (aucun quand la session ouvrait tous les sites) et le site de rattachement de la fiche (ajouté ci-dessous).
+      siteIds = hasAllSites(grant.role) ? null : siteIds ?? [];
+      role = grant.role;
+    }
+  }
   const db = await getDb();
   const [[user], sites] = await Promise.all([
     db.select(PERSON_COLUMNS).from(t.people).where(eq(t.people.id, personId)),
     db.select({ id: t.sites.id, label: t.sites.label, archivedAt: t.sites.archivedAt }).from(t.sites).orderBy(asc(t.sites.sort)),
   ]);
   if (!user) return { session: null, denied: accessHref('non-autorise') };
-  const demo = isDemo();
   // Fiche sortie de l'effectif en cours de session : la session tombe (la connexion la refuse aussi).
   if (!demo && hasLeft(user, today())) return { session: null, denied: accessHref('non-autorise') };
   // Le site de rattachement fait toujours partie du périmètre, tel qu'il est dans la fiche (pas seulement à la connexion).

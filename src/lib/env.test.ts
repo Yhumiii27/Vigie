@@ -52,6 +52,24 @@ describe('parseConfig', () => {
     expect(entraMissing(parseConfig({ VIGIE_DEMO: '1' }))).toEqual(['ENTRA_TENANT_ID', 'ENTRA_CLIENT_ID', 'ENTRA_CLIENT_SECRET', 'VIGIE_SESSION_SECRET', 'VIGIE_PUBLIC_URL']);
   });
 
+  it('connexion par Clavis : ENTRA_TENANT_ID facultative avec ENTRA_ISSUER ; droits lus dans Clavis sur demande', () => {
+    const clavis = { VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr', VIGIE_SESSION_SECRET: 'x'.repeat(32), ENTRA_ISSUER: 'https://clavis.exemple.fr', ENTRA_CLIENT_ID: 'vigie', ENTRA_CLIENT_SECRET: 's' };
+    const c = parseConfig(clavis);
+    expect(c.entra).toEqual({ tenantId: null, clientId: 'vigie', clientSecret: 's', issuer: 'https://clavis.exemple.fr' });
+    expect(entraMissing(c)).toEqual([]);
+    // Variable absente : comportement d'avant (rôles du jeton), relecture toutes les 60 s si elle est posée.
+    expect([c.accessFromClavis, c.accessFromClavisSeconds]).toEqual([false, 60]);
+    expect(parseConfig({ ...clavis, VIGIE_ACCESS_FROM_CLAVIS: 'on', VIGIE_ACCESS_FROM_CLAVIS_SECONDS: '0' })).toMatchObject({ accessFromClavis: true, accessFromClavisSeconds: 0 });
+    expect(parseConfig({ ...clavis, VIGIE_ACCESS_FROM_CLAVIS: 'off' }).accessFromClavis).toBe(false);
+    expect(parseConfig({ ...clavis, ENTRA_TENANT_ID: 'T-1' }).entra?.tenantId).toBe('T-1');
+    expect(() => parseConfig({ ...clavis, VIGIE_ACCESS_FROM_CLAVIS: 'oui' })).toThrow(/VIGIE_ACCESS_FROM_CLAVIS : valeur attendue : on/);
+    expect(() => parseConfig({ ...clavis, VIGIE_ACCESS_FROM_CLAVIS_SECONDS: '7200' })).toThrow(/VIGIE_ACCESS_FROM_CLAVIS_SECONDS : au plus 3600/);
+    expect(() => parseConfig({ ...clavis, VIGIE_ACCESS_FROM_CLAVIS_SECONDS: '-1' })).toThrow(/VIGIE_ACCESS_FROM_CLAVIS_SECONDS/);
+    // Sans émetteur de remplacement, l'annuaire Entra reste à donner ; avec lui, identifiant et secret vont ensemble.
+    expect(() => parseConfig({ ...clavis, ENTRA_ISSUER: '' })).toThrow(/ENTRA_TENANT_ID, ENTRA_CLIENT_ID et ENTRA_CLIENT_SECRET : à renseigner ensemble/);
+    expect(() => parseConfig({ ...clavis, ENTRA_CLIENT_SECRET: '' })).toThrow(/ENTRA_TENANT_ID facultative avec ENTRA_ISSUER/);
+  });
+
   it('secrets trop courts, adresse publique avec chemin, listes mal formées : refusés', () => {
     const problems = (env: Record<string, string>) => {
       try {
