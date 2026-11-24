@@ -9,7 +9,7 @@ import { resetConfig } from '@/lib/env';
 import { OUTBOUND_MAX_ATTEMPTS } from '@/lib/rules/outbound';
 import { sendOutboundNow } from '@/server/connectors';
 import { decideEcr } from '@/server/engineering';
-import { sendOutboundMessages } from '@/server/outbound';
+import { sendOutboundMessages } from '@/server/integrations/codex/outbound';
 import { entityVersion } from '@/server/versions';
 
 // File d'envoi vers Codex (D12, lot 5 de M-02) : décisions sur les demandes de modification de Codex envoyées à son webhook

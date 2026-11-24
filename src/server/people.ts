@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { readCursusPeople } from '@/lib/foreign/cursus';
-import { SOURCES, unavailableMessage } from '@/lib/foreign/labels';
+import { readCursusPeople } from '@/server/integrations/cursus/views';
+import { SOURCES, unavailableMessage } from '@/lib/integration-labels';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireEditor, requireInSite } from '@/lib/guard';
 import { newCachedPerson } from '@/lib/rules/people-sync';
@@ -14,7 +14,7 @@ import { hasLeft } from '@/lib/people';
 import { notifyReassigned } from './action-create';
 import { today } from '@/lib/today';
 import { logChange } from './changelog';
-import { refreshSharedReferences } from './foreign-sync';
+import { refreshSharedReferences } from '@/server/integrations/sync';
 
 // Personnes lues dans Cursus (D01 de Matrix, décision CV-10 du 03/11/2026) : Vigie ne crée plus de fiche (src/server/skills.ts,
 // savePerson) ; une fiche ancienne sans matricule (saisie avant D01, ou créée à la première connexion Entra) se rattache à un
@@ -119,7 +119,7 @@ export async function attachPerson(_prev: FormState, fd: FormData): Promise<Form
 
 /**
  * « Actualiser depuis Cursus » (écran Habilitations, QHSE et direction) : rafraîchit tout de suite les personnes et le
- * catalogue des titres (src/server/foreign-sync.ts), sans attendre la tâche « Référentiels partagés ».
+ * catalogue des titres (src/server/integrations/sync.ts), sans attendre la tâche « Référentiels partagés ».
  */
 export async function refreshFromCursus(): Promise<FormState> {
   const { error } = await requirePeopleEditor();

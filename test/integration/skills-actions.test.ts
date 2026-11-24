@@ -8,7 +8,7 @@ import {
   archiveTitle, followTitle, moveTitle, reinstatePerson, restoreTitle, savePerson, saveTitle, setPersonLeft, setRequirement,
 } from '@/server/skills';
 import { loadSkillData, loadSkillMatrix, loadSkillSignals, loadTitleChoices } from '@/lib/data/skills';
-import { refreshSharedReferences } from '@/server/foreign-sync';
+import { refreshSharedReferences } from '@/server/integrations/sync';
 
 // Habilitations et formations après la décision CV-01 du 04/11/2026 (lot 2 de M-02, D08 et D09) : Vigie consulte les
 // titres détenus dans cursus.pub_titres_detenus (substitut de démonstration) et suit des titres du catalogue de Cursus

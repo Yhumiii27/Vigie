@@ -5,8 +5,8 @@ import { schema as t, type Db } from '@/db';
 import { config } from '@/lib/config';
 import { log } from '@/lib/log';
 import { OUTBOUND_MAX_ATTEMPTS, OUTBOUND_TARGETS, readCodexResponse, retryDelayMs, type DeliveryOutcome, type OutboundTarget } from '@/lib/rules/outbound';
-import { logChange } from './changelog';
-import { ECR_ENTITY } from './engineering-core';
+import { logChange } from '@/server/changelog';
+import { ECR_ENTITY } from '@/server/engineering-core';
 
 // Envois aux autres outils (D12, lot 5 de M-02) : la tâche planifiée « Envois aux outils » (src/db/scheduler.ts, à chaque
 // passage, serveur Next.js seulement) et « Envoyer maintenant » (onglet « Connecteurs ») envoient les messages

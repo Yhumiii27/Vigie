@@ -2,7 +2,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 import type { DbOrTx } from '@/db';
 import { pubAcces } from '@/db/foreign';
-import { readSource, type SourceRead } from './source';
+import { readSource, type SourceRead } from '../source';
 
 // Lectures de Clavis (connexion centrale, décision du propriétaire du 23/11/2026 : une seule base, les droits lus dans la
 // base, jamais dans le jeton). clavis.pub_acces : une ligne par personne et application ; Vigie lit les siennes

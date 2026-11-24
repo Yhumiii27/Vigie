@@ -4,12 +4,12 @@ import { and, asc, gte, lte } from 'drizzle-orm';
 import { getDb, type DbOrTx } from '@/db';
 import { PRESENCES_OPTIONAL_COLUMNS, SALARIES_OPTIONAL_COLUMNS, pubPresencesPrevues, pubSalaries, pubTitres, pubTitresDetenus } from '@/db/foreign';
 import { siteMatriculeOf } from '@/lib/rules/people-sync';
-import { readSource, viewColumns, type SourceRead } from './source';
+import { readSource, viewColumns, type SourceRead } from '../source';
 
 // Lectures de Cursus (lot 2 de M-02, décision CV-01 du 04/11/2026 : Vigie consulte, Cursus fait foi). D08 : catalogue des
-// titres (cache training_titles, src/server/foreign-sync.ts ; id = titre_id) ; D09 : titres détenus, lus directement et
+// titres (cache training_titles, src/server/integrations/sync.ts ; id = titre_id) ; D09 : titres détenus, lus directement et
 // joints par people.matricule et training_titles.id (src/lib/data/held-titles.ts). D01 (décision CV-10 du 03/11/2026) :
-// personnes (cache people, src/server/foreign-sync.ts) et présences prévues sur site (poste de garde, PRV-25). Aucune
+// personnes (cache people, src/server/integrations/sync.ts) et présences prévues sur site (poste de garde, PRV-25). Aucune
 // écriture chez Cursus.
 
 export type CursusTitle = {

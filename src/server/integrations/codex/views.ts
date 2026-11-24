@@ -2,7 +2,7 @@ import 'server-only';
 import { asc, inArray, or, sql } from 'drizzle-orm';
 import type { DbOrTx } from '@/db';
 import { pubDocuments, pubRevisionsDocument, pubTypesDocument, pubValidations } from '@/db/foreign';
-import { readSource, type SourceRead } from './source';
+import { readSource, type SourceRead } from '../source';
 
 // Lectures de Codex (lot 4 de M-02, D10, décision CV-05 du 05/11/2026 : Codex fait foi pour les documents ; Vigie les
 // consulte). Lues directement à chaque requête (aucun cache) : fiches documents, révisions, circuits de validation et

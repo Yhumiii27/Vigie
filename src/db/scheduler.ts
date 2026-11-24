@@ -75,7 +75,7 @@ const parisClock = (d: Date) => {
 /**
  * Référentiels partagés (lot 0 de M-02) : caches des vues des autres outils (sites de Matrix, affectations de Keystone)
  * rafraîchis une fois par nuit, à partir de 2 h (heure de Paris) ; l'ouverture de la base fait déjà le rafraîchissement du
- * jour du démarrage. Passages : sync_runs (src/server/foreign-sync.ts).
+ * jour du démarrage. Passages : sync_runs (src/server/integrations/sync.ts).
  */
 export function sharedReferencesTask(startedAt = new Date()): ScheduledTask {
   let lastDay = parisClock(startedAt).day;
@@ -85,7 +85,7 @@ export function sharedReferencesTask(startedAt = new Date()): ScheduledTask {
       const { day, hour } = parisClock(now);
       if (day === lastDay || hour < SHARED_REFERENCES_HOUR) return;
       lastDay = day;
-      const { refreshSharedReferences } = await import('@/server/foreign-sync');
+      const { refreshSharedReferences } = await import('@/server/integrations/sync');
       await refreshSharedReferences(db);
     },
   };
@@ -96,13 +96,13 @@ export const INBOUND_REQUESTS_TASK = 'Demandes reçues';
 
 /**
  * Demandes reçues (D13, décision CV-08) : demandes déposées par Keystone avec vigie.pub_signaler_avancement_nc, traitées à
- * chaque passage du planificateur (10 min) par les règles de Vigie (src/server/inbound.ts).
+ * chaque passage du planificateur (10 min) par les règles de Vigie (src/server/integrations/inbound.ts).
  */
 export function inboundRequestsTask(): ScheduledTask {
   return {
     name: INBOUND_REQUESTS_TASK,
     async run(db) {
-      const { processInboundRequests } = await import('@/server/inbound');
+      const { processInboundRequests } = await import('@/server/integrations/inbound');
       await processInboundRequests(db);
     },
   };
@@ -113,13 +113,13 @@ export const OUTBOUND_MESSAGES_TASK = 'Envois aux outils';
 
 /**
  * Envois aux outils (D12) : messages de la file outbound_messages (décisions sur les demandes de modification de Codex),
- * envoyés à chaque passage du planificateur (10 min) avec reprises espacées (src/server/outbound.ts).
+ * envoyés à chaque passage du planificateur (10 min) avec reprises espacées (src/server/integrations/codex/outbound.ts).
  */
 export function outboundMessagesTask(): ScheduledTask {
   return {
     name: OUTBOUND_MESSAGES_TASK,
     async run(db) {
-      const { sendOutboundMessages } = await import('@/server/outbound');
+      const { sendOutboundMessages } = await import('@/server/integrations/codex/outbound');
       await sendOutboundMessages(db);
     },
   };

@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
-import { loadProjectIndex } from '@/lib/foreign/keystone';
-import { projectText } from '@/lib/foreign/labels';
+import { loadProjectIndex } from '@/server/integrations/keystone/views';
+import { projectText } from '@/lib/integration-labels';
 import { getDb, schema as t } from '@/db';
 import { fmtQty, wasteEntryHref } from '@/lib/rules/environment';
 import type { ChangeEntry } from '@/lib/change-entry';

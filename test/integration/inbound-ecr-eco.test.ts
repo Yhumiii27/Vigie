@@ -4,12 +4,12 @@ import { eq, sql } from 'drizzle-orm';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { getDb, schema as t } from '@/db';
 import { loadInboundSignals } from '@/lib/data/inbound';
-import { processInboundRequests } from '@/server/inbound';
+import { processInboundRequests } from '@/server/integrations/inbound';
 
 // D12 (lot 5 de la convergence M-02), décisions CV-06 et CV-08 : Codex crée une demande de modification par
 // vigie.pub_creer_demande_modification (numéro ECR-AAAA-NNN réservé et rendu), Keystone fait avancer un ordre par
 // vigie.pub_signaler_avancement_eco ; les deux fonctions ne font que déposer une demande dans inbound_requests, traitée par
-// Vigie avec ses règles et son journal (src/server/inbound.ts). PGlite, ou PostgreSQL avec TEST_DATABASE_URL (schéma vigie).
+// Vigie avec ses règles et son journal (src/server/integrations/inbound.ts). PGlite, ou PostgreSQL avec TEST_DATABASE_URL (schéma vigie).
 
 freshDemoDatabase();
 

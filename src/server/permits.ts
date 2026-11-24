@@ -5,7 +5,7 @@ import { vetoedWorkerNames } from '@/lib/data/plan-workers';
 import { vetoBlocker } from '@/lib/rules/workers';
 import { lockoutCloseBlocker, lockoutDeliverBlocker } from '@/lib/rules/lockouts';
 import { eq } from 'drizzle-orm';
-import { unknownProjectError } from '@/lib/foreign/keystone';
+import { unknownProjectError } from '@/server/integrations/keystone/views';
 import { getDb, schema as t } from '@/db';
 import {
   FIRE_WATCH_HOURS, PERMIT_DELIVERED, PERMIT_TYPES, PERMIT_TYPE_KEYS, activityLinkIssues, addHoursLocal, firstMinuteReason,

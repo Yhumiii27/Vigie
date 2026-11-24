@@ -58,7 +58,7 @@ export const sites = pgTable('sites', {
   archiveReason: text('archive_reason'),
   // D14 de Matrix, décision CV-09 (03/11/2026, migration 0024) : l'identifiant d'un site EST son code commun
   // (matrix.sites.code, motif ^[a-z][a-z0-9_]{1,31}$, jamais « all ») ; plus de colonne code distincte. La table est un
-  // cache de matrix.pub_sites (src/server/foreign-sync.ts) : libellé et ordre rafraîchis depuis la vue, attributs ci-dessus
+  // cache de matrix.pub_sites (src/server/integrations/sync.ts) : libellé et ordre rafraîchis depuis la vue, attributs ci-dessus
   // propres à Vigie. Un site n'est créé qu'en choisissant un site de la vue non encore suivi (src/server/sites.ts).
   // État lu dans Matrix au dernier rafraîchissement : actif | ferme (actif = false) | absent (plus dans la vue) ; null =
   // jamais lu (base antérieure, source indisponible). Signal « fermé dans Matrix » : loadSiteSignals.
@@ -92,7 +92,7 @@ export const people = pgTable('people', {
   lastRole: text('last_role'),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   // D01 de Matrix, décision CV-10 (03/11/2026, migration 0030) : une fiche qui porte un matricule est un cache de
-  // cursus.pub_salaries (src/server/foreign-sync.ts : nom, poste, site, sortie et, contrat D01 v2, catégorie, entreprise,
+  // cursus.pub_salaries (src/server/integrations/sync.ts : nom, poste, site, sortie et, contrat D01 v2, catégorie, entreprise,
   // e-mail), jamais saisi dans Vigie. Fiche sans matricule (saisie avant D01, ou créée à la première connexion Entra) :
   // « à rattacher » par le QHSE (attachPerson, src/server/people.ts). État lu au dernier rafraîchissement : actif | absent
   // (plus dans la vue : jamais supprimée, signal au QHSE) ; null = jamais lu (pas de matricule, source indisponible).
@@ -894,7 +894,7 @@ export const safetyNotices = pgTable('safety_notices', {
 
 // D08 de Matrix (migration 0025, décision CV-01 du 04/11/2026) : cache du catalogue des titres de Cursus (vue
 // cursus.pub_titres), une ligne = titre suivi par Vigie dans sa matrice ; `id` = titre_id de Cursus (« habilitation.he »,
-// « formation.sst »…). Intitulé et validité rafraîchis par src/server/foreign-sync.ts seulement (jamais saisis) ; suivi,
+// « formation.sst »…). Intitulé et validité rafraîchis par src/server/integrations/sync.ts seulement (jamais saisis) ; suivi,
 // « ne plus suivre » (archivage motivé) et attributs propres au QHSE (CV-03) saisis dans Vigie.
 export const trainingTitles = pgTable('training_titles', {
   id: text('id').primaryKey(),
@@ -929,7 +929,7 @@ export const trainingTitles = pgTable('training_titles', {
 ]);
 
 // Titres requis par salarié (HAB-03), saisis dans Vigie ; les titres détenus sont lus dans cursus.pub_titres_detenus
-// (D09, jointure par people.matricule et training_titles.id, src/lib/foreign/cursus.ts) : plus de table qualifications ni
+// (D09, jointure par people.matricule et training_titles.id, src/server/integrations/cursus/views.ts) : plus de table qualifications ni
 // training_sessions depuis la migration 0025.
 export const qualificationRequirements = pgTable('qualification_requirements', {
   personId: text('person_id').notNull().references(() => people.id),
@@ -938,7 +938,7 @@ export const qualificationRequirements = pgTable('qualification_requirements', {
 }, (t) => [primaryKey({ columns: [t.personId, t.titleId] })]);
 
 // D04 de Matrix (migration 0024) : cache de keystone.pub_affectations (rotations de chantier et affectations du planning),
-// rafraîchi par src/server/foreign-sync.ts seulement (jamais saisi) ; une ligne par affectation de la vue (affectation_id,
+// rafraîchi par src/server/integrations/sync.ts seulement (jamais saisi) ; une ligne par affectation de la vue (affectation_id,
 // clé de la vue) dont le salarié est rattaché par people.matricule et qui finit il y a moins d'un an. `project` recomposé
 // « code · client » pour l'affichage ; `project_code` = keystone.pub_projets.code. Lu par loadSkillMatrix (alerte
 // d'habilitation sur une affectation). Lignes d'une base antérieure (affectation_id vide) : remplacées au rafraîchissement.
@@ -1583,7 +1583,7 @@ export const lockouts = pgTable('lockouts', {
 // ─── Documents (Codex) ──────────────────────────────────────────────────────
 
 // Lot 4 de M-02 (D10, décision CV-05 du 05/11/2026, migration 0028) : les documents sont tenus par Codex et lus dans ses
-// vues publiées (src/lib/foreign/codex.ts) ; les tables documents, document_versions et document_reviews sont supprimées.
+// vues publiées (src/server/integrations/codex/views.ts) ; les tables documents, document_versions et document_reviews sont supprimées.
 // Reste à Vigie le rattachement d'une action du plan à une révision d'un document de Codex (lien complémentaire
 // « docversion » du registre src/lib/action-links.ts, ancienne colonne document_versions.action_id) : une action par
 // révision (élément à action unique), identifiant de Codex en texte, sans clé étrangère vers un autre outil.
@@ -1855,7 +1855,7 @@ export const syncRuns = pgTable('sync_runs', {
 // Un autre outil n'écrit jamais dans les tables de Vigie (M-17, M-18) : il appelle une fonction vigie.pub_<verbe>_<objet>
 // (migration 0026 : pub_signaler_avancement_nc, SECURITY DEFINER), qui contrôle l'appelant (session_user parmi
 // inbound_callers) et la forme des arguments, puis dépose seulement une ligne dans inbound_requests. Vigie la traite
-// ensuite avec ses propres règles et son journal (src/server/inbound.ts : tâche planifiée « Demandes reçues » et bouton
+// ensuite avec ses propres règles et son journal (src/server/integrations/inbound.ts : tâche planifiée « Demandes reçues » et bouton
 // « Traiter maintenant » de l'onglet « Connecteurs ») ; état et motif lisibles par l'appelant quand Matrix les publiera.
 
 /** Rôles PostgreSQL admis à déposer une demande (session_user) ; la migration y inscrit keystone_app. */
@@ -2136,7 +2136,7 @@ export const ecoActions = pgTable('eco_actions', {
 //
 // File d'envoi : un message par décision à transmettre (ex. décision sur une demande de modification de Codex, envoyée à
 // son webhook POST <VIGIE_CODEX_URL>/api/integrations/vigie), écrit dans la transaction de la décision, envoyé par la tâche
-// planifiée « Envois aux outils » (src/server/outbound.ts) avec reprises espacées. Jamais supprimé ; lu par l'onglet
+// planifiée « Envois aux outils » (src/server/integrations/codex/outbound.ts) avec reprises espacées. Jamais supprimé ; lu par l'onglet
 // « Connecteurs ». Aucune donnée personnelle hors du corps attendu par le destinataire.
 export const outboundMessages = pgTable('outbound_messages', {
   id: serial('id').primaryKey(),

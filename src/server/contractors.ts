@@ -2,7 +2,7 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { readSuppliers, supplierError } from '@/lib/foreign/keystone';
+import { readSuppliers, supplierError } from '@/server/integrations/keystone/views';
 import { isPlanEnded } from '@/lib/rules/prevention';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireManager } from '@/lib/guard';

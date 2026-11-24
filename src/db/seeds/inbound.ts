@@ -4,7 +4,7 @@ import { rel } from './dates';
 import type { SeedTx } from './types';
 
 // Jeu de démonstration des demandes reçues de Keystone (D13, décision CV-08, migration 0026), comme si Keystone les avait
-// déposées par vigie.pub_signaler_avancement_nc puis que Vigie les avait traitées (src/server/inbound.ts) :
+// déposées par vigie.pub_signaler_avancement_nc puis que Vigie les avait traitées (src/server/integrations/inbound.ts) :
 // - références projet de la NC EV-2026-130 (article Keystone), appliquée ;
 // - passage de la NC EV-2026-121 à « Efficacité vérifiée » demandé alors que ses actions ne sont pas vérifiées,
 //   refusée par les règles de Vigie (échéance « demande refusée » du responsable QHSE du site).

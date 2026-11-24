@@ -4,7 +4,7 @@
 // CREATE SCHEMA ; plan de Matrix, § 1.3). Colonnes, types et ordre recopiés des contrats publiés (FOREIGN_CONTRACTS,
 // comparés à test/fixtures/contracts/*.json et aux substituts de démonstration par test/integration/foreign-sources.test.ts).
 //
-// Seuls src/lib/foreign/ (lectures) et src/db/foreign-substitutes.ts (substituts de démonstration) importent ce module :
+// Seuls src/server/integrations/ (lectures) et src/db/foreign-substitutes.ts (substituts de démonstration) importent ce module :
 // aucun autre fichier de Vigie ne nomme un schéma d'un autre outil (garde-fou du même test). Aucune écriture vers ces
 // schémas (décision M-17 de Matrix).
 
@@ -165,7 +165,7 @@ export const pubTitresDetenus = cursus.view('pub_titres_detenus', {
  * cursus.pub_salaries — contrat D01 v2 (Matrix data/contrats/cursus.pub_salaries-d01-v2.json) : colonnes du contrat v1
  * (Cursus server/migrations-pg/0002_partage.sql, une ligne par salarié, sortis compris), puis categorie, entreprise et
  * email ajoutées en fin de vue (décision CV-10 : intérimaires et extérieurs aux matricules I… et E…). Tant que le serveur
- * publie le v1, les trois colonnes manquent : src/lib/foreign/cursus.ts ne lit que les colonnes présentes. Puis
+ * publie le v1, les trois colonnes manquent : src/server/integrations/cursus/views.ts ne lit que les colonnes présentes. Puis
  * `matricule_site` (lot 14 de Cursus, proposition en attente du propriétaire et de Matrix) : matricule de site « I… » ou
  * « E… », null pour un salarié ; `matricule` reste le matricule Cursus « EMP-… » de tous. Lecteurs : keystone_app,
  * codex_app, vigie_app, matrix_app.
@@ -336,7 +336,7 @@ export const pubTypesDocument = codex.view('pub_types_document', {
  * clavis.pub_acces — accès de chaque personne à chaque application, réglés par la DSI dans Clavis (publication de Clavis
  * du 23/11/2026, définie par Matrix ; requête de référence src/server/publications/definitions.ts de Clavis). personne_id =
  * oid du jeton de connexion de Clavis ; role = rôle propre de Vigie (Vigie.Direction…). Lue par vigie_app quand
- * VIGIE_ACCESS_FROM_CLAVIS=on (src/lib/foreign/clavis.ts). Aucune donnée personnelle au-delà de l'identifiant.
+ * VIGIE_ACCESS_FROM_CLAVIS=on (src/server/integrations/clavis/views.ts). Aucune donnée personnelle au-delà de l'identifiant.
  */
 export const pubAcces = clavis.view('pub_acces', {
   personneId: uuid('personne_id').notNull(),

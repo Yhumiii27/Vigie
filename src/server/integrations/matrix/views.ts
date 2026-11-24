@@ -2,7 +2,7 @@ import 'server-only';
 import { asc } from 'drizzle-orm';
 import type { DbOrTx } from '@/db';
 import { pubSites } from '@/db/foreign';
-import { readSource, type SourceRead } from './source';
+import { readSource, type SourceRead } from '../source';
 
 // Lectures de Matrix (référentiels communs). D14 : matrix.pub_sites, liste unique des sites de l'entreprise ; un site de
 // Vigie a pour identifiant le code d'un de ces sites (décision CV-09).

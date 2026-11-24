@@ -1,7 +1,7 @@
 import 'server-only';
 import { getDb, schema as t } from '@/db';
-import { readMatrixSiteCoordinates } from '@/lib/foreign/matrix';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { readMatrixSiteCoordinates } from '@/server/integrations/matrix/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 import { isLate } from '../action-rules';
 import { daysBetween } from '../dates';
 import { today } from '@/lib/today';

@@ -1,6 +1,6 @@
 // Demandes reçues des autres outils (D13, décisions CV-07 et CV-08 du 04/11/2026) : règles pures du traitement des
 // demandes déposées par Keystone dans la table de réception inbound_requests (fonction vigie.pub_signaler_avancement_nc,
-// migration 0026). Module sans import de serveur : utilisé par src/server/inbound.ts (traitement), les chargements et les
+// migration 0026). Module sans import de serveur : utilisé par src/server/integrations/inbound.ts (traitement), les chargements et les
 // écrans. Clés stockées : src/lib/state-keys.ts.
 //
 // Ce que Keystone peut demander sur une NC de projet (événement de type NC portant le code du projet ; numéro = référence

@@ -1,5 +1,5 @@
 // Personnes lues dans Cursus (D01 de Matrix, décision CV-10 du 03/11/2026) : règles pures du rafraîchissement du cache
-// people (src/server/foreign-sync.ts) et du rattachement d'une fiche ancienne (src/server/people.ts). Sans import serveur.
+// people (src/server/integrations/sync.ts) et du rattachement d'une fiche ancienne (src/server/people.ts). Sans import serveur.
 // Une fiche qui porte un matricule reprend de cursus.pub_salaries nom, poste, site (site suivi de même code, sinon aucun),
 // sortie et, contrat D01 v2, catégorie, entreprise et e-mail, puis le matricule de site « I… » / « E… » (lot 14 de Cursus,
 // jamais effacé : valeur publiée vide ou colonne absente = valeur gardée) ; une personne absente de la vue n'est jamais supprimée (état
@@ -7,7 +7,7 @@
 // pour le seul intitulé : l'intitulé n'en porte jamais).
 
 import { addDays, fmtDate } from '../dates';
-import { CURSUS_PERSON_STATES, PERSON_CATEGORIES, type CursusPersonState, type PersonCategory } from '../foreign/labels';
+import { CURSUS_PERSON_STATES, PERSON_CATEGORIES, type CursusPersonState, type PersonCategory } from '@/lib/integration-labels';
 
 /** Motif de sortie posé par le rafraîchissement (journal « Sortie enregistrée dans Cursus »). */
 export const CURSUS_LEFT_REASON = 'Sortie enregistrée dans Cursus';
@@ -27,7 +27,7 @@ export function siteMatriculeOf(raw: string | null | undefined): string | null {
   return v && SITE_MATRICULE_RE.test(v) ? v : null;
 }
 
-/** Personne publiée par Cursus, telle que la lit src/lib/foreign/cursus.ts (`undefined` : colonne non publiée, contrat v1). */
+/** Personne publiée par Cursus, telle que la lit src/server/integrations/cursus/views.ts (`undefined` : colonne non publiée, contrat v1). */
 export type CursusPersonRow = {
   matricule: string; name: string; job: string; siteCode: string | null; leftOn: string | null;
   category?: PersonCategory | null; company?: string | null; email?: string | null; siteMatricule?: string | null;

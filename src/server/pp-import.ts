@@ -12,7 +12,7 @@ import { revalidatePath } from 'next/cache';
 import { desc, eq } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
-import { unknownProjectError } from '@/lib/foreign/keystone';
+import { unknownProjectError } from '@/server/integrations/keystone/views';
 import { getDb, schema as t } from '@/db';
 import { planStatus } from '@/lib/rules/prevention';
 import { PLAN_ATTACHMENT } from '@/lib/data/prevention';

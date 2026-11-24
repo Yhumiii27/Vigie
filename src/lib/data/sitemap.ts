@@ -1,8 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { and, asc, count, eq, isNotNull, isNull, ne } from 'drizzle-orm';
-import { loadProjectIndex } from '@/lib/foreign/keystone';
-import { projectText } from '@/lib/foreign/labels';
+import { loadProjectIndex } from '@/server/integrations/keystone/views';
+import { projectText } from '@/lib/integration-labels';
 import { getDb, schema as t, type Db } from '@/db';
 import { PERMIT_TYPES, PLAN_STATUS, isFullySigned, isMandatory, isPlanEnded, permitDays, planStatus, ruleBasis, toParisLocal } from '@/lib/rules/prevention';
 import {

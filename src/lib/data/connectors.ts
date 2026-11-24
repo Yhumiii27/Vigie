@@ -2,7 +2,7 @@ import 'server-only';
 import { cache } from 'react';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { SOURCE_KEYS, SOURCES, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
+import { SOURCE_KEYS, SOURCES, type SourceKey, type SyncStatus } from '@/lib/integration-labels';
 
 /** Source lue chez un autre outil, telle que l'onglet « Connecteurs » l'affiche (lot 0 de M-02, INT-01). */
 export type ConnectorRow = {

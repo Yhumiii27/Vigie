@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, eq, gte, isNull } from 'drizzle-orm';
-import { unknownProjectError } from '@/lib/foreign/keystone';
+import { unknownProjectError } from '@/server/integrations/keystone/views';
 import { getDb, schema as t } from '@/db';
 import {
   EE_HEADCOUNT_MAX, MAX_PLAN_FILES, MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_CONTENT, PLAN_CONTENT_KEYS, PLAN_MEETING_KINDS, PLAN_MEETING_KIND_KEYS, activityLinkIssues, fullSignatureOn, isMandatory, isPlanEnded,

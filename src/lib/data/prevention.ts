@@ -8,12 +8,12 @@ import {
   LOCKOUT_ENERGIES, LOCKOUT_STATUSES, isLockoutStatus, lockoutCloseBlocker, lockoutDeliverBlocker, pointsText, readPoints, verifyRightError,
   type IsolationPoint, type LockoutEnergy, type LockoutStatus,
 } from '@/lib/rules/lockouts';
-import { readDocumentsByRef } from '@/lib/foreign/codex';
+import { readDocumentsByRef } from '@/server/integrations/codex/views';
 import { confReadable, documentHref } from '@/lib/rules/documents';
 import { asc, eq, inArray, isNotNull, or } from 'drizzle-orm';
 import { schema as t } from '@/db';
-import { loadProjectIndex, loadSuppliers } from '@/lib/foreign/keystone';
-import { projectText, unavailableMessage } from '@/lib/foreign/labels';
+import { loadProjectIndex, loadSuppliers } from '@/server/integrations/keystone/views';
+import { projectText, unavailableMessage } from '@/lib/integration-labels';
 import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,

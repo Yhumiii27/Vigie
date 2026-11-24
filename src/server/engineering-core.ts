@@ -12,7 +12,7 @@ import { logChange } from './changelog';
 import { nextReference, usedIds } from './references';
 
 // Écritures communes des modifications techniques (D12, lot 5 de M-02) : server actions de l'écran
-// (src/server/engineering.ts) et traitement des demandes reçues de Codex et de Keystone (src/server/inbound.ts). Pas de
+// (src/server/engineering.ts) et traitement des demandes reçues de Codex et de Keystone (src/server/integrations/inbound.ts). Pas de
 // 'use server' : aucune action appelable depuis le navigateur ; ne lit jamais la session (auteur passé en argument, null
 // pour une demande reçue : l'outil est nommé dans l'intitulé du journal). Toujours appelé dans la transaction de l'écriture.
 

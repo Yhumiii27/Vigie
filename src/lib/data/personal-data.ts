@@ -1,5 +1,5 @@
 import 'server-only';
-import { readDocumentsByOwner } from '@/lib/foreign/codex';
+import { readDocumentsByOwner } from '@/server/integrations/codex/views';
 import { and, asc, desc, eq, or, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { injuryLabel } from '@/lib/rules/events';

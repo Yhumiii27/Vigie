@@ -7,8 +7,8 @@ import { form } from '../next-mocks';
 import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { getDb, schema as t } from '@/db';
 import { installForeignSubstitutes, substituteTable } from '@/db/foreign-substitutes';
-import { SOURCES } from '@/lib/foreign/labels';
-import { refreshSharedReferences } from '@/server/foreign-sync';
+import { SOURCES } from '@/lib/integration-labels';
+import { refreshSharedReferences } from '@/server/integrations/sync';
 
 // D01 de Matrix (décision CV-10 du 03/11/2026) : personnes lues dans cursus.pub_salaries (cache people), contrat v1 ou v2,
 // fiche absente jamais supprimée, aucune création dans Vigie, rattachement d'une fiche ancienne, échéances du QHSE ;
