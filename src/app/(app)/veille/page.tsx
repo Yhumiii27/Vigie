@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Segments, Toolbar } from '@/components/Segments';
 import { PageHeader } from '@/components/PageHeader';
 import { Icon, MissingNotice, hrefWith } from '@/components/ui';
 import { AddControlButton, ControlsPanel, type ControlSuggestions } from '@/components/watch/ControlsPanel';
@@ -111,13 +112,8 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
     <>
       <PageHeader title={SCREENS.watch.title} sub={sub} />
       <div className="vg-page">
-        <div className="vg-tabs">
-          {tabs.map(([key, label, n]) => (
-            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key ? ' is-on' : ''}`}>
-              <span>{label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{n}</span>
-            </Link>
-          ))}
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6 }}>
+        <Toolbar end={(
+          <>
             <TipButton className="btn btn-secondary vg-btn-sm" disabled tip="Import à venir"><Icon name="ph-upload-simple" size={13} />Importer (Excel)</TipButton>
             {tab === 'registre' && (
               // Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application.
@@ -128,8 +124,10 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
               : tab === 'registre'
                 ? <AddSafetyNoticeButton options={noticeOptions} defaultSite={defaultSite} today={now} />
                 : <AddControlButton options={options} requirementOptions={requirementOptions} defaultSite={defaultSite} suggestions={suggestions} today={now} />)}
-          </span>
-        </div>
+          </>
+        )}>
+          <Segments label="Onglets de la veille" items={tabs.map(([key, label, n]) => ({ key, label, count: n, href: tabHref(key), on: tab === key }))} />
+        </Toolbar>
 
         {missingDetail(sp.exigence, !!openRequirement) && tab === 'exigences' && <MissingNotice text="Exigence introuvable." closeHref={hrefWith('/veille', reqParams, {})} />}
         {missingDetail(sp.controle, !!openControl) && tab === 'controles' && <MissingNotice text="Contrôle introuvable ou hors du site sélectionné." closeHref={hrefWith('/veille', ctrlParams, {})} />}

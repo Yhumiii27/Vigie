@@ -377,14 +377,14 @@ export function ReportForm({ siteLabel, siteId, defaultLocation, topPadding = 62
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 {anonymous && !p.cleaned && (
                   <span role="img" aria-label="Photo non allégée : métadonnées conservées" title="Photo non allégée : métadonnées conservées (position, appareil)"
-                    style={{ position: 'absolute', left: 4, bottom: 4, width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--tone-warn-fg)', background: 'rgba(0, 0, 0, .55)' }}>
+                    style={{ position: 'absolute', left: 4, bottom: 4, width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--tone-warn-fg)', background: 'color-mix(in srgb, var(--color-bg) 72%, transparent)' }}>
                     <i className="ph ph-warning" style={{ fontSize: 13 }} aria-hidden />
                   </span>
                 )}
                 {/* Zone tactile de 44 px, pastille visible de 26 px dans le coin. */}
                 <button type="button" onClick={() => removePhoto(p.key)} aria-label={`Retirer la photo ${i + 1}`}
                   style={{ position: 'absolute', top: 0, right: 0, width: TOUCH, height: TOUCH, padding: 0, display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', background: 'none' }}>
-                  <span aria-hidden style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: '#fff', background: 'rgba(0, 0, 0, .55)' }}>
+                  <span aria-hidden style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--color-text)', background: 'color-mix(in srgb, var(--color-bg) 72%, transparent)' }}>
                     <i className="ph ph-x" style={{ fontSize: 13 }} aria-hidden />
                   </span>
                 </button>

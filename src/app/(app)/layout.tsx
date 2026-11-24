@@ -9,7 +9,10 @@ import { loadInboundOverview } from '@/lib/data/inbound';
 import { loadOutboundOverview } from '@/lib/data/engineering';
 import { loadMatrixSiteChoices, loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
 import { getSession } from '@/lib/session';
+import { cookies } from 'next/headers';
 import { getI18n } from '@/i18n/server';
+import { THEME_COOKIE, themeOf } from '@/lib/theme';
+import { NAV_COOKIE, navClosedOf } from '@/lib/nav-state';
 import { NAV_SECTION_EN, SCREEN_LABEL_EN } from '@/i18n/nav';
 
 // Manifeste du signalement installable (EVT-20) lié aux seules pages /signaler : l'application ne s'installe pas d'ici.
@@ -32,16 +35,20 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
       : null,
   ]);
   // Libellés de navigation : chaînes sources anglaises traduites (VG-N01), le libellé français de domain.ts à défaut.
-  const { t } = await getI18n();
+  const { t, lang } = await getI18n();
+  const jar = await cookies();
+  const theme = themeOf(jar.get(THEME_COOKIE)?.value);
+  const closed = navClosedOf(jar.get(NAV_COOKIE)?.value);
   const tr = (en: string | undefined, fr: string) => (en ? t(en) : fr);
   const nav: NavSection[] = NAV.map((sec) => ({
+    key: sec.label,
     label: tr(NAV_SECTION_EN[sec.label], sec.label),
     items: sec.items.filter((k) => canSee(role, k)).map((k) => ({ key: k, href: SCREENS[k].path, label: tr(SCREEN_LABEL_EN[k], SCREENS[k].label), icon: SCREENS[k].icon, badge: counters.badges[k] })),
   })).filter((s) => s.items.length);
 
-  // Coque : barre latérale, et sur téléphone barre supérieure et tiroir de navigation (UX-01).
+  // Coque commune (Norma 2.1) : barre latérale, et jusqu'à 1024 px barre supérieure et tiroir de navigation (UX-01).
   return (
-    <AppShell sidebar={{ nav, site, sites: siteOptions, user: { name: user.name, initials: initials(user.name) }, role, demo, roles: demo ? ROLE_KEYS : [], siteAdmin }}>
+    <AppShell sidebar={{ nav, site, sites: siteOptions, user: { name: user.name, initials: initials(user.name) }, role, demo, roles: demo ? ROLE_KEYS : [], siteAdmin, closed }} lang={lang} theme={theme}>
       {children}
     </AppShell>
   );

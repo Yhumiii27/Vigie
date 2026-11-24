@@ -6,6 +6,7 @@ import type { ChangeEntry } from '@/lib/change-entry';
 import { EventAccessLog } from '@/components/events/AccessLog';
 import { AdvanceButton, DismissButton, MethodSeg, RestoreButton, StepBackButton } from '@/components/EventControls';
 import { BackToList, DetailFocus } from '@/components/ListDetail';
+import { HeaderLink } from '@/components/HeaderLink';
 import { PageHeader } from '@/components/PageHeader';
 import { AccidentSection } from '@/components/events/AccidentSection';
 import { AnalysisEditButton } from '@/components/events/AnalysisEditButton';
@@ -135,15 +136,15 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           <>
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
             {health && (
-              <a href={`${BENIGN_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-wide-only">
-                <i className="ph ph-notebook" style={{ fontSize: 14 }} aria-hidden />Registre des accidents bénins
-              </a>
+              <HeaderLink plain href={`${BENIGN_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} icon="ph-notebook" className="vg-wide-only">
+                Registre des accidents bénins
+              </HeaderLink>
             )}
             {/* CNF-01 : registre des dangers graves et imminents (animateur QHSE, direction, membres du CSE). */}
             {dgiReader && (
-              <Link href={`${DGI_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} className="btn btn-ghost vg-wide-only">
-                <i className="ph ph-siren" style={{ fontSize: 14 }} aria-hidden />Registre des DGI
-              </Link>
+              <HeaderLink href={`${DGI_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} icon="ph-siren" className="vg-wide-only">
+                Registre des DGI
+              </HeaderLink>
             )}
             {manager && <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
               health={health} initialOpen={sp.nouveau === '1'}

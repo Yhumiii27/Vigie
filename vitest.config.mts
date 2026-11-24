@@ -6,7 +6,11 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
-    alias: { 'server-only': fileURLToPath(new URL('./test/server-only.ts', import.meta.url)) },
+    alias: {
+      'server-only': fileURLToPath(new URL('./test/server-only.ts', import.meta.url)),
+      // Composants de la coque commune (norma/charte/ds, hors du tsconfig) : leur « @/i18n/client » est celui de Vigie.
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
   test: {
     environment: 'node',

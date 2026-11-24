@@ -32,6 +32,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@electric-sql/pglite": "^0.5.8",
+    "@phosphor-icons/react": "^2.1.10",
     "@phosphor-icons/web": "^2.1.2",
     "drizzle-orm": "^0.45.3",
     "fast-xml-parser": "^5.11.2",

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { newEventHref } from '@/lib/event-prefill';
 import { NewActionButton } from '@/components/ActionFormDialog';
+import { Segments, Toolbar } from '@/components/Segments';
 import { PageHeader } from '@/components/PageHeader';
 import { Aside, CardHead, Dot, Icon, MissingNotice, SegLinks, ToneTag, hrefWith } from '@/components/ui';
 import { ConsumptionMonthButton, ConsumptionPanel } from '@/components/environment/ConsumptionPanel';
@@ -228,13 +229,8 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
 
         <div className={styles.layout}>
           <div className={styles.main}>
-            <div className="vg-tabs">
-              {tabs.map(([key, label, n]) => (
-                <Link key={key} href={hrefWith(PATH, { annee }, { onglet: key === 'registre' ? undefined : key })} scroll={false} className={`vg-tab${tab === key ? ' is-on' : ''}`}>
-                  <span>{label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{n}</span>
-                </Link>
-              ))}
-              <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6, flexWrap: 'wrap' }}>
+            <Toolbar end={(
+              <>
                 {tab === 'registre' && (
                   <a href={`${PATH}/registre?annee=${d.year}`} download className="btn btn-ghost vg-btn-sm" title={`Registre chronologique ${d.year} · ${session.site.label} · CSV`}>
                     <Icon name="ph-download-simple" size={13} />Exporter le registre
@@ -247,8 +243,12 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                 {manage && tab === 'consommations' && monthSite && (
                   <ConsumptionMonthButton records={d.consumption.records} sites={scopeSites} defaultSite={monthSite} defaultMonth={defaultMonth} maxMonth={d.consumption.maxMonth} />
                 )}
-              </span>
-            </div>
+              </>
+            )}>
+              <Segments label="Onglets de l'environnement" items={tabs.map(([key, label, n]) => ({
+                key, label, count: n, href: hrefWith(PATH, { annee }, { onglet: key === 'registre' ? undefined : key }), on: tab === key,
+              }))} />
+            </Toolbar>
 
             {tab === 'registre' && (
               <>

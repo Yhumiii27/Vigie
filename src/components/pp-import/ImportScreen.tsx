@@ -1,5 +1,6 @@
 'use client';
 
+import { Segments, Toolbar } from '@/components/Segments';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Notice } from '@/components/prevention/parts';
@@ -72,17 +73,11 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
 
   return (
     <>
-      <div className="vg-tabs">
-        {tabs.filter(([key]) => canManage || key === 'modeles').map(([key, label, n]) => (
-          <button key={key} type="button" className={`vg-tab${tab === key ? ' is-on' : ''}`} onClick={() => switchTab(key)}
-            style={{ background: 'none', border: 0, font: 'inherit' }} aria-pressed={tab === key}>
-            <span>{label}</span>{n != null && <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{n}</span>}
-          </button>
-        ))}
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6 }}>
-          <Link href="/prevention" className="btn btn-ghost vg-btn-sm"><Icon name="ph-arrow-left" size={13} />Plans de prévention</Link>
-        </span>
-      </div>
+      <Toolbar end={<Link href="/prevention" className="btn btn-ghost vg-btn-sm"><Icon name="ph-arrow-left" size={13} />Plans de prévention</Link>}>
+        <Segments label="Import d'un plan de prévention" items={tabs.filter(([key]) => canManage || key === 'modeles').map(([key, label, n]) => ({
+          key, label, count: n ?? undefined, on: tab === key, onClick: () => switchTab(key),
+        }))} />
+      </Toolbar>
 
       {!canManage && (
         <Notice tone="neutral" icon="ph-info">Votre rôle permet de consulter les modèles d&apos;import ; l&apos;import d&apos;un plan de prévention est réservé à l&apos;encadrement.</Notice>

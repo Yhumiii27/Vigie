@@ -7,6 +7,9 @@ import { I18nProvider } from '@/i18n/client';
 import { LANG_COOKIE, langOf } from '@/i18n/translate';
 import '@phosphor-icons/web/regular';
 import './nocturne.css';
+// Coque commune de la suite (Norma 2.1, norma/charte/COQUE.md) : cibles tactiles puis classes .coque-…, après Nocturne.
+import '@norma/charte/touch.css';
+import '@norma/charte/coque.css';
 import './vigie.css';
 
 // Inter servie depuis le dépôt (fichier variable, sous-ensemble latin, licence OFL : fonts/OFL-Inter.txt) : la construction
