@@ -11,7 +11,8 @@ const FIRST_FIELD = 'input:not([type=hidden]):not([disabled]), select:not([disab
 export const DISCARD_CONFIRM = 'Fermer sans enregistrer la saisie en cours ?';
 
 /**
- * Fenêtre modale Nocturne sur l'élément natif <dialog> (focus piégé, Échap pour fermer), nommée par son titre (UX-03).
+ * Panneau latéral Nocturne (Norma § 7, VG-N06 : formulaire ouvert par un bouton, à droite, fermé au succès par `close`)
+ * sur l'élément natif <dialog> (modal : focus piégé, Échap pour fermer), nommé par son titre (UX-03).
  * Clic à l'extérieur : ferme seulement si l'appui a aussi commencé sur le fond (une sélection de texte relâchée hors de la
  * fenêtre ne la ferme pas) et si rien n'a été saisi ; Échap demande confirmation quand une saisie est en cours.
  * Focus initial : élément [autofocus], sinon premier champ de saisie, sinon comportement natif ; le navigateur rend le
@@ -61,7 +62,7 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
       onInputCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}
       onChangeCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}>
       {open && (
-        <div className="dialog" style={{ width: `min(${width}px, calc(100vw - 32px))` }}>
+        <div className="dialog" style={{ width: `min(${width}px, 100vw)` }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
               {kicker && <div className="card-kicker">{kicker}</div>}
