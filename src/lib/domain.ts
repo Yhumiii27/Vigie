@@ -295,12 +295,12 @@ export const REMINDER_KIND = 'Rappel du mercredi';
 export const REASON_MAX = 1000;
 
 
-// Cotation des risques : gravité 1–4 × probabilité 1–4.
+// Cotation des risques : gravité 1–4 × probabilité 1–4. Couleurs : variables --vg-risk-* de vigie.css (thèmes sombre et clair).
 export const RISK_LEVELS = [
-  { bg: 'oklch(0.30 0.03 152)', dot: 'var(--tone-ok-dot)', label: 'Faible 1–3' },
-  { bg: 'oklch(0.33 0.05 78)', dot: 'var(--tone-warn-dot)', label: 'Modéré 4–6' },
-  { bg: 'oklch(0.35 0.07 40)', dot: 'oklch(0.72 0.14 40)', label: 'Élevé 8–9' },
-  { bg: 'oklch(0.37 0.09 22)', dot: 'var(--tone-danger-dot)', label: 'Critique 12–16' },
+  { bg: 'var(--vg-risk-0-bg)', dot: 'var(--tone-ok-dot)', label: 'Faible 1–3' },
+  { bg: 'var(--vg-risk-1-bg)', dot: 'var(--tone-warn-dot)', label: 'Modéré 4–6' },
+  { bg: 'var(--vg-risk-2-bg)', dot: 'var(--vg-risk-2-dot)', label: 'Élevé 8–9' },
+  { bg: 'var(--vg-risk-3-bg)', dot: 'var(--tone-danger-dot)', label: 'Critique 12–16' },
 ];
 export const riskLevel = (n: number) => (n >= 12 ? 3 : n >= 8 ? 2 : n >= 4 ? 1 : 0);
 export const RISK_ACTION_THRESHOLD = 8;

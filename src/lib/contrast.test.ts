@@ -82,6 +82,47 @@ describe('contrastes de l’interface (AA)', () => {
   });
 });
 
+// Thème clair (Norma 1.0, <html data-theme="light">) : blocs `:root[data-theme="light"]` de nocturne.css et de vigie.css.
+describe('contrastes du thème clair (AA)', () => {
+  const light = (sheet: string) => {
+    const at = sheet.indexOf(':root[data-theme="light"] {');
+    if (at < 0) throw new Error('Bloc du thème clair absent');
+    return sheet.slice(at, sheet.indexOf('}', at));
+  };
+  const ln = light(nocturne);
+  const lv = light(vigie);
+  const lBg = token(ln, '--color-bg');
+  const lSurface = token(ln, '--color-surface');
+  it.each([
+    ['texte / surface', () => contrastRatio(token(ln, '--color-text'), lSurface)],
+    ['texte / fond', () => contrastRatio(token(ln, '--color-text'), lBg)],
+    ['accent / surface', () => contrastRatio(token(ln, '--color-accent'), lSurface)],
+    ['--vg-text-muted / fond', () => contrastRatio(token(lv, '--vg-text-muted'), lBg)],
+    ['--vg-text-muted / surface', () => contrastRatio(token(lv, '--vg-text-muted'), lSurface)],
+    ['--vg-accent-text / entrée active', () => contrastRatio(token(lv, '--vg-accent-text'), blend(token(ln, '--color-accent'), lBg, 0.1))],
+    ['--vg-accent-text / puce active dans une carte', () => contrastRatio(token(lv, '--vg-accent-text'), blend(token(ln, '--color-accent'), lSurface, 0.1))],
+    ['étiquette danger', () => contrastRatio(token(lv, '--tone-danger-fg'), token(lv, '--tone-danger-bg'))],
+    ['étiquette vigilance', () => contrastRatio(token(lv, '--tone-warn-fg'), token(lv, '--tone-warn-bg'))],
+    ['étiquette conforme', () => contrastRatio(token(lv, '--tone-ok-fg'), token(lv, '--tone-ok-bg'))],
+    ['erreur de champ (danger-fg) / surface', () => contrastRatio(token(lv, '--tone-danger-fg'), lSurface)],
+    ['texte / case « critique » de la matrice', () => contrastRatio(token(ln, '--color-text'), token(lv, '--vg-risk-3-bg'))],
+  ])('%s', (_label, measure) => {
+    expect(measure()).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+  it('constat remonté à Norma : neutral-500 du thème clair (texte secondaire de Vigie) sous AA sur une surface', () => {
+    // Valeur de norma/charte/nocturne.css (copie, mêmes valeurs) : 3,91:1 sur blanc, assez pour un élément graphique (3:1).
+    expect(contrastRatio(token(ln, '--color-neutral-500'), lSurface)).toBe(3.91);
+    expect(contrastRatio(token(ln, '--color-neutral-400'), lSurface)).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+  it.each([
+    ['danger', '--tone-danger-dot'],
+    ['vigilance', '--tone-warn-dot'],
+    ['conforme', '--tone-ok-dot'],
+  ])('pastille %s sur une surface (élément graphique, 3:1)', (_label, dot) => {
+    expect(contrastRatio(token(lv, dot), lSurface)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+});
+
 describe('feuilles de style de Vigie', () => {
   const sources = [vigie, css('revue-de-direction/dossier.css'), css('(app)/prevention/imprimer/print.css')];
   it('aucun texte en neutral-600 ni en neutral-700 dans vigie.css (couleur de texte)', () => {

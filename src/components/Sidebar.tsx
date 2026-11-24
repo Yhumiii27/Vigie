@@ -10,7 +10,9 @@ import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
 import { HelpButton } from './HelpDialog';
 import { SEARCH_MIN, SEARCH_PATH } from '@/lib/rules/search';
+import { ThemeToggle } from './ThemeToggle';
 import { Icon } from './ui';
+import type { Theme } from '@/lib/theme';
 
 export type NavSection = { label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
 
@@ -27,6 +29,8 @@ export type SidebarProps = {
   roles: string[];
   /** Sites (archivés compris) et responsables proposés pour « Gérer les sites… » ; null si le rôle ne peut pas les administrer. */
   siteAdmin?: SiteAdmin | null;
+  /** Thème d'affichage lu dans le cookie epc2i-theme par le serveur (Norma 1.0). */
+  theme: Theme;
 };
 
 type Props = SidebarProps & {
@@ -40,7 +44,7 @@ type Props = SidebarProps & {
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
-export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, open = false, onNavigate, onClose }: Props) {
+export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, theme, open = false, onNavigate, onClose }: Props) {
   const pathname = usePathname();
   const [manageSites, setManageSites] = useState(false);
   const siteMenu = useMenu();
@@ -67,6 +71,8 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
           <span className="vg-brand-mark" aria-hidden>V</span>
           <span className="vg-brand-name">Vigie</span>
           <span className="tag tag-outline" style={{ fontSize: 11, padding: '1px 7px' }}>QHSE</span>
+          {/* Norma 1.0 : bascule sombre / clair de l'en-tête (pas de sélecteur de langue dans Vigie). */}
+          <ThemeToggle theme={theme} />
           {/* Tiroir de navigation (téléphone) : fermeture explicite, en plus d'Échap et du fond. */}
           <button type="button" className="btn btn-ghost btn-icon vg-narrow-only vg-side-close" aria-label="Fermer le menu" onClick={onClose}>
             <Icon name="ph-x" size={16} />

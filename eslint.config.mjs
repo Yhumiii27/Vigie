@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Design prototype sources (reference only)
     "design/**",
     ".data/**",
+    // Copie du socle commun Norma (norma.mjs verifier : jamais modifiée ici)
+    "norma/**",
   ]),
 ]);
 

@@ -31,7 +31,9 @@ export function AppShell({ sidebar, children }: { sidebar: SidebarProps; childre
       restoreFocus.current = false;
       return;
     }
-    document.getElementById('vg-side')?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    // Focus d'ouverture sur « Fermer le menu » (la bascule sombre / clair, Norma 1.0, la précède dans l'en-tête du tiroir).
+    const side = document.getElementById('vg-side');
+    (side?.querySelector<HTMLElement>('.vg-side-close') ?? side?.querySelector<HTMLElement>(FOCUSABLE))?.focus();
     // Un menu ouvert dans le tiroir (site, rôle) traite Échap avant (capture + preventDefault, Sidebar).
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) close(); };
     document.addEventListener('keydown', onKey);

@@ -18,7 +18,35 @@
   --vg-text-muted: #8d91a5;
   /* UX-09 : accent d'un élément actif sur son fond teinté (puce, entrée de navigation) : 4,8:1 au lieu de 4,1:1. */
   --vg-accent-text: #9e92e8;
+  /* Cotation des risques (RISK_LEVELS de src/lib/domain.ts) : fond des cases de la matrice et pastille « élevé ». */
+  --vg-risk-0-bg: oklch(0.30 0.03 152);
+  --vg-risk-1-bg: oklch(0.33 0.05 78);
+  --vg-risk-2-bg: oklch(0.35 0.07 40);
+  --vg-risk-3-bg: oklch(0.37 0.09 22);
+  --vg-risk-2-dot: oklch(0.72 0.14 40);
   color-scheme: dark;
+}
+
+/* Thème clair (Norma 1.0, cookie epc2i-theme, <html data-theme="light">) : les variables de Nocturne sont redéfinies par
+   nocturne.css ; ici celles de Vigie (tons, texte tertiaire, accent actif, cotation), mesurées par src/lib/contrast.test.ts. */
+:root[data-theme="light"] {
+  --tone-danger-fg: oklch(0.45 0.14 22);
+  --tone-danger-bg: oklch(0.93 0.04 22);
+  --tone-danger-dot: oklch(0.58 0.18 22);
+  --tone-warn-fg: oklch(0.45 0.09 65);
+  --tone-warn-bg: oklch(0.94 0.05 82);
+  --tone-warn-dot: oklch(0.66 0.14 70);
+  --tone-ok-fg: oklch(0.42 0.09 152);
+  --tone-ok-bg: oklch(0.93 0.04 152);
+  --tone-ok-dot: oklch(0.58 0.13 152);
+  --vg-text-muted: #5f6272;
+  --vg-accent-text: #4a3f92;
+  --vg-risk-0-bg: oklch(0.92 0.04 152);
+  --vg-risk-1-bg: oklch(0.92 0.06 85);
+  --vg-risk-2-bg: oklch(0.88 0.07 45);
+  --vg-risk-3-bg: oklch(0.86 0.08 22);
+  --vg-risk-2-dot: oklch(0.62 0.16 40);
+  color-scheme: light;
 }
 
 body { margin: 0; background: var(--color-bg); color: var(--color-text); }
@@ -38,6 +66,14 @@ button { font: inherit; }
 .vg-brand { display: flex; align-items: center; gap: 9px; padding: 2px 10px 12px; }
 .vg-brand-mark { width: 22px; height: 22px; border: 1px solid var(--color-accent); border-radius: 6px; display: grid; place-items: center; color: var(--color-accent); font-size: 12px; font-weight: 500; }
 .vg-brand-name { font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
+/* Bascule sombre / clair (Norma 1.0) : à droite du nom de l'outil (Vigie n'a pas de sélecteur de langue). Infobulle sous le
+   bouton (en haut de la barre latérale, au-dessus elle serait coupée). */
+.vg-theme-toggle { margin-left: auto; flex: none; overflow: visible; }
+.vg-theme-toggle .seg-opt { padding: 5px 7px; font-size: 14px; }
+.vg-theme-toggle .seg-opt:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.vg-theme-toggle .seg-opt:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.vg-theme-toggle .vg-tip-bubble { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; transform: none; }
+.vg-theme-toggle + .vg-side-close { margin-left: 0; }
 
 .vg-site-btn {
   width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px;
