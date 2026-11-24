@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { asRole } from './helpers';
 
-// UX-06 : mise en page tablette (761–1180 px) — Kanban des actions sur deux rangées de trois colonnes, liste puis fiche
+// UX-06 : mise en page tablette (761–1180 px ; barre latérale en tiroir jusqu'à 1024 px, coque Norma 2.1) — Kanban des actions sur deux rangées de trois colonnes, liste puis fiche
 // en portrait, deux colonnes en paysage, aucune barre de défilement horizontale ; bureau inchangé (six colonnes).
 // Contrôle axe-core sur tablette : accessibilite.spec.ts (projet « tablette », 820 × 1180).
 
@@ -21,7 +21,9 @@ test.describe('tablette portrait (820 × 1180)', () => {
     await expect(page.locator('.vg-kanban')).toBeVisible();
     expect(await columns(page)).toBe(3);
     expect(await horizontalScroll(page)).toBeLessThanOrEqual(0);
-    await expect(page.locator('.vg-side')).toBeVisible(); // barre latérale gardée (pas de tiroir)
+    // Coque commune (Norma 2.1) : jusqu'à 1024 px, barre latérale en tiroir ouvert par « Menu ».
+    await expect(page.locator('.coque-side')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Menu' })).toBeVisible();
   });
 
   test('événements : liste puis fiche, « Retour à la liste »', async ({ page, context, baseURL }) => {
@@ -59,6 +61,6 @@ test.describe('bureau (1280 × 800) inchangé', () => {
     await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
     await page.goto('/actions?vue=kanban');
     expect(await columns(page)).toBe(6);
-    expect(await page.locator('.vg-side').evaluate((el) => el.getBoundingClientRect().width)).toBe(236);
+    expect(await page.locator('.coque-side').evaluate((el) => el.getBoundingClientRect().width)).toBe(232);
   });
 });

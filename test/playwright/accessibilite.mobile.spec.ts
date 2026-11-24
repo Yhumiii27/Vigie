@@ -7,14 +7,14 @@ import { AXE_SCREENS, asRole, axeViolations } from './helpers';
 test('tiroir : Échap ferme d’abord le menu du site, puis le tiroir ; focus rendu au bouton', async ({ page, context, baseURL }) => {
   await asRole(context, baseURL!, 'Animateur QHSE', 'site_a');
   await page.goto('/');
-  const toggle = page.getByRole('button', { name: 'Ouvrir le menu de navigation' });
+  const toggle = page.getByRole('button', { name: 'Menu', exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   // Focus d'ouverture : premier élément du tiroir (« Fermer le menu »), puis la recherche de pages (VG-N07, en tête comme
   // Keystone et Arche), puis le choix du site.
   await expect(page.getByRole('button', { name: 'Fermer le menu' })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('searchbox', { name: 'Aller à une page' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Aller à une page…' })).toBeFocused();
   await page.keyboard.press('Tab');
   const site = page.getByRole('button', { name: /^Site :/ });
   await expect(site).toBeFocused();

@@ -22,24 +22,14 @@ export const FR: Record<string, string> = {
   'Engineering changes': 'Modifications techniques',
 
   // Coque (src/components/AppShell.tsx, Sidebar.tsx)
-  'Skip to content': 'Aller au contenu',
-  'Open the navigation menu': 'Ouvrir le menu de navigation',
-  Sidebar: 'Barre latérale',
-  'Close the menu': 'Fermer le menu',
   'Site: {site}': 'Site : {site}',
   'Manage sites…': 'Gérer les sites…',
   'Changing…': 'Changement en cours…',
   'Site selected: {site}.': 'Site sélectionné : {site}.',
   'Search Vigie': 'Rechercher dans Vigie',
   'Search…': 'Rechercher…',
-  'Go to a page': 'Aller à une page',
   'Go to a page…': 'Aller à une page…',
-  'Shortcut Command K or Control K; Enter opens the first page found.': 'Raccourci Commande K ou Contrôle K ; Entrée ouvre la première page trouvée.',
-  '1 page found': '1 page trouvée',
   '{n} pages found': '{n} pages trouvées',
-  'No page found': 'Aucune page trouvée',
-  'Pages found': 'Pages trouvées',
-  'No page matches.': 'Aucune page ne correspond.',
   'Main navigation': 'Navigation principale',
   ' ({n} to handle)': ' ({n} à traiter)',
   'My space · actions, qualifications': 'Mon espace · actions, habilitations',
@@ -51,12 +41,22 @@ export const FR: Record<string, string> = {
   'Microsoft account: ': 'Compte Microsoft : ',
   'Sign out': 'Se déconnecter',
 
-  // Affichage et langue (src/components/ThemeToggle.tsx, LangToggle.tsx)
+  // Langue et affichage empilés (src/components/Prefs.tsx, PrefsStack de norma/charte/ds/HeaderTools.tsx)
   'Dark / light display': 'Affichage',
   'Dark display': 'Affichage sombre',
   'Light display': 'Affichage clair',
   Language: 'Langue',
+
+  // Coque commune Norma 2.1 (norma/charte/ds : AppShell, Sidebar, HeaderActions ; COQUE.md, audit du 24/11/2026 § 2)
+  'Skip to main content': 'Aller au contenu',
+  Menu: 'Menu',
+  'Close menu': 'Fermer le menu',
+  'Main menu': 'Menu principal',
+  'No page matches': 'Aucune page ne correspond',
+  Actions: 'Actions',
+  'New report': 'Nouveau signalement',
+  Close: 'Fermer',
 };
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = [];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions'];

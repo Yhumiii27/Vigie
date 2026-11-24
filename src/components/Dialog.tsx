@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useHeaderMenu, useIsClient } from './coque';
 import { FORM_SAVED_EVENT } from '@/components/form';
 import { TipButton } from '@/components/Tip';
 
@@ -10,6 +12,9 @@ type DialogProps = { open: boolean; onClose: () => void; title: ReactNode; child
 const FIRST_FIELD = 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
 export const DISCARD_CONFIRM = 'Fermer sans enregistrer la saisie en cours ?';
 
+/** Largeur commune des panneaux (COQUE.md § 7) : 640 px (`--panel-w`), 680 px au-delà (`--panel-w-wide`, document). */
+const panelWidth = (width: number) => (width > 640 ? 'var(--panel-w-wide)' : 'var(--panel-w)');
+
 /**
  * Panneau latéral Nocturne (Norma § 7, VG-N06 : formulaire ouvert par un bouton, à droite, fermé au succès par `close`)
  * sur l'élément natif <dialog> (modal : focus piégé, Échap pour fermer), nommé par son titre (UX-03).
@@ -18,7 +23,10 @@ export const DISCARD_CONFIRM = 'Fermer sans enregistrer la saisie en cours ?';
  * Focus initial : élément [autofocus], sinon premier champ de saisie, sinon comportement natif ; le navigateur rend le
  * focus à l'élément d'origine à la fermeture. Un ActionForm intérieur enregistré (FORM_SAVED_EVENT) remet la saisie à zéro.
  */
-export function Dialog({ open, onClose, title, children, width = 520, kicker }: DialogProps) {
+export function Dialog({ open, onClose, title, children, width = 640, kicker }: DialogProps) {
+  // Ouverte depuis le menu « Actions » de l'en-tête (monté fermé, `hidden`) : rendue dans <body> pour rester visible.
+  const inMenu = useHeaderMenu() != null;
+  const mounted = useIsClient();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const openRef = useRef(false);
@@ -37,7 +45,7 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
       target?.focus();
     }
     if (!open && d.open) d.close();
-  }, [open]);
+  }, [open, mounted]);
   // Formulaire intérieur enregistré (commentaire ajouté depuis la fiche…) : la saisie n'est plus « en cours ».
   useEffect(() => {
     const d = ref.current;
@@ -45,12 +53,12 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
     const saved = () => { dirty.current = false; };
     d.addEventListener(FORM_SAVED_EVENT, saved);
     return () => d.removeEventListener(FORM_SAVED_EVENT, saved);
-  }, []);
+  }, [mounted]);
   const requestClose = () => {
     if (dirty.current && !window.confirm(DISCARD_CONFIRM)) return;
     onClose();
   };
-  return (
+  const node = (
     // stopPropagation : React remonte l'événement « cancel » aux fenêtres parentes ; Échap ne ferme que la fenêtre du dessus.
     <dialog ref={ref} className="vg-dialog" aria-labelledby={open ? titleId : undefined}
       onCancel={(e) => { e.preventDefault(); e.stopPropagation(); requestClose(); }}
@@ -62,7 +70,7 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
       onInputCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}
       onChangeCapture={(e) => { if (!(e.target as HTMLElement).closest('[data-vg-no-dirty]')) dirty.current = true; }}>
       {open && (
-        <div className="dialog" style={{ width: `min(${width}px, 100vw)` }}>
+        <div className="dialog" style={{ width: `min(${panelWidth(width)}, 100vw)` }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
               {kicker && <div className="card-kicker">{kicker}</div>}
@@ -77,6 +85,8 @@ export function Dialog({ open, onClose, title, children, width = 520, kicker }: 
       )}
     </dialog>
   );
+  if (!inMenu) return node;
+  return mounted ? createPortal(node, document.body) : null;
 }
 
 type DialogButtonProps = {
@@ -100,6 +110,18 @@ type DialogButtonProps = {
 export function DialogButton({ label, title, kicker, icon, className = 'btn btn-secondary vg-btn-sm', style, width, disabled, tooltip, ariaLabel, children }: DialogButtonProps) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const menu = useHeaderMenu();
+  if (menu) {
+    // Ligne du menu « Actions » de l'en-tête (COQUE.md § 3.3) : la fenêtre s'ouvre et le menu se ferme.
+    return (
+      <>
+        <button type="button" role="menuitem" className="vg-menu-item vg-menu-row" disabled={disabled} onClick={() => { menu.close(); setOpen(true); }}>
+          {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{label || ariaLabel || tooltip}
+        </button>
+        <Dialog open={open} onClose={close} title={title} kicker={kicker} width={width}>{open && children(close)}</Dialog>
+      </>
+    );
+  }
   // Bouton à icône seule : nommé par ariaLabel, sinon par l'infobulle (qui n'est alors pas répétée en description).
   const iconOnly = label === '' || label == null;
   const name = ariaLabel ?? (iconOnly ? tooltip : undefined);

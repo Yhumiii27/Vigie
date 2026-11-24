@@ -55,25 +55,27 @@ a:hover { color: var(--color-accent-400); }
 button { font: inherit; }
 
 /* ─── Coque ─────────────────────────────────────────────────────────────── */
-
-.vg-app { display: flex; min-height: 100vh; font-size: 13px; line-height: 1.45; color: var(--color-text); background: var(--color-bg); }
-
-.vg-side {
-  width: 236px; flex: none; display: flex; flex-direction: column; padding: 14px 10px 12px;
-  position: sticky; top: 0; height: 100vh;
-  background: linear-gradient(to bottom, transparent, var(--color-divider) 48px, var(--color-divider) calc(100% - 48px), transparent) no-repeat right / 1px 100%;
-}
-.vg-brand { display: flex; align-items: center; gap: 9px; padding: 2px 10px 12px; }
-.vg-brand-mark { width: 22px; height: 22px; border: 1px solid var(--color-accent); border-radius: 6px; display: grid; place-items: center; color: var(--color-accent); font-size: 12px; font-weight: 500; }
-.vg-brand-name { font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
-/* Sélecteur FR / EN et bascule sombre / clair (Norma 1.0, VG-N01) : en-tête de page, à droite. Infobulle sous le bouton. */
-.vg-theme-toggle { flex: none; overflow: visible; }
-.vg-theme-toggle .seg-opt { padding: 5px 7px; font-size: 14px; }
-.vg-theme-toggle .seg-opt:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
-.vg-theme-toggle .seg-opt:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
-.vg-theme-toggle .vg-tip-bubble { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; transform: none; }
-/* Norma § 7 (VG-N01) : sélecteur FR / EN puis bascule sombre / clair dans l'en-tête de page, à droite (comme Keystone). */
-.vg-lang-toggle .seg-opt { font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+/* Coque commune de la suite (Norma 2.1, norma/charte/COQUE.md, classes .coque-… de norma/charte/coque.css) : grille,
+   barre latérale 232 px, en-tête de page, langue / affichage empilés, barre supérieure et tiroir ≤ 1024 px. Ici seulement
+   ce qui est propre à Vigie : corps de l'interface en 13 px (--text-ui), sélecteur du site, menus. */
+.vg-app { font-size: var(--text-ui); line-height: 1.45; }
+/* Lien d'évitement de la coque commune hors du conteneur .vg-app : même corps. */
+.coque-skip { font-size: var(--text-ui); }
+/* Pages chargées : le contenu suit la colonne de la coque (marges et écart de .coque-main). */
+.vg-page { padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+/* En-tête chargé (squelette, pages d'erreur) : même place que l'en-tête de page commun. */
+.vg-header { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.vg-header h1 { margin: 0; font-size: var(--text-title); font-weight: var(--weight-strong); line-height: 1.2; letter-spacing: -0.01em; }
+/* En-tête chargé de nombreuses actions : une seconde ligne garde la paire langue / affichage à droite. */
+.coque-header { justify-content: flex-end; }
+/* ⌘K lisible en thème clair (neutral-500 sous 4,5:1 sur la surface claire). */
+:root[data-theme="light"] .coque-kbd { color: var(--color-neutral-400); }
+/* Boutons de l'en-tête de page : taille `sm` de la coque (12,5 px). */
+.coque-header-actions .btn { font-size: var(--text-control); }
+/* Menu « Actions » de l'en-tête : lignes de menu (liens et boutons d'action, HeaderLink, DialogButton). */
+.vg-menu-row { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+/* Marque des pages hors coque (connexion, amorçage, page introuvable) : carré et nom de la coque commune. */
+.vg-brand { display: flex; align-items: center; gap: 10px; }
 
 .vg-site-btn {
   width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px;
@@ -81,57 +83,14 @@ button { font: inherit; }
   color: var(--color-text); font-size: 12.5px; cursor: pointer; text-align: left;
 }
 .vg-site-btn:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
-/* TDB-18 : champ de recherche globale de la barre latérale (bureau et tiroir du téléphone). */
-.vg-side-search {
-  display: flex; align-items: center; gap: 7px; margin: 8px 2px 0; padding: 0 9px;
-  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-md);
-}
-.vg-side-search:focus-within { border-color: var(--color-accent); }
-.vg-side-search input {
-  flex: 1; min-width: 0; min-height: 32px; background: none; border: 0; outline: none; color: var(--color-text); font: inherit; font-size: 12.5px;
-}
-.vg-side-search input::placeholder { color: var(--vg-text-muted); }
-/* VG-N07 : recherche de pages ⌘K (raccourci affiché, section de la page trouvée). */
-.vg-kbd { font: inherit; font-size: 11px; color: var(--vg-text-muted); border: 1px solid var(--color-divider); border-radius: var(--radius-sm); padding: 0 5px; line-height: 18px; }
-.vg-page-hit-section { margin-left: auto; font-size: 11px; color: var(--vg-text-muted); white-space: nowrap; }
-.vg-page-hit-empty { margin: 4px 10px; font-size: 12px; color: var(--vg-text-muted); }
-@media (pointer: coarse) { .vg-kbd { display: none; } }
 .vg-menu { position: absolute; z-index: 30; background: var(--color-surface); border-radius: var(--radius-md); padding: 4px; display: grid; gap: 2px; }
 .vg-menu-item { padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; color: var(--color-text); background: none; border: 0; text-align: left; width: 100%; }
 .vg-menu-item:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .vg-menu-item.is-on { color: var(--color-accent); }
 
-.vg-nav { flex: 1; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 2px; margin-top: 6px; }
-.vg-nav-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; margin-top: 12px; }
 .vg-eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--vg-text-muted); }
-.vg-nav-sec > .vg-eyebrow { padding: 0 10px 4px; }
-.vg-item {
-  position: relative; display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: var(--radius-md);
-  cursor: pointer; color: var(--color-neutral-300); text-decoration: none;
-}
-.vg-item:hover { color: var(--color-neutral-300); background: color-mix(in srgb, var(--color-text) 6%, transparent); }
-.vg-item::before { content: ''; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 2px; border-radius: 1px; background: transparent; }
-.vg-item.is-on, .vg-item.is-on:hover { color: var(--vg-accent-text); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
-.vg-item.is-on::before { background: var(--color-accent); }
-.vg-item-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vg-badge { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 6px; background: var(--color-accent-800); color: var(--color-accent-100); }
-
-.vg-mobile-link {
-  display: flex; align-items: center; gap: 9px; padding: 7px 10px; margin-top: 8px; border: 1px dashed var(--color-divider);
-  border-radius: var(--radius-md); cursor: pointer; color: var(--color-neutral-400); font-size: 12px; text-decoration: none;
-}
-.vg-mobile-link:hover { border-color: var(--color-accent); color: var(--color-neutral-400); }
-.vg-mobile-link.is-on, .vg-mobile-link.is-on:hover { color: var(--color-accent); }
-/* UX-16 : entrée « Aide et glossaire » (bouton au style du lien de l'aperçu mobile). */
-.vg-help-link { width: 100%; background: none; font: inherit; font-size: 12px; text-align: left; }
-
-.vg-user { display: flex; align-items: center; gap: 9px; padding: 12px 10px 0; margin-top: 4px; width: 100%; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
 .vg-avatar { flex: none; border-radius: 50%; background: var(--color-accent-900); color: var(--color-accent-200); display: grid; place-items: center; font-weight: 500; }
-
-.vg-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.vg-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 22px 28px 16px; }
-.vg-header h1 { font-size: 22px; margin: 0; letter-spacing: -.015em; line-height: 1.12; }
-.vg-page { padding: 0 28px 28px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 
 /* ─── Petits éléments ───────────────────────────────────────────────────── */
 
@@ -167,12 +126,6 @@ button { font: inherit; }
 a.seg-opt { color: inherit; text-decoration: none; }
 .seg-opt.is-on, .seg-opt.is-on:hover { color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); background: none; }
 .seg-opt:not(.is-on):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
-
-/* Onglets */
-.vg-tabs { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 4px; background: var(--rule-fade) no-repeat bottom / 100% 1px; }
-.vg-tab { display: flex; align-items: center; gap: 7px; padding: 8px 14px 10px; cursor: pointer; font-size: 13px; color: var(--color-neutral-400); text-decoration: none; box-shadow: inset 0 -2px 0 transparent; }
-.vg-tab:hover { color: var(--color-neutral-300); }
-.vg-tab.is-on, .vg-tab.is-on:hover { color: var(--color-accent); box-shadow: inset 0 -2px 0 var(--color-accent); }
 
 /* Menus déroulants de filtre (details/summary) */
 .vg-dropdown { position: relative; }
@@ -256,12 +209,10 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
 @media print {
-  .vg-side, .vg-header .btn, .no-print { display: none !important; }
+  .vg-header .btn, .no-print { display: none !important; }
 }
 
 @media (max-width: 760px) {
-  .vg-app { flex-direction: column; }
-  .vg-header, .vg-page { padding-left: 16px; padding-right: 16px; }
   .vg-form-row { grid-template-columns: minmax(0, 1fr) !important; }
   .vg-wide-only { display: none !important; }
 }
@@ -278,10 +229,6 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-history > summary::-webkit-details-marker { display: none; }
 
 /* ─── Navigation mobile, notifications et fenêtres (UX-01, UX-03, TDB-02/05) ─ */
-/* Barre supérieure et tiroir de navigation : téléphone seulement (AppShell). */
-.vg-topbar { display: none; }
-.vg-topbar-site { flex: 1; min-width: 0; text-align: right; font-size: 12px; color: var(--color-neutral-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vg-side-close { margin-left: auto; width: 32px; height: 32px; color: var(--color-neutral-400); }
 /* Panneau de la cloche : largeur adaptée à l'écran. */
 .vg-notif-panel { right: 0; top: calc(100% + 6px); width: min(380px, calc(100vw - 32px)); max-height: 460px; overflow: auto; padding: 6px 6px 0; }
 /* Échéance sans lien (écran source fermé au rôle, TDB-02). */
@@ -293,31 +240,15 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-dash-grid { container-type: inline-size; }
 @container (min-width: 652px) { .vg-span-2 { grid-column: span 2; } }
 
-@media (max-width: 760px) {
-  .vg-topbar {
-    position: sticky; top: 0; z-index: 35; display: flex; align-items: center; gap: 9px; min-height: 52px; padding: 8px 16px;
-    background: var(--rule-fade) no-repeat bottom / 100% 1px, var(--color-bg);
-  }
-  .vg-side {
-    position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); height: 100dvh; z-index: 45;
-    background: var(--color-surface); box-shadow: var(--shadow-lg);
-    transform: translateX(-100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s;
-  }
-  .vg-side.is-open { transform: none; visibility: visible; transition: transform .2s ease, visibility 0s; }
-  .vg-side-backdrop { position: fixed; inset: 0; z-index: 44; background: color-mix(in srgb, #292b31 60%, transparent); }
-  html:has(.vg-app.is-nav-open) { overflow: hidden; }
+@media (max-width: 1024px) {
   /* Cibles tactiles. */
-  .vg-item, .vg-menu-item { min-height: 44px; }
-  .vg-dropdown .vg-menu-item { display: flex; align-items: center; }
+  .vg-menu-item { min-height: 44px; }
+  .vg-dropdown .vg-menu-item, .vg-menu-row { display: flex; align-items: center; }
+}
+@media (max-width: 760px) {
   .vg-notif-panel { position: fixed; left: 16px; right: 16px; top: 60px; width: auto; max-height: calc(100dvh - 76px); }
   /* Champs des fenêtres en 16 px : pas de zoom automatique de Safari iOS à la saisie (comme /signaler, UX-02). */
   .vg-dialog .input { font-size: 16px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .vg-side, .vg-side.is-open { transition: none; }
-}
-@media print {
-  .vg-topbar, .vg-side-backdrop { display: none !important; }
 }
 
 /* ─── Fiche et formulaires d'une action QSE (paquet 1, ACT-20 à ACT-26) ──── */
@@ -404,10 +335,6 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 /* ─── Accessibilité et retours d'état (paquet 9 : UX-04, UX-10, UX-11, UX-14) ─ */
 /* Texte lu par les lecteurs d'écran seulement. */
 .vg-sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-/* Lien d'évitement « Aller au contenu » : visible au focus clavier. */
-.vg-skip { position: fixed; left: 12px; top: -60px; z-index: 60; padding: 8px 14px; border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-md); text-decoration: none; font-size: 13px; }
-.vg-skip:focus { top: 12px; outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.vg-main:focus { outline: none; }
 /* Bouton désactivé qui garde son explication au clavier (aria-disabled, TipButton) : même rendu qu'un bouton désactivé. */
 .btn[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
 /* Infobulles (TipButton, TipText) : survol et focus clavier, Échap pour fermer. */
@@ -431,7 +358,7 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 .vg-toast > i { font-size: 16px; flex: none; margin-top: 1px; }
 .vg-toast.is-ok > i { color: var(--tone-ok-dot); }
 .vg-toast.is-info > i { color: var(--color-accent); }
-.vg-toast.is-error { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone-danger-dot) 60%, transparent), 0 6px 18px rgba(0,0,0,0.55); }
+.vg-toast.is-error { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone-danger-dot) 60%, transparent), var(--shadow-md); }
 .vg-toast.is-error > i { color: var(--tone-danger-dot); }
 .vg-toast .vg-text-btn { color: var(--color-neutral-400); font-size: 14px; }
 .vg-save-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--color-neutral-400); }
@@ -440,7 +367,7 @@ input.input[type='file']::file-selector-button { font: inherit; color: var(--col
 @keyframes vg-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .vg-spinner { animation: none; border-right-color: currentColor; opacity: .6; } }
 [aria-busy='true'] { cursor: progress; }
-@media print { .vg-toasts, .vg-skip { display: none !important; } }
+@media print { .vg-toasts { display: none !important; } }
 @media (max-width: 760px) { .vg-toasts { left: 16px; right: 16px; width: auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); } }
 /* Contraste et cibles relevés par axe-core (UX-09, WCAG 2.2 AA). */
 /* Lien dans un texte : souligné discret (le seul changement de couleur ne suffit pas, 1.4.1). */
@@ -475,8 +402,6 @@ a.vg-risk-cell:focus-visible { outline: 2px solid var(--color-accent); outline-o
 /* Barre latérale resserrée, marges réduites ; Kanban des actions sur deux rangées de trois colonnes (sans défilement
    horizontal) ; liste puis fiche (UX-07) en portrait (761–1023 px), deux colonnes plus étroites en paysage. */
 @media (min-width: 761px) and (max-width: 1180px) {
-  .vg-side { width: 204px; }
-  .vg-header, .vg-page { padding-left: 20px; padding-right: 20px; }
   .vg-kanban-scroll { overflow-x: visible !important; }
   .vg-kanban { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; min-width: 0 !important; row-gap: 18px !important; }
   .vg-md > .vg-md-list { max-width: none !important; }

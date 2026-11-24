@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Dialog } from '@/components/Dialog';
 import { GLOSSARY, SCREEN_HELP, helpScreenOf } from '@/lib/help';
@@ -9,11 +10,13 @@ import { Icon } from './ui';
 const clean = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 /**
- * Aide en ligne (UX-16) : entrée « Aide » de la barre latérale, fenêtre accessible au clavier (élément <dialog>, Échap pour
+ * Aide en ligne (UX-16) : bouton « Aide et glossaire » des outils communs de l'en-tête de page (COQUE.md § 3 : date · aide ·
+ * cloche), fenêtre accessible au clavier (élément <dialog>, Échap pour
  * fermer) avec l'aide de l'écran affiché et le glossaire des indicateurs (TF1, TG, DUERP…), filtrable. Contenu statique de
  * src/lib/help.ts, sans service externe.
  */
-export function HelpButton({ pathname }: { pathname: string }) {
+export function HelpButton() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const screen = helpScreenOf(pathname);
@@ -22,9 +25,9 @@ export function HelpButton({ pathname }: { pathname: string }) {
   const terms = GLOSSARY.filter((g) => !q || clean(`${g.term} ${g.definition}`).includes(q));
   return (
     <>
-      <button type="button" className="vg-mobile-link vg-help-link" aria-haspopup="dialog" onClick={() => setOpen(true)}>
-        <Icon name="ph-question" size={15} />
-        <span style={{ flex: 1, textAlign: 'left' }}>Aide et glossaire</span>
+      <button type="button" className="btn btn-ghost btn-icon" aria-label="Aide et glossaire" title="Aide et glossaire" aria-haspopup="dialog"
+        onClick={() => setOpen(true)}>
+        <Icon name="ph-question" size={17} />
       </button>
       <Dialog open={open} onClose={() => { setOpen(false); setQuery(''); }} title={topic && screen ? SCREENS[screen].title : 'Aide'} kicker="Aide en ligne" width={620}>
         {open && (

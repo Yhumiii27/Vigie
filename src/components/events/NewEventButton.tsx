@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Dialog } from '@/components/Dialog';
+import { useHeaderMenu } from '@/components/coque';
 import { EventFields, type EventDefaults, type EventFieldOptions } from './EventEditButton';
 
 /**
@@ -14,10 +15,13 @@ import { EventFields, type EventDefaults, type EventFieldOptions } from './Event
 export function NewEventButton({ options, defaults, today, health, initialOpen = false }: { options: EventFieldOptions; defaults?: EventDefaults; today: string; health: boolean; initialOpen?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
+  const menu = useHeaderMenu();
   const close = () => setOpen(false);
   return (
     <>
-      <button type="button" className="btn btn-primary" onClick={() => setOpen(true)}>
+      {/* Dans le menu « Actions » de l'en-tête (plus de trois actions, COQUE.md § 3.3) : une ligne du menu. */}
+      <button type="button" {...(menu ? { role: 'menuitem', className: 'vg-menu-item vg-menu-row' } : { className: 'btn btn-secondary' })}
+        onClick={() => { menu?.close(); setOpen(true); }}>
         <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />Nouvel événement
       </button>
       <Dialog open={open} onClose={close} title="Nouvel événement" kicker="Signalements et événements" width={680}>

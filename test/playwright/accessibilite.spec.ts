@@ -19,8 +19,8 @@ test.describe('coque au clavier (UX-11)', () => {
     await expect(skip).toBeFocused();
     await expect(skip).toBeVisible();
     await page.keyboard.press('Enter');
-    expect((await focused(page))?.id).toBe('contenu');
-    await expect(page.getByRole('main')).toHaveAttribute('id', 'contenu');
+    expect((await focused(page))?.id).toBe('main-content');
+    await expect(page.getByRole('main')).toHaveAttribute('id', 'main-content');
     await expect(page.getByRole('navigation', { name: 'Navigation principale' }).getByRole('link', { name: /Tableau de bord/ })).toHaveAttribute('aria-current', 'page');
   });
 

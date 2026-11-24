@@ -28,7 +28,7 @@ test('Salarié : mon espace — actions, habilitations, signalements', async ({ 
 test('tiroir de navigation : entrée « Mon espace » sur téléphone', async ({ page, context, baseURL }) => {
   await asRole(context, baseURL!, 'Chef de service', 'site_a');
   await page.goto('/evenements');
-  await page.getByRole('button', { name: 'Ouvrir le menu de navigation' }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('link', { name: /Mon espace/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Mon espace' })).toBeVisible();
   await expect(page.getByText('[S. Benali]', { exact: false }).first()).toBeVisible();

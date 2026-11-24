@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { Segments, Toolbar } from '@/components/Segments';
 import { PageHeader } from '@/components/PageHeader';
 import { firstMinuteReason, sevesoLabel } from '@/lib/rules/prevention';
 import { SiteMapScreen } from '@/components/sitemap/SiteMapScreen';
@@ -40,17 +41,8 @@ export default async function SiteMapPage({ searchParams }: Props) {
     <>
       <PageHeader title={TITLE} sub={sub} />
       <div className="vg-page">
-        <div className="vg-tabs">
-          {data.tabs
-            ? data.tabs.map((t) => (
-              <Link key={t.id} href={`/prevention/carte?site=${t.id}`} scroll={false} className={`vg-tab${t.id === data.site.id ? ' is-on' : ''}`}
-                title={t.conflicts ? `${plural(t.conflicts, 'situation de coactivité', 'situations de coactivité')} aujourd'hui` : undefined}>
-                <span>{t.label}</span>
-                {t.conflicts > 0 && <span style={{ fontSize: 11, color: 'var(--tone-danger-fg)' }}>{t.conflicts}</span>}
-              </Link>
-            ))
-            : <span className="vg-tab is-on" style={{ cursor: 'default' }}>{data.site.label}</span>}
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6, flexWrap: 'wrap' }}>
+        <Toolbar end={(
+          <>
             {(rule.seveso || rule.ppFromFirstMinute) && (
               <span title={rule.ppFromFirstMinute ? `${firstMinuteReason(rule)} d'une entreprise extérieure.` : sevesoLabel(rule.seveso)}>
                 <ToneTag tone={rule.seveso === 'seuil_haut' ? 'danger' : 'warn'}>
@@ -64,8 +56,16 @@ export default async function SiteMapPage({ searchParams }: Props) {
             {canManage(role) && !demo && (
               <Link href={`/signaler/postes?site=${encodeURIComponent(data.site.id)}`} className="btn btn-secondary vg-btn-sm"><Icon name="ph-qr-code" size={13} />QR codes des postes</Link>
             )}
-          </span>
-        </div>
+          </>
+        )}>
+          <Segments label="Sites" items={data.tabs
+            ? data.tabs.map((t) => ({
+              key: t.id, label: t.label, href: `/prevention/carte?site=${t.id}`, on: t.id === data.site.id,
+              count: t.conflicts > 0 ? <span style={{ color: 'var(--tone-danger-fg)' }}>{t.conflicts}</span> : undefined,
+              title: t.conflicts ? `${plural(t.conflicts, 'situation de coactivité', 'situations de coactivité')} aujourd'hui` : undefined,
+            }))
+            : [{ key: data.site.id, label: data.site.label, href: `/prevention/carte?site=${data.site.id}`, on: true }]} />
+        </Toolbar>
         <SiteMapScreen key={`${data.site.id}|${plan ?? ''}|${permit ?? ''}`} data={data} canManage={canManage(role)} initialDate={initialDate} />
       </div>
     </>

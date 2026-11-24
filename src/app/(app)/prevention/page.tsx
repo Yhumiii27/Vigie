@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Segments, Toolbar } from '@/components/Segments';
 import { PageHeader } from '@/components/PageHeader';
 import { ContractorsTable, NewContractorButton } from '@/components/prevention/ContractorDialogs';
 import {
@@ -228,24 +229,8 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           </div>
         )}
 
-        <div className="vg-tabs">
-          {TABS.map(([key, label]) => (
-            <Link key={key} href={tabHref(key)} scroll={false} className={`vg-tab${tab === key && !alt ? ' is-on' : ''}`}>
-              <span>{label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{tabCount[key]}</span>
-            </Link>
-          ))}
-          {canReadGateHouse(role) && (
-            <Link href={GATE_HOUSE_PATH} scroll={false} className={`vg-tab${gate ? ' is-on' : ''}`} aria-current={gate ? 'page' : undefined}>
-              <span>Poste de garde</span>
-            </Link>
-          )}
-          <Link href={SAFETY_TALKS_HREF} scroll={false} className={`vg-tab${talks ? ' is-on' : ''}`} aria-current={talks ? 'page' : undefined}>
-            <span>Causeries sécurité</span>
-          </Link>
-          <Link href={simopsHref()} scroll={false} className={`vg-tab${simops ? ' is-on' : ''}`} aria-current={simops ? 'page' : undefined}>
-            <span>Opérations simultanées</span>
-          </Link>
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, paddingBottom: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Toolbar end={(
+          <>
             <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
             {!alt && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
             {!alt && manage && tab === 'plans' && <NewPlanButton options={options} />}
@@ -255,8 +240,15 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             )}
             {!alt && manage && tab === 'permis' && <NewPermitButton options={options} />}
             {!alt && manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
-          </span>
-        </div>
+          </>
+        )}>
+          <Segments label="Vues de la prévention" items={[
+            ...TABS.map(([key, label]) => ({ key, label, count: tabCount[key], href: tabHref(key), on: tab === key && !alt })),
+            ...(canReadGateHouse(role) ? [{ key: 'poste-de-garde', label: 'Poste de garde', href: GATE_HOUSE_PATH, on: !!gate }] : []),
+            { key: 'causeries', label: 'Causeries sécurité', href: SAFETY_TALKS_HREF, on: !!talks },
+            { key: 'simops', label: 'Opérations simultanées', href: simopsHref(), on: !!simops },
+          ]} />
+        </Toolbar>
 
         {gate ? <GateHouseView gate={gate} /> : simops ? <SimopsView data={simops} today={d.now} /> : talks ? (
           <SafetyTalksView data={talks} canManage={manage} openId={str(sp.causerie)} sites={formOptions.sites} defaultSite={d.choices.defaultSiteId} />

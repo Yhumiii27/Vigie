@@ -1,12 +1,11 @@
 // Traduction de l'interface (Norma § 2 et § 7, VG-N01 ; même principe que Keystone, Arche et Crucible) : les chaînes de
 // l'interface sont écrites en anglais (chaîne source) et rendues en français par le dictionnaire exact de ./fr.ts. Le
-// français est la langue par défaut ; l'anglais se choisit par le sélecteur FR / EN de la barre latérale (cookie
+// français est la langue par défaut ; l'anglais se choisit par le sélecteur FR / EN de l'en-tête de page (cookie
 // vigie-lang). Le texte saisi par les personnes ne passe jamais par t(). Module pur, sans import serveur : utilisé par le
 // serveur (./server.ts), le navigateur (./client.tsx) et les tests. Les identifiants de route restent en français.
 import { FR } from './fr';
 
 export type Lang = 'fr' | 'en';
-export const LANGS: readonly Lang[] = ['fr', 'en'];
 export const DEFAULT_LANG: Lang = 'fr';
 
 /** Cookie de la langue choisie (`fr` | `en`, un an), propre à Vigie. */

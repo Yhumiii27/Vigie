@@ -7,7 +7,7 @@ import { useEffect } from 'react';
 export default function RootError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => console.error(error), [error]);
   return (
-    <main className="vg-main" style={{ minHeight: '100vh' }}>
+    <main className="coque-main vg-app" style={{ minHeight: '100vh' }}>
       <header className="vg-header"><h1>Erreur</h1></header>
       <div className="vg-page">
         <div className="card" style={{ maxWidth: 520, gap: 10 }}>

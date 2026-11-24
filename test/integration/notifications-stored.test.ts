@@ -190,7 +190,8 @@ function bellItems(node: unknown): Record<string, unknown>[] | null {
   }
   const props = (node as { props?: { items?: Record<string, unknown>[]; children?: unknown } }).props;
   if (props?.items && Array.isArray(props.items)) return props.items;
-  return bellItems(props?.children);
+  // En-tête de la coque commune (Norma 2.1) : la cloche est passée en propriété (`bell`), pas en enfant.
+  return props ? bellItems(Object.values(props)) : null;
 }
 
 describe('Salarié : sa cloche seulement, sans responsables ni site dans la charge', () => {

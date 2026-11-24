@@ -17,8 +17,8 @@ export function Bootstrap({ session, leadOptions, matrix }: { session: Session; 
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ display: 'grid', gap: 16, width: '100%', maxWidth: 520 }}>
         <div className="vg-brand" style={{ padding: 0, justifySelf: 'center' }}>
-          <span className="vg-brand-mark">V</span>
-          <span className="vg-brand-name">Vigie</span>
+          <span className="coque-logo" aria-hidden><i className="ph ph-binoculars" style={{ fontSize: 15 }} aria-hidden /></span>
+          <span className="coque-wordmark">Vigie</span>
         </div>
         <div className="card" style={{ gap: 12 }}>
           <div className="card-kicker">Première mise en service</div>

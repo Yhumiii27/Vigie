@@ -9,8 +9,8 @@ export default function NotFound() {
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ display: 'grid', gap: 16, justifyItems: 'center', maxWidth: 440, textAlign: 'center' }}>
         <div className="vg-brand" style={{ padding: 0 }}>
-          <span className="vg-brand-mark">V</span>
-          <span className="vg-brand-name">Vigie</span>
+          <span className="coque-logo" aria-hidden><i className="ph ph-binoculars" style={{ fontSize: 15 }} aria-hidden /></span>
+          <span className="coque-wordmark">Vigie</span>
         </div>
         <div className="card" style={{ gap: 10, alignItems: 'center' }}>
           <div className="card-title" style={{ fontSize: 15 }}>Page introuvable</div>
