@@ -9,6 +9,8 @@ import { loadInboundOverview } from '@/lib/data/inbound';
 import { loadOutboundOverview } from '@/lib/data/engineering';
 import { loadMatrixSiteChoices, loadQhseLeadOptions, loadSiteAdmin } from '@/lib/data/sites';
 import { getSession } from '@/lib/session';
+import { cookies } from 'next/headers';
+import { THEME_COOKIE, themeOf } from '@/lib/theme';
 
 // Manifeste du signalement installable (EVT-20) lié aux seules pages /signaler : l'application ne s'installe pas d'ici.
 export const metadata: Metadata = { manifest: null };
@@ -34,9 +36,10 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
     items: sec.items.filter((k) => canSee(role, k)).map((k) => ({ key: k, href: SCREENS[k].path, label: SCREENS[k].label, icon: SCREENS[k].icon, badge: counters.badges[k] })),
   })).filter((s) => s.items.length);
 
+  const theme = themeOf((await cookies()).get(THEME_COOKIE)?.value);
   // Coque : barre latérale, et sur téléphone barre supérieure et tiroir de navigation (UX-01).
   return (
-    <AppShell sidebar={{ nav, site, sites: siteOptions, user: { name: user.name, initials: initials(user.name) }, role, demo, roles: demo ? ROLE_KEYS : [], siteAdmin }}>
+    <AppShell sidebar={{ nav, site, sites: siteOptions, user: { name: user.name, initials: initials(user.name) }, role, demo, roles: demo ? ROLE_KEYS : [], siteAdmin, theme }}>
       {children}
     </AppShell>
   );
