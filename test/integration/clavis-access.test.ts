@@ -7,7 +7,7 @@ import path from 'node:path';
 import { NextRequest, type NextResponse } from 'next/server';
 import { eq, sql } from 'drizzle-orm';
 import { closeDb, getDb, schema as t } from '@/db';
-import { installForeignSubstitutes, substituteTable } from '@/db/foreign-substitutes';
+import { FOREIGN_CONTRACTS } from '@/db/foreign';
 import { resetConfig } from '@/lib/env';
 import { forgetClavisAccess } from '@/lib/auth/clavis-access';
 import { refreshSharedReferences } from '@/server/foreign-sync';
@@ -17,7 +17,9 @@ import { refreshSharedReferences } from '@/server/foreign-sync';
 // appliqué pendant la session après VIGIE_ACCESS_FROM_CLAVIS_SECONDS, accès fermé en cours de session = refus, vue illisible
 // = refus ; contrôle du tid avec un émetteur remplacé ; variable absente = rôles du jeton, comme avant. Fournisseur OIDC
 // factice (scripts/oidc-mock.mjs) à la place de Clavis (même forme : oid, tid, email, xms_edov) ; vue clavis.pub_acces
-// de substitution (PGlite, src/db/foreign-substitutes.ts), remplie par le test.
+// créée par le test lui-même (installClavisView), de la forme du contrat, dans la base de test du fichier (PGlite en
+// mémoire, ou base PostgreSQL créée pour ce fichier par test/setup-postgres.ts) — jamais par les substituts de
+// src/db/foreign-substitutes.ts, qui ne s'installent pas sur PostgreSQL hors démonstration.
 
 const APP = 'http://localhost:3292';
 const SECRET = 'secret-de-session-de-la-connexion-par-clavis-0123';
@@ -46,7 +48,16 @@ async function freePort(): Promise<number> {
 }
 
 const exec = async (q: string) => (await getDb()).execute(sql.raw(q));
-const ACCESS = `clavis.${substituteTable('pub_acces')}`;
+const ACCESS = 'clavis.essai_acces';
+
+/** Schéma clavis de l'essai : table et vue pub_acces aux colonnes, types et ordre du contrat (FOREIGN_CONTRACTS.access). */
+async function installClavisView() {
+  const cols = FOREIGN_CONTRACTS.access.columns;
+  await exec('drop schema if exists clavis cascade');
+  await exec('create schema clavis');
+  await exec(`create table ${ACCESS} (${cols.map(([n, type]) => `"${n}" ${type}`).join(', ')})`);
+  await exec(`create view clavis.pub_acces as select ${cols.map(([n]) => `"${n}"`).join(', ')} from ${ACCESS}`);
+}
 
 /** Ligne de clavis.pub_acces pour Vigie (remplace celle de la personne). */
 async function grant(key: string, role: string | null, ouvert = true) {
@@ -90,6 +101,7 @@ beforeAll(async () => {
     { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', siteId: 'site_a', sort: 1 },
     { id: 'hmarchand', name: '[H. Marchand]', email: 'h.marchand@epc2i.example', siteId: 'site_a', sort: 2 },
   ]);
+  await installClavisView();
 });
 
 afterAll(async () => {
@@ -246,7 +258,7 @@ describe('connexion par Clavis (VIGIE_ACCESS_FROM_CLAVIS=on)', () => {
     expect((await refreshSharedReferences(await getDb(), { only: ['access'] }))[0]).toMatchObject({ source: 'access', status: 'unavailable' });
 
     // Vue revenue : un échec n'est jamais gardé, l'accès se rouvre à la requête suivante.
-    await installForeignSubstitutes(await getDb(), { engine: 'pglite', demo: false });
+    await installClavisView();
     await grant('salarie', 'Vigie.Salarie');
     expect(await pageSession(res)).toMatchObject({ role: 'Salarié' });
   });
