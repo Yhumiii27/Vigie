@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ReasonButton } from '@/components/ReasonDialog';
 import { Field, Select } from '@/components/form';
 import { SaveStatus, announce, useActionRunner } from '@/components/feedback';
-import { CURSUS_PEOPLE_NOTICE, SYNC_STATUSES, type SyncStatus } from '@/lib/foreign/labels';
+import { CURSUS_PEOPLE_NOTICE, SYNC_STATUSES, type SyncStatus } from '@/lib/integration-labels';
 import { fmtParisDateTime } from '@/lib/dates';
 import type { Option } from '@/lib/data/options';
 import type { DepartedRow, PeopleAdmin, PeopleAdminRow } from '@/lib/data/people';

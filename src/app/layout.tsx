@@ -3,6 +3,8 @@ import localFont from 'next/font/local';
 import { cookies } from 'next/headers';
 import { connection } from 'next/server';
 import { THEME_COOKIE, themeOf } from '@/lib/theme';
+import { I18nProvider } from '@/i18n/client';
+import { LANG_COOKIE, langOf } from '@/i18n/translate';
 import '@phosphor-icons/web/regular';
 import './nocturne.css';
 import './vigie.css';
@@ -23,10 +25,13 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
   // (page 404 comprise, sinon prérendue sans nonce).
   await connection();
   // Thème sombre / clair (Norma 1.0) : cookie epc2i-theme lu au rendu, attribut posé sur <html> (pas de flash).
-  const theme = themeOf((await cookies()).get(THEME_COOKIE)?.value);
+  const jar = await cookies();
+  const theme = themeOf(jar.get(THEME_COOKIE)?.value);
+  // Langue de l'interface (VG-N01) : cookie vigie-lang, français par défaut ; traducteur fourni aux composants du navigateur.
+  const lang = langOf(jar.get(LANG_COOKIE)?.value);
   return (
-    <html lang="fr" className={inter.variable} data-theme={theme}>
-      <body>{children}</body>
+    <html lang={lang} className={inter.variable} data-theme={theme}>
+      <body><I18nProvider lang={lang}>{children}</I18nProvider></body>
     </html>
   );
 }

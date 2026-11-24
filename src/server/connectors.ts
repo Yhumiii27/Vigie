@@ -5,15 +5,15 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { formReader, type FormState } from '@/lib/forms';
 import { requireApprover, requireInSite } from '@/lib/guard';
-import { SOURCES } from '@/lib/foreign/labels';
+import { SOURCES } from '@/lib/integration-labels';
 import { logChange } from './changelog';
-import { refreshSharedReferences } from './foreign-sync';
-import { processInboundRequests } from './inbound';
-import { sendOutboundMessages } from './outbound';
+import { refreshSharedReferences } from '@/server/integrations/sync';
+import { processInboundRequests } from '@/server/integrations/inbound';
+import { sendOutboundMessages } from '@/server/integrations/codex/outbound';
 
 /**
  * « Actualiser » de l'onglet « Connecteurs » (« Gérer les sites », animateur QHSE et direction) : rafraîchit tout de suite
- * les caches des référentiels partagés et contrôle les lectures directes (src/server/foreign-sync.ts, journal sync_runs).
+ * les caches des référentiels partagés et contrôle les lectures directes (src/server/integrations/sync.ts, journal sync_runs).
  * Une source indisponible n'est pas une erreur du formulaire : le message la nomme.
  */
 export async function refreshConnectors(): Promise<FormState> {

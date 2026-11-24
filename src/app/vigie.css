@@ -66,14 +66,14 @@ button { font: inherit; }
 .vg-brand { display: flex; align-items: center; gap: 9px; padding: 2px 10px 12px; }
 .vg-brand-mark { width: 22px; height: 22px; border: 1px solid var(--color-accent); border-radius: 6px; display: grid; place-items: center; color: var(--color-accent); font-size: 12px; font-weight: 500; }
 .vg-brand-name { font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
-/* Bascule sombre / clair (Norma 1.0) : à droite du nom de l'outil (Vigie n'a pas de sélecteur de langue). Infobulle sous le
-   bouton (en haut de la barre latérale, au-dessus elle serait coupée). */
-.vg-theme-toggle { margin-left: auto; flex: none; overflow: visible; }
+/* Sélecteur FR / EN et bascule sombre / clair (Norma 1.0, VG-N01) : en-tête de page, à droite. Infobulle sous le bouton. */
+.vg-theme-toggle { flex: none; overflow: visible; }
 .vg-theme-toggle .seg-opt { padding: 5px 7px; font-size: 14px; }
 .vg-theme-toggle .seg-opt:first-child { border-radius: var(--radius-md) 0 0 var(--radius-md); }
 .vg-theme-toggle .seg-opt:last-child { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
 .vg-theme-toggle .vg-tip-bubble { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; transform: none; }
-.vg-theme-toggle + .vg-side-close { margin-left: 0; }
+/* Norma § 7 (VG-N01) : sélecteur FR / EN puis bascule sombre / clair dans l'en-tête de page, à droite (comme Keystone). */
+.vg-lang-toggle .seg-opt { font-size: 11px; font-weight: 600; letter-spacing: .02em; }
 
 .vg-site-btn {
   width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 9px;
@@ -91,6 +91,11 @@ button { font: inherit; }
   flex: 1; min-width: 0; min-height: 32px; background: none; border: 0; outline: none; color: var(--color-text); font: inherit; font-size: 12.5px;
 }
 .vg-side-search input::placeholder { color: var(--vg-text-muted); }
+/* VG-N07 : recherche de pages ⌘K (raccourci affiché, section de la page trouvée). */
+.vg-kbd { font: inherit; font-size: 11px; color: var(--vg-text-muted); border: 1px solid var(--color-divider); border-radius: var(--radius-sm); padding: 0 5px; line-height: 18px; }
+.vg-page-hit-section { margin-left: auto; font-size: 11px; color: var(--vg-text-muted); white-space: nowrap; }
+.vg-page-hit-empty { margin: 4px 10px; font-size: 12px; color: var(--vg-text-muted); }
+@media (pointer: coarse) { .vg-kbd { display: none; } }
 .vg-menu { position: absolute; z-index: 30; background: var(--color-surface); border-radius: var(--radius-md); padding: 4px; display: grid; gap: 2px; }
 .vg-menu-item { padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 12.5px; color: var(--color-text); background: none; border: 0; text-align: left; width: 100%; }
 .vg-menu-item:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
@@ -196,9 +201,17 @@ a.seg-opt { color: inherit; text-decoration: none; }
 
 /* ─── Fenêtres modales et formulaires ───────────────────────────────────── */
 
-dialog.vg-dialog { padding: 0; border: 0; background: transparent; color: var(--color-text); max-width: none; max-height: none; overflow: visible; }
-dialog.vg-dialog::backdrop { background: color-mix(in srgb, #292b31 60%, transparent); }
-dialog.vg-dialog .dialog { max-height: calc(100dvh - 48px); overflow: auto; font-size: 13px; line-height: 1.45; }
+/* Formulaires en panneau latéral (Norma § 7, VG-N06 ; Drawer de norma/charte/ds) : la fenêtre <dialog> s'ouvre à droite,
+   sur toute la hauteur, au-dessus d'un voile ; largeur demandée par l'écran (100 % sur téléphone). */
+dialog.vg-dialog { padding: 0; border: 0; background: transparent; color: var(--color-text); max-width: 100vw; max-height: 100dvh;
+  height: 100dvh; margin: 0 0 0 auto; inset: 0 0 0 auto; overflow: visible; }
+dialog.vg-dialog::backdrop { background: color-mix(in srgb, var(--color-bg) 60%, transparent); }
+dialog.vg-dialog .dialog { height: 100dvh; max-height: 100dvh; max-width: 100vw; overflow: auto; font-size: 13px; line-height: 1.45;
+  border-radius: 0; border-left: 1px solid var(--color-neutral-800); padding: 18px 22px; box-shadow: var(--shadow-lg); }
+@media (prefers-reduced-motion: no-preference) {
+  dialog.vg-dialog[open] .dialog { animation: vg-panel-in 160ms ease-out; }
+}
+@keyframes vg-panel-in { from { transform: translateX(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
 .dialog-title { line-height: 1.2; }
 
 .vg-form { display: grid; gap: 12px; }

@@ -3,9 +3,9 @@ import { sql } from 'drizzle-orm';
 import type { DbOrTx } from '@/db';
 import { FOREIGN_CONTRACTS } from '@/db/foreign';
 import { log } from '@/lib/log';
-import { SOURCES, type SourceKey } from './labels';
+import { SOURCES, type SourceKey } from '@/lib/integration-labels';
 
-// Lecture d'une vue publiée par un autre outil (lot 0 de M-02, docs/specs/convergence-m02.md § 2.1). Seul src/lib/foreign/
+// Lecture d'une vue publiée par un autre outil (lot 0 de M-02, docs/specs/convergence-m02.md § 2.1). Seul src/server/integrations/
 // lit un autre schéma, par SELECT seulement (décision M-17 de Matrix). Disponibilité contrôlée à chaque lecture :
 // vue absente (outil pas encore sur le serveur, lien retiré) ou lecture refusée (lien de lecture non accordé) → état
 // « source indisponible », jamais une erreur de la page ; avertissement dans le journal du serveur (au plus une fois par

@@ -1,10 +1,10 @@
 import 'server-only';
-import { readRegisterDocuments } from '@/lib/foreign/codex';
+import { readRegisterDocuments } from '@/server/integrations/codex/views';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { cache } from 'react';
 import { asc, desc, inArray, isNull } from 'drizzle-orm';
-import { loadProjectIndex } from '@/lib/foreign/keystone';
-import { projectText } from '@/lib/foreign/labels';
+import { loadProjectIndex } from '@/server/integrations/keystone/views';
+import { projectText } from '@/lib/integration-labels';
 import { getDb, schema as t } from '@/db';
 import { addDays, addMonths, daysBetween, fmtDate, fmtDayMonth, toParisLocal, yearOf, parisDay } from '../dates';
 import { today } from '@/lib/today';

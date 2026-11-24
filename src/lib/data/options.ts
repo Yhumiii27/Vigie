@@ -7,8 +7,8 @@ import { actionLabel } from '../action-rules';
 import { isClosedActionStatus } from '../domain';
 import { writableSites } from '../guard';
 import { ALL_SITES, getSession, inPerimeter, inSite } from '../session';
-import { loadProjects } from '../foreign/keystone';
-import { unavailableMessage } from '../foreign/labels';
+import { loadProjects } from '@/server/integrations/keystone/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 
 import type { Option } from '../form-options';
 

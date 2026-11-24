@@ -2,8 +2,8 @@ import 'server-only';
 import { cache } from 'react';
 import { isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readDocumentsByRef, readRegisterDocuments, type CodexDocType, type CodexDocument } from '@/lib/foreign/codex';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readDocumentsByRef, readRegisterDocuments, type CodexDocType, type CodexDocument } from '@/server/integrations/codex/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 import {
   CONF_LEVELS, QHSE_DEPARTMENTS, codexDocumentHref, confReadable, docStatus, documentHref, inRegisterScope, isInForce,
   isWithdrawn, processLabel, retentionText, reviewState, revisionStatus,

@@ -1,6 +1,6 @@
 // Envois aux autres outils (D12, lot 5 de M-02, migration 0029) : règles pures de la file outbound_messages — libellés,
 // reprises espacées, lecture de la réponse du webhook de Codex (POST /api/integrations/vigie, docs/api.md de Codex).
-// Module sans import de serveur ; l'envoi est dans src/server/outbound.ts.
+// Module sans import de serveur ; l'envoi est dans src/server/integrations/codex/outbound.ts.
 
 import type { Tone } from '../domain';
 import type { OUTBOUND_KIND_CODES, OUTBOUND_STATUS_CODES, OUTBOUND_TARGET_CODES } from '../state-keys';

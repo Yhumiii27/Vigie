@@ -159,9 +159,9 @@ async function open(): Promise<Opened> {
     await seed(opened.db, { files: true });
   }
   // Caches des référentiels partagés (sites de Matrix, affectations de Keystone) rafraîchis à l'ouverture, hors
-  // construction ; jamais bloquant (source indisponible : sync_runs et journal du serveur, src/server/foreign-sync.ts).
+  // construction ; jamais bloquant (source indisponible : sync_runs et journal du serveur, src/server/integrations/sync.ts).
   if (!building) {
-    const { refreshSharedReferences } = await import('@/server/foreign-sync');
+    const { refreshSharedReferences } = await import('@/server/integrations/sync');
     await refreshSharedReferences(opened.db);
   }
   // Maintenance périodique (purge des compteurs du signalement sans compte, src/db/maintenance.ts), arrêtée à la fermeture.

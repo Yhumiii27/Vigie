@@ -7,8 +7,8 @@ import { entityVersions } from '@/server/versions';
 import { actionLabel, canReadAction, isLate } from '../action-rules';
 import { addDays, parisDay } from '../dates';
 import { AVANCEMENT, canApprove, isAvancement, isEmployee, type Tone, type TodoItem } from '../domain';
-import { loadProjectIndex, readArticles, readBomUsage, readFleet } from '../foreign/keystone';
-import { projectText, unavailableMessage } from '../foreign/labels';
+import { loadProjectIndex, readArticles, readBomUsage, readFleet } from '@/server/integrations/keystone/views';
+import { projectText, unavailableMessage } from '@/lib/integration-labels';
 import { hasLeft } from '../people';
 import { loadPeople, loadSiteRows } from '../queries';
 import {

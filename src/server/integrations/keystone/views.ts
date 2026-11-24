@@ -3,11 +3,11 @@ import { cache } from 'react';
 import { asc, gte, inArray, or } from 'drizzle-orm';
 import { getDb, type DbOrTx } from '@/db';
 import { pubAffectations, pubArticles, pubFournisseurs, pubNomenclatures, pubParcMachines, pubProjets } from '@/db/foreign';
-import { unavailableMessage } from './labels';
-import { readSource, type SourceRead } from './source';
+import { unavailableMessage } from '@/lib/integration-labels';
+import { readSource, type SourceRead } from '../source';
 
 // Lectures de Keystone. D02 : projets lus directement dans keystone.pub_projets (plus de table keystone_projects) ;
-// D04 : affectations (cache keystone_assignments, src/server/foreign-sync.ts) ; D16 : fournisseurs (choix d'une entreprise
+// D04 : affectations (cache keystone_assignments, src/server/integrations/sync.ts) ; D16 : fournisseurs (choix d'une entreprise
 // extérieure, contractors.supplier_id).
 
 export type KeystoneProject = { code: string; name: string; client: string | null; phase: string | null; open: boolean };

@@ -10,7 +10,7 @@ import { loadEventDetail } from '@/lib/data/events';
 import { loadRisks } from '@/lib/data/risks';
 import { loadVisibleTodo } from '@/lib/data/todo';
 import { resetConfig } from '@/lib/env';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { unavailableMessage } from '@/lib/integration-labels';
 import { codexDocumentHref, confReadable, inRegisterScope } from '@/lib/rules/documents';
 import { linkRiskMeasure } from '@/server/risks';
 

@@ -4,8 +4,8 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, notInArray } from '
 import { getDb, schema as t, type DbOrTx } from '@/db';
 import { STEP_CLOSED, canApprove, canEdit, type TodoItem } from '@/lib/domain';
 import { RESPONSIBILITY_KINDS, responsibilitySummary, responsibilityTotal, type ResponsibilityCounts, type ResponsibilityKind } from '@/lib/rules/responsibilities';
-import { readCursusPeople } from '@/lib/foreign/cursus';
-import { PERSON_CATEGORIES, SOURCES, unavailableMessage, type PersonCategory } from '@/lib/foreign/labels';
+import { readCursusPeople } from '@/server/integrations/cursus/views';
+import { PERSON_CATEGORIES, SOURCES, unavailableMessage, type PersonCategory } from '@/lib/integration-labels';
 import { hasLeft, toAttach } from '@/lib/people';
 import { getSession, siteFilter } from '@/lib/session';
 import { today } from '@/lib/today';

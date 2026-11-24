@@ -12,8 +12,8 @@ import { getSession, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 import type { Option } from './options';
 import { parisDay } from '@/lib/dates';
-import { MATRIX_SITE_STATES, unavailableMessage, type MatrixSiteState } from '@/lib/foreign/labels';
-import { readMatrixSites } from '@/lib/foreign/matrix';
+import { MATRIX_SITE_STATES, unavailableMessage, type MatrixSiteState } from '@/lib/integration-labels';
+import { readMatrixSites } from '@/server/integrations/matrix/views';
 
 /** Site tel que la fenêtre « Gérer les sites » l'affiche (actifs et archivés). */
 export type SiteAdminRow = {

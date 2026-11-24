@@ -2,7 +2,7 @@ import 'server-only';
 import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import { entryRef } from '@/lib/rules/environment';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
-import { readDocumentsByRef, readRegisterDocuments } from '@/lib/foreign/codex';
+import { readDocumentsByRef, readRegisterDocuments } from '@/server/integrations/codex/views';
 import * as t from '../db/schema';
 import type { DbOrTx } from '../db/types';
 

@@ -5,7 +5,7 @@ import { METHODS } from '@/lib/domain';
 import { advanceBlocker, analysisFilled, cpamPending, declarationDuty, missingQualification } from '@/lib/rules/events';
 
 // Passage d'un événement à l'étape suivante, commun à la server action advanceEvent (src/server/events.ts) et au
-// traitement des demandes reçues de Keystone (src/server/inbound.ts, D13) : une seule règle (advanceBlocker) et une seule
+// traitement des demandes reçues de Keystone (src/server/integrations/inbound.ts, D13) : une seule règle (advanceBlocker) et une seule
 // écriture (étape et historique du workflow). Ne lit jamais la session.
 
 type EventRow = typeof t.events.$inferSelect;

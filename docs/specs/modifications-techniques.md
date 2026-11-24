@@ -270,9 +270,9 @@ reçues traitées (création par Codex, approbation de l'ingénierie par Keyston
 ## 10. Fichiers
 
 `src/lib/rules/engineering.ts`, `src/lib/rules/outbound.ts` (+ tests), `src/lib/rules/inbound.ts` (décisions de D12),
-`src/lib/data/engineering.ts`, `src/server/engineering.ts`, `src/server/engineering-core.ts`, `src/server/outbound.ts`,
-`src/server/inbound.ts`, `src/server/connectors.ts` (« Envoyer maintenant »), `src/db/scheduler.ts` (« Envois aux outils »),
-`src/lib/foreign/keystone.ts` et `src/db/foreign.ts` (articles, nomenclatures, parc installé ; contrats
+`src/lib/data/engineering.ts`, `src/server/engineering.ts`, `src/server/engineering-core.ts`, `src/server/integrations/codex/outbound.ts`,
+`src/server/integrations/inbound.ts`, `src/server/connectors.ts` (« Envoyer maintenant »), `src/db/scheduler.ts` (« Envois aux outils »),
+`src/server/integrations/keystone/views.ts` et `src/db/foreign.ts` (articles, nomenclatures, parc installé ; contrats
 `test/fixtures/contracts/keystone.pub_*.json`), `src/app/(app)/modifications-techniques/`, `src/components/engineering/`,
 `src/components/SitesManager.tsx` (file d'envoi), registre `src/lib/action-links.ts` (`eco`), `src/lib/domain.ts` (écran
 `engineering`, source `modification_technique`), `src/lib/env.ts` (`VIGIE_CODEX_WEBHOOK_TOKEN`, `VIGIE_CODEX_WEBHOOK_SECRET`),

@@ -3,16 +3,16 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { schema as t, type Db, type DbOrTx } from '@/db';
 import { EVENT_STEPS } from '@/lib/domain';
 import { log } from '@/lib/log';
-import { readDocumentsByRef } from '@/lib/foreign/codex';
+import { readDocumentsByRef } from '@/server/integrations/codex/views';
 import { isWithdrawn } from '@/lib/rules/documents';
 import { ECO_STATUSES, matriculeOrNull, type EcoApprovalKey, type EcoDecision, type EcoStatus } from '@/lib/rules/engineering';
 import {
   INBOUND_KINDS, NC_REFERENCE_LABELS, callerText, decideEcoRequest, decideEcrRequest, decideNcRequest, ecoPayloadSchema, isNcKind, ncPayloadSchema,
   type InboundKind, type InboundResultCode, type NcDecision, type NcFacts, type NcReferences,
 } from '@/lib/rules/inbound';
-import { logChange, type ChangeDetail } from './changelog';
-import { ECR_ENTITY, enqueueCodexDecision, settleEco, writeApproval, writeEcoStep } from './engineering-core';
-import { eventAdvanceBlocker, writeAdvance } from './event-workflow';
+import { logChange, type ChangeDetail } from '@/server/changelog';
+import { ECR_ENTITY, enqueueCodexDecision, settleEco, writeApproval, writeEcoStep } from '@/server/engineering-core';
+import { eventAdvanceBlocker, writeAdvance } from '@/server/event-workflow';
 
 // Traitement des demandes reçues des autres outils (D13, décision CV-08 du 04/11/2026). La fonction
 // vigie.pub_signaler_avancement_nc (migration 0026) ne fait que déposer une ligne « received » dans inbound_requests ;

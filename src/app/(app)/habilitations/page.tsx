@@ -5,7 +5,7 @@ import { SkillMatrix } from '@/components/skills/SkillMatrix';
 import { CardHead, MissingNotice, SegLinks } from '@/components/ui';
 import { ForecastView } from '@/components/skills/ForecastView';
 import { renewalForecast, skillLinkTarget } from '@/lib/rules/skills';
-import { CURSUS_HELD_NOTICE } from '@/lib/foreign/labels';
+import { CURSUS_HELD_NOTICE } from '@/lib/integration-labels';
 import { today } from '@/lib/today';
 import { SCREENS, canApprove, canEdit, canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';

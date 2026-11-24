@@ -10,7 +10,7 @@ import { closeDb, getDb, schema as t } from '@/db';
 import { FOREIGN_CONTRACTS } from '@/db/foreign';
 import { resetConfig } from '@/lib/env';
 import { forgetClavisAccess } from '@/lib/auth/clavis-access';
-import { refreshSharedReferences } from '@/server/foreign-sync';
+import { refreshSharedReferences } from '@/server/integrations/sync';
 
 // Connexion par Clavis, droits lus dans la base (décision du propriétaire du 23/11/2026 ; VIGIE_ACCESS_FROM_CLAVIS=on) :
 // rôle de clavis.pub_acces à la connexion (les rôles du jeton ne sont pas lus), accès fermé ou absent refusé, rôle changé

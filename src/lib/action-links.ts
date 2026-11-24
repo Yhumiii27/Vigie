@@ -12,8 +12,8 @@ import { EVENT_AUDIT_LINK_KINDS, ORIGIN_REF_MAX, canEdit, isClosedActionStatus, 
 import { requireInSite } from './guard';
 import { inSite } from './session';
 import { ORIGIN_LINKS, type OriginColumn } from './origin-links';
-import { readDocumentRevisions, readDocumentsByRef } from './foreign/codex';
-import { unavailableMessage } from './foreign/labels';
+import { readDocumentRevisions, readDocumentsByRef } from '@/server/integrations/codex/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 import { confReadable, documentHref, isOpenRevision } from './rules/documents';
 
 /**

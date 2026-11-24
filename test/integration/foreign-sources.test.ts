@@ -8,11 +8,11 @@ import { actAs, changeLog, freshDemoDatabase, lastLog } from '../helpers';
 import { getDb, schema as t } from '@/db';
 import { FOREIGN_CONTRACTS, PRESENCES_OPTIONAL_COLUMNS, SALARIES_OPTIONAL_COLUMNS, type ForeignSourceKey } from '@/db/foreign';
 import { installForeignSubstitutes, substituteTable } from '@/db/foreign-substitutes';
-import { SOURCES } from '@/lib/foreign/labels';
-import { refreshSharedReferences } from '@/server/foreign-sync';
+import { SOURCES } from '@/lib/integration-labels';
+import { refreshSharedReferences } from '@/server/integrations/sync';
 
 // Lot 0 de la convergence M-02 (docs/specs/convergence-m02.md § 2) et lots D14, D02, D04, D16 : substituts des vues des
-// autres outils (même forme que les contrats publiés), garde-fou « seul src/lib/foreign lit un autre schéma »,
+// autres outils (même forme que les contrats publiés), garde-fou « seul src/server/integrations lit un autre schéma »,
 // rafraîchissement des caches (sites, affectations) et journal sync_runs (ok, indisponible, erreur), suivi d'un site de
 // Matrix, choix d'un projet et d'un fournisseur contrôlés contre les vues.
 
@@ -58,8 +58,8 @@ describe('contrats des vues lues et substituts de démonstration', () => {
     await exec('drop schema autre_outil');
   });
 
-  it('garde-fou : aucun autre fichier de Vigie ne nomme un schéma d’un autre outil (lecture par src/lib/foreign seulement)', () => {
-    const allowed = new Set(['src/db/foreign.ts', 'src/db/foreign-substitutes.ts', 'src/db/seeds/foreign.ts', 'src/lib/foreign/labels.ts']);
+  it('garde-fou : aucun autre fichier de Vigie ne nomme un schéma d’un autre outil (lecture par src/server/integrations seulement)', () => {
+    const allowed = new Set(['src/db/foreign.ts', 'src/db/foreign-substitutes.ts', 'src/db/seeds/foreign.ts', 'src/lib/integration-labels.ts']);
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
@@ -70,7 +70,7 @@ describe('contrats des vues lues et substituts de démonstration', () => {
     };
     walk(path.join(process.cwd(), 'src'));
     walk(path.join(process.cwd(), 'drizzle'));
-    const offending = files.filter((f) => !allowed.has(f) && !f.startsWith('src/lib/foreign/')).filter((f) => {
+    const offending = files.filter((f) => !allowed.has(f) && !f.startsWith('src/server/integrations/')).filter((f) => {
       // Commentaires retirés (SQL « -- », COMMENT ON ; TS « // », « /* */ ») : seul le code compte.
       const text = readFileSync(path.join(process.cwd(), f), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1').replace(/--[^\n]*/g, ' ').replace(/COMMENT ON[^;]*;/gi, ' ');

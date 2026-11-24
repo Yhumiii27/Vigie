@@ -13,7 +13,7 @@ import { getSession, siteFilter } from '../session';
 import { loadQhseLeads } from './leads';
 
 // Demandes reçues des autres outils (D13, décision CV-08) : historique sur la fiche d'une NC, résumé de l'onglet
-// « Connecteurs », échéances du QHSE. Lecture seule ; le traitement est dans src/server/inbound.ts.
+// « Connecteurs », échéances du QHSE. Lecture seule ; le traitement est dans src/server/integrations/inbound.ts.
 
 type Row = typeof t.inboundRequests.$inferSelect;
 

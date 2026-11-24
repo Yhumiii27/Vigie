@@ -9,7 +9,7 @@ import { REASON_MAX } from '@/lib/domain';
 import type { Option } from '@/lib/data/options';
 import type { Person } from '@/lib/queries';
 import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
-import { CURSUS_PEOPLE_NOTICE, PERSON_CATEGORIES, type PersonCategory } from '@/lib/foreign/labels';
+import { CURSUS_PEOPLE_NOTICE, PERSON_CATEGORIES, type PersonCategory } from '@/lib/integration-labels';
 
 type Props = {
   /** Fiche modifiée (D01, décision CV-10 : aucune création dans Vigie, les personnes viennent de Cursus). */

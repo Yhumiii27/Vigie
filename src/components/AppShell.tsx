@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { StatusToaster } from './feedback';
 import { Sidebar, type SidebarProps } from './Sidebar';
 import { Icon } from './ui';
+import { useI18n } from '@/i18n/client';
 
 const WIDE = '(min-width: 761px)';
 /** Cible du lien d'évitement (UX-11). */
@@ -18,6 +19,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * d'annonce des enregistrements (StatusToaster).
  */
 export function AppShell({ sidebar, children }: { sidebar: SidebarProps; children: ReactNode }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   // Fermeture par Échap, le fond ou « Fermer le menu » : focus rendu au bouton une fois l'inertie levée (effet ci-dessous).
@@ -31,7 +33,7 @@ export function AppShell({ sidebar, children }: { sidebar: SidebarProps; childre
       restoreFocus.current = false;
       return;
     }
-    // Focus d'ouverture sur « Fermer le menu » (la bascule sombre / clair, Norma 1.0, la précède dans l'en-tête du tiroir).
+    // Focus d'ouverture sur « Fermer le menu » (premier bouton de l'en-tête du tiroir).
     const side = document.getElementById('vg-side');
     (side?.querySelector<HTMLElement>('.vg-side-close') ?? side?.querySelector<HTMLElement>(FOCUSABLE))?.focus();
     // Un menu ouvert dans le tiroir (site, rôle) traite Échap avant (capture + preventDefault, Sidebar).
@@ -49,9 +51,9 @@ export function AppShell({ sidebar, children }: { sidebar: SidebarProps; childre
 
   return (
     <div className={`vg-app${open ? ' is-nav-open' : ''}`}>
-      <a href={`#${MAIN_ID}`} className="vg-skip" inert={open || undefined}>Aller au contenu</a>
+      <a href={`#${MAIN_ID}`} className="vg-skip" inert={open || undefined}>{t('Skip to content')}</a>
       <div className="vg-topbar" inert={open || undefined}>
-        <button ref={toggleRef} type="button" className="btn btn-ghost btn-icon" aria-label="Ouvrir le menu de navigation"
+        <button ref={toggleRef} type="button" className="btn btn-ghost btn-icon" aria-label={t('Open the navigation menu')}
           aria-expanded={open} aria-controls="vg-side" onClick={() => setOpen(true)}>
           <Icon name="ph-list" size={20} />
         </button>

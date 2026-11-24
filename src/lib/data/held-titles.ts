@@ -2,8 +2,8 @@ import 'server-only';
 import { cache } from 'react';
 import { isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { readHeldTitles, type CursusHeldTitle } from '@/lib/foreign/cursus';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { readHeldTitles, type CursusHeldTitle } from '@/server/integrations/cursus/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 
 // Titres détenus d'après Cursus (D09, décision CV-01 du 04/11/2026), rattachés aux personnes de Vigie par leur matricule
 // (people.matricule) : base commune de la matrice, des alertes et échéances, de l'espace salarié, des données

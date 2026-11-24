@@ -3,18 +3,18 @@ import { eq, inArray, isNotNull, max } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { schema as t, type Db } from '@/db';
 import { addDays } from '@/lib/dates';
-import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/lib/foreign/keystone';
-import { readCursusPeople, readCursusTitles, readHeldTitles, readPlannedPresences } from '@/lib/foreign/cursus';
-import { readMatrixSites } from '@/lib/foreign/matrix';
-import { readClavisAccessRows } from '@/lib/foreign/clavis';
-import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/lib/foreign/codex';
+import { readArticles, readAssignments, readBomUsage, readFleet, readProjects, readSuppliers } from '@/server/integrations/keystone/views';
+import { readCursusPeople, readCursusTitles, readHeldTitles, readPlannedPresences } from '@/server/integrations/cursus/views';
+import { readMatrixSites } from '@/server/integrations/matrix/views';
+import { readClavisAccessRows } from '@/server/integrations/clavis/views';
+import { readDocumentRevisions, readDocumentTypes, readDocumentValidations, readRegisterDocuments } from '@/server/integrations/codex/views';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { cursusPersonSync, newCachedPerson, shouldCreate, type CachedPerson } from '@/lib/rules/people-sync';
-import { CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SOURCES, type CursusTitleState, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/foreign/labels';
-import type { SourceRead } from '@/lib/foreign/source';
+import { CURSUS_TITLE_STATES, MATRIX_SITE_STATES, SOURCES, type CursusTitleState, type MatrixSiteState, type SourceKey, type SyncStatus } from '@/lib/integration-labels';
+import type { SourceRead } from '@/server/integrations/source';
 import { log } from '@/lib/log';
 import { today } from '@/lib/today';
-import { logChange, type ChangeDetail } from './changelog';
+import { logChange, type ChangeDetail } from '@/server/changelog';
 
 // Rafraîchissement des caches lus chez les autres outils (lot 0 de M-02, docs/specs/convergence-m02.md § 2.2) : seul ce
 // module écrit les caches (jamais un formulaire). Appelé à l'ouverture de la base (src/db/index.ts), par la tâche planifiée

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
-import { unknownProjectError } from '@/lib/foreign/keystone';
+import { unknownProjectError } from '@/server/integrations/keystone/views';
 import { fmtDate } from '@/lib/dates';
 import { isClosedActionStatus } from '@/lib/domain';
 import { formReader, type FormState } from '@/lib/forms';

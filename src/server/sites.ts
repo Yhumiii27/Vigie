@@ -13,8 +13,8 @@ import { SITE_OPEN_KINDS, openItemsSummary, transferTargetError, type SiteOpenCo
 import { hasLeft } from '@/lib/people';
 import { today } from '@/lib/today';
 import { logChange } from './changelog';
-import { readMatrixSites } from '@/lib/foreign/matrix';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { readMatrixSites } from '@/server/integrations/matrix/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 
 // Administration des sites (fenêtre « Gérer les sites… » du sélecteur de site) : animateur QHSE et direction.
 // Sites suivis = cache de matrix.pub_sites (D14) : un site se suit en le choisissant dans la liste de Matrix, jamais créé
@@ -25,7 +25,7 @@ import { unavailableMessage } from '@/lib/foreign/labels';
  * Suivre un site de Matrix (id vide : création) ou modifier les attributs propres à Vigie d'un site suivi (D14, décision
  * CV-09). L'identifiant d'un site est son code commun (matrix.pub_sites.code) : à la création, le site est choisi parmi les
  * sites actifs de la vue non encore suivis (champ `code`) ; libellé et ordre viennent de Matrix (lecture seule, rafraîchis
- * par src/server/foreign-sync.ts). Attributs locaux : responsable QHSE (champ `qhseLeadId`, vide = poste vacant ; absent du
+ * par src/server/integrations/sync.ts). Attributs locaux : responsable QHSE (champ `qhseLeadId`, vide = poste vacant ; absent du
  * formulaire = inchangé) et droit local d'Alsace-Moselle (case `alsaceMoselle`, lue seulement si le formulaire porte
  * `alsaceMoselleField` ; jours fériés du délai de déclaration CPAM, EVT-03) ; Seveso (saveSiteRule) et SIRET (écran
  * Environnement) ailleurs. Sites de Matrix indisponibles : création refusée avec un message. Le premier site suivi

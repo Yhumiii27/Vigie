@@ -1,6 +1,6 @@
 // Modifications techniques (D12 de Matrix, lot 5 de M-02, décision CV-06 du 05/11/2026 ; docs/specs/modifications-techniques.md) :
 // règles pures des demandes (ECR) et ordres (ECO) de modification. Module sans import de serveur : utilisé par les server
-// actions (src/server/engineering.ts), le traitement des demandes reçues (src/server/inbound.ts), les chargements et les
+// actions (src/server/engineering.ts), le traitement des demandes reçues (src/server/integrations/inbound.ts), les chargements et les
 // écrans. Clés stockées : src/lib/state-keys.ts (contraintes de la migration 0029, spécification
 // partage/60-vigie-ecr-eco.sql de Matrix). Valeurs calculées, jamais stockées : dispositions à décider, verrouillage.
 

@@ -2,12 +2,12 @@ import 'server-only';
 import { getDb } from '@/db';
 import { config } from '../config';
 import type { Role } from '../domain';
-import { readClavisAccess } from '../foreign/clavis';
+import { readClavisAccess } from '@/server/integrations/clavis/views';
 import { log } from '../log';
 import { roleFromClavisAccess } from './claims';
 
 // Droits lus dans Clavis (VIGIE_ACCESS_FROM_CLAVIS=on ; décision du propriétaire du 23/11/2026 : une seule base, les droits
-// lus dans la base, jamais dans le jeton — Norma § 6). Lecture de clavis.pub_acces (src/lib/foreign/clavis.ts) à la
+// lus dans la base, jamais dans le jeton — Norma § 6). Lecture de clavis.pub_acces (src/server/integrations/clavis/views.ts) à la
 // connexion (`fresh`, /auth/retour) puis pendant la session (src/lib/session.ts) au plus toutes les
 // VIGIE_ACCESS_FROM_CLAVIS_SECONDS (60 par défaut) : un rôle changé dans Clavis vaut à la page suivante après ce délai, un
 // accès fermé termine la session. Lecture impossible = refus ; un échec n'est jamais gardé (relu à la requête suivante).

@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
-import { readDocumentsByRef } from '@/lib/foreign/codex';
+import { readDocumentsByRef } from '@/server/integrations/codex/views';
 import { proposeTargetsFor } from '@/lib/data/engineering';
-import { unknownArticlesError, unknownProjectError } from '@/lib/foreign/keystone';
-import { unavailableMessage } from '@/lib/foreign/labels';
+import { unknownArticlesError, unknownProjectError } from '@/server/integrations/keystone/views';
+import { unavailableMessage } from '@/lib/integration-labels';
 import { fmtDate } from '@/lib/dates';
 import { canApprove, canSee } from '@/lib/domain';
 import { EDIT_DENIED } from '@/lib/edit-rights';

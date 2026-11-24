@@ -10,7 +10,7 @@ import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
-import { CODEX_DOCUMENTS_NOTICE } from '@/lib/foreign/labels';
+import { CODEX_DOCUMENTS_NOTICE } from '@/lib/integration-labels';
 import type { DocumentRow, LinkedAction } from '@/lib/data/documents';
 import { documentActionDefaults } from './action-defaults';
 

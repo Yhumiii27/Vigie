@@ -11,7 +11,7 @@ import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
 import type { ConnectorRow } from '@/lib/data/connectors';
-import { MATRIX_SITE_STATES, SOURCES, SYNC_STATUSES } from '@/lib/foreign/labels';
+import { MATRIX_SITE_STATES, SOURCES, SYNC_STATUSES } from '@/lib/integration-labels';
 import { processInboundNow, refreshConnectors, sendOutboundNow } from '@/server/connectors';
 import type { InboundOverview } from '@/lib/data/inbound';
 import type { OutboundOverview } from '@/lib/data/engineering';

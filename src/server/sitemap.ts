@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { and, eq, isNull } from 'drizzle-orm';
-import { unknownProjectError } from '@/lib/foreign/keystone';
+import { unknownProjectError } from '@/server/integrations/keystone/views';
 import { getDb, schema as t } from '@/db';
 import { isPlanEnded, permitActivityBlocker, planCovers, planStatus } from '@/lib/rules/prevention';
 import { interferenceLine, parseIds, parsePoints, type Geometry, type Pt } from '@/lib/rules/coactivity';

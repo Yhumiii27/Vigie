@@ -7,11 +7,11 @@ import { getDb, schema as t } from '@/db';
 import { loadEventInbound, loadInboundOverview, loadInboundSignals } from '@/lib/data/inbound';
 import { acknowledgeInboundRequest, processInboundNow } from '@/server/connectors';
 import { revertEvent } from '@/server/events';
-import { processInboundRequests } from '@/server/inbound';
+import { processInboundRequests } from '@/server/integrations/inbound';
 
 // D13 (lot 3 de la convergence M-02), décisions CV-07 et CV-08 du 04/11/2026 : Keystone signale l'avancement d'une NC de
 // projet par vigie.pub_signaler_avancement_nc (migration 0026), qui dépose seulement une demande dans inbound_requests ;
-// Vigie la traite avec ses règles et son journal (src/server/inbound.ts). Numéro de NC = référence EV-… (nc_number tenu
+// Vigie la traite avec ses règles et son journal (src/server/integrations/inbound.ts). Numéro de NC = référence EV-… (nc_number tenu
 // par le déclencheur events_nc_number). PGlite, ou PostgreSQL avec TEST_DATABASE_URL (schéma vigie).
 
 freshDemoDatabase();

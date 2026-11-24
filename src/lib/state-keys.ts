@@ -52,17 +52,17 @@ export const STUDY_TYPE_CODES = ['hazid', 'hazop', 'amdec', 'controle_chantier',
 export const STUDY_STATUS_CODES = ['planifiee', 'realisee', 'validee'] as const;
 /** process_safety_studies.conclusion : STUDY_CONCLUSIONS, ou vide. */
 export const STUDY_CONCLUSION_CODES = ['favorable', 'reserves', 'defavorable'] as const;
-/** sites.matrix_state : MATRIX_SITE_STATES (src/lib/foreign/labels.ts) — D14, migration 0024. */
+/** sites.matrix_state : MATRIX_SITE_STATES (src/lib/integration-labels.ts) — D14, migration 0024. */
 export const MATRIX_STATE_CODES = ['actif', 'ferme', 'absent'] as const;
-/** sync_runs.status : SYNC_STATUSES (src/lib/foreign/labels.ts) — lot 0 de M-02, migration 0024. */
+/** sync_runs.status : SYNC_STATUSES (src/lib/integration-labels.ts) — lot 0 de M-02, migration 0024. */
 export const SYNC_STATUS_CODES = ['ok', 'error', 'unavailable'] as const;
-/** keystone_assignments.source : ASSIGNMENT_SOURCES (src/lib/foreign/labels.ts) — D04, contrat keystone.pub_affectations. */
+/** keystone_assignments.source : ASSIGNMENT_SOURCES (src/lib/integration-labels.ts) — D04, contrat keystone.pub_affectations. */
 export const ASSIGNMENT_SOURCE_CODES = ['rotation', 'planning'] as const;
-/** training_titles.cursus_state : CURSUS_TITLE_STATES (src/lib/foreign/labels.ts) — D08, migration 0025. */
+/** training_titles.cursus_state : CURSUS_TITLE_STATES (src/lib/integration-labels.ts) — D08, migration 0025. */
 export const CURSUS_TITLE_STATE_CODES = ['actif', 'absent'] as const;
-/** people.cursus_state : CURSUS_PERSON_STATES (src/lib/foreign/labels.ts) — D01, décision CV-10, migration 0030. */
+/** people.cursus_state : CURSUS_PERSON_STATES (src/lib/integration-labels.ts) — D01, décision CV-10, migration 0030. */
 export const CURSUS_PERSON_STATE_CODES = ['actif', 'absent'] as const;
-/** people.category : PERSON_CATEGORIES (src/lib/foreign/labels.ts) — contrat cursus.pub_salaries D01 v2 (colonne categorie). */
+/** people.category : PERSON_CATEGORIES (src/lib/integration-labels.ts) — contrat cursus.pub_salaries D01 v2 (colonne categorie). */
 export const PERSON_CATEGORY_CODES = ['salarie', 'interimaire', 'exterieur'] as const;
 /** inbound_requests.status : INBOUND_STATUSES (src/lib/rules/inbound.ts) — D13, décision CV-08, migration 0026. */
 export const INBOUND_STATUS_CODES = ['received', 'applied', 'rejected'] as const;

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { fmtDate } from '@/lib/dates';
 import { canSeeHealth } from '@/lib/domain';
-import { PERSON_CATEGORIES, type PersonCategory } from '@/lib/foreign/labels';
+import { PERSON_CATEGORIES, type PersonCategory } from '@/lib/integration-labels';
 import { guard } from '@/lib/guard';
 import { loadPersonalData, loadPersonalDataPeople } from '@/lib/data/personal-data';
 import { logAccess } from '@/server/access-log';

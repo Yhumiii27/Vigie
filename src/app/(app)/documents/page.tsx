@@ -5,7 +5,7 @@ import { hrefWith } from '@/components/ui';
 import { DocumentRegister } from '@/components/documents/DocumentRegister';
 import { FilterMenu } from '@/components/documents/FilterMenu';
 import { STATUS_FILTERS, processLabel, type StatusFilter } from '@/lib/rules/documents';
-import { CODEX_DOCUMENTS_NOTICE } from '@/lib/foreign/labels';
+import { CODEX_DOCUMENTS_NOTICE } from '@/lib/integration-labels';
 import { canCreateAction } from '@/lib/action-rules';
 import { SCREENS, TONE, canEdit } from '@/lib/domain';
 import { addDays } from '@/lib/dates';
