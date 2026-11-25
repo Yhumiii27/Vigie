@@ -12,6 +12,7 @@
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreDependencies": [
-    "axe-core"
+    "axe-core",
+    "@phosphor-icons/react"
   ]
 }

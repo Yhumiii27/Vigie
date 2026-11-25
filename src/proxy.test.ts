@@ -2,7 +2,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { resetConfig } from './lib/env';
 import { REFUSAL_CSP } from './lib/security';
-import { proxy } from './proxy';
+import { config, proxy } from './proxy';
 
 // Proxy (SEC-04, SEC-05) en démonstration et hors démonstration sans Entra ID configuré ; le cas Entra configuré
 // (session, renouvellement) est couvert par test/integration/entra.test.ts.
@@ -109,5 +109,13 @@ describe('production sans Entra ID configuré', () => {
       expect(passes(await proxy(req(`https://vigie.exemple.fr${path}`)))).toBe(false);
     }
     expect(passes(await proxy(req('https://vigie.exemple.fr/signaler-sw.js', { method: 'POST' })))).toBe(false);
+  });
+});
+
+describe('favicon (Norma 2.3, src/app/icon.svg)', () => {
+  it('hors du proxy, donc servi sans session ; les pages restent dans le proxy', () => {
+    const matcher = new RegExp(`^${config.matcher[0]}$`);
+    for (const path of ['/icon.svg', '/favicon.ico', '/_next/static/a.js']) expect(matcher.test(path)).toBe(false);
+    for (const path of ['/', '/evenements', '/plans/site_a.svg', '/signaler']) expect(matcher.test(path)).toBe(true);
   });
 });
