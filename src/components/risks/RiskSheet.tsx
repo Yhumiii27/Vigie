@@ -17,6 +17,8 @@ import { EVENT_TYPES, MEASURE_LINK_KINDS, MEASURE_LINK_KIND_KEYS, RISK_FLAGS, TO
 import type { ArchiveInfo, LinkedAction, MeasureOptions, RiskView, RisksData, WorkUnitView } from '@/lib/data/risks';
 import { archiveRisk, confirmResidual, linkRiskMeasure, moveRisk, removeRiskMeasure, restoreRisk } from '@/server/risks';
 import { Cotation, RiskFields } from './RiskForm';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 export type RiskSheetView = 'sheet' | 'edit' | 'newAction' | 'link' | 'archive' | 'restore';
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
@@ -43,17 +45,18 @@ export function riskActionDefaults(risk: Pick<RiskView, 'id' | 'hazard' | 'situa
   };
 }
 
-/** « Archivé le 30/06/2026 par Claire Lefèvre » (unité ou risque archivé). */
-export const archivedLabel = (a: ArchiveInfo, verb = 'Archivé') => `${verb} le ${fmtDate(a.on)}${a.by ? ` par ${a.by}` : ''}`;
+/** « Archivé le 30/06/2026 par Claire Lefèvre » (risque), « Archivée le … » (unité), « Annulée le … » (demande d'accès). */
+export const archivedLabel = (t: T, a: ArchiveInfo, kind: 'risk' | 'unit' | 'cancelled' = 'risk') =>
+  `${fill(kind === 'unit' ? t('Unit archived on {date}') : kind === 'cancelled' ? t('Cancelled on {date}') : t('Archived on {date}'), { date: fmtDate(a.on) })}${a.by ? fill(t(' by {by}'), { by: a.by }) : ''}`;
 
 /** Titre et sur-titre de la fenêtre selon la vue de la fiche. */
-export function riskSheetHeading(risk: RiskView, unit: Unit, view: RiskSheetView) {
-  if (view === 'newAction') return { title: 'Nouvelle action', kicker: `Plan d'actions unique · ${risk.hazard}` };
-  if (view === 'link') return { title: 'Rattacher une action existante', kicker: `Plan d'actions unique · ${risk.hazard}` };
-  if (view === 'edit') return { title: risk.hazard, kicker: `Modifier le risque · ${unit.label}` };
-  if (view === 'archive') return { title: risk.hazard, kicker: `Archiver le risque · ${unit.label}` };
-  if (view === 'restore') return { title: risk.hazard, kicker: `Restaurer le risque · ${unit.label}` };
-  return { title: risk.hazard, kicker: `${risk.archived ? 'Risque archivé' : 'Risque'} · ${unit.label}` };
+export function riskSheetHeading(t: T, risk: RiskView, unit: Unit, view: RiskSheetView) {
+  if (view === 'newAction') return { title: t('New action'), kicker: `${t('Single action plan')} · ${risk.hazard}` };
+  if (view === 'link') return { title: t('Link an existing action'), kicker: `${t('Single action plan')} · ${risk.hazard}` };
+  if (view === 'edit') return { title: risk.hazard, kicker: `${t('Edit the risk')} · ${unit.label}` };
+  if (view === 'archive') return { title: risk.hazard, kicker: `${t('Archive the risk')} · ${unit.label}` };
+  if (view === 'restore') return { title: risk.hazard, kicker: `${t('Restore the risk')} · ${unit.label}` };
+  return { title: risk.hazard, kicker: `${risk.archived ? t('Archived risk') : t('Risk')} · ${unit.label}` };
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -97,6 +100,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   onView: (view: RiskSheetView | null) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const run = (fn: () => Promise<{ error?: string }>, after?: () => void) => start(async () => {
@@ -105,7 +109,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
       setError(r.error ?? null);
       if (!r.error) after?.();
     } catch {
-      setError("L'opération a échoué. Réessayez.");
+      setError(t('The operation failed. Try again.'));
     }
   });
 
@@ -130,22 +134,21 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
   if (view === 'archive') {
     const open = risk.actions.filter((a) => !a.done && !a.cancelled).map((a) => a.id);
     return (
-      <ReasonForm action={archiveRisk} hidden={{ id: risk.id }} submitLabel="Archiver le risque" submitIcon="ph-archive"
-        placeholder="Ex. poste supprimé, risque fusionné avec un autre, saisie en double…" onDone={onClose} onCancel={() => onView('sheet')}
+      <ReasonForm action={archiveRisk} hidden={{ id: risk.id }} submitLabel={t('Archive the risk')} submitIcon="ph-archive"
+        placeholder={t('E.g. station removed, risk merged with another, duplicate entry…')} onDone={onClose} onCancel={() => onView('sheet')}
         message={<>
-          Le risque « {risk.hazard} » ({risk.situation}) sortira du document unique en vigueur : tableau, matrice, échéances, exports et prochain instantané.
-          Il reste consultable avec son historique, ses actions et ses événements via le filtre « Archivés ».
-          {open.length > 0 && <> {open.length > 1 ? 'Les actions' : "L'action"} {open.join(', ')} {open.length > 1 ? 'restent ouvertes' : 'reste ouverte'} dans le plan d&apos;actions.</>}
-          {' '}Les versions archivées du DUERP ne sont pas modifiées.
+          {fill(t('The risk “{hazard}” ({situation}) will leave the single document in force: table, matrix, deadlines, exports and next snapshot. It stays readable with its history, actions and events through the “Archived” filter.'), { hazard: risk.hazard, situation: risk.situation })}
+          {open.length > 0 && <> {fill(open.length > 1 ? t('The actions {ids} stay open in the action plan.') : t('The action {ids} stays open in the action plan.'), { ids: open.join(', ') })}</>}
+          {' '}{t('The archived versions of the DUERP are not changed.')}
         </>} />
     );
   }
 
   if (view === 'restore') {
     return (
-      <ReasonForm action={restoreRisk} hidden={{ id: risk.id }} submitLabel="Restaurer le risque" submitIcon="ph-arrow-counter-clockwise"
+      <ReasonForm action={restoreRisk} hidden={{ id: risk.id }} submitLabel={t('Restore the risk')} submitIcon="ph-arrow-counter-clockwise"
         onDone={onClose} onCancel={() => onView('sheet')}
-        message={<>Le risque « {risk.hazard} » reviendra dans l&apos;unité « {unit.label} » du document unique en vigueur, avec ses cotations et ses actions.</>} />
+        message={<>{fill(t('The risk “{hazard}” will return to the unit “{unit}” of the single document in force, with its ratings and actions.'), { hazard: risk.hazard, unit: unit.label })}</>} />
     );
   }
 
@@ -159,9 +162,9 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
     <div style={{ display: 'grid', gap: 16 }}>
       {archived && (
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE.neutral.bg }}>
-          <ToneTag tone="neutral" style={{ flexShrink: 0 }}>Archivé</ToneTag>
+          <ToneTag tone="neutral" style={{ flexShrink: 0 }}>{t('Archived')}</ToneTag>
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-            {archivedLabel(archived)} : hors du document unique en vigueur.{archived.reason && <> Motif : {archived.reason}</>}
+            {archivedLabel(t, archived)}{t(': outside the single document in force.')}{archived.reason && <> {fill(t('Reason: {reason}'), { reason: archived.reason })}</>}
           </span>
         </div>
       )}
@@ -169,26 +172,26 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE[flag.tone].bg }}>
           <ToneTag tone={flag.tone} style={{ flexShrink: 0 }}>{flag.label}</ToneTag>
           <span style={{ fontSize: 12.5, color: TONE[flag.tone].fg, textWrap: 'pretty' }}>
-            {flag.hint}{risk.flag === 'toReview' && risk.lastClosedOn ? ` Dernière vérification le ${fmtDate(risk.lastClosedOn)}.` : ''}
+            {flag.hint}{risk.flag === 'toReview' && risk.lastClosedOn ? fill(t(' Last verification on {date}.'), { date: fmtDate(risk.lastClosedOn) }) : ''}
           </span>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'start' }}>
-        <Row label="Danger">{risk.hazard}</Row>
-        <Row label="Situation dangereuse"><span style={{ color: 'var(--color-neutral-300)' }}>{risk.situation}</span></Row>
-        <Row label="Cotation brute"><Cotation g={risk.gravity} p={risk.probability} /></Row>
-        <Row label="Mesures existantes"><span style={{ color: 'var(--color-neutral-300)' }}>{risk.existingMeasures || '—'}</span></Row>
-        <Row label="Risque résiduel">
+        <Row label={t('Hazard')}>{risk.hazard}</Row>
+        <Row label={t('Hazardous situation')}><span style={{ color: 'var(--color-neutral-300)' }}>{risk.situation}</span></Row>
+        <Row label={t('Gross rating')}><Cotation g={risk.gravity} p={risk.probability} /></Row>
+        <Row label={t('Existing measures')}><span style={{ color: 'var(--color-neutral-300)' }}>{risk.existingMeasures || '—'}</span></Row>
+        <Row label={t('Residual risk')}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Cotation g={risk.residualGravity} p={risk.residualProbability} />
-            {risk.residualReviewedOn && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>recoté le {fmtDate(risk.residualReviewedOn)}</span>}
+            {risk.residualReviewedOn && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fill(t('re-rated on {date}'), { date: fmtDate(risk.residualReviewedOn) })}</span>}
           </span>
         </Row>
       </div>
 
       <section style={{ display: 'grid', gap: 8 }}>
-        <div className="vg-eyebrow">Actions de réduction{risk.actions.length ? ` · ${risk.actions.length}` : ''}</div>
+        <div className="vg-eyebrow">{t('Reduction actions')}{risk.actions.length ? ` · ${risk.actions.length}` : ''}</div>
         {risk.actions.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
             {risk.actions.map((a) => (
@@ -196,26 +199,26 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
                 <Link href={`/actions?action=${encodeURIComponent(a.id)}`} className="vg-link" style={{ fontSize: 12.5, color: actionColor(a), textDecoration: a.cancelled ? 'line-through' : undefined }}>{a.id}</Link>
                 <span style={{ flex: 1, minWidth: 160 }}>{a.title}</span>
                 {a.cancelled
-                  ? <ToneTag tone="neutral">Abandonnée</ToneTag>
+                  ? <ToneTag tone="neutral">{t('Abandoned')}</ToneTag>
                   : <span style={{ color: actionColor(a), whiteSpace: 'nowrap' }}>{a.status}</span>}
                 {a.pilot && <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.pilot}</span>}
-                <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{a.done && a.closedOn ? `vérifiée le ${fmtDate(a.closedOn)}` : `date cible ${fmtDate(a.dueOn)}`}</span>
+                <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{a.done && a.closedOn ? fill(t('verified on {date}'), { date: fmtDate(a.closedOn) }) : fill(t('target date {date}'), { date: fmtDate(a.dueOn) })}</span>
                 {actionable && <LinkActionButton link={`risk:${risk.id}`} current={a.id} />}
               </li>
             ))}
           </ul>
         ) : (
-          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucune action rattachée.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('No action linked.')}</div>
         )}
         {actionable && (
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => onView('newAction')}>
-              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Nouvelle action
+              <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />{t('New action')}
             </button>
             {/* Vue de la même fenêtre, pas une seconde fenêtre (Échap fermerait aussi la fiche). */}
             <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} disabled={!linkOptions.length}
-              title={linkOptions.length ? undefined : 'Aucune action non close à rattacher'} onClick={() => onView('link')}>
-              <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />Rattacher une action existante
+              title={linkOptions.length ? undefined : t('No open action to link')} onClick={() => onView('link')}>
+              <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />{t('Link an existing action')}
             </button>
           </div>
         )}
@@ -225,11 +228,11 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
 
       {showEvents && <section style={{ display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div className="vg-eyebrow">Événements liés{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
+          <div className="vg-eyebrow">{t('Linked events')}{risk.events.length ? ` · ${risk.events.length}` : ''}</div>
           {/* EVT-24 : « Nouvel événement » prérempli (site, unité, risque) ; risque en vigueur, rôles qui modifient le DUERP. */}
           {editable && !unitArchived && (
             <Link href={newEventHref('risque', risk.id)} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+              <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />{t('Report an event')}
             </Link>
           )}
         </div>
@@ -246,13 +249,13 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
             ))}
           </ul>
         ) : (
-          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucun événement rattaché. Le rattachement se fait depuis la fiche de l&apos;événement.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('No event linked. Linking is done from the event sheet.')}</div>
         )}
       </section>}
 
       {/* DUE-09 : justificatifs du risque (mesures, mesurages, rapports) ; figés une fois le risque archivé. */}
-      <EntityFiles kind="risk" entityId={risk.id} title="Justificatifs" kicker={`${unit.label} · ${risk.hazard}`} files={risk.files}
-        canAdd={canManage && !risk.archived && !unitArchived} emptyText="Aucun justificatif joint." />
+      <EntityFiles kind="risk" entityId={risk.id} title={t('Supporting documents')} kicker={`${unit.label} · ${risk.hazard}`} files={risk.files}
+        canAdd={canManage && !risk.archived && !unitArchived} emptyText={t('No supporting document attached.')} />
 
       {showHistory && <LazyChangeLog entity="risk" id={risk.id} />}
 
@@ -260,8 +263,8 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
       {archived && canApprove && (
         <div className="dialog-actions">
           <button type="button" className="btn btn-secondary" disabled={unitArchived}
-            title={unitArchived ? `L'unité « ${unit.label} » est archivée : restaurez-la d'abord.` : undefined} onClick={() => onView('restore')}>
-            <i className="ph ph-arrow-counter-clockwise" style={{ fontSize: 14 }} aria-hidden />Restaurer le risque
+            title={unitArchived ? fill(t('The unit “{unit}” is archived: restore it first.'), { unit: unit.label }) : undefined} onClick={() => onView('restore')}>
+            <i className="ph ph-arrow-counter-clockwise" style={{ fontSize: 14 }} aria-hidden />{t('Restore the risk')}
           </button>
         </div>
       )}
@@ -269,15 +272,15 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
         <div className="dialog-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button type="button" className="btn btn-ghost" style={{ color: 'var(--color-neutral-400)' }} disabled={pending}
-              title="Retirer le risque du document unique en vigueur (motif obligatoire, historique conservé)"
+              title={t('Remove the risk from the single document in force (reason required, history kept)')}
               onClick={() => { setError(null); onView('archive'); }}>
-              <i className="ph ph-archive" style={{ fontSize: 14 }} aria-hidden />Archiver
+              <i className="ph ph-archive" style={{ fontSize: 14 }} aria-hidden />{t('Archive')}
             </button>
-            <button type="button" className="btn btn-ghost btn-icon" aria-label="Monter" title="Monter dans l'unité" disabled={isFirst || pending}
+            <button type="button" className="btn btn-ghost btn-icon" aria-label={t('Move up')} title={t('Move up in the unit')} disabled={isFirst || pending}
               onClick={() => run(() => moveRisk(risk.id, 'up'))}>
               <i className="ph ph-arrow-up" style={{ fontSize: 14 }} aria-hidden />
             </button>
-            <button type="button" className="btn btn-ghost btn-icon" aria-label="Descendre" title="Descendre dans l'unité" disabled={isLast || pending}
+            <button type="button" className="btn btn-ghost btn-icon" aria-label={t('Move down')} title={t('Move down in the unit')} disabled={isLast || pending}
               onClick={() => run(() => moveRisk(risk.id, 'down'))}>
               <i className="ph ph-arrow-down" style={{ fontSize: 14 }} aria-hidden />
             </button>
@@ -286,13 +289,13 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
             {risk.flag === 'toReview' && (
               <>
                 <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => run(() => confirmResidual(risk.id))}>
-                  <i className="ph ph-check" style={{ fontSize: 14 }} aria-hidden />{pending ? 'Enregistrement…' : 'Confirmer le résiduel actuel'}
+                  <i className="ph ph-check" style={{ fontSize: 14 }} aria-hidden />{pending ? t('Saving…') : t('Confirm the current residual')}
                 </button>
-                <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => onView('edit')}>Recoter le résiduel</button>
+                <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => onView('edit')}>{t('Re-rate the residual')}</button>
               </>
             )}
             <button type="button" className="btn btn-primary" disabled={pending} onClick={() => onView('edit')}>
-              <i className="ph ph-pencil-simple" style={{ fontSize: 14 }} aria-hidden />Modifier
+              <i className="ph ph-pencil-simple" style={{ fontSize: 14 }} aria-hidden />{t('Edit')}
             </button>
           </span>
         </div>
@@ -306,6 +309,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
  * et retrait (motif) dans la fiche même, sans seconde fenêtre (rôles qui modifient le DUERP, risque en vigueur).
  */
 function MeasuresSection({ risk, unit, editable, options }: { risk: RiskView; unit: Unit; editable: boolean; options?: MeasureOptions }) {
+  const { t } = useI18n();
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState<MeasureLinkKind>('control');
   const [removing, setRemoving] = useState<number | null>(null);
@@ -316,47 +320,47 @@ function MeasuresSection({ risk, unit, editable, options }: { risk: RiskView; un
     .map(([id, label]) => [id, label] as const);
   return (
     <section style={{ display: 'grid', gap: 8 }}>
-      <div className="vg-eyebrow">Mesures de maîtrise liées{risk.measures.length ? ` · ${risk.measures.length}` : ''}</div>
+      <div className="vg-eyebrow">{t('Linked control measures')}{risk.measures.length ? ` · ${risk.measures.length}` : ''}</div>
       {risk.measures.length ? (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
           {risk.measures.map((m) => (
             <li key={m.id} style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                 <i className={`ph ${MEASURE_LINK_KINDS[m.kind].icon}`} style={{ fontSize: 13, color: 'var(--color-neutral-400)' }} aria-hidden />
-                <span className="vg-sr-only">{MEASURE_LINK_KINDS[m.kind].label} : </span>
+                <span className="vg-sr-only">{fill(t('{label}: '), { label: MEASURE_LINK_KINDS[m.kind].label })}</span>
                 {m.href ? <Link href={m.href} className="vg-link" style={{ fontSize: 12.5, flex: 1, minWidth: 160 }}>{m.label}</Link> : <span style={{ flex: 1, minWidth: 160 }}>{m.label}</span>}
-                <ToneTag tone={m.tone}>{m.valid ? m.state : `Plus valide · ${m.state}`}</ToneTag>
+                <ToneTag tone={m.tone}>{m.valid ? m.state : fill(t('No longer valid · {state}'), { state: m.state })}</ToneTag>
                 {editable && removing !== m.id && (
-                  <button type="button" className="vg-text-btn" onClick={() => { setRemoving(m.id); setAdding(false); }}>Retirer</button>
+                  <button type="button" className="vg-text-btn" onClick={() => { setRemoving(m.id); setAdding(false); }}>{t('Withdraw')}</button>
                 )}
               </div>
               {editable && removing === m.id && (
                 <div className="vg-inset" style={{ padding: '10px 12px' }}>
-                  <ReasonForm action={removeRiskMeasure} hidden={{ id: m.id }} submitLabel="Retirer la mesure" submitIcon="ph-link-break"
-                    placeholder="Ex. équipement remplacé, consigne intégrée à une autre procédure" onDone={() => setRemoving(null)} onCancel={() => setRemoving(null)}
-                    message={<>La mesure « {m.label} » ne sera plus suivie pour ce risque ; la liaison reste au journal du risque avec son motif.</>} />
+                  <ReasonForm action={removeRiskMeasure} hidden={{ id: m.id }} submitLabel={t('Remove the measure')} submitIcon="ph-link-break"
+                    placeholder={t('E.g. equipment replaced, instruction included in another procedure')} onDone={() => setRemoving(null)} onCancel={() => setRemoving(null)}
+                    message={<>{fill(t('The measure “{label}” will no longer be followed for this risk; the link stays in the risk’s log with its reason.'), { label: m.label })}</>} />
                 </div>
               )}
             </li>
           ))}
         </ul>
       ) : (
-        <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucune mesure liée à un contrôle, un document ou une habilitation.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('No measure linked to an inspection, a document or a qualification.')}</div>
       )}
       {editable && !adding && (
         <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, justifySelf: 'start' }} onClick={() => { setAdding(true); setRemoving(null); }}>
-          <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />Lier une mesure de maîtrise
+          <i className="ph ph-link" style={{ fontSize: 13 }} aria-hidden />{t('Link a control measure')}
         </button>
       )}
       {editable && adding && (
         <div className="vg-inset" style={{ padding: '10px 12px' }}>
-          <ActionForm action={linkRiskMeasure} hidden={{ riskId: risk.id }} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} submitLabel="Lier la mesure" submitIcon="ph-link">
-            <Field name="kind" label="Élément">
+          <ActionForm action={linkRiskMeasure} hidden={{ riskId: risk.id }} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} submitLabel={t('Link the measure')} submitIcon="ph-link">
+            <Field name="kind" label={t('Item')}>
               <Select name="kind" options={MEASURE_LINK_KIND_KEYS.map((k) => [k, MEASURE_LINK_KINDS[k].label] as const)} value={kind} onChange={(e) => setKind(e.target.value as MeasureLinkKind)} />
             </Field>
             <Field name="targetId" label={MEASURE_LINK_KINDS[kind].label}
-              hint="Signalée quand elle n'est plus valide : contrôle dépassé ou défavorable, document sans version en vigueur, habilitation expirée chez un salarié du site.">
-              <Select key={kind} name="targetId" options={choices} defaultValue="" placeholder={choices.length ? 'Choisir…' : 'Aucun élément disponible'} />
+              hint={t('Flagged when it is no longer valid: inspection overdue or unfavourable, document without a version in force, qualification expired for an employee of the site.')}>
+              <Select key={kind} name="targetId" options={choices} defaultValue="" placeholder={choices.length ? t('Choose…') : t('No item available')} />
             </Field>
           </ActionForm>
         </div>

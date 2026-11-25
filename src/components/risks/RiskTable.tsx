@@ -10,6 +10,8 @@ import type { MeasureOptions, RiskView, RisksData, WorkUnitView } from '@/lib/da
 import { Cotation } from './RiskForm';
 import { RiskSheet, actionColor, riskSheetHeading, type RiskSheetView } from './RiskSheet';
 import { Tip, TipText } from '@/components/Tip';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
 
@@ -50,6 +52,7 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
   /** Lien profond ?risque=<id> : fiche ouverte au chargement. */
   initialRiskId?: number;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<OpenState | null>(initialRiskId != null && rows.some((r) => r.id === initialRiskId) ? { id: initialRiskId, view: 'sheet' } : null);
   const index = open ? rows.findIndex((r) => r.id === open.id) : -1;
   const current = index >= 0 ? rows[index] : null;
@@ -59,11 +62,11 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
     else setOpen((o) => o && { id: o.id, view });
   };
   const show = (r: RiskView) => setOpen({ id: r.id, view: 'sheet' });
-  const heading = current && open ? riskSheetHeading(current, unit, open.view) : null;
+  const heading = current && open ? riskSheetHeading(t, current, unit, open.view) : null;
   return (
     <>
       <table className="table" style={{ fontSize: 12.5, minWidth: 760 }}>
-        <thead><tr><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Mesures existantes</th><th>Risque résiduel</th><th>Actions</th></tr></thead>
+        <thead><tr><th>{t('Hazard')}</th><th>{t('Hazardous situation')}</th><th>{t('Gross rating')}</th><th>{t('Existing measures')}</th><th>{t('Residual risk')}</th><th>{t('Actions')}</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             // DUE-16 : la ligne reste cliquable à la souris ; au clavier et pour les lecteurs d'écran, le danger est un bouton
@@ -71,7 +74,7 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
             <tr key={r.id} className="is-clickable" onClick={(e) => { if (!fromControl(e) && !selectingText()) show(r); }}>
               <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
                 <button type="button" className="vg-text-btn" style={{ fontWeight: 500, fontSize: 12.5, color: 'inherit', textAlign: 'left' }} onClick={() => show(r)}>
-                  {r.hazard}<span className="vg-sr-only"> : ouvrir la fiche du risque</span>
+                  {r.hazard}<span className="vg-sr-only">{t(': open the risk sheet')}</span>
                 </button>
               </td>
               <td style={{ color: 'var(--color-neutral-300)' }}>{r.situation}</td>
@@ -88,14 +91,14 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
                       )}
                     </Tip>
                   ))}
-                  {r.flag === 'toDefine' && <TipText tip={RISK_FLAGS.toDefine.hint}><span style={{ color: TONE.danger.dot }}>À définir</span></TipText>}
-                  {r.flag === 'residualHigh' && <TipText tip={RISK_FLAGS.residualHigh.hint}><span style={{ color: TONE.danger.dot }}>Résiduel ≥ {RISK_ACTION_THRESHOLD}</span></TipText>}
-                  {r.flag === 'toReview' && <TipText tip={RISK_FLAGS.toReview.hint}><ToneTag tone="warn" style={{ fontSize: 11 }}>À recoter</ToneTag></TipText>}
+                  {r.flag === 'toDefine' && <TipText tip={RISK_FLAGS.toDefine.hint}><span style={{ color: TONE.danger.dot }}>{t('To be defined')}</span></TipText>}
+                  {r.flag === 'residualHigh' && <TipText tip={RISK_FLAGS.residualHigh.hint}><span style={{ color: TONE.danger.dot }}>{fill(t('Residual ≥ {n}'), { n: RISK_ACTION_THRESHOLD })}</span></TipText>}
+                  {r.flag === 'toReview' && <TipText tip={RISK_FLAGS.toReview.hint}><ToneTag tone="warn" style={{ fontSize: 11 }}>{t('To re-rate')}</ToneTag></TipText>}
                   {!r.actions.length && !r.flag && <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                   {canManage && actionsQhse && (
                     <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                      title="Nouvelle action de réduction rattachée au risque" onClick={() => setOpen({ id: r.id, view: 'newAction', direct: true })}>
-                      <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />Action
+                      title={t('New reduction action linked to the risk')} onClick={() => setOpen({ id: r.id, view: 'newAction', direct: true })}>
+                      <i className="ph ph-plus" style={{ fontSize: 13 }} aria-hidden />{t('Action')}
                     </button>
                   )}
                 </span>
@@ -104,7 +107,7 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
           ))}
           {!rows.length && (
             <tr><td colSpan={6} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-              Aucun risque évalué pour cette unité{canManage ? " : utilisez « Ajouter un risque » pour commencer l'évaluation." : '.'}
+              {canManage ? t('No risk assessed for this unit: use “Add a risk” to start the assessment.') : t('No risk assessed for this unit.')}
             </td></tr>
           )}
         </tbody>

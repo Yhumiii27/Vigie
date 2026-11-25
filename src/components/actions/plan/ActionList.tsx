@@ -4,6 +4,8 @@ import { fmtDate } from '@/lib/dates';
 import { TONE } from '@/lib/domain';
 import { fmtDecimal } from '@/lib/forms';
 import { ActionLink, ActionTableRow } from '../ActionPlanProvider';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 // Vue Liste (vue générale par défaut, spec § 16) : N°, Date, Responsable, Avancement (retard signalé), Priorité, Date
 // cible, Source, Domaine, libellé, Site ; pied : pointage et coûts des actions affichées. Vue des Abandonnées : motif et
@@ -13,11 +15,12 @@ const MUTED = { color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' } as con
 const EMPTY = { color: 'var(--color-neutral-500)', fontSize: 12, padding: '14px 8px' } as const;
 
 /** Numéro : vrai lien (nouvel onglet possible), la ligne entière ouvre la fiche. */
-function NumberCell({ a }: { a: ActionListItem }) {
+async function NumberCell({ a }: { a: ActionListItem }) {
+  const { t } = await getI18n();
   return (
     <td style={{ ...MUTED, color: 'var(--color-neutral-300)' }}>
       <ActionLink id={a.id} style={{ color: 'inherit', textDecoration: 'none' }}>{a.id}</ActionLink>
-      {a.toComplete && <span title={`À compléter : ${a.missing.length} champ${a.missing.length > 1 ? 's' : ''} manquant${a.missing.length > 1 ? 's' : ''}`} style={{ marginLeft: 5, color: TONE.warn.dot }}><Icon name="ph-question" size={12} /></span>}
+      {a.toComplete && <span title={fill(a.missing.length > 1 ? t('To complete: {n} missing fields') : t('To complete: {n} missing field'), { n: a.missing.length })} style={{ marginLeft: 5, color: TONE.warn.dot }}><Icon name="ph-question" size={12} /></span>}
     </td>
   );
 }
@@ -31,23 +34,25 @@ function SourceCell({ a }: { a: ActionListItem }) {
   );
 }
 
-function ResponsableCell({ a }: { a: ActionListItem }) {
+async function ResponsableCell({ a }: { a: ActionListItem }) {
+  const { t } = await getI18n();
   return (
     <td style={{ whiteSpace: 'nowrap' }}>
       {a.pilot}
-      {a.pilotLeft && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>personne sortie</span>}
+      {a.pilotLeft && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{t('person who left')}</span>}
     </td>
   );
 }
 
-function DueCell({ a }: { a: ActionListItem }) {
+async function DueCell({ a }: { a: ActionListItem }) {
+  const { t } = await getI18n();
   return (
     <td style={{ whiteSpace: 'nowrap' }}>
-      <span style={{ color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }} title={a.rescheduled ? 'Date cible replanifiée' : 'Date cible'}>{a.due}</span>
-      {a.late && <span style={{ display: 'block', fontSize: 11, color: TONE.danger.dot }}>{a.lateDays} j de retard</span>}
+      <span style={{ color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }} title={a.rescheduled ? t('Target date rescheduled') : t('Target date')}>{a.due}</span>
+      {a.late && <span style={{ display: 'block', fontSize: 11, color: TONE.danger.dot }}>{fill(t('{n} d late'), { n: a.lateDays })}</span>}
       {a.status === 'terminee' && a.verifyDue && (
-        <span style={{ display: 'block', fontSize: 11, color: a.verifyLate ? TONE.danger.dot : 'var(--color-neutral-500)' }} title={`Vérification d'efficacité le ${a.verifyDue}`}>
-          Vérif. {a.verifyDue}
+        <span style={{ display: 'block', fontSize: 11, color: a.verifyLate ? TONE.danger.dot : 'var(--color-neutral-500)' }} title={fill(t('Effectiveness check on {date}'), { date: a.verifyDue })}>
+          {fill(t('Check {date}'), { date: a.verifyDue })}
         </span>
       )}
     </td>
@@ -57,13 +62,14 @@ function DueCell({ a }: { a: ActionListItem }) {
 const money = (n: number) => `${fmtDecimal(n)} €`;
 
 /** Liste des actions de l'affichage courant. */
-export function ActionList({ items, totals, filtered }: { items: ActionListItem[]; totals: { hours: number; estimatedCost: number; actualCost: number }; filtered: boolean }) {
+export async function ActionList({ items, totals, filtered }: { items: ActionListItem[]; totals: { hours: number; estimatedCost: number; actualCost: number }; filtered: boolean }) {
+  const { t } = await getI18n();
   return (
     <div className="card" style={{ padding: '6px 14px 10px' }}>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 1100 }}>
           <thead>
-            <tr><th>N°</th><th>Date</th><th>Responsable</th><th>Avancement</th><th>Priorité</th><th>Date cible</th><th>Source</th><th>Domaine</th><th>Action</th><th>Site</th></tr>
+            <tr><th>{t('No.')}</th><th>{t('Date')}</th><th>{t('Owner')}</th><th>{t('Progress')}</th><th>{t('Priority')}</th><th>{t('Target date')}</th><th>{t('Source')}</th><th>{t('Domain')}</th><th>{t('Action')}</th><th>{t('Site')}</th></tr>
           </thead>
           <tbody>
             {items.map((a) => (
@@ -84,15 +90,19 @@ export function ActionList({ items, totals, filtered }: { items: ActionListItem[
               </ActionTableRow>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={10} style={EMPTY}>{filtered ? 'Aucune action ne correspond à ces critères.' : 'Aucune action à afficher.'}</td></tr>
+              <tr><td colSpan={10} style={EMPTY}>{filtered ? t('No action matches these criteria.') : t('No action to display.')}</td></tr>
             )}
           </tbody>
           {items.length > 0 && (
             <tfoot>
               <tr>
                 <td colSpan={10} style={{ fontSize: 11.5, color: 'var(--color-neutral-400)', paddingTop: 10 }}>
-                  {items.length} action{items.length > 1 ? 's' : ''} affichée{items.length > 1 ? 's' : ''} · Pointage : {fmtDecimal(totals.hours)} h ·
-                  Coût estimé : {money(totals.estimatedCost)} · Coût réel : {money(totals.actualCost)}
+                  {[
+                    fill(items.length > 1 ? t('{n} actions displayed') : t('{n} action displayed'), { n: items.length }),
+                    fill(t('Time logged: {h} h'), { h: fmtDecimal(totals.hours) }),
+                    fill(t('Estimated cost: {cost}'), { cost: money(totals.estimatedCost) }),
+                    fill(t('Actual cost: {cost}'), { cost: money(totals.actualCost) }),
+                  ].join(' · ')}
                 </td>
               </tr>
             </tfoot>
@@ -104,12 +114,13 @@ export function ActionList({ items, totals, filtered }: { items: ActionListItem[
 }
 
 /** Affichage « Abandonnées » : date et motif d'abandon. */
-export function AbandonedList({ items, filtered }: { items: ActionListItem[]; filtered: boolean }) {
+export async function AbandonedList({ items, filtered }: { items: ActionListItem[]; filtered: boolean }) {
+  const { t } = await getI18n();
   return (
     <div className="card" style={{ padding: '6px 14px 10px' }}>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 900 }}>
-          <thead><tr><th>N°</th><th>Action</th><th>Source</th><th>Responsable</th><th>Site</th><th>Abandonnée le</th><th>Motif</th></tr></thead>
+          <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source')}</th><th>{t('Owner')}</th><th>{t('Site')}</th><th>{t('Abandoned on')}</th><th>{t('Reason')}</th></tr></thead>
           <tbody>
             {items.map((a) => (
               <ActionTableRow key={a.id} id={a.id}>
@@ -123,7 +134,7 @@ export function AbandonedList({ items, filtered }: { items: ActionListItem[]; fi
               </ActionTableRow>
             ))}
             {items.length === 0 && (
-              <tr><td colSpan={7} style={EMPTY}>{filtered ? 'Aucune action abandonnée ne correspond à ces critères.' : 'Aucune action abandonnée.'}</td></tr>
+              <tr><td colSpan={7} style={EMPTY}>{filtered ? t('No abandoned action matches these criteria.') : t('No abandoned action.')}</td></tr>
             )}
           </tbody>
         </table>

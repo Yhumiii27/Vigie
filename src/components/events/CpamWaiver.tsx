@@ -3,48 +3,52 @@
 import { ReasonButton } from '@/components/ReasonDialog';
 import { cancelCpamWaiver, waiveCpamDeclaration } from '@/server/events';
 import type { DeclarationDuty } from '@/lib/rules/events';
+import { useI18n } from '@/i18n/client';
+import type { T } from '@/i18n/translate';
 
 // Absence de déclaration CPAM d'un AT motivée (EVT-02) : animateur QHSE et direction, motif conservé au journal (réservé).
 // Libellés selon la victime (declarationDuty) : intérimaire, information de l'ETT (R. 412-2 CSS) ; victime extérieure,
 // déclaration par son employeur.
 
-const WAIVER_TEXTS: Record<DeclarationDuty, { label: string; title: string; reasonLabel: string; placeholder: string }> = {
+const waiverTexts = (t: T): Record<DeclarationDuty, { label: string; title: string; reasonLabel: string; placeholder: string }> => ({
   cpam: {
-    label: "Motiver l'absence de déclaration", title: "Déclaration CPAM non faite par l'entreprise",
-    reasonLabel: "Pourquoi l'entreprise ne déclare-t-elle pas cet accident ?",
-    placeholder: 'Déclaration faite par un tiers, accident inscrit sur le registre papier, réserves…',
+    label: t('Give the reason for not declaring'), title: t('CPAM declaration not made by the company'),
+    reasonLabel: t('Why does the company not declare this accident?'),
+    placeholder: t('Declaration made by a third party, accident entered in the paper register, reservations…'),
   },
   ett: {
-    label: "Indiquer l'information de l'ETT", title: "Accident d'un intérimaire : déclaration par l'entreprise de travail temporaire",
-    reasonLabel: "Quand et comment l'entreprise de travail temporaire a-t-elle été informée ?",
-    placeholder: 'ETT informée le … par lettre recommandée ; copies à la CARSAT et à l’inspection du travail le …',
+    label: t('Record that the agency was informed'), title: t('Accident of a temp worker: declaration by the temporary work agency'),
+    reasonLabel: t('When and how was the temporary work agency informed?'),
+    placeholder: t('Agency informed on … by registered letter; copies to the CARSAT and the labour inspectorate on …'),
   },
   employer: {
-    label: "Indiquer la déclaration par l'employeur", title: "Victime extérieure : déclaration par son employeur",
-    reasonLabel: "Quel employeur déclare l'accident, et comment a-t-il été informé ?",
-    placeholder: 'Entreprise extérieure …, informée le … ; plan de prévention …',
+    label: t('Record the declaration by the employer'), title: t('External victim: declaration by their employer'),
+    reasonLabel: t('Which employer declares the accident, and how were they informed?'),
+    placeholder: t('External company …, informed on …; prevention plan …'),
   },
-};
+});
 
 /** « Motiver l'absence de déclaration » : l'obligation sort des échéances et la clôture redevient possible. */
 export function CpamWaiverButton({ eventId, duty = 'cpam' }: { eventId: string; duty?: DeclarationDuty }) {
-  const t = WAIVER_TEXTS[duty];
+  const { t } = useI18n();
+  const w = waiverTexts(t)[duty];
   return (
-    <ReasonButton label={t.label} title={t.title} kicker={eventId} icon="ph-file-x"
+    <ReasonButton label={w.label} title={w.title} kicker={eventId} icon="ph-file-x"
       className="btn btn-ghost vg-btn-sm" action={waiveCpamDeclaration} hidden={{ id: eventId }}
-      reasonLabel={t.reasonLabel}
-      message="L'accident sort des échéances de déclaration et peut être clôturé. Le motif est conservé au journal de la fiche, visible de l'animateur QHSE et de la direction seulement."
-      placeholder={t.placeholder}
-      submitLabel="Enregistrer le motif" />
+      reasonLabel={w.reasonLabel}
+      message={t('The accident leaves the declaration deadlines and can be closed. The reason is kept in the sheet’s log, visible to the QHSE coordinator and senior management only.')}
+      placeholder={w.placeholder}
+      submitLabel={t('Save the reason')} />
   );
 }
 
 /** « Annuler le motif » : l'accident redevient à déclarer (échéance, clôture bloquée). */
 export function CancelCpamWaiverButton({ eventId }: { eventId: string }) {
+  const { t } = useI18n();
   return (
-    <ReasonButton label="Annuler le motif" title="Annuler le motif d'absence de déclaration" kicker={eventId} icon="ph-arrow-counter-clockwise"
-      className="btn btn-ghost vg-btn-sm" action={cancelCpamWaiver} hidden={{ id: eventId }} reasonLabel="Motif de l'annulation"
-      message="L'accident redevient à déclarer à la CPAM : l'échéance revient et la clôture est de nouveau bloquée."
-      submitLabel="Annuler le motif" />
+    <ReasonButton label={t('Cancel the reason')} title={t('Cancel the reason for not declaring')} kicker={eventId} icon="ph-arrow-counter-clockwise"
+      className="btn btn-ghost vg-btn-sm" action={cancelCpamWaiver} hidden={{ id: eventId }} reasonLabel={t('Reason for cancellation')}
+      message={t('The accident must again be declared to the CPAM: the deadline returns and closure is blocked again.')}
+      submitLabel={t('Cancel the reason')} />
   );
 }

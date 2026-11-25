@@ -14,6 +14,8 @@ import { AccidentFields, requiredHint, type AccidentValues } from './AccidentFie
 import { MpFields, type MpValues } from './MpFields';
 import { MP_TITLE, hasNcDisposition, hasNcOrigin, mentionsInjury } from '@/lib/rules/events';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** Champs modifiables d'un événement (données simples transmises par la page serveur ; `knownAt` à l'heure de Paris). */
 export type EditableEvent = {
@@ -55,24 +57,25 @@ const DISPOSITION_OPTIONS = NC_DISPOSITION_KEYS.map((k) => [k, NC_DISPOSITIONS[k
 
 /** Traitement d'un produit non conforme (EVT-17, ISO 9001 §8.7) : décision, quantité, coût de non-qualité, dérogation. */
 function NcDispositionFields({ e }: { e: EventDefaults }) {
+  const { t } = useI18n();
   const [disposition, setDisposition] = useState(e.ncDisposition ?? '');
   const num = (v: number | null | undefined) => (v == null ? '' : String(v).replace('.', ','));
   return (
     <>
-      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Traitement du produit non conforme</h6>
+      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>{t('Disposition of the nonconforming product')}</h6>
       <FormRow cols={3}>
-        <Field name="ncDisposition" label="Décision">
-          <Select name="ncDisposition" options={DISPOSITION_OPTIONS} value={disposition} onChange={(ev) => setDisposition(ev.target.value)} placeholder="À décider" />
+        <Field name="ncDisposition" label={t('Decision')}>
+          <Select name="ncDisposition" options={DISPOSITION_OPTIONS} value={disposition} onChange={(ev) => setDisposition(ev.target.value)} placeholder={t('To be decided')} />
         </Field>
-        <Field name="ncQuantity" label="Quantité concernée" hint="Pièces, lots ou unités.">
+        <Field name="ncQuantity" label={t('Quantity concerned')} hint={t('Parts, batches or units.')}>
           <Input name="ncQuantity" inputMode="decimal" defaultValue={num(e.ncQuantity)} />
         </Field>
-        <Field name="ncCostKeur" label="Coût de non-qualité (k€ HT)" hint="Retouche, rebut, transport, temps passé ; 1,45 pour 1 450 €.">
+        <Field name="ncCostKeur" label={t('Cost of non-quality (k€ excl. VAT)')} hint={t('Rework, scrap, transport, time spent; 1.45 for €1,450.')}>
           <Input name="ncCostKeur" inputMode="decimal" defaultValue={num(e.ncCostKeur)} />
         </Field>
       </FormRow>
-      <Field name="ncDispositionNote" label={disposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement'}
-        hint={disposition === 'derogation' ? 'Obligatoire : client ou donneur d’ordre, référence et conditions de la dérogation.' : undefined}>
+      <Field name="ncDispositionNote" label={disposition === 'derogation' ? t('Concession granted by') : t('Disposition details')}
+        hint={disposition === 'derogation' ? t('Required: customer or principal, reference and conditions of the concession.') : undefined}>
         <Input name="ncDispositionNote" defaultValue={e.ncDispositionNote ?? ''} maxLength={500} />
       </Field>
     </>
@@ -85,8 +88,9 @@ function NcDispositionFields({ e }: { e: EventDefaults }) {
  * `benign` : AT inscrit au registre des accidents bénins (rôle habilité), basculé ou non en déclaration CPAM.
  */
 export function EventEditButton({ event, options, health, benign }: { event: EditableEvent; options: EventFieldOptions; health: boolean; benign?: 'active' | 'escalated' | null }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Modifier" title={`Modifier ${event.id}`} kicker="Signalements et événements" width={680}>
+    <DialogButton label={t('Edit')} title={fill(t('Edit {id}'), { id: event.id })} kicker={t('Reports and events')} width={680}>
       {(close) => <EventFields mode="edit" event={event} options={options} health={health} benign={benign} onDone={close} onCancel={close} />}
     </DialogButton>
   );
@@ -103,11 +107,12 @@ type FieldsProps = {
 
 /** Avertissement (non bloquant) : un intitulé ou une description d'AT qui semble décrire une lésion (SEC-06). */
 function InjuryWarning({ text, health }: { text: string; health: boolean }) {
+  const { t } = useI18n();
   if (!mentionsInjury(text)) return null;
   return (
     <span style={{ display: 'block', color: 'var(--tone-warn-fg)', textWrap: 'pretty' }}>
       <i className="ph ph-warning" style={{ fontSize: 12, marginRight: 4 }} aria-hidden />
-      Ce texte semble décrire une lésion ou des soins : {health ? 'saisissez-les plutôt dans les champs réservés (nature et siège des lésions, soins).' : "l'animateur QHSE les saisit dans des champs réservés."}
+      {t('This text seems to describe a lesion or care: ')}{health ? t('enter them instead in the restricted fields (nature and site of lesions, care).') : t('the QHSE coordinator enters them in restricted fields.')}
     </span>
   );
 }
@@ -115,6 +120,7 @@ function InjuryWarning({ text, health }: { text: string; health: boolean }) {
 /** Formulaire complet d'un événement : création depuis le bureau (createEvent) ou modification de la fiche (saveEvent). */
 export function EventFields(props: FieldsProps) {
   const { mode, options, health, benign, onDone, onCancel } = props;
+  const { t } = useI18n();
   const create = mode === 'create';
   const e: EventDefaults = props.mode === 'edit' ? props.event : { occurredOn: props.today, severity: 1, ...props.defaults };
   const [type, setType] = useState(e.type ?? '');
@@ -130,14 +136,14 @@ export function EventFields(props: FieldsProps) {
   const pickZone = (value: string) => {
     setZoneId(value);
     const z = siteZones.find((x) => String(x.id) === value);
-    if (z && !location.trim()) setLocation(z.name.replace(/ \(archivée\)$/, ''));
+    if (z && !location.trim()) setLocation(z.name.replace(/ \((archivée|archived)\)$/, ''));
   };
   const at = type === 'AT';
   const mp = type === 'MP';
   // Données exigées à la qualification pour le type choisi (EVT-05) : signalées dans l'aide du champ.
   const required = (k: QualificationField) => (QUALIFICATION_FIELDS[type as EventType] ?? []).includes(k);
-  const hint = (k: QualificationField, base?: ReactNode) => (required(k) ? requiredHint(base) : base);
-  const textHint = (text: string) => (at || mp ? <>Sans détail médical : visible de l&apos;encadrement et dans les échéances.<InjuryWarning text={text} health={health} /></> : undefined);
+  const hint = (k: QualificationField, base?: ReactNode) => (required(k) ? requiredHint(t, base) : base);
+  const textHint = (text: string) => (at || mp ? <>{t('No medical detail: visible to management and in the deadlines.')}<InjuryWarning text={text} health={health} /></> : undefined);
   // Projet de la fiche absent de keystone.pub_projets (ou source indisponible) : reste proposé tel quel (code et libellé).
   // Origine NC : celle de la fiche tant que le type n'a pas changé ; sinon repartir de la valeur par défaut du nouveau type.
   const ncDefault = type === e.type && e.ncOrigin ? e.ncOrigin : type === 'RC' ? 'Réclamation client' : '';
@@ -151,102 +157,102 @@ export function EventFields(props: FieldsProps) {
 
   return (
     <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id, version: props.event.version } : undefined}
-      submitLabel={create ? 'Créer l’événement' : 'Enregistrer'} submitIcon={create ? 'ph-plus' : undefined}>
+      submitLabel={create ? t('Create the event') : t('Save')} submitIcon={create ? 'ph-plus' : undefined}>
       <FormRow cols={3}>
-        <Field name="type" label="Type" hint={typeOptions.length === 1 ? "Requalification par l'animateur QHSE ou la direction." : undefined}>
-          <Select name="type" options={typeOptions} value={type} onChange={(ev) => setType(ev.target.value)} placeholder={create ? 'Choisir…' : undefined} />
+        <Field name="type" label={t('Type')} hint={typeOptions.length === 1 ? t('Requalification by the QHSE coordinator or senior management.') : undefined}>
+          <Select name="type" options={typeOptions} value={type} onChange={(ev) => setType(ev.target.value)} placeholder={create ? t('Choose…') : undefined} />
         </Field>
-        <Field name="occurredOn" label="Date">
+        <Field name="occurredOn" label={t('Date')}>
           <Input name="occurredOn" type="date" defaultValue={e.occurredOn} max={create ? props.today : undefined} />
         </Field>
-        <Field name="occurredTime" label="Heure">
+        <Field name="occurredTime" label={t('Time')}>
           <Input name="occurredTime" type="time" defaultValue={e.occurredTime ?? ''} />
         </Field>
       </FormRow>
       {mp ? (
-        <Field name="title" label="Intitulé" hint="Imposé : ni la victime ni la maladie (l'intitulé paraît dans les actions liées).">
+        <Field name="title" label={t('Title')} hint={t('Imposed: neither the victim nor the disease (the title appears in the linked actions).')}>
           <Input name="title" value={MP_TITLE} readOnly />
         </Field>
       ) : (
-        <Field name="title" label="Intitulé" hint={textHint(title)}>
+        <Field name="title" label={t('Title')} hint={textHint(title)}>
           <Input name="title" value={title} onChange={(ev) => setTitle(ev.target.value)} maxLength={200} autoFocus />
         </Field>
       )}
       {create && (
         <FormRow>
-          <Field name="declarantId" label="Déclarant">
-            <Select name="declarantId" options={options.people} value={declarantId} onChange={(ev) => setDeclarantId(ev.target.value)} placeholder="Externe" />
+          <Field name="declarantId" label={t('Reporter')}>
+            <Select name="declarantId" options={options.people} value={declarantId} onChange={(ev) => setDeclarantId(ev.target.value)} placeholder={t('External')} />
           </Field>
           {!declarantId && (
-            <Field name="declarant" label="Déclarant externe (client, fournisseur…)">
-              <Input name="declarant" maxLength={120} placeholder="Nom, société" />
+            <Field name="declarant" label={t('External reporter (customer, supplier…)')}>
+              <Input name="declarant" maxLength={120} placeholder={t('Name, company')} />
             </Field>
           )}
         </FormRow>
       )}
       <FormRow>
-        <Field name="siteId" label="Site">
+        <Field name="siteId" label={t('Site')}>
           <Select name="siteId" options={options.sites} value={siteId}
             onChange={(ev) => { setSiteId(ev.target.value); if (!(options.zones ?? []).some((z) => String(z.id) === zoneId && z.siteId === ev.target.value)) setZoneId(''); }} />
         </Field>
         {!mp && (
-          <Field name="zoneId" label="Zone de la carte" hint={siteZones.length ? 'Zone du plan de site (QR code du poste) ; facultative.' : 'Aucune zone dessinée sur la carte de ce site.'}>
-            <Select name="zoneId" options={zoneChoices} value={zoneId} onChange={(ev) => pickZone(ev.target.value)} placeholder="Aucune" />
+          <Field name="zoneId" label={t('Map zone')} hint={siteZones.length ? t('Zone of the site plan (station QR code); optional.') : t('No zone drawn on this site’s map.')}>
+            <Select name="zoneId" options={zoneChoices} value={zoneId} onChange={(ev) => pickZone(ev.target.value)} placeholder={t('No zone')} />
           </Field>
         )}
       </FormRow>
       <FormRow>
-        <Field name="location" label="Lieu" hint={hint('location', zoneId ? 'Laissé vide : nom de la zone.' : undefined)}>
-          <Input name="location" value={location} onChange={(ev) => setLocation(ev.target.value)} maxLength={120} placeholder="Atelier, poste, zone…" />
+        <Field name="location" label={t('Location')} hint={hint('location', zoneId ? t('Left empty: the zone’s name.') : undefined)}>
+          <Input name="location" value={location} onChange={(ev) => setLocation(ev.target.value)} maxLength={120} placeholder={t('Workshop, station, zone…')} />
         </Field>
-        <Field name="equipment" label={at ? 'Objet ou matériel en cause' : 'Équipement'}>
-          <Input name="equipment" defaultValue={e.equipment ?? ''} maxLength={120} placeholder="Machine, outillage, lot…" />
-        </Field>
-      </FormRow>
-      <FormRow>
-        <Field name="keystoneProjectCode" label="Projet Keystone lié"
-          hint={options.projectsMessage ?? (e.keystoneProject && !e.keystoneProjectCode ? `Ancien libellé : ${e.keystoneProject}` : undefined)}>
-          <Select name="keystoneProjectCode" options={projects} defaultValue={e.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
+        <Field name="equipment" label={at ? t('Object or equipment involved') : t('Equipment')}>
+          <Input name="equipment" defaultValue={e.equipment ?? ''} maxLength={120} placeholder={t('Machine, tooling, batch…')} />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="pilotId" label="Pilote" hint="Obligatoire pour passer à l'étape « Qualifié ».">
-          <Select name="pilotId" options={options.people} defaultValue={e.pilotId ?? ''} placeholder="À désigner" />
+        <Field name="keystoneProjectCode" label={t('Linked Keystone project')}
+          hint={options.projectsMessage ?? (e.keystoneProject && !e.keystoneProjectCode ? fill(t('Former label: {label}'), { label: e.keystoneProject }) : undefined)}>
+          <Select name="keystoneProjectCode" options={projects} defaultValue={e.keystoneProjectCode ?? ''} placeholder={t('No project')} />
         </Field>
-        <Field name="severity" label="Gravité potentielle" hint={hint('severity')}>
+      </FormRow>
+      <FormRow>
+        <Field name="pilotId" label={t('Lead')} hint={t('Required to move to the “Qualified” stage.')}>
+          <Select name="pilotId" options={options.people} defaultValue={e.pilotId ?? ''} placeholder={t('To be designated')} />
+        </Field>
+        <Field name="severity" label={t('Potential severity')} hint={hint('severity')}>
           <Select name="severity" options={SEVERITY_OPTIONS} defaultValue={str(e.severity)} />
         </Field>
       </FormRow>
       {hasNcOrigin(type) && (
         // Clé sur le type : le champ est recréé (et sa valeur par défaut réappliquée) à chaque changement NC ↔ RC.
-        <Field key={type} name="ncOrigin" label="Origine de la non-conformité" hint={hint('ncOrigin')}>
-          <Select name="ncOrigin" options={NC_OPTIONS} defaultValue={ncDefault} placeholder="Non précisée" />
+        <Field key={type} name="ncOrigin" label={t('Origin of the nonconformity')} hint={hint('ncOrigin')}>
+          <Select name="ncOrigin" options={NC_OPTIONS} defaultValue={ncDefault} placeholder={t('Not specified')} />
         </Field>
       )}
       {type === 'RC' && (
         <FormRow>
-          <Field name="customer" label="Client" hint={hint('customer')}>
+          <Field name="customer" label={t('Customer')} hint={hint('customer')}>
             <Input name="customer" defaultValue={e.customer ?? ''} maxLength={120} />
           </Field>
-          <Field name="customerRef" label="Référence client" hint={hint('customerRef', 'Commande, affaire ou livraison ; à défaut, le projet Keystone lié')}>
+          <Field name="customerRef" label={t('Customer reference')} hint={hint('customerRef', t('Order, deal or delivery; failing that, the linked Keystone project'))}>
             <Input name="customerRef" defaultValue={e.customerRef ?? ''} maxLength={120} />
           </Field>
         </FormRow>
       )}
       {type === 'ENV' && (
         <FormRow>
-          <Field name="envAspect" label="Aspect environnemental" hint={hint('envAspect')}>
-            <Select name="envAspect" options={ASPECT_OPTIONS} defaultValue={e.envAspect ?? ''} placeholder="Choisir…" />
+          <Field name="envAspect" label={t('Environmental aspect')} hint={hint('envAspect')}>
+            <Select name="envAspect" options={ASPECT_OPTIONS} defaultValue={e.envAspect ?? ''} placeholder={t('Choose…')} />
           </Field>
-          <Field name="envMedium" label="Milieu concerné" hint={hint('envMedium')}>
-            <Select name="envMedium" options={MEDIUM_OPTIONS} defaultValue={e.envMedium ?? ''} placeholder="Choisir…" />
+          <Field name="envMedium" label={t('Medium concerned')} hint={hint('envMedium')}>
+            <Select name="envMedium" options={MEDIUM_OPTIONS} defaultValue={e.envMedium ?? ''} placeholder={t('Choose…')} />
           </Field>
         </FormRow>
       )}
-      <Field name="description" label="Description" hint={textHint(description)}>
+      <Field name="description" label={t('Description')} hint={textHint(description)}>
         <TextArea name="description" value={description} onChange={(ev) => setDescription(ev.target.value)} rows={3} maxLength={4000} />
       </Field>
-      <Field name="immediateMeasures" label="Mesures immédiates">
+      <Field name="immediateMeasures" label={t('Immediate measures')}>
         <TextArea name="immediateMeasures" defaultValue={e.immediateMeasures} rows={2} maxLength={4000} />
       </Field>
       {hasNcDisposition(type) && <NcDispositionFields key={type} e={e} />}
@@ -254,25 +260,25 @@ export function EventFields(props: FieldsProps) {
       {mp && health && <MpFields event={e} people={options.victims ?? options.people} />}
 
       {!mp && <>
-      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Rattachements</h6>
+      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>{t('Links')}</h6>
       <FormRow>
-        <Field name="controlId" label="Équipement contrôlé (contrôle périodique)">
-          <Select name="controlId" options={options.controls} defaultValue={str(e.controlId)} placeholder="Aucun" />
+        <Field name="controlId" label={t('Inspected equipment (periodic inspection)')}>
+          <Select name="controlId" options={options.controls} defaultValue={str(e.controlId)} placeholder={t('None')} />
         </Field>
-        <Field name="riskId" label="Risque du DUER">
-          <Select name="riskId" options={options.risks} defaultValue={str(e.riskId)} placeholder="Aucun" />
+        <Field name="riskId" label={t('DUER risk')}>
+          <Select name="riskId" options={options.risks} defaultValue={str(e.riskId)} placeholder={t('None')} />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="documentId" label="Document concerné">
-          <Select name="documentId" options={options.documents} defaultValue={e.documentId ?? ''} placeholder="Aucun" />
+        <Field name="documentId" label={t('Document concerned')}>
+          <Select name="documentId" options={options.documents} defaultValue={e.documentId ?? ''} placeholder={t('None')} />
         </Field>
-        <Field name="preventionPlanId" label="Plan de prévention">
-          <Select name="preventionPlanId" options={options.plans} defaultValue={e.preventionPlanId ?? ''} placeholder="Aucun" />
+        <Field name="preventionPlanId" label={t('Prevention plan')}>
+          <Select name="preventionPlanId" options={options.plans} defaultValue={e.preventionPlanId ?? ''} placeholder={t('None')} />
         </Field>
       </FormRow>
-      <Field name="permitId" label="Permis" hint="Le plan de prévention du permis est repris s'il n'est pas renseigné.">
-        <Select name="permitId" options={options.permits} defaultValue={e.permitId ?? ''} placeholder="Aucun" />
+      <Field name="permitId" label={t('Permit')} hint={t('The permit’s prevention plan is used if it is not entered.')}>
+        <Select name="permitId" options={options.permits} defaultValue={e.permitId ?? ''} placeholder={t('None')} />
       </Field>
       </>}
     </ActionForm>

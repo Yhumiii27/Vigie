@@ -15,6 +15,8 @@ import {
   saveProgramAction, updatePreventionProgram,
 } from '@/server/risks';
 import { fmtEuro } from '@/lib/rules/risk-format';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 const lineTone = (l: ProgramLineView) => (l.cancelled ? 'var(--color-neutral-500)' : TONE[l.tone].fg);
@@ -26,19 +28,20 @@ const costText = (n: number | null | undefined) => (n != null ? String(n).replac
  * (ligne ajoutée : proposé depuis l'action choisie) ; `costHint` remplace l'aide du coût.
  */
 function LineFields({ line, cost, onCost, costHint }: { line?: ProgramLineView; cost?: string; onCost?: (v: string) => void; costHint?: string }) {
+  const { t } = useI18n();
   return (
     <>
       <FormRow>
-        <Field name="estimatedCost" label="Coût estimé (€ HT)" hint={costHint ?? 'Optionnel ; centimes admis (1250,50).'}>
+        <Field name="estimatedCost" label={t('Estimated cost (€ excl. VAT)')} hint={costHint ?? t('Optional; cents allowed (1250.50).')}>
           {onCost
             ? <Input name="estimatedCost" inputMode="decimal" value={cost ?? ''} onChange={(e) => onCost(e.target.value)} />
             : <Input name="estimatedCost" inputMode="decimal" defaultValue={costText(line?.estimatedCost)} />}
         </Field>
-        <Field name="indicator" label="Indicateur de résultat">
-          <Input name="indicator" maxLength={300} defaultValue={line?.indicator ?? ''} placeholder="Ex. 100 % des monteurs habilités" />
+        <Field name="indicator" label={t('Result indicator')}>
+          <Input name="indicator" maxLength={300} defaultValue={line?.indicator ?? ''} placeholder={t('E.g. 100 % of fitters qualified')} />
         </Field>
       </FormRow>
-      <Field name="resources" label="Ressources" hint="Moyens humains, prestataires, budget, délais.">
+      <Field name="resources" label={t('Resources')} hint={t('Human means, contractors, budget, timing.')}>
         <TextArea name="resources" rows={2} maxLength={500} defaultValue={line?.resources ?? ''} />
       </Field>
     </>
@@ -50,17 +53,18 @@ function LineFields({ line, cost, onCost, costHint }: { line?: ProgramLineView; 
  * modifiable ici) ; le coût de la ligne reste ensuite figé avec le programme à l'arrêt.
  */
 function AddLineFields({ candidates, costs }: { candidates: PreventionProgramData['candidates']; costs: PreventionProgramData['candidateCosts'] }) {
+  const { t } = useI18n();
   const [picked, setPicked] = useState('');
   const [cost, setCost] = useState('');
   const proposed = picked && Object.hasOwn(costs, picked) ? costs[picked] : null;
   return (
     <>
-      <Field name="actionId" label="Action du plan" hint="Actions rattachées à un risque du DUERP en vigueur, non closes ou vérifiées dans l'année.">
-        <Select name="actionId" options={candidates} placeholder="Choisir…" value={picked}
+      <Field name="actionId" label={t('Plan action')} hint={t('Actions linked to a risk of the DUERP in force, not closed or verified within the year.')}>
+        <Select name="actionId" options={candidates} placeholder={t('Choose…')} value={picked}
           onChange={(e) => { const id = e.target.value; setPicked(id); setCost(costText(Object.hasOwn(costs, id) ? costs[id] : null)); }} />
       </Field>
       <LineFields cost={cost} onCost={setCost}
-        costHint={proposed != null ? `Proposé : coût estimé de l'action (TTC), ${fmtEuro(proposed)} ; modifiable.` : undefined} />
+        costHint={proposed != null ? fill(t('Proposed: estimated cost of the action (incl. VAT), {cost}; can be changed.'), { cost: fmtEuro(proposed) }) : undefined} />
     </>
   );
 }
@@ -81,6 +85,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
   /** Historique du programme (rôles qui modifient le DUERP). */
   showHistory: boolean;
 }) {
+  const { t } = useI18n();
   const { year, program, lines, totals, hiddenCount, candidates, candidateCosts } = data;
   const draft = program?.state === 'draft';
   const frozen = program?.state === 'frozen';
@@ -90,9 +95,9 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
   const multiSite = new Set(lines.map((l) => l.siteId)).size > 1;
   const meta = program && [
     `DUERP ${program.duerpVersion}`,
-    program.cseConsultedOn ? `CSE consulté le ${fmtDate(program.cseConsultedOn)}` : null,
-    program.frozenOn ? `arrêté le ${fmtDate(program.frozenOn)}${program.frozenBy ? ` par ${program.frozenBy}` : ''}` : null,
-    program.createdBy && !frozen ? `préparé par ${program.createdBy}` : null,
+    program.cseConsultedOn ? fill(t('CSE consulted on {date}'), { date: fmtDate(program.cseConsultedOn) }) : null,
+    program.frozenOn ? `${fill(t('adopted on {date}'), { date: fmtDate(program.frozenOn) })}${program.frozenBy ? fill(t(' by {by}'), { by: program.frozenBy }) : ''}` : null,
+    program.createdBy && !frozen ? fill(t('prepared by {by}'), { by: program.createdBy }) : null,
   ].filter(Boolean).join(' · ');
 
   return (
@@ -100,12 +105,12 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
       <div className="card" style={{ gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'grid', gap: 2 }}>
-            <div className="card-kicker">Programme annuel de prévention · L. 4121-3-1</div>
+            <div className="card-kicker">{t('Annual prevention programme · L. 4121-3-1')}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="card-title" style={{ fontSize: 15 }}>{PROGRAM_SHORT} {year}</span>
               {program
                 ? <ToneTag tone={PROGRAM_STATES[program.state].tone}>{PROGRAM_STATES[program.state].label}</ToneTag>
-                : <ToneTag tone="neutral">Non établi</ToneTag>}
+                : <ToneTag tone="neutral">{t('Not established')}</ToneTag>}
             </div>
           </div>
           {yearLinks.length > 1 && (
@@ -117,14 +122,14 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
           <>
             <div style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>
               {meta}
-              {!program.cseConsultedOn && <span style={{ color: TONE.warn.fg }}> · consultation du CSE à renseigner</span>}
+              {!program.cseConsultedOn && <span style={{ color: TONE.warn.fg }}> · {t('CSE consultation to be entered')}</span>}
             </div>
             {program.comment && <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{program.comment}</div>}
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
               {[
-                { v: String(totals.count), k: totals.count > 1 ? 'actions' : 'action' },
-                { v: String(totals.done), k: totals.done > 1 ? 'vérifiées' : 'vérifiée' },
-                { v: fmtEuro(totals.cost), k: 'coût estimé (HT)' },
+                { v: String(totals.count), k: totals.count > 1 ? t('actions') : t('action') },
+                { v: String(totals.done), k: totals.done > 1 ? t('verified actions') : t('verified action') },
+                { v: fmtEuro(totals.cost), k: t('estimated cost (excl. VAT)') },
               ].map((k) => (
                 <div key={k.k} style={{ display: 'grid', gap: 1 }}>
                   <span style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em' }}>{k.v}</span>
@@ -134,46 +139,45 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
               {totals.count > totals.costed && (
                 <div style={{ display: 'grid', gap: 1 }}>
                   <span style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em', color: TONE.warn.fg }}>{totals.count - totals.costed}</span>
-                  <span style={muted}>sans coût</span>
+                  <span style={muted}>{t('without cost')}</span>
                 </div>
               )}
             </div>
           </>
         ) : (
           <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', fontSize: 12.5, textWrap: 'pretty', margin: 0 }}>
-            Aucun programme établi pour {year}. Le programme reprend les actions du plan d&apos;actions rattachées aux risques du DUERP,
-            avec leur coût estimé, les ressources et un indicateur, puis il est arrêté après la consultation du CSE.
+            {fill(t('No programme established for {year}. The programme takes over the action plan’s actions linked to the DUERP risks, with their estimated cost, resources and an indicator, then it is adopted after the CSE consultation.'), { year })}
           </p>
         )}
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {editLines && (
             <>
-              <DialogButton label="Ajouter une action" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Ajouter une action" kicker={`${PROGRAM_SHORT} ${year}`} width={600}
-                disabled={!candidates.length} tooltip={candidates.length ? undefined : 'Aucune autre action rattachée à un risque du DUERP en vigueur.'}>
+              <DialogButton label={t('Add an action')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('Add an action')} kicker={`${PROGRAM_SHORT} ${year}`} width={600}
+                disabled={!candidates.length} tooltip={candidates.length ? undefined : t('No other action linked to a risk of the DUERP in force.')}>
                 {(close) => (
-                  <ActionForm action={addProgramAction} hidden={{ year }} onDone={close} onCancel={close} submitLabel="Ajouter au programme">
+                  <ActionForm action={addProgramAction} hidden={{ year }} onDone={close} onCancel={close} submitLabel={t('Add to the programme')}>
                     <AddLineFields candidates={candidates} costs={candidateCosts} />
                   </ActionForm>
                 )}
               </DialogButton>
-              <DialogButton label="Arrêter le programme" icon="ph-seal-check" className="btn btn-secondary vg-btn-sm" title={`Arrêter le programme ${year}`} kicker="Après consultation du CSE" width={520}
-                disabled={!lines.length && !hiddenCount} tooltip={lines.length || hiddenCount ? undefined : 'Programme vide : ajoutez au moins une action.'}>
+              <DialogButton label={t('Adopt the programme')} icon="ph-seal-check" className="btn btn-secondary vg-btn-sm" title={fill(t('Adopt the programme {year}'), { year })} kicker={t('After CSE consultation')} width={520}
+                disabled={!lines.length && !hiddenCount} tooltip={lines.length || hiddenCount ? undefined : t('Empty programme: add at least one action.')}>
                 {(close) => (
-                  <ActionForm action={freezePreventionProgram} hidden={{ year }} onDone={close} onCancel={close} submitLabel="Arrêter le programme" submitIcon="ph-seal-check">
+                  <ActionForm action={freezePreventionProgram} hidden={{ year }} onDone={close} onCancel={close} submitLabel={t('Adopt the programme')} submitIcon="ph-seal-check">
                     <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-                      Les lignes du programme (tous sites) seront figées à la date de la consultation ; il ne sera plus modifiable, sauf réouverture motivée.
+                      {t('The programme lines (all sites) will be frozen on the consultation date; it can no longer be changed, except by a reasoned reopening.')}
                     </p>
-                    <Field name="cseConsultedOn" label="Consultation du CSE" hint="Date de la réunion où le CSE a été consulté.">
+                    <Field name="cseConsultedOn" label={t('CSE consultation')} hint={t('Date of the meeting where the CSE was consulted.')}>
                       <Input name="cseConsultedOn" type="date" />
                     </Field>
                   </ActionForm>
                 )}
               </DialogButton>
-              <DialogButton label="Modifier l'objet" icon="ph-pencil-simple" className="btn btn-ghost vg-btn-sm" title={`Programme ${year}`} kicker="Objet du programme" width={520}>
+              <DialogButton label={t('Edit the purpose')} icon="ph-pencil-simple" className="btn btn-ghost vg-btn-sm" title={fill(t('Programme {year}'), { year })} kicker={t('Purpose of the programme')} width={520}>
                 {(close) => (
                   <ActionForm action={updatePreventionProgram} hidden={{ year }} onDone={close} onCancel={close}>
-                    <Field name="comment" label="Objet">
+                    <Field name="comment" label={t('Purpose')}>
                       <TextArea name="comment" rows={3} maxLength={1000} defaultValue={program?.comment ?? ''} />
                     </Field>
                   </ActionForm>
@@ -182,21 +186,21 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             </>
           )}
           {canApprove && frozen && (
-            <ReasonButton label="Rouvrir" icon="ph-lock-open" title={`Rouvrir le programme ${year}`} kicker="Programme arrêté"
-              action={reopenPreventionProgram} hidden={{ year }} submitLabel="Rouvrir le programme" submitIcon="ph-lock-open"
-              placeholder="Ex. action ajoutée à la demande du CSE, erreur de chiffrage…"
-              message="L'instantané et la date de consultation du CSE sont effacés : le programme repasse en préparation et devra être de nouveau arrêté après consultation." />
+            <ReasonButton label={t('Reopen')} icon="ph-lock-open" title={fill(t('Reopen the programme {year}'), { year })} kicker={t('Adopted programme')}
+              action={reopenPreventionProgram} hidden={{ year }} submitLabel={t('Reopen the programme')} submitIcon="ph-lock-open"
+              placeholder={t('E.g. action added at the CSE’s request, costing error…')}
+              message={t('The snapshot and the CSE consultation date are cleared: the programme goes back to preparation and must be adopted again after consultation.')} />
           )}
           {data.creatable && (
-            <DialogButton label={`Créer le programme ${year}`} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={`Programme ${year}`} kicker={`${PROGRAM_SHORT} · DUERP ${data.currentVersion}`} width={560}>
+            <DialogButton label={fill(t('Create the programme {year}'), { year })} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={fill(t('Programme {year}'), { year })} kicker={`${PROGRAM_SHORT} · DUERP ${data.currentVersion}`} width={560}>
               {(close) => (
-                <ActionForm action={createPreventionProgram} hidden={{ year }} onDone={close} onCancel={close} submitLabel="Créer le programme">
+                <ActionForm action={createPreventionProgram} hidden={{ year }} onDone={close} onCancel={close} submitLabel={t('Create the programme')}>
                   <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
                     {data.prefillCount
-                      ? `${data.prefillCount} action${data.prefillCount > 1 ? 's' : ''} du plan rattachée${data.prefillCount > 1 ? 's' : ''} aux risques du DUERP ${data.currentVersion} (échéance en ${year} ou report d'une année antérieure) ${data.prefillCount > 1 ? 'seront reprises' : 'sera reprise'}, tous sites.`
-                      : `Aucune action rattachée aux risques du DUERP ${data.currentVersion} n'est à reprendre : le programme sera créé vide.`}
+                      ? fill(data.prefillCount > 1 ? t('{n} plan actions linked to the risks of DUERP {version} (due in {year} or carried over from an earlier year) will be taken over, all sites.') : t('{n} plan action linked to the risks of DUERP {version} (due in {year} or carried over from an earlier year) will be taken over, all sites.'), { n: data.prefillCount, version: data.currentVersion ?? '', year })
+                      : fill(t('No action linked to the risks of DUERP {version} needs to be taken over: the programme will be created empty.'), { version: data.currentVersion ?? '' })}
                   </p>
-                  <Field name="comment" label="Objet" hint="Optionnel : priorités de l'année, mise à jour du DUERP d'origine…">
+                  <Field name="comment" label={t('Purpose')} hint={t('Optional: priorities of the year, update of the original DUERP…')}>
                     <TextArea name="comment" rows={3} maxLength={1000} />
                   </Field>
                 </ActionForm>
@@ -204,11 +208,11 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             </DialogButton>
           )}
           {canApprove && !program && !data.creatable && !data.currentVersion && (
-            <span style={{ fontSize: 12, color: TONE.warn.fg }}>Aucune version du DUERP en vigueur : ouvrez d&apos;abord une version.</span>
+            <span style={{ fontSize: 12, color: TONE.warn.fg }}>{t('No DUERP version in force: open a version first.')}</span>
           )}
           {program && (
             <a href={printHref} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer
+              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{t('Print')}
             </a>
           )}
         </div>
@@ -220,8 +224,8 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             <table className="table" style={{ fontSize: 12.5, minWidth: 900 }}>
               <thead>
                 <tr>
-                  <th>Action</th><th>Risques</th><th>Date cible</th><th>Avancement</th>{showPilot && <th>Responsable</th>}
-                  <th style={{ textAlign: 'right' }}>Coût</th><th>Ressources</th><th>Indicateur</th>{editLines && <th />}
+                  <th>{t('Action')}</th><th>{t('Risks')}</th><th>{t('Target date')}</th><th>{t('Progress')}</th>{showPilot && <th>{t('Owner')}</th>}
+                  <th style={{ textAlign: 'right' }}>{t('Cost')}</th><th>{t('Resources')}</th><th>{t('Indicator')}</th>{editLines && <th />}
                 </tr>
               </thead>
               <tbody>
@@ -242,12 +246,12 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
                             : <span style={{ fontSize: 12 }}>{r.label}</span>}
                           <span style={muted}>{r.cotation}</span>
                         </div>
-                      )) : <span style={muted}>Plus rattachée à un risque en vigueur</span>}
+                      )) : <span style={muted}>{t('No longer linked to a risk in force')}</span>}
                     </td>
                     <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>{l.dueOn ? fmtDate(l.dueOn) : '—'}</td>
                     <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                       <span style={{ color: lineTone(l) }}>{l.status}</span>
-                      {l.frozenStatus != null && l.frozenStatus !== l.status && <div style={muted}>à l&apos;arrêt : {l.frozenStatus}</div>}
+                      {l.frozenStatus != null && l.frozenStatus !== l.status && <div style={muted}>{fill(t('at adoption: {status}'), { status: l.frozenStatus })}</div>}
                     </td>
                     {showPilot && <td style={{ verticalAlign: 'top', color: 'var(--color-neutral-300)' }}>{l.pilot || '—'}</td>}
                     <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap', textAlign: 'right' }}>{l.estimatedCost != null ? fmtEuro(l.estimatedCost) : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}</td>
@@ -256,18 +260,18 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
                     {editLines && (
                       <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'inline-flex', gap: 10 }}>
-                          <DialogButton label="Modifier" className="vg-text-btn" title={`${l.actionId} · ${l.title}`} kicker={`${PROGRAM_SHORT} ${year}`} width={600}>
+                          <DialogButton label={t('Edit')} className="vg-text-btn" title={`${l.actionId} · ${l.title}`} kicker={`${PROGRAM_SHORT} ${year}`} width={600}>
                             {(close) => (
                               <ActionForm action={saveProgramAction} hidden={{ year, actionId: l.actionId }} onDone={close} onCancel={close}>
                                 <LineFields line={l} />
                               </ActionForm>
                             )}
                           </DialogButton>
-                          <DialogButton label="Retirer" className="vg-text-btn" title={`${l.actionId} · ${l.title}`} kicker={`Retirer du ${PROGRAM_SHORT} ${year}`} width={480}>
+                          <DialogButton label={t('Withdraw')} className="vg-text-btn" title={`${l.actionId} · ${l.title}`} kicker={fill(t('Remove from the {short} {year}'), { short: PROGRAM_SHORT, year })} width={480}>
                             {(close) => (
-                              <ActionForm action={removeProgramAction} hidden={{ year, actionId: l.actionId }} onDone={close} onCancel={close} submitLabel="Retirer du programme">
+                              <ActionForm action={removeProgramAction} hidden={{ year, actionId: l.actionId }} onDone={close} onCancel={close} submitLabel={t('Remove from the programme')}>
                                 <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-                                  L&apos;action reste au plan d&apos;actions ; son coût, ses ressources et son indicateur sont retirés du programme en préparation (retrait noté dans l&apos;historique).
+                                  {t('The action stays in the action plan; its cost, resources and indicator are removed from the programme in preparation (removal noted in the history).')}
                                 </p>
                               </ActionForm>
                             )}
@@ -279,7 +283,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
                 ))}
                 {!lines.length && (
                   <tr><td colSpan={cols} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-                    {hiddenCount ? 'Aucune action du programme sur ce site.' : `Aucune action au programme${editLines ? ' : utilisez « Ajouter une action ».' : '.'}`}
+                    {hiddenCount ? t('No programme action on this site.') : editLines ? t('No action in the programme: use “Add an action”.') : t('No action in the programme.')}
                   </td></tr>
                 )}
               </tbody>
@@ -287,7 +291,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
           </div>
           {hiddenCount > 0 && (
             <div style={muted}>
-              {hiddenCount} action{hiddenCount > 1 ? 's' : ''} du programme sur d&apos;autres sites {hiddenCount > 1 ? 'ne sont pas affichées' : "n'est pas affichée"} (site sélectionné) ; le programme est commun à tous les sites.
+              {fill(hiddenCount > 1 ? t('{n} programme actions on other sites are not displayed (selected site); the programme is common to all sites.') : t('{n} programme action on other sites is not displayed (selected site); the programme is common to all sites.'), { n: hiddenCount })}
             </div>
           )}
         </div>

@@ -42,6 +42,8 @@ import { eventView, isOpen, loadPeople } from '@/lib/queries';
 import { loadEventInbound } from '@/lib/data/inbound';
 import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination';
 import { Pagination } from '@/components/Pagination';
+import { getI18n } from '@/i18n/server';
+import { fill, type T } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.events.title };
 
@@ -51,6 +53,7 @@ type Tab = 'ouverts' | 'tous' | 'classes';
 
 export default async function EventsPage({ searchParams }: PageProps<'/evenements'>) {
   const { role, user, site, siteOptions, cse } = await guard('events');
+  const { t } = await getI18n();
   const sp = await searchParams;
   const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
   // ?type=AT, ou plusieurs types séparés par des virgules (?type=NC,RC depuis le tableau de bord).
@@ -105,7 +108,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
 
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
-    { key: undefined, label: 'Tous', n: searched.length },
+    { key: undefined, label: t('All'), n: searched.length },
     ...(types.length > 1 ? [{ key: type, label: types.map((k) => EVENT_TYPES[k].label).join(' + '), n: types.reduce((n, k) => n + counts[k], 0) }] : []),
     ...typeKeys.map((k) => ({ key: k, label: EVENT_TYPES[k].label, n: counts[k] })),
   ];
@@ -120,8 +123,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const qhse = canCreateAction(role);
   const actionOptions: ActionFormOptions = qhse ? { people: options.people, sites: options.sites, today: now } : { people: [], sites: [], today: now };
   const defaultSite = site.id !== ALL_SITES ? site.id : siteOptions[0]?.id;
-  const emptyText = hasEventFilters(urlFilters) || q || type || origin ? 'Aucun événement ne correspond.'
-    : tab === 'classes' ? 'Aucun événement classé sans suite.' : tab === 'tous' ? 'Aucun événement ne correspond.' : 'Aucun événement ouvert.';
+  const emptyText = hasEventFilters(urlFilters) || q || type || origin ? t('No matching event.')
+    : tab === 'classes' ? t('No dismissed event.') : tab === 'tous' ? t('No matching event.') : t('No open event.');
   const tabLink = (etat: Tab, label: string, n: number) => ({
     href: hrefWith('/evenements', params, { etat: etat === 'ouverts' ? undefined : etat, page: undefined, sel: undefined }),
     label: <>{label}<span style={{ opacity: 0.6 }}>{n}</span></>, on: tab === etat,
@@ -131,19 +134,19 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
 
   return (
     <>
-      <PageHeader title={SCREENS.events.title} sub={`${openCount} événement${openCount > 1 ? 's' : ''} ouvert${openCount > 1 ? 's' : ''} · ${employee ? 'vos signalements, tous vos sites' : 'tous types'}`}
+      <PageHeader title={SCREENS.events.title} sub={`${fill(openCount > 1 ? t('{n} open events') : t('{n} open event'), { n: openCount })} · ${employee ? t('your reports, all your sites') : t('all types')}`}
         actions={(manager || dgiReader) && (
           <>
             {/* Registre imprimable (données de santé, EVT-04) : lien HTML simple, la feuille d'impression ne reste pas chargée. */}
             {health && (
               <HeaderLink plain href={`${BENIGN_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} icon="ph-notebook" className="vg-wide-only">
-                Registre des accidents bénins
+                {t('Minor accident register')}
               </HeaderLink>
             )}
             {/* CNF-01 : registre des dangers graves et imminents (animateur QHSE, direction, membres du CSE). */}
             {dgiReader && (
               <HeaderLink href={`${DGI_REGISTER_PATH}${site.id !== ALL_SITES ? `?site=${encodeURIComponent(site.id)}` : ''}`} icon="ph-siren" className="vg-wide-only">
-                Registre des DGI
+                {t('Serious and imminent danger register')}
               </HeaderLink>
             )}
             {manager && <NewEventButton key={prefillKey(sp)} options={fieldOptions} today={now}
@@ -166,20 +169,20 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {origin && <input type="hidden" name="origine" value={origin} />}
             {baseParams.taille && <input type="hidden" name="taille" value={baseParams.taille} />}
             {Object.entries(eventFilterParams(urlFilters)).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
-            <input className="input" name="q" defaultValue={q} placeholder="Référence, lieu, équipement…" style={{ fontSize: 12.5, paddingLeft: 32 }} />
+            <input className="input" name="q" defaultValue={q} placeholder={t('Reference, location, equipment…')} style={{ fontSize: 12.5, paddingLeft: 32 }} />
           </form>
           <div>
             <SegLinks options={[
-              tabLink('ouverts', 'Ouverts', inTab.ouverts.length),
-              tabLink('tous', 'Tous', inTab.tous.length),
-              tabLink('classes', 'Classés sans suite', inTab.classes.length),
+              tabLink('ouverts', t('Open'), inTab.ouverts.length),
+              tabLink('tous', t('All'), inTab.tous.length),
+              tabLink('classes', t('Dismissed'), inTab.classes.length),
             ]} />
           </div>
           <EventFilterBar filters={urlFilters} base={baseParams} people={employee ? [] : options.people} health={health} pilots={!employee} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {origin && (
-              <Link href={hrefWith('/evenements', params, { origine: undefined, page: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title="Retirer le filtre d'origine">
-                Origine : {origin === NC_ORIGIN_NONE ? 'non renseignée' : origin}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
+              <Link href={hrefWith('/evenements', params, { origine: undefined, page: undefined, sel: undefined })} scroll={false} className="vg-chip is-on" title={t('Remove the origin filter')}>
+                {fill(t('Origin: {origin}'), { origin: origin === NC_ORIGIN_NONE ? t('not entered') : origin })}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden />
               </Link>
             )}
             {filters.map((f) => (
@@ -192,7 +195,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
             {list.length === 0 && <div className="vg-muted" style={{ fontSize: 12, padding: '8px 12px' }}>{emptyText}</div>}
             {list.map((e) => {
               const closedOn = closures.get(e.id);
-              const state = e.dismissed ? 'classé sans suite' : e.step >= STEP_CLOSED ? (closedOn ? `clôturé le ${fmtDayMonth(closedOn)}` : 'clôturé') : `J+${e.days}`;
+              const state = e.dismissed ? t('dismissed') : e.step >= STEP_CLOSED ? (closedOn ? fill(t('closed on {date}'), { date: fmtDayMonth(closedOn) }) : t('closed')) : fill(t('D+{n}'), { n: e.days });
               return (
                 <Link key={e.id} href={hrefWith('/evenements', params, { sel: e.id })} scroll={false} className={`vg-row${e.id === selId ? ' is-on' : ''}`}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-neutral-500)' }}>
@@ -209,13 +212,13 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
               );
             })}
           </div>
-          <Pagination path="/evenements" params={params} page={paged} label="Pages des événements" clear={['sel']} />
+          <Pagination path="/evenements" params={params} page={paged} label={t('Event pages')} clear={['sel']} />
         </div>
 
         <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           <BackToList href={hrefWith('/evenements', params, { sel: undefined })} />
           {selParam && <DetailFocus key={selParam} />}
-          {selParam && !detail && <MissingNotice text="Événement introuvable, hors du site sélectionné ou non accessible." closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
+          {selParam && !detail && <MissingNotice text={t('Event not found, outside the selected site or not accessible.')} closeHref={hrefWith('/evenements', params, { sel: undefined })} />}
           {detail && (employee
             ? <ReportCard key={detail.event.id} detail={detail} sites={options.sites} />
             : <EventCard key={detail.event.id} detail={detail} log={log} inbound={inbound} options={fieldOptions} actionOptions={actionOptions} qhse={qhse} canEdit={canEditScreen(role, 'events')} canRevert={canEditScreen(role, 'events')}
@@ -227,10 +230,10 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
 }
 
 /** Libellé court de l'état d'un événement (en-tête de fiche). */
-function statusText(e: EventDetail['event'], stepDates: EventDetail['stepDates']) {
+function statusText(e: EventDetail['event'], stepDates: EventDetail['stepDates'], t: T) {
   if (e.dismissed) return EVENT_DISMISSED.toLowerCase();
-  if (e.step >= STEP_CLOSED) return `clôturé${stepDates[STEP_CLOSED] ? ` le ${fmtDate(stepDates[STEP_CLOSED]!)}` : ''}`;
-  return `ouvert depuis ${e.days} j`;
+  if (e.step >= STEP_CLOSED) return stepDates[STEP_CLOSED] ? fill(t('closed on {date}'), { date: fmtDate(stepDates[STEP_CLOSED]!) }) : t('closed');
+  return fill(t('open for {n} d'), { n: e.days });
 }
 
 /** Avancement du workflow, avec la date d'entrée dans chaque étape atteinte. */
@@ -255,12 +258,13 @@ function StepTrack({ step, dismissed, stepDates }: { step: number; dismissed: bo
   );
 }
 
-function Narrative({ description, immediateMeasures }: { description: string | null; immediateMeasures: string | null }) {
+async function Narrative({ description, immediateMeasures }: { description: string | null; immediateMeasures: string | null }) {
+  const { t } = await getI18n();
   const text = { margin: 0, fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty', whiteSpace: 'pre-line' } as const;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
-      <div><h6 className="vg-h6" style={{ marginBottom: 4 }}>Description</h6><p style={text}>{description || '—'}</p></div>
-      <div><h6 className="vg-h6" style={{ marginBottom: 4 }}>Mesures immédiates</h6><p style={text}>{immediateMeasures || '—'}</p></div>
+      <div><h6 className="vg-h6" style={{ marginBottom: 4 }}>{t('Description')}</h6><p style={text}>{description || '—'}</p></div>
+      <div><h6 className="vg-h6" style={{ marginBottom: 4 }}>{t('Immediate measures')}</h6><p style={text}>{immediateMeasures || '—'}</p></div>
     </div>
   );
 }
@@ -269,7 +273,8 @@ function Narrative({ description, immediateMeasures }: { description: string | n
  * Fiche d'un signalement vue par son déclarant (Salarié, lecture seule) : avancement daté, description, mesures immédiates,
  * pièces jointes et suite donnée (libellé et avancement des actions). Ni l'analyse des causes, ni le pilote, ni les historiques.
  */
-function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions['sites'] }) {
+async function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions['sites'] }) {
+  const { t } = await getI18n();
   const { event: e, actions, attachments, stepDates, dismissal } = detail;
   const siteLabel = sites.find(([id]) => id === e.siteId)?.[1].split(' — ')[0] ?? e.siteId;
 
@@ -278,10 +283,10 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
-        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? ` à ${e.occurredTime}` : ''} · {statusText(e, stepDates)}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? fill(t(' at {time}'), { time: e.occurredTime }) : ''} · {statusText(e, stepDates, t)}</span>
         {/* IMP-07 : fiche imprimable du déclarant (sans pilote, analyse ni historique). */}
         <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-          <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+          <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{t('Print the sheet')}
         </a>
       </div>
       <h2 style={{ fontSize: 18, margin: 0, letterSpacing: '-.01em' }}>{e.title}</h2>
@@ -290,21 +295,21 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
         <div className="vg-inset" role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', fontSize: 12.5 }}>
           <i className="ph ph-archive" style={{ fontSize: 16, color: 'var(--color-neutral-400)' }} aria-hidden />
           <span style={{ textWrap: 'pretty' }}>
-            Classé sans suite le {fmtDate(dismissal.on)}{dismissal.reason && <> — <em style={{ color: 'var(--color-neutral-300)' }}>{dismissal.reason}</em></>}
+            {fill(t('Dismissed on {date}'), { date: fmtDate(dismissal.on) })}{dismissal.reason && <> — <em style={{ color: 'var(--color-neutral-300)' }}>{dismissal.reason}</em></>}
           </span>
         </div>
       )}
 
       <StepTrack step={e.step} dismissed={e.dismissed} stepDates={stepDates} />
-      <Fields fields={[['Date', fmtDate(e.occurredOn)], ['Lieu', e.location], ['Site', siteLabel], ['Équipement', e.equipment ?? '—']]} />
+      <Fields fields={[[t('Date'), fmtDate(e.occurredOn)], [t('Location'), e.location], [t('Site'), siteLabel], [t('Equipment'), e.equipment ?? '—']]} />
       <Narrative description={e.description} immediateMeasures={e.immediateMeasures} />
       <EventAttachments eventId={e.id} files={attachments} canManage={false} />
 
       <div style={{ display: 'grid', gap: 8 }}>
-        <H6>Suite donnée</H6>
+        <H6>{t('Follow-up')}</H6>
         {actions.length > 0 ? (
           <table className="table" style={{ fontSize: 12.5 }}>
-            <thead><tr><th>N°</th><th>Action</th><th>Avancement</th></tr></thead>
+            <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Progress')}</th></tr></thead>
             <tbody>
               {actions.map((a) => (
                 <tr key={a.id}>
@@ -317,7 +322,7 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
           </table>
         ) : (
           <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', padding: '10px 12px', border: '1px dashed var(--color-divider)', borderRadius: 'var(--radius-md)' }}>
-            Aucune action décidée pour l&apos;instant.
+            {t('No action decided yet.')}
           </div>
         )}
       </div>
@@ -325,7 +330,7 @@ function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormOptions
   );
 }
 
-function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
+async function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit, canRevert, canSeeRisks, canEditRisks, canSeeEnv, today }: {
   detail: EventDetail; log: ChangeEntry[];
   /** D13 (CV-08) : demandes reçues de Keystone pour une NC (null : autre type d'événement). */
   inbound: Awaited<ReturnType<typeof loadEventInbound>> | null;
@@ -340,6 +345,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
   canSeeEnv: boolean;
   today: string;
 }) {
+  const { t } = await getI18n();
   const { event: e, actions, analyses, attachments, blocker, lock, history, stepDates, links, wasteEntries, health, dismissal, accident, register, zone } = detail;
   const sev = TONE[severityTone(e.severity)];
   const closed = e.step >= STEP_CLOSED;
@@ -347,8 +353,8 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
   const siteLabel = options.sites.find(([id]) => id === e.siteId)?.[1].split(' — ')[0] ?? e.siteId;
   const link = (l: { label: string; href: string } | undefined, fallback = '—') => (l ? <Link href={l.href} className="vg-link" style={{ fontSize: 12.5 }}>{l.label}</Link> : fallback);
   const fields: [string, ReactNode][] = [
-    ['Date', fmtDate(e.occurredOn)], ['Lieu', e.location], ['Site', siteLabel], ['Déclarant', e.declarantLabel], ['Projet Keystone lié', e.keystoneProject ?? '—'],
-    [e.type === 'AT' ? 'Objet ou matériel en cause' : 'Équipement', (
+    [t('Date'), fmtDate(e.occurredOn)], [t('Location'), e.location], [t('Site'), siteLabel], [t('Reporter'), e.declarantLabel], [t('Linked Keystone project'), e.keystoneProject ?? '—'],
+    [e.type === 'AT' ? t('Object or equipment involved') : t('Equipment'), (
       <span key="equipment" style={{ display: 'grid', gap: 3 }}>
         {e.equipment && <span>{e.equipment}</span>}
         {links.control && (
@@ -359,57 +365,57 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
         {!e.equipment && !links.control && '—'}
       </span>
     )],
-    ['Pilote', e.pilot], ['Gravité potentielle', SEVERITY[e.severity]],
+    [t('Lead'), e.pilot], [t('Potential severity'), SEVERITY[e.severity]],
   ];
   // EVT-19 : zone de la carte, avec le QR code de son poste (encadrement) ; zone archivée : QR code sans lieu pré-rempli.
   if (zone) {
-    fields.splice(2, 0, ['Zone de la carte', (
+    fields.splice(2, 0, [t('Map zone'), (
       <span key="zone" style={{ display: 'grid', gap: 3 }}>
-        <span>{zone.name}{zone.archived && <span className="vg-muted"> · zone archivée</span>}</span>
+        <span>{zone.name}{zone.archived && <span className="vg-muted">{t(' · archived zone')}</span>}</span>
         {canEdit && !zone.archived && (
           <Link href={reportPostHref(zone.siteId, zone.id)} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <i className="ph ph-qr-code" aria-hidden />QR code du poste
+            <i className="ph ph-qr-code" aria-hidden />{t('Station QR code')}
           </Link>
         )}
       </span>
     )]);
   }
-  if (hasNcOrigin(e.type)) fields.push(['Origine', e.ncOrigin ?? (e.type === 'RC' ? 'Réclamation client' : '—')]);
-  if (e.type === 'AT' && e.commute) fields.push(['Nature', 'Accident de trajet · hors TF1 / TG']);
+  if (hasNcOrigin(e.type)) fields.push([t('Origin'), e.ncOrigin ?? (e.type === 'RC' ? t('Customer complaint') : '—')]);
+  if (e.type === 'AT' && e.commute) fields.push([t('Nature'), t('Commuting accident · excluded from TF1 / TG')]);
   if (hasNcDisposition(e.type)) {
     // EVT-17 : traitement du produit non conforme (ISO 9001 §8.7).
-    const eur = (n: number) => `${n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} k€ HT`;
+    const eur = (n: number) => fill(t('{n} k€ excl. VAT'), { n: n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) });
     fields.push(
-      ['Traitement du produit', e.ncDisposition ? NC_DISPOSITIONS[e.ncDisposition as NcDisposition] ?? e.ncDisposition : 'À décider'],
-      ['Quantité concernée', e.ncQuantity != null ? e.ncQuantity.toLocaleString('fr-FR') : '—'],
-      ['Coût de non-qualité', e.ncCostKeur != null ? eur(e.ncCostKeur) : '—'],
+      [t('Product disposition'), e.ncDisposition ? NC_DISPOSITIONS[e.ncDisposition as NcDisposition] ?? e.ncDisposition : t('To be decided')],
+      [t('Quantity concerned'), e.ncQuantity != null ? e.ncQuantity.toLocaleString('fr-FR') : '—'],
+      [t('Cost of non-quality'), e.ncCostKeur != null ? eur(e.ncCostKeur) : '—'],
     );
-    if (e.ncDispositionNote) fields.push([e.ncDisposition === 'derogation' ? 'Dérogation accordée par' : 'Précisions sur le traitement', e.ncDispositionNote]);
+    if (e.ncDispositionNote) fields.push([e.ncDisposition === 'derogation' ? t('Concession granted by') : t('Disposition details'), e.ncDispositionNote]);
   }
-  if (e.type === 'RC') fields.push(['Client', e.customer ?? '—'], ['Référence client', e.customerRef ?? '—']);
-  if (e.type === 'ENV') fields.push(['Aspect environnemental', e.envAspect ?? '—'], ['Milieu concerné', e.envMedium ?? '—']);
+  if (e.type === 'RC') fields.push([t('Customer'), e.customer ?? '—'], [t('Customer reference'), e.customerRef ?? '—']);
+  if (e.type === 'ENV') fields.push([t('Environmental aspect'), e.envAspect ?? '—'], [t('Medium concerned'), e.envMedium ?? '—']);
   if (links.risk) {
-    fields.push(['Risque DUER', canSeeRisks ? (
+    fields.push([t('DUER risk'), canSeeRisks ? (
       <span key="risk" style={{ display: 'grid', gap: 3 }}>
         {link(links.risk)}
-        {canEditRisks && ['AT', 'PA', 'SD'].includes(e.type) && <Link href={links.risk.href} className="vg-link" style={{ fontSize: 11.5 }}>Réévaluer le risque →</Link>}
+        {canEditRisks && ['AT', 'PA', 'SD'].includes(e.type) && <Link href={links.risk.href} className="vg-link" style={{ fontSize: 11.5 }}>{t('Reassess the risk →')}</Link>}
       </span>
     ) : links.risk.label]);
   }
   // Document de Codex (lot 4 de M-02) : lien vers le registre, ou vers Codex hors du registre ; identifiant seul sinon.
   if (links.document) {
     const d = links.document;
-    fields.push(['Document', (
+    fields.push([t('Document'), (
       <span key="document" style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline' }}>
         {!d.href ? d.label : d.href.startsWith('/') ? link(d) : <a href={d.href} target="_blank" rel="noopener noreferrer" className="vg-link" style={{ fontSize: 12.5 }}>{d.label}</a>}
         {d.status && <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>{d.status.label}</span>}
       </span>
     )]);
   }
-  if (links.plan) fields.push(['Plan de prévention', link(links.plan)]);
-  if (links.permit) fields.push(['Permis', link(links.permit)]);
+  if (links.plan) fields.push([t('Prevention plan'), link(links.plan)]);
+  if (links.permit) fields.push([t('Permit'), link(links.permit)]);
   if (wasteEntries.length) {
-    fields.push(['Enlèvements de déchets', (
+    fields.push([t('Waste collections'), (
       <span key="waste" style={{ display: 'grid', gap: 3 }}>
         {wasteEntries.map((w) => (
           <span key={w.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -447,7 +453,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
     permits: withCurrent(options.permits, e.permitId, links.permit?.label),
     // Zone enregistrée gardée comme choix (archivée, ou hors du site sélectionné), jamais proposée pour un nouveau choix.
     zones: zone && !(options.zones ?? []).some((z) => z.id === zone.id)
-      ? [{ id: zone.id, name: zone.archived ? `${zone.name} (archivée)` : zone.name, siteId: zone.siteId }, ...(options.zones ?? [])]
+      ? [{ id: zone.id, name: zone.archived ? fill(t('{name} (archived)'), { name: zone.name }) : zone.name, siteId: zone.siteId }, ...(options.zones ?? [])]
       : options.zones,
   };
   // Avertissement « aucune donnée de santé » du formulaire d'action (§ 4) : événement de type AT.
@@ -481,29 +487,29 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
         <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
-        {e.type === 'AT' && e.commute && <ToneTag tone="neutral">Trajet</ToneTag>}
+        {e.type === 'AT' && e.commute && <ToneTag tone="neutral">{t('Commute')}</ToneTag>}
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
-        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? ` à ${e.occurredTime}` : ''} · {statusText(e, stepDates)}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? fill(t(' at {time}'), { time: e.occurredTime }) : ''} · {statusText(e, stepDates, t)}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
           {/* IMP-07 : fiche imprimable (mêmes droits que la fiche) ; lien HTML simple (print.css). */}
           <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-            <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Imprimer la fiche
+            <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{t('Print the sheet')}
           </a>
           {/* EVT-10 : synthèse imprimable de la DAT et feuille d'accident (données de santé) ; lien HTML simple (print.css). */}
           {health && e.type === 'AT' && (
             <a href={`${DAT_PRINT_PATH}/${encodeURIComponent(e.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Synthèse DAT
+              <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{t('DAT summary')}
             </a>
           )}
           {canEdit && !locked && <EventEditButton event={editable} options={editOptions} health={health} benign={register?.entry ? (register.entry.escalatedAt ? 'escalated' : 'active') : null} />}
           {canRevert && !e.dismissed && !closed && (
             <DismissButton id={e.id} disabled={openLinked > 0}
-              tooltip={openLinked > 0 ? `${openLinked} action${openLinked > 1 ? 's' : ''} liée${openLinked > 1 ? 's' : ''} : abandonnez-${openLinked > 1 ? 'les' : 'la'} d'abord dans le plan d'actions.` : 'Doublon, faux signalement, hors sujet…'} />
+              tooltip={openLinked > 1 ? fill(t('{n} linked actions: abandon them first in the action plan.'), { n: openLinked }) : openLinked === 1 ? t('1 linked action: abandon it first in the action plan.') : t('Duplicate, false report, off topic…')} />
           )}
           {canRevert && !e.dismissed && e.step > 0 && (
-            <StepBackButton key={`back-${e.step}`} id={e.id} reopen={closed} label={closed ? "Rouvrir l'événement" : `Revenir à « ${EVENT_STEPS[e.step - 1]} »`} />
+            <StepBackButton key={`back-${e.step}`} id={e.id} reopen={closed} label={closed ? t('Reopen the event') : fill(t('Back to “{step}”'), { step: EVENT_STEPS[e.step - 1] })} />
           )}
-          <AdvanceButton key={`next-${e.step}`} id={e.id} label={closed ? 'Clôturé' : `Passer à « ${EVENT_STEPS[e.step + 1]} »`} disabled={closed || e.dismissed || !!blocker || !canEdit} hint={hint} />
+          <AdvanceButton key={`next-${e.step}`} id={e.id} label={closed ? t('Closed') : fill(t('Move to “{step}”'), { step: EVENT_STEPS[e.step + 1] })} disabled={closed || e.dismissed || !!blocker || !canEdit} hint={hint} />
         </span>
       </div>
       <h2 style={{ fontSize: 18, margin: 0, letterSpacing: '-.01em' }}>{e.title}</h2>
@@ -512,7 +518,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
         <div className="vg-inset" role="status" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, padding: '10px 12px', fontSize: 12.5 }}>
           <i className="ph ph-archive" style={{ fontSize: 16, color: 'var(--color-neutral-400)' }} aria-hidden />
           <span style={{ flex: 1, minWidth: 200, textWrap: 'pretty' }}>
-            Classé sans suite le {fmtDate(dismissal.on)} par {dismissal.by}{dismissal.reason && <> — <em style={{ color: 'var(--color-neutral-300)' }}>{dismissal.reason}</em></>}
+            {fill(t('Dismissed on {date} by {by}'), { date: fmtDate(dismissal.on), by: dismissal.by })}{dismissal.reason && <> — <em style={{ color: 'var(--color-neutral-300)' }}>{dismissal.reason}</em></>}
           </span>
           {canRevert && <RestoreButton id={e.id} />}
         </div>
@@ -532,7 +538,7 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
 
       <div style={{ display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <H6>Analyse des causes</H6>
+          <H6>{t('Root cause analysis')}</H6>
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
             <MethodSeg key={e.id} id={e.id} method={method} disabled={!canEdit || locked} hint={lock ?? undefined} />
             {canEdit && !locked && <AnalysisEditButton key={`${e.id}-${method}`} eventId={e.id} method={method} content={analyses[method]} />}
@@ -542,23 +548,25 @@ function EventCard({ detail, log, inbound, options, actionOptions, qhse, canEdit
       </div>
 
       <EventActions eventId={e.id} items={actionItems} options={actionOptions} canCreate={qhse} newDefaults={newDefaults}
-        emptyNote={`Aucune action liée — l'analyse des causes doit en produire au moins une avant le passage à l'étape « ${EVENT_STEPS[STEP_ACTIONS]} ».`}
+        emptyNote={fill(t('No linked action — the root cause analysis must produce at least one before moving to the “{step}” stage.'), { step: EVENT_STEPS[STEP_ACTIONS] })}
         addBlocked={addActionBlocker(e.step, e.dismissed)} />
 
       {inbound && <EventInbound items={inbound.items} qhse={inbound.qhse} />}
       <EventHistory entries={history} />
-      <ChangeLogList entries={log} title="Journal des modifications" />
+      <ChangeLogList entries={log} title={t('Change log')} />
       {/* SEC-11 : consultations des données de santé et des pièces jointes, pour les rôles habilités seulement. */}
       {health && <EventAccessLog eventId={e.id} />}
     </div>
   );
 }
 
-function Empty({ label }: { label: string }) {
-  return <div className="vg-inset" style={{ padding: 12, fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune analyse « {label} » saisie pour cet événement.</div>;
+async function Empty({ label }: { label: string }) {
+  const { t } = await getI18n();
+  return <div className="vg-inset" style={{ padding: 12, fontSize: 12, color: 'var(--color-neutral-500)' }}>{fill(t('No “{label}” analysis entered for this event.'), { label })}</div>;
 }
 
-function Analysis({ method, content }: { method: string; content: unknown }) {
+async function Analysis({ method, content }: { method: string; content: unknown }) {
+  const { t } = await getI18n();
   if (method === '5m') {
     const rows = content as [string, string][] | undefined;
     if (!rows?.length) return <Empty label="5M" />;
@@ -575,13 +583,13 @@ function Analysis({ method, content }: { method: string; content: unknown }) {
   }
   if (method === 'tree') {
     const nodes = readTree(content);
-    if (!nodes.length) return <Empty label="Arbre des causes" />;
+    if (!nodes.length) return <Empty label={t('Cause tree')} />;
     return (
       <div className="vg-inset" style={{ display: 'grid', gap: 6, padding: 12 }}>
-        {nodes.map(([lvl, t, top], i) => (
+        {nodes.map(([lvl, cause, top], i) => (
           <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', paddingLeft: lvl * 18 }}>
             <span style={{ width: 8, height: 8, flex: 'none', borderRadius: '50%', border: '1px solid var(--color-accent)', background: top ? 'var(--color-accent)' : 'transparent' }} />
-            <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>{t}</span>
+            <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>{cause}</span>
           </div>
         ))}
       </div>
@@ -589,12 +597,12 @@ function Analysis({ method, content }: { method: string; content: unknown }) {
   }
   if (method === 'why') {
     const whys = readWhys(content);
-    if (!whys.length) return <Empty label="5 pourquoi" />;
+    if (!whys.length) return <Empty label={t('5 whys')} />;
     return (
       <div className="vg-inset" style={{ display: 'grid', gap: 6, padding: 12 }}>
-        {whys.map((t, i) => (
+        {whys.map((why, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr', gap: 8, fontSize: 12, color: 'var(--color-neutral-300)' }}>
-            <span style={{ color: 'var(--color-accent)' }}>{i + 1}.</span><span>{t}</span>
+            <span style={{ color: 'var(--color-accent)' }}>{i + 1}.</span><span>{why}</span>
           </div>
         ))}
       </div>
@@ -605,9 +613,9 @@ function Analysis({ method, content }: { method: string; content: unknown }) {
   return (
     <div className="vg-inset" style={{ display: 'grid', gap: 10, padding: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '6px 12px' }}>
-        {D8_STEPS.map((t, i) => (
-          <div key={t} style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: i < current ? 'var(--color-neutral-300)' : i === current ? 'var(--color-accent)' : 'var(--vg-text-muted)' }}>
-            <i className={`ph ${i < current ? 'ph-check-circle' : i === current ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 13 }} aria-hidden /><span>{t}</span>
+        {D8_STEPS.map((d8, i) => (
+          <div key={d8} style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: i < current ? 'var(--color-neutral-300)' : i === current ? 'var(--color-accent)' : 'var(--vg-text-muted)' }}>
+            <i className={`ph ${i < current ? 'ph-check-circle' : i === current ? 'ph-circle-half' : 'ph-circle'}`} style={{ fontSize: 13 }} aria-hidden /><span>{d8}</span>
           </div>
         ))}
       </div>

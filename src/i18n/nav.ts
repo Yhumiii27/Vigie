@@ -24,3 +24,19 @@ export const SCREEN_LABEL_EN: Partial<Record<ScreenKey, string>> = {
   env: 'Environment and waste',
   engineering: 'Engineering changes',
 };
+
+/** Titres de page des écrans (SCREENS.title) en chaînes sources anglaises : PageHeader les traduit. */
+export const SCREEN_TITLE_EN: Partial<Record<ScreenKey, string>> = {
+  dashboard: 'QHSE dashboard',
+  todo: 'To do',
+  events: 'Reports and events',
+  actions: 'Single action plan',
+  prevention: 'Prevention plans and permits',
+  risks: 'Risk assessment',
+  skills: 'Qualifications and training',
+  watch: 'Regulatory watch and inspections',
+  audits: 'Audits and certifications',
+  docs: 'Controlled documents',
+  env: 'Environment and waste',
+  engineering: 'Engineering changes',
+};

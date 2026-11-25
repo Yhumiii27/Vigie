@@ -7,17 +7,17 @@ import { NAV, SCREENS, type ScreenKey } from '@/lib/domain';
 import { SEARCH_MIN, SEARCH_PATH } from '@/lib/rules/search';
 import { THEME_COOKIE, themeOf } from '@/lib/theme';
 import { getI18n } from '@/i18n/server';
-import { NAV_SECTION_EN } from '@/i18n/nav';
+import { NAV_SECTION_EN, SCREEN_TITLE_EN } from '@/i18n/nav';
 import { NotificationBell } from './NotificationBell';
 import { HelpButton } from './HelpDialog';
 import { CoquePageHeader } from './coque';
 import { Prefs } from './Prefs';
 
-/** Section de la barre latérale d'un écran de NAV, d'après son titre (fil d'Ariane par défaut). */
-function sectionOf(title: string): string | undefined {
-  const key = (Object.keys(SCREENS) as ScreenKey[]).find((k) => SCREENS[k].title === title);
-  return key ? NAV.find((sec) => sec.items.includes(key))?.label : undefined;
-}
+/** Écran d'après son titre (SCREENS, en français). */
+const screenOf = (title: string) => (Object.keys(SCREENS) as ScreenKey[]).find((k) => SCREENS[k].title === title);
+
+/** Section de la barre latérale d'un écran de NAV (fil d'Ariane par défaut). */
+const sectionOf = (key: ScreenKey | undefined) => (key ? NAV.find((sec) => sec.items.includes(key))?.label : undefined);
 
 /**
  * En-tête de page commun (Norma 2.1, COQUE.md § 3), ordre fixe : fil d'Ariane et titre h1 26 px (sous-titre) · recherche
@@ -35,11 +35,14 @@ export async function PageHeader({ title, sub, actions, crumbs, toolbar }: {
     elsewhere: n.elsewhere, siteLabel: n.siteLabel, family: n.family,
   }));
   const [{ lang, t }, theme] = await Promise.all([getI18n(), cookies().then((c) => themeOf(c.get(THEME_COOKIE)?.value))]);
-  const section = sectionOf(title);
+  const screen = screenOf(title);
+  const section = sectionOf(screen);
+  // Titre d'un écran de SCREENS traduit par sa chaîne source (VG-N01) ; tout autre titre est déjà traduit par la page.
+  const shownTitle = screen && SCREEN_TITLE_EN[screen] ? t(SCREEN_TITLE_EN[screen]) : title;
   const trail = crumbs ?? (section ? [NAV_SECTION_EN[section] ? t(NAV_SECTION_EN[section]) : section] : undefined);
   const plus = <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />;
   return (
-    <CoquePageHeader title={title} crumbs={trail} subtitle={sub}
+    <CoquePageHeader title={shownTitle} crumbs={trail} subtitle={sub}
       search={(
         <form action={SEARCH_PATH} role="search">
           <i className="ph ph-magnifying-glass coque-header-search-icon" style={{ fontSize: 14 }} aria-hidden />

@@ -17,10 +17,10 @@ import { guard } from '@/lib/guard';
 import { ALL_SITES } from '@/lib/session';
 import { loadActionDetail, loadActionFormOptions, loadActionPlan } from '@/lib/data/actions';
 import { loadActionStats } from '@/lib/data/action-stats';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.actions.title };
-
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /** « Site de [Ville B] — zone d'essais » → « site de [Ville B] » (après « relève du »). */
 const lcSite = (label: string) => {
@@ -36,6 +36,8 @@ const lcSite = (label: string) => {
  */
 export default async function ActionsPage({ searchParams }: PageProps<'/actions'>) {
   const session = await guard('actions');
+  const { t } = await getI18n();
+  const actionCount = (n: number) => fill(n > 1 ? t('{n} actions') : t('{n} action'), { n });
   const parsed = parseActionFilters(await searchParams);
   // Statistiques (ACT-29) : lecteurs du plan seulement ; le Salarié revient à la vue Liste de ses actions.
   const statsView = parsed.vue === 'statistiques' && canReadPlan(session.role);
@@ -64,15 +66,15 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
   const requested = filters.action;
   const banner = requested && !link?.payload
     ? link?.elsewhere
-      ? <>L&apos;action {requested} relève du {lcSite(link.elsewhere)} : sélectionnez ce site ou « Tous les sites » dans la barre latérale pour l&apos;ouvrir.</>
-      : <>L&apos;action {requested} est introuvable dans le plan d&apos;actions.</>
+      ? <>{fill(t('Action {id} belongs to the {site}: select that site or “All sites” in the sidebar to open it.'), { id: requested, site: lcSite(link.elsewhere) })}</>
+      : <>{fill(t('Action {id} cannot be found in the action plan.'), { id: requested })}</>
     : null;
 
   return (
     <>
       <PageHeader title={SCREENS.actions.title} sub={filters.etat === 'abandonnees'
-        ? `${plural(counts.abandoned, 'action')} abandonnée${counts.abandoned > 1 ? 's' : ''}`
-        : `${plural(counts.open, 'action')} ouverte${counts.open > 1 ? 's' : ''} · ${counts.late} en retard`} />
+        ? fill(counts.abandoned > 1 ? t('{n} abandoned actions') : t('{n} abandoned action'), { n: counts.abandoned })
+        : `${fill(counts.open > 1 ? t('{n} open actions') : t('{n} open action'), { n: counts.open })} · ${fill(t('{n} overdue'), { n: counts.late })}`} />
       <div className="vg-page">
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -86,7 +88,7 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
           <div className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: '10px 14px', fontSize: 12.5 }}>
             <Icon name="ph-info" size={15} style={{ color: TONE.warn.dot }} />
             <span style={{ flex: 1, minWidth: 0, textWrap: 'pretty' }}>{banner}</span>
-            <Link href={hrefWith('/actions', params, {})} scroll={false} className="vg-link">Masquer</Link>
+            <Link href={hrefWith('/actions', params, {})} scroll={false} className="vg-link">{t('Hide')}</Link>
           </div>
         )}
 
@@ -95,19 +97,19 @@ export default async function ActionsPage({ searchParams }: PageProps<'/actions'
           {filtered && !stats && (
             <div style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
               {items.length === 0
-                ? (filters.mes ? "Vous n'êtes responsable d'aucune action correspondant à ces critères." : 'Aucune action ne correspond à ces critères.')
-                : plural(items.length, 'action')}
+                ? (filters.mes ? t('You are the owner of no action matching these criteria.') : t('No action matches these criteria.'))
+                : actionCount(items.length)}
             </div>
           )}
 
           {stats ? (
-            <ActionStatsView stats={stats} siteLabel={session.site.id === ALL_SITES ? 'tous les sites du périmètre' : session.site.label}
+            <ActionStatsView stats={stats} siteLabel={session.site.id === ALL_SITES ? t('all the sites of the scope') : session.site.label}
               today={now} href={(mois) => hrefWith('/actions', { vue: 'statistiques' }, { mois })} />
           ) : emptyPlan ? (
             <div className="card" style={{ alignItems: 'center', justifyItems: 'center', textAlign: 'center', gap: 10, padding: '28px 16px' }}>
               <Icon name="ph-list-checks" size={26} style={{ color: 'var(--color-neutral-500)' }} />
               <div style={{ fontSize: 13, color: 'var(--color-neutral-300)' }}>
-                {employee ? 'Aucune action dont vous êtes responsable.' : 'Aucune action en cours sur ce site.'}
+                {employee ? t('No action of which you are the owner.') : t('No action in progress on this site.')}
               </div>
               {newButton}
             </div>

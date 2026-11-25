@@ -6,6 +6,8 @@ import type { KanbanKey } from '@/lib/action-rules';
 import type { ActionListItem } from '@/lib/action-view';
 import { TONE, type Tone } from '@/lib/domain';
 import { ActionLink } from './ActionPlanProvider';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 const MAX_CARDS = 8;
 
@@ -30,6 +32,7 @@ export function KanbanBoard({ columns }: { columns: KanbanColumnData[] }) {
 }
 
 function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const hidden = c.cards.length - MAX_CARDS;
   const cards = expanded ? c.cards : c.cards.slice(0, MAX_CARDS);
@@ -43,12 +46,12 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
         <button type="button" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}
           style={{ justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 0, cursor: 'pointer', font: 'inherit', fontSize: 11.5, color: 'var(--color-neutral-500)', padding: '2px 4px' }}>
           <Icon name={expanded ? 'ph-caret-up' : 'ph-caret-down'} size={11} />
-          {expanded ? 'Réduire' : hidden === 1 ? "Afficher l'autre action" : `Afficher les ${hidden} autres`}
+          {expanded ? t('Collapse') : hidden === 1 ? t('Show the other action') : fill(t('Show the {n} others'), { n: hidden })}
         </button>
       )}
-      {c.cards.length === 0 && <div style={NOTE}>Aucune action</div>}
+      {c.cards.length === 0 && <div style={NOTE}>{t('No action')}</div>}
       {c.key === 'terminee' && (
-        <div style={NOTE}>Une action Terminée n&apos;est close qu&apos;après la vérification de son efficacité par le service QHSE.</div>
+        <div style={NOTE}>{t('A Completed action is closed only after the QHSE department has verified its effectiveness.')}</div>
       )}
     </div>
   );
@@ -56,6 +59,7 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
 
 /** Carte : source et référence, numéro, libellé, palier (En cours, En retard), responsable, date cible, vérification. */
 function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
+  const { t } = useI18n();
   return (
     <ActionLink id={a.id} className="card elev-sm vg-kcard" style={{ gap: 7, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-neutral-500)', minWidth: 0 }}>
@@ -67,9 +71,9 @@ function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
       <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{a.label}</div>
       {(step || a.toComplete || a.priorityLabel) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11, color: 'var(--color-neutral-400)' }}>
-          {step && <span title="Avancement">{a.avancement}</span>}
+          {step && <span title={t('Progress')}>{a.avancement}</span>}
           {a.priorityLabel && <span>{step ? '· ' : ''}{a.priorityLabel}</span>}
-          {a.toComplete && <span style={{ color: TONE.warn.dot }}>{step || a.priorityLabel ? '· ' : ''}À compléter</span>}
+          {a.toComplete && <span style={{ color: TONE.warn.dot }}>{step || a.priorityLabel ? '· ' : ''}{t('To complete')}</span>}
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 6px', fontSize: 11, color: 'var(--color-neutral-400)' }}>
@@ -79,11 +83,11 @@ function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.pilot}</span>
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
-          <span title={`Date cible : ${a.due}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }}>
+          <span title={fill(t('Target date: {date}'), { date: a.due })} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }}>
             <Icon name="ph-calendar-blank" size={12} />{a.due}
           </span>
           {a.status === 'terminee' && a.verifyDue && (
-            <span title={`Vérification d'efficacité le ${a.verifyDue}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.verifyLate ? TONE.danger.dot : TONE.warn.dot }}>
+            <span title={fill(t('Effectiveness check on {date}'), { date: a.verifyDue })} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: a.verifyLate ? TONE.danger.dot : TONE.warn.dot }}>
               <Icon name="ph-seal-check" size={12} />{a.verifyDue}
             </span>
           )}

@@ -1,4 +1,6 @@
 import { TONE } from '@/lib/domain';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 import { FRANCE_PATH, MAP_HEIGHT, MAP_WIDTH, siteSummary, siteTone, type MapSite } from '@/lib/rules/sites-map';
 
 // Carte des sites (PRV-24) : sous « Tous les sites », carte SVG sans fond externe (contour simplifié de la France) et
@@ -9,16 +11,17 @@ type Placed = MapSite & { x: number; y: number };
 
 const rowId = (id: string) => `carte-site-${id}`;
 
-export function SitesMap({ placed, unplaced, all, message }: { placed: Placed[]; unplaced: MapSite[]; all: MapSite[]; message: string | null }) {
+export async function SitesMap({ placed, unplaced, all, message }: { placed: Placed[]; unplaced: MapSite[]; all: MapSite[]; message: string | null }) {
+  const { t } = await getI18n();
   return (
     <div className="card" style={{ gap: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <h2 className="card-title" style={{ fontSize: 14, margin: 0 }}>Carte des sites</h2>
-        <span className="vg-muted" style={{ fontSize: 11.5 }}>Coordonnées publiées par Matrix · {all.length} site{all.length > 1 ? 's' : ''} suivi{all.length > 1 ? 's' : ''}</span>
+        <h2 className="card-title" style={{ fontSize: 14, margin: 0 }}>{t('Sites map')}</h2>
+        <span className="vg-muted" style={{ fontSize: 11.5 }}>{fill(all.length > 1 ? t('Coordinates published by Matrix · {n} sites followed') : t('Coordinates published by Matrix · {n} site followed'), { n: all.length })}</span>
       </div>
       {message && <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--tone-warn-fg)' }}>{message}</p>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 14, alignItems: 'start' }}>
-        <svg viewBox={`-10 -10 ${MAP_WIDTH + 20} ${MAP_HEIGHT + 20}`} role="group" aria-label="Carte des sites suivis en France métropolitaine"
+        <svg viewBox={`-10 -10 ${MAP_WIDTH + 20} ${MAP_HEIGHT + 20}`} role="group" aria-label={t('Map of the sites followed in metropolitan France')}
           style={{ width: '100%', maxWidth: 420, height: 'auto', justifySelf: 'center' }}>
           <path d={FRANCE_PATH} fill="var(--color-neutral-800)" stroke="var(--color-neutral-600)" strokeWidth={1} aria-hidden />
           {placed.map((s) => {
@@ -32,11 +35,11 @@ export function SitesMap({ placed, unplaced, all, message }: { placed: Placed[];
             );
           })}
         </svg>
-        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Indicateurs par site, défilement horizontal sur petit écran">
+        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label={t('Indicators by site, horizontal scrolling on small screens')}>
           <table className="table" style={{ fontSize: 12.5 }}>
-            <caption className="vg-sr-only">Indicateurs par site</caption>
+            <caption className="vg-sr-only">{t('Indicators by site')}</caption>
             <thead>
-              <tr><th scope="col">Site</th><th scope="col">Événements ouverts</th><th scope="col">Actions en retard</th><th scope="col">Jours sans accident avec arrêt</th><th scope="col">Plans de prévention ouverts</th></tr>
+              <tr><th scope="col">{t('Site')}</th><th scope="col">{t('Open events')}</th><th scope="col">{t('Late actions')}</th><th scope="col">{t('Days without lost-time accident')}</th><th scope="col">{t('Open prevention plans')}</th></tr>
             </thead>
             <tbody>
               {all.map((s) => (
@@ -54,7 +57,7 @@ export function SitesMap({ placed, unplaced, all, message }: { placed: Placed[];
       </div>
       {unplaced.length > 0 && (
         <p style={{ margin: 0, fontSize: 12 }} className="vg-muted">
-          Sans coordonnées dans Matrix (absents de la carte, présents dans le tableau) : {unplaced.map((s) => s.label).join(', ')}.
+          {fill(t('Without coordinates in Matrix (absent from the map, present in the table): {sites}.'), { sites: unplaced.map((s) => s.label).join(', ') })}
         </p>
       )}
     </div>

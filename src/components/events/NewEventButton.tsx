@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Dialog } from '@/components/Dialog';
 import { useHeaderMenu } from '@/components/coque';
 import { EventFields, type EventDefaults, type EventFieldOptions } from './EventEditButton';
+import { useI18n } from '@/i18n/client';
 
 /**
  * « Nouvel événement » (encadrement, bureau) : formulaire complet, ouvert d'emblée quand la page est appelée
@@ -13,6 +14,7 @@ import { EventFields, type EventDefaults, type EventFieldOptions } from './Event
  * `health` : données de santé d'un AT saisissables (animateur QHSE, direction ; SEC-06).
  */
 export function NewEventButton({ options, defaults, today, health, initialOpen = false }: { options: EventFieldOptions; defaults?: EventDefaults; today: string; health: boolean; initialOpen?: boolean }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(initialOpen);
   const menu = useHeaderMenu();
@@ -22,9 +24,9 @@ export function NewEventButton({ options, defaults, today, health, initialOpen =
       {/* Dans le menu « Actions » de l'en-tête (plus de trois actions, COQUE.md § 3.3) : une ligne du menu. */}
       <button type="button" {...(menu ? { role: 'menuitem', className: 'vg-menu-item vg-menu-row' } : { className: 'btn btn-secondary' })}
         onClick={() => { menu?.close(); setOpen(true); }}>
-        <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />Nouvel événement
+        <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />{t('New event')}
       </button>
-      <Dialog open={open} onClose={close} title="Nouvel événement" kicker="Signalements et événements" width={680}>
+      <Dialog open={open} onClose={close} title={t('New event')} kicker={t('Reports and events')} width={680}>
         {open && (
           <EventFields mode="create" options={options} defaults={defaults} today={today} health={health} onCancel={close}
             onDone={(state) => { close(); if (state.id) router.push(`/evenements?sel=${encodeURIComponent(state.id)}`); }} />

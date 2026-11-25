@@ -1,8 +1,25 @@
 // Dictionnaire français de l'interface (VG-N01) : chaîne source anglaise → texte affiché en français. Une entrée par
-// chaîne passée à t() ; completeness.test.ts refuse une chaîne sans entrée (ou dont l'entrée recopie l'anglais sans
+// chaîne passée à t() ; les écrans repris ont leur dictionnaire dans ./screens/ ; completeness.test.ts refuse une chaîne sans entrée (ou dont l'entrée recopie l'anglais sans
 // figurer dans SAME_IN_FRENCH). Ordre : coque (barre latérale, en-tête, navigation), puis par écran à mesure de la reprise.
 
-export const FR: Record<string, string> = {
+import { COMMON_FR, COMMON_SAME } from './screens/common';
+import { DASHBOARD_FR } from './screens/dashboard';
+import { TODO_FR } from './screens/todo';
+import { EVENTS_FR, EVENTS_SAME } from './screens/events';
+import { ACTIONS_FR, ACTIONS_SAME } from './screens/actions';
+import { RISKS_FR, RISKS_SAME } from './screens/risks';
+
+/** Dictionnaires des écrans repris, dans l'ordre de la reprise (une chaîne commune à deux écrans va dans COMMON_FR). */
+export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
+  common: COMMON_FR,
+  dashboard: DASHBOARD_FR,
+  todo: TODO_FR,
+  events: EVENTS_FR,
+  actions: ACTIONS_FR,
+  risks: RISKS_FR,
+};
+
+const SHELL_FR: Record<string, string> = {
   // Navigation (src/i18n/nav.ts)
   Steering: 'Pilotage',
   Field: 'Terrain',
@@ -56,7 +73,27 @@ export const FR: Record<string, string> = {
   Actions: 'Actions',
   'New report': 'Nouveau signalement',
   Close: 'Fermer',
+
+  // Titres de page des écrans (SCREEN_TITLE_EN de src/i18n/nav.ts, traduits par PageHeader)
+  'QHSE dashboard': 'Tableau de bord QHSE',
+  'Single action plan': "Plan d'actions unique",
+  'Regulatory watch and inspections': 'Veille réglementaire et contrôles',
 };
 
+export const FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
+
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions'];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME];
+
+/** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
+export function conflictingEntries(): string[] {
+  const seen = new Map<string, string>(Object.entries(SHELL_FR));
+  const out: string[] = [];
+  for (const [name, dict] of Object.entries(SCREEN_DICTIONARIES)) {
+    for (const [en, fr] of Object.entries(dict)) {
+      if (seen.has(en) && seen.get(en) !== fr) out.push(`${name} : ${en}`);
+      seen.set(en, fr);
+    }
+  }
+  return out;
+}

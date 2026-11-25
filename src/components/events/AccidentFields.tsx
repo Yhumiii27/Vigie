@@ -6,6 +6,8 @@ import type { Option } from '@/lib/form-options';
 import { VICTIM_KINDS, VICTIM_KIND_KEYS } from '@/lib/domain';
 import { RestrictedNote } from './FieldGrid';
 import { INJURIES, declarationDuty } from '@/lib/rules/events';
+import { useI18n } from '@/i18n/client';
+import type { T } from '@/i18n/translate';
 
 /** Rubriques de la déclaration d'un AT transmises au formulaire (données de santé à null pour un rôle non habilité). */
 export type AccidentValues = {
@@ -17,9 +19,8 @@ export type AccidentValues = {
 };
 
 const VICTIM_OPTIONS = VICTIM_KIND_KEYS.map((k) => [k, VICTIM_KINDS[k]] as const);
-const REQUIRED = 'requis pour la qualification';
 /** Aide d'un champ exigé à la qualification (EVT-05). */
-export const requiredHint = (base?: ReactNode) => (base ? <>{base} · {REQUIRED}</> : `${REQUIRED[0].toUpperCase()}${REQUIRED.slice(1)}.`);
+export const requiredHint = (t: T, base?: ReactNode) => (base ? <>{base} · {t('required for qualification')}</> : t('Required for qualification.'));
 
 /**
  * Rubriques de la déclaration d'accident du travail (EVT-01, Cerfa 14463) dans le formulaire de la fiche : victime,
@@ -30,6 +31,7 @@ export const requiredHint = (base?: ReactNode) => (base ? <>{base} · {REQUIRED}
  * intérimaire ou victime extérieure : déclaré par l'ETT ou par son employeur (declarationDuty), date conservée si déjà saisie.
  */
 export function AccidentFields({ event: e, people, health, benign }: { event: AccidentValues; people: readonly Option[]; health: boolean; benign?: 'active' | 'escalated' | null }) {
+  const { t } = useI18n();
   const [victimKind, setVictimKind] = useState(e.victimKind ?? '');
   const [injury, setInjury] = useState(e.injury ?? '');
   const [declaredOn, setDeclaredOn] = useState(e.cpamDeclaredOn ?? '');
@@ -39,97 +41,97 @@ export function AccidentFields({ event: e, people, health, benign }: { event: Ac
 
   return (
     <>
-      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>Accident du travail · déclaration</h6>
-      <Field name="commute" label="Nature de l'accident"
-        hint="Accident de trajet (L. 411-2 CSS) : déclaré comme un accident du travail, mais exclu du TF1, du TG, des jours sans accident et de la pyramide.">
+      <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>{t('Occupational accident · declaration')}</h6>
+      <Field name="commute" label={t('Nature of the accident')}
+        hint={t('Commuting accident (L. 411-2 CSS): declared as an occupational accident, but excluded from TF1, TG, days without accident and the pyramid.')}>
         <input type="hidden" name="commuteField" value="1" />
-        <Checkbox name="commute" label="Accident de trajet (domicile – travail, ou travail – lieu de repas)" defaultChecked={!!e.commute} />
+        <Checkbox name="commute" label={t('Commuting accident (home – work, or work – place of meal)')} defaultChecked={!!e.commute} />
       </Field>
       <FormRow>
-        <Field name="victimKind" label="Victime" hint={!victimKind ? requiredHint() : undefined}>
-          <Select name="victimKind" options={VICTIM_OPTIONS} value={victimKind} onChange={(ev) => setVictimKind(ev.target.value)} placeholder="À préciser" />
+        <Field name="victimKind" label={t('Victim')} hint={!victimKind ? requiredHint(t) : undefined}>
+          <Select name="victimKind" options={VICTIM_OPTIONS} value={victimKind} onChange={(ev) => setVictimKind(ev.target.value)} placeholder={t('To be specified')} />
         </Field>
         {victimKind === 'salarie' && (
-          <Field name="victimId" label="Personne de l'effectif" hint={requiredHint()}>
-            <Select name="victimId" options={people} defaultValue={e.victimId ?? ''} placeholder="Choisir…" />
+          <Field name="victimId" label={t('Workforce member')} hint={requiredHint(t)}>
+            <Select name="victimId" options={people} defaultValue={e.victimId ?? ''} placeholder={t('Choose…')} />
           </Field>
         )}
         {declared && (
-          <Field name="victimName" label="Nom de la victime" hint={requiredHint()}>
-            <Input name="victimName" defaultValue={e.victimName ?? ''} maxLength={120} placeholder="Prénom et nom" autoComplete="off" />
+          <Field name="victimName" label={t('Victim’s name')} hint={requiredHint(t)}>
+            <Input name="victimName" defaultValue={e.victimName ?? ''} maxLength={120} placeholder={t('First and last name')} autoComplete="off" />
           </Field>
         )}
       </FormRow>
       {declared && (
-        <Field name="victimCompany" label={victimKind === 'interimaire' ? 'Entreprise de travail temporaire' : 'Entreprise ou organisme de la victime'}>
+        <Field name="victimCompany" label={victimKind === 'interimaire' ? t('Temporary work agency') : t('Victim’s company or organisation')}>
           <Input name="victimCompany" defaultValue={e.victimCompany ?? ''} maxLength={120} />
         </Field>
       )}
       <FormRow>
-        <Field name="workSchedule" label="Horaire de travail ce jour-là">
-          <Input name="workSchedule" defaultValue={e.workSchedule ?? ''} maxLength={80} placeholder="7 h 30 – 12 h · 13 h – 16 h 30" />
+        <Field name="workSchedule" label={t('Working hours that day')}>
+          <Input name="workSchedule" defaultValue={e.workSchedule ?? ''} maxLength={80} placeholder={t('7:30 – 12:00 · 13:00 – 16:30')} />
         </Field>
-        <Field name="knownAt" label="Connu de l'employeur le" hint="Point de départ du délai de 48 h. Vide : date d'enregistrement dans Vigie.">
+        <Field name="knownAt" label={t('Known to the employer on')} hint={t('Start of the 48-hour deadline. Empty: date recorded in Vigie.')}>
           <Input name="knownAt" type="datetime-local" defaultValue={e.knownAt ?? ''} />
         </Field>
       </FormRow>
-      <Field name="activity" label="Activité de la victime au moment de l'accident">
-        <Input name="activity" defaultValue={e.activity ?? ''} maxLength={300} placeholder="Tâche, poste, opération en cours" />
+      <Field name="activity" label={t('Victim’s activity at the time of the accident')}>
+        <Input name="activity" defaultValue={e.activity ?? ''} maxLength={300} placeholder={t('Task, station, operation in progress')} />
       </Field>
-      <Field name="circumstances" label="Circonstances détaillées" hint={requiredHint('Les faits seulement : la nature et le siège des lésions ont leurs champs réservés.')}>
+      <Field name="circumstances" label={t('Detailed circumstances')} hint={requiredHint(t, t('Facts only: the nature and site of lesions have their restricted fields.'))}>
         <TextArea name="circumstances" defaultValue={e.circumstances ?? ''} rows={3} maxLength={4000} />
       </Field>
       <FormRow>
-        <Field name="witnesses" label="Témoins">
-          <TextArea name="witnesses" defaultValue={e.witnesses ?? ''} rows={2} maxLength={1000} placeholder="Nom, entreprise, coordonnées" />
+        <Field name="witnesses" label={t('Witnesses')}>
+          <TextArea name="witnesses" defaultValue={e.witnesses ?? ''} rows={2} maxLength={1000} placeholder={t('Name, company, contact details')} />
         </Field>
-        <Field name="thirdParty" label="Tiers impliqué">
-          <Input name="thirdParty" defaultValue={e.thirdParty ?? ''} maxLength={500} placeholder="Nom, adresse, assureur ; vide : aucun" />
+        <Field name="thirdParty" label={t('Third party involved')}>
+          <Input name="thirdParty" defaultValue={e.thirdParty ?? ''} maxLength={500} placeholder={t('Name, address, insurer; empty: none')} />
         </Field>
       </FormRow>
 
       {!health ? <RestrictedNote /> : (
         <>
           <h6 className="vg-h6" style={{ margin: '4px 0 -4px' }}>
-            <i className="ph ph-lock-simple" style={{ fontSize: 12, marginRight: 4 }} aria-hidden />Données de santé · animateur QHSE et direction
+            <i className="ph ph-lock-simple" style={{ fontSize: 12, marginRight: 4 }} aria-hidden />{t('Health data · QHSE coordinator and senior management')}
           </h6>
           <FormRow>
-            <Field name="injury" label="Blessure"
-              hint={benign === 'active' ? 'Inscrit au registre des accidents bénins : « Basculer en déclaration CPAM » depuis la fiche.' : benign === 'escalated' ? 'Basculé en déclaration CPAM depuis le registre.' : undefined}>
-              <Select name="injury" options={INJURIES} value={injury} onChange={(ev) => setInjury(ev.target.value)} placeholder="Non précisée" />
+            <Field name="injury" label={t('Injury')}
+              hint={benign === 'active' ? t('Entered in the minor accident register: “Switch to CPAM declaration” from the sheet.') : benign === 'escalated' ? t('Switched to CPAM declaration from the register.') : undefined}>
+              <Select name="injury" options={INJURIES} value={injury} onChange={(ev) => setInjury(ev.target.value)} placeholder={t('Not specified')} />
             </Field>
-            <Field name="lostDays" label="Jours perdus" hint={injury === 'arret' ? "Jours calendaires d'arrêt (taux de gravité)." : 'Uniquement pour un accident avec arrêt.'}>
+            <Field name="lostDays" label={t('Days lost')} hint={injury === 'arret' ? t('Calendar days of sick leave (severity rate).') : t('Only for a lost-time accident.')}>
               <Input name="lostDays" type="number" min={0} step={1} inputMode="numeric" defaultValue={e.lostDays ?? ''} disabled={injury !== 'arret'} />
             </Field>
           </FormRow>
           <FormRow>
-            <Field name="lesionNature" label="Nature des lésions">
-              <Input name="lesionNature" defaultValue={e.lesionNature ?? ''} maxLength={200} placeholder="Coupure, entorse, brûlure…" />
+            <Field name="lesionNature" label={t('Nature of lesions')}>
+              <Input name="lesionNature" defaultValue={e.lesionNature ?? ''} maxLength={200} placeholder={t('Cut, sprain, burn…')} />
             </Field>
-            <Field name="lesionSite" label="Siège des lésions">
-              <Input name="lesionSite" defaultValue={e.lesionSite ?? ''} maxLength={200} placeholder="Main droite, cheville gauche…" />
+            <Field name="lesionSite" label={t('Site of lesions')}>
+              <Input name="lesionSite" defaultValue={e.lesionSite ?? ''} maxLength={200} placeholder={t('Right hand, left ankle…')} />
             </Field>
           </FormRow>
-          <Field name="careGiven" label="Soins dispensés">
-            <TextArea name="careGiven" defaultValue={e.careGiven ?? ''} rows={2} maxLength={1000} placeholder="Poste de secours, médecin, urgences, transport…" />
+          <Field name="careGiven" label={t('Care given')}>
+            <TextArea name="careGiven" defaultValue={e.careGiven ?? ''} rows={2} maxLength={1000} placeholder={t('First-aid station, doctor, emergency department, transport…')} />
           </Field>
           {!showDeclaration && benign !== 'active' && duty !== 'cpam' && (
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
               {duty === 'ett'
-                ? "Intérimaire : l'entreprise de travail temporaire déclare l'accident. Informez-la sous 24 h (copie à la CARSAT et à l'inspection du travail), puis « Indiquer l'information de l'ETT » sur la fiche."
-                : "Victime extérieure : son employeur déclare l'accident. « Indiquer la déclaration par l'employeur » sur la fiche avant la clôture."}
+                ? t('Temp worker: the temporary work agency declares the accident. Inform it within 24 hours (copy to the CARSAT and the labour inspectorate), then “Record that the agency was informed” on the sheet.')
+                : t('External victim: their employer declares the accident. “Record the declaration by the employer” on the sheet before closure.')}
             </p>
           )}
           {showDeclaration && (
             <FormRow>
-              <Field name="cpamDeclaredOn" label="Déclaration CPAM"
+              <Field name="cpamDeclaredOn" label={t('CPAM declaration')}
                 hint={injury === 'soins'
-                  ? "Accident bénin : inscription au registre ou déclaration, sous 48 h (dimanches et fériés non compris). Vide : non déclaré."
-                  : "Date d'envoi de la déclaration (48 h, dimanches et fériés non compris). Vide : à déclarer."}>
+                  ? t('Minor accident: entry in the register or declaration, within 48 hours (Sundays and public holidays excluded). Empty: not declared.')
+                  : t('Date the declaration was sent (48 hours, Sundays and public holidays excluded). Empty: to be declared.')}>
                 <Input name="cpamDeclaredOn" type="date" value={declaredOn} onChange={(ev) => setDeclaredOn(ev.target.value)} />
               </Field>
               {declaredOn && (
-                <Field name="reservesOn" label="Réserves motivées adressées le" hint="Facultatives : 10 jours francs après la déclaration.">
+                <Field name="reservesOn" label={t('Reasoned reservations sent on')} hint={t('Optional: 10 clear days after the declaration.')}>
                   <Input name="reservesOn" type="date" defaultValue={e.reservesOn ?? ''} />
                 </Field>
               )}
