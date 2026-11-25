@@ -1,10 +1,9 @@
 'use client';
 
-import { Binoculars } from '@phosphor-icons/react/dist/ssr';
 import type { ReactNode } from 'react';
 import { StatusToaster } from './feedback';
 import { Sidebar, type SidebarProps } from './Sidebar';
-import { AppShell as CoqueShell, MobileTopBar } from './coque';
+import { AppShell as CoqueShell, MobileTopBar, ToolLogo } from './coque';
 import { Prefs } from './Prefs';
 import type { Lang } from '@/i18n/translate';
 import type { Theme } from '@/lib/theme';
@@ -18,7 +17,7 @@ import type { Theme } from '@/lib/theme';
 export function AppShell({ sidebar, lang, theme, children }: { sidebar: SidebarProps; lang: Lang; theme: Theme; children: ReactNode }) {
   return (
     <CoqueShell className="vg-app" sidebar={<Sidebar {...sidebar} />}
-      topbar={<MobileTopBar name="Vigie" icon={Binoculars} prefs={<Prefs lang={lang} theme={theme} />} />}
+      topbar={<MobileTopBar name="Vigie" logo={<ToolLogo code="vigie" size={20} />} prefs={<Prefs lang={lang} theme={theme} />} />}
       after={<StatusToaster />}>
       {children}
     </CoqueShell>
