@@ -7,9 +7,10 @@ import { RISK_ACTION_THRESHOLD, RISK_LEVELS, SEVERITY, riskLevel } from '@/lib/d
 import type { RiskView, WorkUnitView } from '@/lib/data/risks';
 import { saveRisk } from '@/server/risks';
 import { hazardSuggestions } from '@/lib/hazard-families';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 const GRAVITY: [string, string][] = [1, 2, 3, 4].map((n) => [String(n), SEVERITY[n]]);
-const PROBABILITY: [string, string][] = [['1', 'P1 · improbable'], ['2', 'P2 · possible'], ['3', 'P3 · probable'], ['4', 'P4 · très probable']];
 
 /** Cotation G × P sur la couleur de son niveau (même rendu que le tableau des risques). */
 export function Cotation({ g, p, style }: { g: number; p: number; style?: CSSProperties }) {
@@ -53,6 +54,8 @@ export function RiskFields({ units, defaults = {}, reviewPrompt, hazards, onDone
   onDone: () => void;
   onCancel?: () => void;
 }) {
+  const { t } = useI18n();
+  const PROBABILITY: [string, string][] = [['1', t('P1 · unlikely')], ['2', t('P2 · possible')], ['3', t('P3 · likely')], ['4', t('P4 · very likely')]];
   const listId = useId();
   const [g, setG] = useState(defaults.gravity ?? 2);
   const [p, setP] = useState(defaults.probability ?? 2);
@@ -62,48 +65,49 @@ export function RiskFields({ units, defaults = {}, reviewPrompt, hazards, onDone
   const unitOptions = units.map((u) => [u.id, sites.size > 1 ? `${u.label} · ${u.site}` : u.label] as const);
   const editing = defaults.id != null;
   return (
-    <ActionForm action={saveRisk} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : 'Ajouter le risque'} hidden={{ id: defaults.id, version: defaults.version }}>
-      <Field name="unitId" label="Unité de travail">
+    <ActionForm action={saveRisk} onDone={onDone} onCancel={onCancel} submitLabel={editing ? t('Save') : t('Add the risk')} hidden={{ id: defaults.id, version: defaults.version }}>
+      <Field name="unitId" label={t('Work unit')}>
         <Select name="unitId" options={unitOptions} defaultValue={defaults.unitId} />
       </Field>
       {/* DUE-18 : familles de dangers usuelles (INRS ED 840) et libellés déjà employés, proposées sans être imposées. */}
-      <Field name="hazard" label="Danger" hint="Famille de danger : choisissez une suggestion (familles INRS) ou saisissez un autre libellé.">
+      <Field name="hazard" label={t('Hazard')} hint={t('Hazard family: choose a suggestion (INRS families) or type another label.')}>
         <Input name="hazard" defaultValue={defaults.hazard} maxLength={120} autoFocus={!editing} list={listId} autoComplete="off" />
       </Field>
       <datalist id={listId}>{hazardSuggestions(hazards).map((h) => <option key={h} value={h} />)}</datalist>
-      <Field name="situation" label="Situation dangereuse">
-        <TextArea name="situation" defaultValue={defaults.situation} rows={2} maxLength={500} placeholder="Qui est exposé, à quoi, dans quelle activité…" />
+      <Field name="situation" label={t('Hazardous situation')}>
+        <TextArea name="situation" defaultValue={defaults.situation} rows={2} maxLength={500} placeholder={t('Who is exposed, to what, in which activity…')} />
       </Field>
       <FormRow cols={3}>
-        <Field name="gravity" label="Gravité">
+        <Field name="gravity" label={t('Severity')}>
           <Select name="gravity" options={GRAVITY} value={String(g)} onChange={(e) => { const v = +e.target.value; setG(v); setRg((r) => Math.min(r, v)); }} />
         </Field>
-        <Field name="probability" label="Probabilité">
+        <Field name="probability" label={t('Probability')}>
           <Select name="probability" options={PROBABILITY} value={String(p)} onChange={(e) => { const v = +e.target.value; setP(v); setRp((r) => Math.min(r, v)); }} />
         </Field>
-        <LiveCotation label="Cotation brute" g={g} p={p} hint={g * p >= RISK_ACTION_THRESHOLD ? 'Action de réduction obligatoire.' : undefined} />
+        <LiveCotation label={t('Gross rating')} g={g} p={p} hint={g * p >= RISK_ACTION_THRESHOLD ? t('Reduction action mandatory.') : undefined} />
       </FormRow>
-      <Field name="existingMeasures" label="Mesures existantes">
-        <TextArea name="existingMeasures" defaultValue={defaults.existingMeasures} rows={2} maxLength={1000} placeholder="Protections collectives, EPI, consignes, formations…" />
+      <Field name="existingMeasures" label={t('Existing measures')}>
+        <TextArea name="existingMeasures" defaultValue={defaults.existingMeasures} rows={2} maxLength={1000} placeholder={t('Collective protection, PPE, instructions, training…')} />
       </Field>
       <FormRow cols={3}>
-        <Field name="residualGravity" label="Gravité résiduelle">
+        <Field name="residualGravity" label={t('Residual severity')}>
           <Select name="residualGravity" options={GRAVITY.slice(0, g)} value={String(rg)} onChange={(e) => setRg(+e.target.value)} />
         </Field>
-        <Field name="residualProbability" label="Probabilité résiduelle">
+        <Field name="residualProbability" label={t('Residual probability')}>
           <Select name="residualProbability" options={PROBABILITY.slice(0, p)} value={String(rp)} onChange={(e) => setRp(+e.target.value)} />
         </Field>
-        <LiveCotation label="Risque résiduel" g={rg} p={rp} hint={rg * rp >= RISK_ACTION_THRESHOLD ? `Résiduel ≥ ${RISK_ACTION_THRESHOLD} : réduction encore nécessaire.` : undefined} />
+        <LiveCotation label={t('Residual risk')} g={rg} p={rp} hint={rg * rp >= RISK_ACTION_THRESHOLD ? fill(t('Residual ≥ {n}: reduction still needed.'), { n: RISK_ACTION_THRESHOLD }) : undefined} />
       </FormRow>
-      {reviewPrompt && <Checkbox name="residualReviewed" label="Résiduel recoté après vérification d'efficacité" defaultChecked />}
+      {reviewPrompt && <Checkbox name="residualReviewed" label={t('Residual re-rated after the effectiveness check')} defaultChecked />}
     </ActionForm>
   );
 }
 
 /** Bouton « Ajouter un risque » : l'unité sélectionnée est proposée par défaut. */
 export function AddRiskButton({ units, unitId, hazards }: { units: Pick<WorkUnitView, 'id' | 'label' | 'site'>[]; unitId?: string; hazards?: readonly string[] }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Ajouter un risque" icon="ph-plus" title="Ajouter un risque" kicker="Document unique" width={600}>
+    <DialogButton label={t('Add a risk')} icon="ph-plus" title={t('Add a risk')} kicker={t('Single document')} width={600}>
       {(close) => <RiskFields units={units} defaults={{ unitId }} hazards={hazards} onDone={close} onCancel={close} />}
     </DialogButton>
   );

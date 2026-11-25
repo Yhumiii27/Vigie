@@ -9,6 +9,8 @@ import { editOptions } from '@/components/actions/detail/form-helpers';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref } from '@/lib/action-rules';
 import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { TONE, type Tone } from '@/lib/domain';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** Action liée à l'événement, telle que la fiche l'affiche (plan d'actions QSE : libellé court, avancement, priorité). */
 export type EventActionItem = {
@@ -33,6 +35,7 @@ export function EventActions({ eventId, items, options, canCreate, newDefaults, 
   /** Raison pour laquelle l'ajout d'action est fermé (étape « Efficacité vérifiée » atteinte, classé sans suite). */
   addBlocked?: string | null;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [editing, setEditing] = useState<EventActionItem | null>(null);
   const close = () => setEditing(null);
@@ -43,26 +46,26 @@ export function EventActions({ eventId, items, options, canCreate, newDefaults, 
   return (
     <div style={{ display: 'grid', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <h6 className="vg-h6">Actions</h6>
+        <h6 className="vg-h6">{t('Actions')}</h6>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           {canCreate ? (
             // Le bouton désactivé ne reçoit pas le survol : l'infobulle est portée par son conteneur.
             <span title={addBlocked ?? undefined} style={{ display: 'inline-flex' }}>
-              <NewActionButton options={options} defaults={newDefaults} label="Créer l'action" className="btn btn-secondary vg-btn-sm"
+              <NewActionButton options={options} defaults={newDefaults} label={t('Create the action')} className="btn btn-secondary vg-btn-sm"
                 disabled={!!addBlocked} tooltip={addBlocked ?? undefined} />
             </span>
           ) : !addBlocked && (
             <span className="vg-muted" style={{ fontSize: 12 }}>{QHSE_ONLY_CREATE_MESSAGE}</span>
           )}
-          <Link href={planHref} className="vg-link">Plan d&apos;actions →</Link>
+          <Link href={planHref} className="vg-link">{t('Action plan →')}</Link>
         </span>
       </div>
       {items.length > 0 ? (
         <table className="table" style={{ fontSize: 12.5 }}>
-          <thead><tr><th>N°</th><th>Action</th><th>Priorité</th><th>Responsable</th><th>Date cible</th><th>Avancement</th></tr></thead>
+          <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Priority')}</th><th>{t('Owner')}</th><th>{t('Target date')}</th><th>{t('Progress')}</th></tr></thead>
           <tbody>
             {items.map((a) => (
-              <tr key={a.id} className="is-clickable" tabIndex={0} title={a.edit ? `Modifier ${a.id}` : `Voir ${a.id} dans le plan d'actions`}
+              <tr key={a.id} className="is-clickable" tabIndex={0} title={a.edit ? fill(t('Edit {id}'), { id: a.id }) : fill(t('See {id} in the action plan'), { id: a.id })}
                 onClick={() => open(a)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(a); } }}>
                 <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{a.id}</td>
                 <td>{a.label}</td>
@@ -80,13 +83,13 @@ export function EventActions({ eventId, items, options, canCreate, newDefaults, 
         </div>
       )}
 
-      <Dialog open={!!editing} onClose={close} title={editing ? `Modifier ${editing.id}` : ''} kicker="Plan d'actions unique" width={720}>
+      <Dialog open={!!editing} onClose={close} title={editing ? fill(t('Edit {id}'), { id: editing.id }) : ''} kicker={t('Single action plan')} width={720}>
         {editing?.edit && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--color-neutral-400)' }}>
               <span className="tag" style={{ background: TONE[editing.tone].bg, color: TONE[editing.tone].fg }}>{editing.statusLabel}</span>
-              <span>L&apos;avancement, la vérification et le fil de commentaires sont sur la fiche du plan d&apos;actions.</span>
-              <Link href={actionHref(editing.id)} className="vg-link" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>Ouvrir →</Link>
+              <span>{t('Progress, verification and the comment thread are on the action plan sheet.')}</span>
+              <Link href={actionHref(editing.id)} className="vg-link" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{t('Open →')}</Link>
             </div>
             <ActionFields options={editOptions(options, { pilotId: editing.edit.pilotId ?? '', pilot: editing.pilot, siteId: editing.edit.siteId ?? null, site: editing.site ?? editing.edit.siteId ?? '' })}
               defaults={editing.edit} onDone={close} onCancel={close} />

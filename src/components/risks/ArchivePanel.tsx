@@ -10,6 +10,8 @@ import { RiskSheet, archivedLabel, riskSheetHeading, type RiskSheetView } from '
 import { rowOpener } from './RiskTable';
 import { RestoreUnitButton } from './UnitDialogs';
 import { ScrollX } from '@/components/ui';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
 
@@ -34,6 +36,7 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
   /** Lien profond ?risque=<id> vers un risque archivé : fiche ouverte au chargement. */
   initialRiskId?: number;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState<{ id: number; view: RiskSheetView } | null>(
     initialRiskId != null && risks.some((r) => r.id === initialRiskId) ? { id: initialRiskId, view: 'sheet' } : null,
   );
@@ -44,21 +47,21 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
   const current = open ? risks.find((r) => r.id === open.id) ?? null : null;
   const currentUnit = current ? unitOf.get(current.unitId) : undefined;
   const close = () => setOpen(null);
-  const heading = current && currentUnit && open ? riskSheetHeading(current, currentUnit.unit, open.view) : null;
+  const heading = current && currentUnit && open ? riskSheetHeading(t, current, currentUnit.unit, open.view) : null;
   const unitName = (u: { label: string; site: string }) => (showSite ? `${u.label} · ${u.site.split(' — ')[0]}` : u.label);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
       <div className="card" style={{ gap: 10 }}>
-        <div className="card-kicker">Unités de travail archivées{archivedUnits.length ? ` · ${archivedUnits.length}` : ''}</div>
+        <div className="card-kicker">{t('Archived work units')}{archivedUnits.length ? ` · ${archivedUnits.length}` : ''}</div>
         {archivedUnits.length ? (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 10 }}>
             {archivedUnits.map((u) => (
               <li key={u.id} style={{ display: 'grid', gap: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                   <span style={{ fontWeight: 500 }}>{unitName(u)}</span>
-                  <span style={muted}>{u.count ? `${u.count} risque${u.count > 1 ? 's' : ''} archivé${u.count > 1 ? 's' : ''}` : 'aucun risque'}</span>
-                  <span style={{ ...muted, flex: 1, minWidth: 200 }}>{archivedLabel(u.archived, 'Archivée')}{u.archived.reason ? ` · ${u.archived.reason}` : ''}</span>
+                  <span style={muted}>{u.count ? fill(u.count > 1 ? t('{n} archived risks') : t('{n} archived risk'), { n: u.count }) : t('no risk')}</span>
+                  <span style={{ ...muted, flex: 1, minWidth: 200 }}>{archivedLabel(t, u.archived, 'unit')}{u.archived.reason ? ` · ${u.archived.reason}` : ''}</span>
                   {canApprove && <RestoreUnitButton unit={u} residual={residual} />}
                 </div>
                 <LazyChangeLog entity="work_unit" id={u.id} />
@@ -66,33 +69,33 @@ export function ArchivePanel({ risks, units, archivedUnits, canApprove, options,
             ))}
           </ul>
         ) : (
-          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucune unité de travail archivée.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('No archived work unit.')}</div>
         )}
       </div>
 
       <div className="card" style={{ padding: '6px 14px 10px' }}>
-        <ScrollX label="Risques archivés">
+        <ScrollX label={t('Archived risks')}>
           <table className="table" style={{ fontSize: 12.5, minWidth: 760 }}>
-            <thead><tr><th>Unité</th><th>Danger</th><th>Situation dangereuse</th><th>Cotation brute</th><th>Risque résiduel</th><th>Archivage</th></tr></thead>
+            <thead><tr><th>{t('Unit')}</th><th>{t('Hazard')}</th><th>{t('Hazardous situation')}</th><th>{t('Gross rating')}</th><th>{t('Residual risk')}</th><th>{t('Archiving')}</th></tr></thead>
             <tbody>
               {risks.map((r) => {
                 const u = unitOf.get(r.unitId);
                 return (
                   <tr key={r.id} {...rowOpener(() => setOpen({ id: r.id, view: 'sheet' }))} style={{ opacity: 0.85 }}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{u ? unitName(u.unit) : r.unitId}{u?.archived && <div style={muted}>unité archivée</div>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{u ? unitName(u.unit) : r.unitId}{u?.archived && <div style={muted}>{t('archived unit')}</div>}</td>
                     <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{r.hazard}</td>
                     <td style={{ color: 'var(--color-neutral-300)' }}>{r.situation}</td>
                     <td><Cotation g={r.gravity} p={r.probability} /></td>
                     <td><Cotation g={r.residualGravity} p={r.residualProbability} /></td>
                     <td style={{ minWidth: 180 }}>
-                      {r.archived && <span style={muted}>{archivedLabel(r.archived)}</span>}
+                      {r.archived && <span style={muted}>{archivedLabel(t, r.archived)}</span>}
                       {r.archived?.reason && <div style={{ fontSize: 12, color: 'var(--color-neutral-300)', marginTop: 2 }}>{r.archived.reason}</div>}
                     </td>
                   </tr>
                 );
               })}
               {!risks.length && (
-                <tr><td colSpan={6} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>Aucun risque archivé.</td></tr>
+                <tr><td colSpan={6} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>{t('No archived risk.')}</td></tr>
               )}
             </tbody>
           </table>

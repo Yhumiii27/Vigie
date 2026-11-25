@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV, SCREENS, type ScreenKey } from '@/lib/domain';
-import { NAV_SECTION_EN, SCREEN_LABEL_EN } from './nav';
-import { FR, SAME_IN_FRENCH } from './fr';
+import { NAV_SECTION_EN, SCREEN_LABEL_EN, SCREEN_TITLE_EN } from './nav';
+import { FR, SAME_IN_FRENCH, conflictingEntries } from './fr';
 import { fill, frExact, langCookie, langOf, makeT } from './translate';
 
 // VG-N01 : toute chaîne passée à t() dans un fichier qui traduit (useI18n / getI18n) a son entrée française, différente de
@@ -30,6 +30,15 @@ describe('traduction de l’interface (VG-N01)', () => {
   it('une entrée qui recopie l’anglais est relue (SAME_IN_FRENCH)', () => {
     const same = Object.entries(FR).filter(([en, fr]) => en === fr && !SAME_IN_FRENCH.includes(en)).map(([en]) => en);
     expect(same).toEqual([]);
+  });
+
+  it('une chaîne définie dans deux dictionnaires y a la même traduction', () => {
+    expect(conflictingEntries()).toEqual([]);
+  });
+
+  it('les titres de page traduits en français redonnent SCREENS.title', () => {
+    const t = makeT('fr');
+    for (const [k, en] of Object.entries(SCREEN_TITLE_EN)) expect(t(en!), k).toBe(SCREENS[k as ScreenKey].title);
   });
 
   it('la navigation traduite en français redonne les libellés de domain.ts', () => {

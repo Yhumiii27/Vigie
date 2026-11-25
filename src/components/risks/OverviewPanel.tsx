@@ -2,13 +2,15 @@ import Link from 'next/link';
 import { SegLinks, ToneTag } from '@/components/ui';
 import { RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, TONE, riskLevel } from '@/lib/domain';
 import type { DuerpOverview } from './overview';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 // Vue d'ensemble du DUERP toutes unités (DUE-17) : matrice globale des unités du site sélectionné, synthèse par unité et
 // risques prioritaires (résiduel ≥ seuil ou alerte), consultation pour tous les rôles de l'écran (DUERP lisible par tous).
 
 const muted = { fontSize: 11.5, color: 'var(--vg-text-muted)' } as const;
 
-export function OverviewPanel({ data, residual, brutHref, residualHref, unitHref, scopeLabel }: {
+export async function OverviewPanel({ data, residual, brutHref, residualHref, unitHref, scopeLabel }: {
   data: DuerpOverview;
   residual: boolean;
   brutHref: string;
@@ -16,26 +18,27 @@ export function OverviewPanel({ data, residual, brutHref, residualHref, unitHref
   unitHref: (unitId: string) => string;
   scopeLabel: string;
 }) {
+  const { t } = await getI18n();
   const { matrix, totals, priority, byUnit } = data;
   const stats = [
-    { v: totals.risks, k: `risques évalués · ${totals.units} unité${totals.units > 1 ? 's' : ''}`, color: 'var(--color-text)' },
-    { v: totals.high, k: 'élevés ou critiques (brut)', color: totals.high ? RISK_LEVELS[2].dot : 'var(--color-text)' },
-    { v: totals.residualHigh, k: `résiduels ≥ ${RISK_ACTION_THRESHOLD}`, color: totals.residualHigh ? TONE.danger.dot : TONE.ok.dot },
-    { v: totals.toDefine, k: 'à définir (sans action)', color: totals.toDefine ? TONE.danger.dot : 'var(--color-text)' },
+    { v: totals.risks, k: `${t('risks assessed')} · ${fill(totals.units > 1 ? t('{n} units') : t('{n} unit'), { n: totals.units })}`, color: 'var(--color-text)' },
+    { v: totals.high, k: t('high or critical (gross)'), color: totals.high ? RISK_LEVELS[2].dot : 'var(--color-text)' },
+    { v: totals.residualHigh, k: fill(t('residual ≥ {n}'), { n: RISK_ACTION_THRESHOLD }), color: totals.residualHigh ? TONE.danger.dot : TONE.ok.dot },
+    { v: totals.toDefine, k: t('to be defined (no action)'), color: totals.toDefine ? TONE.danger.dot : 'var(--color-text)' },
   ];
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
         <div className="card" style={{ gap: 10, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="card-title" style={{ fontSize: 14 }}>Matrice toutes unités</span>
+            <span className="card-title" style={{ fontSize: 14 }}>{t('Matrix of all units')}</span>
             <SegLinks size={11.5} pad="3px 9px" options={[
-              { href: brutHref, label: 'Brut', on: !residual },
-              { href: residualHref, label: 'Résiduel', on: residual },
+              { href: brutHref, label: t('Gross'), on: !residual },
+              { href: residualHref, label: t('Residual'), on: residual },
             ]} />
           </div>
           <table className="vg-risk-matrix" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 4, fontSize: 12 }}>
-            <caption className="vg-sr-only">{`Nombre de risques par gravité et probabilité (${residual ? 'cotation résiduelle' : 'cotation brute'}), toutes unités`}</caption>
+            <caption className="vg-sr-only">{residual ? t('Number of risks by severity and probability (residual rating), all units') : t('Number of risks by severity and probability (gross rating), all units')}</caption>
             <thead>
               <tr><td />{[1, 2, 3, 4].map((p) => <th key={p} scope="col" style={{ ...muted, fontWeight: 400 }}>P{p}</th>)}</tr>
             </thead>
@@ -60,7 +63,7 @@ export function OverviewPanel({ data, residual, brutHref, residualHref, unitHref
           </div>
         </div>
         <div className="card" style={{ gap: 10 }}>
-          <div className="card-kicker">Vue d&apos;ensemble · {scopeLabel}</div>
+          <div className="card-kicker">{fill(t('Overview · {scope}'), { scope: scopeLabel })}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
             {stats.map((k) => (
               <div key={k.k} style={{ display: 'grid', gap: 2 }}>
@@ -71,17 +74,17 @@ export function OverviewPanel({ data, residual, brutHref, residualHref, unitHref
           </div>
           {(totals.residualStillHigh > 0 || totals.toReview > 0) && (
             <span style={{ fontSize: 12, color: TONE.warn.fg }}>
-              {[totals.residualStillHigh && `${totals.residualStillHigh} au résiduel encore élevé`, totals.toReview && `${totals.toReview} résiduel${totals.toReview > 1 ? 's' : ''} à recoter`].filter(Boolean).join(' · ')}
+              {[totals.residualStillHigh && fill(t('{n} with a residual still high'), { n: totals.residualStillHigh }), totals.toReview && fill(totals.toReview > 1 ? t('{n} residuals to re-rate') : t('{n} residual to re-rate'), { n: totals.toReview })].filter(Boolean).join(' · ')}
             </span>
           )}
         </div>
       </div>
 
       <div className="card" style={{ padding: '10px 14px', gap: 8 }}>
-        <span className="card-title" style={{ fontSize: 14 }}>Synthèse par unité de travail</span>
+        <span className="card-title" style={{ fontSize: 14 }}>{t('Summary by work unit')}</span>
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12.5, minWidth: 560 }}>
-            <thead><tr><th>Unité</th><th>Risques</th><th>Élevés (brut)</th><th>Résiduels ≥ {RISK_ACTION_THRESHOLD}</th><th>Alertes</th><th>Niveau brut le plus élevé</th></tr></thead>
+            <thead><tr><th>{t('Unit')}</th><th>{t('Risks')}</th><th>{t('High (gross)')}</th><th>{fill(t('Residuals ≥ {n}'), { n: RISK_ACTION_THRESHOLD })}</th><th>{t('Alerts')}</th><th>{t('Highest gross level')}</th></tr></thead>
             <tbody>
               {byUnit.map((u) => (
                 <tr key={u.id}>
@@ -99,14 +102,14 @@ export function OverviewPanel({ data, residual, brutHref, residualHref, unitHref
       </div>
 
       <div className="card" style={{ padding: '10px 14px', gap: 8 }}>
-        <span className="card-title" style={{ fontSize: 14 }}>Risques prioritaires</span>
-        <span style={muted}>{`Résiduel ≥ ${RISK_ACTION_THRESHOLD}, ou cotation brute ≥ ${RISK_ACTION_THRESHOLD} sans action de réduction ; du plus élevé au plus faible.`}</span>
+        <span className="card-title" style={{ fontSize: 14 }}>{t('Priority risks')}</span>
+        <span style={muted}>{fill(t('Residual ≥ {n}, or gross rating ≥ {n} without a reduction action; from highest to lowest.'), { n: RISK_ACTION_THRESHOLD })}</span>
         {priority.length === 0 ? (
-          <span style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>Aucun risque prioritaire.</span>
+          <span style={{ fontSize: 12.5, color: 'var(--color-neutral-400)' }}>{t('No priority risk.')}</span>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ fontSize: 12.5, minWidth: 620 }}>
-              <thead><tr><th>Unité</th><th>Danger</th><th>Brut</th><th>Résiduel</th><th>Alerte</th></tr></thead>
+              <thead><tr><th>{t('Unit')}</th><th>{t('Hazard')}</th><th>{t('Gross')}</th><th>{t('Residual')}</th><th>{t('Alert')}</th></tr></thead>
               <tbody>
                 {priority.map((r) => (
                   <tr key={r.id}>

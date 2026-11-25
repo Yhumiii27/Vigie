@@ -13,48 +13,49 @@ import { verifyAction } from '@/server/plan-ui';
 import {
   DOMAIN_OPTIONS, FOLLOW_UP_PREFIX, PRIORITY_OPTIONS, RISK_LEVEL_OPTIONS, VERIFY_METHOD_OPTIONS, followUpPrefill, numberField,
 } from './form-helpers';
-
-const RESULTS = [['efficace', 'Efficace'], ['non_efficace', 'Non efficace']] as const;
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 export function VerifyForm({ detail, from, options, today, verifyDefault, onDone, onCancel }: {
   /** Avancement affiché à l'ouverture (Terminée) : un avancement changé entre-temps fait refuser la vérification. */
   detail: ActionDetailView; from: Avancement; options: ActionFormOptions; today: string; verifyDefault: string; onDone: (s: FormState) => void; onCancel: () => void;
 }) {
+  const { t } = useI18n();
+  const RESULTS = [['efficace', t('Effective')], ['non_efficace', t('Not effective')]] as const;
   const [closedOn, setClosedOn] = useState(today);
   const [note, setNote] = useState('');
   const [result, setResult] = useState('');
   const [newRisk, setNewRisk] = useState(false);
   const minClosed = detail.doneOn ?? detail.openedOn;
   return (
-    <ActionForm action={verifyAction} hidden={{ id: detail.id, from }} submitLabel="Enregistrer la vérification" submitIcon="ph-seal-check"
+    <ActionForm action={verifyAction} hidden={{ id: detail.id, from }} submitLabel={t('Save the verification')} submitIcon="ph-seal-check"
       onDone={onDone} onCancel={onCancel}>
       <FormRow>
-        <Field name="closedOn" label="Date de vérification" hint="Date de clôture de l’action.">
+        <Field name="closedOn" label={t('Verification date')} hint={t('Closure date of the action.')}>
           <Input name="closedOn" type="date" value={closedOn} min={minClosed} max={today} required onChange={(e) => setClosedOn(e.target.value)} />
         </Field>
-        <Field name="verifyMethod" label="Nature de la vérification">
-          <Select name="verifyMethod" options={VERIFY_METHOD_OPTIONS} defaultValue="" placeholder="Choisir…" required autoFocus />
+        <Field name="verifyMethod" label={t('Nature of the verification')}>
+          <Select name="verifyMethod" options={VERIFY_METHOD_OPTIONS} defaultValue="" placeholder={t('Choose…')} required autoFocus />
         </Field>
       </FormRow>
-      <Field name="efficacyNote" label="Constat de vérification" hint="Ce qui a été vérifié, comment et avec quel résultat.">
+      <Field name="efficacyNote" label={t('Verification finding')} hint={t('What was verified, how and with what result.')}>
         <TextArea name="efficacyNote" rows={3} maxLength={ACTION_TEXT_MAX} required value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>
       <FormRow>
-        <Field name="effective" label="Résultat">
+        <Field name="effective" label={t('Result')}>
           <Radios name="effective" options={RESULTS} value={result} onChange={setResult} />
         </Field>
-        <Field name="hours" label="Pointage (h)" hint="Temps réellement passé ; corrigeable ensuite.">
+        <Field name="hours" label={t('Time logged (h)')} hint={t('Time actually spent; can be corrected later.')}>
           <Input name="hours" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={numberField(detail.hours)} />
         </Field>
       </FormRow>
-      <Field name="newRisk" label="Remarque du QHSE">
-        <Checkbox name="newRisk" label="Nouveau risque généré" checked={newRisk} onChange={setNewRisk} />
+      <Field name="newRisk" label={t('QHSE remark')}>
+        <Checkbox name="newRisk" label={t('New risk generated')} checked={newRisk} onChange={setNewRisk} />
       </Field>
 
       {(result === 'non_efficace' || newRisk) && (
         <p className="vg-step-note">
-          Source, élément lié et référence d’origine de {detail.id} sont repris par l’action de suite ; la vérification et la suite sont
-          enregistrées ensemble.
+          {fill(t('Source, linked item and origin reference of {id} are taken over by the follow-up action; the verification and the follow-up are saved together.'), { id: detail.id })}
         </p>
       )}
       {result === 'non_efficace' && (
@@ -71,6 +72,7 @@ export function VerifyForm({ detail, from, options, today, verifyDefault, onDone
 function FollowUpSection({ reason, detail, options, today, verifyDefault, closedOn, note }: {
   reason: FollowReason; detail: ActionDetailView; options: ActionFormOptions; today: string; verifyDefault: string; closedOn: string; note: string;
 }) {
+  const { t } = useI18n();
   const p = FOLLOW_UP_PREFIX[reason];
   const prefill = followUpPrefill(detail, reason, { closedOn, note, people: options.people, sites: options.sites });
   // Problème pré-rempli suivi tant qu'il n'a pas été retouché (constat saisi après l'ouverture de la section).
@@ -78,40 +80,40 @@ function FollowUpSection({ reason, detail, options, today, verifyDefault, closed
   const n = (name: string) => `${p}${name}`;
   return (
     <fieldset className="vg-fieldset">
-      <legend>Nouvelle action ({FOLLOW_REASONS[reason].toLowerCase()})</legend>
-      <Field name={n('problem')} label={reason === 'nouveau_risque' ? 'Description du risque' : 'Description du problème'}>
+      <legend>{fill(t('New action ({reason})'), { reason: FOLLOW_REASONS[reason].toLowerCase() })}</legend>
+      <Field name={n('problem')} label={reason === 'nouveau_risque' ? t('Description of the risk') : t('Description of the problem')}>
         <TextArea name={n('problem')} rows={2} maxLength={ACTION_TEXT_MAX} required value={problem ?? prefill.problem}
           onChange={(e) => setProblem(e.target.value)} />
       </Field>
-      <Field name={n('detail')} label="Détail de l’action">
+      <Field name={n('detail')} label={t('Detail of the action')}>
         <TextArea name={n('detail')} rows={3} maxLength={ACTION_TEXT_MAX} required />
       </Field>
       <FormRow>
-        <Field name={n('pilotId')} label="Responsable">
-          <Select name={n('pilotId')} options={options.people} defaultValue={prefill.pilotId} placeholder="Choisir…" required />
+        <Field name={n('pilotId')} label={t('Owner')}>
+          <Select name={n('pilotId')} options={options.people} defaultValue={prefill.pilotId} placeholder={t('Choose…')} required />
         </Field>
-        <Field name={n('priority')} label="Priorité">
-          <Select name={n('priority')} options={PRIORITY_OPTIONS} defaultValue={prefill.priority} placeholder="Choisir…" required />
+        <Field name={n('priority')} label={t('Priority')}>
+          <Select name={n('priority')} options={PRIORITY_OPTIONS} defaultValue={prefill.priority} placeholder={t('Choose…')} required />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name={n('dueOn')} label="Date cible">
+        <Field name={n('dueOn')} label={t('Target date')}>
           <Input name={n('dueOn')} type="date" min={today} required />
         </Field>
-        <Field name={n('verifyDueOn')} label="Vérification planifiée">
+        <Field name={n('verifyDueOn')} label={t('Planned verification')}>
           <Input name={n('verifyDueOn')} type="date" min={today} defaultValue={verifyDefault} required />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name={n('domain')} label="Domaine">
-          <Select name={n('domain')} options={DOMAIN_OPTIONS} defaultValue={prefill.domain} placeholder="Choisir…" required />
+        <Field name={n('domain')} label={t('Domain')}>
+          <Select name={n('domain')} options={DOMAIN_OPTIONS} defaultValue={prefill.domain} placeholder={t('Choose…')} required />
         </Field>
-        <Field name={n('riskLevel')} label="Niveau de risque">
+        <Field name={n('riskLevel')} label={t('Risk level')}>
           <Select name={n('riskLevel')} options={RISK_LEVEL_OPTIONS} defaultValue={prefill.riskLevel} placeholder="—" />
         </Field>
       </FormRow>
-      <Field name={n('siteId')} label="Site" hint="Celui de l’élément lié quand il en a un.">
-        <Select name={n('siteId')} options={options.sites} defaultValue={prefill.siteId} placeholder="Choisir…" required />
+      <Field name={n('siteId')} label={t('Site')} hint={t('That of the linked item when it has one.')}>
+        <Select name={n('siteId')} options={options.sites} defaultValue={prefill.siteId} placeholder={t('Choose…')} required />
       </Field>
     </fieldset>
   );

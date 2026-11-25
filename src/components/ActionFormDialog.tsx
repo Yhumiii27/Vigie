@@ -22,10 +22,10 @@ import { ACTION_SOURCES, ACTION_TEXT_MAX, AVANCEMENT, ORIGIN_REF_MAX, isAvanceme
 import { ARCHIVED_SITE_SUFFIX, LEFT_SUFFIX, withCurrent } from '@/lib/form-options';
 import type { FormState } from '@/lib/forms';
 import { saveAction } from '@/server/plan';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 export type { ActionDefaults } from '@/lib/action-view';
-
-const NO_ELEMENT = '— Aucun : référence d’origine —';
 
 /**
  * Champ en lecture seule (date d'ouverture, avancement, source verrouillée, élément imposé) : <output>, que le libellé du
@@ -37,13 +37,14 @@ function ReadOnly({ id, value }: { id: string; value: ReactNode }) {
 
 /** Avertissement « aucune donnée de santé » : élément AT (§ 4), plus le texte qui semble décrire une lésion. */
 function HealthWarning({ texts }: { texts: string[] }) {
-  const injury = texts.some((t) => mentionsInjury(t));
+  const { t } = useI18n();
+  const injury = texts.some((text) => mentionsInjury(text));
   return (
     <div role="note" className="vg-warn-note">
       <i className="ph ph-first-aid" aria-hidden />
       <span>
         {AT_HEALTH_WARNING}
-        {injury && <strong style={{ display: 'block', fontWeight: 500 }}>Ce texte semble décrire une lésion ou des soins : retirez-les, ils restent dans la fiche de l’accident (champs réservés).</strong>}
+        {injury && <strong style={{ display: 'block', fontWeight: 500 }}>{t('This text seems to describe a lesion or care: remove them, they stay in the accident sheet (restricted fields).')}</strong>}
       </span>
     </div>
   );
@@ -57,6 +58,7 @@ function HealthWarning({ texts }: { texts: string[] }) {
 export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyOriginLabel }: {
   options: ActionFormOptions; defaults?: ActionDefaults; onDone: (state: FormState) => void; onCancel?: () => void; legacyOriginLabel?: string | null;
 }) {
+  const { t } = useI18n();
   const editing = !!defaults.id;
   const status = defaults.status && isAvancement(defaults.status) ? defaults.status : 'a_faire';
   const openedOn = defaults.openedOn ?? options.today;
@@ -108,11 +110,11 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
 
   const sourceLabel = (k: string | null | undefined) => (k && k in ACTION_SOURCES ? ACTION_SOURCES[k as keyof typeof ACTION_SOURCES].label : k ?? '');
   const originHint = hasElement
-    ? 'Facultative : par défaut, la référence de l’élément lié.'
-    : sourceHasElement(source) && picker ? 'Obligatoire sans élément lié (ex. courrier, rapport, n° d’étude).' : 'Obligatoire : courrier, compte rendu, n° d’étude…';
+    ? t('Optional: by default, the linked item’s reference.')
+    : sourceHasElement(source) && picker ? t('Required without a linked item (e.g. letter, report, study no.).') : t('Required: letter, minutes, study no.…');
 
   return (
-    <ActionForm action={saveAction} onDone={onDone} onCancel={onCancel} submitLabel={editing ? 'Enregistrer' : 'Créer l’action'}
+    <ActionForm action={saveAction} onDone={onDone} onCancel={onCancel} submitLabel={editing ? t('Save') : t('Create action')}
       submitIcon={editing ? undefined : 'ph-list-plus'}
       hidden={{
         id: defaults.id,
@@ -127,42 +129,42 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
       {health && <HealthWarning texts={[texts.problem, texts.detail]} />}
 
       <FormRow>
-        <Field name="openedOn" label="Date d’ouverture" hint={editing ? undefined : 'Date du jour, posée par Vigie.'}>
+        <Field name="openedOn" label={t('Opening date')} hint={editing ? undefined : t('Today’s date, set by Vigie.')}>
           <ReadOnly id="openedOn" value={fmtDate(openedOn)} />
         </Field>
-        <Field name="pilotId" label="Responsable" hint={editing && defaults.pilotId && !options.people.some(([v]) => v === defaults.pilotId) ? 'Sorti de l’effectif : désignez un nouveau responsable.' : undefined}>
-          <Select name="pilotId" options={people} defaultValue={defaults.pilotId ?? ''} placeholder="Choisir…" required />
+        <Field name="pilotId" label={t('Owner')} hint={editing && defaults.pilotId && !options.people.some(([v]) => v === defaults.pilotId) ? t('Left the workforce: designate a new owner.') : undefined}>
+          <Select name="pilotId" options={people} defaultValue={defaults.pilotId ?? ''} placeholder={t('Choose…')} required />
         </Field>
       </FormRow>
 
       <FormRow>
-        <Field name="status" label="Avancement" hint={editing ? 'Se change par « Changer l’avancement ».' : undefined}>
+        <Field name="status" label={t('Progress')} hint={editing ? t('Changed with “Change the progress”.') : undefined}>
           <ReadOnly id="status" value={AVANCEMENT[status].label} />
         </Field>
-        <Field name="priority" label="Priorité">
-          <Select name="priority" options={PRIORITY_OPTIONS} defaultValue={defaults.priority ?? ''} placeholder="Choisir…" required />
+        <Field name="priority" label={t('Priority')}>
+          <Select name="priority" options={PRIORITY_OPTIONS} defaultValue={defaults.priority ?? ''} placeholder={t('Choose…')} required />
         </Field>
       </FormRow>
 
       <FormRow>
-        <Field name="dueOn" label="Date cible" hint={editing ? undefined : 'Pas avant aujourd’hui.'}>
+        <Field name="dueOn" label={t('Target date')} hint={editing ? undefined : t('Not before today.')}>
           <Input name="dueOn" type="date" value={dueOn} min={editing ? undefined : options.today} onChange={(e) => setDueOn(e.target.value)} required />
         </Field>
         {showDone ? (
-          <Field name="doneOn" label="Date effective">
+          <Field name="doneOn" label={t('Actual date')}>
             <Input name="doneOn" type="date" defaultValue={defaults.doneOn ?? ''} min={openedOn} max={options.today} required />
           </Field>
         ) : <div />}
       </FormRow>
 
-      <Field name="source" label="Source" hint={
-        sourceFixed ? 'Fixée à la création (ACT-01) : elle ne se modifie pas.'
-          : editing ? `À compléter (reprise).${legacyOriginLabel ? ` Origine Vigie avant reprise : ${legacyOriginLabel}.` : ''}${sourceHint(source) ? ` ${sourceHint(source)}` : ''}`
-            : locked ? 'Imposée par l’élément lié.' : sourceHint(source)
+      <Field name="source" label={t('Source')} hint={
+        sourceFixed ? t('Set at creation (ACT-01): it cannot be changed.')
+          : editing ? `${t('To complete (migration).')}${legacyOriginLabel ? fill(t(' Vigie origin before migration: {origin}.'), { origin: legacyOriginLabel }) : ''}${sourceHint(source) ? ` ${sourceHint(source)}` : ''}`
+            : locked ? t('Imposed by the linked item.') : sourceHint(source)
       }>
         {sourceFixed || locked
           ? <ReadOnly id="source" value={sourceLabel(sourceFixed ? defaults.source : locked)} />
-          : <Select name="source" options={sourceOptions(sourceChoices)} value={source} placeholder="Choisir…" required
+          : <Select name="source" options={sourceOptions(sourceChoices)} value={source} placeholder={t('Choose…')} required
               onChange={(e) => changeSource(e.target.value)} />}
       </Field>
       {(sourceFixed || locked) && sourceHint(sourceFixed ? defaults.source : locked) && (
@@ -170,73 +172,73 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
       )}
 
       {imposedLink && (
-        <Field name="link" label="Élément lié" hint="Imposé par l’écran : il ne se modifie pas ensuite.">
+        <Field name="link" label={t('Linked item')} hint={t('Imposed by the screen: it cannot be changed afterwards.')}>
           <ReadOnly id="link" value={defaults.linkLabel ?? imposedLink} />
         </Field>
       )}
       {picker && (
-        <Field name="link" label="Élément lié" hint={choices.length ? 'Fixé à la création ; propose le site de l’élément.' : 'Aucun élément ouvert aux actions pour cette source.'}>
-          <Select name="link" options={choices.map((t) => [t.value, t.label] as const)} value={link} placeholder={NO_ELEMENT}
+        <Field name="link" label={t('Linked item')} hint={choices.length ? t('Set at creation; proposes the item’s site.') : t('No item open to actions for this source.')}>
+          <Select name="link" options={choices.map((c) => [c.value, c.label] as const)} value={link} placeholder={t('— None: origin reference —')}
             onChange={(e) => changeLink(e.target.value)} />
         </Field>
       )}
 
       {/* VG-02 : recommandation d'une étude de sécurité des procédés — réserve bloquante du jalon (modifiable ensuite par le QHSE depuis la fiche de l'étude). */}
       {!editing && (imposedLink ?? link).startsWith('safetystudy:') && (
-        <Field name="safetyBlocking" label="Jalon de sécurité" hint="Une réserve bloquante ouverte empêche le franchissement du jalon de l’étude (lu par Arche).">
-          <Checkbox name="safetyBlocking" label="Réserve bloquante" />
+        <Field name="safetyBlocking" label={t('Safety milestone')} hint={t('An open blocking reservation prevents passing the study’s milestone (read by Arche).')}>
+          <Checkbox name="safetyBlocking" label={t('Blocking reservation')} />
         </Field>
       )}
 
-      <Field name="originRef" label="Référence d’origine" hint={editing ? 'Fixée à la création.' : originHint}>
+      <Field name="originRef" label={t('Origin reference')} hint={editing ? t('Set at creation.') : originHint}>
         {editing
           ? <ReadOnly id="originRef" value={defaults.originRef || '—'} />
           : <Input name="originRef" defaultValue={defaults.originRef ?? ''} maxLength={ORIGIN_REF_MAX} required={!hasElement} />}
       </Field>
 
       <FormRow>
-        <Field name="domain" label="Domaine">
-          <Select name="domain" options={DOMAIN_OPTIONS} defaultValue={defaults.domain ?? ''} placeholder="Choisir…" required />
+        <Field name="domain" label={t('Domain')}>
+          <Select name="domain" options={DOMAIN_OPTIONS} defaultValue={defaults.domain ?? ''} placeholder={t('Choose…')} required />
         </Field>
-        <Field name="riskLevel" label="Niveau de risque" hint="Facultatif.">
+        <Field name="riskLevel" label={t('Risk level')} hint={t('Optional.')}>
           <Select name="riskLevel" options={RISK_LEVEL_OPTIONS} defaultValue={defaults.riskLevel == null ? '' : String(defaults.riskLevel)} placeholder="—" />
         </Field>
       </FormRow>
 
-      <Field name="problem" label="Description du problème">
+      <Field name="problem" label={t('Description of the problem')}>
         <TextArea name="problem" rows={3} maxLength={ACTION_TEXT_MAX} defaultValue={defaults.problem ?? ''} required
-          onChange={(e) => setTexts((t) => ({ ...t, problem: e.target.value }))} />
+          onChange={(e) => setTexts((prev) => ({ ...prev, problem: e.target.value }))} />
       </Field>
-      <Field name="detail" label="Détail de l’action" hint="La première ligne sert de libellé court (90 caractères).">
+      <Field name="detail" label={t('Detail of the action')} hint={t('The first line is the short label (90 characters).')}>
         <TextArea name="detail" rows={4} maxLength={ACTION_TEXT_MAX} defaultValue={defaults.detail ?? ''} required
-          placeholder="Verbe d’action + objet (ex. Remplacer les élingues textiles du poste 3…)"
-          onChange={(e) => setTexts((t) => ({ ...t, detail: e.target.value }))} />
+          placeholder={t('Action verb + object (e.g. Replace the textile slings of station 3…)')}
+          onChange={(e) => setTexts((prev) => ({ ...prev, detail: e.target.value }))} />
       </Field>
 
       <FormRow>
-        <Field name="verifyDueOn" label="Vérification planifiée" hint={
-          verifyLocked ? 'Fixée : l’action est vérifiée.' : warnings.length ? <span className="vg-warn-text">{warnings.join(' ')}</span> : 'Vérification de l’efficacité par le QHSE.'
+        <Field name="verifyDueOn" label={t('Planned verification')} hint={
+          verifyLocked ? t('Set: the action is verified.') : warnings.length ? <span className="vg-warn-text">{warnings.join(' ')}</span> : t('Effectiveness verification by the QHSE.')
         }>
           {verifyLocked
             ? <ReadOnly id="verifyDueOn" value={defaults.verifyDueOn ? fmtDate(defaults.verifyDueOn) : '—'} />
             : <Input name="verifyDueOn" type="date" value={verifyDueOn} min={editing ? undefined : options.today} onChange={(e) => setVerifyDueOn(e.target.value)} required />}
         </Field>
-        <Field name="siteId" label="Site" hint={pickedTarget?.siteId ? 'Site de l’élément lié.' : undefined}>
-          <Select name="siteId" options={sites} value={siteId} placeholder="Choisir…" required onChange={(e) => setSiteId(e.target.value)} />
+        <Field name="siteId" label={t('Site')} hint={pickedTarget?.siteId ? t('Site of the linked item.') : undefined}>
+          <Select name="siteId" options={sites} value={siteId} placeholder={t('Choose…')} required onChange={(e) => setSiteId(e.target.value)} />
         </Field>
       </FormRow>
 
       <FormRow>
-        <Field name="estimatedCost" label="Coût estimé (€ TTC)" hint="Facultatif, sans le temps passé.">
+        <Field name="estimatedCost" label={t('Estimated cost (€ incl. VAT)')} hint={t('Optional, without the time spent.')}>
           <Input name="estimatedCost" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={numberField(defaults.estimatedCost)} />
         </Field>
-        <Field name="actualCost" label="Coût réel (€ TTC)" hint="Facultatif.">
+        <Field name="actualCost" label={t('Actual cost (€ incl. VAT)')} hint={t('Optional.')}>
           <Input name="actualCost" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={numberField(defaults.actualCost)} />
         </Field>
       </FormRow>
 
       {showVerification && (
-        <Field name="hours" label="Pointage (h)" hint="Temps réellement passé. Nature, constat, résultat et date de vérification se changent par « Rouvrir » puis une nouvelle vérification.">
+        <Field name="hours" label={t('Time logged (h)')} hint={t('Time actually spent. Nature, finding, result and verification date are changed with “Reopen” then a new verification.')}>
           <Input name="hours" type="number" inputMode="decimal" step="0.01" min="0" defaultValue={numberField(defaults.hours)} />
         </Field>
       )}
@@ -245,12 +247,13 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
 }
 
 /** Bouton « Nouvelle action » (ou libellé personnalisé) ouvrant le formulaire ; les écrans ne l'affichent qu'au QHSE (ACT-22). */
-export function NewActionButton({ options, defaults, label = 'Nouvelle action', className = 'btn btn-primary vg-btn-sm', icon = 'ph-plus', style, disabled, tooltip }: {
+export function NewActionButton({ options, defaults, label, className = 'btn btn-primary vg-btn-sm', icon = 'ph-plus', style, disabled, tooltip }: {
   options: ActionFormOptions; defaults?: ActionDefaults; label?: string; className?: string; icon?: string; style?: CSSProperties; disabled?: boolean; tooltip?: string;
 }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label={label} icon={icon} className={className} style={style} disabled={disabled} tooltip={tooltip}
-      title={defaults?.id ? `Modifier ${defaults.id}` : 'Nouvelle action QSE'} kicker="Plan d’actions QSE" width={640}>
+    <DialogButton label={label ?? t('New action')} icon={icon} className={className} style={style} disabled={disabled} tooltip={tooltip}
+      title={defaults?.id ? fill(t('Edit {id}'), { id: defaults.id }) : t('New QSE action')} kicker={t('QSE action plan')} width={640}>
       {(close) => <ActionFields options={options} defaults={defaults} onDone={close} onCancel={close} />}
     </DialogButton>
   );

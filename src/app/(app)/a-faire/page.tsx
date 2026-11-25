@@ -8,12 +8,14 @@ import { fmtDay, fmtMonthAbbr } from '@/lib/dates';
 import { ALL_SITES, CONTROL_HORIZON_DAYS, SCREENS, TODO_HORIZON_DAYS, TONE, isEmployee } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadTodoPage } from '@/lib/data/dashboard';
+import { getI18n } from '@/i18n/server';
+import { SCREEN_LABEL_EN } from '@/i18n/nav';
+import { fill } from '@/i18n/translate';
 
 // TDB-17 : titre d'onglet de la page.
 export const metadata: Metadata = { title: SCREENS.todo.title };
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /**
  * Liste complète des échéances visibles (dépassements, horizon 15 jours, contrôles et certificats à 30 jours), filtrable : site
@@ -21,6 +23,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`;
  */
 export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) {
   const { role, site } = await guard('todo');
+  const { t } = await getI18n();
+  const screenLabel = (k: keyof typeof SCREENS) => (SCREEN_LABEL_EN[k] ? t(SCREEN_LABEL_EN[k]) : SCREENS[k].label);
   const sp = await searchParams;
   // Un salarié ne voit que ses échéances : pas de bascule « Toutes / Mes échéances ».
   const employee = isEmployee(role);
@@ -34,13 +38,18 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
   return (
     <>
       <PageHeader title={SCREENS.todo.title}
-        sub={`${plural(n, 'échéance')} · ${d.counts.overdue} en retard${d.counts.elsewhere ? ` · dont ${d.counts.elsewhere} sur d'autres sites` : ''} · horizon ${TODO_HORIZON_DAYS} jours (contrôles et certificats ${CONTROL_HORIZON_DAYS} jours)`} />
+        sub={[
+          fill(n > 1 ? t('{n} deadlines') : t('{n} deadline'), { n }),
+          fill(t('{n} overdue'), { n: d.counts.overdue }),
+          d.counts.elsewhere ? fill(t('including {n} on other sites'), { n: d.counts.elsewhere }) : '',
+          fill(t('horizon {n} days (inspections and certificates {m} days)'), { n: TODO_HORIZON_DAYS, m: CONTROL_HORIZON_DAYS }),
+        ].filter(Boolean).join(' · ')} />
       <div className="vg-page" style={{ gap: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {!employee && (
             <SegLinks options={[
-              { href: hrefWith('/a-faire', params, { mes: undefined }), label: `Toutes ${d.counts.all}`, on: !mine },
-              { href: hrefWith('/a-faire', params, { mes: '1' }), label: `Mes échéances ${d.counts.mine}`, on: mine },
+              { href: hrefWith('/a-faire', params, { mes: undefined }), label: fill(t('All {n}'), { n: d.counts.all }), on: !mine },
+              { href: hrefWith('/a-faire', params, { mes: '1' }), label: fill(t('My deadlines {n}'), { n: d.counts.mine }), on: mine },
             ]} />
           )}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
@@ -55,13 +64,13 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
           <MarkAllReadButton scope="todo" filter={{ domain, mine }} disabled={!d.counts.unread} />
         </div>
         {mine && site.id !== ALL_SITES && (
-          <span className="vg-muted" style={{ fontSize: 12, marginTop: -6 }}>Vos échéances de tous les sites de votre périmètre ; celles d&apos;un autre site ouvrent ce site.</span>
+          <span className="vg-muted" style={{ fontSize: 12, marginTop: -6 }}>{t('Your deadlines from every site of your scope; those of another site open that site.')}</span>
         )}
 
         {n === 0 && (
           <div className="card" style={{ gap: 6 }}>
-            <span className="vg-muted" style={{ fontSize: 12.5 }}>{filtered ? 'Aucune échéance pour ce filtre.' : 'Aucune échéance.'}</span>
-            {filtered && <Link href="/a-faire" className="vg-link">Retirer les filtres</Link>}
+            <span className="vg-muted" style={{ fontSize: 12.5 }}>{filtered ? t('No deadline for this filter.') : t('No deadline.')}</span>
+            {filtered && <Link href="/a-faire" className="vg-link">{t('Remove the filters')}</Link>}
           </div>
         )}
 
@@ -69,21 +78,21 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
           <section key={label} style={{ display: 'grid', gap: 6 }}>
             <div className="vg-eyebrow">{label} · {rows.length}</div>
             <div className="card" style={{ gap: 2, padding: 6 }}>
-              {rows.map((t) => {
-                const late = !!t.overdue;
+              {rows.map((item) => {
+                const late = !!item.overdue;
                 return (
-                  <TodoLink key={t.key} item={{ key: t.key, href: t.href, elsewhere: t.elsewhere, read: t.read }} markRead className={`vg-row${t.href ? '' : ' vg-row-static'}`}
+                  <TodoLink key={item.key} item={{ key: item.key, href: item.href, elsewhere: item.elsewhere, read: item.read }} markRead className={`vg-row${item.href ? '' : ' vg-row-static'}`}
                     style={{ gridTemplateColumns: '36px 1fr', gap: 12, alignItems: 'center', padding: '7px 10px' }}>
                     <span style={{ textAlign: 'center', lineHeight: 1.1, color: late ? TONE.danger.dot : undefined }}>
-                      <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{fmtDay(t.date)}</span>
-                      <span style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>{fmtMonthAbbr(t.date)}</span>
+                      <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{fmtDay(item.date)}</span>
+                      <span style={{ display: 'block', fontSize: 11, textTransform: 'uppercase', color: late ? TONE.danger.dot : 'var(--color-neutral-500)' }}>{fmtMonthAbbr(item.date)}</span>
                     </span>
                     <span style={{ display: 'grid', gap: 3, minWidth: 0 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: t.read ? 400 : 500 }}>
-                        {!t.read && <span className="vg-unread"><span className="vg-sr-only">Non lue</span></span>}{t.title}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: item.read ? 400 : 500 }}>
+                        {!item.read && <span className="vg-unread"><span className="vg-sr-only">{t('Unread')}</span></span>}{item.title}
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', flexWrap: 'wrap' }}>
-                        <Dot color={TONE[t.tone].dot} size={6} />{[t.kind, t.who, SCREENS[t.screen].label, t.siteLabel].filter(Boolean).join(' · ')}
+                        <Dot color={TONE[item.tone].dot} size={6} />{[item.kind, item.who, screenLabel(item.screen), item.siteLabel].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                   </TodoLink>

@@ -32,6 +32,8 @@ import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.risks.title };
 
@@ -40,6 +42,7 @@ const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites' | 'projects' | 'projectsM
 
 export default async function RisksPage({ searchParams }: PageProps<'/risques'>) {
   const session = await guard('risks');
+  const { t } = await getI18n();
   const sp = await searchParams;
   // UX-12 : ancien paramètre ?archives=1 lu puis réécrit en ?etat=archives.
   const canonical = canonicalHref('/risques', sp);
@@ -121,41 +124,41 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
   const resHigh = rows.filter((r) => r.residualGravity * r.residualProbability >= RISK_ACTION_THRESHOLD).length;
   const toReview = rows.filter((r) => r.flag === 'toReview').length;
   const stats = [
-    { v: rows.length, k: 'risques évalués', color: 'var(--color-text)' },
-    { v: high, k: 'élevés ou critiques (brut)', color: high ? RISK_LEVELS[2].dot : 'var(--color-text)' },
-    { v: resHigh, k: `résiduels ≥ ${RISK_ACTION_THRESHOLD}`, color: resHigh ? TONE.danger.dot : TONE.ok.dot },
+    { v: rows.length, k: t('risks assessed'), color: 'var(--color-text)' },
+    { v: high, k: t('high or critical (gross)'), color: high ? RISK_LEVELS[2].dot : 'var(--color-text)' },
+    { v: resHigh, k: fill(t('residual ≥ {n}'), { n: RISK_ACTION_THRESHOLD }), color: resHigh ? TONE.danger.dot : TONE.ok.dot },
   ];
 
   const updateNote = version?.daysToUpdate == null ? '' : version.daysToUpdate < 0
-    ? ` · dépassée de ${-version.daysToUpdate} j`
-    : version.daysToUpdate === 0 ? " · aujourd'hui"
-    : version.daysToUpdate <= 30 ? ` · dans ${version.daysToUpdate} j` : '';
+    ? fill(t(' · overdue by {n} d'), { n: -version.daysToUpdate })
+    : version.daysToUpdate === 0 ? t(' · today')
+    : version.daysToUpdate <= 30 ? fill(t(' · in {n} d'), { n: version.daysToUpdate }) : '';
   const requirementLink = duerpRequirement && canSee(session.role, 'watch') ? duerpRequirement.href : null;
   const banner: { k: string; v: string; color?: string; link?: { href: string; label: string } }[] = version ? [
-    { k: 'Version', v: version.version },
+    { k: t('Version'), v: version.version },
     {
-      k: 'Mise à jour annuelle',
-      v: `${fmtDate(version.updatedOn)} · prochaine le ${fmtDate(version.nextUpdateOn)}${updateNote}`,
+      k: t('Annual update'),
+      v: `${fill(t('{date} · next on {next}'), { date: fmtDate(version.updatedOn), next: fmtDate(version.nextUpdateOn) })}${updateNote}`,
       color: version.updateTone ? TONE[version.updateTone].fg : undefined,
     },
-    { k: 'Conservation', v: version.retentionLabel },
+    { k: t('Retention'), v: version.retentionLabel },
     {
-      k: 'Validation',
+      k: t('Validation'),
       v: [
-        version.validatedBy, version.cseConsultedOn ? `CSE consulté le ${fmtDate(version.cseConsultedOn)}` : 'consultation du CSE à renseigner',
-        version.spstSentOn ? `transmise au SPST le ${fmtDate(version.spstSentOn)}` : 'transmission au SPST à renseigner',
+        version.validatedBy, version.cseConsultedOn ? fill(t('CSE consulted on {date}'), { date: fmtDate(version.cseConsultedOn) }) : t('CSE consultation to be entered'),
+        version.spstSentOn ? fill(t('sent to the SPST on {date}'), { date: fmtDate(version.spstSentOn) }) : t('transmission to the SPST to be entered'),
       ].filter(Boolean).join(' · '),
       color: version.cseConsultedOn && version.spstSentOn ? undefined : TONE.warn.fg,
-      link: requirementLink ? { href: requirementLink, label: 'Exigence R. 4121-1' } : undefined,
+      link: requirementLink ? { href: requirementLink, label: t('Requirement R. 4121-1') } : undefined,
     },
-  ] : [{ k: 'Version', v: 'Aucune version en vigueur', color: TONE.warn.fg }];
+  ] : [{ k: t('Version'), v: t('No version in force'), color: TONE.warn.fg }];
 
   return (
     <>
-      <PageHeader title={SCREENS.risks.title} sub={`Document unique · ${units.length} unité${units.length > 1 ? 's' : ''} de travail`} />
+      <PageHeader title={SCREENS.risks.title} sub={fill(units.length > 1 ? t('Single document · {n} work units') : t('Single document · {n} work unit'), { n: units.length })} />
       <div className="vg-page">
         <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="ph-file-text" size={18} style={{ color: 'var(--color-accent)' }} /><span style={{ fontWeight: 500 }}>DUERP</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="ph-file-text" size={18} style={{ color: 'var(--color-accent)' }} /><span style={{ fontWeight: 500 }}>{t('DUERP')}</span></div>
           {banner.map(({ k, v, color, link }) => (
             <div key={k} style={{ display: 'grid', gap: 1 }}>
               <span style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--vg-text-muted)' }}>{k}</span>
@@ -165,10 +168,10 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           ))}
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
-            <a href="/risques/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer</a>
+            <a href="/risques/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />{t('Print')}</a>
             {/* CNF-03 : bilan annuel SSCT présenté au CSE (accidentologie : rôles habilités aux données de santé). */}
             {canSeeHealth(session.role) && (
-              <a href="/risques/bilan-ssct" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-chart-bar" size={13} />Bilan SSCT</a>
+              <a href="/risques/bilan-ssct" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-chart-bar" size={13} />{t('SSCT report')}</a>
             )}
             <VersionsButton versions={versions} canApprove={approve} people={approve ? options.people : []} history={edit} />
             {edit && (
@@ -179,19 +182,19 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
         </div>
         {!edit && <DuerpAccessNotice style={{ padding: '0 4px' }} />}
 
-        {missingDetail(sp.risque, !!deepRisk || !!deepArchived) && <MissingNotice text="Risque introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
-        {emergencyOn && missingDetail(sp.situation, !!deepSituation) && <MissingNotice text="Situation d'urgence introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
-        {studiesAsked && missingDetail(sp.etude, !!deepStudy) && <MissingNotice text="Étude de sécurité introuvable ou hors du site sélectionné." closeHref={hrefWith('/risques', params, {})} />}
+        {missingDetail(sp.risque, !!deepRisk || !!deepArchived) && <MissingNotice text={t('Risk not found or outside the selected site.')} closeHref={hrefWith('/risques', params, {})} />}
+        {emergencyOn && missingDetail(sp.situation, !!deepSituation) && <MissingNotice text={t('Emergency situation not found or outside the selected site.')} closeHref={hrefWith('/risques', params, {})} />}
+        {studiesAsked && missingDetail(sp.etude, !!deepStudy) && <MissingNotice text={t('Safety study not found or outside the selected site.')} closeHref={hrefWith('/risques', params, {})} />}
 
         <div className="vg-split vg-md" data-focus={explicitUnit || !unitPanel ? 'detail' : 'list'} style={{ display: 'grid', gap: 12, alignItems: 'start' }}>
           <div className="vg-md-list" style={{ display: 'grid', gap: 2 }}>
-            <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>Unités de travail</div>
+            <div className="vg-eyebrow" style={{ padding: '4px 10px 6px' }}>{t('Work units')}</div>
             {units.length > 0 && (
               <Link href={hrefWith('/risques', params, { ...panel, unite: undefined, vue: overview ? undefined : 'ensemble' })} scroll={false}
                 className={`vg-item${overview ? ' is-on' : ''}`} style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }}
                 aria-current={overview ? 'page' : undefined}>
                 <Icon name="ph-squares-four" size={13} />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Vue d&apos;ensemble · toutes unités</span>
+                <span style={{ flex: 1, fontSize: 12.5 }}>{t('Overview · all units')}</span>
               </Link>
             )}
             {units.map((u) => (
@@ -203,53 +206,53 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{u.count}</span>
                 {u.alerts > 0 && (
-                  <span title={`${u.alerts} risque${u.alerts > 1 ? 's' : ''} ≥ ${RISK_ACTION_THRESHOLD} sans action de réduction ou au résiduel encore élevé`}
+                  <span title={fill(u.alerts > 1 ? t('{n} risks ≥ {threshold} without a reduction action or with a residual still high') : t('{n} risk ≥ {threshold} without a reduction action or with a residual still high'), { n: u.alerts, threshold: RISK_ACTION_THRESHOLD })}
                     style={{ fontSize: 11, fontWeight: 500, color: TONE.danger.fg, background: TONE.danger.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{u.alerts}</span>
                 )}
                 {u.toReview > 0 && (
-                  <span title={`${u.toReview} ${u.toReview > 1 ? 'résiduels' : 'résiduel'} à recoter (actions vérifiées)`} style={{ display: 'inline-flex' }}>
+                  <span title={fill(u.toReview > 1 ? t('{n} residuals to re-rate (verified actions)') : t('{n} residual to re-rate (verified actions)'), { n: u.toReview })} style={{ display: 'inline-flex' }}>
                     <Icon name="ph-arrows-clockwise" size={12} style={{ color: TONE.warn.dot }} />
                   </span>
                 )}
                 <span className="vg-dot" style={{ width: 7, height: 7, background: u.count ? RISK_LEVELS[u.top].dot : 'var(--color-neutral-700)' }} />
               </Link>
             ))}
-            {!units.length && <div style={{ padding: '4px 10px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune unité sur ce site.</div>}
+            {!units.length && <div style={{ padding: '4px 10px', fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('No unit on this site.')}</div>}
             {edit && (archivedCount > 0 || archives) && (
               <Link href={hrefWith('/risques', params, { ...panel, etat: archives ? undefined : ARCHIVES })} scroll={false} className={`vg-item${archives ? ' is-on' : ''}`}
-                style={{ gap: 8, padding: '7px 10px', marginTop: 4, color: 'var(--color-neutral-400)' }} title="Unités et risques retirés du document unique, avec leur motif et leur historique">
+                style={{ gap: 8, padding: '7px 10px', marginTop: 4, color: 'var(--color-neutral-400)' }} title={t('Units and risks removed from the single document, with their reason and history')}>
                 <Icon name="ph-archive" size={13} />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Archivés</span>
+                <span style={{ flex: 1, fontSize: 12.5 }}>{t('Archives')}</span>
                 <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{archivedCount}</span>
               </Link>
             )}
             <Link href={hrefWith('/risques', params, { ...panel, programme: program ? undefined : String(thisYear) })} scroll={false} className={`vg-item${program ? ' is-on' : ''}`}
               style={{ gap: 8, padding: '7px 10px', marginTop: edit && (archivedCount > 0 || archives) ? 0 : 4, color: 'var(--color-neutral-400)' }}
-              title="Programme annuel de prévention des risques professionnels et d'amélioration des conditions de travail (L. 4121-3-1)">
+              title={t('Annual programme for the prevention of occupational risks and the improvement of working conditions (L. 4121-3-1)')}>
               <Icon name="ph-calendar-check" size={13} />
-              <span style={{ flex: 1, fontSize: 12.5 }}>Programme annuel ({PROGRAM_SHORT})</span>
+              <span style={{ flex: 1, fontSize: 12.5 }}>{fill(t('Annual programme ({short})'), { short: PROGRAM_SHORT })}</span>
             </Link>
             <Link href={hrefWith('/risques', params, { ...panel, unite: undefined, vue: emergency ? undefined : 'urgences' })} scroll={false} className={`vg-item${emergency ? ' is-on' : ''}`}
               style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} aria-current={emergency ? 'page' : undefined}
-              title="Situations d'urgence identifiées, moyens, consignes et exercices (ISO 45001 §8.2, ISO 14001 §8.2)">
+              title={t('Identified emergency situations, means, instructions and drills (ISO 45001 §8.2, ISO 14001 §8.2)')}>
               <Icon name="ph-siren" size={13} />
-              <span style={{ flex: 1, fontSize: 12.5 }}>Situations d&apos;urgence</span>
+              <span style={{ flex: 1, fontSize: 12.5 }}>{t('Emergency situations')}</span>
             </Link>
             {!employee && (
               <Link href={hrefWith('/risques', params, { ...panel, unite: undefined, vue: study ? undefined : 'etudes' })} scroll={false} className={`vg-item${study ? ' is-on' : ''}`}
                 style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} aria-current={study ? 'page' : undefined}
-                title="HazID, HazOp / AMDEC, contrôle chantier, PSSR et audit ASPD des CAPEX et projets (méthode DIG-PRODI)">
+                title={t('HazID, HazOp / FMEA, site inspection, PSSR and ASPD audit of CAPEX and projects (DIG-PRODI method)')}>
                 <Icon name="ph-flask" size={13} />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Études de sécurité des procédés</span>
+                <span style={{ flex: 1, fontSize: 12.5 }}>{t('Process safety studies')}</span>
               </Link>
             )}
             {approve && register && (
               <Link href={hrefWith('/risques', params, { ...panel, registre: registerOn ? undefined : '1' })} scroll={false} className={`vg-item${registerOn ? ' is-on' : ''}`}
-                style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} title="Registre des demandes d'accès au DUERP (R. 4121-4)">
+                style={{ gap: 8, padding: '7px 10px', color: 'var(--color-neutral-400)' }} title={t('Register of requests for access to the DUERP (R. 4121-4)')}>
                 <Icon name="ph-hand-arrow-down" size={13} />
-                <span style={{ flex: 1, fontSize: 12.5 }}>Mises à disposition</span>
+                <span style={{ flex: 1, fontSize: 12.5 }}>{t('Access provisions')}</span>
                 {register.pending > 0 && (
-                  <span title={`${register.pending} demande${register.pending > 1 ? 's' : ''} en attente`}
+                  <span title={fill(register.pending > 1 ? t('{n} requests pending') : t('{n} request pending'), { n: register.pending })}
                     style={{ fontSize: 11, fontWeight: 500, color: TONE.warn.fg, background: TONE.warn.bg, borderRadius: 8, padding: '0 5px', lineHeight: '15px' }}>{register.pending}</span>
                 )}
               </Link>
@@ -258,7 +261,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           </div>
 
           <div className="vg-md-detail" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
-          <BackToList href={hrefWith('/risques', { mode: params.mode }, {})} label="Retour aux unités de travail" />
+          <BackToList href={hrefWith('/risques', { mode: params.mode }, {})} label={t('Back to work units')} />
           {(explicitUnit || !unitPanel) && <DetailFocus key={`${unitId ?? ''}:${archives}:${program?.year ?? ''}:${registerOn}:${overview}:${emergency}:${study}`} />}
           {study && studies ? (
             <ProcessSafetyPanel key={deepStudy?.id ?? 'etudes'} rows={studies.studies} cancelled={studies.cancelled} canManage={approve}
@@ -287,13 +290,13 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
                 <div className="card" style={{ gap: 10, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span className="card-title" style={{ fontSize: 14 }}>Matrice gravité × probabilité</span>
+                    <span className="card-title" style={{ fontSize: 14 }}>{t('Severity × probability matrix')}</span>
                     <SegLinks size={11.5} pad="3px 9px" options={[
-                      { href: hrefWith('/risques', params, { mode: undefined }), label: 'Brut', on: !residual },
-                      { href: hrefWith('/risques', params, { mode: 'residuel' }), label: 'Résiduel', on: residual },
+                      { href: hrefWith('/risques', params, { mode: undefined }), label: t('Gross'), on: !residual },
+                      { href: hrefWith('/risques', params, { mode: 'residuel' }), label: t('Residual'), on: residual },
                     ]} />
                   </div>
-                  <RiskMatrix rows={matrix} selected={cell} residual={residual} caption={`Matrice ${residual ? 'du risque résiduel' : 'de la cotation brute'} · ${unit.label}`}
+                  <RiskMatrix rows={matrix} selected={cell} residual={residual} caption={fill(residual ? t('Residual risk matrix · {unit}') : t('Gross rating matrix · {unit}'), { unit: unit.label })}
                     hrefOf={(c) => (cell && c.g === cell.g && c.p === cell.p
                       ? hrefWith('/risques', params, { gravite: undefined, probabilite: undefined })
                       : hrefWith('/risques', params, { gravite: String(c.g), probabilite: String(c.p) }))} />
@@ -310,7 +313,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                   </div>
                   {unit.zones.length > 0 && (
                     <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="ph-map-pin" size={12} />Zones du plan : {unit.zones.map((z) => z.name).join(', ')}
+                      <Icon name="ph-map-pin" size={12} />{fill(t('Plan zones: {zones}'), { zones: unit.zones.map((z) => z.name).join(', ') })}
                     </span>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -323,11 +326,11 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                   </div>
                   {toReview > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TONE.warn.fg }} title={RISK_FLAGS.toReview.hint}>
-                      <Icon name="ph-arrows-clockwise" size={13} />{toReview} {toReview > 1 ? 'résiduels' : 'résiduel'} à recoter
+                      <Icon name="ph-arrows-clockwise" size={13} />{fill(toReview > 1 ? t('{n} residuals to re-rate') : t('{n} residual to re-rate'), { n: toReview })}
                     </div>
                   )}
                   <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', fontSize: 12, textWrap: 'pretty' }}>
-                    Cotation gravité 1–4 × probabilité 1–4. À partir de {RISK_ACTION_THRESHOLD}, une action de réduction est obligatoire et suivie dans le plan d&apos;actions unique ; le risque résiduel est recoté après vérification d&apos;efficacité.
+                    {fill(t('Rating severity 1–4 × probability 1–4. From {n}, a reduction action is mandatory and followed in the single action plan; the residual risk is re-rated after the effectiveness check.'), { n: RISK_ACTION_THRESHOLD })}
                   </p>
                   <div style={{ display: 'flex', gap: 6, marginTop: 'auto', flexWrap: 'wrap', alignItems: 'center' }}>
                     {edit && <AddRiskButton units={unitOptions} unitId={unit.id} hazards={risks.map((r) => r.hazard)} />}
@@ -340,9 +343,9 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                 <div style={{ overflowX: 'auto' }}>
                   {cell && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 0 2px', fontSize: 12 }}>
-                      <span style={{ color: 'var(--vg-text-muted)' }}>{tableRows.length} risque{tableRows.length > 1 ? 's' : ''} sur {rows.length}</span>
+                      <span style={{ color: 'var(--vg-text-muted)' }}>{fill(tableRows.length > 1 ? t('{n} risks out of {m}') : t('{n} risk out of {m}'), { n: tableRows.length, m: rows.length })}</span>
                       <Link href={hrefWith('/risques', params, { gravite: undefined, probabilite: undefined })} scroll={false} className="vg-chip is-on">
-                        {residual ? 'Résiduel' : 'Brut'} G{cell.g} × P{cell.p}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only"> : retirer ce filtre</span>
+                        {residual ? t('Residual') : t('Gross')} G{cell.g} × P{cell.p}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only">{t(': remove this filter')}</span>
                       </Link>
                     </div>
                   )}
@@ -356,9 +359,9 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
           ) : (
             <div className="card" style={{ gap: 8, maxWidth: 560, border: '1px dashed var(--color-divider)', background: 'transparent' }}>
               <div className="card-kicker">{session.site.label}</div>
-              <div className="card-title" style={{ fontSize: 15 }}>Aucune unité de travail</div>
+              <div className="card-title" style={{ fontSize: 15 }}>{t('No work unit')}</div>
               <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', fontSize: 12.5, textWrap: 'pretty' }}>
-                Le document unique s&apos;organise par unités de travail (atelier, zone, activité). {edit ? 'Ajoutez une première unité pour ce site, puis évaluez ses risques.' : "Aucune unité n'a encore été créée pour ce site."}
+                {t('The single document is organised by work units (workshop, zone, activity). ')}{edit ? t('Add a first unit for this site, then assess its risks.') : t('No unit has been created yet for this site.')}
               </p>
             </div>
           )}
