@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Binoculars } from '@phosphor-icons/react/dist/ssr';
 import { useMemo, useState } from 'react';
 import { setRole, setSite } from '@/app/actions';
 import { LOGOUT_PATH, MY_SPACE_PATH } from '@/lib/auth/paths';
 import { SaveStatus, useActionRunner } from './feedback';
 import { menuItemProps, useMenu } from './Menu';
 import { SitesManager, type SiteAdmin } from './SitesManager';
-import { NavSection as CoqueNavSection, NavSections, PageSearch, Sidebar as CoqueSidebar, useCoque, type PageHit } from './coque';
+import { NavSection as CoqueNavSection, NavSections, PageSearch, Sidebar as CoqueSidebar, ToolLogo, useCoque, type PageHit } from './coque';
 import { Icon } from './ui';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
@@ -119,7 +118,7 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
 
   return (
     <>
-      <CoqueSidebar name="Vigie" icon={Binoculars} footer={footer}>
+      <CoqueSidebar name="Vigie" logo={<ToolLogo code="vigie" />} footer={footer}>
         {/* VG-N07 (COQUE.md § 2) : aller à une page par son nom, juste sous la marque ; ⌘K / Ctrl+K, Entrée ouvre la première. */}
         <PageSearch pages={pages}>
           {/* Sélecteur propre à Vigie : le site choisi (COQUE.md § 2, « sélecteurs propres à un outil »). */}

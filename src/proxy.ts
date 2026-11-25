@@ -157,6 +157,7 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Tout sauf les ressources statiques de Next.js (hachées, publiques) et le rechargement à chaud.
-  matcher: ['/((?!_next/static|_next/image|_next/webpack-hmr|favicon\\.ico).*)'],
+  // Tout sauf les ressources statiques de Next.js (hachées, publiques), le rechargement à chaud et le favicon
+  // (src/app/icon.svg, logo de Vigie de Norma 2.3 : servi sans session, même sur la page de connexion).
+  matcher: ['/((?!_next/static|_next/image|_next/webpack-hmr|favicon\\.ico|icon\\.svg).*)'],
 };
