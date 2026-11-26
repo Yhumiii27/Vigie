@@ -9,6 +9,7 @@ import { EVENTS_FR, EVENTS_SAME } from './screens/events';
 import { ACTIONS_FR, ACTIONS_SAME } from './screens/actions';
 import { RISKS_FR, RISKS_SAME } from './screens/risks';
 import { PREVENTION_FR, PREVENTION_SAME } from './screens/prevention';
+import { SKILLS_FR, SKILLS_SAME } from './screens/skills';
 
 /** Dictionnaires des écrans repris, dans l'ordre de la reprise (une chaîne commune à deux écrans va dans COMMON_FR). */
 export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
@@ -19,6 +20,7 @@ export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
   actions: ACTIONS_FR,
   risks: RISKS_FR,
   prevention: PREVENTION_FR,
+  skills: SKILLS_FR,
 };
 
 const SHELL_FR: Record<string, string> = {
@@ -85,7 +87,7 @@ const SHELL_FR: Record<string, string> = {
 export const FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME];
 
 /** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
 export function conflictingEntries(): string[] {

@@ -6,6 +6,8 @@ import { fmtDate } from '@/lib/dates';
 import { guard } from '@/lib/guard';
 import { loadSkillMatrix } from '@/lib/data/skills';
 import { today } from '@/lib/today';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
 
 export const metadata: Metadata = { title: 'Plan de formation · recyclages à prévoir' };
@@ -15,31 +17,32 @@ export const metadata: Metadata = { title: 'Plan de formation · recyclages à p
 // service RH, sans action QSE. Ouvert dans un nouvel onglet par un lien HTML simple (print.css hors de l'application).
 export default async function TrainingPlanPrintPage() {
   const session = await guard('skills');
+  const { t } = await getI18n();
   const now = today();
   const { rows, titles, self } = await loadSkillMatrix();
   const forecast = renewalForecast(rows, now);
   return (
     <article className="pp-doc">
       <div className="pp-toolbar pp-noprint">
-        <a href="/habilitations?vue=a-prevoir" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Habilitations et formations</a>
+        <a href="/habilitations?vue=a-prevoir" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{t('Qualifications and training')}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="pp-muted" style={{ fontSize: 11.5 }}>{t('For the PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
       <header className="pp-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · Habilitations et formations</div>
-        <h1>Plan de formation · recyclages à prévoir sur 12 mois</h1>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>{t('Vigie · Qualifications and training')}</div>
+        <h1>{t('Training plan · renewals to plan over 12 months')}</h1>
         <dl className="pp-meta">
-          <dt>Établissement</dt><dd>{session.site.label}</dd>
-          <dt>Périmètre</dt><dd>{self ? 'Mes habilitations' : `${rows.length} salariés · ${titles.length} titres suivis`}</dd>
-          <dt>Édité le</dt><dd>{fmtDate(now)} par {session.user.name}</dd>
+          <dt>{t('Establishment')}</dt><dd>{session.site.label}</dd>
+          <dt>{t('Scope')}</dt><dd>{self ? t('My qualifications') : fill(t('{people} employees · {n} titles followed'), { people: rows.length, n: titles.length })}</dd>
+          <dt>{t('Issued on')}</dt><dd>{fill(t('{date} by {name}'), { date: fmtDate(now), name: session.user.name })}</dd>
         </dl>
       </header>
       <section className="pp-section">
         <ForecastView forecast={forecast} links={false} tableClass="table pp-table" />
       </section>
-      <div className="pp-foot">Prévision calculée d&apos;après les échéances des titres requis à la date d&apos;édition · formations gérées par le service RH.</div>
+      <div className="pp-foot">{t('Forecast computed from the expiry dates of the required titles on the issue date · trainings managed by the HR department.')}</div>
     </article>
   );
 }

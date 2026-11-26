@@ -10,6 +10,8 @@ import type { Option } from '@/lib/data/options';
 import type { Person } from '@/lib/queries';
 import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
 import { CURSUS_PEOPLE_NOTICE, PERSON_CATEGORIES, type PersonCategory } from '@/lib/integration-labels';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Props = {
   /** Fiche modifiée (D01, décision CV-10 : aucune création dans Vigie, les personnes viennent de Cursus). */
@@ -37,41 +39,43 @@ const note = (icon: string, text: string) => (
 
 /** « Sortie de l'effectif » : déclaration (date + motif) ou, pour une sortie à venir, annulation. */
 function LeaveSection({ person, today, onDone }: { person: Person; today: string; onDone: () => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <div style={{ display: 'grid', gap: 10, borderTop: '1px solid var(--color-divider)', paddingTop: 14 }}>
-      <h6 className="vg-h6">Sortie de l&apos;effectif</h6>
+      <h6 className="vg-h6">{t('Departure from the workforce')}</h6>
       {person.leftOn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
-          <span>Sortie prévue le {fmtDate(person.leftOn)}{person.leftReason ? ` · ${person.leftReason}` : ''}</span>
-          <ReasonButton action={reinstatePerson} hidden={{ id: person.id }} label="Annuler la sortie" className="vg-text-btn" title="Annuler la sortie"
-            kicker={person.name} submitLabel="Annuler la sortie" message="Le salarié reste dans la matrice, les échéances et les listes ; l’annulation est inscrite à son historique."
-            placeholder="Ex. contrat prolongé" onDone={onDone} />
+          <span>{fill(t('Departure planned on {date}'), { date: fmtDate(person.leftOn) })}{person.leftReason ? ` · ${person.leftReason}` : ''}</span>
+          <ReasonButton action={reinstatePerson} hidden={{ id: person.id }} label={t('Cancel the departure')} className="vg-text-btn" title={t('Cancel the departure')}
+            kicker={person.name} submitLabel={t('Cancel the departure')} message={t('The employee stays in the matrix, the deadlines and the lists; the cancellation is written to their history.')}
+            placeholder={t('E.g. contract extended')} onDone={onDone} />
         </div>
       ) : open ? (
-        <ActionForm action={setPersonLeft} hidden={{ id: person.id }} onDone={onDone} onCancel={() => setOpen(false)} submitLabel="Déclarer la sortie" submitIcon="ph-sign-out">
+        <ActionForm action={setPersonLeft} hidden={{ id: person.id }} onDone={onDone} onCancel={() => setOpen(false)} submitLabel={t('Record the departure')} submitIcon="ph-sign-out">
           <FormRow>
-            <Field name="leftOn" label="Date de sortie">
+            <Field name="leftOn" label={t('Departure date')}>
               <Input name="leftOn" type="date" min={addMonths(today, -12)} defaultValue={today} required />
             </Field>
-            <Field name="leftReason" label="Motif" hint="Obligatoire · ex. fin de contrat, mutation.">
-              <TextArea name="leftReason" rows={1} maxLength={REASON_MAX} required placeholder="Ex. fin de contrat" />
+            <Field name="leftReason" label={t('Reason')} hint={t('Required · e.g. end of contract, transfer.')}>
+              <TextArea name="leftReason" rows={1} maxLength={REASON_MAX} required placeholder={t('E.g. end of contract')} />
             </Field>
           </FormRow>
-          {note('ph-info', "Le salarié quitte la matrice, les échéances et les listes à cette date ; ses titres restent consultables (filtre « Sortis »).")}
+          {note('ph-info', t('The employee leaves the matrix, the deadlines and the lists on this date; their titles stay viewable (“Left” filter).'))}
         </ActionForm>
       ) : (
         <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} onClick={() => setOpen(true)}>
-          <i className="ph ph-sign-out" style={{ fontSize: 13 }} aria-hidden />Déclarer la sortie
+          <i className="ph ph-sign-out" style={{ fontSize: 13 }} aria-hidden />{t('Record the departure')}
         </button>
       )}
-      {note('ph-plugs-connected', 'Fiche ancienne sans matricule : à rattacher à un salarié de Cursus, qui tiendra ensuite la sortie.')}
+      {note('ph-plugs-connected', t('Old record without an employee number: to link to a Cursus employee, who will then hold the departure.'))}
     </div>
   );
 }
 
 /** Données de la fiche reprises de Cursus (D01) : affichées, jamais modifiées dans Vigie. */
 function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string }) {
+  const { t } = useI18n();
   const fact = (label: string, value: string | null | undefined) => (
     <div style={{ display: 'grid', gap: 2 }}>
       <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{label}</span>
@@ -81,17 +85,17 @@ function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-        {fact('Nom', person.name)}
-        {fact('Matricule', person.matricule)}
-        {person.siteMatricule && fact('Matricule de site', person.siteMatricule)}
-        {fact('Poste', person.job)}
-        {fact('Site de rattachement', siteLabel)}
-        {fact('Catégorie', person.category ? PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category : null)}
-        {person.company && fact('Agence ou entreprise', person.company)}
-        {fact('E-mail publié par Cursus', person.cursusEmail)}
-        {person.leftOn && fact("Sortie de l'effectif", `${fmtDate(person.leftOn)}${person.leftReason ? ` · ${person.leftReason}` : ''}`)}
+        {fact(t('Name'), person.name)}
+        {fact(t('Employee number'), person.matricule)}
+        {person.siteMatricule && fact(t('Site employee number'), person.siteMatricule)}
+        {fact(t('Job'), person.job)}
+        {fact(t('Home site'), siteLabel)}
+        {fact(t('Category'), person.category ? PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category : null)}
+        {person.company && fact(t('Agency or company'), person.company)}
+        {fact(t('E-mail published by Cursus'), person.cursusEmail)}
+        {person.leftOn && fact(t('Departure from the workforce'), `${fmtDate(person.leftOn)}${person.leftReason ? ` · ${person.leftReason}` : ''}`)}
       </div>
-      {person.cursusState === 'absent' && note('ph-warning', 'Personne absente de la dernière lecture de Cursus : fiche conservée, à vérifier auprès du service RH.')}
+      {person.cursusState === 'absent' && note('ph-warning', t('Person absent from the last read of Cursus: record kept, to check with the HR department.'))}
       {note('ph-plugs-connected', CURSUS_PEOPLE_NOTICE)}
     </div>
   );
@@ -102,45 +106,46 @@ function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string 
  * dans la matrice, service). Fiche ancienne sans matricule : saisie gardée jusqu'au rattachement (vue « Personnel »).
  */
 export function PersonForm({ person, version, sites, archivedSites, services, today, onDone, onCancel }: Props) {
+  const { t } = useI18n();
   const cursus = !!person.matricule;
   const siteId = person.siteId ?? '';
   const current = siteId && !sites.some(([v]) => v === siteId) ? archivedSites.find(([v]) => v === siteId) ?? ([siteId, siteId] as const) : null;
   const siteOptions = current ? [...sites, current] : sites;
-  const siteLabel = siteOptions.find(([v]) => v === siteId)?.[1] ?? (siteId || 'Aucun site suivi');
+  const siteLabel = siteOptions.find(([v]) => v === siteId)?.[1] ?? (siteId || t('No site followed'));
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {cursus && <CursusFacts person={person} siteLabel={String(siteLabel)} />}
-      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer" hidden={{ id: person.id, version }}>
+      <ActionForm action={savePerson} onDone={onDone} onCancel={onCancel} submitLabel={t('Save')} hidden={{ id: person.id, version }}>
         {!cursus && (
           <>
             <FormRow>
-              <Field name="name" label="Nom">
-                <Input name="name" defaultValue={person.name} placeholder="Ex. [J. Dupont]" maxLength={80} autoFocus />
+              <Field name="name" label={t('Name')}>
+                <Input name="name" defaultValue={person.name} placeholder={t('E.g. [J. Dupont]')} maxLength={80} autoFocus />
               </Field>
-              <Field name="job" label="Poste">
-                <Input name="job" defaultValue={person.job} placeholder="Ex. Monteur · atelier montage" maxLength={80} />
+              <Field name="job" label={t('Job')}>
+                <Input name="job" defaultValue={person.job} placeholder={t('E.g. Fitter · assembly workshop')} maxLength={80} />
               </Field>
             </FormRow>
             <FormRow>
-              <Field name="siteId" label="Site de rattachement">
-                <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : 'Choisir un site'} />
+              <Field name="siteId" label={t('Home site')}>
+                <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : t('Choose a site')} />
               </Field>
-              <Field name="email" label="E-mail professionnel" hint="Rapproche la fiche du compte Microsoft à la première connexion.">
-                <Input name="email" type="email" defaultValue={person.email ?? ''} placeholder="Ex. j.dupont@epc2i.fr" maxLength={254} autoComplete="off" />
+              <Field name="email" label={t('Work e-mail')} hint={t('Matches the record with the Microsoft account at the first sign-in.')}>
+                <Input name="email" type="email" defaultValue={person.email ?? ''} placeholder={t('E.g. j.dupont@epc2i.fr')} maxLength={254} autoComplete="off" />
               </Field>
             </FormRow>
           </>
         )}
-        <Field name="service" label="Service" hint="Attribut propre à Vigie (filtre de la matrice).">
-          <Input name="service" list="vg-person-services" defaultValue={person.service} placeholder="Ex. Atelier montage" maxLength={60} />
+        <Field name="service" label={t('Department#service')} hint={t('Attribute specific to Vigie (matrix filter).')}>
+          <Input name="service" list="vg-person-services" defaultValue={person.service} placeholder={t('E.g. Assembly workshop')} maxLength={60} />
           <datalist id="vg-person-services">{services.map((s) => <option key={s} value={s} />)}</datalist>
         </Field>
-        <Checkbox name="inSkillsMatrix" label="Suivi dans la matrice des habilitations" defaultChecked={person.inSkillsMatrix} />
-        {!cursus && note('ph-link-break', 'Fiche sans matricule Cursus : le service QHSE la rattache à un salarié de Cursus (vue « Personnel »), qui tiendra ensuite nom, poste, site et sortie.')}
+        <Checkbox name="inSkillsMatrix" label={t('Followed in the qualifications matrix')} defaultChecked={person.inSkillsMatrix} />
+        {!cursus && note('ph-link-break', t('Record without a Cursus employee number: the QHSE department links it to a Cursus employee (“Staff” view), who will then hold name, job, site and departure.'))}
       </ActionForm>
       {!cursus && <LeaveSection person={person} today={today} onDone={onDone} />}
       {/* Historique de la fiche (HAB-03), chargé à l'ouverture. */}
-      <LazyChangeLog entity="person" id={person.id} title="Historique de la fiche" />
+      <LazyChangeLog entity="person" id={person.id} title={t('Record history')} />
     </div>
   );
 }
