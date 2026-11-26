@@ -9,6 +9,8 @@ import { TONE, type Tone } from '@/lib/domain';
 import type { FormOptions, Option } from '@/lib/data/options';
 import type { LinkedEvent, PlanChoice, ProcedureLink, SiteRuleView } from '@/lib/data/prevention';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 // Éléments partagés par les fenêtres de l'écran « Plans de prévention et permis ».
 
@@ -41,22 +43,23 @@ export const muted = { fontSize: 11, color: 'var(--color-neutral-500)' } as cons
 export const ruleOf = (options: Pick<PreventionOptions, 'siteRules'>, siteId: string) => options.siteRules.find((r) => r.id === siteId);
 
 /** Entreprises proposées dans un formulaire : actives, plus l'entreprise déjà choisie si elle a été archivée depuis. */
-export function contractorChoices(options: Pick<PreventionOptions, 'contractors'>, current?: { id: string | null; name: string | null }): readonly Option[] {
-  return withCurrent(options.contractors, current?.id, `${current?.name ?? current?.id} (archivée)`, 'start');
+export function contractorChoices(options: Pick<PreventionOptions, 'contractors'>, t: T, current?: { id: string | null; name: string | null }): readonly Option[] {
+  return withCurrent(options.contractors, current?.id, fill(t('{name} (archived)'), { name: current?.name ?? current?.id ?? '' }), 'start');
 }
 
 /** Lien vers la procédure de référence de l'écran (gestion documentaire). */
 export function ProcedureNote({ procedure }: { procedure?: ProcedureLink | null }) {
+  const { t } = useI18n();
   if (!procedure) return null;
   return (
     <Link href={procedure.href} className="vg-link" style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <i className="ph ph-book-open" style={{ fontSize: 13 }} aria-hidden />Procédure {procedure.id} · {procedure.title}
+      <i className="ph ph-book-open" style={{ fontSize: 13 }} aria-hidden />{fill(t('Procedure {id}'), { id: procedure.id })} · {procedure.title}
     </Link>
   );
 }
 
-/** Aide du champ Site quand un site est sélectionné (l'enregistrement reste visible à l'écran). */
-export const SITE_LOCK_HINT = 'Site sélectionné dans la barre latérale ; choisissez « Tous les sites » pour saisir sur un autre site.';
+/** Aide du champ Site quand un site est sélectionné (l'enregistrement reste visible à l'écran) ; chaîne source, rendue par t(). */
+export const SITE_LOCK_HINT = 'Site selected in the sidebar; choose “All sites” to enter on another site.';
 
 /** Ligne de tableau qui ouvre une fenêtre (clic ou Entrée), sauf clic sur un lien ou un bouton. */
 export function rowOpener(open: () => void) {
@@ -127,19 +130,20 @@ export function useRun() {
 export function ConfirmButton({ label, confirmLabel, question, icon, onConfirm, disabled, tooltip, pending, className = 'btn btn-secondary vg-btn-sm' }: {
   label: string; confirmLabel: string; question: string; icon?: string; onConfirm: () => void; disabled?: boolean; tooltip?: string; pending?: boolean; className?: string;
 }) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState(false);
   if (asking) {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>{question}</span>
-        <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setAsking(false)}>Non</button>
+        <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setAsking(false)}>{t('No')}</button>
         <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); onConfirm(); }}>{confirmLabel}</button>
       </span>
     );
   }
   return (
     <TipButton className={className} disabled={disabled || pending} aria-busy={pending || undefined} tip={tooltip} onClick={() => setAsking(true)}>
-      {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{pending ? 'Enregistrement…' : label}
+      {icon && <i className={`ph ${icon}`} style={{ fontSize: 13 }} aria-hidden />}{pending ? t('Saving…') : label}
     </TipButton>
   );
 }
@@ -165,13 +169,14 @@ export function SignChip({ label, on, title }: { label: string; on: boolean; tit
  * « Signaler un événement » prérempli sur /evenements (`reportHref`, encadrement seulement).
  */
 export function LinkedEvents({ events, reportHref, emptyLabel }: { events: LinkedEvent[]; reportHref: string | null; emptyLabel: string }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <SectionTitle aside={reportHref && (
         <Link href={reportHref} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+          <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />{t('Report an event')}
         </Link>
-      )}>Événements liés</SectionTitle>
+      )}>{t('Linked events')}</SectionTitle>
       {events.length === 0 && <span style={muted}>{emptyLabel}</span>}
       {events.map((e) => (
         <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>

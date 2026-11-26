@@ -8,35 +8,38 @@ import type { SiteRuleView } from '@/lib/data/prevention';
 import { saveSiteRule } from '@/server/sites';
 import { MANDATORY_HOURS, SEVESO_LEVELS } from '@/lib/rules/prevention';
 import { Notice } from './parts';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 // Règle de prévention d'un site : classement Seveso et plan de prévention « dès la première minute ».
 
 function SiteRuleForm({ site, onDone, onCancel }: { site: SiteRuleView; onDone: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [seveso, setSeveso] = useState(site.seveso ?? '');
   const [firstMinute, setFirstMinute] = useState(site.ppFromFirstMinute);
   return (
     <ActionForm action={saveSiteRule} onDone={onDone} onCancel={onCancel} hidden={{ siteId: site.id }}>
-      <Field name="seveso" label="Classement" hint="Établissement classé au titre de la directive Seveso III (ICPE).">
-        <Select name="seveso" options={SEVESO_LEVELS} value={seveso} onChange={(e) => setSeveso(e.target.value)} placeholder="Non classé" autoFocus />
+      <Field name="seveso" label={t('Classification')} hint={t('Establishment classified under the Seveso III directive (ICPE).')}>
+        <Select name="seveso" options={SEVESO_LEVELS} value={seveso} onChange={(e) => setSeveso(e.target.value)} placeholder={t('Not classified')} autoFocus />
       </Field>
       <div style={{ display: 'grid', gap: 4 }}>
         <label className="vg-check">
           <input type="checkbox" name="ppFromFirstMinute" checked={firstMinute} onChange={(e) => setFirstMinute(e.target.checked)} />
           <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
-          <span>Exiger un plan de prévention écrit dès la première minute d&apos;intervention</span>
+          <span>{t('Require a written prevention plan from the first minute of the intervention')}</span>
         </label>
         <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>
-          Règle interne, plus stricte que le Code du travail (R. 4512-7 : {MANDATORY_HOURS} h sur 12 mois ou travaux dangereux).
+          {fill(t('Internal rule, stricter than the French Labour Code (R. 4512-7: {hours} h over 12 months or dangerous work).'), { hours: MANDATORY_HOURS })}
         </span>
       </div>
       <Notice tone={firstMinute ? 'accent' : 'neutral'} icon={firstMinute ? 'ph-shield-warning' : 'ph-info'}>
         {firstMinute
-          ? "Toute intervention d'une entreprise extérieure exige un plan écrit, établi après l'inspection commune et signé par les deux entreprises avant le début des travaux, quelles que soient sa durée et sa nature. Les permis de feu et d'essai d'une entreprise extérieure ne sont délivrés qu'avec un plan signé couvrant leur validité."
-          : `Règle légale : plan écrit obligatoire dès ${MANDATORY_HOURS} h de travaux sur 12 mois ou pour des travaux dangereux (arrêté du 19 mars 1993).`}
+          ? t('Any intervention of an external company requires a written plan, drawn up after the joint inspection and signed by both companies before the work starts, whatever its duration and nature. The fire and test permits of an external company are issued only with a signed plan covering their validity.')
+          : fill(t('Legal rule: written plan required from {hours} h of work over 12 months or for dangerous work (order of 19 March 1993).'), { hours: MANDATORY_HOURS })}
       </Notice>
       {seveso === 'seuil_haut' && !firstMinute && (
         <Notice tone="warn">
-          Établissement Seveso seuil haut sans la règle « dès la première minute » : vérifiez la cohérence avec la politique de prévention des accidents majeurs et le système de gestion de la sécurité.
+          {t('Upper-tier Seveso establishment without the “from the first minute” rule: check consistency with the major-accident prevention policy and the safety management system.')}
         </Notice>
       )}
     </ActionForm>
@@ -45,12 +48,13 @@ function SiteRuleForm({ site, onDone, onCancel }: { site: SiteRuleView; onDone: 
 
 /** « Modifier » la règle de prévention d'un site (animateur QHSE, direction). */
 export function SiteRuleButton({ site }: { site: SiteRuleView }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Modifier" icon="ph-pencil-simple" className="btn btn-ghost vg-btn-sm" title={site.label} kicker="Règle du site · plans de prévention" width={560}>
+    <DialogButton label={t('Edit')} icon="ph-pencil-simple" className="btn btn-ghost vg-btn-sm" title={site.label} kicker={t('Site rule · prevention plans')} width={560}>
       {(close) => (
         <>
           <SiteRuleForm site={site} onDone={close} onCancel={close} />
-          <div style={{ marginTop: 12 }}><LazyChangeLog entity="site" id={site.id} title="Historique du site" /></div>
+          <div style={{ marginTop: 12 }}><LazyChangeLog entity="site" id={site.id} title={t('Site history')} /></div>
         </>
       )}
     </DialogButton>

@@ -31,33 +31,36 @@ import { SIMOPS_VIEW, parseSimopsDay, simopsHref } from '@/lib/rules/simops';
 import { today } from '@/lib/today';
 import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
+import { getI18n } from '@/i18n/server';
+import { fill, type T } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.prevention.title };
 
-const TABS = [['plans', 'Plans de prévention'], ['permis', 'Permis'], ['entreprises', 'Entreprises extérieures']] as const;
+const TABS = [['plans', 'Prevention plans'], ['permis', 'Permits'], ['entreprises', 'External companies']] as const;
 type Tab = (typeof TABS)[number][0];
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });
 
 /** Classement commun des sites soumis à la règle « dès la première minute » (« Établissement Seveso seuil haut »). */
-function ruleClass(rules: SiteRuleView[]) {
+function ruleClass(rules: SiteRuleView[], t: T) {
   if (rules.length && rules[0].seveso && rules.every((r) => r.seveso === rules[0].seveso)) return rules[0].classLabel;
-  return rules.length > 1 ? 'Règle interne des sites' : 'Règle interne du site';
+  return rules.length > 1 ? t('Internal rule of the sites') : t('Internal rule of the site');
 }
 
 /** Ce qui manque au plan pour être en règle (alerte R. 4512-6). */
-function missingLabel(p: PlanView) {
+function missingLabel(p: PlanView, t: T) {
   const parts = [];
-  if (!p.inspectionDone) parts.push('inspection commune préalable non réalisée');
-  if (!p.signedEuOn && !p.signedEeOn) parts.push('aucune signature');
-  else if (!p.signedEuOn) parts.push("signature de l'entreprise utilisatrice manquante");
-  else if (!p.signedEeOn) parts.push("signature de l'entreprise extérieure manquante");
+  if (!p.inspectionDone) parts.push(t('prior joint inspection not carried out'));
+  if (!p.signedEuOn && !p.signedEeOn) parts.push(t('no signature'));
+  else if (!p.signedEuOn) parts.push(t('signature of the host company missing'));
+  else if (!p.signedEeOn) parts.push(t('signature of the external company missing'));
   return parts.join(', ');
 }
 
 export default async function PreventionPage({ searchParams }: PageProps<'/prevention'>) {
   const { role } = await guard('prevention');
+  const { t } = await getI18n();
   const sp = await searchParams;
   // UX-12 : ancien ?filtre=archivees (entreprises) lu puis réécrit en ?etat=archives.
   const canonical = canonicalHref('/prevention', sp);
@@ -146,7 +149,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
   return (
     <>
       <PageHeader title={SCREENS.prevention.title}
-        sub={`${plural(d.counts.inProgress, 'intervention en cours', 'interventions en cours')} · ${plural(d.counts.activePermits, 'permis actif', 'permis actifs')} · ${plural(d.counts.contractors, 'entreprise extérieure', 'entreprises extérieures')}`} />
+        sub={`${plural(d.counts.inProgress, t('{n} intervention in progress'), t('{n} interventions in progress'))} · ${plural(d.counts.activePermits, t('{n} active permit'), t('{n} active permits'))} · ${plural(d.counts.contractors, t('{n} external company'), t('{n} external companies'))}`} />
       <div className="vg-page">
         <div className="card" style={{ gap: 2, padding: '6px 14px' }}>
           {d.siteRules.map((r) => (
@@ -185,13 +188,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <Icon name="ph-warning" size={22} style={{ color: TONE.danger.dot, flex: 'none' }} />
               <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 0 }}>
-                <span style={{ fontWeight: 500 }}>{plural(alertCount, "intervention d'entreprise extérieure sans plan de prévention signé", "interventions d'entreprises extérieures sans plan de prévention signé")}</span>
+                <span style={{ fontWeight: 500 }}>{plural(alertCount, t('{n} external company intervention without a signed prevention plan'), t('{n} external company interventions without a signed prevention plan'))}</span>
                 <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
                   {allRule
-                    ? <>{ruleClass(ruleSites)} : plan de prévention écrit, établi après l&apos;inspection commune préalable et signé par les deux entreprises dès la première minute d&apos;intervention, quelles que soient la durée et la nature des travaux ; les permis de feu et d&apos;essai d&apos;une entreprise extérieure ne sont délivrés qu&apos;avec un plan signé couvrant leur validité.</>
+                    ? fill(t('{rule}: written prevention plan, drawn up after the prior joint inspection and signed by both companies from the first minute of the intervention, whatever the duration and nature of the work; the fire and test permits of an external company are issued only with a signed plan covering their validity.'), { rule: ruleClass(ruleSites, t) })
                     : ruleSites.length
-                      ? <>Selon la règle du site : plan écrit et signé dès la première minute d&apos;intervention sur les sites concernés ({ruleSites.map((r) => r.label).join(', ')}), ailleurs dès 400 h de travaux sur 12 mois ou pour des travaux dangereux (Code du travail R. 4512-6 et R. 4512-7).</>
-                      : <>Code du travail R. 4512-6 et R. 4512-7 : plan écrit obligatoire dès 400 h de travaux sur 12 mois ou pour des travaux dangereux, établi après l&apos;inspection commune préalable et signé par les deux entreprises avant le début des travaux.</>}
+                      ? fill(t('Under the site rule: written plan signed from the first minute of the intervention on the sites concerned ({sites}), elsewhere from 400 h of work over 12 months or for dangerous work (French Labour Code R. 4512-6 and R. 4512-7).'), { sites: ruleSites.map((r) => r.label).join(', ') })
+                      : t('French Labour Code R. 4512-6 and R. 4512-7: written plan required from 400 h of work over 12 months or for dangerous work, drawn up after the prior joint inspection and signed by both companies before the work starts.')}
                 </span>
               </div>
             </div>
@@ -202,13 +205,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                   <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 240 }}>
                     <span style={{ fontSize: 12.5 }}><span style={{ fontWeight: 500 }}>{p.contractor}</span> — {lcfirst(p.title)}</span>
                     <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-                      {p.id} · {p.location} · depuis le {fmtDate(p.startOn)}, fin le {fmtDate(p.endOn)} · {p.mandatoryShort} · {missingLabel(p)}
-                      {permits.length > 0 && ` · permis ${permits.map((x) => `${x.id} (${x.requested ? 'demandé' : 'délivré'})`).join(', ')} sur ce plan`}
+                      {p.id} · {p.location} · {fill(t('since {start}, ends on {end}'), { start: fmtDate(p.startOn), end: fmtDate(p.endOn) })} · {p.mandatoryShort} · {missingLabel(p, t)}
+                      {permits.length > 0 && fill(t(' · permits {list} on this plan'), { list: permits.map((x) => `${x.id} (${x.requested ? t('requested') : t('issued')})`).join(', ') })}
                     </span>
                   </div>
                   {manage
                     ? <PlanAlertActions plan={p} options={options} />
-                    : <Link href={`/prevention?plan=${encodeURIComponent(p.id)}`} scroll={false} className="btn btn-ghost vg-btn-sm">Voir le plan</Link>}
+                    : <Link href={`/prevention?plan=${encodeURIComponent(p.id)}`} scroll={false} className="btn btn-ghost vg-btn-sm">{t('See the plan')}</Link>}
                 </div>
               );
             })}
@@ -217,13 +220,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                 <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 240 }}>
                   <span style={{ fontSize: 12.5 }}><span style={{ fontWeight: 500 }}>{p.contractor}</span> — {lcfirst(p.description)}</span>
                   <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-                    {p.id} · {p.typeLabel.toLowerCase()} {p.status === 'demande' ? 'demandé' : 'délivré'} · {p.location} · {p.validity}
+                    {p.id} · {p.typeLabel.toLowerCase()} {p.status === 'demande' ? t('requested') : t('issued')} · {p.location} · {p.validity}
                     {p.planIssue && ` · ${lcfirst(p.planIssue.replace(/\.$/, ''))}`}
                   </span>
                 </div>
                 {manage
                   ? <PermitAlertActions permit={p} options={options} />
-                  : <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} scroll={false} className="btn btn-ghost vg-btn-sm">Voir le permis</Link>}
+                  : <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} scroll={false} className="btn btn-ghost vg-btn-sm">{t('See the permit')}</Link>}
               </div>
             ))}
           </div>
@@ -231,22 +234,22 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
 
         <Toolbar end={(
           <>
-            <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />Carte et coactivité</Link>
-            {!alt && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />Importer un formulaire</Link>}
+            <Link href="/prevention/carte" className="btn btn-secondary vg-btn-sm"><Icon name="ph-map-trifold" size={13} />{t('Map and co-activity')}</Link>
+            {!alt && manage && tab === 'plans' && <Link href="/prevention/import" className="btn btn-secondary vg-btn-sm"><Icon name="ph-file-arrow-up" size={13} />{t('Import a form')}</Link>}
             {!alt && manage && tab === 'plans' && <NewPlanButton options={options} />}
             {!alt && tab === 'permis' && (
               // Lien HTML simple (nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application.
-              <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />Imprimer le registre</a>
+              <a href={registerHref} target="_blank" rel="noreferrer" className="btn btn-secondary vg-btn-sm"><Icon name="ph-printer" size={13} />{t('Print the register')}</a>
             )}
             {!alt && manage && tab === 'permis' && <NewPermitButton options={options} />}
             {!alt && manage && tab === 'entreprises' && <NewContractorButton suppliers={d.suppliers} />}
           </>
         )}>
-          <Segments label="Vues de la prévention" items={[
-            ...TABS.map(([key, label]) => ({ key, label, count: tabCount[key], href: tabHref(key), on: tab === key && !alt })),
-            ...(canReadGateHouse(role) ? [{ key: 'poste-de-garde', label: 'Poste de garde', href: GATE_HOUSE_PATH, on: !!gate }] : []),
-            { key: 'causeries', label: 'Causeries sécurité', href: SAFETY_TALKS_HREF, on: !!talks },
-            { key: 'simops', label: 'Opérations simultanées', href: simopsHref(), on: !!simops },
+          <Segments label={t('Prevention views')} items={[
+            ...TABS.map(([key, label]) => ({ key, label: t(label), count: tabCount[key], href: tabHref(key), on: tab === key && !alt })),
+            ...(canReadGateHouse(role) ? [{ key: 'poste-de-garde', label: t('Gatehouse'), href: GATE_HOUSE_PATH, on: !!gate }] : []),
+            { key: 'causeries', label: t('Safety talks'), href: SAFETY_TALKS_HREF, on: !!talks },
+            { key: 'simops', label: t('Simultaneous operations'), href: simopsHref(), on: !!simops },
           ]} />
         </Toolbar>
 
@@ -254,31 +257,31 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           <SafetyTalksView data={talks} canManage={manage} openId={str(sp.causerie)} sites={formOptions.sites} defaultSite={d.choices.defaultSiteId} />
         ) : (
           <>
-        {missingPlan && <MissingNotice text="Plan de prévention introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
-        {missingPermit && <MissingNotice text="Permis introuvable ou hors du site sélectionné." closeHref={tabHref(tab)} />}
-        {tab === 'entreprises' && missingDetail(sp.entreprise, !!openContractor) && <MissingNotice text="Entreprise extérieure introuvable." closeHref={tabHref(tab)} />}
+        {missingPlan && <MissingNotice text={t('Prevention plan not found or outside the selected site.')} closeHref={tabHref(tab)} />}
+        {missingPermit && <MissingNotice text={t('Permit not found or outside the selected site.')} closeHref={tabHref(tab)} />}
+        {tab === 'entreprises' && missingDetail(sp.entreprise, !!openContractor) && <MissingNotice text={t('External company not found.')} closeHref={tabHref(tab)} />}
 
         {tab === 'plans' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={shownFilters(PLAN_FILTERS, planFilter, planCount).map((f) => ({
                 href: hrefWith('/prevention', planParams, { filtre: filterParam(PLAN_FILTERS, f) }),
-                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{planCount(f)}</span></>,
+                label: <>{t(f.label)}<span style={{ marginLeft: 6, opacity: 0.6 }}>{planCount(f)}</span></>,
                 on: f === planFilter,
               }))} />
               <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
                 {allRule
-                  ? `${ruleClass(ruleSites)} : plan écrit et signé dès la première minute d'intervention, quelles que soient la durée et la nature des travaux`
+                  ? fill(t('{rule}: written plan signed from the first minute of the intervention, whatever the duration and nature of the work'), { rule: ruleClass(ruleSites, t) })
                   : ruleSites.length
-                    ? 'Plan écrit obligatoire dès la première minute sur les sites soumis à la règle, sinon dès 400 h sur 12 mois ou travaux dangereux (R. 4512-7)'
-                    : "Plan écrit obligatoire (R. 4512-7) : 400 h sur 12 mois ou travaux dangereux (liste de l'arrêté du 19 mars 1993)"}
+                    ? t('Written plan required from the first minute on the sites under the rule, otherwise from 400 h over 12 months or dangerous work (R. 4512-7)')
+                    : t('Written plan required (R. 4512-7): 400 h over 12 months or dangerous work (list of the order of 19 March 1993)')}
               </span>
             </div>
             <FilterBar path="/prevention" base={{ filtre: planParams.filtre }} detail={['plan']} fields={[
-              { name: 'entreprise', label: 'Entreprise extérieure', all: 'Toutes', options: planSel.contractors, value: planSel.filters.entreprise },
-              { name: 'projet', label: 'Projet Keystone', options: planSel.projects, value: planSel.filters.projet },
+              { name: 'entreprise', label: t('External company'), all: t('Any'), options: planSel.contractors, value: planSel.filters.entreprise },
+              { name: 'projet', label: t('Keystone project'), options: planSel.projects, value: planSel.filters.projet },
             ]} />
-            <PlansTable key={openPlan?.id ?? 'liste'} plans={plans} options={options} canManage={manage} openId={openPlan?.id} emptyLabel={planFilter.empty} />
+            <PlansTable key={openPlan?.id ?? 'liste'} plans={plans} options={options} canManage={manage} openId={openPlan?.id} emptyLabel={t(planFilter.empty)} />
           </>
         )}
 
@@ -287,31 +290,31 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={shownFilters(PERMIT_FILTERS, permitFilter, permitCount).map((f) => ({
                 href: hrefWith('/prevention', { ...permitParams, onglet: 'permis' }, { filtre: filterParam(PERMIT_FILTERS, f) }),
-                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{permitCount(f)}</span></>,
+                label: <>{t(f.label)}<span style={{ marginLeft: 6, opacity: 0.6 }}>{permitCount(f)}</span></>,
                 on: f === permitFilter,
               }))} />
               <SegLinks options={PERMIT_TYPE_FILTERS.map((f) => ({
                 href: hrefWith('/prevention', { ...permitParams, onglet: 'permis' }, { type: f.key ?? undefined }),
-                label: <>{f.label}<span style={{ marginLeft: 6, opacity: 0.6 }}>{f.key ? byState.filter((p) => p.type === f.key).length : byState.length}</span></>,
+                label: <>{t(f.label)}<span style={{ marginLeft: 6, opacity: 0.6 }}>{f.key ? byState.filter((p) => p.type === f.key).length : byState.length}</span></>,
                 on: f.key === permitType,
               }))} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-fire" size={13} style={{ color: 'var(--tone-warn-dot)' }} />Permis de feu : travaux par points chauds, surveillance 2 h après la fin des travaux</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-flask" size={13} style={{ color: 'var(--color-accent)' }} />Permis d&apos;essai : zone d&apos;essais (ATEX zone 2), produits inertes simulant les explosifs</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-fire" size={13} style={{ color: 'var(--tone-warn-dot)' }} />{t('Fire permit: hot work, watch for 2 h after the end of the work')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="ph-flask" size={13} style={{ color: 'var(--color-accent)' }} />{t('Test permit: test area (ATEX zone 2), inert products simulating explosives')}</span>
               {ruleSites.length > 0 && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Icon name="ph-shield-warning" size={13} style={{ color: 'var(--color-accent)' }} />
-                  Entreprise extérieure : délivrance subordonnée à un plan de prévention signé couvrant la validité{allRule ? '' : ' (sites soumis à la règle)'}
+                  {t('External company: issue subject to a signed prevention plan covering the validity')}{allRule ? '' : t(' (sites under the rule)')}
                 </span>
               )}
             </div>
             <FilterBar path="/prevention" base={{ onglet: 'permis', filtre: permitParams.filtre, type: permitParams.type }} detail={['permis']} fields={[
-              { name: 'entreprise', label: 'Entreprise extérieure', all: 'Toutes', options: permitSel.contractors, value: permitSel.filters.entreprise },
-              { name: 'projet', label: 'Projet Keystone', options: permitSel.projects, value: permitSel.filters.projet },
+              { name: 'entreprise', label: t('External company'), all: t('Any'), options: permitSel.contractors, value: permitSel.filters.entreprise },
+              { name: 'projet', label: t('Keystone project'), options: permitSel.projects, value: permitSel.filters.projet },
             ]} />
             <PermitsTable key={openPermit?.id ?? 'liste'} permits={permits} options={options} canManage={manage} openId={openPermit?.id}
-              emptyLabel={permitType ? `${permitFilter.empty.replace(/\.$/, '')} (${permitType === 'feu' ? 'permis de feu' : "permis d'essai"}).` : permitFilter.empty} />
+              emptyLabel={permitType ? `${t(permitFilter.empty).replace(/\.$/, '')} (${permitType === 'feu' ? t('fire permit') : t('test permit')}).` : t(permitFilter.empty)} />
           </>
         )}
 
@@ -319,13 +322,13 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <SegLinks options={[
-                { href: '/prevention?onglet=entreprises', label: <>Actives<span style={{ marginLeft: 6, opacity: 0.6 }}>{d.counts.contractors}</span></>, on: !showArchived },
-                { href: `/prevention?onglet=entreprises&etat=${ARCHIVES}`, label: <>Archivées<span style={{ marginLeft: 6, opacity: 0.6 }}>{archivedCount}</span></>, on: showArchived },
+                { href: '/prevention?onglet=entreprises', label: <>{t('Active#fplural')}<span style={{ marginLeft: 6, opacity: 0.6 }}>{d.counts.contractors}</span></>, on: !showArchived },
+                { href: `/prevention?onglet=entreprises&etat=${ARCHIVES}`, label: <>{t('Archived#fplural')}<span style={{ marginLeft: 6, opacity: 0.6 }}>{archivedCount}</span></>, on: showArchived },
               ]} />
-              <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Plans et permis comptés sur le site sélectionné</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{t('Plans and permits counted on the selected site')}</span>
             </div>
             <ContractorsTable key={openContractor?.id ?? 'liste'} contractors={contractors} suppliers={manage ? d.suppliers : { options: [], message: null }} canManage={manage} openId={openContractor?.id}
-              emptyLabel={showArchived ? 'Aucune entreprise archivée.' : 'Aucune entreprise extérieure enregistrée.'} />
+              emptyLabel={showArchived ? t('No archived company.') : t('No external company recorded.')} />
           </>
         )}
           </>

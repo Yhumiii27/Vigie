@@ -23,6 +23,8 @@ import {
 } from './parts';
 import { withCurrent } from '@/lib/form-options';
 import { PermitLockouts } from './PermitLockouts';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -39,14 +41,15 @@ function planCandidates(plans: PlanChoice[], siteId: string, contractorId: strin
     .sort((a, b) => Number(b.signed) - Number(a.signed) || a.startOn.localeCompare(b.startOn));
 }
 
-const planLabel = (p: PlanChoice, withContractor: boolean) =>
-  `${p.id} · ${withContractor ? `${p.contractor} — ` : ''}${p.title} · ${p.period} · ${p.signed ? 'signé' : 'non signé'}`;
+const planLabel = (p: PlanChoice, withContractor: boolean, t: T) =>
+  `${p.id} · ${withContractor ? `${p.contractor} — ` : ''}${p.title} · ${p.period} · ${p.signed ? t('signed') : t('not signed')}`;
 
 const contractorName = (options: PreventionOptions, id: string) => options.contractors.find(([v]) => v === id)?.[1].split(' — ')[0] ?? id;
 
 // ─── Formulaire ─────────────────────────────────────────────────────────────
 
 function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView; options: PreventionOptions; onDone: (id?: string) => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [type, setType] = useState<PermitType>(permit?.type ?? 'feu');
   // Une demande antérieure à laquelle manquerait un point de la check-list type le retrouve (exigé à l'enregistrement).
   const [items, setItems] = useState<ChecklistItem[]>(() => (permit
@@ -70,14 +73,14 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   const firstMinute = !!rule?.ppFromFirstMinute;
   // Plan signé exigé pour délivrer : entreprise extérieure sur un site « dès la première minute », ou permis de feu d'une entreprise extérieure.
   const planRequired = permitNeedsSignedPlan({ type, contractorId: contractorId || null }, rule);
-  const requiredWhy = firstMinute ? `${lcfirst(ruleBasis(rule))}, plan dès la première minute` : 'permis de feu : travaux dangereux, arrêté du 19 mars 1993';
+  const requiredWhy = firstMinute ? fill(t('{basis}, plan from the first minute'), { basis: lcfirst(ruleBasis(rule)) }) : t('fire permit: dangerous work, order of 19 March 1993');
   const fromDay = validFrom.slice(0, 10), toDay = validTo.slice(0, 10);
   const candidates = planCandidates(options.plans, siteId, contractorId, fromDay, toDay);
   const selected = options.plans.find((p) => p.id === planId);
   const stale = !!planId && !candidates.some((p) => p.id === planId);
   const planOptions = [
-    ...(stale ? [[planId, `${selected ? planLabel(selected, !contractorId) : planId} — ne convient pas`] as const] : []),
-    ...candidates.map((p) => [p.id, planLabel(p, !contractorId)] as const),
+    ...(stale ? [[planId, `${selected ? planLabel(selected, !contractorId, t) : planId}${t(' — not suitable')}`] as const] : []),
+    ...candidates.map((p) => [p.id, planLabel(p, !contractorId, t)] as const),
   ];
   /** Conserve le plan choisi s'il convient encore ; sinon propose le plan (signé de préférence) de l'entreprise couvrant les dates. */
   const repick = (next: { site?: string; contractor?: string; from?: string; to?: string }) => {
@@ -94,9 +97,9 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   };
   const who = contractorId ? contractorName(options, contractorId) : '';
 
-  const switchType = (t: PermitType) => {
-    setType(t);
-    setItems(preset(t));
+  const switchType = (k: PermitType) => {
+    setType(k);
+    setItems(preset(k));
   };
   const addItem = () => {
     const label = draft.trim();
@@ -111,8 +114,8 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   };
 
   return (
-    <ActionForm action={savePermit} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={permit ? 'Enregistrer' : 'Enregistrer la demande'} hidden={{ id: permit?.id, version: permit?.version }}>
-      <Field name="type" label="Type de permis">
+    <ActionForm action={savePermit} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={permit ? t('Save') : t('Save the request')} hidden={{ id: permit?.id, version: permit?.version }}>
+      <Field name="type" label={t('Permit type')}>
         <div className="seg" role="radiogroup" style={{ justifySelf: 'start' }}>
           {PERMIT_TYPE_KEYS.map((k) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12, padding: '5px 11px', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: permit && permit.type !== k ? 0.45 : 1 }}>
@@ -123,78 +126,78 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
         </div>
       </Field>
       <FormRow>
-        <Field name="siteId" label="Site" hint={options.siteLocked ? SITE_LOCK_HINT : undefined}>
+        <Field name="siteId" label={t('Site')} hint={options.siteLocked ? t(SITE_LOCK_HINT) : undefined}>
           <Select name="siteId" options={options.recordSites} value={siteId} onChange={(e) => { setSiteId(e.target.value); repick({ site: e.target.value }); }} />
         </Field>
-        <Field name="location" label="Lieu">
-          <Input name="location" defaultValue={permit?.location} placeholder={type === 'feu' ? 'Ex. Atelier montage · poste M3' : "Ex. Zone d'essais · banc BE-1 (zone ATEX 2)"} />
+        <Field name="location" label={t('Location')}>
+          <Input name="location" defaultValue={permit?.location} placeholder={type === 'feu' ? t('E.g. Assembly workshop · station M3') : t('E.g. Test area · bench BE-1 (ATEX zone 2)')} />
         </Field>
       </FormRow>
-      <Field name="description" label="Travaux">
+      <Field name="description" label={t('Work')}>
         <Input name="description" defaultValue={permit?.description}
-          placeholder={type === 'feu' ? 'Ex. Soudure de reprise sur le bâti du poste de retournement' : "Ex. Essais d'endurance avec produit inerte simulant l'émulsion"} />
+          placeholder={type === 'feu' ? t('E.g. Repair welding on the frame of the turning station') : t('E.g. Endurance tests with an inert product simulating the emulsion')} />
       </Field>
       <FormRow>
-        <Field name="contractorId" label="Entreprise" hint="Laisser vide pour une intervention du personnel interne.">
-          <Select name="contractorId" options={contractorChoices(options, permit && { id: permit.contractorId, name: permit.contractor })} value={contractorId} placeholder="Intervention interne"
+        <Field name="contractorId" label={t('Company')} hint={t('Leave empty for an intervention by internal staff.')}>
+          <Select name="contractorId" options={contractorChoices(options, t, permit && { id: permit.contractorId, name: permit.contractor })} value={contractorId} placeholder={t('Internal intervention')}
             onChange={(e) => { setContractorId(e.target.value); repick({ contractor: e.target.value }); }} />
         </Field>
-        <Field name="performer" label="Intervenant(s)">
-          <Input name="performer" defaultValue={permit?.performer} placeholder="Ex. [T. Nguyen]" />
+        <Field name="performer" label={t('Worker(s)')}>
+          <Input name="performer" defaultValue={permit?.performer} placeholder={t('E.g. [T. Nguyen]')} />
         </Field>
       </FormRow>
       <FormRow cols={type === 'feu' ? 3 : 2}>
-        <Field name="validFrom" label="Valide du">
+        <Field name="validFrom" label={t('Valid from')}>
           <Input name="validFrom" type="datetime-local" value={validFrom} onChange={(e) => { setValidFrom(e.target.value); repick({ from: e.target.value }); }} />
         </Field>
-        <Field name="validTo" label="Au (fin des travaux)" hint={`Validité de ${PERMIT_MAX_DAYS} jours au plus.`}>
+        <Field name="validTo" label={t('To (end of the work)')} hint={fill(t('Validity of {n} days at most.'), { n: PERMIT_MAX_DAYS })}>
           <Input name="validTo" type="datetime-local" value={validTo} onChange={(e) => changeValidTo(e.target.value)} />
         </Field>
         {type === 'feu' && (
-          <Field name="watchUntil" label="Surveillance jusqu'à" hint={`${FIRE_WATCH_HOURS} h après la fin des travaux.`}>
+          <Field name="watchUntil" label={t('Watch until')} hint={fill(t('{n} h after the end of the work.'), { n: FIRE_WATCH_HOURS })}>
             <Input name="watchUntil" type="datetime-local" value={watch} onChange={(e) => { setWatch(e.target.value); setWatchTouched(true); }} />
           </Field>
         )}
       </FormRow>
 
       <FormRow>
-        <Field name="preventionPlanId" label="Plan de prévention"
-          hint={firstMinute ? 'Entreprise extérieure : plan signé couvrant la validité exigé pour délivrer.'
-            : type === 'feu' ? 'Permis de feu d\'une entreprise extérieure : plan signé couvrant la validité exigé pour délivrer.'
-              : 'Pour une entreprise extérieure : la délivrance exige le plan obligatoire signé.'}>
+        <Field name="preventionPlanId" label={t('Prevention plan')}
+          hint={firstMinute ? t('External company: signed plan covering the validity required to issue.')
+            : type === 'feu' ? t('Fire permit of an external company: signed plan covering the validity required to issue.')
+              : t('For an external company: issuing requires the signed mandatory plan.')}>
           <Select name="preventionPlanId" options={planOptions} value={planId} onChange={(e) => choosePlan(e.target.value)}
-            placeholder={contractorId && !candidates.length ? 'Aucun plan couvrant ces dates' : 'Aucun'} />
+            placeholder={contractorId && !candidates.length ? t('No plan covering these dates') : t('None')} />
         </Field>
-        <Field name="keystoneProjectCode" label="Projet Keystone" hint={options.projectsMessage ?? (permit?.keystoneProject && !permit.keystoneProjectCode ? `Ancien libellé : ${permit.keystoneProject}` : undefined)}>
-          <Select name="keystoneProjectCode" options={projects} defaultValue={permit?.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
+        <Field name="keystoneProjectCode" label={t('Keystone project')} hint={options.projectsMessage ?? (permit?.keystoneProject && !permit.keystoneProjectCode ? fill(t('Former label: {label}'), { label: permit.keystoneProject }) : undefined)}>
+          <Select name="keystoneProjectCode" options={projects} defaultValue={permit?.keystoneProjectCode ?? ''} placeholder={t('No project')} />
         </Field>
       </FormRow>
       {stale && (
         <Notice tone="danger">
-          Le plan {planId} ne convient pas à ce permis (clos, autre site ou autre entreprise, ou période ne couvrant pas la validité) : choisissez un plan couvrant les dates du permis.
+          {fill(t('The plan {id} does not suit this permit (closed, other site or other company, or period not covering the validity): choose a plan covering the permit’s dates.'), { id: planId })}
         </Notice>
       )}
       {!stale && contractorId && !candidates.length && (
         planRequired
           ? (
             <Notice tone="danger">
-              Aucun plan de prévention de {who} ne couvre ces dates sur ce site : le permis ne pourra pas être délivré sans plan signé couvrant sa validité ({requiredWhy}). Créez le plan dans l&apos;onglet « Plans de prévention ».
-              {firstMinute && ' La demande est comptée comme un écart tant que ce plan n\'est pas signé.'}
+              {fill(t('No prevention plan of {company} covers these dates on this site: the permit cannot be issued without a signed plan covering its validity ({why}). Create the plan in the “Prevention plans” tab.'), { company: who, why: requiredWhy })}
+              {firstMinute && t(' The request is counted as a gap as long as this plan is not signed.')}
             </Notice>
           )
-          : <Notice tone="neutral" icon="ph-info">Aucun plan de prévention de {who} ne couvre ces dates sur ce site : rattachez-en un si le plan écrit est obligatoire (R. 4512-7 : 400 h sur 12 mois ou travaux dangereux).</Notice>
+          : <Notice tone="neutral" icon="ph-info">{fill(t('No prevention plan of {company} covers these dates on this site: link one if the written plan is required (R. 4512-7: 400 h over 12 months or dangerous work).'), { company: who })}</Notice>
       )}
       {!stale && planRequired && !planId && candidates.length > 0 && (
-        <Notice tone="warn">Rattachez le plan de prévention de {who} couvrant ces dates : la délivrance est impossible sans plan signé ({requiredWhy}).</Notice>
+        <Notice tone="warn">{fill(t('Link the prevention plan of {company} covering these dates: issuing is impossible without a signed plan ({why}).'), { company: who, why: requiredWhy })}</Notice>
       )}
       {!stale && selected && (selected.mandatory || planRequired) && !selected.signed && (
         <Notice tone="warn" icon="ph-pen-nib">
-          Le plan {selected.id} n&apos;est pas encore signé par les deux entreprises : la délivrance restera bloquée jusqu&apos;aux signatures{firstMinute ? ', et la demande comptée comme un écart' : ''}.
+          {fill(t('The plan {id} is not yet signed by both companies: issuing will stay blocked until the signatures'), { id: selected.id })}{firstMinute ? t(', and the request counted as a gap') : ''}.
         </Notice>
       )}
 
-      <Field name="checklist" label={<>Vérifications préalables <span style={{ color: 'var(--color-neutral-500)' }}>· {checkedCount}/{items.length}</span></>}
-        hint="Tous les points doivent être vérifiés pour délivrer le permis.">
+      <Field name="checklist" label={<>{t('Prior checks')} <span style={{ color: 'var(--color-neutral-500)' }}>· {checkedCount}/{items.length}</span></>}
+        hint={t('Every point must be checked to issue the permit.')}>
         <input type="hidden" name="checklist" value={JSON.stringify(items)} />
         <div className="vg-inset" style={{ display: 'grid', gap: 7, padding: '10px 12px' }}>
           {items.map((item, i) => (
@@ -205,7 +208,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
                 <span>{item.label}</span>
               </label>
               {!presets.includes(item.label) && (
-                <button type="button" className="btn btn-ghost btn-icon" aria-label={`Retirer « ${item.label} »`} style={{ width: 24, height: 24, color: 'var(--color-neutral-500)' }}
+                <button type="button" className="btn btn-ghost btn-icon" aria-label={fill(t('Remove “{item}”'), { item: item.label })} style={{ width: 24, height: 24, color: 'var(--color-neutral-500)' }}
                   onClick={() => setItems(items.filter((_, j) => j !== i))}>
                   <Icon name="ph-x" size={12} />
                 </button>
@@ -213,10 +216,10 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
             </div>
           ))}
           <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-            <input className="input" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Ajouter un point de contrôle propre à l'intervention…" maxLength={200}
-              aria-label="Nouveau point de contrôle" style={{ fontSize: 12.5 }}
+            <input className="input" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t('Add a check point specific to the intervention…')} maxLength={200}
+              aria-label={t('New check point')} style={{ fontSize: 12.5 }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} />
-            <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!draft.trim()} onClick={addItem}><Icon name="ph-plus" size={13} />Ajouter</button>
+            <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!draft.trim()} onClick={addItem}><Icon name="ph-plus" size={13} />{t('Add')}</button>
           </div>
         </div>
       </Field>
@@ -227,15 +230,16 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
 // ─── Fiche ──────────────────────────────────────────────────────────────────
 
 function PermitChecklist({ permit, editable }: { permit: PermitView; editable: boolean }) {
+  const { t } = useI18n();
   const [items, setItem] = useOptimistic(permit.checklist, (cur: ChecklistItem[], [i, v]: [number, boolean]) => cur.map((c, j) => (j === i ? { ...c, checked: v } : c)));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const done = items.filter((i) => i.checked).length;
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      <SectionTitle aside={<span style={{ ...muted, display: 'inline-flex', gap: 8, alignItems: 'center' }}><SaveStatus pending={pending} />{done}/{items.length} vérifiés</span>}>Vérifications préalables</SectionTitle>
+      <SectionTitle aside={<span style={{ ...muted, display: 'inline-flex', gap: 8, alignItems: 'center' }}><SaveStatus pending={pending} />{fill(t('{done}/{total} checked'), { done, total: items.length })}</span>}>{t('Prior checks')}</SectionTitle>
       <div className="vg-inset" style={{ display: 'grid', gap: 7, padding: '10px 12px' }}>
-        {items.length === 0 && <span style={muted}>Aucun point de contrôle.</span>}
+        {items.length === 0 && <span style={muted}>{t('No check point.')}</span>}
         {items.map((item, i) => editable ? (
           <label key={`${i}-${item.label}`} className="vg-check">
             <input type="checkbox" checked={item.checked}
@@ -260,6 +264,7 @@ function PermitChecklist({ permit, editable }: { permit: PermitView; editable: b
  * Permis délivré : seuls les plans en règle (signés s'ils sont exigés) sont proposés, comme le vérifie le serveur.
  */
 function PermitPlanLink({ permit, options }: { permit: PermitView; options: PreventionOptions }) {
+  const { t } = useI18n();
   const delivered = permit.status === 'delivre';
   const list = planCandidates(options.plans, permit.siteId, permit.contractorId ?? '', permit.validFrom.slice(0, 10), permit.validTo.slice(0, 10))
     .filter((p) => p.id !== permit.preventionPlanId && (!delivered || p.signed || (!p.mandatory && !permit.planRequired)));
@@ -270,19 +275,21 @@ function PermitPlanLink({ permit, options }: { permit: PermitView; options: Prev
     if (permit.planIssueKind === 'unsigned') return null;
     return (
       <span style={{ fontSize: 11.5, color: 'var(--color-neutral-400)' }}>
-        Aucun autre plan {delivered ? 'signé ' : ''}de {permit.contractor ?? "l'entreprise"} ne couvre la validité du permis : {delivered ? 'recueillez les signatures du plan' : "établissez-le dans l'onglet « Plans de prévention »"}{delivered ? ', ou annulez le permis si les travaux sont arrêtés' : ''}.
+        {fill(delivered
+          ? t('No other signed plan of {company} covers the permit’s validity: collect the plan’s signatures, or cancel the permit if the work is stopped.')
+          : t('No other plan of {company} covers the permit’s validity: draw it up in the “Prevention plans” tab.'), { company: permit.contractor ?? t('the company') })}
       </span>
     );
   }
   return (
     <div style={{ display: 'grid', gap: 4 }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select className="input" value={planId} onChange={(e) => setPlanId(e.target.value)} aria-label="Plan de prévention à rattacher"
+        <select className="input" value={planId} onChange={(e) => setPlanId(e.target.value)} aria-label={t('Prevention plan to link')}
           style={{ flex: 1, minWidth: 220, fontSize: 12.5, padding: '5px 8px' }}>
-          {list.map((p) => <option key={p.id} value={p.id}>{planLabel(p, false)}</option>)}
+          {list.map((p) => <option key={p.id} value={p.id}>{planLabel(p, false, t)}</option>)}
         </select>
         <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending || !planId} onClick={() => run(() => linkPermitPlan(permit.id, planId))}>
-          <Icon name="ph-link" size={13} />Rattacher le plan
+          <Icon name="ph-link" size={13} />{t('Link the plan')}
         </button>
       </div>
       <ErrorLine error={error} />
@@ -293,78 +300,79 @@ function PermitPlanLink({ permit, options }: { permit: PermitView; options: Prev
 function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLeave }: {
   permit: PermitView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCancelPermit: () => void; onLeave: () => void;
 }) {
+  const { t } = useI18n();
   const { pending, error, run } = useRun();
   const requested = permit.status === 'demande';
   const delivered = permit.status === 'delivre';
   const ended = permit.status === 'clos' || permit.status === 'annule';
   const expired = permit.state === 'expire';
-  const deliverBlock = !permit.allChecked ? 'Tous les points de la check-list doivent être vérifiés.'
+  const deliverBlock = !permit.allChecked ? t('Every point of the checklist must be checked.')
     : permit.planBlocker ? permit.planBlocker
-      : expired ? 'La période de validité est dépassée.'
+      : expired ? t('The validity period is exceeded.')
         : permit.lockoutDeliverBlock;
-  const closeQuestion = permit.type === 'feu' ? 'Surveillance après travaux terminée et zone vérifiée ?' : 'Essais terminés et zone remise en sécurité ?';
+  const closeQuestion = permit.type === 'feu' ? t('Watch after work finished and zone checked?') : t('Tests finished and zone made safe again?');
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-        <ToneTag tone={permit.tone}>{permit.stateLabel}{permit.watching ? ' · surveillance' : ''}</ToneTag>
+        <ToneTag tone={permit.tone}>{permit.stateLabel}{permit.watching ? t(' · watch') : ''}</ToneTag>
         <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{permit.typeLabel}</span>
-        {permit.planGap && <ToneTag tone="danger">{permit.status === 'demande' ? 'Demande' : 'Entreprise extérieure'} sans plan signé · écart</ToneTag>}
-        {permit.planGapWith && <span style={muted}>compté avec le plan {permit.planGapWith}, en écart</span>}
+        {permit.planGap && <ToneTag tone="danger">{permit.status === 'demande' ? t('Request without a signed plan · gap') : t('External company without a signed plan · gap')}</ToneTag>}
+        {permit.planGapWith && <span style={muted}>{fill(t('counted with the plan {id}, in gap'), { id: permit.planGapWith })}</span>}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
           {/* Fiche à afficher sur le lieu des travaux : lien HTML simple (nouvel onglet), la feuille d'impression ne reste pas chargée. */}
           <a href={`/prevention/imprimer/permis/${encodeURIComponent(permit.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-            <Icon name="ph-printer" size={13} />Imprimer
+            <Icon name="ph-printer" size={13} />{t('Print')}
           </a>
           {!ended && (
             <Link href={`/prevention/carte?permis=${encodeURIComponent(permit.id)}`} className="btn btn-ghost vg-btn-sm">
-              <Icon name="ph-map-trifold" size={13} />Voir sur la carte
+              <Icon name="ph-map-trifold" size={13} />{t('See on the map')}
             </Link>
           )}
         </span>
       </div>
 
-      {expired && delivered && <Notice tone="danger">Validité dépassée sans clôture : vérifiez la fin des travaux{permit.type === 'feu' ? ' et la ronde de surveillance' : ' et la remise en sécurité de la zone'}, puis clôturez le permis.</Notice>}
-      {expired && requested && <Notice tone="danger">Permis jamais délivré et période de validité échue : modifiez les dates ou annulez la demande.</Notice>}
+      {expired && delivered && <Notice tone="danger">{permit.type === 'feu' ? t('Validity exceeded without closure: check the end of the work and the watch round, then close the permit.') : t('Validity exceeded without closure: check the end of the work and that the zone is made safe again, then close the permit.')}</Notice>}
+      {expired && requested && <Notice tone="danger">{t('Permit never issued and validity period over: change the dates or cancel the request.')}</Notice>}
       {permit.planIssue && (permit.planGap || permit.planBlocker) && (
         <Notice tone="danger">
           <div style={{ display: 'grid', gap: 6 }}>
             <span>
-              {permit.planGap && <strong style={{ fontWeight: 500 }}>Intervention d&apos;une entreprise extérieure sans plan de prévention signé. </strong>}
+              {permit.planGap && <strong style={{ fontWeight: 500 }}>{t('Intervention of an external company without a signed prevention plan.')} </strong>}
               {permit.planIssue}{' '}
               {requested
-                ? (permit.ruleReason ? `Délivrance impossible (${lcfirst(permit.ruleReason)}).` : "Délivrance impossible tant que le plan n'est pas en règle.")
+                ? (permit.ruleReason ? fill(t('Issue impossible ({reason}).'), { reason: lcfirst(permit.ruleReason) }) : t('Issue impossible as long as the plan is not in order.'))
                 : permit.ruleReason ? `${permit.ruleReason}.` : ''}
             </span>
             {permit.plan && permit.planIssueKind === 'unsigned' && (
               <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ justifySelf: 'start' }}>
-                Ouvrir le plan {permit.plan.id} pour recueillir les signatures
+                {fill(t('Open the plan {id} to collect the signatures'), { id: permit.plan.id })}
               </Link>
             )}
             {canManage && permit.contractorId && <PermitPlanLink key={permit.preventionPlanId ?? 'aucun'} permit={permit} options={options} />}
           </div>
         </Notice>
       )}
-      {permit.watching && <Notice tone="warn" icon="ph-eye">Travaux terminés : surveillance du lieu jusqu&apos;à {permit.watchLabel}.</Notice>}
+      {permit.watching && <Notice tone="warn" icon="ph-eye">{fill(t('Work finished: watch of the place until {time}.'), { time: permit.watchLabel ?? '' })}</Notice>}
 
       <Facts items={[
-        ['Travaux', permit.description],
-        ['Lieu', permit.location],
-        ['Site', permit.site],
-        ['Entreprise', permit.contractorId && permit.contractor
+        [t('Work'), permit.description],
+        [t('Location'), permit.location],
+        [t('Site'), permit.site],
+        [t('Company'), permit.contractorId && permit.contractor
           ? <Link href={contractorHref(permit.contractorId)} className="vg-link" style={{ fontSize: 12.5 }}>{permit.contractor}</Link>
-          : permit.contractor ?? 'Intervention interne'],
-        ['Intervenant(s)', permit.performer],
-        ['Plan de prévention', permit.plan
-          ? <>{permit.plan.id}<span style={{ display: 'block', ...muted, color: permit.plan.signed ? 'var(--color-neutral-500)' : 'var(--tone-warn-fg)' }}>{permit.plan.signed ? 'Signé' : 'Non signé'} · {permit.plan.period}</span></>
-          : permit.planRequired ? <span style={{ color: 'var(--tone-danger-fg)' }}>Aucun</span> : '—'],
-        ['Projet Keystone', permit.keystoneProject ?? '—'],
-        ['Valide du', fmtLocalLong(permit.validFrom)],
-        ['Au', fmtLocalLong(permit.validTo)],
-        permit.watchUntil ? ["Surveillance jusqu'à", fmtLocalLong(permit.watchUntil)] : null,
-        ['Délivré par', permit.issuer ?? (requested ? 'Non délivré' : '—')],
-        permit.closedLabel ? [permit.status === 'annule' ? 'Annulé le' : 'Clos le', permit.status === 'annule'
-          ? <>{permit.closedLabel}{permit.cancelledBy ? ` par ${permit.cancelledBy}` : ''}{permit.cancelReason && <span style={{ display: 'block', ...muted }}>{permit.cancelReason}</span>}</>
+          : permit.contractor ?? t('Internal intervention')],
+        [t('Worker(s)'), permit.performer],
+        [t('Prevention plan'), permit.plan
+          ? <>{permit.plan.id}<span style={{ display: 'block', ...muted, color: permit.plan.signed ? 'var(--color-neutral-500)' : 'var(--tone-warn-fg)' }}>{permit.plan.signed ? t('Signed') : t('Not signed')} · {permit.plan.period}</span></>
+          : permit.planRequired ? <span style={{ color: 'var(--tone-danger-fg)' }}>{t('None')}</span> : '—'],
+        [t('Keystone project'), permit.keystoneProject ?? '—'],
+        [t('Valid from'), fmtLocalLong(permit.validFrom)],
+        [t('To#date'), fmtLocalLong(permit.validTo)],
+        permit.watchUntil ? [t('Watch until'), fmtLocalLong(permit.watchUntil)] : null,
+        [t('Issued by'), permit.issuer ?? (requested ? t('Not issued') : '—')],
+        permit.closedLabel ? [permit.status === 'annule' ? t('Cancelled on') : t('Closed on'), permit.status === 'annule'
+          ? <>{permit.closedLabel}{permit.cancelledBy ? fill(t(' by {name}'), { name: permit.cancelledBy }) : ''}{permit.cancelReason && <span style={{ display: 'block', ...muted }}>{permit.cancelReason}</span>}</>
           : permit.closedLabel] : null,
       ]} />
 
@@ -376,7 +384,7 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
       {/* Actions reprises seulement (consultation) : la Prévention ne crée plus d'action QSE (15/10/2026). */}
       {(permit.actions.length > 0 || (permit.plan && permit.planActions > 0)) && (
         <div style={{ display: 'grid', gap: 6 }}>
-          <SectionTitle>Actions reprises du plan d&apos;actions</SectionTitle>
+          <SectionTitle>{t('Actions taken over from the action plan')}</SectionTitle>
           {permit.actions.map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
               <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
@@ -387,13 +395,13 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
           ))}
           {permit.plan && permit.planActions > 0 && (
             <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ fontSize: 11.5, justifySelf: 'start' }}>
-              {permit.planActions > 1 ? `${permit.planActions} actions` : '1 action'} sur le plan {permit.plan.id}
+              {fill(permit.planActions > 1 ? t('{n} actions on the plan {id}') : t('1 action on the plan {id}'), { n: permit.planActions, id: permit.plan.id })}
             </Link>
           )}
         </div>
       )}
 
-      <LinkedEvents events={permit.events} emptyLabel="Aucun événement rattaché à ce permis."
+      <LinkedEvents events={permit.events} emptyLabel={t('No event linked to this permit.')}
         reportHref={canManage ? newEventHref('permis', permit.id) : null} />
 
       <ChangeLogList entries={permit.history} />
@@ -401,20 +409,20 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
       <ErrorLine error={error} />
       {canManage && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          {requested && <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>}
+          {requested && <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />{t('Edit')}</button>}
           {(requested || delivered) && (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onCancelPermit}>
-              <Icon name="ph-prohibit" size={13} />{requested ? 'Annuler la demande' : 'Annuler le permis'}
+              <Icon name="ph-prohibit" size={13} />{requested ? t('Cancel the request') : t('Cancel the permit')}
             </button>
           )}
           {delivered && (
-            <ConfirmButton label="Clore" confirmLabel="Oui, clore" question={closeQuestion} icon="ph-check-square" pending={pending}
+            <ConfirmButton label={t('Close#verb')} confirmLabel={t('Yes, close')} question={closeQuestion} icon="ph-check-square" pending={pending}
               disabled={permit.state === 'delivre' || !!permit.closeBlock || !!permit.lockoutCloseBlock}
-              tooltip={permit.state === 'delivre' ? "Les travaux n'ont pas commencé : annulez le permis s'ils n'ont pas lieu." : permit.closeBlock ?? permit.lockoutCloseBlock ?? undefined}
+              tooltip={permit.state === 'delivre' ? t('The work has not started: cancel the permit if it does not take place.') : permit.closeBlock ?? permit.lockoutCloseBlock ?? undefined}
               className="btn btn-primary vg-btn-sm" onConfirm={() => run(() => closePermit(permit.id))} />
           )}
           {requested && (
-            <ConfirmButton label="Délivrer" confirmLabel="Délivrer" question="Délivrer le permis sous votre responsabilité ?" icon="ph-seal-check" pending={pending}
+            <ConfirmButton label={t('Issue')} confirmLabel={t('Issue')} question={t('Issue the permit under your responsibility?')} icon="ph-seal-check" pending={pending}
               disabled={!!deliverBlock} tooltip={deliverBlock ?? undefined} className="btn btn-primary vg-btn-sm" onConfirm={() => run(() => deliverPermit(permit.id))} />
           )}
         </div>
@@ -428,22 +436,23 @@ type Mode = 'view' | 'edit' | 'cancel';
 
 /** Fiche d'un permis (check-list, délivrance, clôture, annulation avec motif). */
 export function PermitDialog({ permit, open, onClose, options, canManage }: { permit: PermitView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
   const requested = permit?.status === 'demande';
   const kicker = !permit ? ''
-    : mode === 'edit' ? `Modifier la demande ${permit.id}`
-      : mode === 'cancel' ? `${requested ? 'Annuler la demande' : 'Annuler le permis'} ${permit.id}` : permit.typeLabel;
+    : mode === 'edit' ? fill(t('Edit the request {id}'), { id: permit.id })
+      : mode === 'cancel' ? `${requested ? t('Cancel the request') : t('Cancel the permit')} ${permit.id}` : permit.typeLabel;
   return (
     <Dialog open={open && !!permit} onClose={close} width={680} kicker={kicker}
       title={permit ? `${permit.id} · ${permit.location}` : ''}>
       {permit && mode === 'edit' && <PermitForm permit={permit} options={options} onDone={back} onCancel={back} />}
       {permit && mode === 'cancel' && (
-        <ReasonForm action={cancelPermit} hidden={{ id: permit.id }} submitLabel={requested ? 'Annuler la demande' : 'Annuler le permis'} submitIcon="ph-prohibit"
+        <ReasonForm action={cancelPermit} hidden={{ id: permit.id }} submitLabel={requested ? t('Cancel the request') : t('Cancel the permit')} submitIcon="ph-prohibit"
           onDone={back} onCancel={back}
-          placeholder={requested ? 'Ex. Soudure reportée en cabine de soudage : permis inutile' : 'Ex. Travaux arrêtés : intervention reportée'}
-          message={requested ? 'La demande reste consultable dans le filtre « Annulés », avec le motif.' : 'Travaux arrêtés ou n’ayant pas lieu : le permis reste consultable dans le filtre « Annulés », avec le motif.'} />
+          placeholder={requested ? t('E.g. Welding moved to the welding booth: permit not needed') : t('E.g. Work stopped: intervention postponed')}
+          message={requested ? t('The request stays readable in the “Cancelled” filter, with the reason.') : t('Work stopped or not taking place: the permit stays readable in the “Cancelled” filter, with the reason.')} />
       )}
       {permit && mode === 'view' && (
         <PermitSheet permit={permit} options={options} canManage={canManage} onEdit={() => setMode('edit')}
@@ -455,10 +464,11 @@ export function PermitDialog({ permit, open, onClose, options, canManage }: { pe
 
 /** Bouton de l'alerte « entreprise extérieure sans plan signé » pour un permis : ouvrir la fiche (aucune action QSE, 15/10/2026). */
 export function PermitAlertActions({ permit, options }: { permit: PermitView; options: PreventionOptions }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <div style={{ display: 'flex', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
-      <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name={permit.icon} size={13} />Ouvrir le permis</button>
+      <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name={permit.icon} size={13} />{t('Open the permit')}</button>
       <PermitDialog permit={permit} open={open} onClose={() => setOpen(false)} options={options} canManage />
     </div>
   );
@@ -468,9 +478,10 @@ export function PermitAlertActions({ permit, options }: { permit: PermitView; op
 
 /** « Nouveau permis » : la demande créée s'ouvre pour la vérification de la check-list et la délivrance. */
 export function NewPermitButton({ options }: { options: PreventionOptions }) {
+  const { t } = useI18n();
   const router = useRouter();
   return (
-    <DialogButton label="Nouveau permis" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouveau permis" kicker="Permis de feu · permis d'essai" width={680}>
+    <DialogButton label={t('New permit')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('New permit')} kicker={t('Fire permit · test permit')} width={680}>
       {(close) => (
         <PermitForm options={options} onCancel={close} onDone={(id) => {
           close();
@@ -483,6 +494,7 @@ export function NewPermitButton({ options }: { options: PreventionOptions }) {
 
 /** Tableau des permis ; un clic ouvre la fiche. */
 export function PermitsTable({ permits, options, canManage, openId, emptyLabel }: { permits: PermitView[]; options: PreventionOptions; canManage: boolean; openId?: string; emptyLabel: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(openId ?? null);
   const sel = permits.find((p) => p.id === selId) ?? null;
@@ -494,7 +506,7 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12.5, minWidth: 1160 }}>
             <thead>
-              <tr><th>Réf.</th><th>Type</th><th>Lieu</th><th>Travaux</th><th>Intervenant</th><th>Plan de prévention</th><th>Validité</th><th>Surveillance jusqu&apos;à</th><th>Check-list</th><th>Statut</th></tr>
+              <tr><th>{t('Ref.')}</th><th>{t('Type')}</th><th>{t('Location')}</th><th>{t('Work')}</th><th>{t('Worker')}</th><th>{t('Prevention plan')}</th><th>{t('Validity')}</th><th>{t('Watch until')}</th><th>{t('Checklist')}</th><th>{t('Status')}</th></tr>
             </thead>
             <tbody>
               {permits.length === 0 && <tr><td colSpan={10} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>{emptyLabel}</td></tr>}
@@ -511,25 +523,25 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
                     <td style={{ color: 'var(--color-neutral-400)', minWidth: 150, maxWidth: 220, textWrap: 'pretty' }}>{p.location}</td>
                     <td style={{ minWidth: 220, maxWidth: 320, textWrap: 'pretty' }}>{p.description}</td>
                     <td style={{ minWidth: 150 }}>
-                      <span style={{ display: 'block' }}>{p.contractor ?? 'Interne'}</span>
+                      <span style={{ display: 'block' }}>{p.contractor ?? t('Internal')}</span>
                       <span style={{ display: 'block', ...muted }}>{p.performer}</span>
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }} title={p.planIssue ?? undefined}>
                       {p.plan
-                        ? <><span style={{ display: 'block', color: 'var(--color-neutral-300)' }}>{p.plan.id}</span><span style={{ display: 'block', fontSize: 11, color: p.plan.signed ? 'var(--color-neutral-500)' : 'var(--tone-warn-fg)' }}>{p.plan.signed ? 'signé' : 'non signé'}</span></>
+                        ? <><span style={{ display: 'block', color: 'var(--color-neutral-300)' }}>{p.plan.id}</span><span style={{ display: 'block', fontSize: 11, color: p.plan.signed ? 'var(--color-neutral-500)' : 'var(--tone-warn-fg)' }}>{p.plan.signed ? t('signed') : t('not signed')}</span></>
                         : p.contractorId
-                          ? <span style={{ color: p.planRequired ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>Aucun</span>
+                          ? <span style={{ color: p.planRequired ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>{t('None')}</span>
                           : <span style={muted}>—</span>}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.validity}</td>
                     <td style={{ whiteSpace: 'nowrap', color: p.watching ? 'var(--tone-warn-fg)' : 'var(--color-neutral-300)' }}>{p.watchLabel ?? <span style={muted}>—</span>}</td>
                     <td style={{ whiteSpace: 'nowrap', color: p.allChecked ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{done}/{p.checklist.length}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <ToneTag tone={p.tone}>{p.stateLabel}{p.watching ? ' · surveillance' : ''}</ToneTag>
+                      <ToneTag tone={p.tone}>{p.stateLabel}{p.watching ? t(' · watch') : ''}</ToneTag>
                       {p.planGap && (
                         <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}
-                          title={p.planGapWith ? `Même intervention que le plan ${p.planGapWith}, en écart : comptée une seule fois.` : undefined}>
-                          {p.planGapWith ? `Écart · compté avec ${p.planGapWith}` : 'Écart · sans plan signé'}
+                          title={p.planGapWith ? fill(t('Same intervention as the plan {id}, in gap: counted only once.'), { id: p.planGapWith }) : undefined}>
+                          {p.planGapWith ? fill(t('Gap · counted with {id}'), { id: p.planGapWith }) : t('Gap · without a signed plan')}
                         </span>
                       )}
                     </td>

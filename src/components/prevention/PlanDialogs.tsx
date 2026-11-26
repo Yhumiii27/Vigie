@@ -27,6 +27,8 @@ import {
   contractorChoices, contractorHref, dropUrlParam, muted, rowOpener, ruleOf, useRun, type PreventionOptions,
 } from './parts';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** Pièces jointes acceptées sur un plan : PDF, images, Word. */
 const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
@@ -70,6 +72,7 @@ function ContentGroupTitle({ group, note }: { group: PlanContentGroup; note?: Re
 const contentOf = (group: PlanContentGroup) => PLAN_CONTENT.filter((c) => c.group === group);
 
 function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; options: PreventionOptions; onDone: (id?: string) => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [hours, setHours] = useState(plan ? String(plan.estimatedHours) : '');
   const [start, setStart] = useState(plan?.startOn ?? '');
   const [dangerous, setDangerous] = useState(plan?.dangerousWork ?? false);
@@ -80,7 +83,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
   const h = Number(hours.replace(/\s/g, '').replace(',', '.'));
   const overHours = hours.trim() !== '' && Number.isFinite(h) && h >= MANDATORY_HOURS;
   const legal = overHours || dangerous;
-  const legalText = [overHours && `${hours.trim()} h ≥ ${MANDATORY_HOURS} h sur 12 mois`, dangerous && 'travaux dangereux'].filter(Boolean).join(' et ');
+  const legalText = [overHours && fill(t('{hours} h ≥ {min} h over 12 months'), { hours: hours.trim(), min: MANDATORY_HOURS }), dangerous && t('dangerous work')].filter(Boolean).join(t(' and '));
   const signed = !!(plan?.signedEuOn || plan?.signedEeOn);
   // Intervention commencée : déplacer la date de début exige un motif (un écart R. 4512-6 ne s'efface pas sans trace).
   const startMoved = !!plan && plan.startOn <= options.today && start !== plan.startOn;
@@ -88,93 +91,93 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
   const projects = withCurrent(options.projects, plan?.keystoneProjectCode, plan?.keystoneProject, 'start');
 
   return (
-    <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? 'Enregistrer' : 'Créer le plan'} hidden={{ id: plan?.id, version: plan?.version }}>
+    <ActionForm action={savePlan} onDone={(s) => onDone(s.id)} onCancel={onCancel} submitLabel={plan ? t('Save') : t('Create the plan')} hidden={{ id: plan?.id, version: plan?.version }}>
       {signed && (
         <Notice tone="warn" icon="ph-pen-nib">
-          Modifier l&apos;entreprise, la nature des travaux, le lieu, la période, les heures, les mesures ou une section déjà renseignée du contenu réglementaire d&apos;un plan signé efface les signatures : le plan mis à jour doit être signé à nouveau.
-          Compléter une section encore vide conserve les signatures.
+          {t('Changing the company, the nature of the work, the location, the period, the hours, the measures or an already filled section of the regulatory content of a signed plan clears the signatures: the updated plan must be signed again.')}
+          {' '}{t('Completing a section still empty keeps the signatures.')}
         </Notice>
       )}
       <FormRow>
-        <Field name="contractorId" label="Entreprise extérieure" hint={options.contractors.length ? undefined : "Ajoutez d'abord l'entreprise dans l'onglet « Entreprises extérieures »."}>
-          <Select name="contractorId" options={contractorChoices(options, plan && { id: plan.contractorId, name: plan.contractor })} defaultValue={plan?.contractorId ?? ''} placeholder="Choisir…" autoFocus={!plan} />
+        <Field name="contractorId" label={t('External company')} hint={options.contractors.length ? undefined : t('First add the company in the “External companies” tab.')}>
+          <Select name="contractorId" options={contractorChoices(options, t, plan && { id: plan.contractorId, name: plan.contractor })} defaultValue={plan?.contractorId ?? ''} placeholder={t('Choose…')} autoFocus={!plan} />
         </Field>
-        <Field name="siteId" label="Site" hint={options.siteLocked ? SITE_LOCK_HINT : undefined}>
+        <Field name="siteId" label={t('Site')} hint={options.siteLocked ? t(SITE_LOCK_HINT) : undefined}>
           <Select name="siteId" options={options.recordSites} value={siteId} onChange={(e) => setSiteId(e.target.value)} />
         </Field>
       </FormRow>
-      <Field name="title" label="Nature des travaux">
-        <Input name="title" defaultValue={plan?.title} placeholder="Ex. Maintenance du pont roulant 10 t : réglage des fins de course" />
+      <Field name="title" label={t('Nature of the work')}>
+        <Input name="title" defaultValue={plan?.title} placeholder={t('E.g. Maintenance of the 10 t overhead crane: adjusting the limit switches')} />
       </Field>
-      <Field name="location" label="Lieu d'intervention">
-        <Input name="location" defaultValue={plan?.location} placeholder="Ex. Atelier montage · poste M3" />
+      <Field name="location" label={t('Place of intervention')}>
+        <Input name="location" defaultValue={plan?.location} placeholder={t('E.g. Assembly workshop · station M3')} />
       </Field>
       <FormRow cols={3}>
-        <Field name="startOn" label="Début">
+        <Field name="startOn" label={t('Start')}>
           <Input name="startOn" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
-        <Field name="endOn" label="Fin">
+        <Field name="endOn" label={t('End')}>
           <Input name="endOn" type="date" defaultValue={plan?.endOn} />
         </Field>
-        <Field name="estimatedHours" label="Heures sur 12 mois" hint={firstMinute ? 'Pour information : plan obligatoire sur ce site.' : "Total estimé pour l'entreprise extérieure."}>
-          <Input name="estimatedHours" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Ex. 120" />
+        <Field name="estimatedHours" label={t('Hours over 12 months')} hint={firstMinute ? t('For information: plan required on this site.') : t('Estimated total for the external company.')}>
+          <Input name="estimatedHours" inputMode="numeric" value={hours} onChange={(e) => setHours(e.target.value)} placeholder={t('E.g. 120')} />
         </Field>
       </FormRow>
       {startMoved && (
-        <Field name="reason" label="Motif de la modification de la date de début" hint="Intervention déjà commencée : la modification est tracée avec son motif.">
-          <TextArea name="reason" rows={2} placeholder="Ex. Date de début saisie par erreur : l'intervention a commencé le 06/10" />
+        <Field name="reason" label={t('Reason for changing the start date')} hint={t('Intervention already started: the change is traced with its reason.')}>
+          <TextArea name="reason" rows={2} placeholder={t('E.g. Start date entered by mistake: the intervention started on 06/10')} />
         </Field>
       )}
       <div style={{ display: 'grid', gap: 4 }}>
         <label className="vg-check">
           <input type="checkbox" name="dangerousWork" checked={dangerous} onChange={(e) => setDangerous(e.target.checked)} />
           <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
-          <span>Travaux dangereux (arrêté du 19 mars 1993)</span>
+          <span>{t('Dangerous work (order of 19 March 1993)')}</span>
         </label>
         <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>{DANGEROUS_WORK_HINT}</span>
         {firstMinute && (
           <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0, display: 'flex', gap: 5, alignItems: 'baseline' }}>
-            <Icon name="ph-info" size={12} />Heures et travaux dangereux renseignés pour information : sur ce site, le plan est obligatoire quelles que soient la durée et la nature des travaux.
+            <Icon name="ph-info" size={12} />{t('Hours and dangerous work entered for information: on this site, the plan is required whatever the duration and nature of the work.')}
           </span>
         )}
       </div>
       <Notice tone={firstMinute || legal ? 'accent' : 'neutral'} icon={firstMinute ? 'ph-shield-warning' : legal ? 'ph-file-text' : 'ph-info'}>
         {firstMinute
-          ? <>Plan de prévention écrit <strong style={{ fontWeight: 500 }}>obligatoire</strong> dès la première minute d&apos;intervention ({lcfirst(ruleBasis(rule))}) : inspection commune préalable et signature des deux entreprises avant le début des travaux.{' '}
-            {legal ? `Seuil légal R. 4512-7 également atteint (${legalText}).` : `Hors règle du site, il ne serait pas obligatoire (moins de ${MANDATORY_HOURS} h sur 12 mois, sans travaux dangereux).`}</>
+          ? <>{t('Written prevention plan')} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}): prior joint inspection and signature of both companies before the work starts.'), { basis: lcfirst(ruleBasis(rule)) })}{' '}
+            {legal ? fill(t('Legal threshold R. 4512-7 also reached ({reasons}).'), { reasons: legalText }) : fill(t('Outside the site rule, it would not be required (less than {min} h over 12 months, no dangerous work).'), { min: MANDATORY_HOURS })}</>
           : legal
-            ? <>Plan de prévention écrit <strong style={{ fontWeight: 500 }}>obligatoire</strong> ({legalText}) : inspection commune préalable et signature des deux entreprises avant le début des travaux.</>
-            : <>Plan écrit non obligatoire (moins de {MANDATORY_HOURS} h sur 12 mois, sans travaux dangereux) ; l&apos;analyse des risques d&apos;interférence reste requise (R. 4512-6).</>}
+            ? <>{t('Written prevention plan')} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('({reasons}): prior joint inspection and signature of both companies before the work starts.'), { reasons: legalText })}</>
+            : fill(t('Written plan not required (less than {min} h over 12 months, no dangerous work); the analysis of interference risks is still required (R. 4512-6).'), { min: MANDATORY_HOURS })}
       </Notice>
       <FormRow>
-        <Field name="inspectionOn" label="Inspection commune préalable" hint="Visite conjointe des lieux, installations et matériels.">
+        <Field name="inspectionOn" label={t('Prior joint inspection')} hint={t('Joint visit of the premises, installations and equipment.')}>
           <Input name="inspectionOn" type="date" defaultValue={plan?.inspectionOn ?? ''} />
         </Field>
-        <Field name="ownerId" label="Responsable (entreprise utilisatrice)">
-          <Select name="ownerId" options={options.people} defaultValue={plan?.ownerId ?? ''} placeholder="Choisir…" />
+        <Field name="ownerId" label={t('Manager (host company)')}>
+          <Select name="ownerId" options={options.people} defaultValue={plan?.ownerId ?? ''} placeholder={t('Choose…')} />
         </Field>
       </FormRow>
-      <Field name="keystoneProjectCode" label="Projet Keystone" hint={options.projectsMessage ?? (plan?.keystoneProject && !plan.keystoneProjectCode ? `Ancien libellé : ${plan.keystoneProject}` : undefined)}>
-        <Select name="keystoneProjectCode" options={projects} defaultValue={plan?.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
+      <Field name="keystoneProjectCode" label={t('Keystone project')} hint={options.projectsMessage ?? (plan?.keystoneProject && !plan.keystoneProjectCode ? fill(t('Former label: {label}'), { label: plan.keystoneProject }) : undefined)}>
+        <Select name="keystoneProjectCode" options={projects} defaultValue={plan?.keystoneProjectCode ?? ''} placeholder={t('No project')} />
       </Field>
-      <Field name="interferenceRisks" label="Risques d'interférence" hint="Coactivité, circulation, énergies, produits, zones à risque…">
+      <Field name="interferenceRisks" label={t('Interference risks')} hint={t('Co-activity, traffic, energies, products, risk areas…')}>
         <TextArea name="interferenceRisks" rows={3} defaultValue={plan?.interferenceRisks ?? ''} />
       </Field>
-      <ContentGroupTitle group="ee" note="Communiquées par l'entreprise extérieure avant l'intervention ; elles ne bloquent pas la signature." />
+      <ContentGroupTitle group="ee" note={t('Provided by the external company before the intervention; they do not block the signature.')} />
       <FormRow>
-        <Field name="eeHeadcount" label={<>{EE_HEADCOUNT.label} <span style={muted}>{EE_HEADCOUNT.ref}</span></>} hint="Nombre de travailleurs affectés à l'intervention.">
-          <Input name="eeHeadcount" inputMode="numeric" defaultValue={plan?.eeHeadcount ?? ''} placeholder="Ex. 3" />
+        <Field name="eeHeadcount" label={<>{EE_HEADCOUNT.label} <span style={muted}>{EE_HEADCOUNT.ref}</span></>} hint={t('Number of workers assigned to the intervention.')}>
+          <Input name="eeHeadcount" inputMode="numeric" defaultValue={plan?.eeHeadcount ?? ''} placeholder={t('E.g. 3')} />
         </Field>
         <ContentField field={PLAN_CONTENT.find((c) => c.key === 'eeSupervisor')!} plan={plan} />
       </FormRow>
       <ContentField field={PLAN_CONTENT.find((c) => c.key === 'subcontracting')!} plan={plan} />
       <ContentGroupTitle group="measures"
-        note={<>Exigées pour signer un plan obligatoire ; indiquez « Aucun » ou « Sans objet » quand une section ne s&apos;applique pas.</>} />
-      <Field name="measures" label="Mesures de prévention" hint="Répartition des mesures entre l'entreprise utilisatrice et l'entreprise extérieure.">
+        note={t('Required to sign a mandatory plan; enter “None” or “Not applicable” when a section does not apply.')} />
+      <Field name="measures" label={t('Prevention measures')} hint={t('Split of the measures between the host company and the external company.')}>
         <TextArea name="measures" rows={3} defaultValue={plan?.measures ?? ''} />
       </Field>
       {contentOf('measures').map((c) => <ContentField key={c.key} field={c} plan={plan} />)}
-      <ContentGroupTitle group="sir" note="Exigé pour signer un plan obligatoire." />
+      <ContentGroupTitle group="sir" note={t('Required to sign a mandatory plan.')} />
       {contentOf('sir').map((c) => <ContentField key={c.key} field={c} plan={plan} />)}
     </ActionForm>
   );
@@ -184,22 +187,24 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
 
 /** Nom et qualité du signataire (PRV-07, R. 4512-7 : chef d'entreprise ou son représentant). */
 function SignerFields({ prefix, defaultName }: { prefix: 'signedEu' | 'signedEe'; defaultName?: string }) {
+  const { t } = useI18n();
   return (
     <FormRow>
-      <Field name={`${prefix}Name`} label="Nom du signataire">
+      <Field name={`${prefix}Name`} label={t('Name of the signatory')}>
         <Input name={`${prefix}Name`} defaultValue={defaultName ?? ''} maxLength={120} autoComplete="off" />
       </Field>
-      <Field name={`${prefix}Quality`} label="Qualité" hint="Chef d'entreprise ou son représentant : fonction.">
-        <Input name={`${prefix}Quality`} maxLength={120} placeholder="Directeur de site, chef de chantier…" />
+      <Field name={`${prefix}Quality`} label={t('Capacity')} hint={t('Company head or their representative: position.')}>
+        <Input name={`${prefix}Quality`} maxLength={120} placeholder={t('Site director, site manager…')} />
       </Field>
     </FormRow>
   );
 }
 
 function EuSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
-    <ActionForm action={signPlanEu} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" hidden={{ id: plan.id }}>
-      <Field name="signedEuOn" label="Signé pour l'entreprise utilisatrice le">
+    <ActionForm action={signPlanEu} onDone={onDone} onCancel={onCancel} submitLabel={t('Save the signature')} hidden={{ id: plan.id }}>
+      <Field name="signedEuOn" label={t('Signed for the host company on')}>
         <Input name="signedEuOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
       </Field>
       <SignerFields prefix="signedEu" defaultName={plan.owner ?? undefined} />
@@ -208,15 +213,16 @@ function EuSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; to
 }
 
 function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; today: string; onDone: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [fileError, setFileError] = useState<string | null>(null);
   return (
-    <ActionForm action={recordPlanEeSignature} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer la signature" encType="multipart/form-data" hidden={{ id: plan.id }}>
+    <ActionForm action={recordPlanEeSignature} onDone={onDone} onCancel={onCancel} submitLabel={t('Save the signature')} encType="multipart/form-data" hidden={{ id: plan.id }}>
       <SignerFields prefix="signedEe" />
       <FormRow>
-        <Field name="signedEeOn" label={`Signé par ${plan.contractor} le`}>
+        <Field name="signedEeOn" label={fill(t('Signed by {company} on'), { company: plan.contractor ?? '' })}>
           <Input name="signedEeOn" type="date" defaultValue={today} max={today} min={plan.inspectionOn ?? undefined} />
         </Field>
-        <Field name="file" label="Exemplaire signé" hint="Facultatif : PDF ou photo, 10 Mo au maximum.">
+        <Field name="file" label={t('Signed copy')} hint={t('Optional: PDF or photo, 10 MB at most.')}>
           <Input name="file" type="file" accept="application/pdf,image/*" onChange={(e) => setFileError(checkPicked(e.currentTarget, 1))} />
         </Field>
       </FormRow>
@@ -226,6 +232,7 @@ function EeSignatureForm({ plan, today, onDone, onCancel }: { plan: PlanView; to
 }
 
 function SignatureBox({ title, signedOn, signer, children }: { title: string; signedOn: string | null; signer?: { name: string; quality: string | null } | null; children?: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="vg-inset" style={{ display: 'grid', gap: 8, padding: '10px 12px', alignContent: 'start' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -233,7 +240,7 @@ function SignatureBox({ title, signedOn, signer, children }: { title: string; si
         <span style={{ fontWeight: 500, fontSize: 12.5 }}>{title}</span>
       </div>
       <span style={{ fontSize: 12, color: signedOn ? 'var(--tone-ok-fg)' : 'var(--color-neutral-400)' }}>
-        {signedOn ? `Signé le ${fmtDate(signedOn)}${signer ? ` par ${signer.name}${signer.quality ? ` (${signer.quality})` : ''}` : ''}` : 'Signature attendue'}
+        {signedOn ? `${fill(t('Signed on {date}'), { date: fmtDate(signedOn) })}${signer ? `${fill(t(' by {name}'), { name: signer.name })}${signer.quality ? ` (${signer.quality})` : ''}` : ''}` : t('Signature expected')}
       </span>
       {children}
     </div>
@@ -258,22 +265,23 @@ function FormItem({ item }: { item: PpFormData['sections'][number]['items'][numb
 
 /** Réponses du formulaire de plan de prévention importé (lecture seule). */
 function ImportedForm({ form }: { form: PlanFormView }) {
+  const { t } = useI18n();
   const boxes = form.sections.flatMap((s) => s.items).filter((i) => i.checked !== undefined);
   const checked = boxes.filter((i) => i.checked).length;
   return (
     <div style={{ display: 'grid', gap: 6 }}>
-      <SectionTitle aside={<span style={muted}>{form.formatLabel}{form.importedOn ? ` · importé le ${form.importedOn}` : ''}</span>}>Formulaire importé</SectionTitle>
+      <SectionTitle aside={<span style={muted}>{form.formatLabel}{form.importedOn ? fill(t(' · imported on {date}'), { date: form.importedOn }) : ''}</span>}>{t('Imported form')}</SectionTitle>
       <div className="vg-inset" style={{ display: 'grid', gap: 10, padding: '10px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
           <Icon name={FORMAT_ICON[form.format]} size={15} style={{ color: 'var(--color-neutral-400)' }} />
           {form.fileUrl
             ? <a href={form.fileUrl} target="_blank" rel="noreferrer" className="vg-link" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>{form.fileName}</a>
             : <span style={{ wordBreak: 'break-all' }}>{form.fileName}</span>}
-          {!form.fileUrl && <span style={muted}>fichier source indisponible</span>}
-          {boxes.length > 0 && <span style={{ ...muted, marginLeft: 'auto' }}>{checked}/{boxes.length} cases cochées</span>}
+          {!form.fileUrl && <span style={muted}>{t('source file unavailable')}</span>}
+          {boxes.length > 0 && <span style={{ ...muted, marginLeft: 'auto' }}>{fill(t('{checked}/{total} boxes ticked'), { checked, total: boxes.length })}</span>}
         </div>
         {form.sections.length === 0
-          ? <span style={muted}>Aucune réponse enregistrée.</span>
+          ? <span style={muted}>{t('No answer recorded.')}</span>
           : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px 18px' }}>
               {form.sections.map((sec, i) => (
@@ -291,6 +299,7 @@ function ImportedForm({ form }: { form: PlanFormView }) {
 
 /** Pièces jointes du plan : consultation, ajout et retrait tant que le plan n'est ni clos ni annulé. */
 function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean }) {
+  const { t } = useI18n();
   const [adding, setAdding] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const { pending, error, run } = useRun();
@@ -298,10 +307,10 @@ function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <SectionTitle aside={editable && !adding && (
-        <button type="button" className="vg-text-btn" onClick={() => setAdding(true)}><Icon name="ph-paperclip" size={13} />Joindre un fichier</button>
-      )}>Pièces jointes</SectionTitle>
+        <button type="button" className="vg-text-btn" onClick={() => setAdding(true)}><Icon name="ph-paperclip" size={13} />{t('Attach a file')}</button>
+      )}>{t('Attachments')}</SectionTitle>
       {plan.attachments.length === 0 && !adding && (
-        <span style={muted}>Aucune pièce jointe (exemplaire signé, compte rendu d&apos;inspection commune, avenant…).</span>
+        <span style={muted}>{t('No attachment (signed copy, joint inspection report, amendment…).')}</span>
       )}
       {plan.attachments.length > 0 && (
         <div className="vg-thumbs">
@@ -314,7 +323,7 @@ function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean
                   : <span style={{ display: 'grid', justifyItems: 'center', gap: 4, padding: 6, textAlign: 'center' }}><Icon name={a.icon} size={22} /><span style={{ fontSize: 11, wordBreak: 'break-all', lineHeight: 1.2 }}>{a.name.length > 28 ? `${a.name.slice(0, 26)}…` : a.name}</span></span>}
               </a>
               {editable && (
-                <ConfirmButton label="Retirer" confirmLabel="Retirer" question="Retirer ?" icon="ph-x" pending={pending} className="vg-text-btn"
+                <ConfirmButton label={t('Remove')} confirmLabel={t('Remove')} question={t('Remove?')} icon="ph-x" pending={pending} className="vg-text-btn"
                   onConfirm={() => run(() => removePlanAttachment(a.id))} />
               )}
             </div>
@@ -324,9 +333,9 @@ function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean
       <ErrorLine error={error} />
       {adding && (
         <div className="vg-inset" style={{ padding: '10px 12px' }}>
-          <ActionForm action={addPlanAttachments} encType="multipart/form-data" hidden={{ id: plan.id }} submitLabel="Joindre" submitIcon="ph-paperclip"
+          <ActionForm action={addPlanAttachments} encType="multipart/form-data" hidden={{ id: plan.id }} submitLabel={t('Attach')} submitIcon="ph-paperclip"
             onDone={closeForm} onCancel={closeForm}>
-            <Field name="files" label="Fichiers" hint={`PDF, image ou Word · ${MAX_PLAN_FILES} fichiers et ${MAX_BATCH_BYTES / MB} Mo au maximum par envoi.`}>
+            <Field name="files" label={t('Files')} hint={fill(t('PDF, image or Word · {n} files and {mb} MB at most per upload.'), { n: MAX_PLAN_FILES, mb: MAX_BATCH_BYTES / MB })}>
               <Input name="files" type="file" multiple accept={PLAN_FILE_ACCEPT} onChange={(e) => setFileError(checkPicked(e.currentTarget, MAX_PLAN_FILES))} />
             </Field>
             <ErrorLine error={fileError} />
@@ -337,7 +346,7 @@ function PlanAttachments({ plan, editable }: { plan: PlanView; editable: boolean
   );
 }
 
-const contentText = (value: string | number | null, empty = 'Non renseigné') => (
+const contentText = (value: string | number | null, empty: string) => (
   <span style={{ fontSize: 12.5, color: value != null && value !== '' ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>
     {value != null && value !== '' ? value : empty}
   </span>
@@ -345,10 +354,11 @@ const contentText = (value: string | number | null, empty = 'Non renseigné') =>
 
 /** Contenu réglementaire du plan (PRV-02) : entreprise extérieure (R. 4511-10), mesures (R. 4512-8), suivi individuel renforcé (R. 4512-9). */
 function PlanContentView({ plan }: { plan: PlanView }) {
+  const { t } = useI18n();
   const section = (c: PlanContentField) => (
     <div key={c.key} style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
       <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{c.label} · {c.ref}</span>
-      {contentText(plan[c.key])}
+      {contentText(plan[c.key], t('Not entered'))}
     </div>
   );
   return (
@@ -358,7 +368,7 @@ function PlanContentView({ plan }: { plan: PlanView }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
           <div style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
             <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{EE_HEADCOUNT.label}</span>
-            {contentText(plan.eeHeadcount != null ? `${plan.eeHeadcount} ${plan.eeHeadcount > 1 ? 'personnes' : 'personne'}` : null)}
+            {contentText(plan.eeHeadcount != null ? fill(plan.eeHeadcount > 1 ? t('{n} people') : t('{n} person'), { n: plan.eeHeadcount }) : null, t('Not entered'))}
           </div>
           {contentOf('ee').map(section)}
         </div>
@@ -380,6 +390,7 @@ function PlanContentView({ plan }: { plan: PlanView }) {
 function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }: {
   plan: PlanView; options: PreventionOptions; canManage: boolean; onEdit: () => void; onCancelPlan: () => void; onDeleted: () => void;
 }) {
+  const { t } = useI18n();
   const [eeOpen, setEeOpen] = useState(false);
   const [euOpen, setEuOpen] = useState(false);
   const { pending, error, run } = useRun();
@@ -390,39 +401,39 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
   const unsignedAfterWork = plan.mandatory && !(plan.signedEuOn && plan.signedEeOn) && plan.startOn <= options.today;
   const signedLate = plan.startGap?.kind === 'signe_apres';
   // Même règle que planSignIssue (serveur) : inspection commune, mesures, puis contenu R. 4512-8 et R. 4512-9 d'un plan obligatoire.
-  const signBlock = !plan.inspectionDone ? "Inspection commune préalable à réaliser avant toute signature."
-    : !plan.measures.trim() ? 'Mesures de prévention à compléter avant toute signature.'
-      : plan.contentMissing.length ? `Contenu réglementaire à compléter avant toute signature : ${plan.contentMissing.join(', ')}.` : null;
+  const signBlock = !plan.inspectionDone ? t('Prior joint inspection to carry out before any signature.')
+    : !plan.measures.trim() ? t('Prevention measures to complete before any signature.')
+      : plan.contentMissing.length ? fill(t('Regulatory content to complete before any signature: {list}.'), { list: plan.contentMissing.join(', ') }) : null;
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         <ToneTag tone={plan.tone}>{plan.statusLabel}</ToneTag>
         {plan.mandatory
-          ? <span title={plan.mandatoryReason} style={{ display: 'inline-flex' }}><ToneTag tone="accent">Plan écrit obligatoire · {plan.mandatoryShort}</ToneTag></span>
-          : <span className="tag tag-neutral">Plan écrit non obligatoire</span>}
-        {plan.missingSignature && <ToneTag tone="danger">Intervention en cours sans plan signé</ToneTag>}
-        {plan.overdue && <ToneTag tone="warn">Période échue · à clore</ToneTag>}
+          ? <span title={plan.mandatoryReason} style={{ display: 'inline-flex' }}><ToneTag tone="accent">{t('Written plan required')} · {plan.mandatoryShort}</ToneTag></span>
+          : <span className="tag tag-neutral">{t('Written plan not required')}</span>}
+        {plan.missingSignature && <ToneTag tone="danger">{t('Intervention in progress without a signed plan')}</ToneTag>}
+        {plan.overdue && <ToneTag tone="warn">{t('Period over · to close')}</ToneTag>}
         {plan.startGap?.past && (
-          <span title="Écart compté dans l'indicateur « Écarts R. 4512-6 sur 12 mois »" style={{ display: 'inline-flex' }}>
+          <span title={t('Gap counted in the indicator “R. 4512-6 gaps over 12 months”')} style={{ display: 'inline-flex' }}>
             <ToneTag tone="warn">
-              Écart R. 4512-6 · {plan.startGap.signedOn
-                ? `signé le ${fmtDayMonth(plan.startGap.signedOn)} après le début (${fmtDayMonth(plan.startOn)})`
-                : 'réalisée sans plan signé'}
+              {t('R. 4512-6 gap')} · {plan.startGap.signedOn
+                ? fill(t('signed on {date} after the start ({start})'), { date: fmtDayMonth(plan.startGap.signedOn), start: fmtDayMonth(plan.startOn) })
+                : t('carried out without a signed plan')}
             </ToneTag>
           </span>
         )}
-        <span className="tag tag-neutral" title="Sections renseignées : effectif prévisible, responsable, sous-traitance, R. 4512-8 1° à 5°, R. 4512-9">
-          Contenu R. 4512-8/9 : {plan.contentStats.filled}/{plan.contentStats.total}
+        <span className="tag tag-neutral" title={t('Sections filled: expected headcount, manager, subcontracting, R. 4512-8 1° to 5°, R. 4512-9')}>
+          {fill(t('Content R. 4512-8/9: {filled}/{total}'), { filled: plan.contentStats.filled, total: plan.contentStats.total })}
         </span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
           {/* Lien HTML simple (navigation complète, nouvel onglet) : la feuille d'impression ne reste pas chargée dans l'application. */}
           <a href={`/prevention/imprimer/plan/${encodeURIComponent(plan.id)}`} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-            <Icon name="ph-printer" size={13} />Imprimer
+            <Icon name="ph-printer" size={13} />{t('Print')}
           </a>
           {plan.status !== 'annule' && (
             <Link href={`/prevention/carte?plan=${encodeURIComponent(plan.id)}`} className="btn btn-ghost vg-btn-sm">
-              <Icon name="ph-map-trifold" size={13} />Voir sur la carte
+              <Icon name="ph-map-trifold" size={13} />{t('See on the map')}
             </Link>
           )}
         </span>
@@ -430,7 +441,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
 
       {plan.cancelled && (
         <Notice tone="neutral" icon="ph-prohibit">
-          Plan annulé le {plan.cancelled.on}{plan.cancelled.by ? ` par ${plan.cancelled.by}` : ''}{plan.cancelled.reason ? ` : ${plan.cancelled.reason}` : '.'}
+          {fill(t('Plan cancelled on {date}'), { date: plan.cancelled.on })}{plan.cancelled.by ? fill(t(' by {name}'), { name: plan.cancelled.by }) : ''}{plan.cancelled.reason ? fill(t(': {reason}'), { reason: plan.cancelled.reason }) : '.'}
         </Notice>
       )}
 
@@ -440,58 +451,58 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
 
       {plan.missingSignature && (
         <Notice tone="danger">
-          {plan.legalMandatory && !plan.firstMinute ? "Code du travail R. 4512-7 : l'intervention" : `${plan.mandatoryReason}. L'intervention`} a commencé le {fmtDate(plan.startOn)} alors que le plan écrit obligatoire n&apos;est pas signé par les deux entreprises
-          {plan.inspectionDone ? '.' : ' et que l\'inspection commune préalable n\'est pas enregistrée.'}
+          {plan.legalMandatory && !plan.firstMinute ? t('French Labour Code R. 4512-7: the intervention') : fill(t('{reason}. The intervention'), { reason: plan.mandatoryReason ?? '' })} {fill(t('started on {date} although the mandatory written plan is not signed by both companies'), { date: fmtDate(plan.startOn) })}
+          {plan.inspectionDone ? '.' : t(' and the prior joint inspection is not recorded.')}
         </Notice>
       )}
 
       <Facts items={[
         // PRV-14 : accès direct à la fiche de l'entreprise (onglet Entreprises extérieures).
-        ['Entreprise extérieure', <><Link href={contractorHref(plan.contractorId)} className="vg-link" style={{ fontSize: 12.5 }}>{plan.contractor}</Link><span style={{ display: 'block', ...muted }}>{plan.contractorTrade}</span></>],
-        ['Lieu', plan.location],
-        ['Site', plan.site],
-        ['Période', plan.period],
-        ['Heures sur 12 mois', `${plan.estimatedHours} h`],
-        ['Travaux dangereux', plan.dangerousWork ? 'Oui' : 'Non'],
-        ['Seuil légal R. 4512-7', plan.legalMandatory ? `Atteint (${plan.legalReason})` : `Non atteint · plan exigé par la règle ${plan.firstMinute ? 'du site' : "de l'entreprise"}`],
-        ['Inspection commune', plan.inspectionOn ? `${plan.inspectionDone ? 'Réalisée le' : 'Prévue le'} ${fmtDate(plan.inspectionOn)}` : 'Non réalisée'],
-        ['Responsable', plan.owner ?? '—'],
-        ['Projet Keystone', plan.keystoneProject ?? '—'],
+        [t('External company'), <><Link href={contractorHref(plan.contractorId)} className="vg-link" style={{ fontSize: 12.5 }}>{plan.contractor}</Link><span style={{ display: 'block', ...muted }}>{plan.contractorTrade}</span></>],
+        [t('Location'), plan.location],
+        [t('Site'), plan.site],
+        [t('Period'), plan.period],
+        [t('Hours over 12 months'), `${plan.estimatedHours} h`],
+        [t('Dangerous work'), plan.dangerousWork ? t('Yes') : t('No')],
+        [t('Legal threshold R. 4512-7'), plan.legalMandatory ? fill(t('Reached ({reason})'), { reason: plan.legalReason ?? '' }) : plan.firstMinute ? t('Not reached · plan required by the site rule') : t('Not reached · plan required by the company rule')],
+        [t('Joint inspection'), plan.inspectionOn ? fill(plan.inspectionDone ? t('Carried out on {date}') : t('Planned for {date}'), { date: fmtDate(plan.inspectionOn) }) : t('Not carried out')],
+        [t('Owner'), plan.owner ?? '—'],
+        [t('Keystone project'), plan.keystoneProject ?? '—'],
       ]} />
 
       <div style={{ display: 'grid', gap: 4 }}>
-        <SectionTitle>Nature des travaux</SectionTitle>
+        <SectionTitle>{t('Nature of the work')}</SectionTitle>
         <span style={{ fontSize: 12.5 }}>{plan.title}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
         <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-          <SectionTitle>Risques d&apos;interférence</SectionTitle>
-          <span style={{ fontSize: 12.5, color: plan.interferenceRisks ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{plan.interferenceRisks || 'Non renseignés.'}</span>
+          <SectionTitle>{t('Interference risks')}</SectionTitle>
+          <span style={{ fontSize: 12.5, color: plan.interferenceRisks ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{plan.interferenceRisks || t('Not entered#mplural')}</span>
         </div>
         <div style={{ display: 'grid', gap: 4, alignContent: 'start' }}>
-          <SectionTitle>Mesures de prévention</SectionTitle>
-          <span style={{ fontSize: 12.5, color: plan.measures ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{plan.measures || 'Non renseignées.'}</span>
+          <SectionTitle>{t('Prevention measures')}</SectionTitle>
+          <span style={{ fontSize: 12.5, color: plan.measures ? 'var(--color-neutral-300)' : 'var(--color-neutral-500)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{plan.measures || t('Not entered#fplural')}</span>
         </div>
       </div>
 
       <PlanContentView plan={plan} />
 
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle>Signatures</SectionTitle>
+        <SectionTitle>{t('Signatures')}</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-          <SignatureBox title="Entreprise utilisatrice" signedOn={plan.signedEuOn} signer={plan.signedEu}>
+          <SignatureBox title={t('Host company')} signedOn={plan.signedEuOn} signer={plan.signedEu}>
             {editable && !plan.signedEuOn && !euOpen && (
               <button type="button" className="btn btn-primary vg-btn-sm" style={{ justifySelf: 'start' }} disabled={pending || !!signBlock}
                 title={signBlock ?? undefined} onClick={() => setEuOpen(true)}>
-                <Icon name="ph-pen-nib" size={13} />Signer pour l&apos;entreprise utilisatrice
+                <Icon name="ph-pen-nib" size={13} />{t('Sign for the host company')}
               </button>
             )}
           </SignatureBox>
-          <SignatureBox title={`Entreprise extérieure · ${plan.contractor}`} signedOn={plan.signedEeOn} signer={plan.signedEe}>
+          <SignatureBox title={`${t('External company')} · ${plan.contractor}`} signedOn={plan.signedEeOn} signer={plan.signedEe}>
             {editable && !plan.signedEeOn && !eeOpen && (
               <button type="button" className="btn btn-secondary vg-btn-sm" style={{ justifySelf: 'start' }} disabled={!!signBlock}
                 title={signBlock ?? undefined} onClick={() => setEeOpen(true)}>
-                <Icon name="ph-signature" size={13} />Enregistrer la signature de l&apos;entreprise extérieure
+                <Icon name="ph-signature" size={13} />{t('Record the external company’s signature')}
               </button>
             )}
           </SignatureBox>
@@ -499,7 +510,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
         {editable && signBlock && (!plan.signedEuOn || !plan.signedEeOn) && (
           <span style={{ ...muted, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
             {signBlock}
-            <button type="button" className="vg-text-btn" onClick={onEdit}>{plan.inspectionDone ? 'Compléter le plan' : "Renseigner l'inspection commune"}</button>
+            <button type="button" className="vg-text-btn" onClick={onEdit}>{plan.inspectionDone ? t('Complete the plan') : t('Enter the joint inspection')}</button>
           </span>
         )}
         {euOpen && !plan.signedEuOn && (
@@ -524,7 +535,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
 
       {plan.permits.length > 0 && (
         <div style={{ display: 'grid', gap: 6 }}>
-          <SectionTitle>Permis rattachés</SectionTitle>
+          <SectionTitle>{t('Linked permits')}</SectionTitle>
           <div style={{ display: 'grid', gap: 4 }}>
             {plan.permits.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
@@ -532,8 +543,8 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
                 <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
                 <span>{p.validity}</span>
                 <ToneTag tone={p.tone}>{p.stateLabel}</ToneTag>
-                {p.gap && <span style={{ fontSize: 11, color: 'var(--tone-danger-fg)' }}>{plan.missingSignature ? 'Écart · compté avec ce plan' : 'Écart · sans plan signé'}</span>}
-                {!p.gap && p.requested && !(plan.signedEuOn && plan.signedEeOn) && (plan.mandatory || p.type === 'feu') && <span style={muted}>Délivrance bloquée jusqu&apos;aux signatures</span>}
+                {p.gap && <span style={{ fontSize: 11, color: 'var(--tone-danger-fg)' }}>{plan.missingSignature ? t('Gap · counted with this plan') : t('Gap · without a signed plan')}</span>}
+                {!p.gap && p.requested && !(plan.signedEuOn && plan.signedEeOn) && (plan.mandatory || p.type === 'feu') && <span style={muted}>{t('Issue blocked until the signatures')}</span>}
               </div>
             ))}
           </div>
@@ -543,7 +554,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       {/* Actions reprises seulement (consultation) : la Prévention ne crée plus d'action QSE (15/10/2026). */}
       {plan.actions.length > 0 && (
         <div style={{ display: 'grid', gap: 6 }}>
-          <SectionTitle>Actions reprises du plan d&apos;actions</SectionTitle>
+          <SectionTitle>{t('Actions taken over from the action plan')}</SectionTitle>
           {plan.actions.map((a) => (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
               <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
@@ -555,7 +566,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
         </div>
       )}
 
-      <LinkedEvents events={plan.events} emptyLabel="Aucun événement rattaché à ce plan."
+      <LinkedEvents events={plan.events} emptyLabel={t('No event linked to this plan.')}
         reportHref={canManage ? newEventHref('plan', plan.id) : null} />
 
       <LazyChangeLog entity="prevention_plan" id={plan.id} />
@@ -563,23 +574,23 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       <ErrorLine error={error} />
       {editable && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />{t('Edit')}</button>
           {plan.deletable
-            ? <ConfirmButton label="Supprimer le brouillon" confirmLabel="Supprimer" icon="ph-trash" pending={pending}
-              question="Supprimer ce brouillon saisi par erreur ? Ses pièces jointes sont supprimées."
+            ? <ConfirmButton label={t('Delete the draft')} confirmLabel={t('Delete')} icon="ph-trash" pending={pending}
+              question={t('Delete this draft entered by mistake? Its attachments are deleted.')}
               onConfirm={() => run(() => deletePlan(plan.id), onDeleted)} />
             : <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!plan.cancelBlock} tip={plan.cancelBlock} onClick={onCancelPlan}>
-              <Icon name="ph-prohibit" size={13} />Annuler le plan
+              <Icon name="ph-prohibit" size={13} />{t('Cancel the plan')}
             </TipButton>}
           {plan.startGap ? (
             // PRV-21 : clôture après un écart R. 4512-6 avec la trace des mesures immédiates prises.
             <GapCloseButton disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined} pending={pending}
-              question={unsignedAfterWork ? "Plan non signé par les deux entreprises : l'écart reste tracé dans les indicateurs et l'historique du plan."
-                : signedLate ? "Plan signé après le début de l'intervention : l'écart R. 4512-6 reste tracé dans les indicateurs et l'historique du plan." : "Écart R. 4512-6 constaté au démarrage."}
+              question={unsignedAfterWork ? t('Plan not signed by both companies: the gap stays traced in the indicators and the plan’s history.')
+                : signedLate ? t('Plan signed after the start of the intervention: the R. 4512-6 gap stays traced in the indicators and the plan’s history.') : t('R. 4512-6 gap found at the start.')}
               onClose={(measures) => run(() => closePlan(plan.id, measures))} />
           ) : (
-            <ConfirmButton label="Clore le plan" confirmLabel="Clore" icon="ph-archive" pending={pending}
-              question="Clore définitivement ce plan ?"
+            <ConfirmButton label={t('Close the plan')} confirmLabel={t('Close#verb')} icon="ph-archive" pending={pending}
+              question={t('Close this plan for good?')}
               disabled={!!plan.closeBlock} tooltip={plan.closeBlock ?? undefined}
               onConfirm={() => run(() => closePlan(plan.id))} />
           )}
@@ -597,12 +608,13 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
 function GapCloseButton({ question, onClose, disabled, tooltip, pending }: {
   question: string; onClose: (measures: string) => void; disabled: boolean; tooltip?: string; pending: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [measures, setMeasures] = useState('');
   if (!open) {
     return (
       <TipButton className="btn btn-secondary vg-btn-sm" disabled={disabled || pending} tip={tooltip} onClick={() => setOpen(true)}>
-        <Icon name="ph-archive" size={13} />Clore le plan
+        <Icon name="ph-archive" size={13} />{t('Close the plan')}
       </TipButton>
     );
   }
@@ -611,10 +623,10 @@ function GapCloseButton({ question, onClose, disabled, tooltip, pending }: {
       <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{question}</span>
       <label htmlFor="plan-gap-measures" style={{ fontSize: 12 }}>{GAP_MEASURES_LABEL}</label>
       <textarea id="plan-gap-measures" className="input" value={measures} maxLength={GAP_MEASURES_MAX} onChange={(e) => setMeasures(e.target.value)}
-        placeholder="Ex. Travaux arrêtés, inspection commune faite le jour même, plan signé avant la reprise" style={{ minHeight: 64 }} />
+        placeholder={t('E.g. Work stopped, joint inspection done the same day, plan signed before resuming')} style={{ minHeight: 64 }} />
       <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setOpen(false)}>Annuler</button>
-        <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending || !measures.trim()} onClick={() => onClose(measures)}>Clore</button>
+        <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setOpen(false)}>{t('Cancel')}</button>
+        <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending || !measures.trim()} onClick={() => onClose(measures)}>{t('Close#verb')}</button>
       </span>
     </div>
   );
@@ -624,18 +636,19 @@ type Mode = 'view' | 'edit' | 'cancel';
 
 /** Fiche d'un plan de prévention (consultation, signatures, modification, annulation). */
 export function PlanDialog({ plan, open, onClose, options, canManage }: { plan: PlanView | null; open: boolean; onClose: () => void; options: PreventionOptions; canManage: boolean }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
-  const kicker = mode === 'edit' ? `Modifier le plan ${plan?.id ?? ''}`
-    : mode === 'cancel' ? `Annuler le plan ${plan?.id ?? ''}` : 'Plan de prévention · R. 4512-6';
+  const kicker = mode === 'edit' ? fill(t('Edit the plan {id}'), { id: plan?.id ?? '' })
+    : mode === 'cancel' ? fill(t('Cancel the plan {id}'), { id: plan?.id ?? '' }) : t('Prevention plan · R. 4512-6');
   return (
     <Dialog open={open && !!plan} onClose={close} width={760} kicker={kicker} title={plan ? `${plan.id} · ${plan.contractor}` : ''}>
       {plan && mode === 'edit' && <PlanForm plan={plan} options={options} onDone={back} onCancel={back} />}
       {plan && mode === 'cancel' && (
-        <ReasonForm action={cancelPlan} hidden={{ id: plan.id }} submitLabel="Annuler le plan" submitIcon="ph-prohibit" onDone={back} onCancel={back}
-          placeholder="Ex. Intervention reportée à 2027 : un nouveau plan sera établi"
-          message={<>Le plan reste consultable avec le motif de l&apos;annulation ; il ne compte plus dans les interventions ni dans les plans à signer.</>} />
+        <ReasonForm action={cancelPlan} hidden={{ id: plan.id }} submitLabel={t('Cancel the plan')} submitIcon="ph-prohibit" onDone={back} onCancel={back}
+          placeholder={t('E.g. Intervention postponed to 2027: a new plan will be drawn up')}
+          message={t('The plan stays readable with the reason for the cancellation; it no longer counts in the interventions or in the plans to sign.')} />
       )}
       {plan && mode === 'view' && (
         <PlanSheet plan={plan} options={options} canManage={canManage} onEdit={() => setMode('edit')}
@@ -649,9 +662,10 @@ export function PlanDialog({ plan, open, onClose, options, canManage }: { plan: 
 
 /** « Nouveau plan » : après création, la fiche du plan s'ouvre pour l'inspection et les signatures. */
 export function NewPlanButton({ options }: { options: PreventionOptions }) {
+  const { t } = useI18n();
   const router = useRouter();
   return (
-    <DialogButton label="Nouveau plan" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouveau plan de prévention" kicker="Code du travail R. 4512-6 à R. 4512-12" width={720}>
+    <DialogButton label={t('New plan')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('New prevention plan')} kicker={t('French Labour Code R. 4512-6 to R. 4512-12')} width={720}>
       {(close) => (
         <PlanForm options={options} onCancel={close} onDone={(id) => {
           close();
@@ -664,23 +678,25 @@ export function NewPlanButton({ options }: { options: PreventionOptions }) {
 
 /** Bouton de l'alerte « intervention sans plan signé » : ouvrir la fiche pour signer (aucune action QSE, 15/10/2026). */
 export function PlanAlertActions({ plan, options }: { plan: PlanView; options: PreventionOptions }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <div style={{ display: 'flex', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
-      <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name="ph-pen-nib" size={13} />Signer</button>
+      <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setOpen(true)}><Icon name="ph-pen-nib" size={13} />{t('Sign')}</button>
       <PlanDialog plan={plan} open={open} onClose={() => setOpen(false)} options={options} canManage />
     </div>
   );
 }
 
-const inspectionCell = (p: PlanView) => {
-  if (p.inspectionOn) return <span style={{ color: p.inspectionDone ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{p.inspectionDone ? fmtDate(p.inspectionOn) : `Prévue le ${fmtDate(p.inspectionOn)}`}</span>;
+const inspectionCell = (p: PlanView, t: (s: string) => string) => {
+  if (p.inspectionOn) return <span style={{ color: p.inspectionDone ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{p.inspectionDone ? fmtDate(p.inspectionOn) : fill(t('Planned for {date}'), { date: fmtDate(p.inspectionOn) })}</span>;
   if (p.status === 'clos' || p.status === 'annule') return <span style={muted}>—</span>;
-  return <span style={{ color: p.mandatory ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>À réaliser</span>;
+  return <span style={{ color: p.mandatory ? 'var(--tone-danger-fg)' : 'var(--color-neutral-500)' }}>{t('To carry out')}</span>;
 };
 
 /** Tableau des plans de prévention ; un clic ouvre la fiche. */
 export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { plans: PlanView[]; options: PreventionOptions; canManage: boolean; openId?: string; emptyLabel: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(openId ?? null);
   const sel = plans.find((p) => p.id === selId) ?? null;
@@ -693,8 +709,8 @@ export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { 
           <table className="table" style={{ fontSize: 12.5, minWidth: 1240 }}>
             <thead>
               <tr>
-                <th>Réf.</th><th>Entreprise</th><th>Travaux</th><th>Lieu</th><th>Période</th><th style={{ textAlign: 'right' }}>Heures</th>
-                <th>Dangereux</th><th>Plan écrit</th><th>Inspection commune</th><th>Signatures</th><th>Statut</th><th>Projet Keystone</th>
+                <th>{t('Ref.')}</th><th>{t('Company')}</th><th>{t('Work')}</th><th>{t('Location')}</th><th>{t('Period')}</th><th style={{ textAlign: 'right' }}>{t('Hours')}</th>
+                <th>{t('Dangerous')}</th><th>{t('Written plan')}</th><th>{t('Joint inspection')}</th><th>{t('Signatures')}</th><th>{t('Status')}</th><th>{t('Keystone project')}</th>
               </tr>
             </thead>
             <tbody>
@@ -710,33 +726,33 @@ export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { 
                   <td style={{ color: 'var(--color-neutral-400)', minWidth: 150, maxWidth: 220, textWrap: 'pretty' }}>{p.location}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {p.period}
-                    {p.inProgress && <span style={{ display: 'block', ...muted }}>en cours</span>}
-                    {p.overdue && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>période échue · à clore</span>}
+                    {p.inProgress && <span style={{ display: 'block', ...muted }}>{t('in progress')}</span>}
+                    {p.overdue && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>{t('period over · to close')}</span>}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', color: p.estimatedHours >= MANDATORY_HOURS ? 'var(--color-text)' : 'var(--color-neutral-300)' }}>{p.estimatedHours} h</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {p.dangerousWork ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--tone-warn-fg)' }}><Icon name="ph-warning" size={12} />Oui</span> : <span style={muted}>Non</span>}
+                    {p.dangerousWork ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--tone-warn-fg)' }}><Icon name="ph-warning" size={12} />{t('Yes')}</span> : <span style={muted}>{t('No')}</span>}
                   </td>
-                  <td style={{ whiteSpace: 'nowrap' }} title={p.mandatory ? `Obligatoire — ${p.mandatoryReason}` : `Moins de ${MANDATORY_HOURS} h sur 12 mois, sans travaux dangereux`}>
-                    {p.mandatory ? 'Obligatoire' : <span style={muted}>Non requis</span>}
-                    {p.firstMinute && <span style={{ display: 'block', ...muted }}>dès la 1re minute</span>}
+                  <td style={{ whiteSpace: 'nowrap' }} title={p.mandatory ? fill(t('Required — {reason}'), { reason: p.mandatoryReason ?? '' }) : fill(t('Less than {min} h over 12 months, no dangerous work'), { min: MANDATORY_HOURS })}>
+                    {p.mandatory ? t('Required') : <span style={muted}>{t('Not required')}</span>}
+                    {p.firstMinute && <span style={{ display: 'block', ...muted }}>{t('from the 1st minute')}</span>}
                     {p.contentMissing.length > 0 && p.status !== 'clos' && p.status !== 'annule' && (
-                      <span style={{ display: 'block', ...muted }} title={`À compléter : ${p.contentMissing.join(', ')}`}>contenu incomplet</span>
+                      <span style={{ display: 'block', ...muted }} title={fill(t('To complete: {list}'), { list: p.contentMissing.join(', ') })}>{t('content incomplete')}</span>
                     )}
                   </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{inspectionCell(p)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{inspectionCell(p, t)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <span style={{ display: 'inline-flex', gap: 4 }}>
-                      <SignChip label="EU" on={!!p.signedEuOn} title={p.signedEuOn ? `Entreprise utilisatrice · signé le ${fmtDate(p.signedEuOn)}` : 'Entreprise utilisatrice · signature attendue'} />
-                      <SignChip label="EE" on={!!p.signedEeOn} title={p.signedEeOn ? `Entreprise extérieure · signé le ${fmtDate(p.signedEeOn)}` : 'Entreprise extérieure · signature attendue'} />
+                      <SignChip label="EU" on={!!p.signedEuOn} title={p.signedEuOn ? fill(t('Host company · signed on {date}'), { date: fmtDate(p.signedEuOn) }) : t('Host company · signature expected')} />
+                      <SignChip label="EE" on={!!p.signedEeOn} title={p.signedEeOn ? fill(t('External company · signed on {date}'), { date: fmtDate(p.signedEeOn) }) : t('External company · signature expected')} />
                     </span>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <ToneTag tone={p.tone}>{p.statusLabel}</ToneTag>
-                    {p.missingSignature && <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}>Écart · sans plan signé</span>}
+                    {p.missingSignature && <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}>{t('Gap · without a signed plan')}</span>}
                     {p.startGap?.past && (
                       <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-warn-fg)' }}>
-                        Écart passé · {p.startGap.kind === 'signe_apres' ? 'signé après le démarrage' : 'réalisé sans plan signé'}
+                        {t('Past gap')} · {p.startGap.kind === 'signe_apres' ? t('signed after the start') : t('carried out without a signed plan#m')}
                       </span>
                     )}
                   </td>
