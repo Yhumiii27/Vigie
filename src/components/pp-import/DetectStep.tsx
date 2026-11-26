@@ -9,6 +9,8 @@ import { FORMAT_ICONS, FORMAT_LABELS, type TemplateView } from '@/lib/pp-import/
 import { detectFile, type DetectOk } from './DropStep';
 import { fileSize, plural } from './parts';
 import s from './pp-import.module.css';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** Étape 2 : résultat de la détection (format, champs et cases, modèle reconnu, avertissements). */
 export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTemplate, onRedetected, onBack, onContinue }: {
@@ -22,6 +24,7 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const { t } = useI18n();
   const [retrying, startRetry] = useTransition();
   const [retryError, setRetryError] = useState<string | null>(null);
   // Lecture d'un scan relancée avec le même fichier et le même modèle (choisi au dépôt).
@@ -32,7 +35,7 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
       if (res.ok) onRedetected(res);
       else setRetryError(res.error);
     } catch {
-      setRetryError('Lecture impossible : la connexion au serveur a été interrompue. Réessayez.');
+      setRetryError(t('Reading impossible: the connection to the server was interrupted. Try again.'));
     }
   });
   const boxes = det.fields.filter((f) => f.kind === 'checkbox');
@@ -45,30 +48,30 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
     if (f.kind === 'checkbox') { n.boxes += 1; if (f.checked) n.checked += 1; } else n.inputs += 1;
     sections.set(key, n);
   });
-  const matched = templates.find((t) => t.id === det.matchedTemplateId);
-  const proposed = det.proposedTemplate ? templates.find((t) => t.id === det.proposedTemplate!.id) : undefined;
-  const applied = templates.find((t) => t.id === appliedTemplateId);
+  const matched = templates.find((x) => x.id === det.matchedTemplateId);
+  const proposed = det.proposedTemplate ? templates.find((x) => x.id === det.proposedTemplate!.id) : undefined;
+  const applied = templates.find((x) => x.id === appliedTemplateId);
   const hasFields = det.fields.length > 0;
 
   return (
     <div className="card" style={{ gap: 12 }}>
       <div style={{ display: 'grid', gap: 2 }}>
-        <span className="card-kicker">Étape 2 · Détection</span>
+        <span className="card-kicker">{t('Step 2 · Detection')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Icon name={FORMAT_ICONS[det.format]} size={18} style={{ color: 'var(--color-neutral-400)' }} />
           <span className="card-title" style={{ fontSize: 15, wordBreak: 'break-word' }}>{det.fileName}</span>
-          <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fileSize(files.reduce((n, f) => n + f.size, 0))}{det.pageCount ? ` · ${plural(det.pageCount, 'page', 'pages')}` : ''}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fileSize(files.reduce((n, f) => n + f.size, 0), t)}{det.pageCount ? ` · ${plural(det.pageCount, t('{n} page'), t('{n} pages'))}` : ''}</span>
           <ToneTag tone="accent">{FORMAT_LABELS[det.format]}</ToneTag>
-          {det.ai.used && <ToneTag tone="neutral"><Icon name="ph-sparkle" size={11} style={{ marginRight: 4 }} />Lu par l&apos;API Claude</ToneTag>}
+          {det.ai.used && <ToneTag tone="neutral"><Icon name="ph-sparkle" size={11} style={{ marginRight: 4 }} />{t('Read by the Claude API')}</ToneTag>}
         </div>
       </div>
 
       {hasFields && (
         <Facts items={[
-          ['Champs détectés', String(det.fields.length)],
-          ['Cases à cocher', boxes.length ? `${boxes.length} · ${plural(boxes.filter((b) => b.checked).length, 'cochée', 'cochées')}` : 'Aucune'],
-          ['Champs à remplir', inputs.length ? `${inputs.length} · ${plural(filled.length, 'rempli', 'remplis')}` : 'Aucun'],
-          ['Sections', String(sections.size)],
+          [t('Fields detected'), String(det.fields.length)],
+          [t('Check boxes'), boxes.length ? `${boxes.length} · ${plural(boxes.filter((b) => b.checked).length, t('{n} ticked#f'), t('{n} ticked#fplural'))}` : t('None#f')],
+          [t('Fields to fill'), inputs.length ? `${inputs.length} · ${plural(filled.length, t('{n} filled'), t('{n} filled#plural'))}` : t('None')],
+          [t('Sections'), String(sections.size)],
         ]} />
       )}
 
@@ -78,7 +81,7 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
             <span key={title} className="vg-chip" style={{ cursor: 'default' }}>
               {title}
               <span style={{ opacity: 0.6 }}>
-                {[c.boxes && `${c.checked}/${c.boxes} ☑`, c.inputs && plural(c.inputs, 'champ', 'champs')].filter(Boolean).join(' · ')}
+                {[c.boxes && `${c.checked}/${c.boxes} ☑`, c.inputs && plural(c.inputs, t('{n} field'), t('{n} fields'))].filter(Boolean).join(' · ')}
               </span>
             </span>
           ))}
@@ -87,25 +90,25 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
 
       {hasFields && (matched ? (
         <Notice tone="ok" icon="ph-seal-check">
-          Modèle reconnu : <strong style={{ fontWeight: 500 }}>« {matched.name} »</strong>
-          {det.format !== 'scan' && det.signature === matched.signature ? ' (mêmes champs)' : ''} — sa correspondance est appliquée.
-          {' '}Mis à jour le {fmtDate(matched.updatedOn)}{matched.updatedBy ? ` par ${matched.updatedBy}` : ''}.
+          {t('Template recognised:')} <strong style={{ fontWeight: 500 }}>{fill(t('“{name}”'), { name: matched.name })}</strong>
+          {det.format !== 'scan' && det.signature === matched.signature ? t(' (same fields)') : ''}{t(' — its mapping is applied.')}
+          {' '}{fill(t('Updated on {date}#m'), { date: fmtDate(matched.updatedOn) })}{matched.updatedBy ? fill(t(' by {name}'), { name: matched.updatedBy }) : ''}.
         </Notice>
       ) : proposed ? (
         <Notice tone="accent" icon="ph-file-magnifying-glass">
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
             <span>
-              Formulaire proche du modèle <strong style={{ fontWeight: 500 }}>« {proposed.name} »</strong> ({Math.round(det.proposedTemplate!.overlap * 100)} % des champs en commun).
-              {applied ? ' Sa correspondance est appliquée ; les champs nouveaux reçoivent une suggestion.' : ''}
+              {t('Form close to the template')} <strong style={{ fontWeight: 500 }}>{fill(t('“{name}”'), { name: proposed.name })}</strong> {fill(t('({pct} % of the fields in common).'), { pct: Math.round(det.proposedTemplate!.overlap * 100) })}
+              {applied ? t(' Its mapping is applied; the new fields get a suggestion.') : ''}
             </span>
             {applied
-              ? <button type="button" className="vg-text-btn" onClick={() => onApplyTemplate(null)}>Ne pas l&apos;appliquer</button>
-              : <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => onApplyTemplate(proposed.id)}><Icon name="ph-check" size={13} />Appliquer ce modèle</button>}
+              ? <button type="button" className="vg-text-btn" onClick={() => onApplyTemplate(null)}>{t('Do not apply it')}</button>
+              : <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => onApplyTemplate(proposed.id)}><Icon name="ph-check" size={13} />{t('Apply this template')}</button>}
           </div>
         </Notice>
       ) : (
         <Notice tone="neutral" icon="ph-info">
-          Formulaire inconnu : la correspondance est proposée d&apos;après les libellés. Vérifiez-la, puis enregistrez-la comme modèle pour les prochains imports.
+          {t('Unknown form: the mapping is proposed from the labels. Check it, then save it as a template for the next imports.')}
         </Notice>
       ))}
 
@@ -124,8 +127,8 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
             {det.ai.retryable && (
               <button type="button" className="btn btn-secondary vg-btn-sm" disabled={retrying} onClick={retry}>
                 {retrying
-                  ? <><span className={s.spin} aria-hidden><Icon name="ph-circle-notch" size={13} style={{ display: 'block' }} /></span>Lecture en cours…</>
-                  : <><Icon name="ph-arrow-clockwise" size={13} />Relancer la lecture</>}
+                  ? <><span className={s.spin} aria-hidden><Icon name="ph-circle-notch" size={13} style={{ display: 'block' }} /></span>{t('Reading in progress…')}</>
+                  : <><Icon name="ph-arrow-clockwise" size={13} />{t('Read again')}</>}
               </button>
             )}
           </div>
@@ -135,14 +138,14 @@ export function DetectStep({ files, det, templates, appliedTemplateId, onApplyTe
 
       {!hasFields && (
         <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-          Aucun champ n&apos;a pu être lu automatiquement. Saisissez le plan à partir du document : le fichier sera joint au plan comme document source.
+          {t('No field could be read automatically. Enter the plan from the document: the file will be attached to the plan as the source document.')}
         </span>
       )}
 
       <div className="dialog-actions" style={{ flexWrap: 'wrap' }}>
-        <button type="button" className="btn btn-secondary" disabled={retrying} onClick={onBack}><Icon name="ph-arrow-counter-clockwise" size={14} />Changer de fichier</button>
+        <button type="button" className="btn btn-secondary" disabled={retrying} onClick={onBack}><Icon name="ph-arrow-counter-clockwise" size={14} />{t('Change file')}</button>
         <button type="button" className="btn btn-primary" disabled={retrying} onClick={onContinue}>
-          {hasFields ? 'Vérifier la correspondance' : 'Saisir le plan'}<Icon name="ph-arrow-right" size={14} />
+          {hasFields ? t('Check the mapping') : t('Enter the plan')}<Icon name="ph-arrow-right" size={14} />
         </button>
       </div>
     </div>

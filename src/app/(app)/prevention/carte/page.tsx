@@ -9,18 +9,21 @@ import { Icon, ToneTag } from '@/components/ui';
 import { canManage } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadSitemap } from '@/lib/data/sitemap';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
-const TITLE = 'Carte du site et coactivité';
-export const metadata: Metadata = { title: TITLE };
+const TITLE = 'Site map and co-activity';
+export const metadata: Metadata = { title: 'Carte du site et coactivité' };
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' && v ? v : undefined);
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });
 
 // Même forme que PageProps<'/prevention/carte'> (types de routes générés par Next au prochain démarrage).
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function SiteMapPage({ searchParams }: Props) {
   const { role, demo } = await guard('prevention');
+  const { t } = await getI18n();
   const sp = await searchParams;
   const plan = str(sp.plan), permit = str(sp.permis);
   // Aucune liste du formulaire d'action : la carte ne crée pas d'action QSE (réponses du service QHSE du 15/10/2026).
@@ -32,37 +35,37 @@ export default async function SiteMapPage({ searchParams }: Props) {
   const today = data.activities.filter((a) => a.startOn <= data.now && data.now <= a.endOn).length;
   const sub = [
     data.site.label,
-    `${plural(today, 'activité', 'activités')} aujourd'hui`,
-    data.conflictsToday.length ? plural(data.conflictsToday.length, 'situation de coactivité', 'situations de coactivité') : 'aucune situation de coactivité',
-    data.toPosition.length ? plural(data.toPosition.length, 'intervention à positionner', 'interventions à positionner') : null,
+    plural(today, t('{n} activity today'), t('{n} activities today')),
+    data.conflictsToday.length ? plural(data.conflictsToday.length, t('{n} co-activity situation'), t('{n} co-activity situations')) : t('no co-activity situation'),
+    data.toPosition.length ? plural(data.toPosition.length, t('{n} intervention to position'), t('{n} interventions to position')) : null,
   ].filter(Boolean).join(' · ');
 
   return (
     <>
-      <PageHeader title={TITLE} sub={sub} />
+      <PageHeader title={t(TITLE)} sub={sub} />
       <div className="vg-page">
         <Toolbar end={(
           <>
             {(rule.seveso || rule.ppFromFirstMinute) && (
-              <span title={rule.ppFromFirstMinute ? `${firstMinuteReason(rule)} d'une entreprise extérieure.` : sevesoLabel(rule.seveso)}>
+              <span title={rule.ppFromFirstMinute ? fill(t('{reason} of an external company.'), { reason: firstMinuteReason(rule) }) : sevesoLabel(rule.seveso)}>
                 <ToneTag tone={rule.seveso === 'seuil_haut' ? 'danger' : 'warn'}>
-                  {rule.seveso === 'seuil_haut' ? 'Seveso seuil haut' : rule.seveso === 'seuil_bas' ? 'Seveso seuil bas' : 'Règle interne'}
-                  {rule.ppFromFirstMinute ? ' · plan de prévention dès la 1re minute' : ''}
+                  {rule.seveso === 'seuil_haut' ? t('Upper-tier Seveso') : rule.seveso === 'seuil_bas' ? t('Lower-tier Seveso') : t('Internal rule')}
+                  {rule.ppFromFirstMinute ? t(' · prevention plan from the 1st minute') : ''}
                 </ToneTag>
               </span>
             )}
-            <Link href="/prevention" className="btn btn-secondary vg-btn-sm"><Icon name="ph-clipboard-text" size={13} />Plans de prévention et permis</Link>
+            <Link href="/prevention" className="btn btn-secondary vg-btn-sm"><Icon name="ph-clipboard-text" size={13} />{t('Prevention plans and permits')}</Link>
             {/* QR codes de signalement des zones (en démonstration : depuis l'aperçu mobile). */}
             {canManage(role) && !demo && (
-              <Link href={`/signaler/postes?site=${encodeURIComponent(data.site.id)}`} className="btn btn-secondary vg-btn-sm"><Icon name="ph-qr-code" size={13} />QR codes des postes</Link>
+              <Link href={`/signaler/postes?site=${encodeURIComponent(data.site.id)}`} className="btn btn-secondary vg-btn-sm"><Icon name="ph-qr-code" size={13} />{t('Station QR codes')}</Link>
             )}
           </>
         )}>
-          <Segments label="Sites" items={data.tabs
-            ? data.tabs.map((t) => ({
-              key: t.id, label: t.label, href: `/prevention/carte?site=${t.id}`, on: t.id === data.site.id,
-              count: t.conflicts > 0 ? <span style={{ color: 'var(--tone-danger-fg)' }}>{t.conflicts}</span> : undefined,
-              title: t.conflicts ? `${plural(t.conflicts, 'situation de coactivité', 'situations de coactivité')} aujourd'hui` : undefined,
+          <Segments label={t('Sites')} items={data.tabs
+            ? data.tabs.map((s) => ({
+              key: s.id, label: s.label, href: `/prevention/carte?site=${s.id}`, on: s.id === data.site.id,
+              count: s.conflicts > 0 ? <span style={{ color: 'var(--tone-danger-fg)' }}>{s.conflicts}</span> : undefined,
+              title: s.conflicts ? plural(s.conflicts, t('{n} co-activity situation today'), t('{n} co-activity situations today')) : undefined,
             }))
             : [{ key: data.site.id, label: data.site.label, href: `/prevention/carte?site=${data.site.id}`, on: true }]} />
         </Toolbar>

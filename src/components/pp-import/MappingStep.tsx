@@ -12,9 +12,12 @@ import type { ImportField, MapEntry, TemplateView } from '@/lib/pp-import/types'
 import { savePpTemplate } from '@/server/pp-import';
 import { FieldValue, KIND_LABELS, muted, plural } from './parts';
 import s from './pp-import.module.css';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Filter = 'all' | 'vigie' | 'grid' | 'ignore' | 'checked';
-const FILTERS: [Filter, string][] = [['all', 'Tous'], ['vigie', 'Champs de Vigie'], ['grid', 'Grille du formulaire'], ['ignore', 'Ignorés'], ['checked', 'Cases cochées']];
+// Libellés : chaînes sources (VG-N01), rendues par t().
+const FILTERS: [Filter, string][] = [['all', 'All'], ['vigie', 'Vigie fields'], ['grid', 'Form grid'], ['ignore', 'Ignored#plural'], ['checked', 'Ticked boxes']];
 
 /** Champs de Vigie à renseigner pour créer un plan (signalés s'ils ne sont alimentés par aucun champ). */
 const ESSENTIAL: PpTarget[] = ['contractorName', 'title', 'location', 'startOn', 'endOn', 'estimatedHours'];
@@ -40,6 +43,7 @@ type Props = {
 
 /** Étape 3 : correspondance de chaque champ détecté vers un champ de Vigie, une ligne de la grille ou « ignoré ». */
 export function MappingStep({ mode, fields, mapping, onChange, template, format, signature, canManage, onTemplateSaved, onBack, onContinue }: Props) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   // Dernière ligne de grille saisie par champ : rétablie si l'on repasse sur « Ligne de la grille ».
@@ -74,7 +78,7 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
     return m;
   }, [fields, mapping]);
   const sectionNames = useMemo(() => [...new Set(Object.values(mapping).flatMap((e) => ('section' in e && e.section ? [e.section] : [])))].sort((a, b) => a.localeCompare(b, 'fr')), [mapping]);
-  const missing = ESSENTIAL.filter((t) => !usedTargets.has(t));
+  const missing = ESSENTIAL.filter((k) => !usedTargets.has(k));
 
   const q = normalize(query);
   const shown = fields.filter((f) => {
@@ -90,35 +94,35 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
     <div className="card" style={{ gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'grid', gap: 2 }}>
-          <span className="card-kicker">{isTemplateMode ? "Modèle d'import · correspondance" : 'Étape 3 · Correspondance'}</span>
+          <span className="card-kicker">{isTemplateMode ? t('Import template · mapping') : t('Step 3 · Mapping')}</span>
           <span className="card-title" style={{ fontSize: 15 }}>
-            {isTemplateMode ? `« ${template?.name ?? ''} »` : 'Que faire de chaque champ du formulaire ?'}
+            {isTemplateMode ? fill(t('“{name}”'), { name: template?.name ?? '' }) : t('What to do with each field of the form?')}
           </span>
           <span style={{ fontSize: 12, color: 'var(--color-neutral-500)', textWrap: 'pretty', maxWidth: 760 }}>
-            Un champ alimente un champ du plan dans Vigie, devient une ligne de la grille conservée avec le plan (section et libellé modifiables), ou est ignoré.
+            {t('A field feeds a field of the plan in Vigie, becomes a line of the grid kept with the plan (section and label editable), or is ignored.')}
           </span>
         </div>
         <button type="button" className="vg-text-btn" onClick={() => { gridMemory.current.clear(); onChange(isTemplateMode && template ? { ...template.mapping } : suggestMapping(fields)); }}>
-          <Icon name="ph-arrow-counter-clockwise" size={12} style={{ marginRight: 4 }} />{isTemplateMode ? 'Annuler les modifications' : 'Rétablir les suggestions'}
+          <Icon name="ph-arrow-counter-clockwise" size={12} style={{ marginRight: 4 }} />{isTemplateMode ? t('Cancel the changes') : t('Restore the suggestions')}
         </button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {FILTERS.filter(([k]) => !(isTemplateMode && k === 'checked')).map(([key, label]) => (
           <button key={key} type="button" className={`vg-chip${filter === key ? ' is-on' : ''}`} onClick={() => setFilter(key)} aria-pressed={filter === key}>
-            {label}<span style={{ opacity: 0.6 }}>{counts[key]}</span>
+            {t(label)}<span style={{ opacity: 0.6 }}>{counts[key]}</span>
           </button>
         ))}
         <span style={{ position: 'relative', width: 240, maxWidth: '100%', marginLeft: 'auto' }}>
           <Icon name="ph-magnifying-glass" size={13} style={{ position: 'absolute', left: 9, top: 7, color: 'var(--color-neutral-500)' }} />
-          <input className="input" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Libellé, section, valeur…" aria-label="Rechercher un champ"
+          <input className="input" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Label, section, value…')} aria-label={t('Search for a field')}
             style={{ fontSize: 12, lineHeight: 1.2, minHeight: 0, padding: '5px 10px 5px 28px' }} />
         </span>
       </div>
 
       {!isTemplateMode && missing.length > 0 && (
         <Notice tone="neutral" icon="ph-info">
-          Sans correspondance (à saisir à l&apos;étape suivante) : {missing.map((t) => TARGET_LABELS[t].replace(/^Entreprise extérieure — /, 'Entreprise extérieure : ')).join(' · ')}.
+          {fill(t('Without mapping (to enter at the next step): {list}.'), { list: missing.map((k) => TARGET_LABELS[k].replace(/^Entreprise extérieure — /, 'Entreprise extérieure : ')).join(' · ') })}
         </Notice>
       )}
 
@@ -126,14 +130,14 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
         <table className="table" style={{ fontSize: 12.5, minWidth: isTemplateMode ? 720 : 980 }}>
           <thead>
             <tr>
-              <th>Champ détecté</th>
-              {!isTemplateMode && <><th>Type</th><th>Valeur lue</th><th style={{ textAlign: 'right' }}>Page</th></>}
-              <th style={{ width: 330 }}>Correspondance dans Vigie</th>
+              <th>{t('Field detected')}</th>
+              {!isTemplateMode && <><th>{t('Type')}</th><th>{t('Value read')}</th><th style={{ textAlign: 'right' }}>{t('Page')}</th></>}
+              <th style={{ width: 330 }}>{t('Mapping in Vigie')}</th>
             </tr>
           </thead>
           <tbody>
             {shown.length === 0 && (
-              <tr><td colSpan={isTemplateMode ? 2 : 5} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>Aucun champ pour ce filtre.</td></tr>
+              <tr><td colSpan={isTemplateMode ? 2 : 5} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>{t('No field for this filter.')}</td></tr>
             )}
             {shown.map((f) => {
               const entry = mapping[f.key];
@@ -145,41 +149,41 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
                   <td style={{ minWidth: 220, maxWidth: 360 }}>
                     <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                       <span style={{ textWrap: 'pretty' }}>{f.label}</span>
-                      {isNew && <ToneTag tone="warn" style={{ fontSize: 11, padding: '1px 6px' }}>nouveau</ToneTag>}
+                      {isNew && <ToneTag tone="warn" style={{ fontSize: 11, padding: '1px 6px' }}>{t('new')}</ToneTag>}
                     </span>
-                    <span style={{ display: 'block', ...muted, wordBreak: 'break-all' }} title="Clé du champ dans le fichier">
+                    <span style={{ display: 'block', ...muted, wordBreak: 'break-all' }} title={t('Key of the field in the file')}>
                       {f.section ? `${f.section} · ` : ''}{f.key}
                     </span>
                   </td>
                   {!isTemplateMode && (
                     <>
-                      <td style={{ whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{KIND_LABELS[f.kind]}</td>
+                      <td style={{ whiteSpace: 'nowrap', color: 'var(--color-neutral-400)' }}>{t(KIND_LABELS[f.kind])}</td>
                       <td style={{ minWidth: 160, maxWidth: 300 }}><FieldValue field={f} /></td>
                       <td style={{ textAlign: 'right', color: 'var(--color-neutral-400)' }}>{f.page ?? '—'}</td>
                     </>
                   )}
                   <td>
                     <div style={{ display: 'grid', gap: 5 }}>
-                      <select className={`input ${s.compact}`} value={value} disabled={!canManage} aria-label={`Correspondance de « ${f.label} »`}
+                      <select className={`input ${s.compact}`} value={value} disabled={!canManage} aria-label={fill(t('Mapping of “{label}”'), { label: f.label })}
                         onChange={(e) => choose(f, e.target.value)}>
-                        <optgroup label="Champ du plan dans Vigie">
+                        <optgroup label={t('Field of the plan in Vigie')}>
                           {PP_TARGETS.map(([k, label]) => {
                             const others = (usedTargets.get(k) ?? []).filter((x) => x !== f.key);
-                            return <option key={k} value={`target:${k}`}>{label}{others.length ? ' · déjà associé' : ''}</option>;
+                            return <option key={k} value={`target:${k}`}>{label}{others.length ? t(' · already associated') : ''}</option>;
                           })}
                         </optgroup>
-                        <optgroup label="Formulaire">
-                          <option value="grid">Ligne de la grille du formulaire</option>
-                          <option value="ignore">Ignorer</option>
+                        <optgroup label={t('Form')}>
+                          <option value="grid">{t('Line of the form grid')}</option>
+                          <option value="ignore">{t('Ignore')}</option>
                         </optgroup>
                       </select>
                       {grid && (
                         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 5 }}>
                           <input className={`input ${s.compact}`} value={grid.section} list="pp-import-sections" disabled={!canManage} maxLength={200}
-                            placeholder={DEFAULT_SECTION} aria-label="Section de la grille" title="Section de la grille"
+                            placeholder={DEFAULT_SECTION} aria-label={t('Grid section')} title={t('Grid section')}
                             onChange={(e) => editGrid(f, { section: e.target.value })} />
                           <input className={`input ${s.compact}`} value={grid.label} disabled={!canManage} maxLength={300}
-                            aria-label="Libellé de la ligne" title="Libellé de la ligne"
+                            aria-label={t('Line label')} title={t('Line label')}
                             onChange={(e) => editGrid(f, { label: e.target.value })} />
                         </div>
                       )}
@@ -200,10 +204,10 @@ export function MappingStep({ mode, fields, mapping, onChange, template, format,
 
       <div className="dialog-actions" style={{ flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-secondary" onClick={onBack}>
-          <Icon name="ph-arrow-left" size={14} />{isTemplateMode ? 'Retour aux modèles' : 'Retour'}
+          <Icon name="ph-arrow-left" size={14} />{isTemplateMode ? t('Back to the templates') : t('Back')}
         </button>
         {onContinue && (
-          <button type="button" className="btn btn-primary" onClick={onContinue}>Vérifier le plan<Icon name="ph-arrow-right" size={14} /></button>
+          <button type="button" className="btn btn-primary" onClick={onContinue}>{t('Check the plan')}<Icon name="ph-arrow-right" size={14} /></button>
         )}
       </div>
     </div>
@@ -220,6 +224,7 @@ function TemplateSaver({ mode, template, format, signature, mapping, fields, onS
   fields: ImportField[];
   onSaved: (id: number) => void;
 }) {
+  const { t } = useI18n();
   const [asNew, setAsNew] = useState(!template);
   const [name, setName] = useState('');
   const [state, setState] = useState<FormState & { message?: string }>({});
@@ -243,7 +248,7 @@ function TemplateSaver({ mode, template, format, signature, mapping, fields, onS
     try {
       const r = await savePpTemplate({}, fd);
       if (r.ok && r.id) {
-        setState({ ok: true, message: `Modèle « ${opts.name.trim()} » enregistré${mode === 'import' ? ' : il sera reconnu au prochain import de ce formulaire' : ''}.` });
+        setState({ ok: true, message: fill(mode === 'import' ? t('Template “{name}” saved: it will be recognised at the next import of this form.') : t('Template “{name}” saved.'), { name: opts.name.trim() }) });
         setAsNew(false);
         setName('');
         onSaved(Number(r.id));
@@ -251,7 +256,7 @@ function TemplateSaver({ mode, template, format, signature, mapping, fields, onS
         setState(r);
       }
     } catch {
-      setState({ error: "Enregistrement impossible : la connexion au serveur a été interrompue." });
+      setState({ error: t('Saving impossible: the connection to the server was interrupted.') });
     }
   });
 
@@ -260,13 +265,13 @@ function TemplateSaver({ mode, template, format, signature, mapping, fields, onS
       <div className="vg-inset" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px' }}>
         <Icon name="ph-floppy-disk" size={16} style={{ color: 'var(--color-neutral-400)' }} />
         <span style={{ fontSize: 12.5, flex: 1, minWidth: 220 }}>
-          {plural(fields.length, 'champ', 'champs')} · mis à jour le {fmtDate(template.updatedOn)}{template.updatedBy ? ` par ${template.updatedBy}` : ''}
+          {plural(fields.length, t('{n} field'), t('{n} fields'))} · {fill(t('updated on {date}'), { date: fmtDate(template.updatedOn) })}{template.updatedBy ? fill(t(' by {name}'), { name: template.updatedBy }) : ''}
         </span>
         {state.error && <span role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{state.error}</span>}
         {state.message && <span role="status" style={{ fontSize: 12, color: 'var(--tone-ok-fg)' }}>{state.message}</span>}
         <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending || empty}
           onClick={() => save({ id: template.id, name: template.name, merge: false, signature: template.signature, format: template.format })}>
-          <Icon name="ph-floppy-disk" size={13} />{pending ? 'Enregistrement…' : 'Enregistrer le modèle'}
+          <Icon name="ph-floppy-disk" size={13} />{pending ? t('Saving…') : t('Save the template')}
         </button>
       </div>
     );
@@ -279,29 +284,29 @@ function TemplateSaver({ mode, template, format, signature, mapping, fields, onS
         {template && !asNew ? (
           <>
             <span style={{ fontSize: 12.5, flex: 1, minWidth: 220 }}>
-              Modèle appliqué : <strong style={{ fontWeight: 500 }}>« {template.name} »</strong>
-              <span style={{ display: 'block', ...muted }}>Mettre à jour le modèle y ajoute les champs nouveaux et les corrections de cette correspondance.</span>
+              {t('Template applied:')} <strong style={{ fontWeight: 500 }}>{fill(t('“{name}”'), { name: template.name })}</strong>
+              <span style={{ display: 'block', ...muted }}>{t('Updating the template adds to it the new fields and the corrections of this mapping.')}</span>
             </span>
             {/* Même formulaire (même empreinte) : un seul modèle le reconnaît, on le met à jour. */}
             {!(signature && template.format === format && template.signature === signature) && (
-              <button type="button" className="vg-text-btn" onClick={() => { setAsNew(true); setState({}); }}>Enregistrer comme nouveau modèle</button>
+              <button type="button" className="vg-text-btn" onClick={() => { setAsNew(true); setState({}); }}>{t('Save as a new template')}</button>
             )}
             <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending || empty}
               onClick={() => save({ id: template.id, name: template.name, merge: true, signature, format })}>
-              <Icon name="ph-floppy-disk" size={13} />{pending ? 'Enregistrement…' : 'Mettre à jour le modèle'}
+              <Icon name="ph-floppy-disk" size={13} />{pending ? t('Saving…') : t('Update the template')}
             </button>
           </>
         ) : (
           <form style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}
             onSubmit={(e) => { e.preventDefault(); if (name.trim()) save({ name, merge: false, signature, format }); }}>
-            <label htmlFor="pp-template-name" style={{ fontSize: 12.5 }}>Enregistrer comme modèle</label>
+            <label htmlFor="pp-template-name" style={{ fontSize: 12.5 }}>{t('Save as a template')}</label>
             <input id="pp-template-name" className="input" value={name} maxLength={120} onChange={(e) => setName(e.target.value)}
-              placeholder="Ex. Plan de prévention [Entreprise X] — PDF" aria-invalid={!!state.fieldErrors?.name || undefined}
+              placeholder={t('E.g. Prevention plan [Company X] — PDF')} aria-invalid={!!state.fieldErrors?.name || undefined}
               style={{ fontSize: 12.5, minHeight: 0, padding: '5px 10px', width: 320, maxWidth: '100%' }} />
             <button type="submit" className="btn btn-secondary vg-btn-sm" disabled={pending || empty || !name.trim()}>
-              <Icon name="ph-floppy-disk" size={13} />{pending ? 'Enregistrement…' : 'Enregistrer'}
+              <Icon name="ph-floppy-disk" size={13} />{pending ? t('Saving…') : t('Save')}
             </button>
-            {template && <button type="button" className="vg-text-btn" onClick={() => { setAsNew(false); setState({}); }}>Annuler</button>}
+            {template && <button type="button" className="vg-text-btn" onClick={() => { setAsNew(false); setState({}); }}>{t('Cancel')}</button>}
           </form>
         )}
       </div>

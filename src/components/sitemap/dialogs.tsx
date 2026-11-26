@@ -20,17 +20,20 @@ import {
 } from '@/lib/rules/sitemap';
 import styles from './sitemap.module.css';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 // Fenêtres de la carte du site : zones, voies, activités, échelle et plan de fond.
 
-export const periodLabel = (start: string, end: string) =>
-  start === end ? `Le ${fmtDate(start)}` : start.slice(0, 4) === end.slice(0, 4) ? `${fmtDayMonth(start)} → ${fmtDate(end)}` : `${fmtDate(start)} → ${fmtDate(end)}`;
+export const periodLabel = (start: string, end: string, t: T) =>
+  start === end ? fill(t('On {date}'), { date: fmtDate(start) }) : start.slice(0, 4) === end.slice(0, 4) ? `${fmtDayMonth(start)} → ${fmtDate(end)}` : `${fmtDate(start)} → ${fmtDate(end)}`;
 
 function DeleteRow({ label, question, onConfirm, pending, error }: { label: string; question: string; onConfirm: () => void; pending: boolean; error: string | null }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'grid', gap: 6, paddingTop: 10, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
       <ErrorLine error={error} />
-      <div><ConfirmButton label={label} confirmLabel="Supprimer" icon="ph-trash" question={question} pending={pending} onConfirm={onConfirm} /></div>
+      <div><ConfirmButton label={label} confirmLabel={t('Delete')} icon="ph-trash" question={question} pending={pending} onConfirm={onConfirm} /></div>
     </div>
   );
 }
@@ -41,13 +44,13 @@ function DeleteRow({ label, question, onConfirm, pending, error }: { label: stri
  * Avertissement avant l'archivage d'une zone (EVT-19) : son QR code de poste, s'il est imprimé et collé, ne pré-remplit
  * plus le lieu ; activités et événements rattachés.
  */
-export function zoneArchiveMessage(zone: ZoneView, activityCount: number): string {
-  const label = zone.qrVersion && zone.qrVersion > 1 ? ` (étiquette n° ${zone.qrVersion})` : '';
+export function zoneArchiveMessage(zone: ZoneView, activityCount: number, t: T): string {
+  const label = zone.qrVersion && zone.qrVersion > 1 ? fill(t(' (label no. {n})'), { n: zone.qrVersion }) : '';
   const parts = [
-    `La zone est retirée de la carte, des QR codes des postes et de la coactivité ; elle reste tracée avec son motif. Son QR code de poste${label}, s'il est imprimé et collé au poste, ne pré-remplira plus le lieu : un signalement depuis cette étiquette demandera de choisir le lieu. Retirez l'étiquette du poste.`,
+    fill(t('The zone is removed from the map, the station QR codes and the co-activity; it stays traced with its reason. Its station QR code{label}, if printed and stuck at the station, will no longer prefill the location: a report from this label will ask to choose the location. Remove the label from the station.'), { label }),
   ];
-  if (activityCount) parts.push(`${activityCount} activité${activityCount > 1 ? 's' : ''} y ${activityCount > 1 ? 'sont rattachées et gardent' : 'est rattachée et garde'} leur position, sans zone.`);
-  if (zone.eventCount) parts.push(`${zone.eventCount} événement${zone.eventCount > 1 ? 's' : ''} ${zone.eventCount > 1 ? 'gardent' : 'garde'} cette zone dans ${zone.eventCount > 1 ? 'leur' : 'sa'} fiche.`);
+  if (activityCount) parts.push(fill(activityCount > 1 ? t('{n} activities are linked to it and keep their position, without a zone.') : t('{n} activity is linked to it and keeps their position, without a zone.'), { n: activityCount }));
+  if (zone.eventCount) parts.push(fill(zone.eventCount > 1 ? t('{n} events keep this zone in their record.') : t('{n} event keeps this zone in its record.'), { n: zone.eventCount }));
   return parts.join(' ');
 }
 
@@ -57,39 +60,40 @@ export function ZoneForm({ siteId, zone, points, activityCount, qrHref, onDone, 
   qrHref?: string;
   onDone: (id?: number) => void; onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [archiving, setArchiving] = useState(false);
   if (zone && archiving) {
     // EVT-19 : une zone ne se supprime plus (QR code imprimé, événements rattachés) ; elle s'archive avec un motif.
     return (
-      <ReasonForm action={archiveZone} hidden={{ id: zone.id }} submitLabel="Archiver la zone" submitIcon="ph-archive"
-        message={<span className="vg-warn-text" style={{ display: 'block' }}><i className="ph ph-qr-code" style={{ marginRight: 6 }} aria-hidden />{zoneArchiveMessage(zone, activityCount)}</span>}
-        placeholder="Ex. zone redessinée, local démoli, atelier réaménagé" onCancel={() => setArchiving(false)} onDone={() => onDone()} />
+      <ReasonForm action={archiveZone} hidden={{ id: zone.id }} submitLabel={t('Archive the zone')} submitIcon="ph-archive"
+        message={<span className="vg-warn-text" style={{ display: 'block' }}><i className="ph ph-qr-code" style={{ marginRight: 6 }} aria-hidden />{zoneArchiveMessage(zone, activityCount, t)}</span>}
+        placeholder={t('E.g. zone redrawn, room demolished, workshop rearranged')} onCancel={() => setArchiving(false)} onDone={() => onDone()} />
     );
   }
   return (
     <>
-      <ActionForm action={saveZone} onDone={(s) => onDone(Number(s.id) || undefined)} onCancel={onCancel} submitLabel={zone ? 'Enregistrer' : 'Créer la zone'}
+      <ActionForm action={saveZone} onDone={(s) => onDone(Number(s.id) || undefined)} onCancel={onCancel} submitLabel={zone ? t('Save') : t('Create the zone')}
         hidden={{ id: zone?.id, siteId, polygon: points ? JSON.stringify(points) : undefined }}>
         <FormRow>
-          <Field name="name" label="Nom">
-            <Input name="name" defaultValue={zone?.name} placeholder="Ex. Atelier montage" autoFocus />
+          <Field name="name" label={t('Name')}>
+            <Input name="name" defaultValue={zone?.name} placeholder={t('E.g. Assembly workshop')} autoFocus />
           </Field>
-          <Field name="kind" label="Type">
+          <Field name="kind" label={t('Type')}>
             <Select name="kind" options={ZONE_KIND_KEYS.map((k) => [k, ZONE_KINDS[k].label] as const)} defaultValue={zone?.kind ?? 'atelier'} />
           </Field>
         </FormRow>
-        <Field name="notes" label="Notes" hint="Facultatif : équipements, consignes d'accès, zonage ATEX…">
+        <Field name="notes" label={t('Notes')} hint={t('Optional: equipment, access instructions, ATEX zoning…')}>
           <TextArea name="notes" rows={2} defaultValue={zone?.notes ?? ''} />
         </Field>
-        {!zone && <span style={muted}>Contour de {points?.length ?? 0} sommets ; vous pourrez déplacer les sommets après l&apos;enregistrement (sélectionnez la zone, puis faites glisser les poignées).</span>}
+        {!zone && <span style={muted}>{fill(t('Outline of {n} vertices; you can move the vertices after saving (select the zone, then drag the handles).'), { n: points?.length ?? 0 })}</span>}
       </ActionForm>
       {zone && (
         <div style={{ display: 'grid', gap: 6, paddingTop: 10, background: 'var(--rule-soft) no-repeat top / 100% 1px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setArchiving(true)}>
-              <Icon name="ph-archive" size={13} />Archiver la zone
+              <Icon name="ph-archive" size={13} />{t('Archive the zone')}
             </button>
-            {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />QR code du poste</Link>}
+            {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />{t('Station QR code')}</Link>}
           </div>
         </div>
       )}
@@ -98,15 +102,16 @@ export function ZoneForm({ siteId, zone, points, activityCount, qrHref, onDone, 
 }
 
 export function ZoneSheet({ zone, activityCount, qrHref }: { zone: ZoneView; activityCount: number; qrHref?: string }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <Facts items={[
-        ['Type', ZONE_KINDS[zone.kind].label],
-        ['Activités rattachées', String(activityCount)],
-        zone.eventCount ? ['Événements rattachés', String(zone.eventCount)] : null,
-        zone.notes ? ['Notes', zone.notes] : null,
+        [t('Type'), ZONE_KINDS[zone.kind].label],
+        [t('Linked activities'), String(activityCount)],
+        zone.eventCount ? [t('Linked events#records'), String(zone.eventCount)] : null,
+        zone.notes ? [t('Notes'), zone.notes] : null,
       ]} />
-      {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />QR code du poste</Link>}
+      {qrHref && <Link href={qrHref} className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5 }}><Icon name="ph-qr-code" size={13} />{t('Station QR code')}</Link>}
     </div>
   );
 }
@@ -116,30 +121,31 @@ export function ZoneSheet({ zone, activityCount, qrHref }: { zone: ZoneView; act
 export function RouteForm({ siteId, route, points, activityCount, onDone, onCancel }: {
   siteId: string; route?: RouteView; points?: Pt[]; activityCount: number; onDone: (id?: number) => void; onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const { pending, error, run } = useRun();
   return (
     <>
-      <ActionForm action={saveRoute} onDone={(s) => onDone(Number(s.id) || undefined)} onCancel={onCancel} submitLabel={route ? 'Enregistrer' : 'Créer la voie'}
+      <ActionForm action={saveRoute} onDone={(s) => onDone(Number(s.id) || undefined)} onCancel={onCancel} submitLabel={route ? t('Save') : t('Create the route')}
         hidden={{ id: route?.id, siteId, polyline: points ? JSON.stringify(points) : undefined }}>
         <FormRow>
-          <Field name="name" label="Nom">
-            <Input name="name" defaultValue={route?.name} placeholder="Ex. Voie de livraison poids lourds" autoFocus />
+          <Field name="name" label={t('Name')}>
+            <Input name="name" defaultValue={route?.name} placeholder={t('E.g. Heavy goods vehicle delivery route')} autoFocus />
           </Field>
-          <Field name="kind" label="Type">
+          <Field name="kind" label={t('Type')}>
             <Select name="kind" options={ROUTE_KIND_KEYS.map((k) => [k, ROUTE_KINDS[k].label] as const)} defaultValue={route?.kind ?? 'vehicules'} />
           </Field>
         </FormRow>
         <div style={{ display: 'grid', gap: 4 }}>
-          <Checkbox name="shared" label="Voie commune à plusieurs équipes" defaultChecked={route?.shared ?? true} />
-          <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>Deux équipes qui empruntent une voie commune le même jour sont signalées en coactivité.</span>
+          <Checkbox name="shared" label={t('Route shared by several teams')} defaultChecked={route?.shared ?? true} />
+          <span className="vg-field-hint" style={{ paddingLeft: 24, marginTop: 0 }}>{t('Two teams using a shared route on the same day are flagged as co-activity.')}</span>
         </div>
-        <Field name="notes" label="Notes" hint="Facultatif : sens de circulation, vitesse, horaires de livraison…">
+        <Field name="notes" label={t('Notes')} hint={t('Optional: traffic direction, speed, delivery hours…')}>
           <TextArea name="notes" rows={2} defaultValue={route?.notes ?? ''} />
         </Field>
       </ActionForm>
       {route && (
-        <DeleteRow label="Supprimer la voie" pending={pending} error={error}
-          question={activityCount ? `Supprimer la voie ? Elle sera retirée de ${activityCount} activité${activityCount > 1 ? 's' : ''}.` : 'Supprimer définitivement cette voie ?'}
+        <DeleteRow label={t('Delete the route')} pending={pending} error={error}
+          question={activityCount ? fill(activityCount > 1 ? t('Delete the route? It will be removed from {n} activities.') : t('Delete the route? It will be removed from {n} activity.'), { n: activityCount }) : t('Delete this route for good?')}
           onConfirm={() => run(() => deleteRoute(route.id), () => onDone())} />
       )}
     </>
@@ -147,12 +153,13 @@ export function RouteForm({ siteId, route, points, activityCount, onDone, onCanc
 }
 
 export function RouteSheet({ route, activityCount }: { route: RouteView; activityCount: number }) {
+  const { t } = useI18n();
   return (
     <Facts items={[
-      ['Type', ROUTE_KINDS[route.kind].label],
-      ['Usage', route.shared ? 'Voie commune' : 'Voie réservée'],
-      ['Activités qui l\'empruntent', String(activityCount)],
-      route.notes ? ['Notes', route.notes] : null,
+      [t('Type'), ROUTE_KINDS[route.kind].label],
+      [t('Use'), route.shared ? t('Shared route') : t('Reserved route')],
+      [t('Activities using it'), String(activityCount)],
+      route.notes ? [t('Notes'), route.notes] : null,
     ]} />
   );
 }
@@ -174,6 +181,7 @@ type ActivityFormProps = {
 
 /** Formulaire d'activité (création préremplie depuis la carte ou « À positionner », modification). */
 export function ActivityForm({ siteId, rule, activity, draft, zones, routes, choices, onDone, onCancel }: ActivityFormProps) {
+  const { t } = useI18n();
   const src = activity ?? draft ?? {};
   const [team, setTeam] = useState<Team>(src.team ?? 'externe');
   const [contractorId, setContractorId] = useState(src.contractorId ?? '');
@@ -187,8 +195,8 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
   // du plan ou du permis (« Positionner ») ; celle-ci ne sert que pour une activité sans position.
   const zoneId = activity ? activity.zoneId ?? detected?.id ?? null : point ? detected?.id ?? null : src.zoneId ?? null;
   const guessed = !activity && point && src.zoneId != null && src.zoneId !== detected?.id ? zones.find((z) => z.id === src.zoneId) : undefined;
-  const zoneHint = detected && zoneId === detected.id && (!activity || activity.zoneId == null) ? `Déduite de la position : ${detected.name}.`
-    : point && !detected ? `Position hors des zones dessinées${guessed ? ` (lieu indiqué : ${guessed.name})` : ''}.` : undefined;
+  const zoneHint = detected && zoneId === detected.id && (!activity || activity.zoneId == null) ? fill(t('Deduced from the position: {zone}.'), { zone: detected.name })
+    : point && !detected ? `${t('Position outside the drawn zones')}${guessed ? fill(t(' (location given: {zone})'), { zone: guessed.name }) : ''}.` : undefined;
   const projects = withCurrent(choices.projects, src.keystoneProjectCode, src.keystoneProject, 'start');
   const routeIds = new Set(src.routeIds ?? []);
 
@@ -200,13 +208,13 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
 
   return (
     <ActionForm action={saveActivity} onDone={(s) => onDone(Number(s.id), startOn, endOn)} onCancel={onCancel}
-      submitLabel={activity ? 'Enregistrer' : "Créer l'activité"}
+      submitLabel={activity ? t('Save') : t('Create the activity')}
       hidden={{ id: activity?.id, siteId, geometry: geometry ? JSON.stringify(geometry) : '' }}>
-      <Field name="title" label="Activité">
-        <Input name="title" defaultValue={src.title} placeholder="Ex. Maintenance du pont roulant 10 t" autoFocus={!src.title} />
+      <Field name="title" label={t('Activity')}>
+        <Input name="title" defaultValue={src.title} placeholder={t('E.g. Maintenance of the 10 t overhead crane')} autoFocus={!src.title} />
       </Field>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div className="seg" role="radiogroup" aria-label="Équipe">
+        <div className="seg" role="radiogroup" aria-label={t('Team')}>
           {(['interne', 'externe'] as const).map((k) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12.5, padding: '5px 10px' }}>
               <input type="radio" name="team" value={k} checked={team === k} onChange={() => setTeam(k)} />
@@ -220,73 +228,73 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
       </div>
       <FormRow>
         {team === 'externe' ? (
-          <Field name="contractorId" label="Entreprise extérieure">
-            <Select name="contractorId" options={choices.contractors} value={contractorId} onChange={(e) => setContractorId(e.target.value)} placeholder="Choisir…" />
+          <Field name="contractorId" label={t('External company')}>
+            <Select name="contractorId" options={choices.contractors} value={contractorId} onChange={(e) => setContractorId(e.target.value)} placeholder={t('Choose…')} />
           </Field>
         ) : (
-          <Field name="keystoneProjectCode" label="Projet Keystone" hint={choices.projectsMessage ?? undefined}>
-            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
+          <Field name="keystoneProjectCode" label={t('Keystone project')} hint={choices.projectsMessage ?? undefined}>
+            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder={t('No project')} />
           </Field>
         )}
-        <Field name="ownerId" label={team === 'externe' ? 'Responsable interne (donneur d\'ordre)' : 'Responsable'}>
-          <Select name="ownerId" options={choices.people} defaultValue={src.ownerId ?? ''} placeholder="Choisir…" />
+        <Field name="ownerId" label={team === 'externe' ? t('Internal manager (principal)') : t('Owner')}>
+          <Select name="ownerId" options={choices.people} defaultValue={src.ownerId ?? ''} placeholder={t('Choose…')} />
         </Field>
       </FormRow>
       {team === 'externe' && (
         <FormRow>
-          <Field name="preventionPlanId" label="Plan de prévention">
-            <Select name="preventionPlanId" options={choices.plans} value={planId} onChange={(e) => pickPlan(e.target.value)} placeholder="Aucun plan" />
+          <Field name="preventionPlanId" label={t('Prevention plan')}>
+            <Select name="preventionPlanId" options={choices.plans} value={planId} onChange={(e) => pickPlan(e.target.value)} placeholder={t('No plan')} />
           </Field>
-          <Field name="keystoneProjectCode" label="Projet Keystone" hint={choices.projectsMessage ?? undefined}>
-            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder="Aucun projet" />
+          <Field name="keystoneProjectCode" label={t('Keystone project')} hint={choices.projectsMessage ?? undefined}>
+            <Select name="keystoneProjectCode" options={projects} defaultValue={src.keystoneProjectCode ?? ''} placeholder={t('No project')} />
           </Field>
         </FormRow>
       )}
       <FormRow cols={3}>
-        <Field name="startOn" label="Du">
+        <Field name="startOn" label={t('From#date')}>
           <Input name="startOn" type="date" value={startOn} onChange={(e) => setStartOn(e.target.value)} />
         </Field>
-        <Field name="endOn" label="Au">
+        <Field name="endOn" label={t('To#date')}>
           <Input name="endOn" type="date" value={endOn} min={startOn || undefined} onChange={(e) => setEndOn(e.target.value)} />
         </Field>
-        <Field name="hours" label="Plage horaire" hint="Deux plages disjointes lèvent la coactivité.">
-          <Input name="hours" defaultValue={src.hours ?? ''} placeholder="Ex. 7 h 30 – 12 h" />
+        <Field name="hours" label={t('Time slot')} hint={t('Two separate slots lift the co-activity.')}>
+          <Input name="hours" defaultValue={src.hours ?? ''} placeholder={t('E.g. 7.30 am – 12 pm')} />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="zoneId" label="Zone" hint={zoneHint}>
-          <Select name="zoneId" options={zones.map((z) => [String(z.id), z.name] as const)} defaultValue={zoneId ? String(zoneId) : ''} placeholder="Aucune zone" />
+        <Field name="zoneId" label={t('Zone')} hint={zoneHint}>
+          <Select name="zoneId" options={zones.map((z) => [String(z.id), z.name] as const)} defaultValue={zoneId ? String(zoneId) : ''} placeholder={t('No zone#placeholder')} />
         </Field>
-        <Field name="permitId" label="Permis (feu, essai)">
-          <Select name="permitId" options={choices.permits} defaultValue={src.permitId ?? ''} placeholder="Aucun permis" />
+        <Field name="permitId" label={t('Permit (fire, test)')}>
+          <Select name="permitId" options={choices.permits} defaultValue={src.permitId ?? ''} placeholder={t('No permit#placeholder')} />
         </Field>
       </FormRow>
       <div className="vg-inset" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', fontSize: 12 }}>
         <Icon name={geometry ? 'ph-map-pin' : 'ph-map-pin-line'} size={15} style={{ color: geometry ? 'var(--color-accent)' : 'var(--color-neutral-500)' }} />
         <span style={{ color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
           {geometry
-            ? `Position placée sur la carte${detected ? `, dans « ${detected.name} »` : ''}. ${activity ? 'Utilisez « Déplacer sur la carte » depuis la fiche pour la modifier.' : 'Vous pourrez la déplacer après l\'enregistrement en faisant glisser le repère sélectionné.'}`
-            : 'Sans position : la zone sert de position approximative ; placez l\'activité depuis sa fiche.'}
+            ? `${t('Position placed on the map')}${detected ? fill(t(', in “{zone}”'), { zone: detected.name }) : ''}. ${activity ? t('Use “Move on the map” from the record to change it.') : t('You can move it after saving by dragging the selected marker.')}`
+            : t('Without position: the zone serves as an approximate position; place the activity from its record.')}
         </span>
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle>Accès</SectionTitle>
-        <Checkbox name="vehicles" label="Véhicules ou engins en circulation (camion, chariot élévateur, nacelle…)" defaultChecked={src.vehicles ?? false} />
-        {routes.length === 0 && <span style={muted}>Aucune voie tracée sur ce site : dessinez les voies de circulation avec l&apos;outil « Voie ».</span>}
+        <SectionTitle>{t('Access')}</SectionTitle>
+        <Checkbox name="vehicles" label={t('Vehicles or machinery moving (truck, forklift, aerial platform…)')} defaultChecked={src.vehicles ?? false} />
+        {routes.length === 0 && <span style={muted}>{t('No route drawn on this site: draw the traffic routes with the “Route” tool.')}</span>}
         {routes.length > 0 && (
-          <div style={{ display: 'grid', gap: 5 }} role="group" aria-label="Voies empruntées">
-            <span style={{ fontSize: 11.5, color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>Voies empruntées</span>
+          <div style={{ display: 'grid', gap: 5 }} role="group" aria-label={t('Routes used')}>
+            <span style={{ fontSize: 11.5, color: 'color-mix(in srgb, var(--color-text) 70%, transparent)' }}>{t('Routes used')}</span>
             {routes.map((r) => (
               <label key={r.id} className="vg-check">
                 <input type="checkbox" name="routeIds" value={r.id} defaultChecked={routeIds.has(r.id)} />
                 <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
-                <span>{r.name} <span style={muted}>· {ROUTE_KINDS[r.kind].label.toLowerCase()}{r.shared ? ' · voie commune' : ''}</span></span>
+                <span>{r.name} <span style={muted}>· {ROUTE_KINDS[r.kind].label.toLowerCase()}{r.shared ? t(' · shared route') : ''}</span></span>
               </label>
             ))}
           </div>
         )}
       </div>
-      <Field name="notes" label="Notes" hint="Facultatif : moyens, balisage, consignes particulières.">
+      <Field name="notes" label={t('Notes')} hint={t('Optional: means, marking, specific instructions.')}>
         <TextArea name="notes" rows={2} defaultValue={src.notes ?? ''} />
       </Field>
     </ActionForm>
@@ -297,10 +305,11 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
  * Écart de l'activité d'une entreprise extérieure active à la date : plan obligatoire (règle du site ou R. 4512-7)
  * non signé par les deux entreprises, ou plan clos ou annulé ; null sinon.
  */
-export function planGap(a: ActivityView, date: string): 'Plan non signé' | 'Plan clos ou annulé' | null {
+/** Chaîne source (VG-N01), rendue par t(). */
+export function planGap(a: ActivityView, date: string): 'Plan not signed' | 'Plan closed or cancelled' | null {
   if (a.team !== 'externe' || !a.preventionPlanId || !activeOn(a, date)) return null;
-  if (a.planClosed) return 'Plan clos ou annulé';
-  return lacksSignedPlan(a) ? 'Plan non signé' : null;
+  if (a.planClosed) return 'Plan closed or cancelled';
+  return lacksSignedPlan(a) ? 'Plan not signed' : null;
 }
 
 /** Fiche d'une activité : faits, coactivité du jour, liens vers le plan de prévention et le permis. */
@@ -308,6 +317,7 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
   activity: ActivityView; zones: ZoneView[]; routes: RouteView[]; conflicts: Conflict[]; others: Map<number, ActivityView>; date: string;
   canManage: boolean; rule: SiteRule; onEdit: () => void; onMove: () => void; onDeleted: () => void;
 }) {
+  const { t } = useI18n();
   const { pending, error } = useRun();
   const [cancelling, setCancelling] = useState(false);
   const zone = zones.find((z) => z.id === activity.zoneId);
@@ -319,60 +329,62 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         <ToneTag tone={activity.team === 'externe' ? 'warn' : 'accent'}><Icon name={TEAMS[activity.team].icon} size={12} style={{ marginRight: 4 }} />{TEAMS[activity.team].label}</ToneTag>
-        {noPlan && <ToneTag tone={rule.ppFromFirstMinute ? 'danger' : 'warn'}>Sans plan de prévention</ToneTag>}
-        {gap && <ToneTag tone="danger">{gap}</ToneTag>}
-        {!activity.geometry && <ToneTag tone="neutral">{zone ? 'Position approximative (zone)' : 'Sans position'}</ToneTag>}
-        {activity.vehicles && <span className="tag tag-neutral">Véhicules / engins</span>}
+        {noPlan && <ToneTag tone={rule.ppFromFirstMinute ? 'danger' : 'warn'}>{t('Without a prevention plan')}</ToneTag>}
+        {gap && <ToneTag tone="danger">{t(gap)}</ToneTag>}
+        {!activity.geometry && <ToneTag tone="neutral">{zone ? t('Approximate position (zone)') : t('Without position')}</ToneTag>}
+        {activity.vehicles && <span className="tag tag-neutral">{t('Vehicles / machinery')}</span>}
       </div>
       {noPlan && rule.ppFromFirstMinute && (
-        <Notice tone="danger">{firstMinuteReason(rule)} de l&apos;entreprise extérieure : rattachez le plan de prévention de cette intervention.</Notice>
+        <Notice tone="danger">{fill(t('{reason} of the external company: link the prevention plan of this intervention.'), { reason: firstMinuteReason(rule) })}</Notice>
       )}
       {gap && (
         <Notice tone="danger">
-          {gap === 'Plan clos ou annulé'
-            ? `Intervention en cours alors que le plan ${activity.preventionPlanId} est clos ou annulé : établissez un nouveau plan de prévention.`
-            : `${rule.ppFromFirstMinute ? `${ruleBasis(rule)} : le` : 'Le'} plan ${activity.preventionPlanId} (${(activity.planStatusLabel ?? '').toLowerCase()}) doit être signé par les deux entreprises avant toute intervention${rule.ppFromFirstMinute ? '' : ' (R. 4512-7)'}.`}
+          {gap === 'Plan closed or cancelled'
+            ? fill(t('Intervention in progress although the plan {id} is closed or cancelled: draw up a new prevention plan.'), { id: activity.preventionPlanId ?? '' })
+            : fill(rule.ppFromFirstMinute
+              ? t('{basis}: the plan {id} ({status}) must be signed by both companies before any intervention.')
+              : t('The plan {id} ({status}) must be signed by both companies before any intervention (R. 4512-7).'), { basis: ruleBasis(rule), id: activity.preventionPlanId ?? '', status: (activity.planStatusLabel ?? '').toLowerCase() })}
         </Notice>
       )}
       <Facts items={[
-        activity.team === 'externe' && ['Entreprise extérieure', activity.contractor ?? '—'],
-        ['Responsable', activity.owner ?? '—'],
-        ['Période', periodLabel(activity.startOn, activity.endOn)],
-        ['Plage horaire', activity.hours ?? 'Non précisée'],
-        ['Zone', zone?.name ?? '—'],
-        ['Voies empruntées', used.length ? used.map((r) => r.name).join(', ') : 'Aucune'],
-        ['Plan de prévention', activity.preventionPlanId
+        activity.team === 'externe' && [t('External company'), activity.contractor ?? '—'],
+        [t('Owner'), activity.owner ?? '—'],
+        [t('Period'), periodLabel(activity.startOn, activity.endOn, t)],
+        [t('Time slot'), activity.hours ?? t('Not specified#f')],
+        [t('Zone'), zone?.name ?? '—'],
+        [t('Routes used'), used.length ? used.map((r) => r.name).join(', ') : t('None#f')],
+        [t('Prevention plan'), activity.preventionPlanId
           ? <><Link href={`/prevention?plan=${activity.preventionPlanId}`} className="vg-link" style={{ fontSize: 12.5 }}>{activity.preventionPlanId}</Link>{activity.planStatusLabel && <span style={muted}> · {activity.planStatusLabel}</span>}</>
           : '—'],
-        ['Permis', activity.permitId || activity.planPermits.length ? (
+        [t('Permit'), activity.permitId || activity.planPermits.length ? (
           <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '2px 10px' }}>
             {activity.permitId && <Link href={`/prevention?onglet=permis&permis=${activity.permitId}`} className="vg-link" style={{ fontSize: 12.5 }}>{activity.permitId}</Link>}
             {activity.planPermits.map((p) => (
               <span key={p.id}>
                 <Link href={`/prevention?onglet=permis&permis=${p.id}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
-                <span style={muted}> · {p.type === 'essai' ? "permis d'essai" : 'permis de feu'} du plan, {p.from === p.to ? `le ${fmtDayMonth(p.from)}` : `du ${fmtDayMonth(p.from)} au ${fmtDayMonth(p.to)}`}</span>
+                <span style={muted}> · {p.type === 'essai' ? t('test permit') : t('fire permit')} {t('of the plan')}, {p.from === p.to ? fill(t('on {date}'), { date: fmtDayMonth(p.from) }) : fill(t('from {from} to {to}'), { from: fmtDayMonth(p.from), to: fmtDayMonth(p.to) })}</span>
               </span>
             ))}
           </span>
         ) : '—'],
-        ['Projet Keystone', activity.keystoneProject ?? '—'],
+        [t('Keystone project'), activity.keystoneProject ?? '—'],
       ]} />
       {activity.notes && (
         <div style={{ display: 'grid', gap: 4 }}>
-          <SectionTitle>Notes</SectionTitle>
+          <SectionTitle>{t('Notes')}</SectionTitle>
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', whiteSpace: 'pre-line' }}>{activity.notes}</span>
         </div>
       )}
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle>Coactivité le {fmtDate(date)}</SectionTitle>
-        {mine.length === 0 && <span style={muted}>{activity.startOn <= date && date <= activity.endOn ? 'Aucune situation de coactivité ce jour.' : 'Activité inactive à cette date.'}</span>}
+        <SectionTitle>{fill(t('Co-activity on {date}'), { date: fmtDate(date) })}</SectionTitle>
+        {mine.length === 0 && <span style={muted}>{activity.startOn <= date && date <= activity.endOn ? t('No co-activity situation this day.') : t('Activity inactive on this date.')}</span>}
         {mine.map((c) => {
           const other = others.get(c.a === activity.id ? c.b : c.a);
           return (
             <div key={c.key} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, flexWrap: 'wrap' }}>
               <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[c.tone].dot, alignSelf: 'center' }} />
               <span>{c.title}</span>
-              <span style={muted}>avec {other ? `« ${other.title} »` : 'une autre activité'}{c.place ? ` · ${c.place}` : ''}</span>
+              <span style={muted}>{other ? fill(t('with “{title}”'), { title: other.title }) : t('with another activity')}{c.place ? ` · ${c.place}` : ''}</span>
             </div>
           );
         })}
@@ -381,15 +393,15 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
       <LazyChangeLog entity="site_activity" id={activity.id} />
       <ErrorLine error={error} />
       {canManage && cancelling && (
-        <ReasonForm action={cancelActivity} hidden={{ id: activity.id }} submitLabel="Annuler l'activité" submitIcon="ph-prohibit"
-          message="L'activité est retirée de la carte et de la coactivité ; elle reste tracée avec son motif."
-          placeholder="Ex. intervention annulée, activité saisie en double" onCancel={() => setCancelling(false)} onDone={onDeleted} />
+        <ReasonForm action={cancelActivity} hidden={{ id: activity.id }} submitLabel={t('Cancel the activity')} submitIcon="ph-prohibit"
+          message={t('The activity is removed from the map and the co-activity; it stays traced with its reason.')}
+          placeholder={t('E.g. intervention cancelled, activity entered twice')} onCancel={() => setCancelling(false)} onDone={onDeleted} />
       )}
       {canManage && !cancelling && (
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" className="btn btn-ghost vg-btn-sm" disabled={pending} onClick={() => setCancelling(true)}><Icon name="ph-prohibit" size={13} />Annuler l&apos;activité</button>
-          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onMove}><Icon name="ph-map-pin" size={13} />{activity.geometry ? 'Déplacer sur la carte' : 'Placer sur la carte'}</button>
-          <button type="button" className="btn btn-primary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+          <button type="button" className="btn btn-ghost vg-btn-sm" disabled={pending} onClick={() => setCancelling(true)}><Icon name="ph-prohibit" size={13} />{t('Cancel the activity')}</button>
+          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onMove}><Icon name="ph-map-pin" size={13} />{activity.geometry ? t('Move on the map') : t('Place on the map')}</button>
+          <button type="button" className="btn btn-primary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />{t('Edit')}</button>
         </div>
       )}
     </div>
@@ -402,6 +414,8 @@ const parseNum = (s: string) => Number(s.replace(/\s/g, '').replace(',', '.'));
 
 /** Échelle (largeur réelle du plan, étalonnage sur deux points) et seuil de proximité. */
 export function ScaleForm({ map, measured, onDone, onCancel, onMeasure }: { map: MapConfig; measured: number | null; onDone: () => void; onCancel: () => void; onMeasure: () => void }) {
+  const { t, lang } = useI18n();
+  const locale = lang === 'en' ? 'en-GB' : 'fr-FR';
   const [width, setWidth] = useState(map.metersPerUnit ? String(map.metersPerUnit).replace('.', ',') : '');
   const [distance, setDistance] = useState('');
   const onDistance = (val: string) => {
@@ -411,28 +425,28 @@ export function ScaleForm({ map, measured, onDone, onCancel, onMeasure }: { map:
   };
   const widthM = parseNum(width);
   return (
-    <ActionForm action={saveMapSettings} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer" hidden={{ siteId: map.siteId }}>
+    <ActionForm action={saveMapSettings} onDone={onDone} onCancel={onCancel} submitLabel={t('Save')} hidden={{ siteId: map.siteId }}>
       {measured != null ? (
-        <Field name="distance" label="Distance réelle entre les deux points mesurés (m)" hint={`Segment mesuré : ${(measured * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} % de la largeur du plan. La largeur réelle du plan est recalculée.`}>
-          <Input name="distance" inputMode="decimal" value={distance} onChange={(e) => onDistance(e.target.value)} placeholder="Ex. 104" autoFocus />
+        <Field name="distance" label={t('Real distance between the two measured points (m)')} hint={fill(t('Segment measured: {pct} % of the plan’s width. The real width of the plan is recalculated.'), { pct: (measured * 100).toLocaleString(locale, { maximumFractionDigits: 1 }) })}>
+          <Input name="distance" inputMode="decimal" value={distance} onChange={(e) => onDistance(e.target.value)} placeholder={t('E.g. 104')} autoFocus />
         </Field>
       ) : (
         <Notice tone="neutral" icon="ph-ruler">
-          Étalonnez sur deux points dont vous connaissez la distance (longueur d&apos;un bâtiment, d&apos;une voie…).{' '}
-          <button type="button" className="vg-text-btn" onClick={onMeasure}>Mesurer deux points sur la carte</button>
+          {t('Calibrate on two points whose distance you know (length of a building, of a route…).')}{' '}
+          <button type="button" className="vg-text-btn" onClick={onMeasure}>{t('Measure two points on the map')}</button>
         </Notice>
       )}
       <FormRow>
-        <Field name="metersPerUnit" label="Largeur réelle représentée par le plan (m)"
-          hint={widthM > 0 ? `1 m ≈ ${(map.width / widthM).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} px du plan (${map.width} px de large).` : 'Mètres pour toute la largeur du plan.'}>
-          <Input name="metersPerUnit" inputMode="decimal" value={width} onChange={(e) => setWidth(e.target.value)} placeholder="Ex. 320" />
+        <Field name="metersPerUnit" label={t('Real width shown by the plan (m)')}
+          hint={widthM > 0 ? fill(t('1 m ≈ {px} px of the plan ({width} px wide).'), { px: (map.width / widthM).toLocaleString(locale, { maximumFractionDigits: 1 }), width: map.width }) : t('Metres for the whole width of the plan.')}>
+          <Input name="metersPerUnit" inputMode="decimal" value={width} onChange={(e) => setWidth(e.target.value)} placeholder={t('E.g. 320')} />
         </Field>
-        <Field name="proximityMeters" label="Seuil de proximité (m)" hint="En dessous, deux activités voisines sont en coactivité.">
+        <Field name="proximityMeters" label={t('Proximity threshold (m)')} hint={t('Below it, two neighbouring activities are in co-activity.')}>
           <Input name="proximityMeters" inputMode="numeric" defaultValue={String(map.proximityMeters)} />
         </Field>
       </FormRow>
       {/* Historique de la carte du site (PRV-12) : zones, voies, plan de fond, échelle. */}
-      <LazyChangeLog entity="site_map" id={map.siteId} title="Historique de la carte" />
+      <LazyChangeLog entity="site_map" id={map.siteId} title={t('Map history')} />
     </ActionForm>
   );
 }
@@ -443,11 +457,11 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const PDF_WIDTH = 2400;
 type Picked = { file: File; preview: string; width: number; height: number; note: string };
 
-const canvasBlob = (canvas: HTMLCanvasElement, type: string, quality?: number) =>
-  new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Conversion impossible.'))), type, quality));
+const canvasBlob = (canvas: HTMLCanvasElement, type: string, t: T, quality?: number) =>
+  new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('Conversion impossible.')))), type, quality));
 
 /** Page 1 d'un PDF → image PNG (≈ 2 400 px de large), JPEG si le PNG dépasse 10 Mo. */
-async function pdfToImage(file: File): Promise<Picked> {
+async function pdfToImage(file: File, t: T): Promise<Picked> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
   const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
@@ -460,14 +474,14 @@ async function pdfToImage(file: File): Promise<Picked> {
     canvas.width = Math.round(viewport.width);
     canvas.height = Math.round(viewport.height);
     await page.render({ canvas, viewport }).promise;
-    let blob = await canvasBlob(canvas, 'image/png');
-    if (blob.size > MAX_BYTES) blob = await canvasBlob(canvas, 'image/jpeg', 0.85);
-    if (blob.size > MAX_BYTES) blob = await canvasBlob(canvas, 'image/jpeg', 0.6);
-    if (blob.size > MAX_BYTES) throw new Error('Image convertie trop lourde (plus de 10 Mo).');
+    let blob = await canvasBlob(canvas, 'image/png', t);
+    if (blob.size > MAX_BYTES) blob = await canvasBlob(canvas, 'image/jpeg', t, 0.85);
+    if (blob.size > MAX_BYTES) blob = await canvasBlob(canvas, 'image/jpeg', t, 0.6);
+    if (blob.size > MAX_BYTES) throw new Error(t('Converted image too heavy (more than 10 MB).'));
     const name = `${file.name.replace(/\.pdf$/i, '')}.${blob.type === 'image/png' ? 'png' : 'jpg'}`;
     return {
       file: new File([blob], name, { type: blob.type }), preview: URL.createObjectURL(blob), width: canvas.width, height: canvas.height,
-      note: `Page 1${doc.numPages > 1 ? ` sur ${doc.numPages}` : ''} convertie en image (${canvas.width} × ${canvas.height} px).`,
+      note: fill(doc.numPages > 1 ? t('Page 1 of {n} converted to an image ({w} × {h} px).') : t('Page 1 converted to an image ({w} × {h} px).'), { n: doc.numPages, w: canvas.width, h: canvas.height }),
     };
   } finally {
     await task.destroy();
@@ -483,6 +497,7 @@ async function imageSize(file: File) {
 
 /** Remplacement du plan de fond par une image ou un PDF (page 1 rendue dans le navigateur). */
 export function PlanBackgroundForm({ map, onDone, onCancel }: { map: MapConfig; onDone: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   const [picked, setPicked] = useState<Picked | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -496,17 +511,17 @@ export function PlanBackgroundForm({ map, onDone, onCancel }: { map: MapConfig; 
     if (!file) return;
     try {
       if (file.type === 'application/pdf') {
-        setBusy('Conversion de la page 1 du PDF…');
-        setPicked(await pdfToImage(file));
+        setBusy(t('Converting page 1 of the PDF…'));
+        setPicked(await pdfToImage(file, t));
       } else if (/^image\/(png|jpeg|webp)$/.test(file.type)) {
-        if (file.size > MAX_BYTES) throw new Error(`« ${file.name} » dépasse 10 Mo.`);
+        if (file.size > MAX_BYTES) throw new Error(fill(t('“{name}” exceeds 10 MB.'), { name: file.name }));
         const size = await imageSize(file);
         setPicked({ file, preview: URL.createObjectURL(file), ...size, note: `${size.width} × ${size.height} px.` });
       } else {
-        throw new Error('Format non accepté : image PNG, JPEG, WebP ou PDF.');
+        throw new Error(t('Format not accepted: PNG, JPEG, WebP image or PDF.'));
       }
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : 'Impossible de lire ce fichier.');
+      setError(e instanceof Error && e.message ? e.message : t('This file cannot be read.'));
     } finally {
       setBusy(null);
     }
@@ -522,7 +537,7 @@ export function PlanBackgroundForm({ map, onDone, onCancel }: { map: MapConfig; 
       fd.set('height', String(picked.height));
       const r = await replaceSitePlan({}, fd);
       if (r.ok) onDone();
-      else setError(Object.values(r.fieldErrors ?? {})[0] ?? r.error ?? 'Enregistrement impossible.');
+      else setError(Object.values(r.fieldErrors ?? {})[0] ?? r.error ?? t('Saving impossible.'));
     });
   };
 
@@ -530,10 +545,10 @@ export function PlanBackgroundForm({ map, onDone, onCancel }: { map: MapConfig; 
   return (
     <form className="vg-form" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <Facts items={[
-        ['Plan actuel', map.custom ? map.fileName ?? 'Plan importé' : map.url ? 'Plan schématique par défaut' : 'Aucun plan (fond quadrillé)'],
-        ['Dimensions', `${map.width} × ${map.height} px`],
+        [t('Current plan'), map.custom ? map.fileName ?? t('Imported plan') : map.url ? t('Default schematic plan') : t('No plan (grid background)')],
+        [t('Dimensions'), `${map.width} × ${map.height} px`],
       ]} />
-      <Field name="file" label="Nouveau plan" hint="Image PNG, JPEG ou WebP, ou PDF (la première page est convertie en image) ; 10 Mo au maximum.">
+      <Field name="file" label={t('New plan#background')} hint={t('PNG, JPEG or WebP image, or PDF (the first page is converted to an image); 10 MB at most.')}>
         <input id="file" name="file" type="file" className="input" accept="image/png,image/jpeg,image/webp,application/pdf"
           onChange={(e) => void pick(e.target.files?.[0])} disabled={!!busy || pending} />
       </Field>
@@ -541,24 +556,24 @@ export function PlanBackgroundForm({ map, onDone, onCancel }: { map: MapConfig; 
       {picked && (
         <div style={{ display: 'grid', gap: 6 }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- aperçu local (blob:) avant envoi */}
-          <img src={picked.preview} alt="Aperçu du nouveau plan" className={styles.preview} />
+          <img src={picked.preview} alt={t('Preview of the new plan')} className={styles.preview} />
           <span style={muted}>{picked.note}</span>
         </div>
       )}
       <Notice tone="warn" icon="ph-info">
-        Les zones, voies et activités sont conservées en coordonnées relatives au plan : vérifiez leur position et ajustez-les si le nouveau plan n&apos;a pas le même cadrage, puis étalonnez l&apos;échelle.
-        {ratioChange > 0.02 && <> Les proportions du nouveau plan diffèrent de l&apos;actuel ({Math.round(ratioChange * 100)} %) : un recalage sera nécessaire.</>}
+        {t('Zones, routes and activities are kept in coordinates relative to the plan: check their position and adjust them if the new plan does not have the same framing, then calibrate the scale.')}
+        {ratioChange > 0.02 && <> {fill(t('The proportions of the new plan differ from the current one ({pct} %): a realignment will be needed.'), { pct: Math.round(ratioChange * 100) })}</>}
       </Notice>
       <ErrorLine error={error ?? reset.error} />
       <div className="dialog-actions" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         {map.custom && DEFAULT_PLANS[map.siteId] && (
           <span style={{ marginRight: 'auto' }}>
-            <ConfirmButton label="Revenir au plan schématique" confirmLabel="Revenir" icon="ph-arrow-counter-clockwise" question="Supprimer le plan importé ?"
+            <ConfirmButton label={t('Go back to the schematic plan')} confirmLabel={t('Go back')} icon="ph-arrow-counter-clockwise" question={t('Delete the imported plan?')}
               pending={reset.pending} onConfirm={() => reset.run(() => resetSitePlan(map.siteId), onDone)} className="btn btn-ghost vg-btn-sm" />
           </span>
         )}
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>Annuler</button>
-        <button type="submit" className="btn btn-primary" disabled={!picked || pending || !!busy}>{pending ? 'Envoi…' : 'Remplacer le plan'}</button>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>{t('Cancel')}</button>
+        <button type="submit" className="btn btn-primary" disabled={!picked || pending || !!busy}>{pending ? t('Sending…') : t('Replace the plan')}</button>
       </div>
     </form>
   );

@@ -9,6 +9,8 @@ import { centroid, dist, polylineSegments, type Conflict, type Pt } from '@/lib/
 import { pinchView, tapSlop, type ScreenPt } from './gestures';
 import { ROUTE_KINDS, TEAMS, ZONE_KINDS, type ActivityView, type MapConfig, type RouteView, type ZoneView } from '@/lib/rules/sitemap';
 import styles from './sitemap.module.css';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 // Carte : plan de fond + surcouche SVG en coordonnées normalisées (viewBox 0 0 1 aspect),
 // déplacement (glisser), zoom (molette, boutons), dessin des zones et voies, placement des activités.
@@ -83,6 +85,8 @@ type Props = {
 };
 
 export function MapCanvas(props: Props) {
+  const { t, lang } = useI18n();
+  const locale = lang === 'en' ? 'en-GB' : 'fr-FR';
   const { map, zones, routes, activities, conflicts, layers, dimPlan, tool, editable, selection, activeConflict, initialFocus, overlay, label, ref } = props;
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const box = useRef<HTMLDivElement>(null);
@@ -339,29 +343,29 @@ export function MapCanvas(props: Props) {
   if (map.metersPerUnit) {
     const pxPerMeter = v.s / map.metersPerUnit;
     const nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((m) => m * pxPerMeter >= 64) ?? 5000;
-    scaleBar = { width: nice * pxPerMeter, label: `${nice.toLocaleString('fr-FR')} m` };
+    scaleBar = { width: nice * pxPerMeter, label: `${nice.toLocaleString(locale)} m` };
   }
 
   const tooltip = (() => {
     if (!hover || drag || panning) return null;
-    const t = hover.target;
-    if (t.kind === 'zone') {
-      const z = zones.find((x) => x.id === t.id);
+    const tg = hover.target;
+    if (tg.kind === 'zone') {
+      const z = zones.find((x) => x.id === tg.id);
       return z && <><strong>{z.name}</strong><span>{ZONE_KINDS[z.kind].label}{z.notes ? ` · ${truncate(z.notes, 90)}` : ''}</span></>;
     }
-    if (t.kind === 'route') {
-      const r = routes.find((x) => x.id === t.id);
-      return r && <><strong>{r.name}</strong><span>{ROUTE_KINDS[r.kind].label}{r.shared ? ' · voie commune' : ' · voie réservée'}</span></>;
+    if (tg.kind === 'route') {
+      const r = routes.find((x) => x.id === tg.id);
+      return r && <><strong>{r.name}</strong><span>{ROUTE_KINDS[r.kind].label}{r.shared ? t(' · shared route') : t(' · reserved route')}</span></>;
     }
-    const a = activities.find((x) => x.id === t.id);
+    const a = activities.find((x) => x.id === tg.id);
     if (!a) return null;
     return (
       <>
         <strong>{a.title}</strong>
-        <span>{a.team === 'externe' ? a.contractor ?? 'Entreprise extérieure' : 'Équipe interne'}{a.owner ? ` · ${a.owner}` : ''}</span>
-        <span>{a.startOn === a.endOn ? `Le ${a.startOn.slice(8, 10)}/${a.startOn.slice(5, 7)}` : `Du ${a.startOn.slice(8, 10)}/${a.startOn.slice(5, 7)} au ${a.endOn.slice(8, 10)}/${a.endOn.slice(5, 7)}`}{a.hours ? ` · ${a.hours}` : ''}{a.vehicles ? ' · véhicules / engins' : ''}</span>
-        {a.approx && <span style={{ color: 'var(--color-neutral-500)' }}>Position approximative (centre de la zone)</span>}
-        {a.tone && <span style={{ color: TONE[a.tone].fg }}>Situation de coactivité ce jour</span>}
+        <span>{a.team === 'externe' ? a.contractor ?? t('External company') : t('Internal team')}{a.owner ? ` · ${a.owner}` : ''}</span>
+        <span>{a.startOn === a.endOn ? fill(t('On {date}'), { date: `${a.startOn.slice(8, 10)}/${a.startOn.slice(5, 7)}` }) : fill(t('From {from} to {to}#cap'), { from: `${a.startOn.slice(8, 10)}/${a.startOn.slice(5, 7)}`, to: `${a.endOn.slice(8, 10)}/${a.endOn.slice(5, 7)}` })}{a.hours ? ` · ${a.hours}` : ''}{a.vehicles ? t(' · vehicles / machinery') : ''}</span>
+        {a.approx && <span style={{ color: 'var(--color-neutral-500)' }}>{t('Approximate position (centre of the zone)')}</span>}
+        {a.tone && <span style={{ color: TONE[a.tone].fg }}>{t('Co-activity situation this day')}</span>}
       </>
     );
   })();
@@ -428,7 +432,7 @@ export function MapCanvas(props: Props) {
     });
 
   return (
-    <div ref={box} className={styles.map} tabIndex={0} role="application" aria-label={`${label}. Flèches pour se déplacer, + et − pour zoomer, 0 pour ajuster.`} aria-roledescription="carte"
+    <div ref={box} className={styles.map} tabIndex={0} role="application" aria-label={`${label}. ${t('Arrows to move, + and − to zoom, 0 to fit.')}`} aria-roledescription={t('map')}
       style={{ cursor: cursorStyle }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHover(null); }}
@@ -579,7 +583,7 @@ export function MapCanvas(props: Props) {
               <circle cx={pts[0][0]} cy={pts[0][1]} r={px(5)} style={{ fill: 'var(--tone-warn-dot)', stroke: 'var(--color-bg)', strokeWidth: px(1.5) }} />
               {measured != null && cursor && map.metersPerUnit && (
                 <text x={cursor[0] + px(10)} y={cursor[1] - px(10)} fontSize={px(11.5)} style={{ fill: 'var(--tone-warn-fg)', paintOrder: 'stroke', stroke: 'var(--color-bg)', strokeWidth: px(3) }}>
-                  ≈ {(measured * map.metersPerUnit).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} m (échelle actuelle)
+                  ≈ {(measured * map.metersPerUnit).toLocaleString(locale, { maximumFractionDigits: 1 })} {t('m (current scale)')}
                 </text>
               )}
             </g>
@@ -593,13 +597,13 @@ export function MapCanvas(props: Props) {
       )}
 
       <div className={styles.controls} data-overlay>
-        <button type="button" className={styles.ctrl} aria-label="Zoom avant" title="Zoom avant" onClick={() => zoomAt(w / 2, h / 2, 1.4)} disabled={v.s >= fitScale * MAX_ZOOM - 1e-6}>
+        <button type="button" className={styles.ctrl} aria-label={t('Zoom in')} title={t('Zoom in')} onClick={() => zoomAt(w / 2, h / 2, 1.4)} disabled={v.s >= fitScale * MAX_ZOOM - 1e-6}>
           <i className="ph ph-magnifying-glass-plus" style={{ fontSize: 15 }} aria-hidden />
         </button>
-        <button type="button" className={styles.ctrl} aria-label="Zoom arrière" title="Zoom arrière" onClick={() => zoomAt(w / 2, h / 2, 1 / 1.4)} disabled={v.s <= fitScale * MIN_ZOOM + 1e-6}>
+        <button type="button" className={styles.ctrl} aria-label={t('Zoom out')} title={t('Zoom out')} onClick={() => zoomAt(w / 2, h / 2, 1 / 1.4)} disabled={v.s <= fitScale * MIN_ZOOM + 1e-6}>
           <i className="ph ph-magnifying-glass-minus" style={{ fontSize: 15 }} aria-hidden />
         </button>
-        <button type="button" className={styles.ctrl} aria-label="Ajuster le plan à l'écran" title="Ajuster le plan à l'écran" onClick={() => setView(fitView)}>
+        <button type="button" className={styles.ctrl} aria-label={t('Fit the plan to the screen')} title={t('Fit the plan to the screen')} onClick={() => setView(fitView)}>
           <i className="ph ph-corners-out" style={{ fontSize: 15 }} aria-hidden />
         </button>
       </div>
@@ -607,7 +611,7 @@ export function MapCanvas(props: Props) {
       <div className={styles.scale} aria-live="polite">
         {scaleBar
           ? <><span>{scaleBar.label}</span><span className={styles.scaleBar} style={{ width: scaleBar.width }} /></>
-          : <span>Échelle non étalonnée</span>}
+          : <span>{t('Scale not calibrated')}</span>}
       </div>
 
       {tooltip && hover && (
