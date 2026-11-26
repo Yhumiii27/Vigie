@@ -6,6 +6,8 @@ import { guard } from '@/lib/guard';
 import { loadMyContributions } from '@/lib/data/review';
 import { MissingNotice } from '@/components/ui';
 import { missingDetail } from '@/lib/url-state';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.contributions.title };
 
@@ -16,18 +18,19 @@ export const metadata: Metadata = { title: SCREENS.contributions.title };
  */
 export default async function ContributionsPage({ searchParams }: PageProps<'/audits/contributions'>) {
   await guard('contributions');
+  const { t } = await getI18n();
   const sp = await searchParams;
   const data = await loadMyContributions({ revue: sp.revue });
   const open = data.reviews.filter((r) => r.editable).length;
   const sub = data.reviews.length
-    ? `${data.reviews.length} revue${data.reviews.length > 1 ? 's' : ''} vous concern${data.reviews.length > 1 ? 'ent' : 'e'} · ${open} en préparation ou à clôturer`
-    : 'Contributions, participations et décisions vous concernant';
+    ? fill(data.reviews.length > 1 ? t('{n} reviews concern you · {open} in preparation or to close') : t('{n} review concerns you · {open} in preparation or to close'), { n: data.reviews.length, open })
+    : t('Contributions, participations and decisions concerning you');
   return (
     <>
       <PageHeader title={SCREENS.contributions.title} sub={sub} />
       <div className="vg-page">
         {/* UX-13 : ?revue=<id> inconnu ou sans contribution de la personne : même bandeau dans les deux cas. */}
-        {missingDetail(sp.revue, data.focus != null) && <MissingNotice text="Revue introuvable ou sans contribution de votre part." closeHref="/audits/contributions" />}
+        {missingDetail(sp.revue, data.focus != null) && <MissingNotice text={t('Review not found or without any contribution from you.')} closeHref="/audits/contributions" />}
         <ContributionsView data={data} />
       </div>
     </>

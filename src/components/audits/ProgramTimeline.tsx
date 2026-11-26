@@ -272,7 +272,7 @@ function TrackRow({ track, items, curMonth, canEdit, onOpen }: {
                     {it.locked && <><i className="ph ph-lock-simple" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">{t('Management review')}</span></>}
                     {it.done && <><i className="ph ph-check" style={{ fontSize: 11, marginRight: 3, color: TONE.ok.dot, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">{t('Carried out')}</span></>}
                     {it.state === 'late' && <><i className="ph ph-warning" style={{ fontSize: 11, marginRight: 3, verticalAlign: '-1px' }} aria-hidden /><span className="vg-sr-only">{t('To confirm')}</span></>}
-                    {it.unplanned && <span className="vg-sr-only">{t('Unplanned: ')} </span>}
+                    {it.unplanned && <span className="vg-sr-only">{t('Unplanned: ')}</span>}
                     {it.label}
                   </span>
                 </button>

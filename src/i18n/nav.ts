@@ -39,4 +39,5 @@ export const SCREEN_TITLE_EN: Partial<Record<ScreenKey, string>> = {
   docs: 'Controlled documents',
   env: 'Environment and waste',
   engineering: 'Engineering changes',
+  contributions: 'My contributions to the management review',
 };
