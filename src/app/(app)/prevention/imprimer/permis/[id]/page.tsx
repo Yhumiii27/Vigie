@@ -8,6 +8,8 @@ import { today } from '@/lib/today';
 import { guard } from '@/lib/guard';
 import { loadPrevention, type PermitView } from '@/lib/data/prevention';
 import '../../print.css';
+import { getI18n } from '@/i18n/server';
+import { fill, type T } from '@/i18n/translate';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/permis/[id]'>): Promise<Metadata> {
   const { id } = await params;
@@ -41,27 +43,27 @@ function VisaBox({ title, who, fields }: { title: string; who?: string | null; f
 }
 
 /** Bandeau d'état : ce que vaut le document imprimé (à afficher, ou sans valeur d'autorisation). */
-function banner(p: PermitView): { tone: 'ok' | 'danger' | 'neutral'; text: string } {
+function banner(p: PermitView, t: T): { tone: 'ok' | 'danger' | 'neutral'; text: string } {
   switch (p.state) {
     case 'delivre':
     case 'en_cours':
-      return { tone: 'ok', text: 'Permis délivré : à afficher sur le lieu des travaux pendant toute leur durée' };
+      return { tone: 'ok', text: t('Permit issued: to display at the work place for their whole duration') };
     case 'demande':
-      return { tone: 'danger', text: 'Demande non délivrée : ce document ne vaut pas autorisation de travaux' };
+      return { tone: 'danger', text: t('Request not issued: this document is not a work authorisation') };
     case 'expire':
       return {
         tone: 'danger',
         text: p.status === 'demande'
-          ? 'Demande échue, jamais délivrée : ce document ne vaut pas autorisation de travaux'
-          : `Permis expiré le ${fmtLocalLong(p.watchUntil ?? p.validTo)} sans clôture : travaux non autorisés au-delà de la validité`,
+          ? t('Request lapsed, never issued: this document is not a work authorisation')
+          : fill(t('Permit expired on {date} without closure: work not authorised beyond the validity'), { date: fmtLocalLong(p.watchUntil ?? p.validTo) }),
       };
     case 'clos':
-      return { tone: 'neutral', text: `Permis clos${p.closedLabel ? ` le ${p.closedLabel}` : ''} : travaux terminés` };
+      return { tone: 'neutral', text: `${t('Permit closed')}${p.closedLabel ? fill(t(' on {date}'), { date: p.closedLabel }) : ''}${t(': work finished')}` };
     case 'annule':
       return {
         tone: 'danger',
-        text: `Permis annulé${p.closedLabel ? ` le ${p.closedLabel}` : ''}${p.cancelledBy ? ` par ${p.cancelledBy}` : ''} : ce document ne vaut pas autorisation de travaux`
-          + `${p.cancelReason ? ` (motif : ${p.cancelReason})` : ''}`,
+        text: `${t('Permit cancelled')}${p.closedLabel ? fill(t(' on {date}'), { date: p.closedLabel }) : ''}${p.cancelledBy ? fill(t(' by {name}'), { name: p.cancelledBy }) : ''}${t(': this document is not a work authorisation')}`
+          + `${p.cancelReason ? fill(t(' (reason: {reason})'), { reason: p.cancelReason }) : ''}`,
       };
   }
 }
@@ -70,11 +72,12 @@ function banner(p: PermitView): { tone: 'ok' | 'danger' | 'neutral'; text: strin
 // onglet depuis la fiche du permis. Permis du site sélectionné seulement (mêmes données que l'écran).
 export default async function PermitPrintPage({ params }: PageProps<'/prevention/imprimer/permis/[id]'>) {
   await guard('prevention');
+  const { t } = await getI18n();
   const { id } = await params;
   const d = await loadPrevention();
   const permit = d.permits.find((p) => p.id === decodeURIComponent(id));
   if (!permit) notFound();
-  const state = banner(permit);
+  const state = banner(permit, t);
   const checked = permit.checklist.filter((i) => i.checked).length;
   const fire = permit.type === 'feu';
   const printedOn = fmtDate(today());
@@ -84,10 +87,10 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
         <a href={`/prevention?onglet=permis&permis=${encodeURIComponent(permit.id)}`} className="btn btn-ghost vg-btn-sm">
-          <i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Permis {permit.id}
+          <i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{fill(t('Permit {id}'), { id: permit.id })}
         </a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="pp-muted" style={{ fontSize: 11.5 }}>{t('For the PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
@@ -98,38 +101,38 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
           <h1>{permit.id} · {permit.location}</h1>
           <span className="tag tag-neutral">{permit.stateLabel}</span>
         </div>
-        <div className="pp-muted" style={{ fontSize: 12.5 }}>{permit.site} · édité le {printedOn}</div>
+        <div className="pp-muted" style={{ fontSize: 12.5 }}>{permit.site} · {fill(t('printed on {date}'), { date: printedOn })}</div>
         <div className={`pp-banner${state.tone === 'neutral' ? '' : ` pp-banner-${state.tone}`}`}>{state.text}</div>
       </header>
 
-      <Section num={1} title="Travaux">
+      <Section num={1} title={t('Work')}>
         <Meta rows={[
-          ['Travaux', permit.description],
-          ['Lieu', permit.location],
-          ['Site', permit.site],
-          ['Entreprise', permit.contractor ?? 'Intervention interne'],
-          ['Intervenant(s)', permit.performer],
-          ['Plan de prévention', permit.plan
-            ? `${permit.plan.id} · ${permit.plan.signed ? 'signé' : 'non signé'} · ${permit.plan.period}`
-            : permit.planRequired ? 'Aucun (plan signé exigé)' : '—'],
-          ['Projet Keystone', permit.keystoneProject ?? '—'],
+          [t('Work'), permit.description],
+          [t('Location'), permit.location],
+          [t('Site'), permit.site],
+          [t('Company'), permit.contractor ?? t('Internal intervention')],
+          [t('Worker(s)'), permit.performer],
+          [t('Prevention plan'), permit.plan
+            ? `${permit.plan.id} · ${permit.plan.signed ? t('signed') : t('not signed')} · ${permit.plan.period}`
+            : permit.planRequired ? t('None (signed plan required)') : '—'],
+          [t('Keystone project'), permit.keystoneProject ?? '—'],
         ]} />
       </Section>
 
-      <Section num={2} title="Validité">
+      <Section num={2} title={t('Validity')}>
         <Meta rows={[
-          ['Du', fmtLocalLong(permit.validFrom)],
-          ['Au', fmtLocalLong(permit.validTo)],
-          permit.watchUntil ? [fire ? `Surveillance (${FIRE_WATCH_HOURS} h) jusqu'à` : "Surveillance jusqu'à", fmtLocalLong(permit.watchUntil)] : null,
-          ['Délivré par', permit.issuer
-            ? `${permit.issuer}${permit.deliveredLabel ? ` le ${permit.deliveredLabel}` : ''}`
-            : permit.status === 'demande' ? 'Non délivré' : '—'],
+          [t('From#date'), fmtLocalLong(permit.validFrom)],
+          [t('To#date'), fmtLocalLong(permit.validTo)],
+          permit.watchUntil ? [fire ? fill(t('Watch ({n} h) until'), { n: FIRE_WATCH_HOURS }) : t('Watch until'), fmtLocalLong(permit.watchUntil)] : null,
+          [t('Issued by'), permit.issuer
+            ? `${permit.issuer}${permit.deliveredLabel ? fill(t(' on {date}'), { date: permit.deliveredLabel }) : ''}`
+            : permit.status === 'demande' ? t('Not issued') : '—'],
         ]} />
       </Section>
 
-      <Section num={3} title="Vérifications préalables" aside={`${checked}/${permit.checklist.length} vérifiés`}>
+      <Section num={3} title={t('Prior checks')} aside={fill(t('{done}/{total} checked'), { done: checked, total: permit.checklist.length })}>
         {permit.checklist.length === 0
-          ? <p className="pp-empty">Aucun point de contrôle.</p>
+          ? <p className="pp-empty">{t('No check point.')}</p>
           : (
             <div className="pp-checklist">
               {permit.checklist.map((item, i) => (
@@ -144,16 +147,16 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
 
       {/* PRV-22 : consignations et isolations du permis (annulées exclues). */}
       {permit.lockouts.some((l) => l.status !== 'annulee') && (
-        <Section num={4} title="Consignations">
+        <Section num={4} title={t('Lockouts')}>
           <table className="table pp-table">
-            <thead><tr><th>Consignation</th><th>Points d&apos;isolement</th><th>Poseur · vérificateur</th><th>État</th></tr></thead>
+            <thead><tr><th>{t('Lockout')}</th><th>{t('Isolation points')}</th><th>{t('Applier · verifier')}</th><th>{t('State')}</th></tr></thead>
             <tbody>
               {permit.lockouts.filter((l) => l.status !== 'annulee').map((l) => (
                 <tr key={l.id}>
                   <td>{l.id} · {l.energyLabel}<div className="pp-muted">{l.equipment}</div></td>
                   <td>{l.points.map((p) => (p.device ? `${p.label} (${p.device})` : p.label)).join(' ; ')}</td>
                   <td>{l.applier} · {l.verifier}</td>
-                  <td>{l.statusLabel}{l.verifiedLabel ? <div className="pp-muted">vérifiée le {l.verifiedLabel}</div> : null}{l.removedLabel ? <div className="pp-muted">levée le {l.removedLabel}</div> : null}</td>
+                  <td>{l.statusLabel}{l.verifiedLabel ? <div className="pp-muted">{fill(t('verified on {date}'), { date: l.verifiedLabel })}</div> : null}{l.removedLabel ? <div className="pp-muted">{fill(t('removed on {date}'), { date: l.removedLabel })}</div> : null}</td>
                 </tr>
               ))}
             </tbody>
@@ -161,18 +164,18 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
         </Section>
       )}
 
-      <Section num={permit.lockouts.some((l) => l.status !== 'annulee') ? 5 : 4} title="Visas">
+      <Section num={permit.lockouts.some((l) => l.status !== 'annulee') ? 5 : 4} title={t('Approvals')}>
         <div className="pp-sign">
-          <VisaBox title="Délivré par" who={permit.issuer} fields={['Signature']} />
-          <VisaBox title="Intervenant(s) : consignes reçues" fields={['Nom', 'Signature']} />
-          <VisaBox title="Fin des travaux" fields={['Heure', 'Visa']} />
+          <VisaBox title={t('Issued by')} who={permit.issuer} fields={[t('Signature')]} />
+          <VisaBox title={t('Worker(s): instructions received')} fields={[t('Name'), t('Signature')]} />
+          <VisaBox title={t('End of the work')} fields={[t('Time'), t('Approval')]} />
           {fire
-            ? <VisaBox title={`Fin de surveillance (ronde, ${FIRE_WATCH_HOURS} h)`} fields={['Heure', 'Visa']} />
-            : <VisaBox title="Zone remise en sécurité" fields={['Heure', 'Visa']} />}
+            ? <VisaBox title={fill(t('End of watch (round, {n} h)'), { n: FIRE_WATCH_HOURS })} fields={[t('Time'), t('Approval')]} />
+            : <VisaBox title={t('Zone made safe again')} fields={[t('Time'), t('Approval')]} />}
         </div>
       </Section>
 
-      <div className="pp-foot">Vigie · {permit.typeLabel.toLowerCase()} {permit.id} · {permit.site} · document édité le {printedOn}</div>
+      <div className="pp-foot">Vigie · {permit.typeLabel.toLowerCase()} {permit.id} · {permit.site} · {fill(t('document printed on {date}'), { date: printedOn })}</div>
     </article>
   );
 }
