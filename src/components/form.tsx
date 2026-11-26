@@ -5,6 +5,7 @@ import { createContext, startTransition, useActionState, useCallback, useContext
 import { announce } from '@/components/feedback';
 import { FAILURE_MESSAGE, savedMessage } from '@/lib/feedback';
 import type { FormState } from '@/lib/forms';
+import { useI18n } from '@/i18n/client';
 
 export type FormAction = (prev: FormState, fd: FormData) => Promise<FormState>;
 
@@ -62,7 +63,8 @@ export const FORM_SAVED_EVENT = 'vg:form-saved';
  * Erreurs (UX-04) : message général dans une région `alert`, focus sur le premier champ en erreur (sinon sur le message) ;
  * échec de l'appel (réseau, serveur) rendu comme une erreur du formulaire. Succès (UX-14) : confirmation annoncée.
  */
-export function ActionForm({ action, children, onDone, onCancel, submitLabel = 'Enregistrer', submitIcon, hidden, encType, resetOnDone, successMessage }: ActionFormProps) {
+export function ActionForm({ action, children, onDone, onCancel, submitLabel, submitIcon, hidden, encType, resetOnDone, successMessage }: ActionFormProps) {
+  const { t } = useI18n();
   const safeAction = useCallback(async (prev: FormState, fd: FormData): Promise<FormState> => {
     try {
       return await action(prev, fd);
@@ -102,9 +104,9 @@ export function ActionForm({ action, children, onDone, onCancel, submitLabel = '
       <ErrorsCtx.Provider value={state.fieldErrors}>{children}</ErrorsCtx.Provider>
       {state.error && <div key={attempt} ref={alertRef} role="alert" tabIndex={-1} className="vg-form-error">{state.error}</div>}
       <div className="dialog-actions">
-        {onCancel && <button type="button" className="btn btn-secondary" onClick={onCancel}>Annuler</button>}
+        {onCancel && <button type="button" className="btn btn-secondary" onClick={onCancel}>{t('Cancel')}</button>}
         <button type="submit" className="btn btn-primary" disabled={pending} aria-busy={pending || undefined}>
-          {submitIcon && <i className={`ph ${submitIcon}`} style={{ fontSize: 14 }} aria-hidden />}{pending ? 'Enregistrement…' : submitLabel}
+          {submitIcon && <i className={`ph ${submitIcon}`} style={{ fontSize: 14 }} aria-hidden />}{pending ? t('Saving…') : submitLabel ?? t('Save')}
         </button>
       </div>
     </form>

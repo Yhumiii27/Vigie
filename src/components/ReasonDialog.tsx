@@ -5,6 +5,7 @@ import { DialogButton } from '@/components/Dialog';
 import { ActionForm, Field, TextArea, type FormAction } from '@/components/form';
 import { REASON_MAX } from '@/lib/domain';
 import type { FormState } from '@/lib/forms';
+import { useI18n } from '@/i18n/client';
 
 type ReasonFormProps = {
   /** Server action `(prev, fd) => FormState` ; lit le motif avec `formReader(fd).reason()` (champ `reason`). */
@@ -31,12 +32,13 @@ type ReasonFormProps = {
  * Jamais de suppression d'un enregistrement tracé : qui, quand et pourquoi sont conservés côté serveur. Seul formulaire qui
  * saisit le champ `reason` (QUA-22, src/server/reason-usage.test.ts) ; le serveur le lit par `formReader(fd).reason()`.
  */
-export function ReasonForm({ action, hidden, message, reasonLabel = 'Motif', hint, placeholder, submitLabel = 'Confirmer', submitIcon, onDone, onCancel, children, before }: ReasonFormProps) {
+export function ReasonForm({ action, hidden, message, reasonLabel, hint, placeholder, submitLabel, submitIcon, onDone, onCancel, children, before }: ReasonFormProps) {
+  const { t } = useI18n();
   return (
-    <ActionForm action={action} hidden={hidden} onDone={onDone} onCancel={onCancel} submitLabel={submitLabel} submitIcon={submitIcon}>
+    <ActionForm action={action} hidden={hidden} onDone={onDone} onCancel={onCancel} submitLabel={submitLabel ?? t('Confirm')} submitIcon={submitIcon}>
       {message && <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>{message}</p>}
       {before}
-      <Field name="reason" label={reasonLabel} hint={hint ?? 'Obligatoire, conservé dans l’historique de la fiche.'}>
+      <Field name="reason" label={reasonLabel ?? t('Reason')} hint={hint ?? t('Required, kept in the record’s history.')}>
         <TextArea name="reason" rows={3} maxLength={REASON_MAX} required autoFocus={!before} placeholder={placeholder} />
       </Field>
       {children}
