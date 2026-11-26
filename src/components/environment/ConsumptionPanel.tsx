@@ -10,6 +10,8 @@ import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { saveConsumptionMonth } from '@/server/environment';
 import { CONSUMPTION_KINDS, fmtDelta, fmtNum, monthInitial, monthLong, monthShort, type ConsumptionKind } from '@/lib/rules/environment';
 import { Note, muted, rowOpener, shortSite } from './parts';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Consumption = EnvironmentData['consumption'];
 type KindSummary = Consumption['kinds'][number];
@@ -23,6 +25,7 @@ function fmtTotal(value: number, unit: string) {
 // ─── Graphiques (une série par énergie, 12 derniers mois) ───────────────────
 
 function KindChart({ k, year }: { k: KindSummary; year: number }) {
+  const { t } = useI18n();
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...k.bars.map((b) => b.value ?? 0));
   const lastWithData = k.bars.map((b) => b.value != null).lastIndexOf(true);
@@ -38,11 +41,11 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
           <Icon name={k.icon} size={15} style={{ color: 'var(--color-neutral-400)' }} />{k.label}
         </span>
         <span style={{ fontSize: 11, color: 'var(--color-neutral-500)', fontVariantNumeric: 'tabular-nums' }} aria-live="polite">
-          {bar ? <>{monthShort(bar.month)} · <span style={{ color: 'var(--color-text)' }}>{bar.value != null ? `${fmtNum(bar.value)} ${k.unit}` : 'non saisi'}</span></> : k.unit}
+          {bar ? <>{monthShort(bar.month)} · <span style={{ color: 'var(--color-text)' }}>{bar.value != null ? `${fmtNum(bar.value)} ${k.unit}` : t('not entered#reading')}</span></> : k.unit}
         </span>
       </div>
       {hasData ? (
-        <div role="img" aria-label={`${k.label}, 12 derniers mois : ${k.bars.map((b) => `${monthLong(b.month)} ${b.value != null ? `${fmtNum(b.value)} ${k.unit}` : 'non saisi'}`).join(' ; ')}`}
+        <div role="img" aria-label={fill(t('{kind}, last 12 months: {values}'), { kind: k.label, values: k.bars.map((b) => `${monthLong(b.month)} ${b.value != null ? `${fmtNum(b.value)} ${k.unit}` : t('not entered#reading')}`).join(' ; ') })}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gap: 2, alignItems: 'end' }}
           onMouseLeave={() => setHover(null)}>
           {k.bars.map((b, i) => (
@@ -54,7 +57,7 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
                     background: i === shown ? 'var(--color-accent)' : 'var(--color-accent-600)',
                   }} />
                 ) : (
-                  <div style={{ width: 'min(14px, 100%)', height: 2, background: 'var(--color-neutral-800)' }} title="Non saisi" />
+                  <div style={{ width: 'min(14px, 100%)', height: 2, background: 'var(--color-neutral-800)' }} title={t('Not entered#reading')} />
                 )}
               </div>
               <span style={{ fontSize: 11, color: i === shown ? 'var(--color-text)' : 'var(--vg-text-muted)' }}>{monthInitial(b.month)}</span>
@@ -62,16 +65,16 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
           ))}
         </div>
       ) : (
-        <div className="vg-inset" style={{ padding: '18px 12px', fontSize: 12, color: 'var(--color-neutral-500)', textAlign: 'center' }}>Aucun relevé sur les 12 derniers mois.</div>
+        <div className="vg-inset" style={{ padding: '18px 12px', fontSize: 12, color: 'var(--color-neutral-500)', textAlign: 'center' }}>{t('No reading over the last 12 months.')}</div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 11.5, color: 'var(--color-neutral-400)' }}>
-        <span>12 mois : <span style={{ color: 'var(--color-text)' }}>{fmtTotal(k.total12, k.unit)}</span></span>
+        <span>{t('12 months: ')}<span style={{ color: 'var(--color-text)' }}>{fmtTotal(k.total12, k.unit)}</span></span>
         {k.period && (
           <span>
-            {k.period} : <span style={{ color: 'var(--color-text)' }}>{fmtTotal(k.current, k.unit)}</span>
+            {k.period}{t(': ')}<span style={{ color: 'var(--color-text)' }}>{fmtTotal(k.current, k.unit)}</span>
             {k.delta != null
-              ? <span style={{ color: deltaTone ?? undefined, marginLeft: 6 }}>{fmtDelta(k.delta)} vs {year - 1}</span>
-              : <span style={{ marginLeft: 6, color: 'var(--vg-text-muted)' }}>N-1 incomplet</span>}
+              ? <span style={{ color: deltaTone ?? undefined, marginLeft: 6 }}>{fmtDelta(k.delta)} {fill(t('vs {id}'), { id: year - 1 })}</span>
+              : <span style={{ marginLeft: 6, color: 'var(--vg-text-muted)' }}>{t('previous year incomplete')}</span>}
           </span>
         )}
       </div>
@@ -84,6 +87,7 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
 export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
   data: Consumption; year: number; canManage: boolean; sites: Opt; showSite: boolean;
 }) {
+  const { t } = useI18n();
   const [edit, setEdit] = useState<{ siteId: string; month: string } | null>(null);
   const close = () => setEdit(null);
 
@@ -98,13 +102,13 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
           <div key={tb.siteId} className="card" style={{ padding: '10px 14px', gap: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
               <span className="card-title" style={{ fontSize: 14 }}>{shortSite(tb.site)}</span>
-              <span style={muted}>{tb.archived ? 'Site archivé · 12 derniers mois' : tb.missingMonths ? `${tb.missingMonths} mois sans relevé` : '12 derniers mois'}</span>
+              <span style={muted}>{tb.archived ? t('Site archived · last 12 months') : tb.missingMonths ? fill(t('{n} months without a reading'), { n: tb.missingMonths }) : t('Last 12 months')}</span>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="table" style={{ fontSize: 12.5, minWidth: 360 }}>
                 <thead>
                   <tr>
-                    <th>Mois</th>
+                    <th>{t('Month')}</th>
                     {CONSUMPTION_KINDS.map((k) => <th key={k.key} style={{ textAlign: 'right' }}>{k.label} ({k.unit})</th>)}
                   </tr>
                 </thead>
@@ -120,7 +124,7 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
                           <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: 'var(--vg-text-muted)' }}>—</td>
                         ) : empty ? (
                           <td colSpan={CONSUMPTION_KINDS.length} style={{ textAlign: 'right', color: TONE.warn.fg }}>
-                            {canManage ? 'Non saisi · cliquer pour saisir' : 'Non saisi'}
+                            {canManage ? t('Not entered · click to enter') : t('Not entered#reading')}
                           </td>
                         ) : CONSUMPTION_KINDS.map((k) => (
                           <td key={k.key} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -131,7 +135,7 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
                     );
                   })}
                   <tr style={{ fontWeight: 500 }}>
-                    <td>Total 12 mois</td>
+                    <td>{t('Total 12 months')}</td>
                     {CONSUMPTION_KINDS.map((k) => (
                       <td key={k.key} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{tb.totals[k.key] ? fmtNum(tb.totals[k.key]) : '—'}</td>
                     ))}
@@ -143,7 +147,7 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
         ))}
       </div>
 
-      <Dialog open={!!edit} onClose={close} width={560} kicker="Consommations" title="Saisir un mois">
+      <Dialog open={!!edit} onClose={close} width={560} kicker={t('Consumption')} title={t('Enter a month')}>
         {edit && <MonthForm key={`${edit.siteId}|${edit.month}`} records={data.records} sites={sites} siteId={edit.siteId} month={edit.month} maxMonth={data.maxMonth} onDone={close} onCancel={close} />}
       </Dialog>
     </div>
@@ -154,8 +158,9 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
 export function ConsumptionMonthButton({ records, sites, defaultSite, defaultMonth, maxMonth }: {
   records: ConsumptionRecord[]; sites: Opt; defaultSite: string; defaultMonth: string; maxMonth: string;
 }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Saisir un mois" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Saisir un mois" kicker="Consommations" width={560}>
+    <DialogButton label={t('Enter a month')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('Enter a month')} kicker={t('Consumption')} width={560}>
       {(close) => <MonthForm records={records} sites={sites} siteId={defaultSite} month={defaultMonth} maxMonth={maxMonth} onDone={close} onCancel={close} />}
     </DialogButton>
   );
@@ -176,6 +181,7 @@ function valuesFor(records: ConsumptionRecord[], siteId: string, month: string):
 function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, maxMonth, onDone, onCancel }: {
   records: ConsumptionRecord[]; sites: Opt; siteId: string; month: string; maxMonth: string; onDone: () => void; onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [siteId, setSiteId] = useState(initialSite);
   const [month, setMonth] = useState(initialMonth.slice(0, 7));
   const [values, setValues] = useState<Values>(() => valuesFor(records, initialSite, initialMonth));
@@ -183,7 +189,7 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
   const hasExisting = /^\d{4}-\d{2}$/.test(month) && CONSUMPTION_KINDS.some((k) => existing[k.key] !== '');
   const cleared = CONSUMPTION_KINDS.filter((k) => existing[k.key] !== '' && values[k.key].trim() === '');
   const clearedNames = cleared.map((k) => k.label.toLowerCase());
-  const clearedList = clearedNames.length > 1 ? `${clearedNames.slice(0, -1).join(', ')} et ${clearedNames.at(-1)}` : clearedNames[0];
+  const clearedList = clearedNames.length > 1 ? `${clearedNames.slice(0, -1).join(', ')}${t(' and ')}${clearedNames.at(-1)}` : clearedNames[0];
 
   const reload = (s: string, m: string) => {
     setSiteId(s);
@@ -192,13 +198,13 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
   };
 
   return (
-    <ActionForm action={saveConsumptionMonth} onDone={onDone} onCancel={onCancel} submitLabel="Enregistrer les relevés">
+    <ActionForm action={saveConsumptionMonth} onDone={onDone} onCancel={onCancel} submitLabel={t('Save the readings')}>
       <FormRow>
-        <Field name="siteId" label="Site">
+        <Field name="siteId" label={t('Site')}>
           <Select name="siteId" options={sites} value={siteId} onChange={(e) => reload(e.target.value, month)} />
         </Field>
-        <Field name="month" label="Mois">
-          <Input name="month" type="month" value={month} max={maxMonth.slice(0, 7)} placeholder="AAAA-MM" onChange={(e) => reload(siteId, e.target.value)} style={{ colorScheme: 'dark' }} />
+        <Field name="month" label={t('Month')}>
+          <Input name="month" type="month" value={month} max={maxMonth.slice(0, 7)} placeholder={t('YYYY-MM')} onChange={(e) => reload(siteId, e.target.value)} style={{ colorScheme: 'dark' }} />
         </Field>
       </FormRow>
       <FormRow cols={3}>
@@ -211,13 +217,13 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
       </FormRow>
       <Note icon={cleared.length ? 'ph-warning' : 'ph-info'} tone={cleared.length ? 'warn' : undefined}>
         {cleared.length
-          ? `Relevé${cleared.length > 1 ? 's' : ''} ${clearedList} vidé${cleared.length > 1 ? 's' : ''} : ${cleared.length > 1 ? 'ils seront effacés' : 'il sera effacé'} à l'enregistrement.`
+          ? fill(cleared.length > 1 ? t('Readings {list} emptied: they will be deleted when saved.') : t('Reading {list} emptied: it will be deleted when saved.'), { list: clearedList })
           : hasExisting
-            ? `Relevés déjà saisis pour ${monthLong(`${month}-01`)} : les valeurs modifiées remplacent les précédentes.`
-            : 'Relevés des factures ou des compteurs du site. Laissez vide une énergie non consommée sur le site.'}
+            ? fill(t('Readings already entered for {month}: the changed values replace the previous ones.'), { month: monthLong(`${month}-01`) })
+            : t('Readings from the invoices or the meters of the site. Leave empty an energy the site does not use.')}
       </Note>
       {/* Historique des relevés du mois (DOC-10), chargé à l'ouverture ; rechargé au changement de site ou de mois. */}
-      {hasExisting && <LazyChangeLog key={`${siteId}|${month}`} entity="consumption" id={`${siteId}|${month}-01`} title="Historique des relevés du mois" />}
+      {hasExisting && <LazyChangeLog key={`${siteId}|${month}`} entity="consumption" id={`${siteId}|${month}-01`} title={t('History of the readings of the month')} />}
     </ActionForm>
   );
 }
