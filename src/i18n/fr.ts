@@ -14,6 +14,7 @@ import { WATCH_FR, WATCH_SAME } from './screens/watch';
 import { AUDITS_FR, AUDITS_SAME } from './screens/audits';
 import { DOCUMENTS_FR, DOCUMENTS_SAME } from './screens/documents';
 import { ENVIRONMENT_FR, ENVIRONMENT_SAME } from './screens/environment';
+import { ENGINEERING_FR, ENGINEERING_SAME } from './screens/engineering';
 
 /** Dictionnaires des écrans repris, dans l'ordre de la reprise (une chaîne commune à deux écrans va dans COMMON_FR). */
 export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
@@ -29,6 +30,7 @@ export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
   audits: AUDITS_FR,
   documents: DOCUMENTS_FR,
   environment: ENVIRONMENT_FR,
+  engineering: ENGINEERING_FR,
 };
 
 const SHELL_FR: Record<string, string> = {
@@ -95,7 +97,7 @@ const SHELL_FR: Record<string, string> = {
 export const FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
 
 /** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
 export function conflictingEntries(): string[] {
