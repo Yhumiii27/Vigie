@@ -9,7 +9,7 @@ import { Dialog, DialogButton } from '@/components/Dialog';
 import { ReasonButton, ReasonForm } from '@/components/ReasonDialog';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select } from '@/components/form';
 import { CardHead, ToneTag } from '@/components/ui';
-import { FILES_HINT, FileError, checkPickedFiles } from '@/components/watch/parts';
+import { FileError, checkPickedFiles, filesHint } from '@/components/watch/parts';
 import { ATTACH_ACCEPT } from '@/lib/attachments';
 import { MONTHS_SHORT, addDays, fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { AUDIT_KINDS, FINDING_KINDS, PLAN_ITEM_STATES, TONE } from '@/lib/domain';
@@ -22,6 +22,7 @@ import { FindingForm } from './FindingsCard';
 import { ActionLink, ActionLinks, DialogFooter, FileList } from './parts';
 import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditActionSource, auditReportAvailable, auditReportHref, inferAuditKind, isReviewPlanItem, monthLabel } from '@/lib/rules/audits';
 import styles from './audits.module.css';
+import { useI18n } from '@/i18n/client';
 
 type Opts = ActionFormOptions;
 
@@ -381,6 +382,7 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
   year: number; item?: PlanItemView; track?: string | null; month?: number; unplanned?: boolean; trackOptions: string[]; options: PlanFormOptions;
   certs: readonly Option[]; onReschedule: () => void; onDone: () => void;
 }) {
+  const { t } = useI18n();
   const auditLines = trackOptions.filter((tr) => !isReviewPlanItem({ track: tr, label: '', detail: null }));
   const [trackChoice, setTrackChoice] = useState(item?.track ?? track ?? (unplanned ? auditLines[0] ?? NEW_TRACK : NEW_TRACK));
   const [newTrack, setNewTrack] = useState('');
@@ -503,7 +505,7 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
       )}
       {!review && (
         <>
-          <Field name="report" label="Rapport d'audit" hint={FILES_HINT}>
+          <Field name="report" label="Rapport d'audit" hint={filesHint(t)}>
             <Input name="report" type="file" multiple accept={ATTACH_ACCEPT} onChange={(e) => setFileError(checkPickedFiles(e.currentTarget))} />
           </Field>
           <FileError error={fileError} />
