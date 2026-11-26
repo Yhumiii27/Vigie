@@ -13,6 +13,8 @@ import { TONE } from '@/lib/domain';
 import { CODEX_DOCUMENTS_NOTICE } from '@/lib/integration-labels';
 import type { DocumentRow, LinkedAction } from '@/lib/data/documents';
 import { documentActionDefaults } from './action-defaults';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 const H6 = ({ children }: { children: ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 
@@ -35,19 +37,20 @@ function ActionLink({ action }: { action: LinkedAction }) {
 }
 
 /** Lien « Ouvrir dans Codex » (nouvel onglet) ; sans adresse de Codex configurée, rien. */
-export function CodexLink({ href, label = 'Ouvrir dans Codex', className = 'btn btn-secondary vg-btn-sm' }: { href: string | null; label?: string; className?: string }) {
+export function CodexLink({ href, label, className = 'btn btn-secondary vg-btn-sm' }: { href: string | null; label?: string; className?: string }) {
+  const { t } = useI18n();
   if (!href) return null;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={className} onClick={(e) => e.stopPropagation()}>
-      <Icon name="ph-arrow-square-out" size={13} />{label}
+      <Icon name="ph-arrow-square-out" size={13} />{label ?? t('Open in Codex')}
     </a>
   );
 }
 
-const reviewText = (doc: DocumentRow) => {
+const reviewText = (doc: DocumentRow, t: T) => {
   if (!doc.nextReviewOn || doc.reviewDays == null) return null;
-  if (doc.overdue) return `Revue périodique dépassée depuis le ${fmtDate(doc.nextReviewOn)} (+${-doc.reviewDays} j).`;
-  return `Revue périodique prévue le ${fmtDate(doc.nextReviewOn)} (${doc.reviewDays === 0 ? "aujourd'hui" : `dans ${doc.reviewDays} j`}).`;
+  if (doc.overdue) return fill(t('Periodic review overdue since {date} (+{n} d).'), { date: fmtDate(doc.nextReviewOn), n: -doc.reviewDays });
+  return fill(t('Periodic review planned on {date} ({when}).'), { date: fmtDate(doc.nextReviewOn), when: doc.reviewDays === 0 ? t('today#lower') : fill(t('in {n} d'), { n: doc.reviewDays }) });
 };
 
 /**
@@ -58,19 +61,20 @@ const reviewText = (doc: DocumentRow) => {
 export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
   doc: DocumentRow; canManage: boolean; actionForm: ActionFormOptions | null; suggestedDueOn: string;
 }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<'view' | 'action'>('view');
   const [reviewAction, setReviewAction] = useState(true);
   const newAction = (review: boolean) => { setReviewAction(review); setMode('action'); };
   const back = () => setMode('view');
   const inForce = doc.revisions.find((r) => r.status === 'in_force') ?? null;
   const open = doc.revisions.find((r) => r.status === 'draft' || r.status === 'in_review' || r.status === 'approved') ?? null;
-  const review = reviewText(doc);
+  const review = reviewText(doc, t);
   const showReview = !!review && (doc.overdue || doc.dueSoon) && mode === 'view';
 
   if (mode === 'action' && actionForm) {
     return (
       <section style={{ display: 'grid', gap: 10, marginTop: 6 }}>
-        <H6>Nouvelle action · plan d&apos;actions unique</H6>
+        <H6>{t('New action · single action plan')}</H6>
         <ActionFields options={actionForm} onDone={back} onCancel={back}
           defaults={documentActionDefaults({ ...doc, pending: open ? { letter: open.letter, action: open.action } : null }, { review: reviewAction, suggestedDueOn })} />
       </section>
@@ -81,13 +85,13 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
     <div style={{ display: 'grid', gap: 16, marginTop: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <ToneTag tone={doc.statusTone}>{doc.statusLabel}</ToneTag>
-        {inForce && <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>Révision {inForce.letter} en vigueur{inForce.inForceAt ? ` depuis le ${fmtDate(inForce.inForceAt)}` : ''}</span>}
+        {inForce && <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{fill(t('Revision {rev} in force'), { rev: inForce.letter })}{inForce.inForceAt ? fill(t(' since {date}'), { date: fmtDate(inForce.inForceAt) }) : ''}</span>}
         {canManage && open && (
           <span style={{ fontSize: 12, color: open.status === 'in_review' ? TONE.warn.dot : 'var(--color-neutral-400)' }}>
-            {inForce ? '· ' : ''}révision {open.letter} {open.status === 'in_review' ? 'en validation' : open.status === 'approved' ? 'approuvée, en attente de mise en vigueur' : 'en rédaction'}
+            {inForce ? '· ' : ''}{fill(open.status === 'in_review' ? t('revision {rev} being approved') : open.status === 'approved' ? t('revision {rev} approved, awaiting coming into force') : t('revision {rev} being drafted'), { rev: open.letter })}
           </span>
         )}
-        {doc.legalHold && <ToneTag tone="warn">Gel juridique</ToneTag>}
+        {doc.legalHold && <ToneTag tone="warn">{t('Legal hold')}</ToneTag>}
         <span style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
           <CodexLink href={doc.codexHref} />
         </span>
@@ -97,7 +101,7 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE.neutral.bg }}>
           <Icon name="ph-prohibit" size={14} style={{ color: 'var(--color-neutral-400)', flex: 'none', alignSelf: 'center' }} />
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-            {doc.statusLabel}{doc.withdrawnOn ? ` depuis le ${fmtDate(doc.withdrawnOn)}` : ''} dans Codex : ne plus appliquer.
+            {doc.statusLabel}{doc.withdrawnOn ? fill(t(' since {date}'), { date: fmtDate(doc.withdrawnOn) }) : ''}{t(' in Codex: no longer apply.')}
           </span>
         </div>
       )}
@@ -108,15 +112,15 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
           <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 220 }}>
             <span style={{ fontSize: 12.5 }}>{review}</span>
             <span style={{ fontSize: 11, color: 'var(--vg-text-muted)', textWrap: 'pretty' }}>
-              La revue (sans modification ou par une nouvelle révision) se fait dans Codex par le propriétaire du document.
+              {t('The review (without change or by a new revision) is done in Codex by the owner of the document.')}
             </span>
           </div>
           {doc.openActions.length > 0 ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--color-neutral-400)' }}>
-              Action{doc.openActions.length > 1 ? 's' : ''} {doc.openActions.map((a) => <ActionLink key={a.id} action={a} />)}
+              {doc.openActions.length > 1 ? t('Actions') : t('Action')} {doc.openActions.map((a) => <ActionLink key={a.id} action={a} />)}
             </span>
           ) : actionForm ? (
-            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => newAction(true)}><Icon name="ph-list-plus" size={13} />Créer une action</button>
+            <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => newAction(true)}><Icon name="ph-list-plus" size={13} />{t('Create an action')}</button>
           ) : canManage && (
             <span style={{ fontSize: 11.5, color: 'var(--vg-text-muted)' }}>{QHSE_ONLY_CREATE_MESSAGE}</span>
           )}
@@ -125,37 +129,37 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
 
       <section style={{ display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <H6>Informations</H6>
-          {actionForm && !doc.withdrawn && <button type="button" className="vg-text-btn" onClick={() => newAction(false)}>Nouvelle action</button>}
+          <H6>{t('Information')}</H6>
+          {actionForm && !doc.withdrawn && <button type="button" className="vg-text-btn" onClick={() => newAction(false)}>{t('New action')}</button>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
-          <Meta label="Référence">{doc.id}{doc.aliases.length > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>Anciennement {doc.aliases.join(', ')}</span>}</Meta>
-          <Meta label="Type">{doc.typeLabel}{doc.subtype ? ` · ${doc.subtype}` : ''}</Meta>
-          <Meta label="Processus">{doc.processLabel}</Meta>
-          <Meta label="Propriétaire">{doc.owner}</Meta>
-          <Meta label="Confidentialité">{doc.confLabel}</Meta>
-          <Meta label="Périodicité de revue">{doc.reviewMonths ? `${doc.reviewMonths} mois` : '—'}</Meta>
-          <Meta label="Prochaine revue">
+          <Meta label={t('Reference')}>{doc.id}{doc.aliases.length > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{fill(t('Formerly {ids}'), { ids: doc.aliases.join(', ') })}</span>}</Meta>
+          <Meta label={t('Type')}>{doc.typeLabel}{doc.subtype ? ` · ${doc.subtype}` : ''}</Meta>
+          <Meta label={t('Process')}>{doc.processLabel}</Meta>
+          <Meta label={t('Owner#document')}>{doc.owner}</Meta>
+          <Meta label={t('Confidentiality')}>{doc.confLabel}</Meta>
+          <Meta label={t('Review frequency')}>{doc.reviewMonths ? fill(t('{n} months'), { n: doc.reviewMonths }) : '—'}</Meta>
+          <Meta label={t('Next review')}>
             <span style={{ color: doc.overdue ? TONE.danger.dot : doc.dueSoon ? TONE.warn.dot : undefined }}>{doc.nextReviewOn ? fmtDate(doc.nextReviewOn) : '—'}</span>
           </Meta>
-          <Meta label="Site">{doc.siteLabel}</Meta>
-          <Meta label="Origine">{doc.origin === 'externe' ? `Externe${doc.sourceOrg ? ` · ${doc.sourceOrg}` : ''}` : 'Interne'}</Meta>
-          <Meta label="Conservation (par type, Codex)">{doc.retention ?? '—'}</Meta>
-          <Meta label="Diffusion" wide>{doc.distribution || '—'}</Meta>
+          <Meta label={t('Site')}>{doc.siteLabel}</Meta>
+          <Meta label={t('Origin')}>{doc.origin === 'externe' ? `${t('External')}${doc.sourceOrg ? ` · ${doc.sourceOrg}` : ''}` : t('Internal')}</Meta>
+          <Meta label={t('Retention (by type, Codex)')}>{doc.retention ?? '—'}</Meta>
+          <Meta label={t('Distribution')} wide>{doc.distribution || '—'}</Meta>
         </div>
       </section>
 
       {canManage && doc.circuit && (
         <section style={{ display: 'grid', gap: 6 }}>
-          <H6>Circuit de validation en cours · révision {doc.circuit.revision}</H6>
+          <H6>{fill(t('Approval workflow in progress · revision {rev}'), { rev: doc.circuit.revision ?? '' })}</H6>
           <span style={{ fontSize: 12, color: doc.circuit.overdue ? TONE.danger.dot : 'var(--color-neutral-400)' }}>
-            {doc.circuit.submittedOn ? `Lancé le ${fmtDate(doc.circuit.submittedOn)}` : 'Lancé'}{doc.circuit.due ? ` · échéance le ${fmtDate(doc.circuit.due)}${doc.circuit.overdue ? ' (dépassée)' : ''}` : ''}
+            {doc.circuit.submittedOn ? fill(t('Started on {date}'), { date: fmtDate(doc.circuit.submittedOn) }) : t('Started')}{doc.circuit.due ? fill(t(' · deadline on {date}'), { date: fmtDate(doc.circuit.due) }) + (doc.circuit.overdue ? t(' (overdue#f)') : '') : ''}
           </span>
           <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 3, fontSize: 12.5 }}>
             {doc.circuit.steps.map((s) => (
               <li key={s.idx}>
                 {s.label} · {s.assignee}
-                {s.doneOn ? <span style={{ color: TONE.ok.dot }}> · validé le {fmtDate(s.doneOn)}</span> : s.current ? <span style={{ color: TONE.warn.dot }}> · étape en cours</span> : null}
+                {s.doneOn ? <span style={{ color: TONE.ok.dot }}>{fill(t(' · approved on {date}'), { date: fmtDate(s.doneOn) })}</span> : s.current ? <span style={{ color: TONE.warn.dot }}>{t(' · current stage')}</span> : null}
               </li>
             ))}
           </ol>
@@ -164,30 +168,30 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
 
       {canManage && doc.openActions.length > 0 && !showReview && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <H6>Actions liées</H6>
+          <H6>{t('Linked actions')}</H6>
           {doc.openActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
         </div>
       )}
       {canManage && doc.closedActions.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--color-neutral-400)' }}>
-          <H6>Actions clôturées</H6>
+          <H6>{t('Closed actions')}</H6>
           {doc.closedActions.map((a) => <span key={a.id} style={{ display: 'inline-flex', gap: 6 }}><ActionLink action={a} /><span>{a.label}</span></span>)}
         </div>
       )}
       {canManage && <LinkedEvents events={doc.events} reportHref={newEventHref('document', doc.id)} />}
 
       <section style={{ display: 'grid', gap: 8 }}>
-        <H6>{canManage ? 'Révisions' : 'Révision en vigueur'}</H6>
+        <H6>{canManage ? t('Revisions') : t('Revision in force')}</H6>
         {/* Défilement horizontal sur téléphone : conteneur focalisable pour défiler au clavier (axe, scrollable-region-focusable). */}
-        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Révisions du document, défilement horizontal sur petit écran">
+        <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label={t('Revisions of the document, horizontal scrolling on a small screen')}>
           <table className="table" style={{ fontSize: 12, minWidth: canManage ? 760 : 560 }}>
             <thead>
               <tr>
-                <th>Révision</th><th>Statut</th><th>Objet</th><th>Auteur</th><th>Approuvée le</th><th>Fichier</th>{canManage && <th>Action liée</th>}
+                <th>{t('Revision')}</th><th>{t('Status')}</th><th>{t('Subject')}</th><th>{t('Author')}</th><th>{t('Approved on')}</th><th>{t('File')}</th>{canManage && <th>{t('Linked action')}</th>}
               </tr>
             </thead>
             <tbody>
-              {doc.revisions.length === 0 && <tr><td colSpan={canManage ? 7 : 6} style={{ color: 'var(--vg-text-muted)' }}>Aucune révision publiée par Codex.</td></tr>}
+              {doc.revisions.length === 0 && <tr><td colSpan={canManage ? 7 : 6} style={{ color: 'var(--vg-text-muted)' }}>{t('No revision published by Codex.')}</td></tr>}
               {doc.revisions.map((r) => (
                 <tr key={r.letter} style={r.status === 'superseded' || r.status === 'cancelled' ? { color: 'var(--color-neutral-400)' } : undefined}>
                   <td style={{ fontWeight: 500 }}>{r.letter}</td>

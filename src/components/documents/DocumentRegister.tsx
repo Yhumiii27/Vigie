@@ -10,6 +10,8 @@ import { TONE } from '@/lib/domain';
 import type { ActionFormOptions } from '@/lib/action-view';
 import type { DocumentRow, UnavailableDoc } from '@/lib/data/documents';
 import { DocumentPanel } from './DocumentPanel';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Props = {
   /** Documents du site sélectionné (la fiche reste ouverte même si un filtre masque la ligne). */
@@ -34,6 +36,7 @@ const muted = 'var(--color-neutral-400)';
 
 /** Registre des documents lus dans Codex : tableau filtré et fiche du document en fenêtre modale. */
 export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage, actionForm, aliasOf, elsewhere, unavailable = {}, suggestedDueOn }: Props) {
+  const { t } = useI18n();
   // La fiche ouverte est portée par l'URL (?doc=PRO-QUA-0002) : lien profond depuis les échéances et notifications ; un
   // ancien identifiant (alias) ouvre le document qu'il désigne.
   // Convention d'URL (UX-12) : ouverture ajoutée à l'historique (« Précédent » ferme la fiche), fermeture en place.
@@ -52,11 +55,11 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
   const otherSite = openId && !doc && Object.hasOwn(elsewhere, openId) ? elsewhere[openId] : null;
   const notInForce = openId && !doc && Object.hasOwn(unavailable, openId) ? unavailable[openId] : null;
   const notice = otherSite
-    ? <>{openId} est rattaché au {otherSite.charAt(0).toLowerCase()}{otherSite.slice(1)} : sélectionnez ce site ou « Tous les sites » pour l&apos;afficher.</>
+    ? fill(t('{id} is linked to the {site}: select this site or “All sites” to show it.'), { id: openId ?? '', site: `${otherSite.charAt(0).toLowerCase()}${otherSite.slice(1)}` })
     : notInForce === 'retired'
-      ? <>{openId} a été retiré de la diffusion dans Codex (obsolète ou archivé) : il n&apos;est plus consultable ici. Adressez-vous à l&apos;animateur QHSE pour connaître le document qui le remplace.</>
+      ? fill(t('{id} was withdrawn from distribution in Codex (obsolete or archived): it can no longer be viewed here. Ask the QHSE coordinator for the document that replaces it.'), { id: openId ?? '' })
       : notInForce === 'draft'
-        ? <>{openId} n&apos;est pas encore en vigueur : il sera consultable ici dès la mise en vigueur de sa première révision dans Codex.</>
+        ? fill(t('{id} is not in force yet: it will be viewable here as soon as its first revision comes into force in Codex.'), { id: openId ?? '' })
         : null;
   // Référence inconnue, hors du périmètre, confidentielle pour le rôle : bandeau commun (UX-13), même message.
   const missing = !!openId && !doc && !notice;
@@ -65,12 +68,12 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{toolbar}</div>
 
-      {missing && <MissingNotice text="Document introuvable ou hors du site sélectionné." onClose={() => open(null)} />}
+      {missing && <MissingNotice text={t('Document not found or outside the selected site.')} onClose={() => open(null)} />}
       {notice && (
         <div className="vg-inset" role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', fontSize: 12.5, boxShadow: `inset 2px 0 0 ${TONE.accent.dot}` }}>
           <Icon name="ph-info" size={15} style={{ color: TONE.accent.dot, flex: 'none' }} />
           <span style={{ flex: 1, textWrap: 'pretty' }}>{notice}</span>
-          <button type="button" className="vg-text-btn" onClick={() => open(null)}>Fermer</button>
+          <button type="button" className="vg-text-btn" onClick={() => open(null)}>{t('Close')}</button>
         </div>
       )}
 
@@ -79,8 +82,8 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
           <table className="table" style={{ fontSize: 12.5, minWidth: 980 }}>
             <thead>
               <tr>
-                <th>Référence</th><th>Titre</th><th>Type</th><th>Processus</th><th>Révision</th><th>Statut</th>
-                <th>Propriétaire</th><th>Prochaine revue</th><th>Diffusion</th>
+                <th>{t('Reference')}</th><th>{t('Title#qualification')}</th><th>{t('Type')}</th><th>{t('Process')}</th><th>{t('Revision')}</th><th>{t('Status')}</th>
+                <th>{t('Owner#document')}</th><th>{t('Next review')}</th><th>{t('Distribution')}</th>
               </tr>
             </thead>
             <tbody>
@@ -102,7 +105,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                     {d.revInForce ? <span style={{ fontWeight: 500 }}>{d.revInForce}</span> : <span className="vg-muted">—</span>}
                     {canManage && d.revWorking && (
                       <span style={{ display: 'block', fontSize: 11, color: d.circuit ? TONE.warn.dot : 'var(--vg-text-muted)' }}>
-                        révision {d.revWorking} {d.circuit ? 'en validation' : 'en cours'}
+                        {fill(d.circuit ? t('revision {rev} being approved') : t('revision {rev} in progress'), { rev: d.revWorking })}
                       </span>
                     )}
                   </td>
@@ -110,8 +113,8 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                   <td style={{ whiteSpace: 'nowrap' }}>{d.owner}</td>
                   <td style={{ whiteSpace: 'nowrap', color: d.overdue ? TONE.danger.dot : d.dueSoon ? TONE.warn.dot : 'var(--color-neutral-300)' }}>
                     {d.nextReviewOn ? fmtDate(d.nextReviewOn) : '—'}
-                    {d.overdue && <span style={{ display: 'block', fontSize: 11 }}>en retard · +{-(d.reviewDays ?? 0)} j</span>}
-                    {d.dueSoon && <span style={{ display: 'block', fontSize: 11 }}>{d.reviewDays === 0 ? "aujourd'hui" : `dans ${d.reviewDays} j`}</span>}
+                    {d.overdue && <span style={{ display: 'block', fontSize: 11 }}>{fill(t('late · +{n} d'), { n: -(d.reviewDays ?? 0) })}</span>}
+                    {d.dueSoon && <span style={{ display: 'block', fontSize: 11 }}>{d.reviewDays === 0 ? t('today#lower') : fill(t('in {n} d'), { n: d.reviewDays ?? 0 })}</span>}
                   </td>
                   <td style={{ color: muted, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.distribution || '—'}</td>
                 </tr>
