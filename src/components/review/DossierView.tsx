@@ -11,6 +11,8 @@ import {
   ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, ScrollTable, Section,
   capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 /**
  * Contenu du dossier : calculé (préparatoire), figé à la saisie du compte rendu (dossier de séance), figé au visa
@@ -21,11 +23,12 @@ type DossierData = ReviewRecordOnly & Partial<Omit<StoredDossier, keyof ReviewRe
 
 const BLANK_DECISIONS = 3;
 
-export function DossierView({ page, role, notice }: {
+export async function DossierView({ page, role, notice }: {
   page: Exclude<ReviewDossierPage, { mode: 'none' | 'cancelled' }>; role: Role;
   /** Bandeau sous la barre d'outils (lien ?revue= vers une revue inconnue, UX-13). */
   notice?: ReactNode;
 }) {
+  const { t } = await getI18n();
   const d: DossierData = page.mode === 'record' ? page.record : page.dossier;
   const h = d.header;
   const r = d.record;
@@ -41,23 +44,24 @@ export function DossierView({ page, role, notice }: {
   const done = d.checklist.filter((c) => c.done).length;
   const participants = [...(r.participants ?? []), r.externalParticipants].filter(Boolean);
 
-  const stopped = `indicateurs arrêtés ${atSeance ? 'à la séance du' : 'au'} ${fmtDate(asOf)}`;
-  const taken = (on: string, by: string) => `le ${on ? fmtDate(on) : '—'}${by ? ` par ${by}` : ''}`;
+  const stopped = fill(atSeance ? t('indicators set at the meeting of {date}') : t('indicators set on {date}'), { date: fmtDate(asOf) });
+  const taken = (on: string, by: string) => fill(t('on {date}'), { date: on ? fmtDate(on) : '—' }) + (by ? fill(t(' by {name}'), { name: by }) : '');
+  const setAtSeance = asOf < (page.mode === 'record' ? asOf : page.now) ? fill(t(', set at the meeting of {date}'), { date: fmtDate(asOf) }) : '';
   const banner = page.mode === 'snapshot'
-    ? { icon: 'ph-lock-simple', tone: 'ok' as const, text: `Dossier figé au visa ${taken(page.takenOn, page.takenBy)} · ${stopped}` }
+    ? { icon: 'ph-lock-simple', tone: 'ok' as const, text: `${fill(t('File frozen at the sign-off {taken}'), { taken: taken(page.takenOn, page.takenBy) })} · ${stopped}` }
     : page.mode === 'seance'
-      ? { icon: 'ph-lock-simple-open', tone: 'accent' as const, text: `Dossier de séance figé ${taken(page.takenOn, '')} · ${stopped} · compte rendu modifiable jusqu'au visa` }
+      ? { icon: 'ph-lock-simple-open', tone: 'accent' as const, text: `${fill(t('Meeting file frozen {taken}'), { taken: taken(page.takenOn, '') })} · ${stopped} · ${t('minutes editable until the sign-off')}` }
       : page.mode === 'record'
-        ? { icon: 'ph-archive', tone: 'neutral' as const, text: 'Revue antérieure à Vigie · dossier non archivé' }
-        : { icon: 'ph-arrows-clockwise', tone: 'warn' as const, text: `Dossier préparatoire · indicateurs calculés le ${fmtDate(page.now)}${asOf < page.now ? `, arrêtés à la séance du ${fmtDate(asOf)}` : ''}` };
+        ? { icon: 'ph-archive', tone: 'neutral' as const, text: t('Review earlier than Vigie · file not archived') }
+        : { icon: 'ph-arrows-clockwise', tone: 'warn' as const, text: fill(t('Preparatory file · indicators computed on {date}'), { date: fmtDate(page.now) }) + setAtSeance };
 
   return (
     <main className="rd-doc">
       <div className="rd-toolbar rd-noprint">
         {/* Liens HTML simples (navigation complète) : la feuille globale dossier.css, et sa règle @page, ne doit pas rester chargée dans l'application. */}
-        <a href={`/audits?annee=${yearOf(h.reviewOn)}&revue=${page.review.id}#revue`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Audits et certifications</a>
+        <a href={`/audits?annee=${yearOf(h.reviewOn)}&revue=${page.review.id}#revue`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{t('Audits and certifications')}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="rd-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="rd-muted" style={{ fontSize: 11.5 }}>{t('For the PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
@@ -65,8 +69,8 @@ export function DossierView({ page, role, notice }: {
       <div className="rd-toolbar rd-noprint">
         <ToneTag tone={banner.tone} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i className={`ph ${banner.icon}`} style={{ fontSize: 12 }} aria-hidden />{banner.text}</ToneTag>
         {others.length > 0 && (
-          <nav aria-label="Autres revues" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: 12 }}>
-            <span className="rd-muted">Autres revues :</span>
+          <nav aria-label={t('Other reviews')} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: 12 }}>
+            <span className="rd-muted">{t('Other reviews:')}</span>
             {others.map((o) => (
               <a key={o.id} href={`/revue-de-direction?revue=${o.id}`} className="rd-link" title={o.statusLabel}>{o.kindShort} {fmtDate(o.reviewOn)}</a>
             ))}
@@ -75,50 +79,52 @@ export function DossierView({ page, role, notice }: {
       </div>
 
       <header className="rd-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · système de management QHSE</div>
-        <h1>Revue de direction {kind} du {fmtDate(h.reviewOn)}</h1>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>{t('Vigie · QHSE management system')}</div>
+        <h1>{fill(t('{kind} management review of {date}'), { kind, date: fmtDate(h.reviewOn) })}</h1>
         <div className="rd-muted" style={{ fontSize: 12.5 }}>
-          {page.mode === 'snapshot' && `Dossier figé au visa de la direction ${taken(page.takenOn, page.takenBy)}${page.seance ? ` · dossier de séance du ${page.seance.takenOn ? fmtDate(page.seance.takenOn) : '—'}` : ''} · ${stopped}`}
-          {page.mode === 'seance' && `Dossier de séance figé ${taken(page.takenOn, page.takenBy)} · ${stopped} · compte rendu modifiable jusqu'au visa`}
-          {page.mode === 'record' && 'Compte rendu enregistré · revue antérieure à Vigie : dossier préparatoire non archivé'}
-          {page.mode === 'live' && `Dossier préparatoire consolidé · généré le ${fmtDate(page.now)} par ${h.author}`}
+          {page.mode === 'snapshot' && `${fill(t('File frozen at the management sign-off {taken}'), { taken: taken(page.takenOn, page.takenBy) })}${page.seance ? fill(t(' · meeting file of {date}'), { date: page.seance.takenOn ? fmtDate(page.seance.takenOn) : '—' }) : ''} · ${stopped}`}
+          {page.mode === 'seance' && `${fill(t('Meeting file frozen {taken}'), { taken: taken(page.takenOn, page.takenBy) })} · ${stopped} · ${t('minutes editable until the sign-off')}`}
+          {page.mode === 'record' && t('Minutes recorded · review earlier than Vigie: preparatory file not archived')}
+          {page.mode === 'live' && fill(t('Consolidated preparatory file · generated on {date} by {name}'), { date: fmtDate(page.now), name: h.author })}
         </div>
         <dl className="rd-meta">
-          {page.mode !== 'record' && <><dt>Période examinée</dt><dd>12 mois glissants, du {fmtDate(h.from)} au {fmtDate(h.to)}</dd></>}
-          <dt>Périmètre</dt><dd>{h.site}</dd>
-          <dt>Présidence</dt><dd>{h.director}</dd>
-          <dt>Animation</dt><dd>{h.lead}</dd>
-          <dt>Participants</dt>
+          {page.mode !== 'record' && <><dt>{t('Period reviewed')}</dt><dd>{fill(t('Rolling 12 months, from {from} to {to}'), { from: fmtDate(h.from), to: fmtDate(h.to) })}</dd></>}
+          <dt>{t('Scope')}</dt><dd>{h.site}</dd>
+          <dt>{t('Chair')}</dt><dd>{h.director}</dd>
+          <dt>{t('Facilitation')}</dt><dd>{h.lead}</dd>
+          <dt>{t('Participants')}</dt>
           <dd>
             {participants.length ? participants.join(', ') : (
-              <><span className="rd-muted">[À compléter : responsables de service, responsable qualité, représentants du personnel…]</span><Blank /></>
+              <><span className="rd-muted">{t('[To complete: heads of department, quality manager, staff representatives…]')}</span><Blank /></>
             )}
           </dd>
         </dl>
       </header>
 
       {d.previousFollowUp ? (
-        <Section n={n()} title="Suivi des décisions et actions des revues précédentes" aside={followUpAside(d.previousFollowUp)}>
+        <Section n={n()} title={t('Follow-up of the decisions and actions of the previous reviews')} aside={followUpAside(d.previousFollowUp, t)}>
           {d.previousFollowUp.length ? <FollowUpTable rows={d.previousFollowUp} role={role} />
-            : <Empty>Aucune décision ni action issue des revues précédentes.</Empty>}
+            : <Empty>{t('No decision or action from the previous reviews.')}</Empty>}
         </Section>
       ) : d.previousActions && (
         // Instantané de version 1 (avant le lot 2) : actions des revues précédentes seulement.
-        <Section n={n()} title="Suivi des actions des revues précédentes" aside={plural(d.previousActions.length, 'action', 'actions')}>
+        <Section n={n()} title={t('Follow-up of the actions of the previous reviews')} aside={plural(d.previousActions.length, t('{n} action'), t('{n} actions'))}>
           {d.previousActions.length ? <ActionTable rows={d.previousActions} role={role} review extra={(a) => a.originRef} />
-            : <Empty>Aucune action issue des revues précédentes.</Empty>}
+            : <Empty>{t('No action from the previous reviews.')}</Empty>}
         </Section>
       )}
 
       {d.safety && (
-        <Section n={n()} title="Indicateurs sécurité" aside={d.safety.missingMonths !== undefined ? '12 derniers mois complets' : '12 mois glissants'}>
+        <Section n={n()} title={t('Safety indicators')} aside={d.safety.missingMonths !== undefined ? t('Last 12 full months') : t('Rolling 12 months')}>
           <div className="rd-kpis">
-            <Kpi label="Jours sans accident avec arrêt" value={d.safety.daysWithout} note={d.safety.daysNote} />
-            <Kpi label="TF1 · taux de fréquence" value={d.safety.tf1}
-              note={`Accidents avec arrêt par million d'heures${d.safety.target != null ? ` · objectif ${typeof d.safety.target === 'number' ? `≤ ${d.safety.target.toLocaleString('fr-FR')}` : d.safety.target}` : ' · aucun objectif TF1'}${d.safety.missingMonths ? ` · ${plural(d.safety.missingMonths, 'mois', 'mois')} sans heures saisies` : ''}`} />
-            <Kpi label="TG · taux de gravité" value={d.safety.tg} note="Jours perdus pour 1 000 heures travaillées" />
+            <Kpi label={t('Days without lost-time accident')} value={d.safety.daysWithout} note={d.safety.daysNote} />
+            <Kpi label={t('LTIFR · frequency rate')} value={d.safety.tf1}
+              note={t('Lost-time accidents per million hours')
+                + (d.safety.target != null ? fill(t(' · objective {target}'), { target: typeof d.safety.target === 'number' ? `≤ ${d.safety.target.toLocaleString('fr-FR')}` : d.safety.target }) : t(' · no LTIFR objective'))
+                + (d.safety.missingMonths ? fill(t(' · {n} months without hours entered'), { n: d.safety.missingMonths }) : '')} />
+            <Kpi label={t('Severity rate')} value={d.safety.tg} note={t('Days lost per 1,000 hours worked')} />
           </div>
-          <h3 className="rd-h3">Pyramide des événements sécurité</h3>
+          <h3 className="rd-h3">{t('Pyramid of the safety events')}</h3>
           <div className="rd-pyramid">
             {d.safety.pyramid.map((p) => <PyramidRow key={p.label} label={p.label} n={p.n} w={p.w} color={p.color} />)}
           </div>
@@ -126,21 +132,21 @@ export function DossierView({ page, role, notice }: {
       )}
 
       {d.events && (
-        <Section n={n()} title="Non-conformités et événements" aside={`${plural(d.events.openNc?.length ?? 0, 'NC ouverte', 'NC ouvertes')}`}>
+        <Section n={n()} title={t('Non-conformities and events')} aside={plural(d.events.openNc?.length ?? 0, t('{n} open NC'), t('{n} open NCs'))}>
           <div className="rd-cols">
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Type</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouverts</th></tr></thead>
+                <thead><tr><th>{t('Type')}</th><th className="rd-num-cell">{t('12 months')}</th><th className="rd-num-cell">{t('open#plural')}</th></tr></thead>
                 <tbody>
-                  {d.events.byType?.map((t) => (
-                    <tr key={t.key}><td>{t.label}</td><td className="rd-num-cell">{t.n12}</td><td className="rd-num-cell">{t.open}</td></tr>
+                  {d.events.byType?.map((ty) => (
+                    <tr key={ty.key}><td>{ty.label}</td><td className="rd-num-cell">{ty.n12}</td><td className="rd-num-cell">{ty.open}</td></tr>
                   ))}
                 </tbody>
               </table>
             </ScrollTable>
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Non-conformités par origine</th><th className="rd-num-cell">12 mois</th><th className="rd-num-cell">ouvertes</th></tr></thead>
+                <thead><tr><th>{t('Non-conformities by origin')}</th><th className="rd-num-cell">{t('12 months')}</th><th className="rd-num-cell">{t('open#fplural')}</th></tr></thead>
                 <tbody>
                   {d.events.ncByOrigin?.map((o) => (
                     <tr key={o.origin}><td>{o.origin}</td><td className="rd-num-cell">{o.n12}</td><td className="rd-num-cell">{o.open}</td></tr>
@@ -149,18 +155,18 @@ export function DossierView({ page, role, notice }: {
               </table>
             </ScrollTable>
           </div>
-          <p className="rd-empty rd-muted">Les réclamations client sont comptées sous l&apos;origine « Réclamation client ».</p>
-          <h3 className="rd-h3">Non-conformités ouvertes</h3>
+          <p className="rd-empty rd-muted">{t('Customer complaints are counted under the “Customer complaint” origin.')}</p>
+          <h3 className="rd-h3">{t('Open non-conformities')}</h3>
           {d.events.openNc?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Origine</th><th>Étape</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Non-conformity')}</th><th>{t('Origin')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                 <tbody>
                   {d.events.openNc.map((e) => (
                     <tr key={e.id}>
                       <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
-                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
+                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{e.pilot}</div></td>
                       <td className="rd-muted">{e.origin}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
                       <td><ActionRefs actions={e.actions} role={role} /></td>
@@ -169,7 +175,7 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune non-conformité ouverte.</Empty>}
+          ) : <Empty>{t('No open non-conformity.')}</Empty>}
         </Section>
       )}
 
@@ -177,21 +183,21 @@ export function DossierView({ page, role, notice }: {
         const open = d.complaints.filter((c) => c.open).length;
         const closed = d.complaints.length - open;
         return (
-          <Section n={n()} title="Satisfaction client et réclamations" aside="12 mois glissants">
+          <Section n={n()} title={t('Customer satisfaction and complaints')} aside={t('Rolling 12 months')}>
             <p className="rd-summary">
-              {d.complaints.length} réclamation{d.complaints.length > 1 ? 's' : ''} client enregistrée{d.complaints.length > 1 ? 's' : ''}
-              {d.complaints.length > 0 && ` · ${open} en cours de traitement · ${closed} clôturée${closed > 1 ? 's' : ''}`}
+              {plural(d.complaints.length, t('{n} customer complaint recorded'), t('{n} customer complaints recorded'))}
+              {d.complaints.length > 0 && ` · ${fill(t('{n} being handled'), { n: open })} · ${plural(closed, t('{n} closed#f'), t('{n} closed#fplural'))}`}
             </p>
             {d.complaints.length ? (
               <ScrollTable>
                 <table className="table rd-table">
-                  <thead><tr><th>Réf.</th><th>Date</th><th>Réclamation</th><th>Projet Keystone</th><th>Étape</th><th>Actions</th></tr></thead>
+                  <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Complaint')}</th><th>{t('Keystone project')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                   <tbody>
                     {d.complaints.map((c) => (
                       <tr key={c.id}>
                         <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={c.href} role={role}>{c.id}</Ref></td>
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.occurredOn)}</td>
-                        <td>{c.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {c.pilot}</div></td>
+                        <td>{c.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{c.pilot}</div></td>
                         <td className="rd-muted">{c.project ?? '—'}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{c.step}</td>
                         <td><ActionRefs actions={c.actions} role={role} /></td>
@@ -200,24 +206,24 @@ export function DossierView({ page, role, notice }: {
                   </tbody>
                 </table>
               </ScrollTable>
-            ) : <Empty>Aucune réclamation client sur la période.</Empty>}
-            <h3 className="rd-h3">Perception des clients</h3>
-            <RecordText text={r.customerPerception} held={held} placeholder="résultats d'enquête de satisfaction, retours clients, respect des délais de livraison" />
+            ) : <Empty>{t('No customer complaint over the period.')}</Empty>}
+            <h3 className="rd-h3">{t('Customer perception')}</h3>
+            <RecordText text={r.customerPerception} held={held} placeholder={t('satisfaction survey results, customer feedback, on-time delivery')} />
           </Section>
         );
       })()}
 
       {d.suppliers && (
-        <Section n={n()} title="Performance des fournisseurs">
+        <Section n={n()} title={t('Supplier performance')}>
           <p className="rd-summary">
-            {plural(d.suppliers.summary?.audits ?? 0, 'audit fournisseur au programme', 'audits fournisseurs au programme')} ({d.suppliers.summary?.auditsDone ?? 0} réalisé{(d.suppliers.summary?.auditsDone ?? 0) > 1 ? 's' : ''})
-            {' · '}{plural(d.suppliers.summary?.ncs ?? 0, 'non-conformité fournisseur', 'non-conformités fournisseurs')} sur 12 mois, dont {d.suppliers.summary?.ncOpen ?? 0} ouverte{(d.suppliers.summary?.ncOpen ?? 0) > 1 ? 's' : ''}
+            {plural(d.suppliers.summary?.audits ?? 0, t('{n} supplier audit in the programme'), t('{n} supplier audits in the programme'))} ({plural(d.suppliers.summary?.auditsDone ?? 0, t('{n} carried out'), t('{n} carried out#plural'))})
+            {' · '}{plural(d.suppliers.summary?.ncs ?? 0, t('{n} supplier non-conformity'), t('{n} supplier non-conformities'))}{plural(d.suppliers.summary?.ncOpen ?? 0, t(' over 12 months, of which {n} open#f'), t(' over 12 months, of which {n} open#fplural'))}
           </p>
-          <h3 className="rd-h3">Audits fournisseurs du programme</h3>
+          <h3 className="rd-h3">{t('Supplier audits of the programme')}</h3>
           {d.suppliers.audits?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Date</th><th>Intitulé</th><th>Auditeur</th><th>État</th></tr></thead>
+                <thead><tr><th>{t('Date')}</th><th>{t('Title')}</th><th>{t('Auditor')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
                   {d.suppliers.audits.map((p) => (
                     <tr key={p.id}>
@@ -230,25 +236,25 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucun audit fournisseur sur la période.</Empty>}
+          ) : <Empty>{t('No supplier audit over the period.')}</Empty>}
           {/* AUD-33 : constats des audits fournisseurs (dossier figé avant le paquet 13 : ils restent sous Audits). */}
           {d.suppliers.findingGroups && (
             <>
-              <h3 className="rd-h3">Constats des audits fournisseurs</h3>
-              {d.suppliers.findingGroups.length ? <FindingGroups groups={d.suppliers.findingGroups} role={role} /> : <Empty>Aucun constat d&apos;audit fournisseur.</Empty>}
+              <h3 className="rd-h3">{t('Findings of the supplier audits')}</h3>
+              {d.suppliers.findingGroups.length ? <FindingGroups groups={d.suppliers.findingGroups} role={role} /> : <Empty>{t('No supplier audit finding.')}</Empty>}
             </>
           )}
-          <h3 className="rd-h3">Non-conformités d&apos;origine fournisseur</h3>
+          <h3 className="rd-h3">{t('Non-conformities of supplier origin')}</h3>
           {d.suppliers.ncs?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Date</th><th>Non-conformité</th><th>Étape</th><th>Actions</th></tr></thead>
+                <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Non-conformity')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                 <tbody>
                   {d.suppliers.ncs.map((e) => (
                     <tr key={e.id}>
                       <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}><Ref href={e.href} role={role}>{e.id}</Ref></td>
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
-                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>Pilote : {e.pilot}</div></td>
+                      <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{e.pilot}</div></td>
                       <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
                       <td><ActionRefs actions={e.actions} role={role} /></td>
                     </tr>
@@ -256,17 +262,17 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune non-conformité fournisseur sur la période.</Empty>}
+          ) : <Empty>{t('No supplier non-conformity over the period.')}</Empty>}
         </Section>
       )}
 
       {d.audits && (
-        <Section n={n()} title="Audits et certifications">
-          <h3 className="rd-h3">Certifications</h3>
+        <Section n={n()} title={t('Audits and certifications')}>
+          <h3 className="rd-h3">{t('Certifications')}</h3>
           {d.audits.certs?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Référentiel</th><th>Domaine</th><th>Statut</th><th>Commentaire</th></tr></thead>
+                <thead><tr><th>{t('Standard')}</th><th>{t('Domain')}</th><th>{t('Status')}</th><th>{t('Comment')}</th></tr></thead>
                 <tbody>
                   {d.audits.certs.map((c) => (
                     <tr key={c.id}>
@@ -282,20 +288,21 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucun référentiel suivi.</Empty>}
+          ) : <Empty>{t('No standard followed')}.</Empty>}
 
-          <h3 className="rd-h3"><Ref href={d.audits.programmeHref} role={role}>Programme d&apos;audits et de visites</Ref></h3>
+          <h3 className="rd-h3"><Ref href={d.audits.programmeHref} role={role}>{t('Programme of audits and visits')}</Ref></h3>
           {d.audits.progFrom && d.audits.progTo && d.audits.programmeCounts && (
             <p className="rd-summary">
-              {fromMonth(d.audits.progFrom)} à {monthName(+d.audits.progTo.slice(5, 7))} {yearOf(d.audits.progTo)} (période examinée et année suivant la revue) · {d.audits.programmeCounts.done} réalisé{d.audits.programmeCounts.done > 1 ? 's' : ''} · {d.audits.programmeCounts.pending} à confirmer (échéance passée) · {d.audits.programmeCounts.upcoming} à venir
-              {d.audits.programmeCounts.cancelled != null && ` · ${d.audits.programmeCounts.cancelled} annulé${d.audits.programmeCounts.cancelled > 1 ? 's' : ''}`}
-              {d.audits.programmeCounts.postponed != null && ` · ${d.audits.programmeCounts.postponed} reporté${d.audits.programmeCounts.postponed > 1 ? 's' : ''}`}
+              {fill(t('{from} to {to} (period reviewed and year following the review)'), { from: fromMonth(d.audits.progFrom, t), to: `${monthName(+d.audits.progTo.slice(5, 7))} ${yearOf(d.audits.progTo)}` })}
+              {' · '}{plural(d.audits.programmeCounts.done, t('{n} carried out'), t('{n} carried out#plural'))} · {fill(t('{n} to confirm (deadline passed)'), { n: d.audits.programmeCounts.pending })} · {fill(t('{n} upcoming'), { n: d.audits.programmeCounts.upcoming })}
+              {d.audits.programmeCounts.cancelled != null && ` · ${plural(d.audits.programmeCounts.cancelled, t('{n} cancelled#m'), t('{n} cancelled#mplural'))}`}
+              {d.audits.programmeCounts.postponed != null && ` · ${plural(d.audits.programmeCounts.postponed, t('{n} postponed'), t('{n} postponed#plural'))}`}
             </p>
           )}
           {d.audits.programme?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Mois</th><th>Ligne</th><th>Intitulé</th><th>Responsable</th><th>État</th></tr></thead>
+                <thead><tr><th>{t('Month')}</th><th>{t('Line')}</th><th>{t('Title')}</th><th>{t('Owner')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
                   {d.audits.programme.map((p) => (
                     <tr key={p.id}>
@@ -303,7 +310,7 @@ export function DossierView({ page, role, notice }: {
                       <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{p.track}</td>
                       <td>
                         <Ref href={p.href} role={role}>{p.detail ?? p.label}</Ref>
-                        {p.postponedFrom && <div className="rd-muted" style={{ fontSize: 11 }}>Reporté · initialement {p.postponedFrom.endsWith('-01') ? `${monthName(+p.postponedFrom.slice(5, 7))} ${yearOf(p.postponedFrom)}` : fmtDate(p.postponedFrom)}</div>}
+                        {p.postponedFrom && <div className="rd-muted" style={{ fontSize: 11 }}>{t('Postponed · initially ')}{p.postponedFrom.endsWith('-01') ? `${monthName(+p.postponedFrom.slice(5, 7))} ${yearOf(p.postponedFrom)}` : fmtDate(p.postponedFrom)}</div>}
                         {p.action && <div className="rd-muted" style={{ fontSize: 11 }}><Ref href={p.action.href} role={role}>{p.action.id}</Ref> · {p.action.status}</div>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{p.owner || '—'}</td>
@@ -313,26 +320,26 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucun élément au programme sur cette période.</Empty>}
+          ) : <Empty>{t('No item in the programme over this period.')}</Empty>}
 
-          <h3 className="rd-h3">Constats d&apos;audit</h3>
-          {d.audits.auditGroups?.length ? <FindingGroups groups={d.audits.auditGroups} role={role} /> : <Empty>Aucun constat enregistré.</Empty>}
+          <h3 className="rd-h3">{t('Audit findings')}</h3>
+          {d.audits.auditGroups?.length ? <FindingGroups groups={d.audits.auditGroups} role={role} /> : <Empty>{t('No finding recorded.#audit')}</Empty>}
 
           {/* AUD-40 : auto-évaluation par référentiel (dossiers figés avant le paquet R3 : section absente). */}
           {d.selfAssessments && (
             <>
-              <h3 className="rd-h3">Auto-évaluation par référentiel</h3>
+              <h3 className="rd-h3">{t('Self-assessment per standard')}</h3>
               {d.selfAssessments.length ? (
                 <ScrollTable>
                   <table className="table rd-table">
-                    <thead><tr><th>Référentiel</th><th>Campagne</th><th className="rd-num-cell">Conformité</th><th className="rd-num-cell">Évolution</th><th className="rd-num-cell">Écarts</th><th>Articles les plus faibles</th></tr></thead>
+                    <thead><tr><th>{t('Standard')}</th><th>{t('Campaign')}</th><th className="rd-num-cell">{t('Compliance')}</th><th className="rd-num-cell">{t('Trend')}</th><th className="rd-num-cell">{t('Gaps')}</th><th>{t('Weakest clauses')}</th></tr></thead>
                     <tbody>
                       {d.selfAssessments.map((a) => (
                         <tr key={a.id}>
                           <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{a.standard}<div className="rd-muted" style={{ fontSize: 11 }}>{a.site}</div></td>
                           <td style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · {fmtDate(a.assessedOn)}</td>
                           <td className="rd-num-cell">{a.rate == null ? '—' : `${a.rate} %`}</td>
-                          <td className="rd-num-cell">{a.previousOn ? fmtDelta(a.delta) : 'première'}</td>
+                          <td className="rd-num-cell">{a.previousOn ? fmtDelta(a.delta) : t('first#f')}</td>
                           <td className="rd-num-cell">{a.gaps}</td>
                           <td className="rd-muted">{[...a.clauses].filter((c) => c.rate != null).sort((x, y) => (x.rate ?? 0) - (y.rate ?? 0)).slice(0, 2).map((c) => `${c.clause} ${c.heading} (${c.rate} %)`).join(' · ') || '—'}</td>
                         </tr>
@@ -340,21 +347,21 @@ export function DossierView({ page, role, notice }: {
                     </tbody>
                   </table>
                 </ScrollTable>
-              ) : <Empty>Aucune campagne d&apos;auto-évaluation clôturée.</Empty>}
+              ) : <Empty>{t('No closed self-assessment campaign.')}</Empty>}
             </>
           )}
         </Section>
       )}
 
       {d.actions && (
-        <Section n={n()} title="Plan d'actions" aside={`${plural(d.actions.totals?.open ?? 0, 'ouverte', 'ouvertes')} · ${d.actions.totals?.late ?? 0} en retard`}>
+        <Section n={n()} title={t('Action plan')} aside={`${plural(d.actions.totals?.open ?? 0, t('{n} open#f'), t('{n} open#fplural'))} · ${fill(t('{n} late'), { n: d.actions.totals?.late ?? 0 })}`}>
           {actionRows?.length ? (
             <ScrollTable>
               <table className="table rd-table">
                 {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
                 {d.actions.bySource
-                  ? <thead><tr><th>Source</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Terminées — à vérifier</th><th className="rd-num-cell">Vérifiées · période</th></tr></thead>
-                  : <thead><tr><th>Origine</th><th className="rd-num-cell">Ouvertes</th><th className="rd-num-cell">dont en retard</th><th className="rd-num-cell">Efficacité à vérifier</th><th className="rd-num-cell">Clôturées · 12 mois</th></tr></thead>}
+                  ? <thead><tr><th>{t('Source')}</th><th className="rd-num-cell">{t('Open#fcap')}</th><th className="rd-num-cell">{t('of which late')}</th><th className="rd-num-cell">{t('Finished — to verify')}</th><th className="rd-num-cell">{t('Verified · period')}</th></tr></thead>
+                  : <thead><tr><th>{t('Origin')}</th><th className="rd-num-cell">{t('Open#fcap')}</th><th className="rd-num-cell">{t('of which late')}</th><th className="rd-num-cell">{t('Effectiveness to verify')}</th><th className="rd-num-cell">{t('Closed · 12 months')}</th></tr></thead>}
                 <tbody>
                   {actionRows.map((o) => (
                     <tr key={o.key}>
@@ -367,7 +374,7 @@ export function DossierView({ page, role, notice }: {
                   ))}
                   {d.actions.totals && (
                     <tr className="rd-total">
-                      <td>Total</td>
+                      <td>{t('Total')}</td>
                       <td className="rd-num-cell">{d.actions.totals.open}</td>
                       <td className="rd-num-cell">{d.actions.totals.late}</td>
                       <td className="rd-num-cell">{d.actions.totals.verify}</td>
@@ -377,15 +384,15 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune action au plan d&apos;actions.</Empty>}
+          ) : <Empty>{t('No action in the action plan.')}</Empty>}
           {!!d.actions.lateActions?.length && (
             <>
-              <h3 className="rd-h3">Actions en retard</h3>
+              <h3 className="rd-h3">{t('Late actions')}</h3>
               <ScrollTable>
                 <table className="table rd-table">
                   {d.actions.bySource
-                    ? <thead><tr><th>N°</th><th>Action</th><th>Source</th><th>Responsable</th><th>Date cible</th><th className="rd-num-cell">Retard</th></tr></thead>
-                    : <thead><tr><th>Réf.</th><th>Action</th><th>Origine</th><th>Pilote</th><th>Échéance</th><th className="rd-num-cell">Retard</th></tr></thead>}
+                    ? <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source')}</th><th>{t('Owner')}</th><th>{t('Target date')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>
+                    : <thead><tr><th>{t('Ref.')}</th><th>{t('Action')}</th><th>{t('Origin')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>}
                   <tbody>
                     {d.actions.lateActions.map((a) => (
                       <tr key={a.id}>
@@ -394,7 +401,7 @@ export function DossierView({ page, role, notice }: {
                         <td className="rd-muted">{a.origin} · {a.originRef}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}</td>
-                        <td className="rd-num-cell">{daysBetween(a.dueOn, asOf)} j</td>
+                        <td className="rd-num-cell">{fill(t('{n} d'), { n: daysBetween(a.dueOn, asOf) })}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -406,13 +413,13 @@ export function DossierView({ page, role, notice }: {
       )}
 
       {d.watch && (
-        <Section n={n()} title="Veille réglementaire et contrôles périodiques"
-          aside={d.watch.requirementCounts?.filter((c) => c.n).map((c) => `${c.n} ${evalCount(c.key, c.label, c.n)}`).join(' · ')}>
-          <h3 className="rd-h3">Exigences réglementaires</h3>
+        <Section n={n()} title={t('Regulatory watch and periodic inspections')}
+          aside={d.watch.requirementCounts?.filter((c) => c.n).map((c) => `${c.n} ${evalCount(c.key, c.label, c.n, t)}`).join(' · ')}>
+          <h3 className="rd-h3">{t('Regulatory requirements')}</h3>
           {d.watch.requirements?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Exigence</th><th>Domaine</th><th>Évaluation</th><th>Échéance</th><th>Pilote</th><th>Action</th></tr></thead>
+                <thead><tr><th>{t('Requirement')}</th><th>{t('Domain')}</th><th>{t('Evaluation')}</th><th>{t('Deadline')}</th><th>{t('Lead')}</th><th>{t('Action')}</th></tr></thead>
                 <tbody>
                   {d.watch.requirements.map((q) => (
                     <tr key={q.id}>
@@ -421,7 +428,7 @@ export function DossierView({ page, role, notice }: {
                       <td>
                         <ToneTag tone={q.tone} style={{ whiteSpace: 'nowrap' }}>{q.evalLabel}</ToneTag>
                         {q.evalNote && <div className="rd-muted" style={{ fontSize: 11, marginTop: 2 }}>{q.evalNote}</div>}
-                        {q.lastEvaluatedOn && <div className="rd-muted" style={{ fontSize: 11 }}>évaluée le {fmtDate(q.lastEvaluatedOn)}</div>}
+                        {q.lastEvaluatedOn && <div className="rd-muted" style={{ fontSize: 11 }}>{fill(t('evaluated on {date}'), { date: fmtDate(q.lastEvaluatedOn) })}</div>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{[q.dueOn && fmtDate(q.dueOn), q.dueNote].filter(Boolean).join(' · ') || '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{q.pilot}</td>
@@ -431,17 +438,17 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune exigence suivie.</Empty>}
+          ) : <Empty>{t('No requirement followed.')}</Empty>}
           {d.watch.controls && (
             <>
-              <h3 className="rd-h3">Contrôles périodiques</h3>
+              <h3 className="rd-h3">{t('Periodic inspections')}</h3>
               <p className="rd-summary">
-                {d.watch.controls.overdue} dépassé{d.watch.controls.overdue > 1 ? 's' : ''} · {d.watch.controls.soon} sous 30 jours · {d.watch.controls.planned} planifié{d.watch.controls.planned > 1 ? 's' : ''} · {plural(d.watch.controls.withReserves, 'contrôle avec réserves', 'contrôles avec réserves')}
+                {plural(d.watch.controls.overdue, t('{n} overdue#m'), t('{n} overdue#plural'))} · {fill(t('{n} within 30 days'), { n: d.watch.controls.soon })} · {plural(d.watch.controls.planned, t('{n} planned'), t('{n} planned#plural'))} · {plural(d.watch.controls.withReserves, t('{n} inspection with reservations'), t('{n} inspections with reservations'))}
               </p>
               {d.watch.controls.rows?.length ? (
                 <ScrollTable>
                   <table className="table rd-table">
-                    <thead><tr><th>Équipement</th><th>Contrôle</th><th>Organisme</th><th>Échéance</th><th>État</th><th>Réserves</th></tr></thead>
+                    <thead><tr><th>{t('Equipment')}</th><th>{t('Inspection')}</th><th>{t('Body')}</th><th>{t('Deadline')}</th><th>{t('State')}</th><th>{t('Reservations')}</th></tr></thead>
                     <tbody>
                       {d.watch.controls.rows.map((c) => (
                         <tr key={c.id}>
@@ -459,31 +466,31 @@ export function DossierView({ page, role, notice }: {
                     </tbody>
                   </table>
                 </ScrollTable>
-              ) : <Empty>Aucun contrôle dépassé, à échéance sous 30 jours ou avec réserves.</Empty>}
+              ) : <Empty>{t('No inspection overdue, due within 30 days or with reservations.')}</Empty>}
             </>
           )}
         </Section>
       )}
 
       {d.risks && (
-        <Section n={n()} title="Évaluation des risques (DUERP)">
+        <Section n={n()} title={t('Risk assessment (DUERP)')}>
           {d.risks.version ? (
             <p className="rd-summary">
-              Version {d.risks.version.version} du {fmtDate(d.risks.version.updatedOn)} · prochaine mise à jour le {fmtDate(d.risks.version.nextUpdateOn)}
-              {d.risks.version.daysToUpdate != null && d.risks.version.daysToUpdate < 0 && <span style={{ color: TONE.danger.fg }}> (dépassée de {-d.risks.version.daysToUpdate} j)</span>}
-              {' · '}{d.risks.version.cseConsultedOn ? `CSE consulté le ${fmtDate(d.risks.version.cseConsultedOn)}` : 'consultation du CSE non enregistrée'}
+              {fill(t('Version {version} of {date} · next update on {next}'), { version: d.risks.version.version, date: fmtDate(d.risks.version.updatedOn), next: fmtDate(d.risks.version.nextUpdateOn) })}
+              {d.risks.version.daysToUpdate != null && d.risks.version.daysToUpdate < 0 && <span style={{ color: TONE.danger.fg }}>{fill(t(' (overdue by {n} d)'), { n: -d.risks.version.daysToUpdate })}</span>}
+              {' · '}{d.risks.version.cseConsultedOn ? fill(t('CSE consulted on {date}'), { date: fmtDate(d.risks.version.cseConsultedOn) }) : t('CSE consultation not recorded')}
             </p>
-          ) : <Empty>Aucune version du DUERP en vigueur.</Empty>}
+          ) : <Empty>{t('No DUERP version in force.')}</Empty>}
           {d.risks.priority && (
             <>
-              <h3 className="rd-h3">Risques prioritaires</h3>
+              <h3 className="rd-h3">{t('Priority risks')}</h3>
               <p className="rd-summary">
-                {plural(d.risks.priority.count, 'risque coté au-dessus du seuil d’action', 'risques cotés au-dessus du seuil d’action')} · {d.risks.priority.withoutAction} sans action en cours
+                {plural(d.risks.priority.count, t('{n} risk rated above the action threshold'), t('{n} risks rated above the action threshold'))} · {fill(t('{n} without action in progress'), { n: d.risks.priority.withoutAction })}
               </p>
               {d.risks.priority.top?.length ? (
                 <ScrollTable>
                   <table className="table rd-table">
-                    <thead><tr><th>Unité de travail</th><th>Danger</th><th className="rd-num-cell">Brut → résiduel</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>{t('Work unit')}</th><th>{t('Hazard')}</th><th className="rd-num-cell">{t('Gross → residual')}</th><th>{t('Actions')}</th></tr></thead>
                     <tbody>
                       {d.risks.priority.top.map((k) => (
                         <tr key={k.id}>
@@ -492,26 +499,26 @@ export function DossierView({ page, role, notice }: {
                           <td className="rd-num-cell">{k.score} → {k.residual}</td>
                           <td>{k.actions.length ? k.actions.map((a) => (
                             <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <span style={{ color: a.tone === 'neutral' ? undefined : TONE[a.tone].dot }}>{a.status}</span></div>
-                          )) : <span className="rd-muted">Sans action</span>}</td>
+                          )) : <span className="rd-muted">{t('No action#without')}</span>}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </ScrollTable>
-              ) : <Empty>Aucun risque au-dessus du seuil d&apos;action.</Empty>}
+              ) : <Empty>{t('No risk above the action threshold.')}</Empty>}
             </>
           )}
         </Section>
       )}
 
       {d.prevention && (
-        <Section n={n()} title="Prévention des entreprises extérieures">
+        <Section n={n()} title={t('Prevention for external companies')}>
           {!!d.prevention.kpis?.length && (
             <div className="rd-kpis">
               {d.prevention.kpis.map((k) => <Kpi key={k.label} label={k.label} value={k.value} tone={k.tone} note={[k.sub, k.note].filter(Boolean).join(' · ')} />)}
             </div>
           )}
-          <h3 className="rd-h3">Écarts et échéances</h3>
+          <h3 className="rd-h3">{t('Gaps and deadlines')}</h3>
           {d.prevention.gaps?.length ? (
             <ul className="rd-list">
               {d.prevention.gaps.map((g) => (
@@ -522,22 +529,22 @@ export function DossierView({ page, role, notice }: {
                 </li>
               ))}
             </ul>
-          ) : <Empty>Aucun écart ni échéance de prévention.</Empty>}
+          ) : <Empty>{t('No prevention gap or deadline.')}</Empty>}
         </Section>
       )}
 
       {d.documents && (
-        <Section n={n()} title="Maîtrise documentaire">
+        <Section n={n()} title={t('Document control')}>
           {!!d.documents.kpis?.length && (
             <div className="rd-kpis">
               {d.documents.kpis.map((k) => <Kpi key={k.key} label={k.label} value={String(k.value)} tone={k.key === 'retard' && k.value ? 'danger' : undefined} note={[k.sub, k.note].filter(Boolean).join(' · ')} />)}
             </div>
           )}
-          <h3 className="rd-h3">Revues périodiques en retard</h3>
+          <h3 className="rd-h3">{t('Late periodic reviews')}</h3>
           {d.documents.overdue?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Document</th><th>Propriétaire</th><th>Revue prévue le</th></tr></thead>
+                <thead><tr><th>{t('Ref.')}</th><th>{t('Document')}</th><th>{t('Owner#document')}</th><th>{t('Review planned on')}</th></tr></thead>
                 <tbody>
                   {d.documents.overdue.map((x) => (
                     <tr key={x.id}>
@@ -550,12 +557,12 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune revue documentaire dépassée.</Empty>}
-          <h3 className="rd-h3">Révisions en circuit de validation</h3>
+          ) : <Empty>{t('No overdue document review.')}</Empty>}
+          <h3 className="rd-h3">{t('Revisions in the approval workflow')}</h3>
           {d.documents.pending?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Réf.</th><th>Révision</th><th>Document</th><th>Soumise le</th></tr></thead>
+                <thead><tr><th>{t('Ref.')}</th><th>{t('Revision')}</th><th>{t('Document')}</th><th>{t('Submitted on')}</th></tr></thead>
                 <tbody>
                   {d.documents.pending.map((x) => (
                     <tr key={`${x.docId}-${x.version}`}>
@@ -568,57 +575,57 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune révision en validation.</Empty>}
+          ) : <Empty>{t('No revision being approved.')}</Empty>}
         </Section>
       )}
 
       {d.environment && (
-        <Section n={n()} title="Performance environnementale" aside={`Année ${d.environment.year}`}>
+        <Section n={n()} title={t('Environmental performance')} aside={fill(t('Year {year}'), { year: d.environment.year })}>
           {d.environment.certification && (
             <p className="rd-summary">
-              {d.environment.certification.standard} {d.environment.certification.engaged ? `· ${d.environment.certification.status}` : 'non engagé · suivi réglementaire'}
+              {d.environment.certification.standard} {d.environment.certification.engaged ? `· ${d.environment.certification.status}` : t('not committed · regulatory follow-up')}
               {d.environment.certification.note && <span className="rd-muted"> · {d.environment.certification.note}</span>}
             </p>
           )}
           {d.environment.kpis && (
             <div className="rd-kpis">
-              <Kpi label="Déchets évacués" value={`${fmtNum(d.environment.kpis.tonnes)} t`}
-                note={`${plural(d.environment.kpis.entries, 'enlèvement', 'enlèvements')}${d.environment.kpis.prevTonnes != null ? ` · ${fmtNum(d.environment.kpis.prevTonnes)} t l'an dernier` : ''}`} />
-              <Kpi label="Part de déchets dangereux" value={fmtPct(d.environment.kpis.hazardousShare)} />
-              <Kpi label="Taux de valorisation" value={fmtPct(d.environment.kpis.recoveryShare)} />
-              <Kpi label="BSD manquants" value={String(d.environment.kpis.missingBsd)} tone={d.environment.kpis.missingBsd ? 'danger' : undefined} note="Déchets dangereux sans bordereau Trackdéchets" />
-              <Kpi label="Électricité" value={`${fmtNum(d.environment.kpis.electricity.current, 0)} kWh`}
-                note={[d.environment.kpis.electricity.period, d.environment.kpis.electricity.delta != null ? `${d.environment.kpis.electricity.delta > 0 ? '+' : ''}${fmtNum(d.environment.kpis.electricity.delta * 100)} % sur un an` : null].filter(Boolean).join(' · ')} />
+              <Kpi label={t('Waste removed')} value={`${fmtNum(d.environment.kpis.tonnes)} t`}
+                note={plural(d.environment.kpis.entries, t('{n} removal'), t('{n} removals')) + (d.environment.kpis.prevTonnes != null ? fill(t(' · {n} t last year'), { n: fmtNum(d.environment.kpis.prevTonnes) }) : '')} />
+              <Kpi label={t('Share of hazardous waste')} value={fmtPct(d.environment.kpis.hazardousShare)} />
+              <Kpi label={t('Recovery rate')} value={fmtPct(d.environment.kpis.recoveryShare)} />
+              <Kpi label={t('Missing waste tracking slips')} value={String(d.environment.kpis.missingBsd)} tone={d.environment.kpis.missingBsd ? 'danger' : undefined} note={t('Hazardous waste without a Trackdéchets slip')} />
+              <Kpi label={t('Electricity')} value={`${fmtNum(d.environment.kpis.electricity.current, 0)} kWh`}
+                note={[d.environment.kpis.electricity.period, d.environment.kpis.electricity.delta != null ? fill(t('{delta} % over a year'), { delta: `${d.environment.kpis.electricity.delta > 0 ? '+' : ''}${fmtNum(d.environment.kpis.electricity.delta * 100)}` }) : null].filter(Boolean).join(' · ')} />
             </div>
           )}
           <p className="rd-summary">
-            {plural(d.environment.openEvents ?? 0, 'événement environnemental ouvert', 'événements environnementaux ouverts')} · {d.environment.envClosed12 ?? 0} clôturé{(d.environment.envClosed12 ?? 0) > 1 ? 's' : ''} sur 12 mois
+            {plural(d.environment.openEvents ?? 0, t('{n} open environmental event'), t('{n} open environmental events'))} · {plural(d.environment.envClosed12 ?? 0, t('{n} closed over 12 months'), t('{n} closed over 12 months#plural'))}
           </p>
         </Section>
       )}
 
       {d.skills && (
-        <Section n={n()} title="Ressources et compétences">
+        <Section n={n()} title={t('Resources and competences')}>
           {d.skills.counts && (
             <p className="rd-summary">
-              {d.skills.counts.people} salarié{d.skills.counts.people > 1 ? 's' : ''} suivi{d.skills.counts.people > 1 ? 's' : ''} dans la <Ref href={d.skills.href} role={role}>matrice</Ref> · {d.skills.counts.expired} titre{d.skills.counts.expired > 1 ? 's' : ''} expiré{d.skills.counts.expired > 1 ? 's' : ''} · {d.skills.counts.soon} expirant sous {SKILL_SOON_DAYS} jours · {d.skills.counts.never} requis jamais suivi{d.skills.counts.never > 1 ? 's' : ''}
+              {plural(d.skills.counts.people, t('{n} employee followed in the'), t('{n} employees followed in the'))} <Ref href={d.skills.href} role={role}>{t('matrix')}</Ref> · {plural(d.skills.counts.expired, t('{n} title expired'), t('{n} titles expired'))} · {fill(t('{n} expiring within {days} days'), { n: d.skills.counts.soon, days: SKILL_SOON_DAYS })} · {plural(d.skills.counts.never, t('{n} required never attended'), t('{n} required never attended#plural'))}
             </p>
           )}
           {/* HAB-18 : indicateurs de compétences (absents des dossiers figés avant le paquet 13). */}
           {d.skills.indicators && (
             <div className="rd-kpis">
-              <Kpi label="Conformité des titres requis" value={d.skills.indicators.rate == null ? '—' : `${d.skills.indicators.rate} %`}
-                note={`${d.skills.indicators.compliant} sur ${d.skills.indicators.required} titres requis valides`} />
-              <Kpi label="Titres obtenus sur 12 mois" value={String(d.skills.indicators.trainings12)}
-                note="D'après Cursus (RH) ; efficacité des formations suivie dans Cursus" />
-              <Kpi label="Recyclages en retard" value={String(d.skills.indicators.lateRenewals)} note="titres requis expirés" />
+              <Kpi label={t('Compliance of the required titles')} value={d.skills.indicators.rate == null ? '—' : `${d.skills.indicators.rate} %`}
+                note={fill(t('{n} of {total} required titles valid'), { n: d.skills.indicators.compliant, total: d.skills.indicators.required })} />
+              <Kpi label={t('Titles obtained over 12 months')} value={String(d.skills.indicators.trainings12)}
+                note={t('According to Cursus (HR); training effectiveness followed in Cursus')} />
+              <Kpi label={t('Late renewals')} value={String(d.skills.indicators.lateRenewals)} note={t('required titles expired')} />
             </div>
           )}
-          <h3 className="rd-h3">Alertes d&apos;habilitation sur les affectations Keystone</h3>
+          <h3 className="rd-h3">{t('Qualification alerts on the Keystone assignments')}</h3>
           {d.skills.alerts?.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Salarié</th><th>Titre</th><th>État</th><th>Affectation</th><th>Période</th></tr></thead>
+                <thead><tr><th>{t('Employee')}</th><th>{t('Title#qualification')}</th><th>{t('State')}</th><th>{t('Assignment')}</th><th>{t('Period')}</th></tr></thead>
                 <tbody>
                   {d.skills.alerts.map((a) => (
                     <tr key={`${a.person}-${a.title}-${a.assignment}-${a.startOn}`}>
@@ -632,19 +639,19 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucune affectation à venir sur un titre manquant, expiré ou expirant avant la fin de l&apos;affectation.</Empty>}
-          <h3 className="rd-h3">Besoins en ressources</h3>
-          <RecordText text={r.resourceNeeds} held={held} placeholder="effectifs, équipements, budget, formations à programmer" />
+          ) : <Empty>{t('No upcoming assignment on a title missing, expired or expiring before the end of the assignment.')}</Empty>}
+          <h3 className="rd-h3">{t('Resource needs')}</h3>
+          <RecordText text={r.resourceNeeds} held={held} placeholder={t('headcount, equipment, budget, trainings to schedule')} />
         </Section>
       )}
 
       {/* AUD-13 (§9.3.2 c) : objectifs QHSE mesurables et leur degré de réalisation ; absent des dossiers figés avant le paquet 5. */}
       {d.objectives && (
-        <Section n={n()} title="Objectifs QHSE" aside={`${d.objectives.filter((o) => o.tone === 'ok').length}/${d.objectives.length} atteints`}>
+        <Section n={n()} title={t('QHSE objectives')} aside={fill(t('{done}/{total} achieved'), { done: d.objectives.filter((o) => o.tone === 'ok').length, total: d.objectives.length })}>
           {d.objectives.length ? (
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Objectif</th><th>Indicateur</th><th>Cible</th><th>Valeur</th><th>État</th></tr></thead>
+                <thead><tr><th>{t('Objective')}</th><th>{t('Indicator')}</th><th>{t('Target')}</th><th>{t('Value')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
                   {d.objectives.map((o) => (
                     <tr key={`${o.label}-${o.indicator}-${o.site}`}>
@@ -658,13 +665,13 @@ export function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-          ) : <Empty>Aucun objectif mesurable enregistré pour l&apos;année.</Empty>}
+          ) : <Empty>{t('No measurable objective recorded for the year.')}</Empty>}
         </Section>
       )}
 
       {/* CNF-05 (§9.3.2 b et e) : enjeux, parties intéressées, risques et opportunités. */}
       {d.context && (
-        <Section n={n()} title="Contexte, risques et opportunités" aside="ISO 9001 §4.1 · §4.2 · §6.1">
+        <Section n={n()} title={t('Context, risks and opportunities')} aside="ISO 9001 §4.1 · §4.2 · §6.1">
           {d.context.length ? d.context.map((g) => (
             <div key={g.kind}>
               <h3 className="rd-h3">{g.label} <span className="rd-muted" style={{ fontWeight: 400 }}>· {g.clause}</span></h3>
@@ -672,48 +679,48 @@ export function DossierView({ page, role, notice }: {
                 {g.items.map((i) => (
                   <li key={i.label}>
                     <span style={{ fontWeight: 500 }}>{i.label}</span>{i.detail && <> — {i.detail}</>}
-                    {i.treatment && <span className="rd-muted" style={{ display: 'block' }}>Traitement : {i.treatment}</span>}
+                    {i.treatment && <span className="rd-muted" style={{ display: 'block' }}>{t('Treatment: ')}{i.treatment}</span>}
                   </li>
                 ))}
               </ul>
             </div>
-          )) : <Empty>Aucun enjeu, partie intéressée, risque ou opportunité enregistré.</Empty>}
+          )) : <Empty>{t('No issue, interested party, risk or opportunity recorded.')}</Empty>}
         </Section>
       )}
 
-      <Section n={n()} title="Préparation, décisions et objectifs" aside={d.checklist.length ? `${done}/${d.checklist.length} éléments fournis` : undefined}>
-        <h3 className="rd-h3">Éléments d&apos;entrée de la revue</h3>
+      <Section n={n()} title={t('Preparation, decisions and objectives')} aside={d.checklist.length ? fill(t('{done}/{total} items provided'), { done, total: d.checklist.length }) : undefined}>
+        <h3 className="rd-h3">{t('Input items of the review')}</h3>
         {d.checklist.length ? (
           <div>
             {d.checklist.map((c) => (
               <div key={c.id} className="rd-check">
                 <i className={`ph ${c.done ? 'ph-check-square' : 'ph-square'}`} style={{ fontSize: 15, color: c.done ? TONE.ok.dot : 'var(--color-neutral-500)' }} aria-hidden />
                 <span>{c.label}</span>
-                <span className="rd-muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap', color: c.late ? TONE.danger.fg : undefined }}>{c.done ? 'Fourni' : 'À fournir'} · {c.ownerLabel}</span>
+                <span className="rd-muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap', color: c.late ? TONE.danger.fg : undefined }}>{c.done ? t('Provided') : t('To provide')} · {c.ownerLabel}</span>
               </div>
             ))}
           </div>
-        ) : <Empty>Aucun élément de préparation saisi.</Empty>}
+        ) : <Empty>{t('No preparation item entered.')}</Empty>}
 
         {(r.minutes || page.mode === 'record') && (
           <>
-            <h3 className="rd-h3">Compte rendu et conclusions</h3>
-            <RecordText text={r.minutes} held={held} placeholder="conclusions de la séance" />
+            <h3 className="rd-h3">{t('Minutes and conclusions')}</h3>
+            <RecordText text={r.minutes} held={held} placeholder={t('conclusions of the meeting')} />
             {page.mode === 'record' && (
               <>
-                <h3 className="rd-h3">Perception des clients</h3>
+                <h3 className="rd-h3">{t('Customer perception')}</h3>
                 <RecordText text={r.customerPerception} held={held} placeholder="" />
-                <h3 className="rd-h3">Besoins en ressources</h3>
+                <h3 className="rd-h3">{t('Resource needs')}</h3>
                 <RecordText text={r.resourceNeeds} held={held} placeholder="" />
               </>
             )}
           </>
         )}
 
-        <h3 className="rd-h3">Décisions et objectifs</h3>
+        <h3 className="rd-h3">{t('Decisions and objectives')}</h3>
         <ScrollTable>
           <table className="table rd-table">
-            <thead><tr><th>Nature</th><th style={{ width: '46%' }}>Décision, objectif ou besoin en ressources</th><th>Pilote</th><th>Échéance</th><th>Action</th></tr></thead>
+            <thead><tr><th>{t('Nature')}</th><th style={{ width: '46%' }}>{t('Decision, objective or resource need')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th>{t('Action')}</th></tr></thead>
             <tbody>
               {d.decisions.map((x) => (
                 <tr key={x.id}>
@@ -721,7 +728,7 @@ export function DossierView({ page, role, notice }: {
                   <td>
                     {/* AUD-36 : décision abandonnée après la séance, barrée avec son motif. */}
                     <span style={x.cancelled ? { textDecoration: 'line-through' } : undefined}>{x.text}</span>
-                    {x.cancelled && <span className="rd-muted" style={{ display: 'block', fontSize: 11 }}>Abandonnée le {fmtDate(x.cancelled.on)} par {x.cancelled.by} · motif : {x.cancelled.reason}</span>}
+                    {x.cancelled && <span className="rd-muted" style={{ display: 'block', fontSize: 11 }}>{fill(t('Abandoned on {date} by {name} · reason: {reason}'), { date: fmtDate(x.cancelled.on), name: x.cancelled.by, reason: x.cancelled.reason })}</span>}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
@@ -734,25 +741,25 @@ export function DossierView({ page, role, notice }: {
             </tbody>
           </table>
         </ScrollTable>
-        {!d.decisions.length && h.status !== 'planifiee' && <Empty>Aucune décision enregistrée.</Empty>}
+        {!d.decisions.length && h.status !== 'planifiee' && <Empty>{t('No decision recorded.')}</Empty>}
         {d.extraActions.length > 0 && (
           <>
-            <h3 className="rd-h3">Autres actions issues de la revue</h3>
+            <h3 className="rd-h3">{t('Other actions from the review')}</h3>
             <ActionTable rows={d.extraActions} role={role} />
           </>
         )}
-        <p className="rd-empty rd-muted" style={{ marginTop: 4 }}>Les décisions retenues sont suivies dans le plan d&apos;actions unique avec la source « Revue de direction » (« Objectif QSE » pour un objectif).</p>
+        <p className="rd-empty rd-muted" style={{ marginTop: 4 }}>{t('The decisions taken are followed in the single action plan with the source “Management review” (“QSE objective” for an objective).')}</p>
         <div className="rd-sign">
-          <div>Date de la prochaine revue{r.nextReviewOn && <div className="rd-sign-value">{fmtDate(r.nextReviewOn)}</div>}</div>
-          <div>Visa de la direction{r.closedOn && <div className="rd-sign-value">{r.closedBy ?? '—'} le {fmtDate(r.closedOn)}</div>}</div>
+          <div>{t('Date of the next review')}{r.nextReviewOn && <div className="rd-sign-value">{fmtDate(r.nextReviewOn)}</div>}</div>
+          <div>{t('Management sign-off')}{r.closedOn && <div className="rd-sign-value">{fill(t('{name} on {date}'), { name: r.closedBy ?? '—', date: fmtDate(r.closedOn) })}</div>}</div>
         </div>
         {/* AUD-34 : rectificatifs signés après le visa ; le dossier figé ci-dessus reste inchangé. */}
         {'corrections' in page && page.corrections.length > 0 && (
           <>
-            <h3 className="rd-h3">Rectificatifs après le visa</h3>
+            <h3 className="rd-h3">{t('Corrections after the sign-off')}</h3>
             <ScrollTable>
               <table className="table rd-table">
-                <thead><tr><th>Date</th><th style={{ width: '50%' }}>Rectificatif</th><th>Motif</th><th>Signé par</th></tr></thead>
+                <thead><tr><th>{t('Date')}</th><th style={{ width: '50%' }}>{t('Correction')}</th><th>{t('Reason')}</th><th>{t('Signed by')}</th></tr></thead>
                 <tbody>
                   {page.corrections.map((c) => (
                     <tr key={c.id}>
@@ -770,17 +777,18 @@ export function DossierView({ page, role, notice }: {
       </Section>
 
       <div className="rd-foot">
-        {page.mode === 'live' && `Document généré par Vigie le ${fmtDate(page.now)} · indicateurs calculés à cette date${asOf < page.now ? `, arrêtés à la séance du ${fmtDate(asOf)}` : ''}, à valider en séance.`}
-        {page.mode === 'seance' && `Dossier de séance figé par Vigie le ${page.takenOn ? fmtDate(page.takenOn) : '—'} · ${stopped} · compte rendu modifiable jusqu'au visa de la direction.`}
-        {page.mode === 'snapshot' && `Dossier figé par Vigie le ${page.takenOn ? fmtDate(page.takenOn) : '—'} au visa de la direction · ${stopped}.`}
-        {page.mode === 'record' && `Compte rendu enregistré dans Vigie · consulté le ${fmtDate(page.now)}.`}
+        {page.mode === 'live' && fill(t('Document generated by Vigie on {date} · indicators computed on that date{stopped}, to validate at the meeting.'), { date: fmtDate(page.now), stopped: setAtSeance })}
+        {page.mode === 'seance' && fill(t('Meeting file frozen by Vigie on {date} · {stopped} · minutes editable until the management sign-off.'), { date: page.takenOn ? fmtDate(page.takenOn) : '—', stopped })}
+        {page.mode === 'snapshot' && fill(t('File frozen by Vigie on {date} at the management sign-off · {stopped}.'), { date: page.takenOn ? fmtDate(page.takenOn) : '—', stopped })}
+        {page.mode === 'record' && fill(t('Minutes recorded in Vigie · viewed on {date}.'), { date: fmtDate(page.now) })}
       </div>
     </main>
   );
 }
 
 /** Constats regroupés par audit (sections Audits et Fournisseurs, AUD-33) ; plusieurs actions par constat (AUD-28). */
-function FindingGroups({ groups, role }: { groups: { label: string; findings: DossierFinding[] }[]; role: Role }) {
+async function FindingGroups({ groups, role }: { groups: { label: string; findings: DossierFinding[] }[]; role: Role }) {
+  const { t } = await getI18n();
   return (
     <>
       {groups.map((g) => (
@@ -788,7 +796,7 @@ function FindingGroups({ groups, role }: { groups: { label: string; findings: Do
               <h4 className="rd-h4">{g.label}</h4>
               <ScrollTable>
                 <table className="table rd-table">
-                  <thead><tr><th>Type</th><th>Constat</th><th>Action</th><th>Statut de l&apos;action</th></tr></thead>
+                  <thead><tr><th>{t('Type')}</th><th>{t('Finding')}</th><th>{t('Action')}</th><th>{t('Status of the action')}</th></tr></thead>
                   <tbody>
                     {g.findings.map((f) => {
                       // Plusieurs actions par constat (AUD-28) ; dossier figé avant : action unique (dossierFindingActions).
@@ -799,7 +807,7 @@ function FindingGroups({ groups, role }: { groups: { label: string; findings: Do
                           <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
                             {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
-                              : f.kind === 'point_fort' ? '—' : <span className="rd-muted">Sans action</span>}
+                              : f.kind === 'point_fort' ? '—' : <span className="rd-muted">{t('No action#without')}</span>}
                           </td>
                           <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
                         </tr>

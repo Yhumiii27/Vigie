@@ -25,21 +25,24 @@ import { isQhse } from '@/lib/action-rules';
 import { latestAssessments, loadAssessmentCatalogue, loadSelfAssessments } from '@/lib/data/self-assessment';
 import { SELF_ASSESSMENT_VIEW, fmtDelta, isAssessmentStandard, rateTone, selfAssessmentHref } from '@/lib/rules/self-assessment';
 import { currentSiteId } from '@/lib/session';
+import { getI18n } from '@/i18n/server';
+import { fill, type T } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.audits.title };
 
 /** Vues de l'écran : programme et revue de direction, auto-évaluation par référentiel (AUD-40). */
-function ViewNav({ on }: { on: 'programme' | 'auto' }) {
+function ViewNav({ on, t }: { on: 'programme' | 'auto'; t: T }) {
   return (
     <SegLinks options={[
-      { href: '/audits', label: 'Programme et revue de direction', on: on === 'programme' },
-      { href: selfAssessmentHref(), label: 'Auto-évaluation ISO', on: on === 'auto' },
+      { href: '/audits', label: t('Programme and management review'), on: on === 'programme' },
+      { href: selfAssessmentHref(), label: t('ISO self-assessment'), on: on === 'auto' },
     ]} />
   );
 }
 
 export default async function AuditsPage({ searchParams }: PageProps<'/audits'>) {
   const session = await guard('audits');
+  const { t } = await getI18n();
   const sp = await searchParams;
   // AUD-40 : auto-évaluation par référentiel (?vue=auto-evaluation&campagne=AE-001, ?norme=iso45001).
   if (sp.vue === SELF_ASSESSMENT_VIEW) {
@@ -47,12 +50,12 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
     const [data, catalogue, options] = await Promise.all([loadSelfAssessments({ open: campagne }), loadAssessmentCatalogue(), loadFormOptions()]);
     const edit = canEdit(session.role, 'audits');
     const canCreate = edit && canCreateAction(session.role);
-    const sites = edit ? [...(options.allSites ? [[ALL_SITES, 'Tous les sites'] as const] : []), ...options.sites] : [];
+    const sites = edit ? [...(options.allSites ? [[ALL_SITES, t('All sites')] as const] : []), ...options.sites] : [];
     return (
       <>
-        <PageHeader title={SCREENS.audits.title} sub="Auto-évaluation par référentiel (ISO 45001, ISO 14001, ISO 9001)" />
+        <PageHeader title={SCREENS.audits.title} sub={t('Self-assessment per standard (ISO 45001, ISO 14001, ISO 9001)')} />
         <div className="vg-page">
-          <ViewNav on="auto" />
+          <ViewNav on="auto" t={t} />
           {data && (
             <SelfAssessmentView data={data} catalogue={catalogue ?? []} canCatalogue={edit && isQhse(session.role)} canCreate={canCreate}
               actionOptions={canCreate ? { people: options.people, sites: options.sites, today: data.now } : { people: [], sites: [], today: data.now }}
@@ -93,7 +96,7 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const certOptions = certs.map((c) => [c.id, c.standard] as const);
   // AUD-22, AUD-27 : sites (« Tous les sites » en tête quand le périmètre est complet) et personnes des formulaires du
   // programme, des constats et des certifications — rôles qui saisissent seulement.
-  const siteChoices = [...(options.allSites ? [[ALL_SITES, 'Tous les sites'] as const] : []), ...options.sites];
+  const siteChoices = [...(options.allSites ? [[ALL_SITES, t('All sites')] as const] : []), ...options.sites];
   const planOptions = edit ? { people: options.people, sites: siteChoices } : { people: [], sites: [] };
   const closeHref = `/audits?annee=${year}`;
 
@@ -103,29 +106,29 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const typeHref = (k?: string) => `/audits?annee=${year}${k ? `&type=${k}` : ''}`;
   const typeNav = (
     <SegLinks size={11} pad="3px 8px" options={[
-      { href: typeHref(), label: 'Tous types', on: !auditType },
+      { href: typeHref(), label: t('All types'), on: !auditType },
       ...AUDIT_KIND_KEYS.filter((k) => plan.some((p) => p.auditKind === k)).map((k) => ({ href: typeHref(k), label: AUDIT_KINDS[k].short, on: auditType === k })),
     ]} />
   );
   const yearNav = yearOptions.length > 1 && (
     <SegLinks size={11} pad="3px 8px" options={yearOptions.map((y) => ({ href: `/audits?annee=${y}`, label: String(y), on: y === year }))} />
   );
-  const period = curMonth >= 1 && curMonth <= 12 ? `Semaine ${isoWeek(now)} · ${monthName(curMonth)} en cours` : curMonth === 0 ? 'Programme prévisionnel' : 'Année écoulée';
+  const period = curMonth >= 1 && curMonth <= 12 ? fill(t('Week {week} · {month} in progress'), { week: isoWeek(now), month: monthName(curMonth) }) : curMonth === 0 ? t('Forecast programme') : t('Past year');
 
   return (
     <>
-      <PageHeader title={SCREENS.audits.title} sub={`Programme ${year} et revue de direction`} />
+      <PageHeader title={SCREENS.audits.title} sub={fill(t('{year} programme and management review'), { year })} />
       <div className="vg-page">
-        <ViewNav on="programme" />
-        {missingElement && <MissingNotice text="Élément du programme d'audit introuvable pour l'année affichée." closeHref={closeHref} />}
-        {missingFinding && <MissingNotice text="Constat d'audit introuvable." closeHref={closeHref} />}
-        {missingDetail(sp.changement, !!openChange) && <MissingNotice text="Demande de changement introuvable ou hors du site sélectionné." closeHref={closeHref} />}
-        {missingDetail(sp.referentiel, !!openCert) && <MissingNotice text="Référentiel introuvable ou hors du site sélectionné." closeHref={closeHref} />}
+        <ViewNav on="programme" t={t} />
+        {missingElement && <MissingNotice text={t('Audit programme item not found for the year shown.')} closeHref={closeHref} />}
+        {missingFinding && <MissingNotice text={t('Audit finding not found.')} closeHref={closeHref} />}
+        {missingDetail(sp.changement, !!openChange) && <MissingNotice text={t('Change request not found or outside the selected site.')} closeHref={closeHref} />}
+        {missingDetail(sp.referentiel, !!openCert) && <MissingNotice text={t('Standard not found or outside the selected site.')} closeHref={closeHref} />}
         <CertificationCards key={openCert ?? 'certs'} certs={certs} canApprove={approve} sites={approve ? siteChoices : []} initialId={openCert} closeHref={closeHref} />
 
         {assessments.length > 0 && (
           <div className="card" style={{ gap: 6 }}>
-            <div className="card-kicker">Auto-évaluation par référentiel</div>
+            <div className="card-kicker">{t('Self-assessment per standard')}</div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12.5 }}>
               {assessments.map((a) => (
                 <Link key={a.id} href={selfAssessmentHref(a.id)} className="vg-link" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}>
