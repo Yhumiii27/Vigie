@@ -4,7 +4,9 @@ import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { REVIEW_FOLLOW_UP, TONE, canOpen, type Role } from '@/lib/domain';
 import type { DossierFinding, FollowUpRow } from '@/lib/data/review';
 import type { ActionBrief } from '@/lib/queries';
+import { fill, type T } from '@/i18n/translate';
 
+// Traducteur `t` reçu du dossier (`getI18n()` de la page, français par défaut).
 // Éléments de mise en page du dossier de revue de direction (classes rd-* de src/app/revue-de-direction/dossier.css).
 
 /** Actions d'un constat du dossier, quel que soit son format (dossier figé avant AUD-28, migration 0016 : une seule action). */
@@ -38,10 +40,10 @@ export function Blank({ lines = 2 }: { lines?: number }) {
 }
 
 /** Texte saisi au compte rendu, sinon l'invite à compléter et des lignes vierges (revue pas encore tenue). */
-export function RecordText({ text, held, placeholder }: { text: string | null | undefined; held: boolean; placeholder: string }) {
+export function RecordText({ text, held, placeholder, t }: { text: string | null | undefined; held: boolean; placeholder: string; t: T }) {
   if (text) return <p className="rd-text">{text}</p>;
-  if (held) return <Empty>Non renseigné au compte rendu.</Empty>;
-  return <><p className="rd-empty rd-muted">[À compléter : {placeholder}]</p><Blank /></>;
+  if (held) return <Empty>{t('Not entered in the minutes.')}</Empty>;
+  return <><p className="rd-empty rd-muted">{fill(t('[To complete: {what}]'), { what: placeholder })}</p><Blank /></>;
 }
 
 export function Kpi({ label, value, note, tone }: { label: string; value: ReactNode; note?: string; tone?: 'danger' | 'warn' | 'ok' | 'neutral' | 'accent' }) {
@@ -74,12 +76,12 @@ export function Ref({ href, role, children }: { href: string | null | undefined;
   return href && canOpen(role, href) ? <a href={href} className="rd-link">{children}</a> : <>{children}</>;
 }
 
-export function ActionStatus({ a, plain }: { a: Pick<ActionBrief, 'status' | 'tone' | 'pilot' | 'dueOn'>; plain?: boolean }) {
+export function ActionStatus({ a, plain, t }: { a: Pick<ActionBrief, 'status' | 'tone' | 'pilot' | 'dueOn'>; plain?: boolean; t: T }) {
   if (plain) return <span style={{ color: a.tone === 'neutral' ? undefined : TONE[a.tone].dot }}>{a.status}</span>;
   return (
     <span style={{ display: 'grid', gap: 2 }}>
       <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap', justifySelf: 'start' }}>{a.status}</ToneTag>
-      <span className="rd-muted" style={{ fontSize: 11 }}>{a.pilot} · date cible {fmtDate(a.dueOn)}</span>
+      <span className="rd-muted" style={{ fontSize: 11 }}>{a.pilot} · {fill(t('target date {date}'), { date: fmtDate(a.dueOn) })}</span>
     </span>
   );
 }
@@ -91,22 +93,22 @@ type LinkedBrief = ActionBrief & { href?: string };
  * UX-15 : conteneur à défilement horizontal d'un tableau du dossier sur téléphone (sans effet à l'impression) ; focalisable
  * pour défiler au clavier.
  */
-export function ScrollTable({ children }: { children: ReactNode }) {
-  return <div className="rd-scroll" tabIndex={0} role="group" aria-label="Tableau, défilement horizontal sur petit écran">{children}</div>;
+export function ScrollTable({ children, t }: { children: ReactNode; t: T }) {
+  return <div className="rd-scroll" tabIndex={0} role="group" aria-label={t('Table, horizontal scrolling on a small screen')}>{children}</div>;
 }
 
-export function ActionRefs({ actions, role }: { actions: LinkedBrief[] | undefined; role: Role }) {
+export function ActionRefs({ actions, role, t }: { actions: LinkedBrief[] | undefined; role: Role; t: T }) {
   if (!actions?.length) return <>—</>;
-  return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain /></div>)}</>;
+  return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain t={t} /></div>)}</>;
 }
 
-export function ActionTable({ rows, role, review, extra }: {
-  rows: (LinkedBrief & { originRef?: string; review?: string })[]; role: Role; review?: boolean; extra?: (a: LinkedBrief & { originRef?: string }) => ReactNode;
+export function ActionTable({ rows, role, review, extra, t }: {
+  rows: (LinkedBrief & { originRef?: string; review?: string })[]; role: Role; review?: boolean; extra?: (a: LinkedBrief & { originRef?: string }) => ReactNode; t: T;
 }) {
   return (
-    <ScrollTable>
+    <ScrollTable t={t}>
       <table className="table rd-table">
-        <thead><tr><th>N°</th><th>Action</th>{review && <th>Revue</th>}<th>Responsable</th><th>Date cible</th><th>Avancement</th></tr></thead>
+        <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th>{review && <th>{t('Review#management')}</th>}<th>{t('Owner')}</th><th>{t('Target date')}</th><th>{t('Progress')}</th></tr></thead>
         <tbody>
           {rows.map((a) => (
             <tr key={a.id}>
@@ -114,11 +116,11 @@ export function ActionTable({ rows, role, review, extra }: {
               <td>
                 {a.title}
                 {extra && <div className="rd-muted" style={{ fontSize: 11 }}>{extra(a)}</div>}
-                {a.efficacyNote && <div className="rd-muted" style={{ fontSize: 11 }}>Efficacité : {a.efficacyNote}</div>}
+                {a.efficacyNote && <div className="rd-muted" style={{ fontSize: 11 }}>{t('Effectiveness: ')}{a.efficacyNote}</div>}
               </td>
               {review && <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{a.review ?? '—'}</td>}
               <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>vérifiée le {fmtDate(a.closedOn)}</div>}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(a.dueOn)}{a.closedOn && <div className="rd-muted" style={{ fontSize: 11 }}>{fill(t('verified on {date}#f'), { date: fmtDate(a.closedOn) })}</div>}</td>
               <td><ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.status}</ToneTag></td>
             </tr>
           ))}
@@ -132,11 +134,11 @@ export function ActionTable({ rows, role, review, extra }: {
  * Suivi des décisions et actions des revues précédentes (§9.3.2 a, AUD-05) : suite donnée à chaque décision, objectif ou
  * besoin en ressources (action et avancement, « Sans action au plan », action abandonnée avec son motif).
  */
-export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role }) {
+export function FollowUpTable({ rows, role, t }: { rows: FollowUpRow[]; role: Role; t: T }) {
   return (
-    <ScrollTable>
+    <ScrollTable t={t}>
       <table className="table rd-table">
-        <thead><tr><th>Revue</th><th>Nature</th><th style={{ width: '38%' }}>Décision ou action</th><th>Pilote</th><th>Échéance</th><th>Suite donnée</th></tr></thead>
+        <thead><tr><th>{t('Review#management')}</th><th>{t('Nature')}</th><th style={{ width: '38%' }}>{t('Decision or action')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th>{t('Follow-up given')}</th></tr></thead>
         <tbody>
           {rows.map((x) => (
             <tr key={x.key}>
@@ -149,12 +151,12 @@ export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role 
                 {x.state === 'no_action' && <span style={{ color: x.tone === 'neutral' ? undefined : TONE[x.tone].fg }}>{REVIEW_FOLLOW_UP.no_action.label}</span>}
                 {x.state === 'cancelled' && (
                   <span style={{ display: 'grid', gap: 2 }}>
-                    <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{x.actionId ? REVIEW_FOLLOW_UP.cancelled.label : REVIEW_FOLLOW_UP.abandoned.label}{x.cancelled?.on ? ` le ${fmtDate(x.cancelled.on)}` : ''}</span>
-                    {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>Motif : {x.cancelled.reason}</span>}
+                    <span>{x.actionId && <><Ref href={x.action?.href} role={role}>{x.actionId}</Ref> · </>}{x.actionId ? REVIEW_FOLLOW_UP.cancelled.label : REVIEW_FOLLOW_UP.abandoned.label}{x.cancelled?.on ? fill(t(' on {date}'), { date: fmtDate(x.cancelled.on) }) : ''}</span>
+                    {x.cancelled?.reason && <span className="rd-muted" style={{ fontSize: 11 }}>{t('Reason: ')}{x.cancelled.reason}</span>}
                   </span>
                 )}
                 {x.state === 'action' && (x.action
-                  ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></span>
+                  ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain t={t} /></span>
                   : <span className="rd-muted">{x.actionId}</span>)}
               </td>
             </tr>
@@ -166,11 +168,14 @@ export function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role 
 }
 
 /** « 6 éléments · 2 ouverts · 1 sans action · 1 action abandonnée ». */
-export function followUpAside(rows: FollowUpRow[]) {
+export function followUpAside(rows: FollowUpRow[], t: T) {
   const open = rows.filter((x) => x.open).length;
   const none = rows.filter((x) => x.state === 'no_action').length;
   const cancelled = rows.filter((x) => x.state === 'cancelled').length;
-  return `${plural(rows.length, 'élément', 'éléments')} · ${plural(open, 'ouvert', 'ouverts')} · ${none} sans action · ${plural(cancelled, 'action abandonnée', 'actions abandonnées')}`;
+  return [
+    plural(rows.length, t('{n} item'), t('{n} items')), plural(open, t('{n} open'), t('{n} open#plural')),
+    fill(t('{n} without action'), { n: none }), plural(cancelled, t('{n} action abandoned'), t('{n} actions abandoned')),
+  ].join(' · ');
 }
 
 // ─── Mise en forme ──────────────────────────────────────────────────────────
@@ -178,12 +183,13 @@ export function followUpAside(rows: FollowUpRow[]) {
 export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /** « D'octobre 2025 », « De juin 2026 » (élision devant avril, août, octobre). */
-export const fromMonth = (iso: string) => {
+export const fromMonth = (iso: string, t: T) => {
   const m = monthName(monthOf(iso));
-  return `${/^[aeiou]/.test(m) ? "D'" : 'De '}${m} ${yearOf(iso)}`;
+  return fill(/^[aeiou]/.test(m) ? t('From {month}#elided') : t('From {month}'), { month: `${m} ${yearOf(iso)}` });
 };
 
-export const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+/** « 3 éléments » : `one` et `many` sont des chaînes traduites portant {n}. */
+export const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });
 
 const NUM = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 const INT = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -192,9 +198,12 @@ export const fmtPct = (share: number | null | undefined) => (share == null ? '�
 
 /** Évaluations de conformité au singulier et au pluriel (« 1 écart », « 3 conformes »). */
 const EVAL_COUNT: Record<string, [string, string]> = {
-  conforme: ['conforme', 'conformes'],
-  ecart: ['écart', 'écarts'],
-  analyse: ["analyse d'écart en cours", "analyses d'écart en cours"],
-  a_evaluer: ['à évaluer', 'à évaluer'],
+  conforme: ['compliant', 'compliant#plural'],
+  ecart: ['gap', 'gaps'],
+  analyse: ['gap analysis in progress', 'gap analyses in progress'],
+  a_evaluer: ['to evaluate#lower', 'to evaluate#lower'],
 };
-export const evalCount = (key: string, label: string, n: number) => EVAL_COUNT[key]?.[n > 1 ? 1 : 0] ?? label.toLowerCase();
+export const evalCount = (key: string, label: string, n: number, t: T) => {
+  const words = EVAL_COUNT[key];
+  return words ? t(words[n > 1 ? 1 : 0]) : label.toLowerCase();
+};

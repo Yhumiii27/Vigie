@@ -8,6 +8,7 @@ import { TONE } from '@/lib/domain';
 import type { ActionBrief, AttachmentBrief } from '@/lib/data/audits';
 import styles from './audits.module.css';
 import { Tip } from '@/components/Tip';
+import { useI18n } from '@/i18n/client';
 
 /** Choix exclusif en contrôle segmenté, utilisable dans un ActionForm (champ radio `name`). */
 export function RadioSeg({ name, options, defaultValue, onChange }: {
@@ -62,21 +63,22 @@ export function ActionLinks({ actions, compact, empty }: { actions: { id: string
 }
 
 /** Suppression en deux temps (confirmation en ligne), appelle `onDone` une fois l'élément supprimé. */
-export function DeleteButton({ run, onDone, label = 'Supprimer', note }: { run: () => Promise<{ error?: string }>; onDone: () => void; label?: string; note?: string }) {
+export function DeleteButton({ run, onDone, label, note }: { run: () => Promise<{ error?: string }>; onDone: () => void; label?: string; note?: string }) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   if (!asking) {
     return (
       <button type="button" className="btn btn-ghost vg-btn-sm" style={{ color: 'var(--tone-danger-fg)', marginLeft: 'auto' }} onClick={() => setAsking(true)}>
-        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{label}
+        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{label ?? t('Delete')}
       </button>
     );
   }
   return (
     <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
-      <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{note ?? 'Suppression définitive.'}</span>
-      <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); setError(null); }}>Annuler</button>
+      <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{note ?? t('Permanent deletion.')}</span>
+      <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); setError(null); }}>{t('Cancel')}</button>
       <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending}
         style={{ color: 'var(--tone-danger-fg)', borderColor: TONE.danger.dot }}
         onClick={() => start(async () => {
@@ -84,7 +86,7 @@ export function DeleteButton({ run, onDone, label = 'Supprimer', note }: { run: 
           if (r.error) setError(r.error);
           else onDone();
         })}>
-        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{pending ? 'Suppression…' : 'Confirmer la suppression'}
+        <i className="ph ph-trash" style={{ fontSize: 13 }} aria-hidden />{pending ? t('Deleting…') : t('Confirm the deletion')}
       </button>
       {error && <span role="alert" style={{ flexBasis: '100%', textAlign: 'right', fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
     </span>
@@ -96,6 +98,7 @@ export const fileUrl = (id: string) => `/fichiers/${id}`;
 
 /** Liste de fichiers joints (rapport, certificat) avec retrait en deux temps d'un fichier ajouté par erreur. */
 export function FileList({ files, onRemove, icon = 'ph-file-text' }: { files: AttachmentBrief[]; onRemove?: (id: string) => Promise<{ error?: string }>; icon?: string }) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -111,18 +114,18 @@ export function FileList({ files, onRemove, icon = 'ph-file-text' }: { files: At
           <span style={{ color: 'var(--color-neutral-500)', fontSize: 11 }}>{fmtDate(f.createdAt.slice(0, 10))}</span>
           {onRemove && (asking === f.id ? (
             <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8 }}>
-              <button type="button" className="vg-text-btn" disabled={pending} onClick={() => setAsking(null)}>Annuler</button>
+              <button type="button" className="vg-text-btn" disabled={pending} onClick={() => setAsking(null)}>{t('Cancel')}</button>
               <button type="button" className="vg-text-btn" disabled={pending} style={{ color: 'var(--tone-danger-fg)' }}
                 onClick={() => start(async () => {
                   const r = await onRemove(f.id);
                   setError(r.error ?? null);
                   if (!r.error) setAsking(null);
                 })}>
-                {pending ? 'Retrait…' : 'Confirmer le retrait'}
+                {pending ? t('Removing…') : t('Confirm the removal')}
               </button>
             </span>
           ) : (
-            <button type="button" className="vg-text-btn" style={{ marginLeft: 'auto', color: 'var(--color-neutral-400)' }} onClick={() => { setError(null); setAsking(f.id); }}>Retirer</button>
+            <button type="button" className="vg-text-btn" style={{ marginLeft: 'auto', color: 'var(--color-neutral-400)' }} onClick={() => { setError(null); setAsking(f.id); }}>{t('Remove')}</button>
           ))}
         </div>
       ))}

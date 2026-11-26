@@ -20,6 +20,8 @@ import { PersonForm } from './PersonForm';
 import { CursusRefreshButton } from './PeoplePanel';
 import { lapseFor } from '@/lib/rules/skills';
 import { TitlesButton } from './TitlesManager';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 /** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
 type Opts = Pick<FormOptions, 'sites'>;
@@ -96,23 +98,24 @@ const sub = (text: string) => <span style={{ display: 'block', fontSize: 11.5, c
 /** Recyclage planifié par une action reprise encore à réaliser (ni close ni Terminée). */
 const plannedOf = (c: SkillCell) => (c.renewal?.planned ? c.renewal : null);
 
-function cellTip(c: SkillCell) {
+function cellTip(c: SkillCell, t: T) {
   const s = SKILL_STATES[c.state];
   const r = c.renewal;
   // Action reprise rattachée : « recyclage planifié (A-xxx) », ou son avancement quand elle n'est plus à réaliser (Terminée).
   const action = !r ? '' : r.planned
-    ? ` · ${renewalNoun(c.state)} ${c.state === 'r' ? 'planifiée' : 'planifié'} (${r.id})`
-    : ` · action de ${renewalNoun(c.state)} ${r.id} (${lcfirst(r.statusLabel)})`;
-  return `${c.title.label} — ${s.label}${c.expiresOn && c.state !== 'n' ? ` · échéance ${fmtDate(c.expiresOn)}` : ''}${action}`;
+    ? fill(c.state === 'r' ? t(' · training planned ({id})') : t(' · renewal planned ({id})'), { id: r.id })
+    : fill(t(' · {kind} action {id} ({status})'), { kind: renewalNoun(c.state, t), id: r.id, status: lcfirst(r.statusLabel) });
+  return `${c.title.label} — ${s.label}${c.expiresOn && c.state !== 'n' ? fill(t(' · expiry {date}'), { date: fmtDate(c.expiresOn) }) : ''}${action}`;
 }
 
 
 /** Attestations jointes dans Vigie avant la bascule vers Cursus (migration 0025) : liens, consultation seule. */
 function LegacyFiles({ files }: { files: SkillCell['files'] }) {
+  const { t } = useI18n();
   if (!files.length) return null;
   return (
     <div style={{ display: 'grid', gap: 4 }}>
-      <h6 className="vg-h6">Attestations reprises de Vigie</h6>
+      <h6 className="vg-h6">{t('Certificates taken over from Vigie')}</h6>
       <span style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 12.5 }}>
         {files.map((f) => (
           <a key={f.id} href={f.url} target="_blank" rel="noopener" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -120,13 +123,14 @@ function LegacyFiles({ files }: { files: SkillCell['files'] }) {
           </a>
         ))}
       </span>
-      <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Jointes avant que Cursus ne tienne les formations ; les nouvelles attestations se déposent dans Cursus.</span>
+      <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{t('Attached before Cursus held the trainings; new certificates are filed in Cursus.')}</span>
     </div>
   );
 }
 
 /** Contenu de la fenêtre d'une case : état d'après Cursus, dates, organisme, recyclage repris, exigence, journal. */
 function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillCell; canManage: boolean; today: string }) {
+  const { t } = useI18n();
   const [pending, start] = useTransition();
   const [required, setRequired] = useOptimistic(cell.required);
   const [error, setError] = useState<string | null>(null);
@@ -141,17 +145,17 @@ function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillC
     setError(r.error ?? null);
   });
   const requiredHint = !canManage
-    ? "Modification réservée à l'encadrement et à l'animation QHSE."
+    ? t('Change reserved for management and QHSE coordination.')
     : locked
-      ? `Retirer l'exigence suppose que le service QHSE clôture ou abandonne d'abord l'action ${cell.renewal!.id}.`
+      ? fill(t('Removing the requirement means the QHSE department first closes or abandons the action {id}.'), { id: cell.renewal!.id })
       : required
-        ? 'Le titre est suivi pour ce salarié (alertes et échéances).'
-        : "Le titre n'est pas exigé pour ce salarié.";
+        ? t('The title is followed for this employee (alerts and deadlines).')
+        : t('The title is not required for this employee.');
   const switchOff = !canManage || locked;
   const held = cell.cursusRef !== null;
   const suspension = cell.measure
-    ? `${cell.measure.kind === 'retrait' ? 'Retrait' : 'Suspension'}${cell.measure.on ? ` le ${fmtDate(cell.measure.on)}` : ''} (motif tenu par Cursus)`
-    : cell.prerequisiteMissing ? 'Prérequis manquant dans Cursus (CACES ou formation exigée) : titre inutilisable.' : null;
+    ? `${cell.measure.kind === 'retrait' ? t('Withdrawal') : t('Suspension')}${cell.measure.on ? fill(t(' on {date}'), { date: fmtDate(cell.measure.on) }) : ''}${t(' (reason held by Cursus)')}`
+    : cell.prerequisiteMissing ? t('Prerequisite missing in Cursus (CACES or required training): title unusable.') : null;
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -159,31 +163,31 @@ function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillC
         <SkillDot state={cell.state} size={28} />
         <div style={{ display: 'grid', gap: 1, minWidth: 0 }}>
           <span style={{ fontWeight: 500 }}>{s.label}</span>
-          <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{stateDetail(cell, today)}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{stateDetail(cell, today, t)}</span>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
-        <Fact label="Salarié">{row.person.name}{sub(row.person.job)}</Fact>
-        <Fact label="Titre">{cell.title.label}{sub(validityLabel(cell.title))}</Fact>
-        <Fact label="Obtenu le">{cell.obtainedOn ? fmtDate(cell.obtainedOn) : '—'}</Fact>
-        <Fact label="Échéance">{cell.titleExpiresOn ? fmtDate(cell.titleExpiresOn) : held ? 'Sans échéance' : '—'}</Fact>
-        <Fact label="Organisme ou signataire">{cell.provider ?? '—'}</Fact>
-        {cell.sessionOn && <Fact label="Session prévue (Cursus)">{fmtDate(cell.sessionOn)}</Fact>}
+        <Fact label={t('Employee')}>{row.person.name}{sub(row.person.job)}</Fact>
+        <Fact label={t('Title#qualification')}>{cell.title.label}{sub(validityLabel(cell.title, t))}</Fact>
+        <Fact label={t('Obtained on')}>{cell.obtainedOn ? fmtDate(cell.obtainedOn) : '—'}</Fact>
+        <Fact label={t('Expiry')}>{cell.titleExpiresOn ? fmtDate(cell.titleExpiresOn) : held ? t('No expiry') : '—'}</Fact>
+        <Fact label={t('Provider or signatory')}>{cell.provider ?? '—'}</Fact>
+        {cell.sessionOn && <Fact label={t('Session planned (Cursus)')}>{fmtDate(cell.sessionOn)}</Fact>}
         {suspension && (
-          <Fact label="Titre suspendu" wide><span style={{ color: 'var(--tone-danger-fg)' }}>{suspension}</span></Fact>
+          <Fact label={t('Title suspended')} wide><span style={{ color: 'var(--tone-danger-fg)' }}>{suspension}</span></Fact>
         )}
-        <Fact label="Prochaine affectation Keystone">
+        <Fact label={t('Next Keystone assignment')}>
           {next ? <>{next.project}{sub(`${next.activity} · ${period(next.startOn, next.endOn)}`)}</> : '—'}
         </Fact>
         {cell.renewal && (
-          <Fact label={cell.renewal.planned ? plannedLabel(cell.state) : `Action de ${renewalNoun(cell.state)}`} wide>
+          <Fact label={cell.renewal.planned ? plannedLabel(cell.state, t) : fill(t('{kind} action'), { kind: renewalNoun(cell.state, t) })} wide>
             <RenewalLink renewal={cell.renewal} />
           </Fact>
         )}
         {cell.pastRenewals.length > 0 && (
           // HAB-04 : les anciens recyclages repris gardent leur lien vers la case.
-          <Fact label="Actions de recyclage précédentes" wide>
+          <Fact label={t('Previous renewal actions')} wide>
             <span style={{ display: 'grid', gap: 4 }}>
               {cell.pastRenewals.map((r) => <RenewalLink key={r.id} renewal={r} showDue={false} />)}
             </span>
@@ -192,12 +196,12 @@ function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillC
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <button type="button" role="switch" aria-checked={required} aria-label="Requis pour ce salarié" className={`vg-switch${required ? ' is-on' : ''}`}
+        <button type="button" role="switch" aria-checked={required} aria-label={t('Required for this employee')} className={`vg-switch${required ? ' is-on' : ''}`}
           disabled={switchOff || pending} onClick={toggle} style={{ padding: 0, cursor: switchOff ? 'not-allowed' : 'pointer', opacity: switchOff ? 0.6 : 1 }}>
           <span />
         </button>
         <div style={{ display: 'grid', gap: 1 }}>
-          <span style={{ fontSize: 12.5 }}>Requis pour ce salarié</span>
+          <span style={{ fontSize: 12.5 }}>{t('Required for this employee')}</span>
           <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>{requiredHint}</span>
         </div>
       </div>
@@ -205,22 +209,24 @@ function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillC
 
       <LegacyFiles files={cell.files} />
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        Formations, habilitations, sessions et attestations se saisissent dans Cursus (RH) ; Vigie les consulte.
+        {t('Trainings, qualifications, sessions and certificates are entered in Cursus (HR); Vigie views them.')}
       </p>
       {/* Journal de la case (HAB-03) : exigence et formations saisies avant la bascule — à la saisie seulement. */}
-      {canManage && <LazyChangeLog entity="skill_cell" id={`${row.person.id}|${cell.title.id}`} title="Historique des modifications" />}
+      {canManage && <LazyChangeLog entity="skill_cell" id={`${row.person.id}|${cell.title.id}`} title={t('Change history')} />}
     </div>
   );
 }
 
 /** Titres conservés d'un salarié sorti, titre par titre (consultation seule). */
 function DepartedHistory({ records }: { records: ArchivedRecord[] }) {
-  if (records.length === 0) return <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun titre détenu d&apos;après Cursus.</div>;
+  const { t } = useI18n();
+  if (records.length === 0) return <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('No title held according to Cursus.')}</div>;
   return <ArchiveTable records={records} first="title" />;
 }
 
 /** Salariés sortis de l'effectif (filtre « Sortis ») : date, motif, titres conservés et réintégration. */
 function DepartedList({ people, archive }: { people: Person[]; archive: ArchivedRecord[] }) {
+  const { t } = useI18n();
   const [viewed, setViewed] = useState<Person | null>(null);
   const recordsOf = (id: string) => archive.filter((r) => r.person.id === id);
   return (
@@ -228,7 +234,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
       <table className="table" style={{ fontSize: 12.5 }}>
         <tbody>
           {people.length === 0 && (
-            <tr><td style={{ padding: '14px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun salarié ne correspond aux filtres.</td></tr>
+            <tr><td style={{ padding: '14px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('No employee matches the filters.')}</td></tr>
           )}
           {people.map((p) => (
             <tr key={p.id}>
@@ -236,20 +242,20 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
                 <span style={{ display: 'block' }}>{p.name}</span>
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{[p.job, p.service].filter(Boolean).join(' · ')}</span>
               </td>
-              <td style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>Sorti le {fmtDate(p.leftOn!)}{p.leftReason ? ` · ${p.leftReason}` : ''}</td>
+              <td style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{fill(t('Left on {date}#male'), { date: fmtDate(p.leftOn!) })}{p.leftReason ? ` · ${p.leftReason}` : ''}</td>
               <td style={{ textAlign: 'right', width: 1, whiteSpace: 'nowrap' }}>
                 <span style={{ display: 'inline-flex', gap: 10 }}>
-                  <button type="button" className="vg-text-btn" onClick={() => setViewed(p)}>Titres ({recordsOf(p.id).length})</button>
-                  <ReasonButton action={reinstatePerson} hidden={{ id: p.id }} label="Réintégrer" className="vg-text-btn" title="Réintégrer le salarié"
-                    kicker={p.name} submitLabel="Réintégrer" message="Le salarié revient dans la matrice, les échéances et les listes ; la réintégration est inscrite à son historique."
-                    placeholder="Ex. retour après fin de mission" />
+                  <button type="button" className="vg-text-btn" onClick={() => setViewed(p)}>{fill(t('Titles ({n})'), { n: recordsOf(p.id).length })}</button>
+                  <ReasonButton action={reinstatePerson} hidden={{ id: p.id }} label={t('Reinstate')} className="vg-text-btn" title={t('Reinstate the employee')}
+                    kicker={p.name} submitLabel={t('Reinstate')} message={t('The employee comes back in the matrix, the deadlines and the lists; the reinstatement is written to their history.')}
+                    placeholder={t('E.g. return after the end of an assignment')} />
                 </span>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <Dialog open={!!viewed} onClose={() => setViewed(null)} width={600} kicker="Salarié sorti · consultation seule" title={viewed ? `Titres de ${viewed.name}` : ''}>
+      <Dialog open={!!viewed} onClose={() => setViewed(null)} width={600} kicker={t('Employee who left · view only')} title={viewed ? fill(t('Titles of {name}'), { name: viewed.name }) : ''}>
         {viewed && <DepartedHistory records={recordsOf(viewed.id)} />}
       </Dialog>
     </div>
@@ -258,6 +264,7 @@ function DepartedList({ people, archive }: { people: Person[]; archive: Archived
 
 /** Matrice salariés × titres, légende, filtres, barre d'outils et fenêtres associées. */
 export function SkillMatrix({ titles, versions, archivedTitles, rows, others, departed, archive, archivedSites, self, canManage, canManageTitles, catalog, options, today, initialSel, closeHref, siteLabels = null }: Props) {
+  const { t } = useI18n();
   const router = useRouter();
   const [sel, setSel] = useState<{ personId: string; titleId: string } | null>(initialSel?.titleId ? { personId: initialSel.personId, titleId: initialSel.titleId } : null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -336,7 +343,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
   const setChip = (c: Chip) => replaceFilters({ etat: SCOPE_OF[c] });
   const setService = (v: string) => replaceFilters({ service: v });
   const chipCount: Record<Chip, number | null> = { tous: null, a_traiter: treat.length, sortis: departed.length };
-  const chips: { key: Chip; label: string }[] = [{ key: 'tous', label: 'Tous' }, ...SKILL_FILTERS.filter((f) => f.key !== 'sortis' || canManage)];
+  const chips: { key: Chip; label: string }[] = [{ key: 'tous', label: t('All') }, ...SKILL_FILTERS.filter((f) => f.key !== 'sortis' || canManage)];
 
   const cellName = row && cell ? `${cell.title.label} — ${row.person.name}` : '';
   const unavailable = rows.some((r) => r.cells.some((c) => c.state === 'u'));
@@ -351,7 +358,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
           </span>
         ))}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 18, display: 'inline-grid', placeItems: 'center' }}><PlannedMark /></span>Formation ou recyclage planifié
+          <span style={{ width: 18, display: 'inline-grid', placeItems: 'center' }}><PlannedMark /></span>{t('Training or renewal planned')}
         </span>
         {!self && (
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -365,18 +372,18 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
       {!self && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 220px', maxWidth: 320 }}>
-            <Input name="skills-search" type="search" placeholder="Rechercher un salarié, un poste, un service…" aria-label="Rechercher un salarié"
+            <Input name="skills-search" type="search" placeholder={t('Search an employee, a job, a department…')} aria-label={t('Search an employee')}
               value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
           {services.length > 0 && (
             <div style={{ flex: '0 1 200px' }}>
-              <Select name="skills-service" aria-label="Service" options={services.map((x) => [x, x] as const)} placeholder="Tous les services"
+              <Select name="skills-service" aria-label={t('Department#service')} options={services.map((x) => [x, x] as const)} placeholder={t('All departments')}
                 value={service} onChange={(e) => setService(e.target.value)} />
             </div>
           )}
           {titles.length > 1 && (
             <div style={{ flex: '0 1 220px' }}>
-              <Select name="skills-title" aria-label="Titre suivi" options={titles.map((x) => [x.id, x.label] as const)} placeholder="Tous les titres"
+              <Select name="skills-title" aria-label={t('Title followed')} options={titles.map((x) => [x.id, x.label] as const)} placeholder={t('All titles')}
                 value={titleFilter} onChange={(e) => setTitleFilter(e.target.value)} />
             </div>
           )}
@@ -397,15 +404,15 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
             <table className="table vg-sticky-table" style={{ fontSize: 12.5, minWidth: titleFilter ? undefined : 880 }}>
               <thead>
                 <tr>
-                  <th className="vg-sticky-col">Salarié</th>
-                  {shownTitles.map((t) => <th key={t.id} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{t.label}<span className="vg-sr-only"> · {validityLabel(t)}</span></th>)}
+                  <th className="vg-sticky-col">{t('Employee')}</th>
+                  {shownTitles.map((ti) => <th key={ti.id} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{ti.label}<span className="vg-sr-only"> · {validityLabel(ti, t)}</span></th>)}
                 </tr>
               </thead>
               <tbody>
                 {shown.length === 0 && (
                   <tr>
                     <td colSpan={shownTitles.length + 1} style={{ padding: '14px 8px', fontSize: 12, color: 'var(--color-neutral-500)' }}>
-                      {rows.length === 0 ? 'Aucun salarié suivi dans la matrice pour ce site.' : 'Aucun salarié ne correspond aux filtres.'}
+                      {rows.length === 0 ? t('No employee followed in the matrix for this site.') : t('No employee matches the filters.')}
                     </td>
                   </tr>
                 )}
@@ -417,10 +424,10 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
                       {r.person.service && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{r.person.service}</span>}
                       {siteLabels && r.person.siteId && siteLabels[r.person.siteId] && (
                         <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>
-                          <i className="ph ph-factory" style={{ fontSize: 11, marginRight: 3 }} aria-hidden /><span className="vg-sr-only">Site : </span>{siteLabels[r.person.siteId]}
+                          <i className="ph ph-factory" style={{ fontSize: 11, marginRight: 3 }} aria-hidden /><span className="vg-sr-only">{t('Site: ')}</span>{siteLabels[r.person.siteId]}
                         </span>
                       )}
-                      {r.leavingOn && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>Sortie le {fmtDate(r.leavingOn)}</span>}
+                      {r.leavingOn && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-warn-fg)' }}>{fill(t('Departure on {date}'), { date: fmtDate(r.leavingOn) })}</span>}
                     </>
                   );
                   return (
@@ -428,7 +435,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
                       style={hl ? { background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', outline: '1px solid var(--color-accent)', outlineOffset: -1 } : undefined}>
                       <td className="vg-sticky-col" style={{ whiteSpace: 'nowrap' }}>
                         {canManage ? (
-                          <div role="button" tabIndex={0} className="vg-row" title="Modifier la fiche du salarié" style={{ gap: 0, padding: '3px 8px', margin: '-3px -8px' }}
+                          <div role="button" tabIndex={0} className="vg-row" title={t('Edit the employee record')} style={{ gap: 0, padding: '3px 8px', margin: '-3px -8px' }}
                             onClick={() => setEditId(r.person.id)} onKeyDown={onKey(r.person.id)}>
                             <span>{r.person.name}</span>
                             {meta}
@@ -441,7 +448,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
                         )}
                       </td>
                       {r.cells.filter((c) => !titleFilter || c.title.id === titleFilter).map((c) => {
-                        const tip = cellTip(c);
+                        const tip = cellTip(c, t);
                         return (
                           <td key={c.title.id} style={{ textAlign: 'center' }}>
                             <button type="button" className="btn btn-ghost btn-icon" title={tip} aria-label={`${r.person.name} · ${tip}`} onClick={() => openCell(r.person.id, c.title.id)}
@@ -463,20 +470,20 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
 
       {canManage && chip !== 'sortis' && others.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-          <span>Non suivis dans la matrice :</span>
+          <span>{t('Not followed in the matrix:')}</span>
           {others.map((p) => (
-            <button key={p.id} type="button" className="vg-chip" title="Modifier la fiche du salarié" onClick={() => setEditId(p.id)}>
+            <button key={p.id} type="button" className="vg-chip" title={t('Edit the employee record')} onClick={() => setEditId(p.id)}>
               {p.name}{p.job && <span style={{ opacity: 0.6 }}>{p.job}</span>}
             </button>
           ))}
         </div>
       )}
 
-      <Dialog open={!!(row && cell)} onClose={closeCell} width={600} kicker="Habilitations et formations" title={cellName}>
+      <Dialog open={!!(row && cell)} onClose={closeCell} width={600} kicker={t('Qualifications and training')} title={cellName}>
         {row && cell && <CellView key={`${row.person.id}:${cell.title.id}`} row={row} cell={cell} canManage={canManage} today={today} />}
       </Dialog>
 
-      <Dialog open={!!editPerson} onClose={closeEdit} title={editPerson ? `Modifier ${editPerson.name}` : ''} kicker="Personnel" width={540}>
+      <Dialog open={!!editPerson} onClose={closeEdit} title={editPerson ? fill(t('Edit {name}'), { name: editPerson.name }) : ''} kicker={t('Staff')} width={540}>
         {editPerson && <PersonForm key={editPerson.id} person={editPerson} version={versions?.person[editPerson.id]} sites={options.sites} archivedSites={archivedSites} services={services} today={today} onDone={closeEdit} onCancel={closeEdit} />}
       </Dialog>
     </>

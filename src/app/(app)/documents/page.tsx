@@ -14,12 +14,14 @@ import { loadDocuments, matchesSearch, type DocumentRow } from '@/lib/data/docum
 import { loadFormOptions } from '@/lib/data/options';
 import { lcfirst } from '@/lib/queries';
 import { currentSiteId } from '@/lib/session';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.docs.title };
 
 const PATH = '/documents';
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });
 
 function matchesStatus(d: DocumentRow, s: StatusFilter) {
   switch (s) {
@@ -37,6 +39,7 @@ function matchesStatus(d: DocumentRow, s: StatusFilter) {
  */
 export default async function DocumentsPage({ searchParams }: PageProps<'/documents'>) {
   const { role } = await guard('docs');
+  const { t } = await getI18n();
   const sp = await searchParams;
   // Rôles en consultation seule : documents en vigueur, sans révisions en cours ni circuits.
   const manager = canEdit(role, 'docs');
@@ -69,11 +72,11 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
 
   const inForce = kpis.find((k) => k.key === 'vigueur')!.value;
   const sub = manager
-    ? `${plural(inForce, 'document en vigueur', 'documents en vigueur')} · ${plural(data.overdueCount, 'revue en retard', 'revues en retard')}`
-    : `${plural(inForce, 'document en vigueur', 'documents en vigueur')} · consultation`;
-  const emptyText = !source.ok ? 'Documents de Codex indisponibles.'
-    : rows.length ? 'Aucun document ne correspond aux filtres.'
-      : siteId ? 'Aucun document QHSE de Codex pour ce site.' : 'Aucun document QHSE dans Codex.';
+    ? `${plural(inForce, t('{n} document in force'), t('{n} documents in force'))} · ${plural(data.overdueCount, t('{n} late review'), t('{n} late reviews'))}`
+    : `${plural(inForce, t('{n} document in force'), t('{n} documents in force'))} · ${t('view only#lower')}`;
+  const emptyText = !source.ok ? t('Codex documents unavailable.')
+    : rows.length ? t('No document matches the filters.')
+      : siteId ? t('No QHSE document from Codex for this site.') : t('No QHSE document in Codex.');
 
   const toolbar = (
     <>
@@ -82,29 +85,29 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
         {type && <input type="hidden" name="type" value={type} />}
         {processCode && <input type="hidden" name="processus" value={processCode} />}
         {statut && <input type="hidden" name="statut" value={statut} />}
-        <input className="input" name="q" defaultValue={q} placeholder="Référence ou titre…" aria-label="Rechercher un document"
+        <input className="input" name="q" defaultValue={q} placeholder={t('Reference or title…')} aria-label={t('Search a document')}
           style={{ fontSize: 12.5, minHeight: 30, padding: '5px 10px 5px 30px' }} />
       </form>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {[{ key: undefined as string | undefined, label: 'Tous', n: byType.length }, ...types.map(([k, label]) => ({ key: k, label, n: byType.filter((d) => d.typeCode === k).length }))].map((f) => (
+        {[{ key: undefined as string | undefined, label: t('All'), n: byType.length }, ...types.map(([k, label]) => ({ key: k, label, n: byType.filter((d) => d.typeCode === k).length }))].map((f) => (
           <Link key={f.label} href={hrefWith(PATH, params, { type: f.key })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
             {f.label}<span style={{ opacity: 0.6 }}>{f.n}</span>
           </Link>
         ))}
       </div>
-      <FilterMenu key={`p-${processCode}`} icon="ph-funnel" label={`Processus : ${processCode ? lcfirst(processLabel(processCode)) : 'tous'}`}
+      <FilterMenu key={`p-${processCode}`} icon="ph-funnel" label={fill(t('Process: {value}'), { value: processCode ? lcfirst(processLabel(processCode)) : t('all') })}
         options={[
-          { href: hrefWith(PATH, params, { processus: undefined }), label: 'Tous les processus', on: !processCode, n: byProcess.length },
+          { href: hrefWith(PATH, params, { processus: undefined }), label: t('All processes'), on: !processCode, n: byProcess.length },
           ...processes.map((p) => ({ href: hrefWith(PATH, params, { processus: p }), label: processLabel(p), on: processCode === p, n: byProcess.filter((d) => d.process === p).length })),
         ]} />
       {manager && (
-        <FilterMenu key={`s-${statut}`} label={`Statut : ${statusLabel ? lcfirst(statusLabel) : 'tous'}`}
+        <FilterMenu key={`s-${statut}`} label={fill(t('Status: {value}'), { value: statusLabel ? lcfirst(statusLabel) : t('all') })}
           options={[
-            { href: hrefWith(PATH, params, { statut: undefined }), label: 'Tous les statuts', on: !statut, n: byStatus.length },
+            { href: hrefWith(PATH, params, { statut: undefined }), label: t('All statuses'), on: !statut, n: byStatus.length },
             ...STATUS_FILTERS.map(([k, label]) => ({ href: hrefWith(PATH, params, { statut: k }), label, on: statut === k, n: byStatus.filter((d) => matchesStatus(d, k)).length })),
           ]} />
       )}
-      {filtered && <Link href={PATH} scroll={false} className="vg-link">Réinitialiser</Link>}
+      {filtered && <Link href={PATH} scroll={false} className="vg-link">{t('Reset')}</Link>}
     </>
   );
 
@@ -118,7 +121,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
         </p>
         {!source.ok && (
           <div className="card" role="status" style={{ padding: '10px 14px', borderColor: 'var(--tone-warn-dot)', fontSize: 12.5, textWrap: 'pretty' }}>
-            {source.message} Les revues et circuits de validation ne sont pas suivis tant que la source n&apos;est pas lue.
+            {source.message} {t('Reviews and approval workflows are not followed as long as the source is not read.')}
           </div>
         )}
         {manager && source.ok && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
@@ -134,7 +137,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
                   {k.sub && <span style={{ fontSize: 12, color: k.subTone === 'neutral' ? 'var(--color-neutral-400)' : TONE[k.subTone].dot }}>{k.sub}</span>}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{k.note}</div>
-                <span className="vg-sr-only">{on ? ' (filtre actif, retirer)' : ' (afficher ces documents)'}</span>
+                <span className="vg-sr-only">{on ? t(' (active filter, remove)') : t(' (show these documents)')}</span>
               </Link>
             );
           })}
@@ -156,8 +159,8 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
 
         <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
           {manager
-            ? <>Maîtrise des informations documentées (ISO 9001 §7.5) : seule la révision en vigueur est diffusée. Rédaction, circuits de validation, revues et retraits se font dans Codex.</>
-            : <>Consultation des documents en vigueur (ISO 9001 §7.5). Pour signaler une erreur ou proposer une modification, contactez le propriétaire du document ou l&apos;animateur QHSE.</>}
+            ? t('Control of documented information (ISO 9001 §7.5): only the revision in force is distributed. Drafting, approval workflows, reviews and withdrawals are done in Codex.')
+            : t('View of the documents in force (ISO 9001 §7.5). To report an error or propose a change, contact the owner of the document or the QHSE coordinator.')}
         </p>
       </div>
     </>

@@ -7,6 +7,8 @@ import { daysBetween, fmtDate } from '@/lib/dates';
 import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import { SKILL_STATES, type SkillState } from '@/lib/domain';
 import type { ArchivedRecord, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
 // Plan d'actions : aucun recyclage ni formation ne donne lieu à une action QSE (réponses du service QHSE du 15/10/2026,
@@ -19,10 +21,10 @@ export const lcfirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase
 export { period } from '@/lib/rules/skills';
 
 /** Un titre jamais suivi appelle une formation initiale, sinon un recyclage. */
-export const renewalNoun = (state: SkillState) => (state === 'r' ? 'formation' : 'recyclage');
-export const plannedLabel = (state: SkillState) => (state === 'r' ? 'Formation planifiée' : 'Recyclage planifié');
+export const renewalNoun = (state: SkillState, t: T) => (state === 'r' ? t('training#noun') : t('renewal#noun'));
+export const plannedLabel = (state: SkillState, t: T) => (state === 'r' ? t('Training planned') : t('Renewal planned'));
 
-export const validityLabel = (t: Pick<TrainingTitle, 'validityMonths'>) => (t.validityMonths ? `Validité ${t.validityMonths} mois` : 'Sans échéance');
+export const validityLabel = (ti: Pick<TrainingTitle, 'validityMonths'>, t: T) => (ti.validityMonths ? fill(t('Validity {n} months'), { n: ti.validityMonths }) : t('No expiry'));
 
 /** Pastille d'état de la matrice (cercle coloré + icône). */
 export function SkillDot({ state, size = 22 }: { state: SkillState; size?: number }) {
@@ -40,16 +42,16 @@ export function PlannedMark({ size = 7, style }: { size?: number; style?: CSSPro
 }
 
 /** Précision de l'état : « expiré depuis le 28/09/2026 », « expire le 20/11/2026 · dans 44 j »… */
-export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtainedOn'>, now: string) {
+export function stateDetail(c: Pick<SkillCell, 'state' | 'expiresOn' | 'obtainedOn'>, now: string, t: T) {
   const days = c.expiresOn ? daysBetween(now, c.expiresOn) : null;
   switch (c.state) {
-    case 'x': return c.expiresOn ? `Expiré depuis le ${fmtDate(c.expiresOn)} · ${-days!} j` : 'Expiré';
-    case 's': return c.expiresOn ? `Expire le ${fmtDate(c.expiresOn)} · dans ${days} j` : `Expire sous ${SKILL_SOON_DAYS} jours`;
-    case 'v': return c.expiresOn ? `Valide jusqu'au ${fmtDate(c.expiresOn)}` : 'Valide · sans échéance';
-    case 'r': return 'Requis, jamais suivi';
-    case 'p': return c.expiresOn ? `Inutilisable d'après Cursus · échéance du titre le ${fmtDate(c.expiresOn)}` : "Inutilisable d'après Cursus";
-    case 'u': return 'Titres détenus de Cursus indisponibles : état non calculé';
-    default: return c.obtainedOn ? 'Non requis pour ce salarié · titre détenu' : 'Non requis pour ce salarié';
+    case 'x': return c.expiresOn ? fill(t('Expired since {date} · {n} d'), { date: fmtDate(c.expiresOn), n: -days! }) : t('Expired');
+    case 's': return c.expiresOn ? fill(t('Expires on {date} · in {n} d'), { date: fmtDate(c.expiresOn), n: days! }) : fill(t('Expires within {n} days'), { n: SKILL_SOON_DAYS });
+    case 'v': return c.expiresOn ? fill(t('Valid until {date}'), { date: fmtDate(c.expiresOn) }) : t('Valid · no expiry');
+    case 'r': return t('Required, never attended');
+    case 'p': return c.expiresOn ? fill(t('Unusable according to Cursus · title expires on {date}'), { date: fmtDate(c.expiresOn) }) : t('Unusable according to Cursus');
+    case 'u': return t('Titles held from Cursus unavailable: state not computed');
+    default: return c.obtainedOn ? t('Not required for this employee · title held') : t('Not required for this employee');
   }
 }
 
@@ -65,46 +67,50 @@ export function Fact({ label, children, wide }: { label: string; children: React
 
 /** Lien vers l'action de recyclage reprise dans le plan d'actions, avec son avancement (consultation seule). */
 export function RenewalLink({ renewal, showDue = true }: { renewal: RenewalInfo; showDue?: boolean }) {
+  const { t } = useI18n();
   // Action qu'on ne peut pas lire (canReadAction) : numéro seul, sans lien vers une fiche refusée.
   if (!renewal.readable) return <span style={{ fontSize: 12.5 }}>{renewal.id}</span>;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       <Link href={actionHref(renewal.id)} className="vg-link" style={{ fontSize: 12.5 }}>{renewal.id}</Link>
       <ToneTag tone={renewal.tone} style={{ padding: '1px 7px' }}>{renewal.statusLabel}</ToneTag>
-      {showDue && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>date cible {fmtDate(renewal.dueOn)} · {renewal.pilot}</span>}
+      {showDue && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fill(t('target date {date}'), { date: fmtDate(renewal.dueOn) })} · {renewal.pilot}</span>}
     </span>
   );
 }
 
 /** Étiquette « Recyclage planifié · A-xxx » (lien vers le plan d'actions). */
 export function RenewalTag({ renewal, state }: { renewal: RenewalInfo; state: SkillState }) {
-  const label = renewal.planned ? plannedLabel(state) : `${state === 'r' ? 'Formation' : 'Recyclage'} · ${lcfirst(renewal.statusLabel)}`;
+  const { t } = useI18n();
+  const label = renewal.planned ? plannedLabel(state, t) : `${state === 'r' ? t('Training') : t('Renewal')} · ${lcfirst(renewal.statusLabel)}`;
+  const target = `${renewal.label} — ${fill(t('target date {date}'), { date: fmtDate(renewal.dueOn) })}`;
   if (!renewal.readable) {
     return <span className="tag tag-accent" style={{ gap: 6 }}><Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}</span>;
   }
   return (
-    <Link href={actionHref(renewal.id)} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={`${renewal.label} — date cible ${fmtDate(renewal.dueOn)}`}>
-      <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}<span className="vg-sr-only">{` (${renewal.label} — date cible ${fmtDate(renewal.dueOn)})`}</span>
+    <Link href={actionHref(renewal.id)} className="tag tag-accent" style={{ textDecoration: 'none', gap: 6 }} title={target}>
+      <Icon name="ph-calendar-check" size={13} />{label} · {renewal.id}<span className="vg-sr-only">{` (${target})`}</span>
     </Link>
   );
 }
 
 /** Tableau des titres conservés (consultation seule) : titre ou salarié, obtention, échéance, organisme, attestations reprises. */
 export function ArchiveTable({ records, first }: { records: ArchivedRecord[]; first: 'title' | 'person' }) {
+  const { t } = useI18n();
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="table" style={{ fontSize: 12 }}>
-        <thead><tr><th>{first === 'title' ? 'Titre' : 'Salarié'}</th><th>Obtenu le</th><th>Échéance</th><th>Organisme</th><th aria-label="Attestations" /></tr></thead>
+        <thead><tr><th>{first === 'title' ? t('Title#qualification') : t('Employee')}</th><th>{t('Obtained on')}</th><th>{t('Expiry')}</th><th>{t('Provider')}</th><th aria-label={t('Certificates')} /></tr></thead>
         <tbody>
           {records.map((r) => (
             <tr key={`${r.person.id}|${r.title.id}`}>
               <td>{first === 'title' ? r.title.label : r.person.name}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{r.obtainedOn ? fmtDate(r.obtainedOn) : '—'}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>{r.expiresOn ? fmtDate(r.expiresOn) : r.obtainedOn ? 'Sans échéance' : '—'}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{r.expiresOn ? fmtDate(r.expiresOn) : r.obtainedOn ? t('No expiry') : '—'}</td>
               <td>{r.provider ?? '—'}</td>
               <td style={{ textAlign: 'right' }}>
                 {r.files.map((f) => (
-                  <a key={f.id} href={f.url} target="_blank" rel="noopener" aria-label={`Attestation ${f.name}`} className="vg-link"><Icon name={fileIcon(f.mime)} size={15} /></a>
+                  <a key={f.id} href={f.url} target="_blank" rel="noopener" aria-label={fill(t('Certificate {name}'), { name: f.name })} className="vg-link"><Icon name={fileIcon(f.mime)} size={15} /></a>
                 ))}
               </td>
             </tr>

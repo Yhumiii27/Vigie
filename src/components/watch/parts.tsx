@@ -2,11 +2,13 @@
 
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { MAX_BATCH_BYTES, MAX_FILES_PER_BATCH, fileBatchError } from '@/lib/attachments';
+import { fill, type T } from '@/i18n/translate';
 
 const MB = 1024 * 1024;
 
 /** Consigne d'un champ à plusieurs fichiers (preuves d'évaluation) : mêmes limites que checkPickedFiles et le serveur. */
-export const FILES_HINT = `PDF, image ou document Office · ${MAX_FILES_PER_BATCH} fichiers et ${MAX_BATCH_BYTES / MB} Mo au maximum par envoi.`;
+export const filesHint = (t: T) =>
+  fill(t('PDF, image or Office document · {n} files and {mb} MB at most per upload.'), { n: MAX_FILES_PER_BATCH, mb: MAX_BATCH_BYTES / MB });
 
 /**
  * Motif de refus d'un choix de fichiers (fichier trop lourd, trop de fichiers, volume total), ou null : mêmes limites

@@ -17,6 +17,8 @@ import { loadSiteAdmin } from '@/lib/data/sites';
 import { loadSkillMatrix, loadTitleChoices } from '@/lib/data/skills';
 import { loadPeopleAdmin } from '@/lib/data/people';
 import { PeoplePanel } from '@/components/skills/PeoplePanel';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: SCREENS.skills.title };
 
@@ -24,6 +26,7 @@ const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : u
 
 export default async function SkillsPage({ searchParams }: PageProps<'/habilitations'>) {
   const session = await guard('skills');
+  const { t } = await getI18n();
   const sp = await searchParams;
   // Bandeaux : titres manquants ou expirés, mais aussi expirant avant ou pendant une affectation Keystone (`lapses`).
   // Rôle Salarié : sa seule ligne, ses échéances et ses affectations (filtrées par loadSkillMatrix).
@@ -39,7 +42,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
   // d'action : l'écran ne crée pas d'action QSE (recyclages gérés par le service RH, réponses du service QHSE du 15/10/2026).
   const options = { sites: self ? [] : sites };
   // Fiche d'un salarié encore rattaché à un site archivé (vue « Tous les sites ») : son site reste affiché tel quel.
-  const archivedSites = self ? [] : allSites.filter((s) => s.archivedOn).map((s) => [s.id, `${s.label} (archivé)`] as Option);
+  const archivedSites = self ? [] : allSites.filter((s) => s.archivedOn).map((s) => [s.id, fill(t('{site} (archived)'), { site: s.label })] as Option);
 
   // Lien profond (échéances, notifications, fiche action) : ?salarie=<personId>[&titre=<titleId>].
   const personId = str(sp.salarie);
@@ -64,16 +67,16 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
     ? Object.fromEntries(allSites.filter((x) => rowSites.has(x.id)).map((x) => [x.id, x.label.split(' — ')[0]]))
     : null;
 
-  const sub = self ? `Mes habilitations · ${titles.length} titres suivis` : `${rows.length} salariés · ${titles.length} titres suivis`;
+  const sub = self ? fill(t('My qualifications · {n} titles followed'), { n: titles.length }) : fill(t('{people} employees · {n} titles followed'), { people: rows.length, n: titles.length });
   // HAB-09 : vue « À prévoir » (?vue=a-prevoir) — recyclages et formations des 12 prochains mois, calculés à l'affichage.
   const forecastOn = str(sp.vue) === 'a-prevoir';
   const forecast = forecastOn ? renewalForecast(rows, now) : null;
   // D01 (décision CV-10) : vue « Personnel (Cursus) » — fiches à rattacher et absentes de Cursus, QHSE et direction.
   const peopleAdmin = manageTitles && str(sp.vue) === 'personnel' ? await loadPeopleAdmin() : null;
   const views = [
-    { href: '/habilitations', label: 'Matrice', on: !forecastOn && !peopleAdmin, icon: 'ph-grid-four' },
-    { href: '/habilitations?vue=a-prevoir', label: 'À prévoir · 12 mois', on: forecastOn, icon: 'ph-calendar-dots' },
-    ...(manageTitles ? [{ href: '/habilitations?vue=personnel', label: 'Personnel (Cursus)', on: !!peopleAdmin, icon: 'ph-users-three' }] : []),
+    { href: '/habilitations', label: t('Matrix'), on: !forecastOn && !peopleAdmin, icon: 'ph-grid-four' },
+    { href: '/habilitations?vue=a-prevoir', label: t('To plan · 12 months'), on: forecastOn, icon: 'ph-calendar-dots' },
+    ...(manageTitles ? [{ href: '/habilitations?vue=personnel', label: t('Staff (Cursus)'), on: !!peopleAdmin, icon: 'ph-users-three' }] : []),
   ];
   const allSiteLabels = Object.fromEntries(allSites.map((x) => [x.id, x.label.split(' — ')[0]]));
 
@@ -88,7 +91,7 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
         </p>
         {!source.ok && (
           <div className="card" role="status" style={{ padding: '10px 14px', borderColor: 'var(--tone-warn-dot)', fontSize: 12.5, textWrap: 'pretty' }}>
-            {source.message} Les états des titres requis ne sont pas calculés : aucune alerte ni échéance d&apos;habilitation tant que la source n&apos;est pas lue.
+            {source.message} {t('The states of the required titles are not computed: no qualification alert or deadline as long as the source is not read.')}
           </div>
         )}
         <SkillAlerts alerts={lapses} today={now} />
@@ -97,23 +100,22 @@ export default async function SkillsPage({ searchParams }: PageProps<'/habilitat
           {/* SEC-13 : droit d'accès d'un salarié (RGPD) — animateur QHSE et direction (données de santé comprises). */}
           {canSeeHealth(session.role) && (
             <a href="/habilitations/donnees-personnelles" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
-              <i className="ph ph-user-list" style={{ fontSize: 13 }} aria-hidden />Données personnelles
+              <i className="ph ph-user-list" style={{ fontSize: 13 }} aria-hidden />{t('Personal data')}
             </a>
           )}
         </div>
         {peopleAdmin ? <PeoplePanel admin={peopleAdmin} siteLabels={allSiteLabels} canReassign={canEdit(session.role, 'actions')} /> : forecast ? (
           <div className="card" style={{ gap: 12 }}>
-            <CardHead title="Recyclages et formations à prévoir" aside={(
+            <CardHead title={t('Renewals and trainings to plan')} aside={(
               <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                 {/* Lien HTML simple, nouvel onglet : la feuille d'impression ne reste pas chargée dans l'application. */}
                 <a href="/habilitations/imprimer" target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm">
-                  <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />Plan de formation
+                  <i className="ph ph-printer" style={{ fontSize: 13 }} aria-hidden />{t('Training plan')}
                 </a>
               </span>
             )} />
             <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-              Titres requis expirés, jamais suivis, suspendus ou expirant d&apos;ici 12 mois, par mois d&apos;échéance, d&apos;après Cursus. Plan de formation
-              et sessions gérés par le service RH dans Cursus : aucune action QSE n&apos;est créée.
+              {t('Required titles expired, never attended, suspended or expiring within 12 months, by month of expiry, according to Cursus. Training plan and sessions managed by the HR department in Cursus: no QSE action is created.')}
             </p>
             <ForecastView forecast={forecast} />
           </div>

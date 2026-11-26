@@ -14,6 +14,8 @@ import {
 } from '@/server/review';
 import styles from './review.module.css';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 const SOURCE_OPTIONS = REVIEW_SOURCE_KEYS.map((k) => [k, REVIEW_SOURCES[k].label] as const);
 const KIND_OPTIONS = REVIEW_KIND_KEYS.map((k) => [k, REVIEW_KINDS[k].label] as const);
@@ -31,39 +33,40 @@ export function ItemForm({ reviewId, version, item, people, canDelete, onClose }
   /** QUA-12 : version de la revue à l'ouverture de la page. */
   version?: string;
 }) {
+  const { t } = useI18n();
   const [source, setSource] = useState<string>(item?.source ?? 'manuel');
   const auto = REVIEW_SOURCES[source as keyof typeof REVIEW_SOURCES]?.auto ?? false;
   return (
     <>
-      <ActionForm action={saveReviewItem} onDone={onClose} onCancel={onClose} submitLabel={item ? 'Enregistrer' : 'Ajouter'}
+      <ActionForm action={saveReviewItem} onDone={onClose} onCancel={onClose} submitLabel={item ? t('Save') : t('Add')}
         hidden={{ id: item?.id, reviewId: item ? undefined : reviewId, version: item ? version : undefined }}>
-        <Field name="label" label="Élément d'entrée de la revue" hint="Ex. Performance des fournisseurs, Résultats des audits internes.">
+        <Field name="label" label={t('Review input item')} hint={t('E.g. Supplier performance, Internal audit results.')}>
           <Input name="label" defaultValue={item?.label} maxLength={160} autoFocus />
         </Field>
-        <Field name="source" label="Source"
-          hint={auto ? 'Calculé par Vigie : fourni dès que les données de la section existent dans le dossier.' : 'Élément remis par un contributeur, coché à réception.'}>
+        <Field name="source" label={t('Source')}
+          hint={auto ? t('Computed by Vigie: provided as soon as the data of the section exist in the file.') : t('Item handed in by a contributor, ticked on receipt.')}>
           <Select name="source" options={SOURCE_OPTIONS} defaultValue={item?.source ?? 'manuel'} onChange={(e) => setSource(e.target.value)} />
         </Field>
         {!auto && (
           <>
             <FormRow>
-              <Field name="ownerId" label="Fourni par">
-                <Select name="ownerId" options={withCurrent(people, item?.ownerId)} defaultValue={item?.ownerId ?? ''} placeholder="Hors annuaire / Vigie" />
+              <Field name="ownerId" label={t('Provided by')}>
+                <Select name="ownerId" options={withCurrent(people, item?.ownerId)} defaultValue={item?.ownerId ?? ''} placeholder={t('Outside the directory / Vigie')} />
               </Field>
-              <Field name="dueOn" label="Attendu le">
+              <Field name="dueOn" label={t('Expected on')}>
                 <Input name="dueOn" type="date" defaultValue={item?.dueOn ?? ''} />
               </Field>
             </FormRow>
-            <Field name="owner" label="Précision" hint="Contributeur hors annuaire, référence d'action (ex. A-184)…">
+            <Field name="owner" label={t('Detail')} hint={t('Contributor outside the directory, action reference (e.g. A-184)…')}>
               <Input name="owner" defaultValue={item?.owner} maxLength={80} />
             </Field>
-            {!item && <Checkbox name="done" label="Déjà fourni" />}
+            {!item && <Checkbox name="done" label={t('Already provided')} />}
           </>
         )}
       </ActionForm>
       {item && canDelete && (
         <Footer>
-          <DeleteButton run={() => deleteReviewItem(item.id)} onDone={onClose} label="Retirer de la check-list" note="Donnée de préparation : retrait définitif." />
+          <DeleteButton run={() => deleteReviewItem(item.id)} onDone={onClose} label={t('Remove from the checklist')} note={t('Preparation data: permanent removal.')} />
         </Footer>
       )}
     </>
@@ -76,28 +79,29 @@ export function DecisionForm({ reviewId, version, decision, people, canDelete, o
   reviewId: number; decision?: DecisionView; people: readonly Option[]; canDelete: boolean; onClose: () => void;
   version?: string;
 }) {
+  const { t } = useI18n();
   return (
     <>
-      <ActionForm action={saveReviewDecision} onDone={onClose} onCancel={onClose} submitLabel={decision ? 'Enregistrer' : 'Ajouter'}
+      <ActionForm action={saveReviewDecision} onDone={onClose} onCancel={onClose} submitLabel={decision ? t('Save') : t('Add')}
         hidden={{ id: decision?.id, reviewId: decision ? undefined : reviewId, version: decision ? version : undefined }}>
-        <Field name="kind" label="Nature">
+        <Field name="kind" label={t('Nature')}>
           <Select name="kind" options={DECISION_OPTIONS} defaultValue={decision?.kind ?? 'decision'} />
         </Field>
-        <Field name="text" label="Intitulé" hint="§9.3.3 : opportunités d'amélioration, modifications du système, besoins en ressources.">
+        <Field name="text" label={t('Title')} hint={t('§9.3.3: improvement opportunities, changes to the system, resource needs.')}>
           <TextArea name="text" rows={3} maxLength={400} defaultValue={decision?.text} autoFocus />
         </Field>
         <FormRow>
-          <Field name="pilotId" label="Pilote">
-            <Select name="pilotId" options={withCurrent(people, decision?.pilotId, decision?.pilot)} defaultValue={decision?.pilotId ?? ''} placeholder="À désigner" />
+          <Field name="pilotId" label={t('Lead')}>
+            <Select name="pilotId" options={withCurrent(people, decision?.pilotId, decision?.pilot)} defaultValue={decision?.pilotId ?? ''} placeholder={t('To appoint')} />
           </Field>
-          <Field name="dueOn" label="Échéance">
+          <Field name="dueOn" label={t('Deadline')}>
             <Input name="dueOn" type="date" defaultValue={decision?.dueOn ?? ''} />
           </Field>
         </FormRow>
       </ActionForm>
       {decision && canDelete && !decision.actionId && (
         <Footer>
-          <DeleteButton run={() => deleteReviewDecision(decision.id)} onDone={onClose} label="Retirer" note="Projet de décision avant la séance : retrait définitif." />
+          <DeleteButton run={() => deleteReviewDecision(decision.id)} onDone={onClose} label={t('Remove')} note={t('Draft decision before the meeting: permanent removal.')} />
         </Footer>
       )}
     </>
@@ -109,23 +113,24 @@ export function DecisionForm({ reviewId, version, decision, people, canDelete, o
 export function HoldForm({ review, version, people, now, next, allSites, onClose }: {
   review: ReviewView; version?: string; people: readonly Option[]; now: string; next: { on: string; kind: ReviewKind }; allSites: boolean; onClose: () => void;
 }) {
+  const { t } = useI18n();
   const chosen = new Set(review.participantIds);
   // Participants déjà enregistrés mais sortis de l'effectif : conservés dans la liste.
   const departed = review.participantIds.filter((id) => !people.some(([v]) => v === id)).map((id) => [id, review.participants[review.participantIds.indexOf(id)] ?? id] as const);
   const list = [...people, ...departed].map(([v, l]) => [v, l.split(' — ')[0]] as const);
   return (
     <ActionForm action={holdReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id, version }}
-      submitLabel={review.status === 'tenue' ? 'Enregistrer le compte rendu' : 'Enregistrer · revue tenue'}>
+      submitLabel={review.status === 'tenue' ? t('Save the minutes') : t('Save · review held')}>
       {/* Première saisie : le dossier de séance est figé (indicateurs arrêtés à la date de la séance, AUD-06) sur tout le périmètre. */}
       <p style={{ margin: 0, fontSize: 12, color: !allSites && !review.seanceFrozen ? 'var(--tone-warn-fg)' : 'var(--color-neutral-500)', textWrap: 'pretty' }}>
         {review.seanceFrozen
-          ? 'Dossier de séance figé à la première saisie : le corriger ne recalcule pas ses indicateurs, sauf si la date de la séance change (« Tous les sites » requis).'
-          : `À l'enregistrement, le dossier de séance est figé avec les indicateurs arrêtés à la date de la séance.${allSites ? '' : ' Sélectionnez d’abord « Tous les sites » : il couvre tout le périmètre.'}`}
+          ? t('Meeting file frozen at the first entry: correcting it does not recompute its indicators, unless the meeting date changes (“All sites” required).')
+          : t('When saved, the meeting file is frozen with the indicators set on the meeting date.') + (allSites ? '' : t(' Select “All sites” first: it covers the whole scope.'))}
       </p>
-      <Field name="reviewOn" label="Date de la séance" hint="Corrigez-la si la revue s'est tenue un autre jour.">
+      <Field name="reviewOn" label={t('Meeting date')} hint={t('Correct it if the review took place on another day.')}>
         <Input name="reviewOn" type="date" defaultValue={review.reviewOn <= now ? review.reviewOn : now} max={now} />
       </Field>
-      <Field name="participantIds" label="Participants">
+      <Field name="participantIds" label={t('Participants')}>
         <div className={styles.people}>
           {list.map(([id, label]) => (
             <label key={id} className="vg-check">
@@ -136,23 +141,23 @@ export function HoldForm({ review, version, people, now, next, allSites, onClose
           ))}
         </div>
       </Field>
-      <Field name="externalParticipants" label="Autres participants" hint="Hors annuaire : représentants du CSE, organisme, consultant…">
+      <Field name="externalParticipants" label={t('Other participants')} hint={t('Outside the directory: CSE representatives, body, consultant…')}>
         <Input name="externalParticipants" defaultValue={review.externalParticipants ?? ''} maxLength={300} />
       </Field>
-      <Field name="customerPerception" label="Perception des clients (§9.3.2 c1)" hint="Retours clients, enquêtes, respect des délais de livraison.">
+      <Field name="customerPerception" label={t('Customer perception (§9.3.2 c1)')} hint={t('Customer feedback, surveys, on-time delivery.')}>
         <TextArea name="customerPerception" rows={3} maxLength={2000} defaultValue={review.customerPerception ?? ''} />
       </Field>
-      <Field name="resourceNeeds" label="Besoins en ressources (§9.3.3 c)" hint="Effectifs, équipements, budget, formations à programmer.">
+      <Field name="resourceNeeds" label={t('Resource needs (§9.3.3 c)')} hint={t('Headcount, equipment, budget, trainings to schedule.')}>
         <TextArea name="resourceNeeds" rows={3} maxLength={2000} defaultValue={review.resourceNeeds ?? ''} />
       </Field>
-      <Field name="minutes" label="Compte rendu et conclusions">
+      <Field name="minutes" label={t('Minutes and conclusions')}>
         <TextArea name="minutes" rows={5} maxLength={4000} defaultValue={review.minutes ?? ''} />
       </Field>
       <FormRow>
-        <Field name="nextReviewOn" label="Prochaine revue le" hint="Revue suivante déjà planifiée : reportée à cette date au besoin ; sinon créée (check-list reprise) avec son échéance au programme.">
+        <Field name="nextReviewOn" label={t('Next review on')} hint={t('Next review already planned: postponed to this date if needed; otherwise created (checklist taken over) with its deadline in the programme.')}>
           <Input name="nextReviewOn" type="date" defaultValue={next.on} />
         </Field>
-        <Field name="nextKind" label="Type de la prochaine revue">
+        <Field name="nextKind" label={t('Type of the next review')}>
           <Select name="nextKind" options={KIND_OPTIONS} defaultValue={next.kind} />
         </Field>
       </FormRow>
@@ -165,29 +170,31 @@ export function HoldForm({ review, version, people, now, next, allSites, onClose
 export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }: {
   nextOn: string; kind: ReviewKind; copyFrom: number | null; copyLabel: string | null; onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
-    <ActionForm action={createReview} onDone={onClose} onCancel={onClose} hidden={{ copyFrom }} submitLabel="Planifier la revue">
+    <ActionForm action={createReview} onDone={onClose} onCancel={onClose} hidden={{ copyFrom }} submitLabel={t('Plan the review')}>
       <FormRow>
-        <Field name="reviewOn" label="Date de la revue">
+        <Field name="reviewOn" label={t('Review date')}>
           <Input name="reviewOn" type="date" defaultValue={nextOn} autoFocus />
         </Field>
-        <Field name="kind" label="Type">
+        <Field name="kind" label={t('Type')}>
           <Select name="kind" options={KIND_OPTIONS} defaultValue={kind} />
         </Field>
       </FormRow>
-      {copyFrom && copyLabel && <Checkbox name="copyItems" label={`Reprendre la check-list de la ${copyLabel.toLowerCase()}`} defaultChecked />}
+      {copyFrom && copyLabel && <Checkbox name="copyItems" label={fill(t('Take over the checklist of the {review}'), { review: copyLabel.toLowerCase() })} defaultChecked />}
       <p style={{ margin: 0, fontSize: 12, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        La revue est inscrite au programme annuel : elle reprend l&apos;échéance de revue déjà prévue ce mois-là, sinon elle est ajoutée à la ligne « Revues de direction ».
+        {t('The review is entered in the annual programme: it takes over the review deadline already planned that month, otherwise it is added to the “Management reviews” line.')}
       </p>
     </ActionForm>
   );
 }
 
 export function RescheduleForm({ review, onClose }: { review: ReviewView; onClose: () => void }) {
+  const { t } = useI18n();
   return (
-    <ReasonForm action={rescheduleReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }} submitLabel="Reporter la revue"
-      placeholder="Ex. Indisponibilité de la direction" before={(
-        <Field name="to" label="Nouvelle date" hint="L'échéance de la revue au programme annuel est reportée à cette date (première date conservée).">
+    <ReasonForm action={rescheduleReview} onDone={onClose} onCancel={onClose} hidden={{ id: review.id }} submitLabel={t('Postpone the review')}
+      placeholder={t('E.g. Management unavailable')} before={(
+        <Field name="to" label={t('New date')} hint={t('The deadline of the review in the annual programme is postponed to this date (first date kept).')}>
           <Input name="to" type="date" defaultValue={review.reviewOn} autoFocus />
         </Field>
       )} />
@@ -198,32 +205,33 @@ export function RescheduleForm({ review, onClose }: { review: ReviewView; onClos
 
 /** Visa de la direction : confirmation en ligne, puis clôture et dossier figé. */
 export function CloseReviewButton({ id, allSites }: { id: number; allSites: boolean }) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   if (!asking) {
     return (
       <button type="button" className="btn btn-primary vg-btn-sm" onClick={() => setAsking(true)}
-        title="Visa de la direction : le dossier de revue est figé et n'est plus recalculé.">
-        <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />Clôturer et figer le dossier
+        title={t('Management sign-off: the review file is frozen and no longer recomputed.')}>
+        <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />{t('Close and freeze the file')}
       </button>
     );
   }
   return (
     <span style={{ display: 'grid', gap: 6, flexBasis: '100%' }}>
       <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-        Le dossier est figé avec les indicateurs arrêtés à la date de la séance (dossier de séance et compte rendu) et ne pourra plus être modifié.
-        {!allSites && ' Sélectionnez d’abord « Tous les sites » : le dossier archivé couvre tout le périmètre.'}
+        {t('The file is frozen with the indicators set on the meeting date (meeting file and minutes) and can no longer be changed.')}
+        {!allSites && t(' Select “All sites” first: the archived file covers the whole scope.')}
       </span>
       <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); setError(null); }}>Annuler</button>
+        <button type="button" className="btn btn-secondary vg-btn-sm" disabled={pending} onClick={() => { setAsking(false); setError(null); }}>{t('Cancel')}</button>
         <button type="button" className="btn btn-primary vg-btn-sm" disabled={pending || !allSites}
           onClick={() => start(async () => {
             const r = await closeReview(id);
             if (r.error) setError(r.error);
             else setAsking(false);
           })}>
-          <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />{pending ? 'Clôture…' : 'Confirmer la clôture'}
+          <i className="ph ph-seal-check" style={{ fontSize: 13 }} aria-hidden />{pending ? t('Closing…') : t('Confirm the closing')}
         </button>
       </span>
       {error && <span role="alert" style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{error}</span>}
@@ -233,11 +241,12 @@ export function CloseReviewButton({ id, allSites }: { id: number; allSites: bool
 
 /** Décision abandonnée après la séance (AUD-36) : motif obligatoire, la décision reste affichée barrée. */
 export function AbandonDecisionButton({ decision }: { decision: DecisionView }) {
+  const { t } = useI18n();
   return (
-    <ReasonButton action={abandonReviewDecision} hidden={{ id: decision.id }} label="Abandonner" className="vg-text-btn"
-      title={`${decision.kindLabel} abandonné(e)`} kicker={decision.text.length > 80 ? `${decision.text.slice(0, 79)}…` : decision.text} submitLabel="Abandonner"
-      message="La décision n'est jamais retirée du compte rendu : elle reste affichée barrée avec la date, l'auteur et le motif, et ne donne plus d'échéance « sans suite »."
-      placeholder="Ex. objectif repris par la décision de la revue suivante" />
+    <ReasonButton action={abandonReviewDecision} hidden={{ id: decision.id }} label={t('Abandon')} className="vg-text-btn"
+      title={fill(t('{kind} abandoned'), { kind: decision.kindLabel })} kicker={decision.text.length > 80 ? `${decision.text.slice(0, 79)}…` : decision.text} submitLabel={t('Abandon')}
+      message={t('The decision is never removed from the minutes: it stays shown struck through with the date, the author and the reason, and no longer gives a “no follow-up” deadline.')}
+      placeholder={t('E.g. objective taken over by the decision of the next review')} />
   );
 }
 
@@ -246,12 +255,13 @@ export function AbandonDecisionButton({ decision }: { decision: DecisionView }) 
  * (qui ne change pas) et à l'historique de la revue.
  */
 export function CorrectionButton({ review }: { review: ReviewView }) {
+  const { t } = useI18n();
   return (
-    <ReasonButton action={addReviewCorrection} hidden={{ id: review.id }} label="Ajouter un rectificatif" icon="ph-pen-nib" className="btn btn-ghost vg-btn-sm"
-      title="Rectificatif de la revue" kicker={`Revue de direction du ${fmtDate(review.reviewOn)}`} submitLabel="Signer le rectificatif"
-      message="Le dossier figé au visa ne se modifie pas : le rectificatif s'y ajoute, daté et signé en votre nom, et ne pourra plus être modifié (une erreur se corrige par un nouveau rectificatif)."
-      placeholder="Ex. erreur de saisie relevée par le CSE" before={(
-        <Field name="text" label="Rectificatif" hint="Ce qui est rectifié dans le dossier et la correction apportée.">
+    <ReasonButton action={addReviewCorrection} hidden={{ id: review.id }} label={t('Add a correction')} icon="ph-pen-nib" className="btn btn-ghost vg-btn-sm"
+      title={t('Correction of the review')} kicker={fill(t('Management review of {date}'), { date: fmtDate(review.reviewOn) })} submitLabel={t('Sign the correction')}
+      message={t('The file frozen at the sign-off does not change: the correction is added to it, dated and signed in your name, and can no longer be changed (an error is corrected by a new correction).')}
+      placeholder={t('E.g. entry error noted by the CSE')} before={(
+        <Field name="text" label={t('Correction')} hint={t('What is corrected in the file and the correction made.')}>
           <TextArea name="text" rows={4} maxLength={2000} autoFocus />
         </Field>
       )} />
@@ -259,10 +269,11 @@ export function CorrectionButton({ review }: { review: ReviewView }) {
 }
 
 export function CancelReviewButton({ review }: { review: ReviewView }) {
+  const { t } = useI18n();
   return (
-    <ReasonButton action={cancelReview} hidden={{ id: review.id }} label="Annuler la revue" icon="ph-x-circle" className="btn btn-ghost vg-btn-sm"
-      title="Annuler la revue" kicker={`Revue de direction du ${fmtDate(review.reviewOn)}`} submitLabel="Annuler la revue"
-      message="La revue et sa check-list restent consultables dans l'historique (filtre « Afficher les annulées »). Son échéance au programme annuel est annulée avec elle (liste « Éléments annulés »)."
-      placeholder="Ex. Revue regroupée avec la revue annuelle" />
+    <ReasonButton action={cancelReview} hidden={{ id: review.id }} label={t('Cancel the review')} icon="ph-x-circle" className="btn btn-ghost vg-btn-sm"
+      title={t('Cancel the review')} kicker={fill(t('Management review of {date}'), { date: fmtDate(review.reviewOn) })} submitLabel={t('Cancel the review')}
+      message={t('The review and its checklist stay viewable in the history (“Show the cancelled ones” filter). Its deadline in the annual programme is cancelled with it (“Cancelled items” list).')}
+      placeholder={t('E.g. Review grouped with the annual review')} />
   );
 }

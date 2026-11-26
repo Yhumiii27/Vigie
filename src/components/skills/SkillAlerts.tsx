@@ -7,51 +7,54 @@ import { TONE } from '@/lib/domain';
 import type { SkillAlert } from '@/lib/data/skills';
 import { Fact, RenewalTag, SkillDot, lcfirst, period, stateDetail } from './common';
 import { isBlocking, lapseFor, type Lapse } from '@/lib/rules/skills';
+import { useI18n } from '@/i18n/client';
+import { fill, type T } from '@/i18n/translate';
 
 const HEADLINE: Record<Lapse, string> = {
-  missing: 'Salarié au titre manquant affecté à une activité Keystone',
-  expired: 'Salarié au titre expiré affecté à une activité Keystone',
-  before: 'Titre expirant avant une affectation Keystone',
-  during: 'Titre expirant pendant une affectation Keystone',
+  missing: 'Employee with a missing title assigned to a Keystone activity',
+  expired: 'Employee with an expired title assigned to a Keystone activity',
+  before: 'Title expiring before a Keystone assignment',
+  during: 'Title expiring during a Keystone assignment',
 };
 
 /** « expiré depuis le 28/09/2026 », « expire le 10/10/2026, avant l'affectation »… */
-function lapseDetail(a: SkillAlert) {
+function lapseDetail(a: SkillAlert, t: T) {
   const on = a.expiresOn ? fmtDate(a.expiresOn) : '';
   switch (a.lapse) {
-    case 'missing': return 'requis, jamais suivi';
-    case 'expired': return `expiré depuis le ${on}`;
-    case 'before': return `expire le ${on}, avant l'affectation`;
-    case 'during': return `expire le ${on}, pendant l'affectation`;
+    case 'missing': return t('required, never attended');
+    case 'expired': return fill(t('expired since {date}'), { date: on });
+    case 'before': return fill(t('expires on {date}, before the assignment'), { date: on });
+    case 'during': return fill(t('expires on {date}, during the assignment'), { date: on });
   }
 }
 
 /** Fenêtre « Voir l'affectation » : affectation Keystone et état de tous les titres requis du salarié. */
 function AssignmentView({ alert, today }: { alert: SkillAlert; today: string }) {
+  const { t } = useI18n();
   const a = alert.assignment;
   const days = daysBetween(a.startOn, a.endOn) + 1;
   const toStart = daysBetween(today, a.startOn);
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
-        <Fact label="Projet">{a.project}</Fact>
-        <Fact label="Activité">{a.activity}</Fact>
-        <Fact label="Dates">
-          Du {fmtDate(a.startOn)} au {fmtDate(a.endOn)}
+        <Fact label={t('Project')}>{a.project}</Fact>
+        <Fact label={t('Activity')}>{a.activity}</Fact>
+        <Fact label={t('Dates')}>
+          {fill(t('From {start} to {end}'), { start: fmtDate(a.startOn), end: fmtDate(a.endOn) })}
           <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-            {days} jour{days > 1 ? 's' : ''} · {toStart > 0 ? `début dans ${toStart} j` : toStart === 0 ? "débute aujourd'hui" : 'en cours'}
+            {fill(days > 1 ? t('{n} days') : t('{n} day'), { n: days })} · {toStart > 0 ? fill(t('starts in {n} d'), { n: toStart }) : toStart === 0 ? t('starts today') : t('in progress')}
           </span>
         </Fact>
-        <Fact label="Salarié">
+        <Fact label={t('Employee')}>
           {alert.person.name}
           <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{alert.person.job}</span>
         </Fact>
       </div>
 
       <div style={{ display: 'grid', gap: 6 }}>
-        <h6 className="vg-h6">Titres requis</h6>
+        <h6 className="vg-h6">{t('Required titles')}</h6>
         {alert.required.length === 0 ? (
-          <div className="vg-inset" style={{ padding: 10, fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucun titre requis pour ce salarié.</div>
+          <div className="vg-inset" style={{ padding: 10, fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('No title required for this employee.')}</div>
         ) : (
           <table className="table" style={{ fontSize: 12.5 }}>
             <tbody>
@@ -65,12 +68,12 @@ function AssignmentView({ alert, today }: { alert: SkillAlert; today: string }) 
                     <td style={{ width: 30, paddingRight: 0 }}><SkillDot state={c.state} size={20} /></td>
                     <td>
                       <span style={{ display: 'block' }}>{c.title.label}</span>
-                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{stateDetail(c, today)}</span>
+                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{stateDetail(c, today, t)}</span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {missing && <ToneTag tone="danger">Bloquant</ToneTag>}
-                        {lapses && <ToneTag tone="warn">Expire pendant l&apos;affectation</ToneTag>}
+                        {missing && <ToneTag tone="danger">{t('Blocking#male')}</ToneTag>}
+                        {lapses && <ToneTag tone="warn">{t('Expires during the assignment')}</ToneTag>}
                         {c.renewal && <RenewalTag renewal={c.renewal} state={c.state} />}
                       </span>
                     </td>
@@ -82,7 +85,7 @@ function AssignmentView({ alert, today }: { alert: SkillAlert; today: string }) 
         )}
       </div>
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)' }}>
-        <Icon name="ph-arrows-clockwise" size={12} style={{ marginRight: 5, verticalAlign: -1 }} />Affectation lue dans le planning Keystone.
+        <Icon name="ph-arrows-clockwise" size={12} style={{ marginRight: 5, verticalAlign: -1 }} />{t('Assignment read from the Keystone schedule.')}
       </p>
     </div>
   );
@@ -94,6 +97,7 @@ function AssignmentView({ alert, today }: { alert: SkillAlert; today: string }) 
  * action de recyclage reprise encore rattachée reste affichée en lien.
  */
 export function SkillAlerts({ alerts, today }: { alerts: SkillAlert[]; today: string }) {
+  const { t } = useI18n();
   return (
     <>
       {alerts.map((a) => {
@@ -103,13 +107,13 @@ export function SkillAlerts({ alerts, today }: { alerts: SkillAlert[]; today: st
           <div key={`${a.person.id}-${a.titleId}-${a.assignment.id}`} className="card" style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: '12px 14px', border: `1px solid ${tone}` }}>
             <Icon name="ph-warning" size={22} style={{ color: tone }} />
             <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 240 }}>
-              <span style={{ fontWeight: 500 }}>{HEADLINE[a.lapse]}</span>
+              <span style={{ fontWeight: 500 }}>{t(HEADLINE[a.lapse])}</span>
               <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-                {a.person.name} — {lcfirst(a.title)} {lapseDetail(a)} — affecté à l&apos;activité « {a.assignment.activity} » du projet {a.assignment.project}, {period(a.assignment.startOn, a.assignment.endOn)} (planning Keystone).
+                {a.person.name} — {lcfirst(a.title)} {lapseDetail(a, t)} — {fill(t('assigned to the activity “{activity}” of the project {project}, {period} (Keystone schedule).'), { activity: a.assignment.activity, project: a.assignment.project, period: period(a.assignment.startOn, a.assignment.endOn) })}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
-              <DialogButton label="Voir l'affectation" title={`Affectation de ${a.person.name}`} kicker="Planning Keystone" width={560}>
+              <DialogButton label={t('See the assignment')} title={fill(t('Assignment of {name}'), { name: a.person.name })} kicker={t('Keystone schedule')} width={560}>
                 {() => <AssignmentView alert={a} today={today} />}
               </DialogButton>
               {a.renewal && <RenewalTag renewal={a.renewal} state={a.currentState} />}

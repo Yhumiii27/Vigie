@@ -3,13 +3,15 @@ import { ToneTag } from '@/components/ui';
 import { fmtDate, fmtMonthAbbr, monthName } from '@/lib/dates';
 import { SKILL_SOON_DAYS } from '@/lib/horizons';
 import type { ForecastItem, RenewalForecast } from '@/lib/rules/skills';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 const STATE_LABEL: Record<string, { label: string; tone: 'danger' | 'warn' | 'neutral' }> = {
-  r: { label: 'Jamais suivi', tone: 'danger' },
-  x: { label: 'Expiré', tone: 'danger' },
-  p: { label: 'Suspendu (Cursus)', tone: 'danger' },
-  s: { label: `Expire sous ${SKILL_SOON_DAYS} j`, tone: 'warn' },
-  v: { label: 'Valide', tone: 'neutral' },
+  r: { label: 'Never attended', tone: 'danger' },
+  x: { label: 'Expired', tone: 'danger' },
+  p: { label: 'Suspended (Cursus)', tone: 'danger' },
+  s: { label: 'Expires within {n} d', tone: 'warn' },
+  v: { label: 'Valid', tone: 'neutral' },
 };
 const monthLabel = (ym: string) => `${monthName(+ym.slice(5, 7))} ${ym.slice(0, 4)}`;
 
@@ -18,25 +20,26 @@ const monthLabel = (ym: string) => `${monthName(+ym.slice(5, 7))} ${ym.slice(0, 
  * titre, puis le détail (salarié, titre, échéance). Calculée (renewalForecast), jamais stockée ; plan de formation géré par
  * le service RH, sans action QSE. `links` : liens vers la case de la matrice (écran) ; absents à l'impression.
  */
-export function ForecastView({ forecast, links = true, tableClass = 'table' }: { forecast: RenewalForecast; links?: boolean; tableClass?: string }) {
+export async function ForecastView({ forecast, links = true, tableClass = 'table' }: { forecast: RenewalForecast; links?: boolean; tableClass?: string }) {
+  const { t } = await getI18n();
   const { overdue, months, titles } = forecast;
   const total = overdue.length + months.reduce((n, m) => n + m.items.length, 0);
-  if (!total) return <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-500)' }}>Aucun recyclage ni formation à prévoir sur les 12 prochains mois.</p>;
+  if (!total) return <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-500)' }}>{t('No renewal or training to plan over the next 12 months.')}</p>;
   const count = (items: ForecastItem[], titleId: string) => items.filter((i) => i.titleId === titleId).length;
   const groups = [
-    ...(overdue.length ? [{ key: 'retard', label: 'À rattraper (expiré, jamais suivi ou suspendu)', items: overdue }] : []),
+    ...(overdue.length ? [{ key: 'retard', label: t('To catch up (expired, never attended or suspended)'), items: overdue }] : []),
     ...months.filter((m) => m.items.length).map((m) => ({ key: m.month, label: monthLabel(m.month), items: m.items })),
   ];
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label="Tableau, défilement horizontal sur petit écran">
+      <div style={{ overflowX: 'auto' }} tabIndex={0} role="group" aria-label={t('Table, horizontal scrolling on a small screen')}>
         <table className={`${tableClass} vg-forecast`} style={{ fontSize: 12, minWidth: 720 }}>
           <thead>
             <tr>
-              <th>Titre</th>
-              <th style={{ textAlign: 'center' }} title="Expiré, jamais suivi ou suspendu">À rattraper</th>
+              <th>{t('Title#qualification')}</th>
+              <th style={{ textAlign: 'center' }} title={t('Expired, never attended or suspended')}>{t('To catch up')}</th>
               {months.map((m) => <th key={m.month} style={{ textAlign: 'center' }} title={monthLabel(m.month)}>{fmtMonthAbbr(`${m.month}-01`)}{m.month.endsWith('-01') ? ` ${m.month.slice(2, 4)}` : ''}</th>)}
-              <th style={{ textAlign: 'center' }}>Total</th>
+              <th style={{ textAlign: 'center' }}>{t('Total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -70,8 +73,8 @@ export function ForecastView({ forecast, links = true, tableClass = 'table' }: {
                     ? <Link href={`/habilitations?salarie=${encodeURIComponent(i.personId)}&titre=${encodeURIComponent(i.titleId)}`} className="vg-link" style={{ fontSize: 12.5, minWidth: 150, display: 'inline-block', minHeight: 24, lineHeight: '24px' }}>{i.person}</Link>
                     : <span style={{ minWidth: 150 }}>{i.person}</span>}
                   <span style={{ flex: 1, minWidth: 140 }}>{i.title}</span>
-                  <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{i.expiresOn ? `échéance ${fmtDate(i.expiresOn)}` : 'aucun titre détenu (Cursus)'}</span>
-                  {st.tone !== 'neutral' && <ToneTag tone={st.tone}>{st.label}</ToneTag>}
+                  <span style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{i.expiresOn ? fill(t('expiry {date}'), { date: fmtDate(i.expiresOn) }) : t('no title held (Cursus)')}</span>
+                  {st.tone !== 'neutral' && <ToneTag tone={st.tone}>{fill(t(st.label), { n: SKILL_SOON_DAYS })}</ToneTag>}
                 </li>
               );
             })}

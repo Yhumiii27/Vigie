@@ -20,6 +20,8 @@ import {
   CompanyIdField, LinkedActions, Note, SiretLine, Suggestions, muted, rowOpener, shortSite, type ActionOptions, type Carrier, type Installation,
 } from './parts';
 import { streamActionDefaults } from './action-defaults';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Opt = readonly (readonly [string, string])[];
 export type StreamSuggestions = {
@@ -30,7 +32,7 @@ export type StreamSuggestions = {
 };
 
 const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
-const RECEIPT_HINT = "Récépissé de déclaration de transport de déchets (R. 541-50) ; « Exempté » si le transport n'est pas soumis à déclaration.";
+const RECEIPT_HINT = 'Receipt of the waste transport declaration (R. 541-50); “Exempted” if the transport is not subject to declaration.';
 
 const TREATMENT_OPTIONS = TREATMENT_CODES.map(([c, l]) => [c, `${c} — ${l}`] as const);
 
@@ -54,6 +56,7 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
   /** Listes de choix du formulaire d'action (null : création d'action non permise). */
   actionOptions: ActionOptions | null;
 }) {
+  const { t } = useI18n();
   const registerHref = (id: string) => hrefWith('/environnement', { annee }, { filiere: id });
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(initialId ?? null);
@@ -71,14 +74,14 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
         <table className="table" style={{ fontSize: 12.5, minWidth: 1040 }}>
           <thead>
             <tr>
-              <th>Filière</th><th>Code déchet</th><th>Traitement</th><th>Collecteur</th><th>Installation de destination</th>
-              <th style={{ textAlign: 'right' }}>{year}</th><th style={{ textAlign: 'right' }}>{year - 1}</th><th style={{ textAlign: 'right' }}>Enlèv. {year}</th>
+              <th>{t('Waste stream')}</th><th>{t('Waste code')}</th><th>{t('Treatment')}</th><th>{t('Collector')}</th><th>{t('Destination facility')}</th>
+              <th style={{ textAlign: 'right' }}>{year}</th><th style={{ textAlign: 'right' }}>{year - 1}</th><th style={{ textAlign: 'right' }}>{fill(t('Rem. {year}'), { year })}</th>
             </tr>
           </thead>
           <tbody>
             {streams.length === 0 && (
               <tr><td colSpan={8} style={{ color: 'var(--color-neutral-500)', padding: '14px 8px' }}>
-                Aucune filière déchets pour ce site{canManage ? ' : créez la première avec « Nouvelle filière ».' : '.'}
+                {t('No waste stream for this site')}{canManage ? t(': create the first one with “New waste stream”.') : '.'}
               </td></tr>
             )}
             {streams.map((s) => {
@@ -87,18 +90,18 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
                 <tr key={s.id} {...(canManage ? rowOpener(() => setSelId(s.id)) : {})}>
                   <td style={{ minWidth: 200 }}>
                     <span style={{ fontWeight: 500, color: s.archived ? 'var(--color-neutral-400)' : undefined }}>{s.label}</span>
-                    {s.archived && <ToneTag tone="neutral" style={{ marginLeft: 8 }}>Archivée</ToneTag>}
+                    {s.archived && <ToneTag tone="neutral" style={{ marginLeft: 8 }}>{t('Archived#f')}</ToneTag>}
                     <div style={muted}>{[s.id, showSite && shortSite(s.site), s.channel].filter(Boolean).join(' · ')}</div>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-300)', marginRight: 8 }}>{s.ewcCode}</span>
-                    {s.hazardous && <ToneTag tone="warn">Dangereux</ToneTag>}
+                    {s.hazardous && <ToneTag tone="warn">{t('Hazardous')}</ToneTag>}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }} title={s.treatmentLabel}>
                     <span style={{ fontWeight: 500 }}>{s.treatmentCode}</span>
-                    <span style={{ ...muted, marginLeft: 6 }}>{s.recovery ? 'valorisation' : 'élimination'}</span>
+                    <span style={{ ...muted, marginLeft: 6 }}>{s.recovery ? t('recovery') : t('disposal')}</span>
                   </td>
-                  <td style={{ color: 'var(--color-neutral-300)' }} title={s.gaps.length ? `À compléter : ${s.gaps.join(' · ')}` : undefined}>
+                  <td style={{ color: 'var(--color-neutral-300)' }} title={s.gaps.length ? fill(t('To complete: {gaps}'), { gaps: s.gaps.join(' · ') }) : undefined}>
                     {s.collector}
                     <SiretLine siret={s.collectorSiret} />
                   </td>
@@ -108,14 +111,14 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     {s.yearQty ? fmtQty(s.yearQty, s.unit) : <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
-                    {delta != null && s.yearQty > 0 && <div style={muted}>{fmtDelta(delta)} vs {year - 1}{isCurrent ? ' même période' : ''}</div>}
+                    {delta != null && s.yearQty > 0 && <div style={muted}>{fmtDelta(delta)} {fill(t('vs {id}'), { id: year - 1 })}{isCurrent ? t(' same period') : ''}</div>}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: 'var(--color-neutral-400)' }}>
                     {s.prevQty ? fmtQty(s.prevQty, s.unit) : '—'}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={`Registre ${year} filtré sur cette filière`}>{s.yearCount}<span className="vg-sr-only">{` enlèvement${s.yearCount > 1 ? 's' : ''} : registre ${year} filtré sur cette filière`}</span></Link> : 0}
-                    {s.lastRemovedOn && <div style={muted}>dernier {fmtDate(s.lastRemovedOn)}</div>}
+                    {s.yearCount ? <Link href={registerHref(s.id)} scroll={false} className="vg-link" title={fill(t('Register {year} filtered on this waste stream'), { year })}>{s.yearCount}<span className="vg-sr-only">{fill(s.yearCount > 1 ? t(' removals: register {year} filtered on this waste stream') : t(' removal: register {year} filtered on this waste stream'), { year })}</span></Link> : 0}
+                    {s.lastRemovedOn && <div style={muted}>{fill(t('last {date}'), { date: fmtDate(s.lastRemovedOn) })}</div>}
                   </td>
                 </tr>
               );
@@ -124,18 +127,18 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
         </table>
       </div>
 
-      <Dialog open={!!stream} onClose={close} width={640} kicker={stream ? `Filière ${stream.id} · ${shortSite(stream.site)}` : undefined} title={stream?.label ?? ''}>
+      <Dialog open={!!stream} onClose={close} width={640} kicker={stream ? `${t('Waste stream')} ${stream.id} · ${shortSite(stream.site)}` : undefined} title={stream?.label ?? ''}>
         {stream && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--color-neutral-300)', marginBottom: 12 }}>
               <Icon name="ph-list-numbers" size={14} />
               {stream.yearCount ? (
                 <Link href={registerHref(stream.id)} scroll={false} className="vg-link" onClick={close}>
-                  Voir {stream.yearCount > 1 ? `les ${stream.yearCount} enlèvements` : "l'enlèvement"} de {year} au registre
+                  {fill(stream.yearCount > 1 ? t('See the {n} removals of {year} in the register') : t('See the removal of {year} in the register'), { n: stream.yearCount, year })}
                 </Link>
-              ) : <span>Aucun enlèvement en {year}.</span>}
-              {stream.entryCount > stream.yearCount && <span style={muted}>· {stream.entryCount} toutes années</span>}
-              {stream.cancelledCount > 0 && <span style={muted}>· {stream.cancelledCount} annulé{stream.cancelledCount > 1 ? 's' : ''}</span>}
+              ) : <span>{fill(t('No removal in {year}.'), { year })}</span>}
+              {stream.entryCount > stream.yearCount && <span style={muted}>· {fill(t('{n} all years'), { n: stream.entryCount })}</span>}
+              {stream.cancelledCount > 0 && <span style={muted}>· {fill(stream.cancelledCount > 1 ? t('{n} cancelled#mplural') : t('{n} cancelled#m'), { n: stream.cancelledCount })}</span>}
             </div>
             <div style={{ marginBottom: 14 }}>
               <LinkedActions actions={stream.actions} options={actionOptions} canAct={!!actionOptions}
@@ -144,7 +147,7 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
             {stream.gaps.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <Note icon="ph-warning" tone="warn">
-                  Mentions du registre à compléter (arrêté du 31 mai 2021) : {stream.gaps.join(' · ')}. Elles sont copiées sur chaque nouvel enlèvement.
+                  {fill(t('Register mentions to complete (order of 31 May 2021): {gaps}. They are copied onto each new removal.'), { gaps: stream.gaps.join(' · ') })}
                 </Note>
               </div>
             )}
@@ -152,20 +155,20 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
               // Filière archivée (DOC-09) : consultation seule, réactivation avec motif.
               <div style={{ display: 'grid', gap: 12 }}>
                 <Note icon="ph-archive">
-                  Filière archivée le {fmtDate(stream.archived.on)} par {stream.archived.by}{stream.archived.reason ? ` · ${stream.archived.reason}` : ''}. Elle n&apos;est plus proposée pour un nouvel enlèvement ; son registre et ses actions restent consultables.
+                  {fill(t('Waste stream archived on {date} by {name}'), { date: fmtDate(stream.archived.on), name: stream.archived.by })}{stream.archived.reason ? ` · ${stream.archived.reason}` : ''}{t('. It is no longer offered for a new removal; its register and its actions stay viewable.')}
                 </Note>
-                <ReasonForm action={restoreWasteStream} hidden={{ id: stream.id }} submitLabel="Réactiver la filière" submitIcon="ph-arrow-counter-clockwise"
-                  placeholder="Ex. reprise de l'activité, archivage par erreur" onDone={close} onCancel={close} />
+                <ReasonForm action={restoreWasteStream} hidden={{ id: stream.id }} submitLabel={t('Reactivate the waste stream')} submitIcon="ph-arrow-counter-clockwise"
+                  placeholder={t('E.g. activity resumed, archived by mistake')} onDone={close} onCancel={close} />
               </div>
             ) : archiving ? (
-              <ReasonForm action={archiveWasteStream} hidden={{ id: stream.id }} submitLabel="Archiver la filière" submitIcon="ph-archive"
-                message="La filière n'est plus proposée pour un nouvel enlèvement. Ses enlèvements (registre conservé 3 ans), ses actions et son historique restent consultables ; elle peut être réactivée."
-                placeholder="Ex. déchet plus produit, changement de prestataire" onDone={close} onCancel={() => setArchiving(false)} />
+              <ReasonForm action={archiveWasteStream} hidden={{ id: stream.id }} submitLabel={t('Archive the waste stream')} submitIcon="ph-archive"
+                message={t('The waste stream is no longer offered for a new removal. Its removals (register kept 3 years), its actions and its history stay viewable; it can be reactivated.')}
+                placeholder={t('E.g. waste no longer produced, change of provider')} onDone={close} onCancel={() => setArchiving(false)} />
             ) : (
               <>
                 <StreamForm key={stream.id} stream={stream} sites={sites} defaultSite={stream.siteId} suggestions={suggestions} onDone={close} onCancel={close} />
                 <div style={{ marginTop: 12 }}>
-                  <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setArchiving(true)}><Icon name="ph-archive" size={13} />Archiver la filière</button>
+                  <button type="button" className="btn btn-ghost vg-btn-sm" onClick={() => setArchiving(true)}><Icon name="ph-archive" size={13} />{t('Archive the waste stream')}</button>
                 </div>
               </>
             )}
@@ -179,8 +182,9 @@ export function StreamsPanel({ streams, year, annee, isCurrent, canManage, showS
 
 /** Bouton « Nouvelle filière ». */
 export function NewStreamButton({ sites, defaultSite, suggestions }: { sites: Opt; defaultSite: string; suggestions: StreamSuggestions }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Nouvelle filière" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvelle filière déchets" kicker="Filières" width={640}>
+    <DialogButton label={t('New waste stream')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('New waste stream#title')} kicker={t('Waste streams')} width={640}>
       {(close) => <StreamForm sites={sites} defaultSite={defaultSite} suggestions={suggestions} onDone={close} onCancel={close} />}
     </DialogButton>
   );
@@ -191,6 +195,7 @@ export function NewStreamButton({ sites, defaultSite, suggestions }: { sites: Op
 function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel }: {
   stream?: StreamView; sites: Opt; defaultSite: string; suggestions: StreamSuggestions; onDone: () => void; onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const uid = useId();
   const [code, setCode] = useState(stream?.ewcCode ?? '');
   const [treatment, setTreatment] = useState(stream?.treatmentCode ?? '');
@@ -224,82 +229,81 @@ function StreamForm({ stream, sites, defaultSite, suggestions, onDone, onCancel 
   // Annulés compris : ils restent au registre chronologique (même règle que le serveur).
   const registered = stream ? stream.entryCount + stream.cancelledCount : 0;
   const locked = registered > 0;
-  const lockHint = locked ? 'Verrouillé.' : undefined;
+  const lockHint = locked ? t('Locked.') : undefined;
 
   return (
-    <ActionForm action={saveWasteStream} hidden={{ id: stream?.id, version: stream?.version }} onDone={onDone} onCancel={onCancel} submitLabel={stream ? 'Enregistrer' : 'Créer la filière'}>
-      <Field name="label" label="Libellé">
-        <Input name="label" defaultValue={stream?.label} placeholder="Ex. Huiles hydrauliques usagées" maxLength={120} autoFocus={!stream} />
+    <ActionForm action={saveWasteStream} hidden={{ id: stream?.id, version: stream?.version }} onDone={onDone} onCancel={onCancel} submitLabel={stream ? t('Save') : t('Create the waste stream')}>
+      <Field name="label" label={t('Label')}>
+        <Input name="label" defaultValue={stream?.label} placeholder={t('E.g. Used hydraulic oils')} maxLength={120} autoFocus={!stream} />
       </Field>
       {locked && (
         <Note icon="ph-lock-simple">
-          {registered} enlèvement{registered > 1 ? 's' : ''} au registre{stream!.cancelledCount ? ` (dont ${stream!.cancelledCount} annulé${stream!.cancelledCount > 1 ? 's' : ''})` : ''} : site et unité sont verrouillés
-          pour ne pas réécrire le registre chronologique. Les enlèvements déjà inscrits conservent les codes, l&apos;exutoire et les mentions enregistrés.
+          {fill(registered > 1 ? t('{n} removals in the register') : t('{n} removal in the register'), { n: registered })}{stream!.cancelledCount ? fill(stream!.cancelledCount > 1 ? t(' (of which {n} cancelled#plural)') : t(' (of which {n} cancelled)'), { n: stream!.cancelledCount }) : ''}{t(': site and unit are locked so as not to rewrite the chronological register. The removals already recorded keep the codes, the outlet and the mentions recorded.')}
         </Note>
       )}
       <FormRow>
-        <Field name="ewcCode" label="Code déchet" hint="Liste européenne des déchets : 6 chiffres, « * » si dangereux.">
-          <Input name="ewcCode" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ex. 13 01 10*" maxLength={20} autoComplete="off" />
+        <Field name="ewcCode" label={t('Waste code')} hint={t('European list of waste: 6 digits, “*” if hazardous.')}>
+          <Input name="ewcCode" value={code} onChange={(e) => setCode(e.target.value)} placeholder={t('E.g. 13 01 10*')} maxLength={20} autoComplete="off" />
         </Field>
-        <Field name="unit" label="Unité" hint={lockHint}>
+        <Field name="unit" label={t('Unit')} hint={lockHint}>
           <Select name="unit" options={WASTE_UNITS} defaultValue={stream?.unit ?? 'kg'} disabled={locked} />
         </Field>
       </FormRow>
       {normalized && (
         <Note icon={hazardous ? 'ph-warning' : 'ph-check-circle'} tone={hazardous ? 'warn' : 'ok'}>
           {hazardous
-            ? <>{normalized} · <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>déchet dangereux</strong> : chaque enlèvement exige un bordereau Trackdéchets.</>
-            : <>{normalized} · déchet non dangereux : inscription au registre, sans bordereau obligatoire.</>}
+            ? <>{normalized} · <strong style={{ fontWeight: 500, color: 'var(--color-text)' }}>{t('hazardous waste#one')}</strong>{t(': each removal requires a Trackdéchets slip.')}</>
+            : <>{normalized} · {t('non-hazardous waste: recorded in the register, no slip required.')}</>}
         </Note>
       )}
       <FormRow>
-        <Field name="treatmentCode" label="Code de traitement" hint={treatment ? (isRecovery(treatment) ? 'Valorisation (R1–R13).' : 'Élimination (D1–D15).') : undefined}>
-          <Select name="treatmentCode" options={TREATMENT_OPTIONS} placeholder="Choisir…" value={treatment}
+        <Field name="treatmentCode" label={t('Treatment code')} hint={treatment ? (isRecovery(treatment) ? t('Recovery (R1–R13).') : t('Disposal (D1–D15).')) : undefined}>
+          <Select name="treatmentCode" options={TREATMENT_OPTIONS} placeholder={t('Choose…')} value={treatment}
             onChange={(e) => { setTreatment(e.target.value); if (!qualificationTyped) setQualification(proposed(e.target.value)); }}
             title={treatment ? treatmentLabel(treatment) : undefined} />
         </Field>
-        <Field name="channel" label="Filière de traitement">
-          <Input name="channel" defaultValue={stream?.channel} placeholder="Ex. Régénération, recyclage matière…" list={`${uid}-channels`} maxLength={80} />
+        <Field name="channel" label={t('Treatment route')}>
+          <Input name="channel" defaultValue={stream?.channel} placeholder={t('E.g. Regeneration, material recycling…')} list={`${uid}-channels`} maxLength={80} />
         </Field>
       </FormRow>
       <FormRow>
-        <Field name="qualification" label="Qualification du traitement final"
+        <Field name="qualification" label={t('Qualification of the final treatment')}
           hint={qualificationIssue
             ? <span style={{ color: TONE.warn.fg }}>{qualificationIssue}</span>
-            : transit ? 'Opération de transit : le traitement final se précise à chaque enlèvement.' : 'Hiérarchie des modes de traitement (C. env. L. 541-1).'}>
-          <Select name="qualification" options={QUALIFICATION_OPTIONS} placeholder={transit ? 'À préciser à chaque enlèvement' : 'Choisir…'} value={qualification}
+            : transit ? t('Transit operation: the final treatment is specified at each removal.') : t('Hierarchy of the treatment methods (Env. Code L. 541-1).')}>
+          <Select name="qualification" options={QUALIFICATION_OPTIONS} placeholder={transit ? t('To specify at each removal') : t('Choose…')} value={qualification}
             onChange={(e) => { setQualification(e.target.value); setQualificationTyped(true); }} />
         </Field>
-        <Field name="siteId" label="Site" hint={lockHint}>
+        <Field name="siteId" label={t('Site')} hint={lockHint}>
           <Select name="siteId" options={sites} defaultValue={stream?.siteId ?? defaultSite} disabled={locked} />
         </Field>
       </FormRow>
-      <Checkbox name="pop" label="Contient des polluants organiques persistants (POP)" defaultChecked={stream?.pop} />
+      <Checkbox name="pop" label={t('Contains persistent organic pollutants (POP)')} defaultChecked={stream?.pop} />
 
-      <h6 className="vg-h6" style={{ marginTop: 4 }}>Collecteur</h6>
-      <Field name="collector" label="Raison sociale" hint="Transporteur proposé par défaut à chaque enlèvement, avec ses mentions.">
-        <Input name="collector" defaultValue={stream?.collector} placeholder="Ex. [Collecteur Huiles Ouest]" list={`${uid}-collectors`} maxLength={160}
+      <h6 className="vg-h6" style={{ marginTop: 4 }}>{t('Collector')}</h6>
+      <Field name="collector" label={t('Company name')} hint={t('Carrier offered by default at each removal, with its mentions.')}>
+        <Input name="collector" defaultValue={stream?.collector} placeholder={t('E.g. [West Oil Collector]')} list={`${uid}-collectors`} maxLength={160}
           onChange={(e) => onCollector(e.target.value)} />
       </Field>
       <FormRow>
-        <CompanyIdField name="collectorSiret" label="SIRET" value={collectorSiret} onChange={setCollectorSiret} foreign />
-        <Field name="collectorReceipt" label="N° de récépissé" hint={RECEIPT_HINT}>
+        <CompanyIdField name="collectorSiret" label={t('SIRET')} value={collectorSiret} onChange={setCollectorSiret} foreign />
+        <Field name="collectorReceipt" label={t('Receipt no.')} hint={t(RECEIPT_HINT)}>
           <Input name="collectorReceipt" value={collectorReceipt} onChange={(e) => setCollectorReceipt(e.target.value)} maxLength={60} autoComplete="off" />
         </Field>
       </FormRow>
-      <Field name="collectorAddress" label="Adresse">
-        <Input name="collectorAddress" value={collectorAddress} onChange={(e) => setCollectorAddress(e.target.value)} maxLength={300} placeholder="N°, voie, code postal, commune" />
+      <Field name="collectorAddress" label={t('Address')}>
+        <Input name="collectorAddress" value={collectorAddress} onChange={(e) => setCollectorAddress(e.target.value)} maxLength={300} placeholder={t('No., street, postcode, town')} />
       </Field>
 
-      <h6 className="vg-h6" style={{ marginTop: 4 }}>Destination</h6>
-      <Field name="destination" label="Installation de destination (exutoire)">
-        <Input name="destination" defaultValue={stream?.destination} placeholder="Raison sociale et commune de l'installation de traitement" list={`${uid}-destinations`} maxLength={200}
+      <h6 className="vg-h6" style={{ marginTop: 4 }}>{t('Destination')}</h6>
+      <Field name="destination" label={t('Destination facility (outlet)')}>
+        <Input name="destination" defaultValue={stream?.destination} placeholder={t('Company name and town of the treatment facility')} list={`${uid}-destinations`} maxLength={200}
           onChange={(e) => onDestination(e.target.value)} />
       </Field>
       <FormRow>
-        <CompanyIdField name="destinationSiret" label="SIRET de l'installation" value={destinationSiret} onChange={setDestinationSiret} foreign />
-        <Field name="destinationAddress" label="Adresse de l'installation">
-          <Input name="destinationAddress" value={destinationAddress} onChange={(e) => setDestinationAddress(e.target.value)} maxLength={300} placeholder="N°, voie, code postal, commune" />
+        <CompanyIdField name="destinationSiret" label={t('SIRET of the facility')} value={destinationSiret} onChange={setDestinationSiret} foreign />
+        <Field name="destinationAddress" label={t('Address of the facility')}>
+          <Input name="destinationAddress" value={destinationAddress} onChange={(e) => setDestinationAddress(e.target.value)} maxLength={300} placeholder={t('No., street, postcode, town')} />
         </Field>
       </FormRow>
       <Suggestions id={`${uid}-channels`} values={suggestions.channels} />
