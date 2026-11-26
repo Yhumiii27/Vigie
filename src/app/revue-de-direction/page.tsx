@@ -64,5 +64,5 @@ export default async function ReviewDossierPage({ searchParams }: PageProps<'/re
   // UX-13 : ?revue=<id> inconnu → dossier de la revue en cours, avec le bandeau commun (jamais de repli silencieux).
   const missing = missingDetail(sp.revue, String(page.review.id) === firstParam(sp.revue));
   const notice = missing ? <MissingNotice text={t('Review not found: the file of the current review is shown.')} closeHref={`/revue-de-direction?revue=${page.review.id}`} /> : null;
-  return <DossierView page={page} role={session.role} notice={notice} />;
+  return <DossierView page={page} role={session.role} notice={notice} t={t} />;
 }

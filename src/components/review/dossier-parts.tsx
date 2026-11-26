@@ -4,9 +4,9 @@ import { fmtDate, monthName, monthOf, yearOf } from '@/lib/dates';
 import { REVIEW_FOLLOW_UP, TONE, canOpen, type Role } from '@/lib/domain';
 import type { DossierFinding, FollowUpRow } from '@/lib/data/review';
 import type { ActionBrief } from '@/lib/queries';
-import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
+// Traducteur `t` reçu du dossier (`getI18n()` de la page, français par défaut).
 // Éléments de mise en page du dossier de revue de direction (classes rd-* de src/app/revue-de-direction/dossier.css).
 
 /** Actions d'un constat du dossier, quel que soit son format (dossier figé avant AUD-28, migration 0016 : une seule action). */
@@ -40,8 +40,7 @@ export function Blank({ lines = 2 }: { lines?: number }) {
 }
 
 /** Texte saisi au compte rendu, sinon l'invite à compléter et des lignes vierges (revue pas encore tenue). */
-export async function RecordText({ text, held, placeholder }: { text: string | null | undefined; held: boolean; placeholder: string }) {
-  const { t } = await getI18n();
+export function RecordText({ text, held, placeholder, t }: { text: string | null | undefined; held: boolean; placeholder: string; t: T }) {
   if (text) return <p className="rd-text">{text}</p>;
   if (held) return <Empty>{t('Not entered in the minutes.')}</Empty>;
   return <><p className="rd-empty rd-muted">{fill(t('[To complete: {what}]'), { what: placeholder })}</p><Blank /></>;
@@ -77,8 +76,7 @@ export function Ref({ href, role, children }: { href: string | null | undefined;
   return href && canOpen(role, href) ? <a href={href} className="rd-link">{children}</a> : <>{children}</>;
 }
 
-export async function ActionStatus({ a, plain }: { a: Pick<ActionBrief, 'status' | 'tone' | 'pilot' | 'dueOn'>; plain?: boolean }) {
-  const { t } = await getI18n();
+export function ActionStatus({ a, plain, t }: { a: Pick<ActionBrief, 'status' | 'tone' | 'pilot' | 'dueOn'>; plain?: boolean; t: T }) {
   if (plain) return <span style={{ color: a.tone === 'neutral' ? undefined : TONE[a.tone].dot }}>{a.status}</span>;
   return (
     <span style={{ display: 'grid', gap: 2 }}>
@@ -95,22 +93,20 @@ type LinkedBrief = ActionBrief & { href?: string };
  * UX-15 : conteneur à défilement horizontal d'un tableau du dossier sur téléphone (sans effet à l'impression) ; focalisable
  * pour défiler au clavier.
  */
-export async function ScrollTable({ children }: { children: ReactNode }) {
-  const { t } = await getI18n();
+export function ScrollTable({ children, t }: { children: ReactNode; t: T }) {
   return <div className="rd-scroll" tabIndex={0} role="group" aria-label={t('Table, horizontal scrolling on a small screen')}>{children}</div>;
 }
 
-export function ActionRefs({ actions, role }: { actions: LinkedBrief[] | undefined; role: Role }) {
+export function ActionRefs({ actions, role, t }: { actions: LinkedBrief[] | undefined; role: Role; t: T }) {
   if (!actions?.length) return <>—</>;
-  return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain /></div>)}</>;
+  return <>{actions.map((a) => <div key={a.id} style={{ whiteSpace: 'nowrap' }}><Ref href={a.href} role={role}>{a.id}</Ref> · <ActionStatus a={a} plain t={t} /></div>)}</>;
 }
 
-export async function ActionTable({ rows, role, review, extra }: {
-  rows: (LinkedBrief & { originRef?: string; review?: string })[]; role: Role; review?: boolean; extra?: (a: LinkedBrief & { originRef?: string }) => ReactNode;
+export function ActionTable({ rows, role, review, extra, t }: {
+  rows: (LinkedBrief & { originRef?: string; review?: string })[]; role: Role; review?: boolean; extra?: (a: LinkedBrief & { originRef?: string }) => ReactNode; t: T;
 }) {
-  const { t } = await getI18n();
   return (
-    <ScrollTable>
+    <ScrollTable t={t}>
       <table className="table rd-table">
         <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th>{review && <th>{t('Review#management')}</th>}<th>{t('Owner')}</th><th>{t('Target date')}</th><th>{t('Progress')}</th></tr></thead>
         <tbody>
@@ -138,10 +134,9 @@ export async function ActionTable({ rows, role, review, extra }: {
  * Suivi des décisions et actions des revues précédentes (§9.3.2 a, AUD-05) : suite donnée à chaque décision, objectif ou
  * besoin en ressources (action et avancement, « Sans action au plan », action abandonnée avec son motif).
  */
-export async function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role: Role }) {
-  const { t } = await getI18n();
+export function FollowUpTable({ rows, role, t }: { rows: FollowUpRow[]; role: Role; t: T }) {
   return (
-    <ScrollTable>
+    <ScrollTable t={t}>
       <table className="table rd-table">
         <thead><tr><th>{t('Review#management')}</th><th>{t('Nature')}</th><th style={{ width: '38%' }}>{t('Decision or action')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th>{t('Follow-up given')}</th></tr></thead>
         <tbody>
@@ -161,7 +156,7 @@ export async function FollowUpTable({ rows, role }: { rows: FollowUpRow[]; role:
                   </span>
                 )}
                 {x.state === 'action' && (x.action
-                  ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></span>
+                  ? <span style={{ whiteSpace: 'nowrap' }}><Ref href={x.action.href} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain t={t} /></span>
                   : <span className="rd-muted">{x.actionId}</span>)}
               </td>
             </tr>

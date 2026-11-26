@@ -11,8 +11,7 @@ import {
   ActionRefs, ActionStatus, ActionTable, Blank, Empty, FollowUpTable, Kpi, PyramidRow, RecordText, Ref, ScrollTable, Section,
   capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
-import { getI18n } from '@/i18n/server';
-import { fill } from '@/i18n/translate';
+import { DEFAULT_LANG, fill, makeT, type T } from '@/i18n/translate';
 
 /**
  * Contenu du dossier : calculé (préparatoire), figé à la saisie du compte rendu (dossier de séance), figé au visa
@@ -23,12 +22,13 @@ type DossierData = ReviewRecordOnly & Partial<Omit<StoredDossier, keyof ReviewRe
 
 const BLANK_DECISIONS = 3;
 
-export async function DossierView({ page, role, notice }: {
+export function DossierView({ page, role, notice, t = makeT(DEFAULT_LANG) }: {
   page: Exclude<ReviewDossierPage, { mode: 'none' | 'cancelled' }>; role: Role;
   /** Bandeau sous la barre d'outils (lien ?revue= vers une revue inconnue, UX-13). */
   notice?: ReactNode;
+  /** Traducteur de la requête (`getI18n()` de la page) ; français par défaut (rendu des essais). */
+  t?: T;
 }) {
-  const { t } = await getI18n();
   const d: DossierData = page.mode === 'record' ? page.record : page.dossier;
   const h = d.header;
   const r = d.record;
@@ -103,13 +103,13 @@ export async function DossierView({ page, role, notice }: {
 
       {d.previousFollowUp ? (
         <Section n={n()} title={t('Follow-up of the decisions and actions of the previous reviews')} aside={followUpAside(d.previousFollowUp, t)}>
-          {d.previousFollowUp.length ? <FollowUpTable rows={d.previousFollowUp} role={role} />
+          {d.previousFollowUp.length ? <FollowUpTable t={t} rows={d.previousFollowUp} role={role} />
             : <Empty>{t('No decision or action from the previous reviews.')}</Empty>}
         </Section>
       ) : d.previousActions && (
         // Instantané de version 1 (avant le lot 2) : actions des revues précédentes seulement.
         <Section n={n()} title={t('Follow-up of the actions of the previous reviews')} aside={plural(d.previousActions.length, t('{n} action'), t('{n} actions'))}>
-          {d.previousActions.length ? <ActionTable rows={d.previousActions} role={role} review extra={(a) => a.originRef} />
+          {d.previousActions.length ? <ActionTable t={t} rows={d.previousActions} role={role} review extra={(a) => a.originRef} />
             : <Empty>{t('No action from the previous reviews.')}</Empty>}
         </Section>
       )}
@@ -134,7 +134,7 @@ export async function DossierView({ page, role, notice }: {
       {d.events && (
         <Section n={n()} title={t('Non-conformities and events')} aside={plural(d.events.openNc?.length ?? 0, t('{n} open NC'), t('{n} open NCs'))}>
           <div className="rd-cols">
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Type')}</th><th className="rd-num-cell">{t('12 months')}</th><th className="rd-num-cell">{t('open#plural')}</th></tr></thead>
                 <tbody>
@@ -144,7 +144,7 @@ export async function DossierView({ page, role, notice }: {
                 </tbody>
               </table>
             </ScrollTable>
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Non-conformities by origin')}</th><th className="rd-num-cell">{t('12 months')}</th><th className="rd-num-cell">{t('open#fplural')}</th></tr></thead>
                 <tbody>
@@ -158,7 +158,7 @@ export async function DossierView({ page, role, notice }: {
           <p className="rd-empty rd-muted">{t('Customer complaints are counted under the “Customer complaint” origin.')}</p>
           <h3 className="rd-h3">{t('Open non-conformities')}</h3>
           {d.events.openNc?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Non-conformity')}</th><th>{t('Origin')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                 <tbody>
@@ -169,7 +169,7 @@ export async function DossierView({ page, role, notice }: {
                       <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{e.pilot}</div></td>
                       <td className="rd-muted">{e.origin}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
-                      <td><ActionRefs actions={e.actions} role={role} /></td>
+                      <td><ActionRefs t={t} actions={e.actions} role={role} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -189,7 +189,7 @@ export async function DossierView({ page, role, notice }: {
               {d.complaints.length > 0 && ` · ${fill(t('{n} being handled'), { n: open })} · ${plural(closed, t('{n} closed#f'), t('{n} closed#fplural'))}`}
             </p>
             {d.complaints.length ? (
-              <ScrollTable>
+              <ScrollTable t={t}>
                 <table className="table rd-table">
                   <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Complaint')}</th><th>{t('Keystone project')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                   <tbody>
@@ -200,7 +200,7 @@ export async function DossierView({ page, role, notice }: {
                         <td>{c.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{c.pilot}</div></td>
                         <td className="rd-muted">{c.project ?? '—'}</td>
                         <td style={{ whiteSpace: 'nowrap' }}>{c.step}</td>
-                        <td><ActionRefs actions={c.actions} role={role} /></td>
+                        <td><ActionRefs t={t} actions={c.actions} role={role} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -208,7 +208,7 @@ export async function DossierView({ page, role, notice }: {
               </ScrollTable>
             ) : <Empty>{t('No customer complaint over the period.')}</Empty>}
             <h3 className="rd-h3">{t('Customer perception')}</h3>
-            <RecordText text={r.customerPerception} held={held} placeholder={t('satisfaction survey results, customer feedback, on-time delivery')} />
+            <RecordText t={t} text={r.customerPerception} held={held} placeholder={t('satisfaction survey results, customer feedback, on-time delivery')} />
           </Section>
         );
       })()}
@@ -221,7 +221,7 @@ export async function DossierView({ page, role, notice }: {
           </p>
           <h3 className="rd-h3">{t('Supplier audits of the programme')}</h3>
           {d.suppliers.audits?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Date')}</th><th>{t('Title')}</th><th>{t('Auditor')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
@@ -241,12 +241,12 @@ export async function DossierView({ page, role, notice }: {
           {d.suppliers.findingGroups && (
             <>
               <h3 className="rd-h3">{t('Findings of the supplier audits')}</h3>
-              {d.suppliers.findingGroups.length ? <FindingGroups groups={d.suppliers.findingGroups} role={role} /> : <Empty>{t('No supplier audit finding.')}</Empty>}
+              {d.suppliers.findingGroups.length ? <FindingGroups t={t} groups={d.suppliers.findingGroups} role={role} /> : <Empty>{t('No supplier audit finding.')}</Empty>}
             </>
           )}
           <h3 className="rd-h3">{t('Non-conformities of supplier origin')}</h3>
           {d.suppliers.ncs?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Ref.')}</th><th>{t('Date')}</th><th>{t('Non-conformity')}</th><th>{t('Stage')}</th><th>{t('Actions')}</th></tr></thead>
                 <tbody>
@@ -256,7 +256,7 @@ export async function DossierView({ page, role, notice }: {
                       <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</td>
                       <td>{e.title}<div className="rd-muted" style={{ fontSize: 11 }}>{t('Lead: ')}{e.pilot}</div></td>
                       <td style={{ whiteSpace: 'nowrap' }}>{e.step}</td>
-                      <td><ActionRefs actions={e.actions} role={role} /></td>
+                      <td><ActionRefs t={t} actions={e.actions} role={role} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,7 +270,7 @@ export async function DossierView({ page, role, notice }: {
         <Section n={n()} title={t('Audits and certifications')}>
           <h3 className="rd-h3">{t('Certifications')}</h3>
           {d.audits.certs?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Standard')}</th><th>{t('Domain')}</th><th>{t('Status')}</th><th>{t('Comment')}</th></tr></thead>
                 <tbody>
@@ -300,7 +300,7 @@ export async function DossierView({ page, role, notice }: {
             </p>
           )}
           {d.audits.programme?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Month')}</th><th>{t('Line')}</th><th>{t('Title')}</th><th>{t('Owner')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
@@ -323,14 +323,14 @@ export async function DossierView({ page, role, notice }: {
           ) : <Empty>{t('No item in the programme over this period.')}</Empty>}
 
           <h3 className="rd-h3">{t('Audit findings')}</h3>
-          {d.audits.auditGroups?.length ? <FindingGroups groups={d.audits.auditGroups} role={role} /> : <Empty>{t('No finding recorded.#audit')}</Empty>}
+          {d.audits.auditGroups?.length ? <FindingGroups t={t} groups={d.audits.auditGroups} role={role} /> : <Empty>{t('No finding recorded.#audit')}</Empty>}
 
           {/* AUD-40 : auto-évaluation par référentiel (dossiers figés avant le paquet R3 : section absente). */}
           {d.selfAssessments && (
             <>
               <h3 className="rd-h3">{t('Self-assessment per standard')}</h3>
               {d.selfAssessments.length ? (
-                <ScrollTable>
+                <ScrollTable t={t}>
                   <table className="table rd-table">
                     <thead><tr><th>{t('Standard')}</th><th>{t('Campaign')}</th><th className="rd-num-cell">{t('Compliance')}</th><th className="rd-num-cell">{t('Trend')}</th><th className="rd-num-cell">{t('Gaps')}</th><th>{t('Weakest clauses')}</th></tr></thead>
                     <tbody>
@@ -356,7 +356,7 @@ export async function DossierView({ page, role, notice }: {
       {d.actions && (
         <Section n={n()} title={t('Action plan')} aside={`${plural(d.actions.totals?.open ?? 0, t('{n} open#f'), t('{n} open#fplural'))} · ${fill(t('{n} late'), { n: d.actions.totals?.late ?? 0 })}`}>
           {actionRows?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
                 {d.actions.bySource
@@ -388,7 +388,7 @@ export async function DossierView({ page, role, notice }: {
           {!!d.actions.lateActions?.length && (
             <>
               <h3 className="rd-h3">{t('Late actions')}</h3>
-              <ScrollTable>
+              <ScrollTable t={t}>
                 <table className="table rd-table">
                   {d.actions.bySource
                     ? <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source')}</th><th>{t('Owner')}</th><th>{t('Target date')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>
@@ -417,7 +417,7 @@ export async function DossierView({ page, role, notice }: {
           aside={d.watch.requirementCounts?.filter((c) => c.n).map((c) => `${c.n} ${evalCount(c.key, c.label, c.n, t)}`).join(' · ')}>
           <h3 className="rd-h3">{t('Regulatory requirements')}</h3>
           {d.watch.requirements?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Requirement')}</th><th>{t('Domain')}</th><th>{t('Evaluation')}</th><th>{t('Deadline')}</th><th>{t('Lead')}</th><th>{t('Action')}</th></tr></thead>
                 <tbody>
@@ -432,7 +432,7 @@ export async function DossierView({ page, role, notice }: {
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>{[q.dueOn && fmtDate(q.dueOn), q.dueNote].filter(Boolean).join(' · ') || '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{q.pilot}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{q.action ? <><Ref href={q.action.href} role={role}>{q.action.id}</Ref> · <ActionStatus a={q.action} plain /></> : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{q.action ? <><Ref href={q.action.href} role={role}>{q.action.id}</Ref> · <ActionStatus a={q.action} plain t={t} /></> : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -446,7 +446,7 @@ export async function DossierView({ page, role, notice }: {
                 {plural(d.watch.controls.overdue, t('{n} overdue#m'), t('{n} overdue#plural'))} · {fill(t('{n} within 30 days'), { n: d.watch.controls.soon })} · {plural(d.watch.controls.planned, t('{n} planned'), t('{n} planned#plural'))} · {plural(d.watch.controls.withReserves, t('{n} inspection with reservations'), t('{n} inspections with reservations'))}
               </p>
               {d.watch.controls.rows?.length ? (
-                <ScrollTable>
+                <ScrollTable t={t}>
                   <table className="table rd-table">
                     <thead><tr><th>{t('Equipment')}</th><th>{t('Inspection')}</th><th>{t('Body')}</th><th>{t('Deadline')}</th><th>{t('State')}</th><th>{t('Reservations')}</th></tr></thead>
                     <tbody>
@@ -488,7 +488,7 @@ export async function DossierView({ page, role, notice }: {
                 {plural(d.risks.priority.count, t('{n} risk rated above the action threshold'), t('{n} risks rated above the action threshold'))} · {fill(t('{n} without action in progress'), { n: d.risks.priority.withoutAction })}
               </p>
               {d.risks.priority.top?.length ? (
-                <ScrollTable>
+                <ScrollTable t={t}>
                   <table className="table rd-table">
                     <thead><tr><th>{t('Work unit')}</th><th>{t('Hazard')}</th><th className="rd-num-cell">{t('Gross → residual')}</th><th>{t('Actions')}</th></tr></thead>
                     <tbody>
@@ -542,7 +542,7 @@ export async function DossierView({ page, role, notice }: {
           )}
           <h3 className="rd-h3">{t('Late periodic reviews')}</h3>
           {d.documents.overdue?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Ref.')}</th><th>{t('Document')}</th><th>{t('Owner#document')}</th><th>{t('Review planned on')}</th></tr></thead>
                 <tbody>
@@ -560,7 +560,7 @@ export async function DossierView({ page, role, notice }: {
           ) : <Empty>{t('No overdue document review.')}</Empty>}
           <h3 className="rd-h3">{t('Revisions in the approval workflow')}</h3>
           {d.documents.pending?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Ref.')}</th><th>{t('Revision')}</th><th>{t('Document')}</th><th>{t('Submitted on')}</th></tr></thead>
                 <tbody>
@@ -623,7 +623,7 @@ export async function DossierView({ page, role, notice }: {
           )}
           <h3 className="rd-h3">{t('Qualification alerts on the Keystone assignments')}</h3>
           {d.skills.alerts?.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Employee')}</th><th>{t('Title#qualification')}</th><th>{t('State')}</th><th>{t('Assignment')}</th><th>{t('Period')}</th></tr></thead>
                 <tbody>
@@ -641,7 +641,7 @@ export async function DossierView({ page, role, notice }: {
             </ScrollTable>
           ) : <Empty>{t('No upcoming assignment on a title missing, expired or expiring before the end of the assignment.')}</Empty>}
           <h3 className="rd-h3">{t('Resource needs')}</h3>
-          <RecordText text={r.resourceNeeds} held={held} placeholder={t('headcount, equipment, budget, trainings to schedule')} />
+          <RecordText t={t} text={r.resourceNeeds} held={held} placeholder={t('headcount, equipment, budget, trainings to schedule')} />
         </Section>
       )}
 
@@ -649,7 +649,7 @@ export async function DossierView({ page, role, notice }: {
       {d.objectives && (
         <Section n={n()} title={t('QHSE objectives')} aside={fill(t('{done}/{total} achieved'), { done: d.objectives.filter((o) => o.tone === 'ok').length, total: d.objectives.length })}>
           {d.objectives.length ? (
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Objective')}</th><th>{t('Indicator')}</th><th>{t('Target')}</th><th>{t('Value')}</th><th>{t('State')}</th></tr></thead>
                 <tbody>
@@ -705,20 +705,20 @@ export async function DossierView({ page, role, notice }: {
         {(r.minutes || page.mode === 'record') && (
           <>
             <h3 className="rd-h3">{t('Minutes and conclusions')}</h3>
-            <RecordText text={r.minutes} held={held} placeholder={t('conclusions of the meeting')} />
+            <RecordText t={t} text={r.minutes} held={held} placeholder={t('conclusions of the meeting')} />
             {page.mode === 'record' && (
               <>
                 <h3 className="rd-h3">{t('Customer perception')}</h3>
-                <RecordText text={r.customerPerception} held={held} placeholder="" />
+                <RecordText t={t} text={r.customerPerception} held={held} placeholder="" />
                 <h3 className="rd-h3">{t('Resource needs')}</h3>
-                <RecordText text={r.resourceNeeds} held={held} placeholder="" />
+                <RecordText t={t} text={r.resourceNeeds} held={held} placeholder="" />
               </>
             )}
           </>
         )}
 
         <h3 className="rd-h3">{t('Decisions and objectives')}</h3>
-        <ScrollTable>
+        <ScrollTable t={t}>
           <table className="table rd-table">
             <thead><tr><th>{t('Nature')}</th><th style={{ width: '46%' }}>{t('Decision, objective or resource need')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th>{t('Action')}</th></tr></thead>
             <tbody>
@@ -732,7 +732,7 @@ export async function DossierView({ page, role, notice }: {
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{x.action ? <><Ref href={`/actions?action=${encodeURIComponent(x.action.id)}`} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain /></> : x.actionId ?? '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{x.action ? <><Ref href={`/actions?action=${encodeURIComponent(x.action.id)}`} role={role}>{x.action.id}</Ref> · <ActionStatus a={x.action} plain t={t} /></> : x.actionId ?? '—'}</td>
                 </tr>
               ))}
               {h.status === 'planifiee' && Array.from({ length: BLANK_DECISIONS }, (_, i) => (
@@ -745,7 +745,7 @@ export async function DossierView({ page, role, notice }: {
         {d.extraActions.length > 0 && (
           <>
             <h3 className="rd-h3">{t('Other actions from the review')}</h3>
-            <ActionTable rows={d.extraActions} role={role} />
+            <ActionTable t={t} rows={d.extraActions} role={role} />
           </>
         )}
         <p className="rd-empty rd-muted" style={{ marginTop: 4 }}>{t('The decisions taken are followed in the single action plan with the source “Management review” (“QSE objective” for an objective).')}</p>
@@ -757,7 +757,7 @@ export async function DossierView({ page, role, notice }: {
         {'corrections' in page && page.corrections.length > 0 && (
           <>
             <h3 className="rd-h3">{t('Corrections after the sign-off')}</h3>
-            <ScrollTable>
+            <ScrollTable t={t}>
               <table className="table rd-table">
                 <thead><tr><th>{t('Date')}</th><th style={{ width: '50%' }}>{t('Correction')}</th><th>{t('Reason')}</th><th>{t('Signed by')}</th></tr></thead>
                 <tbody>
@@ -787,14 +787,13 @@ export async function DossierView({ page, role, notice }: {
 }
 
 /** Constats regroupés par audit (sections Audits et Fournisseurs, AUD-33) ; plusieurs actions par constat (AUD-28). */
-async function FindingGroups({ groups, role }: { groups: { label: string; findings: DossierFinding[] }[]; role: Role }) {
-  const { t } = await getI18n();
+function FindingGroups({ groups, role, t }: { groups: { label: string; findings: DossierFinding[] }[]; role: Role; t: T }) {
   return (
     <>
       {groups.map((g) => (
             <div key={g.label} style={{ display: 'grid', gap: 4 }}>
               <h4 className="rd-h4">{g.label}</h4>
-              <ScrollTable>
+              <ScrollTable t={t}>
                 <table className="table rd-table">
                   <thead><tr><th>{t('Type')}</th><th>{t('Finding')}</th><th>{t('Action')}</th><th>{t('Status of the action')}</th></tr></thead>
                   <tbody>
@@ -809,7 +808,7 @@ async function FindingGroups({ groups, role }: { groups: { label: string; findin
                             {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)
                               : f.kind === 'point_fort' ? '—' : <span className="rd-muted">{t('No action#without')}</span>}
                           </td>
-                          <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} /> : '—'}</div>) : '—'}</td>
+                          <td>{list.some((x) => x.action) ? list.map((x) => <div key={x.id}>{x.action ? <ActionStatus a={x.action} t={t} /> : '—'}</div>) : '—'}</td>
                         </tr>
                       );
                     })}
