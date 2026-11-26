@@ -1,5 +1,6 @@
 // Filtres des onglets Plans et Permis (?filtre=, ?type=), partagés par l'écran et le registre imprimable
-// (qui ajoute la période ?annee=, ?mois= et le filtre « Tous, annulés compris »).
+// (qui ajoute la période ?annee=, ?mois= et le filtre « Tous, annulés compris »). Libellés et messages : chaînes sources
+// anglaises (VG-N01), traduites à l'affichage par t().
 
 import { addDays, addMonths, monthName } from '@/lib/dates';
 import type { PermitState, PermitType, PlanPhase } from '@/lib/rules/prevention';
@@ -17,36 +18,36 @@ export type ListFilter<S extends string> = {
 
 // « En cours » suit l'indicateur (début ≤ aujourd'hui ≤ fin) ; « À clore » (période échue, plan non clos) et « Annulés » n'apparaissent que s'il y a lieu.
 export const PLAN_FILTERS: ListFilter<PlanPhase>[] = [
-  { key: 'en-cours', label: 'En cours', states: ['en_cours'], empty: 'Aucune intervention en cours sur ce site.' },
-  { key: 'a-venir', label: 'À venir', states: ['a_venir'], empty: 'Aucune intervention à venir sur ce site.' },
-  { key: 'a-clore', label: 'À clore', states: ['a_clore'], empty: 'Aucun plan à clore sur ce site.', optional: true },
-  { key: 'clos', label: 'Clos', states: ['clos'], empty: 'Aucun plan clos sur ce site.' },
-  { key: 'annules', label: 'Annulés', states: ['annule'], empty: 'Aucun plan annulé sur ce site.', optional: true },
-  { key: 'tous', label: 'Tous', states: ['en_cours', 'a_venir', 'a_clore', 'clos'], empty: 'Aucun plan de prévention sur ce site.' },
+  { key: 'en-cours', label: 'In progress', states: ['en_cours'], empty: 'No intervention in progress on this site.' },
+  { key: 'a-venir', label: 'Upcoming', states: ['a_venir'], empty: 'No upcoming intervention on this site.' },
+  { key: 'a-clore', label: 'To close', states: ['a_clore'], empty: 'No plan to close on this site.', optional: true },
+  { key: 'clos', label: 'Closed#plural', states: ['clos'], empty: 'No closed plan on this site.' },
+  { key: 'annules', label: 'Cancelled#plural', states: ['annule'], empty: 'No cancelled plan on this site.', optional: true },
+  { key: 'tous', label: 'All', states: ['en_cours', 'a_venir', 'a_clore', 'clos'], empty: 'No prevention plan on this site.' },
 ];
 
 // « Ouverts » : tout ce qui reste à traiter (demandes, permis délivrés ou en cours, expirés non clos). « Tous » exclut les annulés.
 export const PERMIT_FILTERS: ListFilter<PermitState>[] = [
-  { key: 'ouverts', label: 'Ouverts', states: ['demande', 'delivre', 'en_cours', 'expire'], empty: 'Aucun permis ouvert sur ce site.' },
-  { key: 'actifs', label: 'Actifs', states: ['delivre', 'en_cours'], empty: 'Aucun permis délivré ou en cours sur ce site.' },
-  { key: 'demandes', label: 'Demandes', states: ['demande'], empty: 'Aucune demande de permis à délivrer sur ce site.' },
-  { key: 'expires', label: 'Expirés', states: ['expire'], empty: 'Aucun permis expiré non clos sur ce site.', optional: true },
-  { key: 'clos', label: 'Clos', states: ['clos'], empty: 'Aucun permis clos sur ce site.' },
-  { key: 'annules', label: 'Annulés', states: ['annule'], empty: 'Aucun permis annulé sur ce site.', optional: true },
-  { key: 'tous', label: 'Tous', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos'], empty: 'Aucun permis sur ce site.' },
+  { key: 'ouverts', label: 'Open', states: ['demande', 'delivre', 'en_cours', 'expire'], empty: 'No open permit on this site.' },
+  { key: 'actifs', label: 'Active#plural', states: ['delivre', 'en_cours'], empty: 'No permit issued or in progress on this site.' },
+  { key: 'demandes', label: 'Requests', states: ['demande'], empty: 'No permit request to issue on this site.' },
+  { key: 'expires', label: 'Expired#plural', states: ['expire'], empty: 'No expired permit left open on this site.', optional: true },
+  { key: 'clos', label: 'Closed#plural', states: ['clos'], empty: 'No closed permit on this site.' },
+  { key: 'annules', label: 'Cancelled#plural', states: ['annule'], empty: 'No cancelled permit on this site.', optional: true },
+  { key: 'tous', label: 'All', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos'], empty: 'No permit on this site.' },
 ];
 
 /** Registre imprimable : filtres de l'onglet Permis, plus tous les permis annulés compris (l'écran reste inchangé). */
 export const REGISTER_FILTERS: ListFilter<PermitState>[] = [
   ...PERMIT_FILTERS,
-  { key: 'registre', label: 'Tous, annulés compris', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos', 'annule'], empty: 'Aucun permis sur ce site.' },
+  { key: 'registre', label: 'All, cancelled included', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos', 'annule'], empty: 'No permit on this site.' },
 ];
 
 /** ?type= : tous types (sans paramètre), permis de feu, permis d'essai. */
 export const PERMIT_TYPE_FILTERS: { key: PermitType | null; label: string }[] = [
-  { key: null, label: 'Tous types' },
-  { key: 'feu', label: 'Feu' },
-  { key: 'essai', label: 'Essai' },
+  { key: null, label: 'All types' },
+  { key: 'feu', label: 'Fire' },
+  { key: 'essai', label: 'Test' },
 ];
 
 /**

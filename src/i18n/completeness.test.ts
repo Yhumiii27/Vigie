@@ -62,6 +62,8 @@ describe('traduction de l’interface (VG-N01)', () => {
     expect(makeT('en')('Sign out')).toBe('Sign out');
     expect(makeT('fr')('Sign out')).toBe('Se déconnecter');
     expect(makeT('fr')('Texte inconnu')).toBe('Texte inconnu');
+    expect(makeT('en')('Closed#plural')).toBe('Closed');
+    expect(makeT('fr')('Closed#plural')).toBe('Clos');
     expect(fill(makeT('fr')('{n} pages found'), { n: 3 })).toBe('3 pages trouvées');
   });
 });

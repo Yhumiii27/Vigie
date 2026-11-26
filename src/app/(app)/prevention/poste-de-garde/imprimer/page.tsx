@@ -8,6 +8,8 @@ import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_HORIZONS, GATE_HOUSE_PATH, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
 import { today } from '@/lib/today';
 import '../../imprimer/print.css';
+import { getI18n } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 
 export const metadata: Metadata = { title: 'Liste du poste de garde' };
 
@@ -19,6 +21,7 @@ const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : u
 export default async function GateHousePrintPage({ searchParams }: PageProps<'/prevention/poste-de-garde/imprimer'>) {
   const session = await guard('prevention');
   if (!canReadGateHouse(session.role)) redirect('/prevention');
+  const { t } = await getI18n();
   const sp = await searchParams;
   const gate = await loadGateHouse(parseHorizon(str(sp.horizon)));
   if (!gate) redirect('/prevention');
@@ -29,48 +32,48 @@ export default async function GateHousePrintPage({ searchParams }: PageProps<'/p
     <article className="pp-doc">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href={`${GATE_HOUSE_PATH}${horizon === 7 ? '' : `&horizon=${horizon}`}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Poste de garde</a>
+        <a href={`${GATE_HOUSE_PATH}${horizon === 7 ? '' : `&horizon=${horizon}`}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{t('Gatehouse')}</a>
         <form method="get" action="/prevention/poste-de-garde/imprimer" className="pp-filters" style={{ margin: 0 }}>
           <label>
-            Période
+            {t('Period')}
             <select name="horizon" className="input" defaultValue={String(horizon)}>
-              {GATE_HOUSE_HORIZONS.map((h) => <option key={h} value={h}>{h === 1 ? 'Demain' : `${h} jours`}</option>)}
+              {GATE_HOUSE_HORIZONS.map((h) => <option key={h} value={h}>{h === 1 ? t('Tomorrow') : fill(t('{n} days'), { n: h })}</option>)}
             </select>
           </label>
-          <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-funnel" style={{ fontSize: 13 }} aria-hidden />Afficher</button>
+          <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-funnel" style={{ fontSize: 13 }} aria-hidden />{t('Show')}</button>
           <PrintButton />
         </form>
       </div>
 
       <header className="pp-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · Prévention</div>
-        <h1>Liste du poste de garde</h1>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · {t('Prevention')}</div>
+        <h1>{t('Gatehouse list')}</h1>
         <div className="pp-muted" style={{ fontSize: 12.5 }}>
-          {session.site.label} · du {fmtDate(list.from)} au {fmtDate(list.to)} · {list.arrivals.length} arrivée(s), {list.departures.length} départ(s) · édité le {printedOn}
+          {session.site.label} · {fill(t('from {from} to {to}'), { from: fmtDate(list.from), to: fmtDate(list.to) })} · {fill(t('{a} arrival(s), {d} departure(s)'), { a: list.arrivals.length, d: list.departures.length })} · {fill(t('printed on {date}'), { date: printedOn })}
         </div>
-        <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>{GATE_HOUSE_NOTICE}</p>
+        <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>{t(GATE_HOUSE_NOTICE)}</p>
       </header>
 
       {message ? <section className="pp-section"><p role="status" className="pp-empty">{message}</p></section> : (
         <>
           <section className="pp-section">
-            <h2>Arrivées</h2>
-            <GateTable rows={list.arrivals} caption="Arrivées à venir" showSite={showSite} print empty="Aucune arrivée prévue sur la période." />
+            <h2>{t('Arrivals')}</h2>
+            <GateTable rows={list.arrivals} caption={t('Upcoming arrivals')} showSite={showSite} print empty={t('No arrival planned over the period.')} />
           </section>
           <section className="pp-section">
-            <h2>Départs</h2>
-            <GateTable rows={list.departures} caption="Départs à venir" showSite={showSite} print empty="Aucun départ prévu sur la période." />
+            <h2>{t('Departures')}</h2>
+            <GateTable rows={list.departures} caption={t('Upcoming departures')} showSite={showSite} print empty={t('No departure planned over the period.')} />
           </section>
           {list.cancelled.length > 0 && (
             <section className="pp-section">
-              <h2>Annulées</h2>
-              <GateTable rows={list.cancelled} caption="Présences annulées" showSite={showSite} print empty="" />
+              <h2>{t('Cancelled#fplural')}</h2>
+              <GateTable rows={list.cancelled} caption={t('Cancelled attendance')} showSite={showSite} print empty="" />
             </section>
           )}
         </>
       )}
 
-      <div className="pp-foot">Vigie · poste de garde · {session.site.label} · édité le {printedOn}</div>
+      <div className="pp-foot">Vigie · {t('gatehouse')} · {session.site.label} · {fill(t('printed on {date}'), { date: printedOn })}</div>
     </article>
   );
 }

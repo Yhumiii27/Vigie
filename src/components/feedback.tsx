@@ -3,6 +3,7 @@
 import { unstable_rethrow } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { FAILURE_MESSAGE, feedbackOf, type Feedback, type FeedbackTone } from '@/lib/feedback';
+import { useI18n } from '@/i18n/client';
 
 // Retours d'état communs (UX-14) : annonce d'un enregistrement ou d'un échec (`announce`, affichée et lue par le
 // `StatusToaster` de la coque), exécution d'une server action sans formulaire avec attente et erreur (`useActionRunner`),
@@ -120,11 +121,12 @@ export function useActionRunner() {
  * Indicateur en ligne d'un enregistrement sans formulaire : « Enregistrement… » pendant l'appel (région `status`), puis le
  * message d'erreur (région `alert`) s'il a échoué.
  */
-export function SaveStatus({ pending, error, label = 'Enregistrement…', className }: { pending: boolean; error?: string | null; label?: string; className?: string }) {
+export function SaveStatus({ pending, error, label, className }: { pending: boolean; error?: string | null; label?: string; className?: string }) {
+  const { t } = useI18n();
   return (
     <>
       <span role="status" aria-live="polite" className={`vg-save-status${className ? ` ${className}` : ''}`}>
-        {pending && <><span className="vg-spinner" aria-hidden />{label}</>}
+        {pending && <><span className="vg-spinner" aria-hidden />{label ?? t('Saving…')}</>}
       </span>
       {error && !pending && <div role="alert" className="vg-form-error">{error}</div>}
     </>

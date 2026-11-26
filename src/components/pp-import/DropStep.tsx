@@ -11,6 +11,8 @@ import {
 } from '@/lib/pp-import/types';
 import { detectPpImport } from '@/server/pp-import';
 import s from './pp-import.module.css';
+import { useI18n } from '@/i18n/client';
+import { fill, type Lang, type T } from '@/i18n/translate';
 
 export type DetectOk = Extract<DetectResponse, { ok: true }>;
 
@@ -96,10 +98,10 @@ export async function detectFile(files: File[], templateId: number | string | nu
 
 /** Étape 1 : dépôt du fichier (glisser-déposer ou sélection), puis détection des champs par le serveur. */
 /** Consommation de la lecture des scans (INT-06), affichée sous l'avis « Lecture des scans activée ». */
-export function aiUsageText(u: AiUsageView): string {
-  const n = (x: number) => x.toLocaleString('fr-FR');
-  const month = `Ce mois-ci : ${n(u.monthCalls)} lecture${u.monthCalls > 1 ? 's' : ''}, ${n(u.monthTokens)} jetons${u.monthlyTokens > 0 ? ` sur un plafond de ${n(u.monthlyTokens)}` : ''}`;
-  return `${month} ; vous : ${n(u.personDay)} sur ${n(u.dailyScans)} lectures par 24 h. Un même fichier relu dans l'heure n'est pas renvoyé.`;
+export function aiUsageText(u: AiUsageView, t: T, lang: Lang): string {
+  const n = (x: number) => x.toLocaleString(lang === 'en' ? 'en-GB' : 'fr-FR');
+  const month = `${fill(u.monthCalls > 1 ? t('This month: {n} readings, {tokens} tokens') : t('This month: {n} reading, {tokens} tokens'), { n: n(u.monthCalls), tokens: n(u.monthTokens) })}${u.monthlyTokens > 0 ? fill(t(' out of a ceiling of {max}'), { max: n(u.monthlyTokens) }) : ''}`;
+  return `${month}${fill(t('; you: {n} out of {max} readings per 24 h. The same file read again within the hour is not resent.'), { n: n(u.personDay), max: n(u.dailyScans) })}`;
 }
 
 export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
@@ -108,6 +110,7 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
   aiUsage?: AiUsageView | null;
   onDetected: (files: File[], det: DetectOk) => void;
 }) {
+  const { t, lang } = useI18n();
   const aiEnabled = aiStatus === 'ready';
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -129,7 +132,7 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
     const first = dropped[0];
     const mime = importMimeOf(first.name, first.type);
     const image = isHeic(first) || !!mime?.startsWith('image/');
-    setReading({ name: dropped.length > 1 ? `${dropped.length} pages` : first.name, mayBeScan: aiEnabled && (image || mime === ACCEPTED_TYPES.pdf) });
+    setReading({ name: dropped.length > 1 ? fill(t('{n} pages'), { n: dropped.length }) : first.name, mayBeScan: aiEnabled && (image || mime === ACCEPTED_TYPES.pdf) });
     start(async () => {
       try {
         const prepared = await prepareFiles(dropped);
@@ -138,7 +141,7 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
         if (res.ok) onDetected(prepared.files, res);
         else setError(res.error);
       } catch {
-        setError('Lecture impossible : la connexion au serveur a été interrompue. Réessayez.');
+        setError(t('Reading impossible: the connection to the server was interrupted. Try again.'));
       } finally {
         setReading(null);
         if (input.current) input.current.value = '';
@@ -155,8 +158,8 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
   return (
     <div className="card" style={{ gap: 12 }}>
       <div style={{ display: 'grid', gap: 2 }}>
-        <span className="card-kicker">Étape 1 · Dépôt du fichier</span>
-        <span className="card-title" style={{ fontSize: 15 }}>Formulaire de plan de prévention rempli</span>
+        <span className="card-kicker">{t('Step 1 · File upload')}</span>
+        <span className="card-title" style={{ fontSize: 15 }}>{t('Filled prevention plan form')}</span>
       </div>
 
       <div role="button" tabIndex={busy ? -1 : 0} aria-disabled={busy}
@@ -169,15 +172,15 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
         {reading ? (
           <>
             <span className={s.spin} aria-hidden><Icon name="ph-circle-notch" size={28} style={{ color: 'var(--color-accent)', display: 'block' }} /></span>
-            <span style={{ fontSize: 13 }}>Lecture de « {reading.name} »…</span>
-            {reading.mayBeScan && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Un scan ou une photo est lu par l&apos;API Claude : jusqu&apos;à une minute.</span>}
+            <span style={{ fontSize: 13 }}>{fill(t('Reading “{name}”…'), { name: reading.name })}</span>
+            {reading.mayBeScan && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{t('A scan or a photo is read by the Claude API: up to one minute.')}</span>}
           </>
         ) : (
           <>
             <Icon name="ph-file-arrow-up" size={30} style={{ color: dragging ? 'var(--color-accent)' : 'var(--color-neutral-400)' }} />
-            <span style={{ fontSize: 13 }}>Déposez le formulaire ici ou <span style={{ color: 'var(--color-accent)' }}>choisissez un fichier</span></span>
-            <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>PDF remplissable, Word (.docx), scan PDF ou photo (JPG, PNG, WEBP, HEIC) · 10 Mo au maximum</span>
-            <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>Formulaire papier photographié page par page : sélectionnez toutes les photos ensemble ({MAX_SCAN_PAGES} au plus).</span>
+            <span style={{ fontSize: 13 }}>{t('Drop the form here or')} <span style={{ color: 'var(--color-accent)' }}>{t('choose a file')}</span></span>
+            <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{t('Fillable PDF, Word (.docx), PDF scan or photo (JPG, PNG, WEBP, HEIC) · 10 MB at most')}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fill(t('Paper form photographed page by page: select all the photos together ({max} at most).'), { max: MAX_SCAN_PAGES })}</span>
           </>
         )}
       </div>
@@ -185,12 +188,12 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
       {error && <div role="alert" className="vg-form-error">{error}</div>}
 
       <div className="vg-form" style={{ gap: 10 }}>
-        <Field name="templateId" label="Modèle d'import"
+        <Field name="templateId" label={t('Import template')}
           hint={templates.length
-            ? 'Facultatif : un formulaire déjà calibré est reconnu automatiquement. Choisir un modèle sert surtout pour un scan, lu avec les champs du modèle.'
-            : "Aucun modèle enregistré : la correspondance est proposée d'après les libellés, puis s'enregistre comme modèle."}>
+            ? t('Optional: a form already calibrated is recognised automatically. Choosing a template is mainly for a scan, read with the template’s fields.')
+            : t('No template recorded: the mapping is proposed from the labels, then saved as a template.')}>
           <select id="templateId" className="input" value={templateId} disabled={busy || !templates.length} onChange={(e) => setTemplateId(e.target.value)} style={{ maxWidth: 460 }}>
-            <option value="">Reconnaissance automatique</option>
+            <option value="">{t('Automatic recognition')}</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name} · {FORMAT_LABELS[t.format]}</option>)}
           </select>
         </Field>
@@ -198,17 +201,17 @@ export function DropStep({ templates, aiStatus, aiUsage = null, onDetected }: {
 
       {aiStatus === 'ready' ? (
         <Notice tone="accent" icon="ph-sparkle">
-          Lecture des scans activée : un scan ou une photo est envoyé à l&apos;API Claude (Anthropic) pour en lire les cases cochées et les champs remplis.
-          Les PDF remplissables et les fichiers Word sont lus sur le serveur Vigie, sans envoi extérieur.
-          {aiUsage && <> {aiUsageText(aiUsage)}</>}
+          {t('Scan reading enabled: a scan or a photo is sent to the Claude API (Anthropic) to read its ticked boxes and filled fields.')}
+          {' '}{t('Fillable PDFs and Word files are read on the Vigie server, without being sent outside.')}
+          {aiUsage && <> {aiUsageText(aiUsage, t, lang)}</>}
         </Notice>
       ) : aiStatus === 'no_credentials' ? (
         <Notice tone="warn" icon="ph-key">
-          {AI_NO_CREDENTIALS_MESSAGE}. En attendant, les PDF remplissables et les fichiers Word sont lus sur le serveur Vigie ; un scan ou une photo est joint au plan et le plan se saisit à partir du fichier.
+          {AI_NO_CREDENTIALS_MESSAGE}. {t('Meanwhile, fillable PDFs and Word files are read on the Vigie server; a scan or a photo is attached to the plan and the plan is entered from the file.')}
         </Notice>
       ) : (
         <Notice tone="neutral" icon="ph-info">
-          {AI_DISABLED_MESSAGE}. Les PDF remplissables et les fichiers Word sont lus sur le serveur Vigie ; un scan ou une photo est joint au plan et le plan se saisit à partir du fichier.
+          {AI_DISABLED_MESSAGE}. {t('Fillable PDFs and Word files are read on the Vigie server; a scan or a photo is attached to the plan and the plan is entered from the file.')}
         </Notice>
       )}
     </div>

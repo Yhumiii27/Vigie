@@ -11,6 +11,8 @@ import type { FormState } from '@/lib/forms';
 import { ReasonForm } from '@/components/ReasonDialog';
 import { PhotoGallery } from '@/components/PhotoGallery';
 import { ATTACHMENT_PHOTO_EDGE, photosToShrink, shrinkPhoto } from '@/lib/photo-shrink';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Result = { error?: string };
 
@@ -39,7 +41,11 @@ type AttachmentsProps = {
  * Pièces jointes d'une fiche (photos, PV, attestations, rapports) : vignettes, ajout et retrait.
  * Composant transverse ; le stockage passe par src/lib/uploads.ts et la lecture par /fichiers/[id] (droit sur l'entité).
  */
-export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, reasonRequired = false, title = 'Pièces jointes', kicker, hint = `Photos, PDF, Word, Excel · ${MAX_FILE_BYTES / 1024 / 1024} Mo par fichier`, emptyText = 'Aucune pièce jointe.', caption }: AttachmentsProps) {
+export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, onRemove, reasonRequired = false, title: titleProp, kicker, hint: hintProp, emptyText: emptyProp, caption }: AttachmentsProps) {
+  const { t } = useI18n();
+  const title = titleProp ?? t('Attachments');
+  const hint = hintProp === undefined ? fill(t('Photos, PDF, Word, Excel · {mb} MB per file'), { mb: MAX_FILE_BYTES / 1024 / 1024 }) : hintProp;
+  const emptyText = emptyProp ?? t('No attachment.');
   const canManage = canAdd;
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,10 +78,10 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
       if (issue) { setError(issue); return; }
       try {
         const r = await onAdd(picked);
-        if (!r.error && reduced) setNote(`${reduced} photo${reduced > 1 ? 's' : ''} allégée${reduced > 1 ? 's' : ''} avant l'envoi pour respecter la limite (${ATTACHMENT_PHOTO_EDGE} px au plus).`);
+        if (!r.error && reduced) setNote(fill(reduced > 1 ? t('{n} photos reduced before upload to respect the limit ({px} px at most).') : t('{n} photo reduced before upload to respect the limit ({px} px at most).'), { n: reduced, px: ATTACHMENT_PHOTO_EDGE }));
         setError(r.error ?? null);
       } catch {
-        setError("L'envoi a échoué. Vérifiez la connexion puis réessayez.");
+        setError(t('The upload failed. Check the connection then try again.'));
       }
     });
   };
@@ -89,7 +95,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
       const r = await onRemove(removing.id, String(fd.get('reason') ?? '').trim());
       return r.error ? { error: r.error } : { ok: true };
     } catch {
-      return { error: 'La suppression a échoué. Réessayez.' };
+      return { error: t('The deletion failed. Try again.') };
     }
   };
 
@@ -103,7 +109,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
         if (r.error) { setRemoveError(r.error); return; }
         setRemoving(null);
       } catch {
-        setRemoveError('La suppression a échoué. Réessayez.');
+        setRemoveError(t('The deletion failed. Try again.'));
       }
     });
   };
@@ -120,7 +126,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
               {f.isImage && !broken.includes(f.id) ? (
                 // UX-05 : une photo s'ouvre dans la galerie de la fiche (précédente / suivante, lien vers l'original).
                 <button type="button" className="vg-thumb" onClick={() => setViewing(photos.findIndex((p) => p.id === f.id))}
-                  aria-label={`Voir la photo ${f.name}`} style={{ border: 0, padding: 0, cursor: 'zoom-in' }}>
+                  aria-label={fill(t('See the photo {name}'), { name: f.name })} style={{ border: 0, padding: 0, cursor: 'zoom-in' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- fichier servi par /fichiers/[id], pas d'optimisation */}
                   <img src={f.url} alt="" loading="lazy" onError={() => setBroken((b) => [...b, f.id])} />
                 </button>
@@ -133,7 +139,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
               </a>
               )}
               {canRemove(f) && (
-                <button type="button" aria-label={`Supprimer ${f.name}`} title="Supprimer" onClick={() => askRemove(f)}
+                <button type="button" aria-label={fill(t('Delete {name}'), { name: f.name })} title={t('Delete')} onClick={() => askRemove(f)}
                   style={{ position: 'absolute', top: 3, right: 3, width: 24, height: 24, borderRadius: '50%', display: 'grid', placeItems: 'center', border: 0, cursor: 'pointer', color: 'var(--color-neutral-100)', background: 'color-mix(in srgb, var(--color-bg) 75%, transparent)' }}>
                   <i className="ph ph-x" style={{ fontSize: 12 }} aria-hidden />
                 </button>
@@ -147,7 +153,7 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
                 style={{ border: '1px dashed var(--color-divider)', boxShadow: 'none', cursor: uploading ? 'progress' : 'pointer', font: 'inherit', fontSize: 11, color: 'var(--color-neutral-400)' }}>
                 <span style={{ display: 'grid', justifyItems: 'center', gap: 4 }}>
                   <i className={`ph ${uploading ? 'ph-circle-notch' : 'ph-plus'}`} style={{ fontSize: 20 }} aria-hidden />
-                  {uploading ? 'Envoi…' : 'Ajouter'}
+                  {uploading ? t('Sending…') : t('Add')}
                 </span>
               </button>
               <input ref={input} type="file" multiple accept={ATTACH_ACCEPT} hidden onChange={(e) => upload(e.target.files)} />
@@ -158,26 +164,26 @@ export function Attachments({ files, canAdd, canRemove = () => canAdd, onAdd, on
       {canManage && hint && <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>{hint}</span>}
       {error && <div role="alert" style={{ fontSize: 12, color: 'var(--tone-danger-fg)' }}>{error}</div>}
       {note && <div role="status" style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{note}</div>}
-      <PhotoGallery photos={photos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} kicker={kicker ? `${kicker} · photo ${(viewing ?? 0) + 1} sur ${photos.length}` : undefined} />
+      <PhotoGallery photos={photos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} kicker={kicker ? `${kicker} · ${fill(t('photo {n} of {total}'), { n: (viewing ?? 0) + 1, total: photos.length })}` : undefined} />
 
-      <Dialog open={!!removing} onClose={() => askRemove(null)} title="Supprimer la pièce jointe ?" kicker={kicker} width={420}>
+      <Dialog open={!!removing} onClose={() => askRemove(null)} title={t('Delete the attachment?')} kicker={kicker} width={420}>
         {removing && (
           <>
             {reasonRequired ? (
-              <ReasonForm action={removeWithReason} reasonLabel="Motif du retrait" submitLabel="Supprimer" submitIcon="ph-trash"
-                message={`« ${removing.name} » sera définitivement retiré de la fiche. Cette suppression est irréversible. Le retrait est inscrit à l’historique de la fiche avec son motif.`}
-                placeholder="Ex. fichier joint par erreur, mauvaise version du rapport" onDone={() => setRemoving(null)} onCancel={() => askRemove(null)} />
+              <ReasonForm action={removeWithReason} reasonLabel={t('Reason for the removal')} submitLabel={t('Delete')} submitIcon="ph-trash"
+                message={fill(t('“{name}” will be removed from the record for good. This deletion cannot be undone. The removal is written to the record’s history with its reason.'), { name: removing.name })}
+                placeholder={t('E.g. file attached by mistake, wrong version of the report')} onDone={() => setRemoving(null)} onCancel={() => askRemove(null)} />
             ) : (
               <>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-                  « {removing.name} » sera définitivement retiré de la fiche. Cette suppression est irréversible.
+                  {fill(t('“{name}” will be removed from the record for good. This deletion cannot be undone.'), { name: removing.name })}
                 </p>
                 {removeError && <div role="alert" className="vg-form-error">{removeError}</div>}
                 <div className="dialog-actions">
-                  <button type="button" className="btn btn-secondary" onClick={() => askRemove(null)} disabled={deleting}>Annuler</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => askRemove(null)} disabled={deleting}>{t('Cancel')}</button>
                   <button type="button" className="btn" onClick={confirmRemove} disabled={deleting}
                     style={{ color: TONE.danger.fg, borderColor: TONE.danger.dot }}>
-                    <i className="ph ph-trash" style={{ fontSize: 14 }} aria-hidden />{deleting ? 'Suppression…' : 'Supprimer'}
+                    <i className="ph ph-trash" style={{ fontSize: 14 }} aria-hidden />{deleting ? t('Deleting…') : t('Delete')}
                   </button>
                 </div>
               </>

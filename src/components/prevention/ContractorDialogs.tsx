@@ -13,42 +13,46 @@ import type { ContractorView } from '@/lib/data/prevention';
 import { archiveContractor, restoreContractor, saveContractor } from '@/server/contractors';
 import { Facts, Notice, SectionTitle, dropUrlParam, muted, rowOpener } from './parts';
 import { TipButton } from '@/components/Tip';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** D16 : fournisseurs de keystone.pub_fournisseurs proposés (sans les ateliers internes) ; `message` : source indisponible. */
 export type SupplierChoices = { options: Option[]; message: string | null };
 
 function ContractorForm({ contractor, suppliers, onDone, onCancel }: { contractor?: ContractorView; suppliers: SupplierChoices; onDone: () => void; onCancel: () => void }) {
+  const { t } = useI18n();
   return (
-    <ActionForm action={saveContractor} onDone={onDone} onCancel={onCancel} submitLabel={contractor ? 'Enregistrer' : "Ajouter l'entreprise"} hidden={{ id: contractor?.id, version: contractor?.version }}>
+    <ActionForm action={saveContractor} onDone={onDone} onCancel={onCancel} submitLabel={contractor ? t('Save') : t('Add the company')} hidden={{ id: contractor?.id, version: contractor?.version }}>
       <FormRow>
-        <Field name="name" label="Raison sociale">
-          <Input name="name" defaultValue={contractor?.name} placeholder="Ex. [Entreprise Levage Ouest]" autoFocus />
+        <Field name="name" label={t('Company name')}>
+          <Input name="name" defaultValue={contractor?.name} placeholder={t('E.g. [Levage Ouest company]')} autoFocus />
         </Field>
-        <Field name="trade" label="Corps de métier">
-          <Input name="trade" defaultValue={contractor?.trade} placeholder="Ex. Maintenance des appareils de levage" />
+        <Field name="trade" label={t('Trade')}>
+          <Input name="trade" defaultValue={contractor?.trade} placeholder={t('E.g. Maintenance of lifting equipment')} />
         </Field>
       </FormRow>
-      <Field name="contactName" label="Interlocuteur" hint="Responsable de l'intervention côté entreprise extérieure.">
-        <Input name="contactName" defaultValue={contractor?.contactName ?? ''} placeholder="Ex. [M. Lebrun]" />
+      <Field name="contactName" label={t('Contact')} hint={t('Person in charge of the intervention on the external company’s side.')}>
+        <Input name="contactName" defaultValue={contractor?.contactName ?? ''} placeholder={t('E.g. [Mr Lebrun]')} />
       </Field>
       <FormRow>
-        <Field name="contactPhone" label="Téléphone">
+        <Field name="contactPhone" label={t('Phone')}>
           <Input name="contactPhone" type="tel" defaultValue={contractor?.contactPhone ?? ''} />
         </Field>
-        <Field name="contactEmail" label="E-mail">
+        <Field name="contactEmail" label={t('E-mail')}>
           <Input name="contactEmail" type="email" defaultValue={contractor?.contactEmail ?? ''} />
         </Field>
       </FormRow>
-      <Field name="supplierId" label="Fournisseur Keystone" hint={suppliers.message ?? 'Facultatif : rattache l’entreprise à sa fiche fournisseur de Keystone (achats, NC fournisseur).'}>
-        <Select name="supplierId" options={withCurrent(suppliers.options, contractor?.supplierId, contractor?.supplier)} defaultValue={contractor?.supplierId ?? ''} placeholder="Aucun" />
+      <Field name="supplierId" label={t('Keystone supplier')} hint={suppliers.message ?? t('Optional: links the company to its Keystone supplier record (purchasing, supplier NC).')}>
+        <Select name="supplierId" options={withCurrent(suppliers.options, contractor?.supplierId, contractor?.supplier)} defaultValue={contractor?.supplierId ?? ''} placeholder={t('None')} />
       </Field>
     </ActionForm>
   );
 }
 
 export function NewContractorButton({ suppliers }: { suppliers: SupplierChoices }) {
+  const { t } = useI18n();
   return (
-    <DialogButton label="Ajouter une entreprise" icon="ph-plus" className="btn btn-primary vg-btn-sm" title="Nouvelle entreprise extérieure" kicker="Entreprises extérieures" width={600}>
+    <DialogButton label={t('Add a company')} icon="ph-plus" className="btn btn-primary vg-btn-sm" title={t('New external company')} kicker={t('External companies')} width={600}>
       {(close) => <ContractorForm suppliers={suppliers} onDone={close} onCancel={close} />}
     </DialogButton>
   );
@@ -60,25 +64,26 @@ const telHref = (phone: string) => `tel:${phone.replace(/\s/g, '')}`;
 function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
   contractor: ContractorView; canManage: boolean; onEdit: () => void; onArchive: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {c.archived && (
         <Notice tone="neutral" icon="ph-archive">
-          {c.archivedLabel}{c.archiveReason ? ` : ${c.archiveReason}` : '.'} L&apos;entreprise n&apos;est plus proposée dans les formulaires ; ses plans et permis restent consultables.
+          {c.archivedLabel}{c.archiveReason ? fill(t(': {reason}'), { reason: c.archiveReason }) : '.'} {t('The company is no longer offered in the forms; its plans and permits stay readable.')}
         </Notice>
       )}
       <Facts items={[
-        ['Corps de métier', c.trade],
-        ['Fournisseur Keystone', c.supplier ?? '—'],
-        ['Interlocuteur', c.contactName ?? '—'],
-        ['Téléphone', c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : '—'],
-        ['E-mail', c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>{c.contactEmail}</a> : '—'],
-        ['Statut', c.archived ? 'Archivée' : 'Active'],
+        [t('Trade'), c.trade],
+        [t('Keystone supplier'), c.supplier ?? '—'],
+        [t('Contact'), c.contactName ?? '—'],
+        [t('Phone'), c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : '—'],
+        [t('E-mail'), c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5, wordBreak: 'break-all' }}>{c.contactEmail}</a> : '—'],
+        [t('Status'), c.archived ? t('Archived#f') : t('Active#f')],
       ]} />
 
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle aside={<span style={muted}>sur le site sélectionné</span>}>Plans de prévention</SectionTitle>
-        {c.planList.length === 0 && <span style={muted}>Aucun plan de prévention.</span>}
+        <SectionTitle aside={<span style={muted}>{t('on the selected site')}</span>}>{t('Prevention plans')}</SectionTitle>
+        {c.planList.length === 0 && <span style={muted}>{t('No prevention plan.')}</span>}
         {c.planList.map((p) => (
           <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
             <Link href={`/prevention?plan=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
@@ -90,8 +95,8 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
       </div>
 
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle aside={<span style={muted}>sur le site sélectionné</span>}>Permis</SectionTitle>
-        {c.permitList.length === 0 && <span style={muted}>Aucun permis.</span>}
+        <SectionTitle aside={<span style={muted}>{t('on the selected site')}</span>}>{t('Permits')}</SectionTitle>
+        {c.permitList.length === 0 && <span style={muted}>{t('No permit.')}</span>}
         {c.permitList.map((p) => (
           <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
             <Icon name={p.icon} size={14} style={{ color: 'var(--color-neutral-400)' }} />
@@ -109,16 +114,16 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
         <div className="dialog-actions" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
           {c.archived
             ? (
-              <ReasonButton action={restoreContractor} hidden={{ id: c.id }} label="Réactiver" icon="ph-arrow-counter-clockwise" title="Réactiver l’entreprise"
-                kicker={c.name} submitLabel="Réactiver" message="L’entreprise est de nouveau proposée dans les formulaires de plans et de permis."
-                placeholder="Ex. nouvelle intervention prévue" />
+              <ReasonButton action={restoreContractor} hidden={{ id: c.id }} label={t('Reactivate')} icon="ph-arrow-counter-clockwise" title={t('Reactivate the company')}
+                kicker={c.name} submitLabel={t('Reactivate')} message={t('The company is offered again in the plan and permit forms.')}
+                placeholder={t('E.g. new intervention planned')} />
             )
             : (
               <TipButton className="btn btn-secondary vg-btn-sm" disabled={!!c.archiveBlock} tip={c.archiveBlock} onClick={onArchive}>
-                <Icon name="ph-archive" size={13} />Archiver
+                <Icon name="ph-archive" size={13} />{t('Archive')}
               </TipButton>
             )}
-          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />Modifier</button>
+          <button type="button" className="btn btn-secondary vg-btn-sm" onClick={onEdit}><Icon name="ph-pencil-simple" size={13} />{t('Edit')}</button>
         </div>
       )}
     </div>
@@ -128,17 +133,18 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
 type Mode = 'view' | 'edit' | 'archive';
 
 function ContractorDialog({ contractor, suppliers, onClose, canManage }: { contractor: ContractorView | null; suppliers: SupplierChoices; onClose: () => void; canManage: boolean }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<Mode>('view');
   const back = () => setMode('view');
   const close = () => { setMode('view'); onClose(); };
-  const kicker = mode === 'edit' ? 'Modifier l’entreprise' : mode === 'archive' ? 'Archiver l’entreprise' : 'Entreprise extérieure';
+  const kicker = mode === 'edit' ? t('Edit the company') : mode === 'archive' ? t('Archive the company') : t('External company');
   return (
     <Dialog open={!!contractor} onClose={close} title={contractor?.name ?? ''} kicker={kicker} width={640}>
       {contractor && mode === 'edit' && <ContractorForm contractor={contractor} suppliers={suppliers} onDone={back} onCancel={back} />}
       {contractor && mode === 'archive' && (
-        <ReasonForm action={archiveContractor} hidden={{ id: contractor.id }} submitLabel="Archiver" submitIcon="ph-archive" onDone={back} onCancel={back}
-          placeholder="Ex. Contrat terminé, entreprise plus référencée"
-          message="L’entreprise ne sera plus proposée dans les plans, permis et activités de la carte ; son historique reste consultable et elle peut être réactivée." />
+        <ReasonForm action={archiveContractor} hidden={{ id: contractor.id }} submitLabel={t('Archive')} submitIcon="ph-archive" onDone={back} onCancel={back}
+          placeholder={t('E.g. Contract ended, company no longer listed')}
+          message={t('The company will no longer be offered in the plans, permits and map activities; its history stays readable and it can be reactivated.')} />
       )}
       {contractor && mode === 'view' && (
         <ContractorSheet contractor={contractor} canManage={canManage} onEdit={() => setMode('edit')} onArchive={() => setMode('archive')} />
@@ -150,7 +156,7 @@ function ContractorDialog({ contractor, suppliers, onClose, canManage }: { contr
 const count = (n: number, active: number, activeLabel: string) => (
   <>
     <span>{n}</span>
-    {active > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-ok-fg)' }}>dont {active} {activeLabel}</span>}
+    {active > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--tone-ok-fg)' }}>{fill(activeLabel, { n: active })}</span>}
   </>
 );
 
@@ -161,6 +167,7 @@ const count = (n: number, active: number, activeLabel: string) => (
 export function ContractorsTable({ contractors, suppliers, canManage, emptyLabel, openId }: {
   contractors: ContractorView[]; suppliers: SupplierChoices; canManage: boolean; emptyLabel: string; openId?: string;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [selId, setSelId] = useState<string | null>(openId ?? null);
   const sel = contractors.find((c) => c.id === selId) ?? null;
@@ -171,22 +178,22 @@ export function ContractorsTable({ contractors, suppliers, canManage, emptyLabel
       <div className="card" style={{ padding: '6px 14px 10px' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ fontSize: 12.5, minWidth: 820 }}>
-            <thead><tr><th>Entreprise</th><th>Interlocuteur</th><th>Téléphone</th><th>E-mail</th><th style={{ textAlign: 'right' }}>Plans</th><th style={{ textAlign: 'right' }}>Permis</th></tr></thead>
+            <thead><tr><th>{t('Company')}</th><th>{t('Contact')}</th><th>{t('Phone')}</th><th>{t('E-mail')}</th><th style={{ textAlign: 'right' }}>{t('Plans')}</th><th style={{ textAlign: 'right' }}>{t('Permits')}</th></tr></thead>
             <tbody>
               {contractors.length === 0 && <tr><td colSpan={6} style={{ ...muted, fontSize: 12, padding: '14px 8px' }}>{emptyLabel}</td></tr>}
               {contractors.map((c) => (
                 <tr key={c.id} {...rowOpener(() => setSelId(c.id))}>
                   <td style={{ minWidth: 200 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
-                      {c.name}{c.archived && <span className="tag tag-neutral" style={{ fontWeight: 400 }}>Archivée</span>}
+                      {c.name}{c.archived && <span className="tag tag-neutral" style={{ fontWeight: 400 }}>{t('Archived#f')}</span>}
                     </span>
                     <span style={{ display: 'block', ...muted }}>{c.trade}</span>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{c.contactName ?? <span style={muted}>—</span>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{c.contactPhone ? <a href={telHref(c.contactPhone)} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactPhone}</a> : <span style={muted}>—</span>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{c.contactEmail ? <a href={`mailto:${c.contactEmail}`} className="vg-link" style={{ fontSize: 12.5 }}>{c.contactEmail}</a> : <span style={muted}>—</span>}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.plans, c.activePlans, 'en cours')}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.permits, c.activePermits, c.activePermits > 1 ? 'actifs' : 'actif')}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.plans, c.activePlans, t('of which {n} in progress'))}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{count(c.permits, c.activePermits, c.activePermits > 1 ? t('of which {n} active#plural') : t('of which {n} active'))}</td>
                 </tr>
               ))}
             </tbody>

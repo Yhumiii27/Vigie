@@ -23,9 +23,16 @@ export const frExact = (s: string): string | undefined => (s && Object.hasOwn(FR
 
 export type T = (english: string) => string;
 
+/**
+ * Contexte en fin de chaîne source (« Closed#plural ») : départage deux traductions françaises d'un même mot anglais ; il
+ * ne s'affiche jamais (retiré en anglais, et du texte rendu quand l'entrée manque).
+ */
+const CONTEXT = /#[a-z]+$/;
+const bare = (s: string) => s.replace(CONTEXT, '');
+
 /** Traducteur d'une langue : l'anglais rend la chaîne source ; le français, son entrée du dictionnaire (sinon la source). */
 export function makeT(lang: Lang): T {
-  return lang === 'fr' ? (s) => frExact(s) ?? s : (s) => s;
+  return lang === 'fr' ? (s) => frExact(s) ?? bare(s) : bare;
 }
 
 /** Chaîne à compléter : `{n}` et autres paramètres remplacés après traduction (« {n} pages found » → « 3 pages trouvées »). */

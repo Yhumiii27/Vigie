@@ -15,6 +15,7 @@ import { MappingStep } from './MappingStep';
 import { ReviewStep } from './ReviewStep';
 import { TemplatesPanel } from './TemplatesPanel';
 import { Stepper, type Stage } from './parts';
+import { useI18n } from '@/i18n/client';
 
 export type ImportTab = 'import' | 'modeles';
 
@@ -31,12 +32,13 @@ const START: Flow = { stage: 'drop', files: null, det: null, mapping: {}, templa
 
 /** Écran d'import : déroulé en quatre étapes et gestion des modèles d'import. */
 export function ImportScreen({ data, canManage, initialTab }: { data: ImportScreenData; canManage: boolean; initialTab: ImportTab }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<ImportTab>(canManage ? initialTab : 'modeles');
   const [flow, setFlow] = useState<Flow>(START);
   // Modification de la correspondance d'un modèle enregistré (sans fichier).
   const [editing, setEditing] = useState<{ template: TemplateView; mapping: PpImportMapping } | null>(null);
 
-  const templateOf = (id: number | null) => data.templates.find((t) => t.id === id) ?? null;
+  const templateOf = (id: number | null) => data.templates.find((x) => x.id === id) ?? null;
 
   const switchTab = (next: ImportTab) => {
     setTab(next);
@@ -67,25 +69,25 @@ export function ImportScreen({ data, canManage, initialTab }: { data: ImportScre
   const reachable: Stage[] = flow.det ? (flow.det.fields.length ? ['drop', 'detect', 'map'] : ['drop', 'detect']) : ['drop'];
 
   const tabs: [ImportTab, string, number | null][] = [
-    ['import', 'Importer un formulaire', null],
-    ['modeles', "Modèles d'import", data.templates.length],
+    ['import', t('Import a form'), null],
+    ['modeles', t('Import templates'), data.templates.length],
   ];
 
   return (
     <>
-      <Toolbar end={<Link href="/prevention" className="btn btn-ghost vg-btn-sm"><Icon name="ph-arrow-left" size={13} />Plans de prévention</Link>}>
-        <Segments label="Import d'un plan de prévention" items={tabs.filter(([key]) => canManage || key === 'modeles').map(([key, label, n]) => ({
+      <Toolbar end={<Link href="/prevention" className="btn btn-ghost vg-btn-sm"><Icon name="ph-arrow-left" size={13} />{t('Prevention plans')}</Link>}>
+        <Segments label={t('Import of a prevention plan')} items={tabs.filter(([key]) => canManage || key === 'modeles').map(([key, label, n]) => ({
           key, label, count: n ?? undefined, on: tab === key, onClick: () => switchTab(key),
         }))} />
       </Toolbar>
 
       {!canManage && (
-        <Notice tone="neutral" icon="ph-info">Votre rôle permet de consulter les modèles d&apos;import ; l&apos;import d&apos;un plan de prévention est réservé à l&apos;encadrement.</Notice>
+        <Notice tone="neutral" icon="ph-info">{t('Your role lets you consult the import templates; importing a prevention plan is reserved for management.')}</Notice>
       )}
 
       {tab === 'modeles' && !editing && (
         <TemplatesPanel templates={data.templates} canManage={canManage}
-          onEditMapping={(t) => setEditing({ template: t, mapping: { ...t.mapping } })}
+          onEditMapping={(tpl) => setEditing({ template: tpl, mapping: { ...tpl.mapping } })}
           onImport={() => switchTab('import')} />
       )}
       {tab === 'modeles' && editing && (

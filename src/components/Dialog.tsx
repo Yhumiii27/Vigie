@@ -5,12 +5,14 @@ import { createPortal } from 'react-dom';
 import { useHeaderMenu, useIsClient } from './coque';
 import { FORM_SAVED_EVENT } from '@/components/form';
 import { TipButton } from '@/components/Tip';
+import { useI18n } from '@/i18n/client';
 
 type DialogProps = { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; width?: number; kicker?: ReactNode };
 
 /** Champ qui reçoit le focus à l'ouverture, faute d'élément [autofocus] : premier champ de saisie actif du contenu. */
 const FIRST_FIELD = 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
-export const DISCARD_CONFIRM = 'Fermer sans enregistrer la saisie en cours ?';
+/** Chaîne source (VG-N01), rendue par t(). */
+export const DISCARD_CONFIRM = 'Close without saving the entry in progress?';
 
 /** Largeur commune des panneaux (COQUE.md § 7) : 640 px (`--panel-w`), 680 px au-delà (`--panel-w-wide`, document). */
 const panelWidth = (width: number) => (width > 640 ? 'var(--panel-w-wide)' : 'var(--panel-w)');
@@ -24,6 +26,7 @@ const panelWidth = (width: number) => (width > 640 ? 'var(--panel-w-wide)' : 'va
  * focus à l'élément d'origine à la fermeture. Un ActionForm intérieur enregistré (FORM_SAVED_EVENT) remet la saisie à zéro.
  */
 export function Dialog({ open, onClose, title, children, width = 640, kicker }: DialogProps) {
+  const { t } = useI18n();
   // Ouverte depuis le menu « Actions » de l'en-tête (monté fermé, `hidden`) : rendue dans <body> pour rester visible.
   const inMenu = useHeaderMenu() != null;
   const mounted = useIsClient();
@@ -55,7 +58,7 @@ export function Dialog({ open, onClose, title, children, width = 640, kicker }: 
     return () => d.removeEventListener(FORM_SAVED_EVENT, saved);
   }, [mounted]);
   const requestClose = () => {
-    if (dirty.current && !window.confirm(DISCARD_CONFIRM)) return;
+    if (dirty.current && !window.confirm(t(DISCARD_CONFIRM))) return;
     onClose();
   };
   const node = (
@@ -76,7 +79,7 @@ export function Dialog({ open, onClose, title, children, width = 640, kicker }: 
               {kicker && <div className="card-kicker">{kicker}</div>}
               <h2 id={titleId} className="dialog-title" style={{ margin: 0 }}>{title}</h2>
             </div>
-            <button type="button" className="btn btn-ghost btn-icon" aria-label="Fermer" onClick={onClose} style={{ width: 28, height: 28, color: 'var(--color-neutral-400)' }}>
+            <button type="button" className="btn btn-ghost btn-icon" aria-label={t('Close')} onClick={onClose} style={{ width: 28, height: 28, color: 'var(--color-neutral-400)' }}>
               <i className="ph ph-x" style={{ fontSize: 16 }} aria-hidden />
             </button>
           </div>
