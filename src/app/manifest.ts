@@ -4,6 +4,8 @@ import { REPORT_SW_SCOPE } from '@/lib/pwa';
 // Manifeste du signalement terrain installable (EVT-20) : /manifest.webmanifest, ouvert sans session (src/proxy.ts),
 // lié aux seules pages /signaler (src/app/signaler/layout.tsx ; manifest: null ailleurs). Portée et démarrage : /signaler.
 // Couleurs du design system Nocturne (--color-bg) ; icônes : logo de Vigie de Norma 2.3 rendu par scripts/pwa-icons.mjs.
+// Langue (VG-N01) : le manifeste reste en français, langue par défaut. Le navigateur le télécharge sans cookie (requête sans
+// identifiants, et il est mis en cache à l'installation) : il ne peut pas suivre le cookie vigie-lang de la personne.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: REPORT_SW_SCOPE,

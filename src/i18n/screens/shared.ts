@@ -139,6 +139,33 @@ export const SHARED_FR: Record<string, string> = {
   'Written and signed prevention plan to draw up before any work ({teams}): {basis}, from the first minute': 'Plan de prévention écrit et signé à établir avant toute intervention ({teams}) : {basis}, dès la première minute',
   'Prevention plan to draw up with {teams}': 'Plan de prévention à établir avec {teams}',
 
+  // Aperçu mobile de démonstration (/apercu-mobile)
+  'Mobile preview · 390 × 844': 'Aperçu mobile · 390 × 844',
+  'On a phone': 'Sur téléphone',
+  'Open the field form': 'Ouvrir le formulaire terrain',
+  'My reports →': 'Mes signalements →',
+  'Report not found or not yours.': "Signalement introuvable ou qui n'est pas le vôtre.",
+  'Field journey': 'Parcours terrain',
+  'Report in less than a minute': "Signaler en moins d'une minute",
+  'The QR code of the post opens this form with the location and the site filled in. The report creates the event at the stage “Reported” in Vigie, visible in the list of reports and on the dashboard; the QHSE coordinator qualifies it within 48 h.':
+    "Le QR code du poste ouvre ce formulaire avec le lieu et le site pré-remplis. Le signalement crée l'événement à l'étape « Déclaré » dans Vigie, visible dans la liste des signalements et sur le tableau de bord ; l'animateur QHSE le qualifie sous 48 h.",
+  'Up to {n} photos taken on the spot go with the report and appear on the event sheet. The phone reduces them before sending, which also removes their metadata (position, device) when it can convert them; a photo it cannot reduce is not attached to an anonymous report.':
+    "Jusqu'à {n} photos prises sur le moment accompagnent le signalement et apparaissent sur la fiche de l'événement. Le téléphone les allège avant l'envoi, ce qui retire aussi leurs métadonnées (position, appareil) quand il sait les convertir ; une photo qu'il ne peut pas alléger n'est pas jointe à un signalement anonyme.",
+  'The anonymous mode hides the reporter from every role, QHSE coordinator included; an anonymous report therefore does not appear in “My reports”. Named reports are followed there across all sites, with the follow-up given.':
+    "Le mode anonyme masque le déclarant pour tous les rôles, animateur QHSE compris ; un signalement anonyme n'apparaît donc pas dans « Mes signalements ». Les signalements nominatifs y sont suivis tous sites confondus, avec la suite donnée.",
+  'Open the field form (target of the QR code · {post}) →': 'Ouvrir le formulaire terrain (cible du QR code · {post}) →',
+  'Open the field form (target of the QR code) →': 'Ouvrir le formulaire terrain (cible du QR code) →',
+  'Open “My reports” on mobile →': 'Ouvrir « Mes signalements » sur mobile →',
+  'Display at the post': 'Affichage au poste',
+  'QR codes of the posts': 'QR codes des postes',
+  'One QR code per zone of the site plan: scanned at the post, it opens the form with the location and the site of the post.':
+    'Un QR code par zone du plan de site : scanné au poste, il ouvre le formulaire avec le lieu et le site du poste.',
+  'One QR code per zone of the site plan ({site}): scanned at the post, it opens the form with the location and the site of the post.':
+    'Un QR code par zone du plan de site ({site}) : scanné au poste, il ouvre le formulaire avec le lieu et le site du poste.',
+  'No zone drawn on the site plan.': 'Aucune zone dessinée sur le plan de site.',
+  'QR code of the post {post}': 'QR code du poste {post}',
+  'Print the sheet →': 'Imprimer la planche →',
+
   // Connecteurs, boîte de réception, file d'envoi (SitesManager)
   'Vigie reads the common registers in the views published by the other tools (read only). Sites and assignments are cached and read again every night; projects and suppliers are read at each entry.':
     'Vigie lit les référentiels communs dans les vues publiées par les autres outils (lecture seule). Les sites et les affectations sont gardés en cache et relus chaque nuit ; les projets et les fournisseurs sont lus à chaque saisie.',

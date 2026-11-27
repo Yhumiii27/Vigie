@@ -1,4 +1,5 @@
-import { screenMetadata } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
+import { fill } from '@/i18n/translate';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { IOSDevice } from '@/components/IOSDevice';
@@ -31,7 +32,7 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
   const sp = await searchParams;
   const mine = sp.vue === 'mes-signalements';
   const sel = mine && typeof sp.sel === 'string' ? sp.sel : undefined;
-  const { site, siteOptions, user, role } = await getSession();
+  const [{ site, siteOptions, user, role }, { t }] = await Promise.all([getSession(), getI18n()]);
   const reportSite = (site.id === ALL_SITES ? siteOptions[0] : site).label.split(' — ')[0];
   const [reports, report, posts, origin] = await Promise.all([
     mine ? loadMyReports() : [],
@@ -44,12 +45,12 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
 
   return (
     <>
-      <PageHeader title={SCREENS.mobile.title} sub="Aperçu mobile · 390 × 844" />
+      <PageHeader title={SCREENS.mobile.title} sub={t('Mobile preview · 390 × 844')} />
       <div style={{ padding: '0 28px 40px', display: 'flex', gap: 28, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div className="vg-narrow-only card" style={{ gap: 8, width: '100%' }}>
-          <div className="card-title" style={{ fontSize: 15 }}>Sur téléphone</div>
-          <Link href={fieldHref} className="btn btn-primary" style={{ minHeight: 44 }}><i className="ph ph-warning" style={{ fontSize: 16 }} aria-hidden />Ouvrir le formulaire terrain</Link>
-          <Link href="/signaler/mes-signalements" className="vg-link">Mes signalements →</Link>
+          <div className="card-title" style={{ fontSize: 15 }}>{t('On a phone')}</div>
+          <Link href={fieldHref} className="btn btn-primary" style={{ minHeight: 44 }}><i className="ph ph-warning" style={{ fontSize: 16 }} aria-hidden />{t('Open the field form')}</Link>
+          <Link href="/signaler/mes-signalements" className="vg-link">{t('My reports →')}</Link>
         </div>
         <div className="vg-wide-only">
           <IOSDevice width={390} height={844} dark>
@@ -63,39 +64,39 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
         </div>
         <div style={{ display: 'grid', gap: 14, maxWidth: 360 }}>
           {/* UX-13 : signalement inconnu, d'autrui ou anonyme : même bandeau, liste « Mes signalements » affichée. */}
-          {sel && !report && <MissingNotice text="Signalement introuvable ou qui n'est pas le vôtre." closeHref={MINE} />}
+          {sel && !report && <MissingNotice text={t('Report not found or not yours.')} closeHref={MINE} />}
           <div>
             <SegLinks options={[
-              { href: PATH, label: 'Signaler', on: !mine, icon: 'ph-warning' },
-              { href: MINE, label: 'Mes signalements', on: mine, icon: 'ph-list-checks' },
+              { href: PATH, label: t('Report#verb'), on: !mine, icon: 'ph-warning' },
+              { href: MINE, label: t('My reports'), on: mine, icon: 'ph-list-checks' },
             ]} />
           </div>
           <div className="card" style={{ gap: 8 }}>
-            <div className="card-kicker">Parcours terrain</div>
-            <div className="card-title" style={{ fontSize: 15 }}>Signaler en moins d&apos;une minute</div>
-            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>Le QR code du poste ouvre ce formulaire avec le lieu et le site pré-remplis. Le signalement crée l&apos;événement à l&apos;étape « Déclaré » dans Vigie, visible dans la liste des signalements et sur le tableau de bord ; l&apos;animateur QHSE le qualifie sous 48 h.</p>
-            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>Jusqu&apos;à {MAX_PHOTOS} photos prises sur le moment accompagnent le signalement et apparaissent sur la fiche de l&apos;événement. Le téléphone les allège avant l&apos;envoi, ce qui retire aussi leurs métadonnées (position, appareil) quand il sait les convertir ; une photo qu&apos;il ne peut pas alléger n&apos;est pas jointe à un signalement anonyme.</p>
-            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>Le mode anonyme masque le déclarant pour tous les rôles, animateur QHSE compris ; un signalement anonyme n&apos;apparaît donc pas dans « Mes signalements ». Les signalements nominatifs y sont suivis tous sites confondus, avec la suite donnée.</p>
-            <Link href={fieldHref} className="vg-link">Ouvrir le formulaire terrain (cible du QR code{firstPost ? ` · ${firstPost.name}` : ''}) →</Link>
-            <Link href="/signaler/mes-signalements" className="vg-link">Ouvrir « Mes signalements » sur mobile →</Link>
+            <div className="card-kicker">{t('Field journey')}</div>
+            <div className="card-title" style={{ fontSize: 15 }}>{t('Report in less than a minute')}</div>
+            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{t('The QR code of the post opens this form with the location and the site filled in. The report creates the event at the stage “Reported” in Vigie, visible in the list of reports and on the dashboard; the QHSE coordinator qualifies it within 48 h.')}</p>
+            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{fill(t('Up to {n} photos taken on the spot go with the report and appear on the event sheet. The phone reduces them before sending, which also removes their metadata (position, device) when it can convert them; a photo it cannot reduce is not attached to an anonymous report.'), { n: MAX_PHOTOS })}</p>
+            <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>{t('The anonymous mode hides the reporter from every role, QHSE coordinator included; an anonymous report therefore does not appear in “My reports”. Named reports are followed there across all sites, with the follow-up given.')}</p>
+            <Link href={fieldHref} className="vg-link">{firstPost ? fill(t('Open the field form (target of the QR code · {post}) →'), { post: firstPost.name }) : t('Open the field form (target of the QR code) →')}</Link>
+            <Link href="/signaler/mes-signalements" className="vg-link">{t('Open “My reports” on mobile →')}</Link>
           </div>
           <div className="card" style={{ gap: 10 }}>
-            <div className="card-kicker">Affichage au poste</div>
-            <div className="card-title" style={{ fontSize: 15 }}>QR codes des postes</div>
+            <div className="card-kicker">{t('Display at the post')}</div>
+            <div className="card-title" style={{ fontSize: 15 }}>{t('QR codes of the posts')}</div>
             <p className="card-body" style={{ opacity: 1, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-              Un QR code par zone du plan de site{site.id === ALL_SITES ? '' : ` (${reportSite})`} : scanné au poste, il ouvre le formulaire avec le lieu et le site du poste.
+              {site.id === ALL_SITES ? t('One QR code per zone of the site plan: scanned at the post, it opens the form with the location and the site of the post.') : fill(t('One QR code per zone of the site plan ({site}): scanned at the post, it opens the form with the location and the site of the post.'), { site: reportSite })}
             </p>
             {posts.length === 0 ? (
-              <span style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>Aucune zone dessinée sur le plan de site.</span>
+              <span style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{t('No zone drawn on the site plan.')}</span>
             ) : (
               <div style={{ display: 'grid', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
                 {posts.map((p) => (
                   <div key={p.zoneId} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ padding: 3, background: '#fff', borderRadius: 4, flex: 'none' }}><QrCode value={`${origin}${p.path}`} size={72} label={`QR code du poste ${p.name}`} /></span>
+                    <span style={{ padding: 3, background: '#fff', borderRadius: 4, flex: 'none' }}><QrCode value={`${origin}${p.path}`} size={72} label={fill(t('QR code of the post {post}'), { post: p.name })} /></span>
                     <span style={{ display: 'grid', gap: 2, minWidth: 0 }}>
                       <span style={{ fontSize: 12.5 }}>{p.name}</span>
                       {site.id === ALL_SITES && <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{p.siteLabel}</span>}
-                      <Link href={p.path} className="vg-link">Ouvrir →</Link>
+                      <Link href={p.path} className="vg-link">{t('Open →')}</Link>
                     </span>
                   </div>
                 ))}
@@ -103,7 +104,7 @@ export default async function MobilePreviewPage({ searchParams }: PageProps<'/ap
             )}
             {canManage(role) && posts.length > 0 && (
               <Link href={`/signaler/postes${site.id === ALL_SITES ? '' : `?site=${encodeURIComponent(site.id)}`}`} className="vg-link">
-                <i className="ph ph-printer" style={{ marginRight: 4 }} aria-hidden />Imprimer la planche →
+                <i className="ph ph-printer" style={{ marginRight: 4 }} aria-hidden />{t('Print the sheet →')}
               </Link>
             )}
           </div>
