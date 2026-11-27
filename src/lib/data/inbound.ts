@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, desc, eq, gt, inArray, isNull, ne, or } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -162,7 +164,7 @@ export const loadInboundSignals = cache(async (): Promise<{ todo: TodoItem[] }> 
       const day = parisDay(r.processedAt ?? r.receivedAt);
       return [{
         ...base, date: day, dueOn: day, tone: 'warn',
-        title: `${r.targetRef} · demande n° ${r.id} de ${tool} refusée : ${INBOUND_RESULTS[r.resultCode as InboundResultCode] ?? 'refus'} — prenez-en connaissance`,
+        ...titled('{ref} · request no. {id} from {tool} refused: {result} — take note of it', { ref: r.targetRef, id: r.id, tool, result: labelMsg(INBOUND_RESULTS[r.resultCode as InboundResultCode] ?? 'refus') }),
         key: `${r.tool}-refus|${r.id}`,
       } satisfies TodoItem];
     }
@@ -171,7 +173,7 @@ export const loadInboundSignals = cache(async (): Promise<{ todo: TodoItem[] }> 
       const due = parisDay(new Date(r.receivedAt.getTime() + INBOUND_PENDING_DAYS * ONE_DAY));
       return [{
         ...base, date: now, dueOn: due, tone: 'danger', overdue: true,
-        title: `${r.targetRef} · demande n° ${r.id} de ${tool} non traitée depuis plus d'un jour : vérifiez la tâche « Demandes reçues » (Connecteurs)`,
+        ...titled('{ref} · request no. {id} from {tool} not processed for more than a day: check the task “Requests received” (Connectors)', { ref: r.targetRef, id: r.id, tool }),
         key: `${r.tool}-attente|${r.id}`,
       } satisfies TodoItem];
     }
@@ -184,7 +186,9 @@ export const loadInboundSignals = cache(async (): Promise<{ todo: TodoItem[] }> 
     const day = parisDay(since);
     return [{
       ...base, date: day, dueOn: day, tone: 'warn',
-      title: `${nc.id} · ${tool} ${approved ? 'propose la clôture de la NC' : 'propose le retour aux actions correctives'} : décision du QHSE (« ${EVENT_STEPS[STEP_CLOSED]} » ou retour arrière)`,
+      ...(approved
+        ? titled('{id} · {tool} proposes to close the NC: decision of the QHSE (“{step}” or step back)', { id: nc.id, tool, step: labelMsg(EVENT_STEPS[STEP_CLOSED]) })
+        : titled('{id} · {tool} proposes to return to the corrective actions: decision of the QHSE (“{step}” or step back)', { id: nc.id, tool, step: labelMsg(EVENT_STEPS[STEP_CLOSED]) })),
       key: `keystone-verification|${r.id}`,
     } satisfies TodoItem];
   }).filter((x) => canApprove(session.role) || (x.ownerIds ?? []).includes(session.user.id));

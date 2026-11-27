@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -99,7 +100,9 @@ export const loadEmergencySignals = cache(async (): Promise<{ todo: TodoItem[] }
       const due = v.due!;
       return {
         date: due.late ? now : due.on, dueOn: due.on, kind: "Situation d'urgence", tone: due.late ? 'danger' : 'warn', overdue: due.late,
-        title: `${v.label} — ${due.late ? `exercice en retard depuis le ${fmtDate(due.on)}` : due.planned ? `exercice planifié le ${fmtDate(due.on)}` : `exercice à organiser avant le ${fmtDate(due.on)}`}`,
+        ...(due.late ? titled('{label} — drill overdue since {date}', { label: v.label, date: fmtDate(due.on) })
+          : due.planned ? titled('{label} — drill planned on {date}', { label: v.label, date: fmtDate(due.on) })
+            : titled('{label} — drill to organise before {date}', { label: v.label, date: fmtDate(due.on) })),
         key: `urgence-exercice|${v.id}`, who: to.who, ownerIds: to.ownerIds, siteId: v.siteId, href: `/risques?vue=urgences&situation=${v.id}`,
       } satisfies TodoItem;
     });

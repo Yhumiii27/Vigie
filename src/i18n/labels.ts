@@ -393,6 +393,16 @@ export const LABEL_EN: Record<string, string> = {
   'Suite de votre signalement': 'Follow-up of your report',
   'Feuille d’émargement à signer': 'Attendance sheet to sign',
   'Rappel du mercredi': 'Wednesday reminder',
+  "Situation d'urgence": 'Emergency situation',
+  // Résultats d'une demande reçue (INBOUND_RESULTS)
+  'État changé dans Vigie': 'State changed in Vigie',
+  'Refusée par les règles de Vigie': 'Refused by the rules of Vigie',
+  'Élément introuvable': 'Element not found',
+  'Demande invalide': 'Invalid request',
+  refus: 'refusal',
+  // Cible d'une effectivité (EFFECTIVITY_TARGETS)
+  Projet: 'Project',
+  'Machine du parc': 'Installed machine',
   'Actions à compléter': 'Actions to complete',
   'Événement clos — action de suite ouverte': 'Event closed — follow-up action open',
   Information: 'Information#kind',

@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc, eq, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -79,7 +80,7 @@ export const loadDgiSignals = cache(async (): Promise<{ todo: TodoItem[] }> => {
     const dueOn = parisDay(n.reportedAt);
     return {
       date: now, dueOn, overdue: true, tone: 'danger', kind: 'Danger grave et imminent', siteId: n.siteId,
-      title: `Danger grave et imminent n° ${n.number} du ${fmtDayMonth(dueOn)} — mesures de l'employeur à consigner`,
+      ...titled('Serious and imminent danger no. {n} of {date} — measures of the employer to record', { n: n.number, date: fmtDayMonth(dueOn) }),
       who: [to.who, ...directors.map((p) => p.name)].join(' · '),
       ownerIds: [...to.ownerIds, ...directors.map((p) => p.id)],
       href: dgiHref(n.siteId, n.id), key: `dgi|${n.id}`,

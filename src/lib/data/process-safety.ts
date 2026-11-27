@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -126,7 +128,7 @@ export const loadProcessSafetySignals = cache(async (): Promise<{ todo: TodoItem
       const to = p && !hasLeft(p, now) ? { who: p.name, ownerIds: [p.id] } : leads.forSite(view.siteId);
       return {
         date: now, dueOn: view.sessionOn, kind: 'Étude de sécurité', tone: 'danger', overdue: true,
-        title: `${view.id} · ${view.typeLabel} ${view.capexCode ?? view.projectCode ?? ''} — séance du ${fmtDate(view.sessionOn)} passée : enregistrez l'étude tenue ou replanifiez-la`,
+        ...titled('{id} · {type} {code} — session of {date} passed: record the study held or reschedule it', { id: view.id, type: labelMsg(view.typeLabel), code: view.capexCode ?? view.projectCode ?? '', date: fmtDate(view.sessionOn) }),
         key: `etude-securite|${view.id}`, who: to.who, ownerIds: to.ownerIds, siteId: view.siteId, href: studyHref(view.id),
       } satisfies TodoItem;
     })

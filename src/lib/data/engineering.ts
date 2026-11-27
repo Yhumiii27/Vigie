@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc, desc, eq } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
@@ -256,7 +258,7 @@ export const loadEngineeringSignals = cache(async (): Promise<{ todo: TodoItem[]
     const to = leads.forSite(r.siteId);
     todo.push({
       ...dated(addDays(parisDay(r.createdAt), ECR_DECISION_DAYS)), kind: 'Modification technique', key: `ecr-decision|${r.id}`,
-      title: `${r.id} · demande de ${ENGINEERING_SOURCES[r.source as EngineeringSource]} à décider : ${r.title}`,
+      ...titled('{id} · request from {source} to decide: {title}', { id: r.id, source: ENGINEERING_SOURCES[r.source as EngineeringSource], title: r.title }),
       who: to.who, ownerIds: to.ownerIds, siteId: r.siteId, href: engineeringHref(r.id),
     });
   }
@@ -271,7 +273,7 @@ export const loadEngineeringSignals = cache(async (): Promise<{ todo: TodoItem[]
         const to = present(a.approverId) ?? leads.forSite(e.siteId);
         todo.push({
           ...dated(due), kind: 'Modification technique', key: `eco-approbation|${e.id}|${a.approvalKey}`,
-          title: `${e.id} · approbation « ${ECO_APPROVAL_KEYS[a.approvalKey as EcoApprovalKey].label} » attendue (${a.approverText}) : ${e.title}`,
+          ...titled('{id} · approval “{key}” expected ({approver}): {title}', { id: e.id, key: labelMsg(ECO_APPROVAL_KEYS[a.approvalKey as EcoApprovalKey].label), approver: a.approverText, title: e.title }),
           who: to.who, ownerIds: to.ownerIds, siteId: e.siteId, href: engineeringHref(e.id),
         });
       }
@@ -279,7 +281,7 @@ export const loadEngineeringSignals = cache(async (): Promise<{ todo: TodoItem[]
         const last = approvals.reduce<Date | null>((m, a) => (a.decidedAt && (!m || a.decidedAt > m) ? a.decidedAt : m), null);
         todo.push({
           ...dated(last ? parisDay(last) : now), kind: 'Modification technique', key: `eco-dispositions|${e.id}`,
-          title: `${e.id} · approuvé : ${pendingDispositions(targets)} disposition(s) d’effectivité à décider avant la libération`,
+          ...titled('{id} · approved: {n} effectivity disposition(s) to decide before the release', { id: e.id, n: pendingDispositions(targets) }),
           who: owner.who, ownerIds: owner.ownerIds, siteId: e.siteId, href: engineeringHref(e.id),
         });
       }
@@ -289,7 +291,7 @@ export const loadEngineeringSignals = cache(async (): Promise<{ todo: TodoItem[]
         if (!dispositionNeedsWork(g.disposition as EffectivityDisposition | null) || g.doneOn || !g.dueOn || g.dueOn > addDays(now, TODO_HORIZON_DAYS)) continue;
         todo.push({
           ...dated(g.dueOn), kind: 'Modification technique', key: `eco-effectivite|${e.id}|${g.targetType}|${g.targetRef}`,
-          title: `${e.id} · ${EFFECTIVITY_DISPOSITIONS[g.disposition as EffectivityDisposition].label.toLowerCase()} à réaliser : ${targetText({ targetType: g.targetType as EffectivityTarget, label: g.label })}`,
+          ...titled('{id} · {disposition} to carry out: {target} {label}', { id: e.id, disposition: { ...labelMsg(EFFECTIVITY_DISPOSITIONS[g.disposition as EffectivityDisposition].label), lower: true }, target: labelMsg(EFFECTIVITY_TARGETS[g.targetType as EffectivityTarget]), label: g.label }),
           who: owner.who, ownerIds: owner.ownerIds, siteId: e.siteId, href: engineeringHref(e.id),
         });
       }

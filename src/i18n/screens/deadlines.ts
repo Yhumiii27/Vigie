@@ -105,6 +105,58 @@ export const DEADLINES_FR: Record<string, string> = {
   'action {id} not closed': 'action {id} non close',
   'Next management review to plan (last review on {date})': 'Prochaine revue de direction à planifier (dernière revue le {date})',
 
+  // Modifications techniques (src/lib/data/engineering.ts)
+  '{id} · request from {source} to decide: {title}': '{id} · demande de {source} à décider : {title}',
+  '{id} · approval “{key}” expected ({approver}): {title}': '{id} · approbation « {key} » attendue ({approver}) : {title}',
+  '{id} · approved: {n} effectivity disposition(s) to decide before the release': '{id} · approuvé : {n} disposition(s) d’effectivité à décider avant la libération',
+  '{id} · {disposition} to carry out: {target} {label}': '{id} · {disposition} à réaliser : {target} {label}',
+
+  // Programme d'audit, constats et certifications (src/lib/data/audits.ts)
+  'planned on {date}': 'prévu le {date}',
+  'planned in {month} {year}': 'prévu en {month} {year}',
+  '{label} — {when}, to confirm': '{label} — {when}, à confirmer',
+  '{label} — planned in {month} {year}, date to set': '{label} — prévu en {month} {year}, date à fixer',
+  '{kind} without action — {text}': '{kind} sans action — {text}',
+  '{label} · answer expected on {date}': '{label} · réponse attendue le {date}',
+  '{label} · answer expected since {date}': '{label} · réponse attendue depuis le {date}',
+  '{label}': '{label}',
+  'Certificate {standard} suspended since {date}': 'Certificat {standard} suspendu depuis le {date}',
+  'Certificate {standard} expired': 'Certificat {standard} expiré',
+  'Certificate {standard} · end of validity on {date}': 'Certificat {standard} · fin de validité le {date}',
+  '{standard} · renewal audit to schedule before {date}': '{standard} · audit de renouvellement à programmer avant le {date}',
+  '{standard} · surveillance audit to schedule': '{standard} · audit de suivi à programmer',
+
+  // Demandes reçues de Keystone et de Codex (src/lib/data/inbound.ts)
+  '{ref} · request no. {id} from {tool} refused: {result} — take note of it': '{ref} · demande n° {id} de {tool} refusée : {result} — prenez-en connaissance',
+  '{ref} · request no. {id} from {tool} not processed for more than a day: check the task “Requests received” (Connectors)':
+    "{ref} · demande n° {id} de {tool} non traitée depuis plus d'un jour : vérifiez la tâche « Demandes reçues » (Connecteurs)",
+  '{id} · {tool} proposes to close the NC: decision of the QHSE (“{step}” or step back)': '{id} · {tool} propose la clôture de la NC : décision du QHSE (« {step} » ou retour arrière)',
+  '{id} · {tool} proposes to return to the corrective actions: decision of the QHSE (“{step}” or step back)': '{id} · {tool} propose le retour aux actions correctives : décision du QHSE (« {step} » ou retour arrière)',
+
+  // Documents de Codex (src/lib/data/documents.ts)
+  'Documents of Codex unavailable: reviews and approval workflows not followed': 'Documents de Codex indisponibles : revues et circuits de validation non suivis',
+  '{id} · {title} — review overdue since {date}': '{id} · {title} — revue dépassée depuis le {date}',
+  '{id} · periodic review “{title}”': '{id} · revue périodique « {title} »',
+  ' · revision {rev} in approval': ' · révision {rev} en validation',
+  ' · revision {rev} being drafted': ' · révision {rev} en rédaction',
+  ' · action {id} in progress': ' · action {id} en cours',
+  '{head}{progress}': '{head}{progress}',
+  '{id} · revision {rev} to approve in Codex{step}': '{id} · révision {rev} à valider dans Codex{step}',
+
+  // Sites, changements, postes, études, urgences, dangers graves et imminents
+  '{site} — QHSE manager to appoint (Manage sites…)': '{site} — responsable QHSE à désigner (Gérer les sites…)',
+  '{site} — {state}: stop following? (Manage sites…)': '{site} — {state} : ne plus suivre ? (Gérer les sites…)',
+  '{id} · {title} — change request to assess': '{id} · {title} — demande de changement à évaluer',
+  '{id} · {title} — implementation planned on {date}, to record': '{id} · {title} — mise en œuvre prévue le {date}, à constater',
+  '{id} · {title} — implementation planned on {date}': '{id} · {title} — mise en œuvre prévue le {date}',
+  '{zone} ({site}) — ceiling of reports without an account reached: regenerate the QR code if it circulates outside the site':
+    "{zone} ({site}) — plafond de signalements sans compte atteint : régénérer le QR code s'il circule hors du site",
+  '{id} · {type} {code} — session of {date} passed: record the study held or reschedule it': "{id} · {type} {code} — séance du {date} passée : enregistrez l'étude tenue ou replanifiez-la",
+  '{label} — drill overdue since {date}': '{label} — exercice en retard depuis le {date}',
+  '{label} — drill planned on {date}': '{label} — exercice planifié le {date}',
+  '{label} — drill to organise before {date}': '{label} — exercice à organiser avant le {date}',
+  'Serious and imminent danger no. {n} of {date} — measures of the employer to record': "Danger grave et imminent n° {n} du {date} — mesures de l'employeur à consigner",
+
   // Veille et contrôles (src/lib/data/watch.ts)
   'action {id} abandoned': 'action {id} abandonnée',
   'action {id} verified': 'action {id} vérifiée',
@@ -136,4 +188,4 @@ export const DEADLINES_FR: Record<string, string> = {
 };
 
 /** Entrées identiques en français, relues (SAME_IN_FRENCH). */
-export const DEADLINES_SAME: string[] = ['{current} · {past}', '{current}', '{text} — {review}', ' · action {id} ({status})', ' · action {id}', '{assignment}{action}', '{name} {why} (Cursus){suffix}'];
+export const DEADLINES_SAME: string[] = ['{current} · {past}', '{current}', '{text} — {review}', ' · action {id} ({status})', ' · action {id}', '{assignment}{action}', '{name} {why} (Cursus){suffix}', '{label}', '{head}{progress}'];
