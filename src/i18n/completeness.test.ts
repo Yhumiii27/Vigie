@@ -3,7 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV, SCREENS, type ScreenKey } from '@/lib/domain';
 import { NAV_SECTION_EN, SCREEN_LABEL_EN, SCREEN_TITLE_EN } from './nav';
-import { FR, SAME_IN_FRENCH, conflictingEntries } from './fr';
+import { TACHES_FR } from '@norma/charte/ds/taches-fr';
+import { FR, SAME_IN_FRENCH, conflictingEntries, normaOverrides } from './fr';
 import { fill, frExact, langCookie, langOf, makeT } from './translate';
 
 // VG-N01 : toute chaîne passée à t() dans un fichier qui traduit (useI18n / getI18n) a son entrée française, différente de
@@ -34,6 +35,13 @@ describe('traduction de l’interface (VG-N01)', () => {
 
   it('une chaîne définie dans deux dictionnaires y a la même traduction', () => {
     expect(conflictingEntries()).toEqual([]);
+  });
+
+  it('les composants communs de Norma se lisent comme dans les autres outils (TACHES_FR)', () => {
+    expect(normaOverrides()).toEqual([]);
+    for (const [en, fr] of Object.entries(TACHES_FR)) expect(frExact(en), en).toBe(fr);
+    const t = makeT('fr');
+    expect([t('Open'), t('Open#plural'), t('All'), t('All#mplural'), t('Source'), t('Source#origin')]).toEqual(['Ouvrir', 'Ouverts', 'Toutes', 'Tous', 'Outil', 'Source']);
   });
 
   it('les titres de page traduits en français redonnent SCREENS.title', () => {

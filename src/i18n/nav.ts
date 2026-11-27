@@ -14,7 +14,7 @@ export const SCREEN_LABEL_EN: Partial<Record<ScreenKey, string>> = {
   dashboard: 'Dashboard',
   todo: 'To do',
   events: 'Reports and events',
-  actions: 'Action plan',
+  actions: 'Action plan#screen',
   prevention: 'Prevention plans and permits',
   risks: 'Risk assessment',
   skills: 'Qualifications and training',

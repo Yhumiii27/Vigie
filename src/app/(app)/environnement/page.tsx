@@ -260,7 +260,7 @@ export default async function EnvironmentPage({ searchParams }: PageProps<'/envi
                   <SegLinks size={12} pad="4px 10px" options={yearOptions} />
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                     {([
-                      { key: undefined, label: t('All'), n: byStream.filter((e) => matchesView(e, undefined)).length },
+                      { key: undefined, label: t('All#mplural'), n: byStream.filter((e) => matchesView(e, undefined)).length },
                       { key: 'dangereux', label: t('Hazardous waste'), n: byStream.filter((e) => matchesView(e, 'dangereux')).length },
                       { key: 'bsd-manquants', label: t('Missing waste tracking slips'), n: byStream.filter((e) => matchesView(e, 'bsd-manquants')).length },
                       { key: 'bsd-en-attente', label: t('Slips not finalised'), n: byStream.filter((e) => matchesView(e, 'bsd-en-attente')).length },

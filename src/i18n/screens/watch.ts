@@ -305,7 +305,7 @@ export const WATCH_FR: Record<string, string> = {
   // Écran (src/app/(app)/veille/page.tsx)
   'Nearest deadline': 'Échéance la plus proche',
   Requirements: 'Exigences',
-  All: 'Tous',
+  'All#mplural': 'Tous',
   '{n} requirements': '{n} exigences',
   '{n} requirement': '{n} exigence',
   ' of which {n} in gap': ' dont {n} en écart',

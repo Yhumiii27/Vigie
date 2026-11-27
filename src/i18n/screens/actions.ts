@@ -53,7 +53,7 @@ export const ACTIONS_FR: Record<string, string> = {
   '{n} d late': '{n} j de retard',
   'Effectiveness check on {date}': "Vérification d'efficacité le {date}",
   'Check {date}': 'Vérif. {date}',
-  Source: 'Source',
+  'Source#origin': 'Source',
   Domain: 'Domaine',
   'No action to display.': 'Aucune action à afficher.',
   '{n} action displayed': '{n} action affichée',
@@ -274,4 +274,4 @@ export const ACTIONS_FR: Record<string, string> = {
 };
 
 /** Chaînes identiques en français et en anglais, relues. */
-export const ACTIONS_SAME = ['{n} action', '{n} actions', 'Source'];
+export const ACTIONS_SAME = ['{n} action', '{n} actions'];

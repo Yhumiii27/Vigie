@@ -91,7 +91,7 @@ export default async function WatchPage({ searchParams }: PageProps<'/veille'>) 
   const tabs = [['exigences', t('Requirements'), activeReqs.length], ['controles', t('Periodic inspections'), activeCtrls.length], ['registre', t('Safety register'), openNotices]] as const;
   const tabHref = (key: string) => (key === 'exigences' ? '/veille' : `/veille?onglet=${key}`);
   const counts = Object.fromEntries(CONTROL_FILTERS.map((f) => [f.key, controls.filter((c) => c.filter === f.key).length])) as Record<ControlFilter, number>;
-  const chips = [{ key: undefined, label: t('All'), n: activeCtrls.length }, ...CONTROL_FILTERS.map((f) => ({ key: f.key, label: f.label, n: counts[f.key] }))];
+  const chips = [{ key: undefined, label: t('All#mplural'), n: activeCtrls.length }, ...CONTROL_FILTERS.map((f) => ({ key: f.key, label: f.label, n: counts[f.key] }))];
   const reqChips = [
     { on: !archives, label: t('Active#fplural'), n: activeReqs.length, href: '/veille' },
     { on: archives, label: t('Archived#fplural'), n: requirements.length - activeReqs.length, href: `/veille?etat=${ARCHIVES}` },

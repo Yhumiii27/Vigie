@@ -408,7 +408,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
               <button type="button" className="btn btn-secondary vg-btn-sm" style={{ padding: '5px 7px' }} aria-label={t('Next day#aria')} onClick={() => setDate(addDays(date, 1))}>
                 <Icon name="ph-caret-right" size={14} />
               </button>
-              <button type="button" className="btn btn-ghost vg-btn-sm" disabled={date === now} onClick={() => setDate(now)}>{t('Today')}</button>
+              <button type="button" className="btn btn-ghost vg-btn-sm" disabled={date === now} onClick={() => setDate(now)}>{t('Today#button')}</button>
             </div>
             <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>
               {weekday(date, lang)} {fmtLong(date)}{date === now ? t(' · today') : ''}

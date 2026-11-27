@@ -3,7 +3,7 @@
 
 export const EVENTS_FR: Record<string, string> = {
   // Liste (src/app/(app)/evenements/page.tsx)
-  All: 'Tous',
+  'All#mplural': 'Tous',
   'No matching event.': 'Aucun événement ne correspond.',
   'No dismissed event.': 'Aucun événement classé sans suite.',
   'No open event.': 'Aucun événement ouvert.',
@@ -14,7 +14,7 @@ export const EVENTS_FR: Record<string, string> = {
   'Minor accident register': 'Registre des accidents bénins',
   'Serious and imminent danger register': 'Registre des DGI',
   'Reference, location, equipment…': 'Référence, lieu, équipement…',
-  Open: 'Ouverts',
+  'Open#plural': 'Ouverts',
   Dismissed: 'Classés sans suite',
   'Remove the origin filter': "Retirer le filtre d'origine",
   'Origin: {origin}': 'Origine : {origin}',

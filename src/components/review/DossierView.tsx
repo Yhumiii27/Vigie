@@ -354,13 +354,13 @@ export function DossierView({ page, role, notice, t = makeT(DEFAULT_LANG) }: {
       )}
 
       {d.actions && (
-        <Section n={n()} title={t('Action plan')} aside={`${plural(d.actions.totals?.open ?? 0, t('{n} open#f'), t('{n} open#fplural'))} · ${fill(t('{n} late'), { n: d.actions.totals?.late ?? 0 })}`}>
+        <Section n={n()} title={t('Action plan#screen')} aside={`${plural(d.actions.totals?.open ?? 0, t('{n} open#f'), t('{n} open#fplural'))} · ${fill(t('{n} late'), { n: d.actions.totals?.late ?? 0 })}`}>
           {actionRows?.length ? (
             <ScrollTable t={t}>
               <table className="table rd-table">
                 {/* Dossier courant : par source (plan d'actions QSE) ; dossier figé avant la refonte : par origine, tel quel. */}
                 {d.actions.bySource
-                  ? <thead><tr><th>{t('Source')}</th><th className="rd-num-cell">{t('Open#fcap')}</th><th className="rd-num-cell">{t('of which late')}</th><th className="rd-num-cell">{t('Finished — to verify')}</th><th className="rd-num-cell">{t('Verified · period')}</th></tr></thead>
+                  ? <thead><tr><th>{t('Source#origin')}</th><th className="rd-num-cell">{t('Open#fcap')}</th><th className="rd-num-cell">{t('of which late')}</th><th className="rd-num-cell">{t('Finished — to verify')}</th><th className="rd-num-cell">{t('Verified · period')}</th></tr></thead>
                   : <thead><tr><th>{t('Origin')}</th><th className="rd-num-cell">{t('Open#fcap')}</th><th className="rd-num-cell">{t('of which late')}</th><th className="rd-num-cell">{t('Effectiveness to verify')}</th><th className="rd-num-cell">{t('Closed · 12 months')}</th></tr></thead>}
                 <tbody>
                   {actionRows.map((o) => (
@@ -391,7 +391,7 @@ export function DossierView({ page, role, notice, t = makeT(DEFAULT_LANG) }: {
               <ScrollTable t={t}>
                 <table className="table rd-table">
                   {d.actions.bySource
-                    ? <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source')}</th><th>{t('Owner')}</th><th>{t('Target date')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>
+                    ? <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source#origin')}</th><th>{t('Owner')}</th><th>{t('Target date')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>
                     : <thead><tr><th>{t('Ref.')}</th><th>{t('Action')}</th><th>{t('Origin')}</th><th>{t('Lead')}</th><th>{t('Deadline')}</th><th className="rd-num-cell">{t('Delay')}</th></tr></thead>}
                   <tbody>
                     {d.actions.lateActions.map((a) => (

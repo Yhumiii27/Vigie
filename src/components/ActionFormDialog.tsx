@@ -157,7 +157,7 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
         ) : <div />}
       </FormRow>
 
-      <Field name="source" label={t('Source')} hint={
+      <Field name="source" label={t('Source#origin')} hint={
         sourceFixed ? t('Set at creation (ACT-01): it cannot be changed.')
           : editing ? `${t('To complete (migration).')}${legacyOriginLabel ? fill(t(' Vigie origin before migration: {origin}.'), { origin: legacyOriginLabel }) : ''}${sourceHint(source) ? ` ${sourceHint(source)}` : ''}`
             : locked ? t('Imposed by the linked item.') : sourceHint(source)

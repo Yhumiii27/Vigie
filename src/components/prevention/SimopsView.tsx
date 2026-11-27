@@ -21,7 +21,7 @@ export async function SimopsView({ data, today }: { data: SimopsData; today: str
           <h2 style={{ fontSize: 15, margin: 0, flex: 1, minWidth: 200 }}>{fill(t('Simultaneous operations on {day}'), { day: fmtLong(day) })}</h2>
           <nav aria-label={t('Day shown')} style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Link href={simopsHref(addDays(day, -1))} scroll={false} className="btn btn-ghost vg-btn-sm"><Icon name="ph-caret-left" size={13} />{t('Previous day')}</Link>
-            {day !== today && <Link href={simopsHref()} scroll={false} className="btn btn-ghost vg-btn-sm">{t('Today')}</Link>}
+            {day !== today && <Link href={simopsHref()} scroll={false} className="btn btn-ghost vg-btn-sm">{t('Today#button')}</Link>}
             <Link href={simopsHref(addDays(day, 1))} scroll={false} className="btn btn-ghost vg-btn-sm">{t('Next day')}<Icon name="ph-caret-right" size={13} /></Link>
           </nav>
           <form method="get" action="/prevention" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

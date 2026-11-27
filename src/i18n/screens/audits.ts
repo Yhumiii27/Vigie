@@ -469,7 +469,7 @@ export const AUDITS_FR: Record<string, string> = {
   // Revue de direction, formulaires (src/components/review/ReviewDialogs.tsx)
   'Review input item': "Élément d'entrée de la revue",
   'E.g. Supplier performance, Internal audit results.': 'Ex. Performance des fournisseurs, Résultats des audits internes.',
-  Source: 'Source',
+  'Source#origin': 'Source',
   'Computed by Vigie: provided as soon as the data of the section exist in the file.': 'Calculé par Vigie : fourni dès que les données de la section existent dans le dossier.',
   'Item handed in by a contributor, ticked on receipt.': 'Élément remis par un contributeur, coché à réception.',
   'Provided by': 'Fourni par',
@@ -776,7 +776,7 @@ export const AUDITS_FR: Record<string, string> = {
   'Programme and management review': 'Programme et revue de direction',
   'ISO self-assessment': 'Auto-évaluation ISO',
   'Self-assessment per standard (ISO 45001, ISO 14001, ISO 9001)': 'Auto-évaluation par référentiel (ISO 45001, ISO 14001, ISO 9001)',
-  'All types': 'Tous types',
+  'All types#filter': 'Tous types',
   'Week {week} · {month} in progress': 'Semaine {week} · {month} en cours',
   'Forecast programme': 'Programme prévisionnel',
   'Past year': 'Année écoulée',
@@ -814,4 +814,4 @@ export const AUDITS_FR: Record<string, string> = {
 };
 
 /** Chaînes identiques en français et en anglais, relues. */
-export const AUDITS_SAME: string[] = ['Nature', 'Site', 'Certifications', 'Note', 'Justification', 'Description', 'Audit', 'N/A', 'Conclusion', 'vs {id}', 'Programme', 'Action', 'Participants · ', 'Participants', 'Source', 'Vigie · Audits'];
+export const AUDITS_SAME: string[] = ['Nature', 'Site', 'Certifications', 'Note', 'Justification', 'Description', 'Audit', 'N/A', 'Conclusion', 'vs {id}', 'Programme', 'Action', 'Participants · ', 'Participants', 'Vigie · Audits'];
