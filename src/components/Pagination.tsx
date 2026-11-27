@@ -31,12 +31,12 @@ export function Pagination({ path, params, page, label, clear = [] }: {
       {page.pages > 1 && (
         <span className="vg-pager-steps">
           {prev
-            ? <Link href={prev} scroll={false} className="btn btn-ghost vg-btn-sm" rel="prev"><i className="ph ph-caret-left" aria-hidden />{t('Previous')}</Link>
-            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true"><i className="ph ph-caret-left" aria-hidden />{t('Previous')}</span>}
+            ? <Link href={prev} scroll={false} className="btn btn-ghost vg-btn-sm" rel="prev"><i className="ph ph-caret-left" aria-hidden />{t('Previous#m')}</Link>
+            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true"><i className="ph ph-caret-left" aria-hidden />{t('Previous#m')}</span>}
           <span aria-current="page">{fill(t('Page {n} of {pages}'), { n: page.page, pages: page.pages })}</span>
           {next
-            ? <Link href={next} scroll={false} className="btn btn-ghost vg-btn-sm" rel="next">{t('Next')}<i className="ph ph-caret-right" aria-hidden /></Link>
-            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true">{t('Next')}<i className="ph ph-caret-right" aria-hidden /></span>}
+            ? <Link href={next} scroll={false} className="btn btn-ghost vg-btn-sm" rel="next">{t('Next#m')}<i className="ph ph-caret-right" aria-hidden /></Link>
+            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true">{t('Next#m')}<i className="ph ph-caret-right" aria-hidden /></span>}
         </span>
       )}
       <span className="vg-pager-sizes">

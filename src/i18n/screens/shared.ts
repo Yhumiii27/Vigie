@@ -38,6 +38,8 @@ export const SHARED_FR: Record<string, string> = {
   ': remove this filter': ' : retirer ce filtre',
   '{from}–{to} of {total}': '{from}–{to} sur {total}',
   'Page {n} of {pages}': 'Page {n} sur {pages}',
+  'Previous#m': 'Précédent',
+  'Next#m': 'Suivant',
   'Per page': 'Par page',
 
   // Aide en ligne (HelpDialog)
