@@ -63,8 +63,8 @@ describe('démonstration', () => {
   it('fiche personne : aucune création dans Vigie (D01, CV-10) ; e-mail unique d’une fiche ancienne', async () => {
     const { savePerson } = await import('@/server/skills');
     const base = { name: '[T. Nguyen]', job: 'Monteur', service: 'Atelier montage', siteId: 'site_a' };
-    expect(await savePerson({}, form({ ...base, email: 'Autre.Nguyen@epc2i.example', matricule: 'M-001' }))).toEqual({ error: expect.stringContaining('se créent dans Cursus') });
+    expect(await savePerson({}, form({ ...base, email: 'Autre.Nguyen@atrium.example', matricule: 'M-001' }))).toEqual({ error: expect.stringContaining('se créent dans Cursus') });
     // Fiche ancienne sans matricule : e-mail encore modifiable, unique sans tenir compte de la casse.
-    expect(await savePerson({}, form({ ...base, id: 'nlegrand', name: '[N. Legrand]', email: 'T.NGUYEN@epc2i.example' }))).toMatchObject({ fieldErrors: { email: expect.any(String) } });
+    expect(await savePerson({}, form({ ...base, id: 'nlegrand', name: '[N. Legrand]', email: 'T.NGUYEN@atrium.example' }))).toMatchObject({ fieldErrors: { email: expect.any(String) } });
   });
 });

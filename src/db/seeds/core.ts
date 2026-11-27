@@ -34,7 +34,7 @@ export const PEOPLE: [id: string, name: string, job: string, matrix: boolean, se
  * la même personne sous `cursusMatricule` ; le rafraîchissement en crée une fiche, que le rattachement remplace (D01).
  */
 export const LEGACY_PEOPLE = [
-  { id: 'nlegrand', name: '[N. Legrand]', job: 'Technicienne méthodes', siteId: 'site_a', email: 'n.legrand@epc2i.example', cursusMatricule: 'EMP-9014' },
+  { id: 'nlegrand', name: '[N. Legrand]', job: 'Technicienne méthodes', siteId: 'site_a', email: 'n.legrand@atrium.example', cursusMatricule: 'EMP-9014' },
 ];
 export const LEFT: Record<string, { leftOn: string; leftReason: string }> = { ylambert: { leftOn: rel(-9), leftReason: 'Fin de contrat' } };
 export const pid = (name: string) => {
@@ -50,9 +50,9 @@ export const DEMO_SIRET: Record<string, string> = { 'site_a': '00000000000018', 
 /** Dernier rôle connu des personnes de démonstration (destinataires par rôle : animateurs QHSE, direction). */
 export const DEMO_LAST_ROLES = new Map(Object.entries(DEMO_ROLE_PEOPLE).map(([role, id]) => [id, role as Role]));
 
-/** E-mail de démonstration (domaine réservé .example) : « [C. Lefèvre] » → c.lefevre@epc2i.example. */
+/** E-mail de démonstration (domaine réservé .example) : « [C. Lefèvre] » → c.lefevre@atrium.example. */
 export const demoEmail = (name: string) =>
-  `${name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '')}@epc2i.example`;
+  `${name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '')}@atrium.example`;
 
 /**
  * Sites (deux actifs, un archivé ; identifiants = codes de matrix.pub_sites, décision CV-09, substitut src/db/seeds/foreign.ts),

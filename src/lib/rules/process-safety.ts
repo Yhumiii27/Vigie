@@ -1,6 +1,6 @@
 // Études de sécurité des procédés (VG-01 à VG-05, demande d'Arche du 01/11/2026 ; CNF-12 à CNF-14, INT-18) — règles pures,
 // sans accès serveur (composants client, chargements, server actions, tests). Méthode DIG-PRODI v4.0 du groupe : une étude
-// par jalon de sécurité d'un CAPEX de filiale (code « CPX-… » d'Arche) ou d'un projet EPC2i (code Keystone) — HazID (HS 2),
+// par jalon de sécurité d'un CAPEX de filiale (code « CPX-… » d'Arche) ou d'un projet Keystone (code Keystone) — HazID (HS 2),
 // HazOp ou AMDEC (HS 3), contrôle chantier (HS 4), PSSR avec la RSPDI (PSSR), audit ASPD (HS 6). Ses recommandations sont des
 // actions QSE rattachées à l'étude (actions.safety_study_id, réserve bloquante : actions.safety_study_blocking). Statut
 // « annulée », décomptes, retard et franchissement du jalon : calculés, jamais stockés.
@@ -77,8 +77,8 @@ export function projectCodeError(code: string | null | undefined): string | null
   if (!code) return null;
   return PROJECT_CODE.test(code) ? null : 'Code projet attendu en majuscules, chiffres, points, tirets ou barres (2 à 40 caractères).';
 }
-/** Une étude porte au moins un rattachement : un CAPEX ou un projet EPC2i. */
-export const LINK_REQUIRED = 'Indiquez le code CAPEX ou le code du projet EPC2i (au moins un).';
+/** Une étude porte au moins un rattachement : un CAPEX ou un projet Keystone. */
+export const LINK_REQUIRED = 'Indiquez le code CAPEX ou le code du projet Keystone (au moins un).';
 
 /** Type incompatible avec le jalon (HazID → HS 2 ; HazOp, AMDEC → HS 3 ; contrôle chantier → HS 4 ; PSSR, RSPDI → PSSR ; ASPD → HS 6). */
 export function studyTypeError(milestone: StudyMilestone, type: StudyType): string | null {

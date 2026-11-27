@@ -18,7 +18,7 @@ lots · 5. Demandes aux autres outils · 6. Questions · Annexe : écarts relev�
 
 ### 1.1 Objet
 
-M-02 (15/10/2026) retient une option pour chacun des 20 groupes de données en double entre les outils d'EPC2i ; le plan
+M-02 (15/10/2026) retient une option pour chacun des 20 groupes de données en double entre les outils de la suite Atrium ; le plan
 de Matrix (`docs/convergence-des-donnees.md`) en décrit la mise en œuvre et compte **49 jours** pour Vigie (§ 5.4). Ce
 plan a été écrit d'après le commit `b658790` de Vigie. Depuis, Vigie a livré les paquets 5 à 15, les lots A et B de la
 classe 1 et les études de sécurité (migrations jusqu'à `0023`), et Matrix a changé de méthode (M-13, M-17, M-18). Cette

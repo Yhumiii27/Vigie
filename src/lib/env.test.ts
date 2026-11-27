@@ -178,8 +178,8 @@ describe('parseConfig', () => {
 
   it('VIGIE_EMAIL_DOMAINS : liste de domaines en minuscules, sans « @ » ni doublon ; vide par défaut', () => {
     expect(parseConfig({ VIGIE_DEMO: '1' }).emailDomains).toEqual([]);
-    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_EMAIL_DOMAINS: '@EPC2I.fr, epc2i.com,epc2i.fr' }).emailDomains).toEqual(['epc2i.fr', 'epc2i.com']);
-    for (const bad of ['a@b', 'https://x', 'epc2i', ',']) {
+    expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_EMAIL_DOMAINS: '@ATRIUM.example, atrium.test,atrium.example' }).emailDomains).toEqual(['atrium.example', 'atrium.test']);
+    for (const bad of ['a@b', 'https://x', 'atrium', ',']) {
       expect(() => parseConfig({ VIGIE_DEMO: '1', VIGIE_EMAIL_DOMAINS: bad })).toThrow(/VIGIE_EMAIL_DOMAINS : liste de noms de domaine attendue/);
     }
     // Facultative pour la configuration Entra : sans elle, seules les premières connexions sont refusées.
@@ -202,9 +202,9 @@ describe('parseConfig', () => {
     expect(parseConfig({ VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr' }).mailTransport).toBe('aucun');
     const c = parseConfig({
       VIGIE_PUBLIC_URL: 'https://vigie.exemple.fr', VIGIE_SCHEDULER: '0', VIGIE_MAIL_TRANSPORT: 'fichier', VIGIE_MAIL_DIR: 'courriels',
-      VIGIE_MAIL_FROM: 'Vigie QHSE <vigie@epc2i.fr>', VIGIE_REMINDER_TIME: '7:30',
+      VIGIE_MAIL_FROM: 'Vigie QHSE <vigie@atrium.example>', VIGIE_REMINDER_TIME: '7:30',
     });
-    expect(c).toMatchObject({ scheduler: false, mailTransport: 'fichier', mailDir: path.resolve('courriels'), mailFrom: 'Vigie QHSE <vigie@epc2i.fr>', reminderTime: { hour: 7, minute: 30 } });
+    expect(c).toMatchObject({ scheduler: false, mailTransport: 'fichier', mailDir: path.resolve('courriels'), mailFrom: 'Vigie QHSE <vigie@atrium.example>', reminderTime: { hour: 7, minute: 30 } });
     expect(parseConfig({ VIGIE_DEMO: '1', VIGIE_MAIL_TRANSPORT: 'aucun', VIGIE_MAIL_FROM: 'vigie@localhost', VIGIE_REMINDER_TIME: '23:59' }))
       .toMatchObject({ mailTransport: 'aucun', mailFrom: 'vigie@localhost', reminderTime: { hour: 23, minute: 59 } });
   });
@@ -223,7 +223,7 @@ describe('parseConfig', () => {
     for (const bad of ['24:00', '07:60', '0700', 'sept heures', '07:00:00']) {
       expect(problems({ VIGIE_REMINDER_TIME: bad }), bad).toEqual(['VIGIE_REMINDER_TIME : heure attendue au format HH:MM, de 00:00 à 23:59 (ex. 07:00)']);
     }
-    for (const bad of ['Vigie', 'Vigie <vigie>', 'a b@c.fr', 'Vigie <vigie@epc2i.fr>\nBcc: x@y.fr', '"Vigie" <vigie@epc2i.fr>', '<>']) {
+    for (const bad of ['Vigie', 'Vigie <vigie>', 'a b@c.fr', 'Vigie <vigie@atrium.example>\nBcc: x@y.fr', '"Vigie" <vigie@atrium.example>', '<>']) {
       expect(problems({ VIGIE_MAIL_FROM: bad }).map((p) => p.split(' :')[0]), bad).toEqual(['VIGIE_MAIL_FROM']);
     }
     expect(problems({ VIGIE_DATA_DIR: '/data', VIGIE_UPLOAD_DIR: '/srv/uploads', VIGIE_BACKUP_DIR: '/srv/backups', VIGIE_MAIL_DIR: '/data/mails' }))

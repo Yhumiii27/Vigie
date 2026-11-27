@@ -47,7 +47,7 @@ beforeAll(async () => {
   Object.assign(process.env, {
     VIGIE_DATA_DIR: 'memory://', VIGIE_PUBLIC_URL: APP, VIGIE_SESSION_SECRET: SECRET,
     ENTRA_TENANT_ID: 'vigie-test', ENTRA_CLIENT_ID: 'vigie', ENTRA_CLIENT_SECRET: 'secret-de-test', ENTRA_ISSUER: issuer,
-    VIGIE_SITE_GROUPS: 'grp-site_a:site_a,grp-site_b:site_b', VIGIE_EMAIL_DOMAINS: 'epc2i.example',
+    VIGIE_SITE_GROUPS: 'grp-site_a:site_a,grp-site_b:site_b', VIGIE_EMAIL_DOMAINS: 'atrium.example',
   });
   resetConfig();
   await closeDb();
@@ -56,10 +56,10 @@ beforeAll(async () => {
   // Comptes du fournisseur factice : [T. Nguyen] (Salarié, groupe B), [C. Lefèvre] (animateur), [Y. Lambert] (sorti),
   // [M. Girard] (fiche visée par le compte « nonverifie », à l'adresse non vérifiée).
   await db.insert(t.people).values([
-    { id: 'tnguyen', name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', siteId: 'site_a', sort: 0 },
-    { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', siteId: 'site_a', sort: 1 },
-    { id: 'ylambert', name: '[Y. Lambert]', email: 'y.lambert@epc2i.example', siteId: 'site_a', leftOn: '2026-01-31', sort: 2 },
-    { id: 'mgirard', name: '[M. Girard]', email: 'm.girard@epc2i.example', siteId: 'site_a', sort: 3 },
+    { id: 'tnguyen', name: '[T. Nguyen]', email: 't.nguyen@atrium.example', siteId: 'site_a', sort: 0 },
+    { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@atrium.example', siteId: 'site_a', sort: 1 },
+    { id: 'ylambert', name: '[Y. Lambert]', email: 'y.lambert@atrium.example', siteId: 'site_a', leftOn: '2026-01-31', sort: 2 },
+    { id: 'mgirard', name: '[M. Girard]', email: 'm.girard@atrium.example', siteId: 'site_a', sort: 3 },
   ]);
 });
 
@@ -149,7 +149,7 @@ describe('connexion Entra ID (fournisseur factice)', () => {
     const created = await sessionOf((await login('nouveau')).res);
     expect(created).toMatchObject({ role: 'Salarié', sites: ['site_b'] });
     const [p] = await (await getDb()).select().from(t.people).where(eq(t.people.id, created!.pid));
-    expect(p).toMatchObject({ name: 'Nina Rousseau', email: 'n.rousseau@epc2i.example', siteId: 'site_b', lastRole: 'Salarié' });
+    expect(p).toMatchObject({ name: 'Nina Rousseau', email: 'n.rousseau@atrium.example', siteId: 'site_b', lastRole: 'Salarié' });
   });
 
   it('refus : aucun rôle Vigie, utilisateur non affecté (AADSTS50105), fiche sortie de l’effectif', async () => {

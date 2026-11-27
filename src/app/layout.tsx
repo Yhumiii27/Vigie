@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import { cookies } from 'next/headers';
 import { connection } from 'next/server';
-import { THEME_COOKIE, themeOf } from '@/lib/theme';
+import { themeFromCookies } from '@/lib/theme';
 import { I18nProvider } from '@/i18n/client';
 import { LANG_COOKIE, langOf } from '@/i18n/translate';
 import '@phosphor-icons/web/regular';
@@ -27,9 +27,9 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
   // CSP à nonce (src/proxy.ts) : toute page est rendue à la requête, pour que Next.js pose le nonce sur ses scripts
   // (page 404 comprise, sinon prérendue sans nonce).
   await connection();
-  // Thème sombre / clair (Norma 1.0) : cookie epc2i-theme lu au rendu, attribut posé sur <html> (pas de flash).
+  // Thème sombre / clair (Norma 1.0) : cookie atrium-theme (ancien nom à défaut, Norma 3.0) lu au rendu, attribut posé sur <html> (pas de flash).
   const jar = await cookies();
-  const theme = themeOf(jar.get(THEME_COOKIE)?.value);
+  const theme = themeFromCookies((n) => jar.get(n)?.value);
   // Langue de l'interface (VG-N01) : cookie vigie-lang, français par défaut ; traducteur fourni aux composants du navigateur.
   const lang = langOf(jar.get(LANG_COOKIE)?.value);
   return (

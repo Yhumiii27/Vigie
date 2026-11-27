@@ -13,7 +13,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Vigie</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.epc2i.vigie</string>
+	<string>com.atrium.vigie</string>
 	<key>CFBundleExecutable</key>
 	<string>Vigie</string>
 	<key>CFBundleIconFile</key>
@@ -33,7 +33,7 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.business</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>EPC2i</string>
+	<string>Suite Atrium</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSHighResolutionCapable</key>

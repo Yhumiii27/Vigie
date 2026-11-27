@@ -46,14 +46,14 @@ async function loadForWrite(id: string | null) {
 }
 
 const LABELS = {
-  site: 'Site', capexCode: 'Code CAPEX', keystoneProjectCode: 'Projet EPC2i', milestone: 'Jalon', type: 'Type', status: 'Statut',
+  site: 'Site', capexCode: 'Code CAPEX', keystoneProjectCode: 'Projet Keystone', milestone: 'Jalon', type: 'Type', status: 'Statut',
   sessionOn: 'Séance', facilitator: 'Animateur', reportRef: 'Rapport (Codex)', scope: 'Périmètre et objet',
 } as const;
 
 type Shown = Record<keyof typeof LABELS, string | null>;
 
 /**
- * Crée ou modifie une étude : site, code CAPEX (« CPX-… ») et / ou projet EPC2i (au moins un), jalon et type compatibles,
+ * Crée ou modifie une étude : site, code CAPEX (« CPX-… ») et / ou projet Keystone (au moins un), jalon et type compatibles,
  * statut planifiée ou réalisée (la validation passe par « Valider », la réouverture par « Rouvrir » motivé : une étude
  * validée garde son statut et sa conclusion ici), date de séance, animateur (personne présente — ou celle déjà
  * enregistrée — ou intervenant extérieur, l'un ou l'autre), référence Codex du rapport, périmètre. Modification : contrôle

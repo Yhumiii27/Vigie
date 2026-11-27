@@ -14,7 +14,7 @@ import { closeDb, getDb } from '@/db';
 import { resetConfig } from '@/lib/env';
 import { introspectPostgres } from '@/lib/matrix';
 
-// Disposition du serveur commun EPC2I (décision du 18/10/2026) : migrations publiées intactes, réécrites au moment de les
+// Disposition du serveur commun Atrium (décision du 18/10/2026) : migrations publiées intactes, réécrites au moment de les
 // appliquer ("public". → "vigie.") par migrateServer, journal vigie.__drizzle_migrations, search_path vigie. Essayé ici
 // sur PGlite (schéma vigie créé à la main, comme le socle du serveur) ; sur PostgreSQL : test/setup-postgres.ts et
 // l'ouverture de la base (src/db/index.ts) dans tous les fichiers de test/integration avec TEST_DATABASE_URL.

@@ -5,7 +5,7 @@ import { isDemo } from '@/lib/config';
 import { loadNotifications } from '@/lib/data/notifications';
 import { NAV, SCREENS, type ScreenKey } from '@/lib/domain';
 import { SEARCH_MIN, SEARCH_PATH } from '@/lib/rules/search';
-import { THEME_COOKIE, themeOf } from '@/lib/theme';
+import { themeFromCookies } from '@/lib/theme';
 import { getI18n } from '@/i18n/server';
 import { NAV_SECTION_EN, SCREEN_TITLE_EN } from '@/i18n/nav';
 import { NotificationBell } from './NotificationBell';
@@ -34,7 +34,7 @@ export async function PageHeader({ title, sub, actions, crumbs, toolbar }: {
     key: n.key, date: n.date, kind: n.kind, tone: n.tone, title: n.title, who: n.who, href: n.href, urgent: n.urgent, read: n.read,
     elsewhere: n.elsewhere, siteLabel: n.siteLabel, family: n.family,
   }));
-  const [{ lang, t }, theme] = await Promise.all([getI18n(), cookies().then((c) => themeOf(c.get(THEME_COOKIE)?.value))]);
+  const [{ lang, t }, theme] = await Promise.all([getI18n(), cookies().then((c) => themeFromCookies((n) => c.get(n)?.value))]);
   const screen = screenOf(title);
   const section = sectionOf(screen);
   // Titre d'un écran de SCREENS traduit par sa chaîne source (VG-N01) ; tout autre titre est déjà traduit par la page.

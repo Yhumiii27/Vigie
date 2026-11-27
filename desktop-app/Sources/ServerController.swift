@@ -621,7 +621,7 @@ enum Failures {
 
             Vérifiez la connexion au réseau de l'entreprise (VPN), puis cliquez sur « Réessayer ». \
             Pour revenir au serveur local de démonstration :
-            defaults delete com.epc2i.vigie VigieServerURL
+            defaults delete com.atrium.vigie VigieServerURL
             """,
             log: nil)
     }
@@ -635,7 +635,7 @@ enum Failures {
 
             Reconstruisez l'application depuis le dossier du projet (bash desktop-app/build.sh), \
             ou indiquez son emplacement dans le Terminal :
-            defaults write com.epc2i.vigie VigieProjectPath "/chemin/vers/Vigie"
+            defaults write com.atrium.vigie VigieProjectPath "/chemin/vers/Vigie"
             """,
             log: nil)
     }

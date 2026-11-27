@@ -5,7 +5,7 @@
 // src/db/seeds/foreign.ts.
 //
 // Créés seulement quand le moteur est PGlite ou que la démonstration est active, et que le rôle peut créer un schéma :
-// jamais sur le serveur commun EPC2I (schémas des outils présents ; vigie_app n'y a pas le droit CREATE sur la base),
+// jamais sur le serveur commun Atrium (schémas des outils présents ; vigie_app n'y a pas le droit CREATE sur la base),
 // jamais dans drizzle/. Base PostgreSQL dédiée hors démonstration : aucun substitut, les sources sont « indisponibles ».
 // Un schéma créé ici porte un commentaire repère : il est recréé à chaque ouverture (contrat à jour), jamais un schéma
 // qui ne le porte pas (vraie publication d'un outil).

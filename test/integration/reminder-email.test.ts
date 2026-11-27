@@ -56,7 +56,7 @@ describe('rappel du mercredi par e-mail', () => {
     const mail = JSON.parse(readFileSync(path.join(dir, 'rappel-2026-W42-clefevre.json'), 'utf8'));
     const own = rows.find((s) => s.personId === 'clefevre')!;
     expect(mail).toMatchObject({
-      to: 'c.lefevre@epc2i.example', from: 'Vigie <vigie@localhost>',
+      to: 'c.lefevre@atrium.example', from: 'Vigie <vigie@localhost>',
       subject: `Vigie · vos actions QSE en cours (${own.actionCount}, dont ${own.lateCount} en retard)`,
     });
     expect(own.lateCount).toBeGreaterThan(0);
@@ -150,11 +150,11 @@ describe('rappel du mercredi par e-mail', () => {
   it('adresse inutilisable (retour à la ligne, plusieurs adresses) : « sans_adresse », adresse lue conservée au journal', async () => {
     const db = await getDb();
     const [saved] = await db.select({ email: t.people.email }).from(t.people).where(eq(t.people.id, 'tnguyen'));
-    await db.update(t.people).set({ email: 't.nguyen@epc2i.example\nBcc: x@y.fr' }).where(eq(t.people.id, 'tnguyen'));
+    await db.update(t.people).set({ email: 't.nguyen@atrium.example\nBcc: x@y.fr' }).where(eq(t.people.id, 'tnguyen'));
     try {
       const dir = path.join(mails, 'w46');
       await runWeeklyReminder(db, { now: at('2026-11-11', '07:00'), todayIso: '2026-11-11', cfg, transport: fileTransport(dir), log: quiet });
-      expect((await sends('2026-W46')).find((s) => s.personId === 'tnguyen')).toMatchObject({ status: 'sans_adresse', email: 't.nguyen@epc2i.example\nBcc: x@y.fr' });
+      expect((await sends('2026-W46')).find((s) => s.personId === 'tnguyen')).toMatchObject({ status: 'sans_adresse', email: 't.nguyen@atrium.example\nBcc: x@y.fr' });
       expect(filesIn(dir)).not.toContain('rappel-2026-W46-tnguyen.json');
       expect(filesIn(dir)).toContain('rappel-2026-W46-clefevre.json');
     } finally {

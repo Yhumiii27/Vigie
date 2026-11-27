@@ -54,7 +54,7 @@ describe('mise à niveau d’une base de démonstration antérieure', () => {
     expect(leads.directors.map((p) => p.id)).toEqual(['hmarchand']);
     expect(leads.approvers.map((p) => p.id)).toEqual(['clefevre', 'hmarchand']);
     const [lead] = await (await getDb()).select({ email: t.people.email }).from(t.people).where(eq(t.people.id, 'clefevre'));
-    expect(lead.email).toBe('c.lefevre@epc2i.example');
+    expect(lead.email).toBe('c.lefevre@atrium.example');
   });
 
   it('lot 2 (migration 0004) : rubriques des AT, registre des accidents bénins, titre SST, mentions du registre des déchets', async () => {

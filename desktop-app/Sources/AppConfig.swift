@@ -4,15 +4,15 @@ import Foundation
 ///
 /// Le chemin du projet et le dossier de Node.js sont inscrits dans Info.plist par build.sh
 /// (clés `VigieProjectPath` et `VigieNodeDir`). Le chemin du projet peut être remplacé sans
-/// reconstruire : `defaults write com.epc2i.vigie VigieProjectPath "/chemin/vers/Vigie"`.
+/// reconstruire : `defaults write com.atrium.vigie VigieProjectPath "/chemin/vers/Vigie"`.
 /// Accès depuis le réseau local (désactivé par défaut) :
-/// `defaults write com.epc2i.vigie VigieNetworkAccess -bool true`.
+/// `defaults write com.atrium.vigie VigieNetworkAccess -bool true`.
 ///
-/// Client du serveur central (PRD-14) : avec `defaults write com.epc2i.vigie VigieServerURL "https://vigie.epc2i.fr"`
+/// Client du serveur central (PRD-14) : avec `defaults write com.atrium.vigie VigieServerURL "https://vigie.atrium.example"`
 /// (ou la clé `VigieServerURL` d'Info.plist, posée par `VIGIE_SERVER_URL=… bash desktop-app/build.sh`), l'application
 /// n'a plus besoin du projet ni de Node.js : elle ouvre le serveur central (connexion Microsoft Entra ID dans la
 /// fenêtre), sans lancer de serveur local ni de base PGlite. Retour au serveur local de démonstration :
-/// `defaults delete com.epc2i.vigie VigieServerURL`.
+/// `defaults delete com.atrium.vigie VigieServerURL`.
 struct AppConfig: Sendable {
     /// Port des scripts `dev` et `start` du projet.
     static let port: UInt16 = 3200
@@ -42,7 +42,7 @@ struct AppConfig: Sendable {
         let info = bundle.infoDictionary ?? [:]
         let projectPath = nonEmpty(defaults.string(forKey: "VigieProjectPath"))
             ?? nonEmpty(info["VigieProjectPath"] as? String)
-            ?? "/Users/gga/Systeme EPC2i/Vigie"
+            ?? "/Users/gga/Systeme Atrium/Vigie"
         let remote = serverOrigin(nonEmpty(defaults.string(forKey: "VigieServerURL")) ?? nonEmpty(info["VigieServerURL"] as? String))
         if let remote {
             return AppConfig(

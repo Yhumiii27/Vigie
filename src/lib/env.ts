@@ -125,7 +125,7 @@ export type VigieConfig = {
   /** Heure d'envoi du rappel du mercredi par e-mail (heure de Paris, 07:00 par défaut). */
   reminderTime: { hour: number; minute: number };
   /**
-   * Déclaration du schéma de la base à Matrix (catalogue des bases EPC2i, src/lib/matrix.ts) après les migrations :
+   * Déclaration du schéma de la base à Matrix (catalogue des bases de la suite Atrium, src/lib/matrix.ts) après les migrations :
    * MATRIX_URL (null : rien n'est envoyé), MATRIX_TOKEN, MATRIX_DECLARATIONS_DIR (copie locale), APP_VERSION.
    */
   matrix: { url: string | null; token: string | null; declarationsDir: string | null; version: string | null };
@@ -189,7 +189,7 @@ const MAIL_ADDRESS = /^[^\s<>@"]+@[^\s<>@".]+(\.[^\s<>@".]+)*$/;
 const sender = z.string().refine((v) => {
   const m = /^([^<>\r\n"]+?)\s*<([^<>]+)>$/.exec(v);
   return MAIL_ADDRESS.test(m ? m[2] : v);
-}, { error: 'expéditeur attendu : « Nom <adresse@domaine> » ou adresse seule (ex. Vigie <vigie@epc2i.fr>)' });
+}, { error: 'expéditeur attendu : « Nom <adresse@domaine> » ou adresse seule (ex. Vigie <vigie@atrium.example>)' });
 /** Heure « HH:MM » (heure de Paris). */
 const clockTime = z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/, { error: 'heure attendue au format HH:MM, de 00:00 à 23:59 (ex. 07:00)' })
   .transform((v) => ({ hour: Number(v.split(':')[0]), minute: Number(v.split(':')[1]) }));
@@ -345,7 +345,7 @@ export function parseConfig(env: Env): VigieConfig {
 
   const emailDomains = read('VIGIE_EMAIL_DOMAINS', z.string()
     .transform((v) => [...new Set(v.split(',').map((d) => d.trim().toLowerCase().replace(/^@/, '')).filter(Boolean))])
-    .refine((l) => l.length > 0 && l.every((d) => EMAIL_DOMAIN.test(d)), { error: 'liste de noms de domaine attendue (ex. epc2i.fr,epc2i.com)' })) ?? [];
+    .refine((l) => l.length > 0 && l.every((d) => EMAIL_DOMAIN.test(d)), { error: 'liste de noms de domaine attendue (ex. atrium.example,atrium.test)' })) ?? [];
   const trustedProxies = read('VIGIE_TRUSTED_PROXIES', z.string()
     .regex(/^\d+$/, { error: 'nombre entier attendu (1 par défaut)' })
     .transform(Number)

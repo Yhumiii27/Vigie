@@ -88,7 +88,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL || !hasClient)('vigie-db restore 
     expect(restored.code).toBe(0);
     expect(await siteIds()).toEqual(['site_a', 'site_b']);
     expect(await sql('select key from report_rate_limits')).toEqual([]);
-    // Schéma vigie seulement (serveur commun EPC2I) : vues pub_ restaurées, rien dans public ni drizzle.
+    // Schéma vigie seulement (serveur commun Atrium) : vues pub_ restaurées, rien dans public ni drizzle.
     expect((await sql<{ v: string }>(`select table_name as v from information_schema.views where table_schema = '${SERVER_SCHEMA}' order by 1`)).map((r) => r.v))
       .toEqual(['pub_controles', 'pub_hse_projet', 'pub_journal', 'pub_non_conformites']);
     expect(await sql("select tablename from pg_tables where schemaname in ('public', 'drizzle')")).toEqual([]);

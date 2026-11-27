@@ -131,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ServerControllerDelega
     }
 
     private func activateOtherInstance() {
-        let identifier = Bundle.main.bundleIdentifier ?? "com.epc2i.vigie"
+        let identifier = Bundle.main.bundleIdentifier ?? "com.atrium.vigie"
         let current = ProcessInfo.processInfo.processIdentifier
         guard let other = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
             .first(where: { $0.processIdentifier != current }) else { return }
@@ -218,7 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ServerControllerDelega
         case .none: serverLine = "Serveur non démarré"
         }
         let credits = NSAttributedString(
-            string: "Pilotage QHSE — EPC2i\n\(serverLine) · \(config.baseURL.absoluteString)",
+            string: "Pilotage QHSE — suite Atrium\n\(serverLine) · \(config.baseURL.absoluteString)",
             attributes: [.font: NSFont.systemFont(ofSize: 11),
                          .foregroundColor: NSColor.secondaryLabelColor,
                          .paragraphStyle: paragraph])

@@ -29,7 +29,7 @@ describe('revendications Entra ID', () => {
   it('adresse de confiance : vérifiée et d’un domaine exact de l’entreprise', () => {
     const verified = (email: string | null) => ({ email, emailVerified: true });
     expect(trustedEmail(verified('Anne.Dupont@EXEMPLE.fr'), ['exemple.fr'])).toEqual({ ok: true, email: 'anne.dupont@exemple.fr' });
-    expect(trustedEmail(verified('a@epc2i.com'), ['exemple.fr', 'EPC2I.com'])).toEqual({ ok: true, email: 'a@epc2i.com' });
+    expect(trustedEmail(verified('a@atrium.test'), ['exemple.fr', 'ATRIUM.test'])).toEqual({ ok: true, email: 'a@atrium.test' });
     expect(trustedEmail(verified('a@filiale.exemple.fr'), ['exemple.fr'])).toEqual({ ok: false, reason: 'domaine' });
     expect(trustedEmail(verified('a@exemple.fr.attaquant.example'), ['exemple.fr'])).toEqual({ ok: false, reason: 'domaine' });
     expect(trustedEmail(verified('a@autre.example'), ['exemple.fr'])).toEqual({ ok: false, reason: 'domaine' });

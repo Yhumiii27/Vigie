@@ -138,7 +138,7 @@ function StudyDetail({ s, canManage, options, actionOptions, today, version, onC
       <Facts items={[
         [t('Site'), s.siteLabel],
         [t('CAPEX'), s.capexCode ?? '—'],
-        !!s.projectCode && [t('EPC2i project'), s.projectCode],
+        !!s.projectCode && [t('Keystone project'), s.projectCode],
         [t('Milestone'), `${s.milestoneLabel} — ${STUDY_MILESTONES[s.milestone].hint}`],
         [t('Status'), <ToneTag key="s" tone={s.statusTone}>{s.statusLabel}</ToneTag>],
         [t('Session'), `${fmtDate(s.sessionOn)}${s.sessionOverdue ? t(' — past, study still planned') : ''}`],
@@ -259,7 +259,7 @@ function StudyForm({ s, options, defaultSite, today, version, onDone, onCancel }
         <Field name="capexCode" label={t('CAPEX code')} hint={t('E.g. CPX-APM-2026-01 (Arche). At least the CAPEX or the project.')}>
           <Input name="capexCode" defaultValue={s?.capexCode ?? ''} maxLength={44} autoFocus={!s} />
         </Field>
-        <Field name="keystoneProjectCode" label={t('EPC2i project')} hint={options.projectsMessage ?? t('Keystone project, optional.')}>
+        <Field name="keystoneProjectCode" label={t('Keystone project')} hint={options.projectsMessage ?? t('Keystone project, optional.')}>
           <Select name="keystoneProjectCode" options={withCurrent(options.projects, s?.projectCode, s?.projectCode, 'start')} defaultValue={s?.projectCode ?? ''} placeholder={t('No project')} />
         </Field>
       </FormRow>

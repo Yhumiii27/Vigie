@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { asRole } from './helpers';
 
 // Norma 2.1 (COQUE.md § 4) : FR / EN au-dessus de sombre / clair, empilés, de même taille, dernier élément de l'en-tête de
-// page (barre supérieure ≤ 1024 px) ; cookie epc2i-theme relu par le serveur qui pose data-theme sur <html> au rendu (pas
+// page (barre supérieure ≤ 1024 px) ; cookie atrium-theme (Norma 3.0) relu par le serveur qui pose data-theme sur <html> au rendu (pas
 // de flash), sombre par défaut ; cookie vigie-lang pour la langue (VG-N01).
 
 test('affichage sombre par défaut, clair par le bouton, gardé au rechargement', async ({ page, context, baseURL }) => {
@@ -16,7 +16,7 @@ test('affichage sombre par défaut, clair par le bouton, gardé au rechargement'
 
   await group.getByRole('button', { name: 'Affichage clair' }).click();
   await expect(html).toHaveAttribute('data-theme', 'light');
-  const cookie = (await context.cookies()).find((c) => c.name === 'epc2i-theme');
+  const cookie = (await context.cookies()).find((c) => c.name === 'atrium-theme');
   expect(cookie?.value).toBe('light');
   expect(cookie?.path).toBe('/');
 

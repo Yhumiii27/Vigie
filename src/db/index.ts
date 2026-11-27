@@ -38,7 +38,7 @@ const g = globalThis as unknown as { __vigieDb?: Promise<Opened> };
 const WRITE_LOCK = sql`select pg_advisory_xact_lock(hashtext(${`${SERVER_SCHEMA}.ecritures`}))`;
 
 /**
- * Serveur PostgreSQL (commun EPC2I, rôle vigie_app ; ou base dédiée) : tables et journal dans le schéma vigie.
+ * Serveur PostgreSQL (commun Atrium, rôle vigie_app ; ou base dédiée) : tables et journal dans le schéma vigie.
  *
  * Ordre à l'ouverture, sous le verrou de session des migrations (clé hashtext('vigie.migrations'), pris avant toute
  * lecture du journal : deux instances qui démarrent ensemble appliquent chaque migration une seule fois) : base d'une
@@ -69,7 +69,7 @@ async function openPostgres(url: string, storage: StorageConfig): Promise<Opened
       if (await hasLegacyServerLayout(query)) {
         throw new Error(`Base PostgreSQL d'une version antérieure de Vigie (tables dans le schéma public, journal drizzle.__drizzle_migrations) : `
           + `Vigie utilise désormais le schéma ${SERVER_SCHEMA} et ne reprend pas ces données (décision du 18/10/2026). `
-          + `Donner à DATABASE_URL une base où le schéma ${SERVER_SCHEMA} est vide (serveur commun EPC2I : rôle vigie_app), `
+          + `Donner à DATABASE_URL une base où le schéma ${SERVER_SCHEMA} est vide (serveur commun Atrium : rôle vigie_app), `
           + 'ou garder la version précédente de Vigie pour cette base.');
       }
       await ensureServerSchema(query);
@@ -114,7 +114,7 @@ async function ensureServerSchema(query: Query) {
   if (present) return;
   if (!creatable) {
     throw new Error(`Schéma ${SERVER_SCHEMA} absent de la base, et le rôle de DATABASE_URL ne peut pas le créer : `
-      + 'serveur commun EPC2I, jouer le socle (Matrix, infra/postgres/init/01 à 03) ; base dédiée, donner le droit CREATE au rôle.');
+      + 'serveur commun Atrium, jouer le socle (Matrix, infra/postgres/init/01 à 03) ; base dédiée, donner le droit CREATE au rôle.');
   }
   await query(`create schema ${SERVER_SCHEMA}`);
 }
