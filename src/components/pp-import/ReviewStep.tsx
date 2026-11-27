@@ -149,7 +149,7 @@ export function ReviewStep({ data, draft, sections, files, format, templateId, t
             {firstMinute && site ? (
               // Fondement de la règle propre au site : Seveso seuil haut ou bas, ou règle interne.
               <Notice tone="accent" icon="ph-shield-check">
-                {fill(t('{site}: written prevention plan'), { site: site.label })} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}).'), { basis: lcfirst(ruleBasis(site)) })}
+                {fill(t('{site}: written prevention plan'), { site: site.label })} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}).'), { basis: lcfirst(labelT(t)(ruleBasis(site))) })}
                 {legalText ? ` ${fill(t('Legal threshold R. 4512-7 also reached ({reasons}).'), { reasons: legalText })}` : ''}
               </Notice>
             ) : (

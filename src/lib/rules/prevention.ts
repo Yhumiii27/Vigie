@@ -2,6 +2,8 @@
 // Code du travail R. 4512-6 à R. 4512-12 · arrêté du 19 mars 1993 (liste des travaux dangereux).
 // Règle interne par site (établissement Seveso seuil haut) : plan écrit et signé dès la première minute d'intervention.
 
+import { labelMsg } from '@/i18n/labels';
+import { msgFr, type Msg } from '@/i18n/msg';
 import { addDays, addMonths, toParisLocal } from '@/lib/dates';
 import type { Tone } from '@/lib/domain';
 
@@ -64,8 +66,18 @@ export const firstMinuteRule = (rule: SiteRule | null | undefined) => !!rule?.pp
 export const ruleBasis = (rule: SiteRule | null | undefined) =>
   (rule?.seveso === 'seuil_haut' || rule?.seveso === 'seuil_bas' ? sevesoLabel(rule.seveso) : 'Règle interne du site');
 
+/**
+ * Motifs composés (VG-N01, src/i18n/msg.ts) : chaîne source anglaise et paramètres, rendus à l'affichage par msgT ; les
+ * fonctions françaises ci-dessous (firstMinuteReason, legalReason, mandatoryReason) en sont le français (msgFr), mot pour mot
+ * le texte d'avant la traduction — valeur des règles, du serveur, du journal et des essais.
+ */
+export const ruleBasisMsg = (rule: SiteRule | null | undefined): Msg => labelMsg(ruleBasis(rule));
+
+export const firstMinuteReasonMsg = (rule: SiteRule | null | undefined): Msg =>
+  ({ en: '{basis}: written and signed plan from the first minute of the work', values: { basis: ruleBasisMsg(rule) } });
+
 /** Motif de l'obligation sur un site soumis à la règle interne. */
-export const firstMinuteReason = (rule: SiteRule | null | undefined) => `${ruleBasis(rule)} : plan écrit et signé dès la première minute d'intervention`;
+export const firstMinuteReason = (rule: SiteRule | null | undefined) => msgFr(firstMinuteReasonMsg(rule));
 
 /** Première lettre en minuscule (« Établissement Seveso… » → « établissement Seveso… »), sigles et références conservés. */
 export const lcfirst = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLocaleLowerCase('fr') + s.slice(1) : s);
@@ -73,11 +85,18 @@ export const lcfirst = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLocaleL
 /** Obligation légale (R. 4512-7) : ≥ 400 h sur 12 mois ou travaux dangereux. */
 export const legalMandatory = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>) => p.estimatedHours >= MANDATORY_HOURS || p.dangerousWork;
 
+/** Seuil légal atteint (« 450 h sur 12 mois et travaux dangereux »), null s'il ne l'est pas. */
+export function legalReasonMsg(p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>): Msg | null {
+  const hours: Msg = { en: '{hours} h over 12 months', values: { hours: p.estimatedHours } };
+  const dangerous: Msg = { en: 'dangerous work' };
+  const over = p.estimatedHours >= MANDATORY_HOURS;
+  if (over && p.dangerousWork) return { en: '{hours} and {dangerous}', values: { hours, dangerous } };
+  return over ? hours : p.dangerousWork ? dangerous : null;
+}
+
 export function legalReason(p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>) {
-  const reasons = [];
-  if (p.estimatedHours >= MANDATORY_HOURS) reasons.push(`${p.estimatedHours} h sur 12 mois`);
-  if (p.dangerousWork) reasons.push('travaux dangereux');
-  return reasons.join(' et ');
+  const m = legalReasonMsg(p);
+  return m ? msgFr(m) : '';
 }
 
 /**
@@ -97,8 +116,10 @@ export const isMandatory = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'
   COMPANY_RULE_ALL_WORK || firstMinuteRule(rule) || legalMandatory(p);
 
 /** Fondement de l'obligation : règle du site, sinon seuil légal atteint, sinon règle de l'entreprise (PRV-13). */
-export const mandatoryReason = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined) =>
-  (firstMinuteRule(rule) ? firstMinuteReason(rule) : legalMandatory(p) ? legalReason(p) : COMPANY_RULE_REASON);
+export const mandatoryReasonMsg = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined): Msg =>
+  (firstMinuteRule(rule) ? firstMinuteReasonMsg(rule) : legalReasonMsg(p) ?? labelMsg(COMPANY_RULE_REASON));
+
+export const mandatoryReason = (p: Pick<PlanLike, 'estimatedHours' | 'dangerousWork'>, rule: SiteRule | null | undefined) => msgFr(mandatoryReasonMsg(p, rule));
 
 export const isFullySigned = (p: Pick<PlanLike, 'signedEuOn' | 'signedEeOn'>) => !!(p.signedEuOn && p.signedEeOn);
 

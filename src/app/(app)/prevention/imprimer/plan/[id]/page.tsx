@@ -12,6 +12,7 @@ import '../../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/plan/[id]'>): Promise<Metadata> {
   const [{ id }, { t }] = await Promise.all([params, getI18n()]);
@@ -161,7 +162,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
           [t('Period'), fill(t('from {from} to {to}'), { from: fmtDate(plan.startOn), to: fmtDate(plan.endOn) })],
           [t('Hours over 12 months'), `${plan.estimatedHours} h`],
           [t('Dangerous work'), plan.dangerousWork ? t('Yes (order of 19 March 1993)') : t('No')],
-          [t('Written plan'), plan.mandatory ? `${t('Required')} · ${plan.mandatoryReason}` : t('Not required (less than 400 h over 12 months, no dangerous work)')],
+          [t('Written plan'), plan.mandatory ? `${t('Required')} · ${msgT(t)(plan.mandatoryReasonText)}` : t('Not required (less than 400 h over 12 months, no dangerous work)')],
           [t('Keystone project'), plan.keystoneProject ?? '—'],
         ]} />
       </Section>

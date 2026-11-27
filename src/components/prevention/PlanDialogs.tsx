@@ -30,6 +30,7 @@ import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
 import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 /** Pièces jointes acceptées sur un plan : PDF, images, Word. */
 const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
@@ -147,7 +148,7 @@ function PlanForm({ plan, options, onDone, onCancel }: { plan?: PlanView; option
       </div>
       <Notice tone={firstMinute || legal ? 'accent' : 'neutral'} icon={firstMinute ? 'ph-shield-warning' : legal ? 'ph-file-text' : 'ph-info'}>
         {firstMinute
-          ? <>{t('Written prevention plan')} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}): prior joint inspection and signature of both companies before the work starts.'), { basis: lcfirst(ruleBasis(rule)) })}{' '}
+          ? <>{t('Written prevention plan')} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}): prior joint inspection and signature of both companies before the work starts.'), { basis: lcfirst(labelT(t)(ruleBasis(rule))) })}{' '}
             {legal ? fill(t('Legal threshold R. 4512-7 also reached ({reasons}).'), { reasons: legalText }) : fill(t('Outside the site rule, it would not be required (less than {min} h over 12 months, no dangerous work).'), { min: MANDATORY_HOURS })}</>
           : legal
             ? <>{t('Written prevention plan')} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('({reasons}): prior joint inspection and signature of both companies before the work starts.'), { reasons: legalText })}</>
@@ -414,7 +415,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         <ToneTag tone={plan.tone}>{labelT(t)(plan.statusLabel)}</ToneTag>
         {plan.mandatory
-          ? <span title={plan.mandatoryReason} style={{ display: 'inline-flex' }}><ToneTag tone="accent">{t('Written plan required')} · {plan.mandatoryShort}</ToneTag></span>
+          ? <span title={msgT(t)(plan.mandatoryReasonText)} style={{ display: 'inline-flex' }}><ToneTag tone="accent">{t('Written plan required')} · {msgT(t)(plan.mandatoryShortText)}</ToneTag></span>
           : <span className="tag tag-neutral">{t('Written plan not required')}</span>}
         {plan.missingSignature && <ToneTag tone="danger">{t('Intervention in progress without a signed plan')}</ToneTag>}
         {plan.overdue && <ToneTag tone="warn">{t('Period over · to close')}</ToneTag>}
@@ -455,7 +456,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
 
       {plan.missingSignature && (
         <Notice tone="danger">
-          {plan.legalMandatory && !plan.firstMinute ? t('French Labour Code R. 4512-7: the intervention') : fill(t('{reason}. The intervention'), { reason: plan.mandatoryReason ?? '' })} {fill(t('started on {date} although the mandatory written plan is not signed by both companies'), { date: fmtDate(plan.startOn) })}
+          {plan.legalMandatory && !plan.firstMinute ? t('French Labour Code R. 4512-7: the intervention') : fill(t('{reason}. The intervention'), { reason: msgT(t)(plan.mandatoryReasonText) })} {fill(t('started on {date} although the mandatory written plan is not signed by both companies'), { date: fmtDate(plan.startOn) })}
           {plan.inspectionDone ? '.' : t(' and the prior joint inspection is not recorded.')}
         </Notice>
       )}
@@ -468,7 +469,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
         [t('Period'), plan.period],
         [t('Hours over 12 months'), `${plan.estimatedHours} h`],
         [t('Dangerous work'), plan.dangerousWork ? t('Yes') : t('No')],
-        [t('Legal threshold R. 4512-7'), plan.legalMandatory ? fill(t('Reached ({reason})'), { reason: plan.legalReason ?? '' }) : plan.firstMinute ? t('Not reached · plan required by the site rule') : t('Not reached · plan required by the company rule')],
+        [t('Legal threshold R. 4512-7'), plan.legalMandatory ? fill(t('Reached ({reason})'), { reason: plan.legalReasonText ? msgT(t)(plan.legalReasonText) : '' }) : plan.firstMinute ? t('Not reached · plan required by the site rule') : t('Not reached · plan required by the company rule')],
         [t('Joint inspection'), plan.inspectionOn ? fill(plan.inspectionDone ? t('Carried out on {date}') : t('Planned for {date}'), { date: fmtDate(plan.inspectionOn) }) : t('Not carried out')],
         [t('Owner'), plan.owner ?? '—'],
         [t('Keystone project'), plan.keystoneProject ?? '—'],

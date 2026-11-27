@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import Link from 'next/link';
 import { ActionForm, Checkbox, Field, FormRow, Input, Select, TextArea } from '@/components/form';
-import { firstMinuteReason, ruleBasis, type SiteRule } from '@/lib/rules/prevention';
+import { firstMinuteReasonMsg, ruleBasis, type SiteRule } from '@/lib/rules/prevention';
 import { ConfirmButton, ErrorLine, Facts, Notice, SectionTitle, muted, useRun } from '@/components/prevention/parts';
 import { LazyChangeLog } from '@/components/LazyChangeLog';
 import { ReasonForm } from '@/components/ReasonDialog';
@@ -23,6 +23,7 @@ import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
 import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 // Fenêtres de la carte du site : zones, voies, activités, échelle et plan de fond.
 
@@ -224,7 +225,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
           ))}
         </div>
         {team === 'externe' && rule.ppFromFirstMinute && !planId && (
-          <span style={{ fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>{firstMinuteReason(rule)}.</span>
+          <span style={{ fontSize: 11.5, color: 'var(--tone-warn-fg)' }}>{msgT(t)(firstMinuteReasonMsg(rule))}.</span>
         )}
       </div>
       <FormRow>
@@ -336,7 +337,7 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
         {activity.vehicles && <span className="tag tag-neutral">{t('Vehicles / machinery')}</span>}
       </div>
       {noPlan && rule.ppFromFirstMinute && (
-        <Notice tone="danger">{fill(t('{reason} of the external company: link the prevention plan of this intervention.'), { reason: firstMinuteReason(rule) })}</Notice>
+        <Notice tone="danger">{fill(t('{reason} of the external company: link the prevention plan of this intervention.'), { reason: msgT(t)(firstMinuteReasonMsg(rule)) })}</Notice>
       )}
       {gap && (
         <Notice tone="danger">
@@ -344,7 +345,7 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
             ? fill(t('Intervention in progress although the plan {id} is closed or cancelled: draw up a new prevention plan.'), { id: activity.preventionPlanId ?? '' })
             : fill(rule.ppFromFirstMinute
               ? t('{basis}: the plan {id} ({status}) must be signed by both companies before any intervention.')
-              : t('The plan {id} ({status}) must be signed by both companies before any intervention (R. 4512-7).'), { basis: ruleBasis(rule), id: activity.preventionPlanId ?? '', status: (activity.planStatusLabel ?? '').toLowerCase() })}
+              : t('The plan {id} ({status}) must be signed by both companies before any intervention (R. 4512-7).'), { basis: labelT(t)(ruleBasis(rule)), id: activity.preventionPlanId ?? '', status: labelT(t)(activity.planStatusLabel ?? '').toLowerCase() })}
         </Notice>
       )}
       <Facts items={[

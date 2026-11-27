@@ -26,6 +26,7 @@ import { PermitLockouts } from './PermitLockouts';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
 import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -74,7 +75,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   const firstMinute = !!rule?.ppFromFirstMinute;
   // Plan signé exigé pour délivrer : entreprise extérieure sur un site « dès la première minute », ou permis de feu d'une entreprise extérieure.
   const planRequired = permitNeedsSignedPlan({ type, contractorId: contractorId || null }, rule);
-  const requiredWhy = firstMinute ? fill(t('{basis}, plan from the first minute'), { basis: lcfirst(ruleBasis(rule)) }) : t('fire permit: dangerous work, order of 19 March 1993');
+  const requiredWhy = firstMinute ? fill(t('{basis}, plan from the first minute'), { basis: lcfirst(labelT(t)(ruleBasis(rule))) }) : t('fire permit: dangerous work, order of 19 March 1993');
   const fromDay = validFrom.slice(0, 10), toDay = validTo.slice(0, 10);
   const candidates = planCandidates(options.plans, siteId, contractorId, fromDay, toDay);
   const selected = options.plans.find((p) => p.id === planId);
@@ -342,8 +343,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
               {permit.planGap && <strong style={{ fontWeight: 500 }}>{t('Intervention of an external company without a signed prevention plan.')} </strong>}
               {permit.planIssue}{' '}
               {requested
-                ? (permit.ruleReason ? fill(t('Issue impossible ({reason}).'), { reason: lcfirst(permit.ruleReason) }) : t('Issue impossible as long as the plan is not in order.'))
-                : permit.ruleReason ? `${permit.ruleReason}.` : ''}
+                ? (permit.ruleReason ? fill(t('Issue impossible ({reason}).'), { reason: lcfirst(permit.ruleReasonText ? msgT(t)(permit.ruleReasonText) : permit.ruleReason) }) : t('Issue impossible as long as the plan is not in order.'))
+                : permit.ruleReasonText ? `${msgT(t)(permit.ruleReasonText)}.` : ''}
             </span>
             {permit.plan && permit.planIssueKind === 'unsigned' && (
               <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ justifySelf: 'start' }}>

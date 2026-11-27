@@ -454,6 +454,9 @@ export const LABEL_EN: Record<string, string> = {
   'Établissement Seveso seuil bas': 'Lower-tier Seveso establishment',
   'Établissement non classé Seveso': 'Establishment not classified Seveso',
   'Règle interne du site': 'Internal rule of the site',
+  'Seveso seuil haut': 'Upper-tier Seveso',
+  'Seveso seuil bas': 'Lower-tier Seveso',
+  'Règle du site': 'Site rule',
   "Règle de l'entreprise : plan écrit et signé pour toute intervention d'une entreprise extérieure, quel que soit le nombre d'heures":
     'Company rule: written and signed plan for any work by an external company, whatever the number of hours',
   'Arrêté du 19 mars 1993 : chute de hauteur de plus de 3 m, pièces nues sous tension (> TBT), soudage avec permis de feu, atmosphère confinée ou explosive, agents CMR, rayonnements ionisants…':

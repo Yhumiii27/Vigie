@@ -118,6 +118,13 @@ export const SHARED_FR: Record<string, string> = {
   '{n} permit requested or delivered': '{n} permis demandé ou délivré',
   '{n} permits requested or delivered': '{n} permis demandés ou délivrés',
 
+  // Motifs du plan de prévention écrit (src/lib/rules/prevention.ts, src/lib/data/prevention.ts)
+  '{basis}: written and signed plan from the first minute of the work': "{basis} : plan écrit et signé dès la première minute d'intervention",
+  '{hours} h over 12 months': '{hours} h sur 12 mois',
+  '{hours} and {dangerous}': '{hours} et {dangerous}',
+  '{rule} · from the first minute': '{rule} · dès la première minute',
+  'any work': 'toute intervention',
+
   // Connecteurs, boîte de réception, file d'envoi (SitesManager)
   'Vigie reads the common registers in the views published by the other tools (read only). Sites and assignments are cached and read again every night; projects and suppliers are read at each entry.':
     'Vigie lit les référentiels communs dans les vues publiées par les autres outils (lecture seule). Les sites et les affectations sont gardés en cache et relus chaque nuit ; les projets et les fournisseurs sont lus à chaque saisie.',

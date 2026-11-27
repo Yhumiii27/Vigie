@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { msgFr, type Msg } from '@/i18n/msg';
 import { readPlanWorkers } from './plan-workers';
 import { INDUCTION_LABELS, inductionWarning, vetoAllowed, type InductionState } from '@/lib/rules/workers';
 import { hasLeft } from '@/lib/people';
@@ -18,7 +20,7 @@ import type { ChangeEntry } from '@/lib/change-entry';
 import {
   PERMIT_DELIVERED, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, START_GAP_LABEL, firstFullSignatureOn, firstMinuteReason, firstMinuteRule,
   fmtLocalLong, fmtLocalRange, fmtLocalShort, inspectionDone, isFullySigned, isInProgress, isMandatory, isPlanEnded, legalMandatory,
-  legalReason, mandatoryReason, missingPlanContent, parseChecklist, permitCloseBlocker, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
+  legalReason, legalReasonMsg, mandatoryReason, mandatoryReasonMsg, firstMinuteReasonMsg, missingPlanContent, parseChecklist, permitCloseBlocker, permitNeedsSignedPlan, permitPlanCheck, permitState, planContentStats,
   PLAN_MEETING_KINDS, nextPeriodicMeeting, type PlanMeetingKind,
   planEndIssue, planPhase, planStatus, ruleBasis, sevesoLabel, startGap, toParisLocal, type ChecklistItem, type PermitPlanIssueKind,
   type PermitState, type PermitType, type PlanContent, type PlanPhase, type PlanStatus, type SiteRule, type StartGapKind,
@@ -130,6 +132,10 @@ export type PlanView = {
   /** Plan écrit obligatoire selon la règle du site du plan. */
   mandatory: boolean;
   mandatoryReason: string;
+  /** mandatoryReason, mandatoryShort et legalReason composés (VG-N01), rendus par msgT à l'affichage. */
+  mandatoryReasonText: Msg;
+  mandatoryShortText: Msg;
+  legalReasonText: Msg | null;
   /** Motif court (étiquettes) : « Seveso seuil haut · dès la première minute » ou « 140 h sur 12 mois et travaux dangereux ». */
   mandatoryShort: string;
   /** Obligation légale R. 4512-7 (≥ 400 h sur 12 mois ou travaux dangereux), indépendamment de la règle du site. */
@@ -204,6 +210,8 @@ export type PermitView = {
   firstMinute: boolean;
   /** Motif de la règle du site (« Établissement Seveso seuil haut : plan écrit et signé dès la première minute d'intervention »), null hors règle. */
   ruleReason: string | null;
+  /** ruleReason composé (VG-N01). */
+  ruleReasonText: Msg | null;
   /** Plan signé couvrant la validité exigé pour délivrer (entreprise extérieure sur un site « dès la première minute », ou permis de feu d'une entreprise extérieure). */
   planRequired: boolean;
   /** Permis demandé ou délivré dont le plan de prévention n'est pas en règle (règle du site), null sinon. */
@@ -302,6 +310,10 @@ export type ContractorView = {
 const fmtInstant = (d: Date) => fmtDate(toParisLocal(d).slice(0, 10));
 
 const sevesoShort = (seveso: string | null) => (seveso === 'seuil_haut' ? 'Seveso seuil haut' : seveso === 'seuil_bas' ? 'Seveso seuil bas' : 'Règle du site');
+
+/** Motif court d'un plan obligatoire (étiquettes) : règle du site, seuil légal atteint, sinon toute intervention (PRV-13). */
+const mandatoryShortMsg = (p: Parameters<typeof legalReasonMsg>[0], rule: SiteRule | null | undefined, firstMinute: boolean): Msg =>
+  (firstMinute ? { en: '{rule} · from the first minute', values: { rule: labelMsg(sevesoShort(rule?.seveso ?? null)) } } : legalReasonMsg(p) ?? { en: 'any work' });
 
 /** Sous-titre de l'indicateur des écarts, selon la règle des sites où ils se trouvent. */
 function gapRuleLabel(rules: (SiteRule | undefined)[]) {
@@ -480,6 +492,7 @@ export async function loadPrevention() {
       plan: plan ? { id: plan.id, signed: isFullySigned(plan), period: periodLabel(plan.startOn, plan.endOn) } : null,
       firstMinute: firstMinuteRule(rule),
       ruleReason: firstMinuteRule(rule) ? firstMinuteReason(rule) : null,
+      ruleReasonText: firstMinuteRule(rule) ? firstMinuteReasonMsg(rule) : null,
       planRequired,
       planIssue,
       planIssueKind: check?.kind ?? null,
@@ -526,6 +539,7 @@ export async function loadPrevention() {
     const rule = ruleOf(p.siteId);
     const firstMinute = firstMinuteRule(rule);
     const mandatory = isMandatory(p, rule);
+    const shortText = mandatoryShortMsg(p, rule, firstMinute);
     const contractor = contractorOf.get(p.contractorId);
     const actions = actionsOf('preventionPlanId', p.id);
     const openPermitIds = allPermits.filter((x) => x.preventionPlanId === p.id && isOpenPermit(x)).map((x) => x.id);
@@ -596,7 +610,10 @@ export async function loadPrevention() {
       ruleBasis: firstMinute ? ruleBasis(rule) : null,
       mandatory,
       mandatoryReason: mandatoryReason(p, rule),
-      mandatoryShort: firstMinute ? `${sevesoShort(rule?.seveso ?? null)} · dès la première minute` : legalReason(p) || 'toute intervention',
+      mandatoryReasonText: mandatoryReasonMsg(p, rule),
+      mandatoryShort: msgFr(shortText),
+      mandatoryShortText: shortText,
+      legalReasonText: legalReasonMsg(p),
       legalMandatory: legalMandatory(p),
       legalReason: legalReason(p),
       inProgress: isInProgress(p, now),
