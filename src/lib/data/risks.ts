@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t, type Db } from '@/db';
@@ -1018,23 +1020,26 @@ export function unitRiskTodos(
   now: string,
 ): TodoItem[] {
   const todo: TodoItem[] = [];
-  const groups: [RiskFlag, string][] = [['toDefine', `≥ ${RISK_ACTION_THRESHOLD} sans action de réduction`], ['residualHigh', `au résiduel encore ≥ ${RISK_ACTION_THRESHOLD}`]];
+  const groups: [RiskFlag, [string, string]][] = [
+    ['toDefine', ['{unit} · {n} risk ≥ {threshold} without a reduction action', '{unit} · {n} risks ≥ {threshold} without a reduction action']],
+    ['residualHigh', ['{unit} · {n} risk with a residual still ≥ {threshold}', '{unit} · {n} risks with a residual still ≥ {threshold}']],
+  ];
   for (const u of units) {
     const ur = risks.filter((r) => r.unitId === u.id);
     if (!ur.some((r) => r.flag)) continue;
     const { who, ownerIds } = recipientsFor(u.siteId);
     const base = { kind: RISK_TODO_KIND, who, ownerIds, siteId: u.siteId, date: now };
-    for (const [flag, label] of groups) {
+    for (const [flag, [one, many]] of groups) {
       const hit = ur.filter((r) => r.flag === flag);
       if (!hit.length) continue;
       todo.push({
         ...base, tone: 'danger', overdue: true, count: hit.length,
-        title: `${u.label} · ${hit.length} risque${hit.length > 1 ? 's' : ''} ${label}`,
+        ...titled(hit.length > 1 ? many : one, { unit: u.label, n: hit.length, threshold: RISK_ACTION_THRESHOLD }),
         href: hit.length === 1 ? `/risques?risque=${hit[0].id}` : `/risques?unite=${encodeURIComponent(u.id)}`,
       });
     }
     for (const r of ur.filter((r) => r.flag === 'toReview')) {
-      todo.push({ ...base, tone: 'warn', title: `${u.label} · ${r.hazard} — résiduel à recoter (actions vérifiées)`, href: `/risques?risque=${r.id}` });
+      todo.push({ ...base, tone: 'warn', ...titled('{unit} · {hazard} — residual to re-rate (actions verified)', { unit: u.label, hazard: r.hazard }), href: `/risques?risque=${r.id}` });
     }
   }
   return todo;
@@ -1076,19 +1081,19 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
   const todo: TodoItem[] = [];
 
   if (!current) {
-    todo.push({ ...base, date: now, tone: 'danger', title: 'Aucune version du DUERP en vigueur', href: '/risques', overdue: true });
+    todo.push({ ...base, date: now, tone: 'danger', ...titled('No version of the DUERP in force'), href: '/risques', overdue: true });
   } else {
     if (current.nextUpdateOn < now) {
-      todo.push({ ...base, date: now, dueOn: current.nextUpdateOn, tone: 'danger', title: `Mise à jour annuelle du DUERP dépassée depuis le ${fmtDayMonth(current.nextUpdateOn)}`, href: '/risques', overdue: true });
+      todo.push({ ...base, date: now, dueOn: current.nextUpdateOn, tone: 'danger', ...titled('Annual update of the DUERP overdue since {date}', { date: fmtDayMonth(current.nextUpdateOn) }), href: '/risques', overdue: true });
     } else if (daysBetween(now, current.nextUpdateOn) <= TODO_HORIZON_DAYS) {
-      todo.push({ ...base, date: current.nextUpdateOn, dueOn: current.nextUpdateOn, tone: 'warn', title: `Mise à jour annuelle du DUERP (version ${current.version})`, href: '/risques' });
+      todo.push({ ...base, date: current.nextUpdateOn, dueOn: current.nextUpdateOn, tone: 'warn', ...titled('Annual update of the DUERP (version {version})', { version: current.version }), href: '/risques' });
     }
     if (!current.cseConsultedOn) {
-      todo.push({ ...base, date: now, tone: 'warn', title: `Consultation du CSE à renseigner · DUERP ${current.version}`, href: '/risques' });
+      todo.push({ ...base, date: now, tone: 'warn', ...titled('Consultation of the CSE to fill in · DUERP {version}', { version: current.version }), href: '/risques' });
     }
     // DUE-03 : chaque mise à jour est transmise au service de prévention et de santé au travail (R. 4121-4).
     if (!current.spstSentOn) {
-      todo.push({ ...base, date: now, tone: 'warn', title: `Transmission au SPST à renseigner · DUERP ${current.version}`, href: '/risques', key: `duerp|${current.version}|spst` });
+      todo.push({ ...base, date: now, tone: 'warn', ...titled('Sending to the occupational health service to fill in · DUERP {version}', { version: current.version }), href: '/risques', key: `duerp|${current.version}|spst` });
     }
   }
 
@@ -1096,9 +1101,9 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
   const year = yearOf(now);
   const program = programs.find((p) => p.year === year);
   if (program && !program.frozenAt) {
-    todo.push({ ...base, date: now, tone: 'warn', title: `${PROGRAM_SHORT} ${year} : consultation du CSE à renseigner`, href: `/risques?programme=${year}`, key: `papripact|${year}|cse` });
+    todo.push({ ...base, date: now, tone: 'warn', ...titled('{programme} {year}: consultation of the CSE to fill in', { programme: PROGRAM_SHORT, year }), href: `/risques?programme=${year}`, key: `papripact|${year}|cse` });
   } else if (!program && programs.some((p) => p.year === year - 1)) {
-    todo.push({ ...base, date: now, tone: 'warn', title: `${PROGRAM_SHORT} ${year} à établir`, href: `/risques?programme=${year}`, key: `papripact|${year}|missing` });
+    todo.push({ ...base, date: now, tone: 'warn', ...titled('{programme} {year} to draw up', { programme: PROGRAM_SHORT, year }), href: `/risques?programme=${year}`, key: `papripact|${year}|missing` });
   }
 
   todo.push(...unitRiskTodos(units, risks, leads.forSite, now));
@@ -1124,7 +1129,7 @@ export const loadRiskSignals = cache(async (): Promise<{ badge?: number; todo: T
     todo.push({
       kind: RISK_TODO_KIND, siteId: r.siteId, date: r.requestedOn, tone: 'warn',
       who: extra ? `${site.who} · ${extra.name}` : site.who, ownerIds: [...site.ownerIds, ...(extra ? [extra.id] : [])],
-      title: `Demande d'accès au DUERP à traiter · ${DUERP_REQUESTERS[r.requesterKind as DuerpRequester] ?? r.requesterKind}`,
+      ...titled('Request for access to the DUERP to handle · {requester}', { requester: labelMsg(DUERP_REQUESTERS[r.requesterKind as DuerpRequester] ?? r.requesterKind) }),
       href: '/risques?registre=1', key: `duerp-access|${r.id}`,
     });
   }
@@ -1161,7 +1166,7 @@ async function duerpReviewTodos(db: Db, allowed: string[] | null, forSite: (site
     const to = forSite(e.siteId);
     return [{
       kind: RISK_TODO_KIND, who: to.who, ownerIds: to.ownerIds, siteId: e.siteId, date: now, tone: 'warn',
-      title: `Réévaluer le DUERP après l'événement ${e.id} du ${fmtDayMonth(e.occurredOn)}`,
+      ...titled('Reassess the DUERP after the event {id} of {date}', { id: e.id, date: fmtDayMonth(e.occurredOn) }),
       href: e.riskId != null ? `/risques?risque=${e.riskId}` : '/risques', key: `duerp-reevaluation|${e.id}`,
       ...(reason === 'arret' ? { health: true } : {}),
     }];

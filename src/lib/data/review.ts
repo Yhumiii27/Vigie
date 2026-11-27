@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { readRegisterDocuments } from '@/server/integrations/codex/views';
 import { QHSE_DEPARTMENTS } from '@/lib/rules/documents';
 import { cache } from 'react';
@@ -992,16 +994,16 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
       const ownerIds = i.ownerId ? [i.ownerId] : qhse.ownerIds;
       const links = { href, ...(i.ownerId ? { readHref: `/audits/contributions?revue=${r.id}` } : {}) };
       if (i.dueOn! < now) {
-        todo.push({ date: now, dueOn: i.dueOn!, kind, tone: 'danger', title: `${i.label} — attendu le ${fmtDayMonth(i.dueOn!)} · revue du ${day}`, who, ...links, ownerIds, overdue: true, siteId: null });
+        todo.push({ date: now, dueOn: i.dueOn!, kind, tone: 'danger', ...titled('{label} — expected on {date} · review of {day}', { label: i.label, date: fmtDayMonth(i.dueOn!), day }), who, ...links, ownerIds, overdue: true, siteId: null });
       } else if (i.dueOn! <= horizon) {
-        todo.push({ date: i.dueOn!, dueOn: i.dueOn!, kind, tone: 'warn', title: `${i.label} · revue du ${day}`, who, ...links, ownerIds, siteId: null });
+        todo.push({ date: i.dueOn!, dueOn: i.dueOn!, kind, tone: 'warn', ...titled('{label} · review of {day}', { label: i.label, day }), who, ...links, ownerIds, siteId: null });
       }
     });
     if (r.status === 'planifiee' && r.reviewOn < now) {
-      todo.push({ date: now, dueOn: r.reviewOn, kind, tone: 'danger', title: `Revue de direction du ${day} — compte rendu à saisir`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
+      todo.push({ date: now, dueOn: r.reviewOn, kind, tone: 'danger', ...titled('Management review of {day} — minutes to enter', { day }), who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
     }
     if (r.status === 'tenue' && addDays(r.reviewOn, REVIEW_CLOSE_DAYS) < now) {
-      todo.push({ date: now, dueOn: addDays(r.reviewOn, REVIEW_CLOSE_DAYS), kind, tone: 'warn', title: `Revue de direction du ${day} — visa de la direction et dossier à clôturer`, who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
+      todo.push({ date: now, dueOn: addDays(r.reviewOn, REVIEW_CLOSE_DAYS), kind, tone: 'warn', ...titled('Management review of {day} — approval of management and file to close', { day }), who: director?.name ?? qhse.who, href, ownerIds: closers, overdue: true, siteId: null });
     }
   });
 
@@ -1014,10 +1016,13 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
       const a = d.actionId ? actionById.get(d.actionId) : undefined;
       const state = decisionFollowUpGap(a?.status ?? null, !!d.actionId);
       if (!state) return;
-      const label = REVIEW_DECISION_KINDS[d.kind as ReviewDecisionKind]?.label ?? 'Décision';
+      const label = labelMsg(REVIEW_DECISION_KINDS[d.kind as ReviewDecisionKind]?.label ?? 'Décision');
       todo.push({
         date: now, dueOn: d.dueOn!, kind, tone: 'danger', overdue: true, siteId: null, key: `revue-decision|${d.id}`,
-        title: `${label} de la revue du ${fmtDayMonth(r.reviewOn)} sans suite — ${state === 'none' ? 'aucune action au plan' : state === 'abandoned' ? `action ${d.actionId} abandonnée` : `action ${d.actionId} non close`} (échéance ${fmtDayMonth(d.dueOn!)}) · ${clipText(d.text, 70)}`,
+        ...titled('{label} of the review of {day} without follow-up — {state} (due date {due}) · {text}', {
+          label, day: fmtDayMonth(r.reviewOn), due: fmtDayMonth(d.dueOn!), text: clipText(d.text, 70),
+          state: state === 'none' ? { en: 'no action in the plan' } : state === 'abandoned' ? { en: 'action {id} abandoned', values: { id: d.actionId ?? '' } } : { en: 'action {id} not closed', values: { id: d.actionId ?? '' } },
+        }),
         who: name(d.pilotId) || qhse.who, href, ...(d.pilotId ? { readHref: `/audits/contributions?revue=${r.id}` } : {}),
         ownerIds: d.pilotId ? [...new Set([d.pilotId, ...qhse.ownerIds])] : qhse.ownerIds,
       });
@@ -1030,7 +1035,7 @@ export const loadReviewSignals = cache(async (): Promise<{ badge?: number; todo:
   if (last && !reviews.some((r) => r.status === 'planifiee' && r.reviewOn > last.reviewOn)) {
     todo.push({
       date: now, dueOn: last.reviewOn, kind, tone: 'warn', siteId: null, key: `revue-prochaine|${last.id}`,
-      title: `Prochaine revue de direction à planifier (dernière revue le ${fmtDate(last.reviewOn)})`,
+      ...titled('Next management review to plan (last review on {date})', { date: fmtDate(last.reviewOn) }),
       who: director?.name ?? qhse.who, href: `/audits?annee=${yearOf(last.reviewOn)}&revue=${last.id}#revue`, ownerIds: closers,
     });
   }

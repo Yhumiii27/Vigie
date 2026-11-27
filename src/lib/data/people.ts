@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, notInArray } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
@@ -152,7 +153,7 @@ export const loadPeopleSignals = cache(async (): Promise<{ todo: TodoItem[] }> =
     const lead = leads.forSite(null);
     todo.push({
       kind: 'Personnel', key: 'cursus-personnes-indisponible', who: lead.who, ownerIds: lead.ownerIds, siteId: null, href: PEOPLE_VIEW_PATH,
-      date: now, tone: 'warn', title: 'Personnes de Cursus indisponibles : fiches du personnel non mises à jour',
+      date: now, tone: 'warn', ...titled('People of Cursus unavailable: staff records not updated'),
     });
   }
   // HAB-05 : personne sortie qui porte encore des responsabilités ouvertes (une échéance par personne, réaffectation en masse).
@@ -171,9 +172,9 @@ export const loadPeopleSignals = cache(async (): Promise<{ todo: TodoItem[] }> =
       }
     }
     const base = { kind: 'Personnel', who: lead.who, ownerIds: lead.ownerIds, siteId: p.siteId, href: PEOPLE_VIEW_PATH, date: now, tone: 'warn' as const };
-    if (toAttach(p, now)) todo.push({ ...base, key: `personne-a-rattacher|${p.id}`, title: `${p.name} — fiche sans matricule Cursus : à rattacher` });
+    if (toAttach(p, now)) todo.push({ ...base, key: `personne-a-rattacher|${p.id}`, ...titled('{name} — record without a Cursus number: to link', { name: p.name }) });
     else if (p.matricule && p.cursusState === 'absent' && !hasLeft(p, now)) {
-      todo.push({ ...base, key: `cursus-personne-absente|${p.id}`, title: `${p.name} — absent(e) de Cursus : vérifier auprès du service RH` });
+      todo.push({ ...base, key: `cursus-personne-absente|${p.id}`, ...titled('{name} — missing from Cursus: check with the HR department', { name: p.name }) });
     }
   }
   return { todo };

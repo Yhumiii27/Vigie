@@ -51,6 +51,60 @@ export const DEADLINES_FR: Record<string, string> = {
   'Register kept · {n} removal entered in {year}, complete entries': 'Registre tenu · {n} enlèvement inscrit en {year}, mentions complètes',
   'Register kept · {n} removals entered in {year}, complete entries': 'Registre tenu · {n} enlèvements inscrits en {year}, mentions complètes',
 
+  // DUERP et programme annuel (src/lib/data/risks.ts)
+  '{unit} · {n} risk ≥ {threshold} without a reduction action': '{unit} · {n} risque ≥ {threshold} sans action de réduction',
+  '{unit} · {n} risks ≥ {threshold} without a reduction action': '{unit} · {n} risques ≥ {threshold} sans action de réduction',
+  '{unit} · {n} risk with a residual still ≥ {threshold}': '{unit} · {n} risque au résiduel encore ≥ {threshold}',
+  '{unit} · {n} risks with a residual still ≥ {threshold}': '{unit} · {n} risques au résiduel encore ≥ {threshold}',
+  '{unit} · {hazard} — residual to re-rate (actions verified)': '{unit} · {hazard} — résiduel à recoter (actions vérifiées)',
+  'Annual update of the DUERP overdue since {date}': 'Mise à jour annuelle du DUERP dépassée depuis le {date}',
+  'Annual update of the DUERP (version {version})': 'Mise à jour annuelle du DUERP (version {version})',
+  'Consultation of the CSE to fill in · DUERP {version}': 'Consultation du CSE à renseigner · DUERP {version}',
+  'Sending to the occupational health service to fill in · DUERP {version}': 'Transmission au SPST à renseigner · DUERP {version}',
+  '{programme} {year}: consultation of the CSE to fill in': '{programme} {year} : consultation du CSE à renseigner',
+  '{programme} {year} to draw up': '{programme} {year} à établir',
+  'Request for access to the DUERP to handle · {requester}': "Demande d'accès au DUERP à traiter · {requester}",
+  'Reassess the DUERP after the event {id} of {date}': "Réévaluer le DUERP après l'événement {id} du {date}",
+
+  // Plan d'actions (src/lib/data/actions.ts)
+  '{id} · {label} — due date passed since {date}': '{id} · {label} — échéance dépassée depuis le {date}',
+  '{id} · {label} — effectiveness check': "{id} · {label} — vérification d'efficacité",
+  '{id} · {label} — effectiveness check overdue since {date}': "{id} · {label} — vérification d'efficacité dépassée depuis le {date}",
+  'Action plan · {n} actions to complete (mandatory fields missing)': "Plan d'actions · {n} actions à compléter (champs obligatoires manquants)",
+  'Action plan · {n} action to complete (mandatory fields missing)': "Plan d'actions · {n} action à compléter (champs obligatoires manquants)",
+  '{event} · follow-up action {id} — decide on a reopening': "{event} · action de suite {id} — décider d'une réouverture",
+
+  // Personnel lu dans Cursus (src/lib/data/people.ts)
+  'People of Cursus unavailable: staff records not updated': 'Personnes de Cursus indisponibles : fiches du personnel non mises à jour',
+  '{name} — record without a Cursus number: to link': '{name} — fiche sans matricule Cursus : à rattacher',
+  '{name} — missing from Cursus: check with the HR department': '{name} — absent(e) de Cursus : vérifier auprès du service RH',
+
+  // Habilitations (src/lib/data/skills.ts)
+  'Titles held from Cursus unavailable: authorisation alerts and deadlines not computed': 'Titres détenus de Cursus indisponibles : alertes et échéances d’habilitation non calculées',
+  ' · action {id} ({status})': ' · action {id} ({status})',
+  ' · action {id}': ' · action {id}',
+  '{assignment}{action}': '{assignment}{action}',
+  ', assigned to {project} {period}': ', affecté à {project} {period}',
+  '{name} expired since {date}{suffix}': '{name} expiré depuis le {date}{suffix}',
+  '{name} never taken{suffix}': '{name} jamais suivi{suffix}',
+  ' since {date}': ' depuis le {date}',
+  'withdrawn{since}': 'retiré{since}',
+  'suspended{since}': 'suspendu{since}',
+  'suspended, prerequisite missing': 'suspendu, prérequis manquant',
+  '{name} {why} (Cursus){suffix}': '{name} {why} (Cursus){suffix}',
+  '{name} expires on {date}{suffix}': '{name} expire le {date}{suffix}',
+  '{name} expires on {date}, before the end of the assignment {project}{action}': "{name} expire le {date}, avant la fin de l'affectation {project}{action}",
+
+  // Revue de direction (src/lib/data/review.ts)
+  '{label} — expected on {date} · review of {day}': '{label} — attendu le {date} · revue du {day}',
+  '{label} · review of {day}': '{label} · revue du {day}',
+  'Management review of {day} — minutes to enter': 'Revue de direction du {day} — compte rendu à saisir',
+  'Management review of {day} — approval of management and file to close': 'Revue de direction du {day} — visa de la direction et dossier à clôturer',
+  '{label} of the review of {day} without follow-up — {state} (due date {due}) · {text}': '{label} de la revue du {day} sans suite — {state} (échéance {due}) · {text}',
+  'no action in the plan': 'aucune action au plan',
+  'action {id} not closed': 'action {id} non close',
+  'Next management review to plan (last review on {date})': 'Prochaine revue de direction à planifier (dernière revue le {date})',
+
   // Veille et contrôles (src/lib/data/watch.ts)
   'action {id} abandoned': 'action {id} abandonnée',
   'action {id} verified': 'action {id} vérifiée',
@@ -82,4 +136,4 @@ export const DEADLINES_FR: Record<string, string> = {
 };
 
 /** Entrées identiques en français, relues (SAME_IN_FRENCH). */
-export const DEADLINES_SAME: string[] = ['{current} · {past}', '{current}', '{text} — {review}'];
+export const DEADLINES_SAME: string[] = ['{current} · {past}', '{current}', '{text} — {review}', ' · action {id} ({status})', ' · action {id}', '{assignment}{action}', '{name} {why} (Cursus){suffix}'];

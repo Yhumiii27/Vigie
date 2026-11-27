@@ -5,11 +5,19 @@
 // en paramètre, tel quel.
 import { fill, makeT, type T } from './translate';
 
-export type Msg = { en: string; values?: Record<string, string | number | Msg> };
+/**
+ * `lower` : première lettre en minuscule au rendu, comme `lcfirst` de src/lib/queries.ts (« À faire » → « à faire », sigle
+ * conservé), pour un libellé de table cité au milieu d'une phrase.
+ */
+export type Msg = { en: string; values?: Record<string, string | number | Msg>; lower?: boolean };
+
+const lowerFirst = (s: string) => (s.length > 1 && s[1] === s[1].toLowerCase() ? s[0].toLowerCase() + s.slice(1) : s);
 
 /** Libellé composé dans la langue du traducteur. */
-export const msgT = (t: T) => (m: Msg): string =>
-  fill(t(m.en), Object.fromEntries(Object.entries(m.values ?? {}).map(([k, v]) => [k, typeof v === 'object' ? msgT(t)(v) : v])));
+export const msgT = (t: T) => (m: Msg): string => {
+  const text = fill(t(m.en), Object.fromEntries(Object.entries(m.values ?? {}).map(([k, v]) => [k, typeof v === 'object' ? msgT(t)(v) : v])));
+  return m.lower ? lowerFirst(text) : text;
+};
 
 /** Libellé français d'un libellé composé (celui que gardent les règles et le serveur). */
 export const msgFr = msgT(makeT('fr'));

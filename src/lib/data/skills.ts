@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled, type Msg } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -302,7 +304,7 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
     const lead = leads.forSite(null);
     todo.push({
       kind: 'Habilitation', key: 'habilitations-cursus-indisponible', who: lead.who, href: '/habilitations', ownerIds: lead.ownerIds, siteId: null,
-      date: now, tone: 'warn', title: 'Titres détenus de Cursus indisponibles : alertes et échéances d’habilitation non calculées',
+      date: now, tone: 'warn', ...titled('Titles held from Cursus unavailable: authorisation alerts and deadlines not computed'),
     });
   }
   skills.rows.forEach((row) => {
@@ -318,22 +320,29 @@ export const loadSkillSignals = cache(async (): Promise<{ badge?: number; todo: 
       const a = row.assignments.find((x) => lapseFor(c.state, c.expiresOn, x, now) !== null);
       const eve = a ? eveOf(a.startOn) : null;
       const project = a ? a.project.split(' · ')[0] : '';
-      const action = c.renewal ? ` · action ${c.renewal.id}${c.renewal.readable ? ` (${lcfirst(c.renewal.statusLabel)})` : ''}` : '';
-      const suffix = `${a ? `, affecté à ${project} ${period(a.startOn, a.endOn)}` : ''}${action}`;
+      const action: Msg | string = c.renewal
+        ? (c.renewal.readable
+          ? { en: ' · action {id} ({status})', values: { id: c.renewal.id, status: { ...labelMsg(c.renewal.statusLabel), lower: true } } }
+          : { en: ' · action {id}', values: { id: c.renewal.id } })
+        : '';
+      const suffix: Msg = { en: '{assignment}{action}', values: { action, assignment: a ? { en: ', assigned to {project} {period}', values: { project, period: period(a.startOn, a.endOn) } } : '' } };
       if (c.state === 'x') {
-        todo.push({ ...base, date: now, dueOn: c.expiresOn!, tone: 'danger', overdue: true, title: `${name} expiré depuis le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
+        todo.push({ ...base, date: now, dueOn: c.expiresOn!, tone: 'danger', overdue: true, ...titled('{name} expired since {date}{suffix}', { name, date: fmtDayMonth(c.expiresOn!), suffix }) });
       } else if (c.state === 'r') {
-        todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} jamais suivi${suffix}` });
+        todo.push({ ...base, date: now, tone: 'danger', overdue: true, ...titled('{name} never taken{suffix}', { name, suffix }) });
       } else if (c.state === 'p') {
         // Titre inutilisable d'après Cursus : prérequis manquant (CACES d'une autorisation de conduite…), suspension ou retrait.
-        const why = c.measure ? `${c.measure.kind === 'retrait' ? 'retiré' : 'suspendu'}${c.measure.on ? ` depuis le ${fmtDayMonth(c.measure.on)}` : ''}` : 'suspendu, prérequis manquant';
-        todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${name} ${why} (Cursus)${suffix}` });
+        const since: Msg | string = c.measure?.on ? { en: ' since {date}', values: { date: fmtDayMonth(c.measure.on) } } : '';
+        const why: Msg = c.measure
+          ? (c.measure.kind === 'retrait' ? { en: 'withdrawn{since}', values: { since } } : { en: 'suspended{since}', values: { since } })
+          : { en: 'suspended, prerequisite missing' };
+        todo.push({ ...base, date: now, tone: 'danger', overdue: true, ...titled('{name} {why} (Cursus){suffix}', { name, why, suffix }) });
       } else if (c.state === 's') {
         // Recyclage à la veille d'une affectation seulement si le titre ne la couvre pas ; sinon l'échéance du titre.
         const date = [c.expiresOn, eve].filter(inWindow).sort()[0];
-        if (date) todo.push({ ...base, date, dueOn: c.expiresOn!, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}${suffix}` });
+        if (date) todo.push({ ...base, date, dueOn: c.expiresOn!, tone: 'warn', ...titled('{name} expires on {date}{suffix}', { name, date: fmtDayMonth(c.expiresOn!), suffix }) });
       } else if (a && inWindow(eve)) {
-        todo.push({ ...base, date: eve, dueOn: c.expiresOn!, tone: 'warn', title: `${name} expire le ${fmtDayMonth(c.expiresOn!)}, avant la fin de l'affectation ${project}${action}` });
+        todo.push({ ...base, date: eve, dueOn: c.expiresOn!, tone: 'warn', ...titled('{name} expires on {date}, before the end of the assignment {project}{action}', { name, date: fmtDayMonth(c.expiresOn!), project, action }) });
       }
     });
   });

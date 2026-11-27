@@ -393,7 +393,16 @@ export const LABEL_EN: Record<string, string> = {
   'Suite de votre signalement': 'Follow-up of your report',
   'Feuille d’émargement à signer': 'Attendance sheet to sign',
   'Rappel du mercredi': 'Wednesday reminder',
+  'Actions à compléter': 'Actions to complete',
+  'Événement clos — action de suite ouverte': 'Event closed — follow-up action open',
   Information: 'Information#kind',
+  // Demandeurs d'accès au DUERP (DUERP_REQUESTERS)
+  'Ancien salarié': 'Former employee',
+  CSE: 'CSE',
+  'Médecin du travail (SPST)': 'Occupational physician (occupational health service)',
+  'Inspection du travail': 'Labour inspectorate',
+  'CARSAT (prévention de la sécurité sociale)': 'CARSAT (social security prevention)',
+  'Autre organisme habilité': 'Other authorised body',
   // Rôles (ROLE_KEYS)
   'Animateur QHSE': 'QHSE coordinator',
   Direction: 'Management#role',
