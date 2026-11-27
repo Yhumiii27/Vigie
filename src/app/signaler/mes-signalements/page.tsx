@@ -1,10 +1,14 @@
 import type { Metadata, Viewport } from 'next';
+import { getI18n } from '@/i18n/server';
 import { MyReports } from '@/components/events/MyReports';
 import { reportQuery } from '@/lib/rules/events';
 import { loadMyReports } from '@/lib/data/events';
 import { ALL_SITES, getSession } from '@/lib/session';
 
-export const metadata: Metadata = { title: 'Mes signalements' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('My reports') };
+}
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#161826' };
 
 // Suivi des signalements nominatifs de l'utilisateur, tous sites (parcours terrain, sans la coque de l'application).

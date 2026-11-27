@@ -8,6 +8,7 @@ import { FieldGrid, Restricted } from './FieldGrid';
 import { MedicalAttachments } from './MedicalAttachments';
 import { injuryLabel } from '@/lib/rules/events';
 import { getI18n } from '@/i18n/server';
+import { msgT } from '@/i18n/msg';
 import { fill, type T } from '@/i18n/translate';
 
 /** « AAAA-MM-JJTHH:mm » → « 08/09/2026 à 16:10 ». */
@@ -45,7 +46,7 @@ export async function AccidentSection({ detail, canEdit, today }: { detail: Even
     if (cpam) {
       healthFields.push([t('CPAM declaration'), (
         <span key="cpam" style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
-          {cpam.declaredOn ? <span>{cpam.label}</span> : <ToneTag tone={cpam.tone}>{cpam.label}</ToneTag>}
+          {cpam.declaredOn ? <span>{msgT(t)(cpam.text)}</span> : <ToneTag tone={cpam.tone}>{msgT(t)(cpam.text)}</ToneTag>}
           {cpam.waiver && (
             <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
               {t('Reason: ')}<em>{cpam.waiver.reason}</em>{fill(t(' — {by}, on {date}'), { by: cpam.waiver.by, date: fmtDate(cpam.waiver.on) })}
@@ -55,7 +56,7 @@ export async function AccidentSection({ detail, canEdit, today }: { detail: Even
           {canEdit && cpam.waiver && <CancelCpamWaiverButton eventId={e.id} />}
         </span>
       )]);
-      if (cpam.reserves) healthFields.push([t('Reasoned reservations'), <ToneTag key="reserves" tone={cpam.reserves.tone}>{cpam.reserves.label}</ToneTag>]);
+      if (cpam.reserves) healthFields.push([t('Reasoned reservations'), <ToneTag key="reserves" tone={cpam.reserves.tone}>{msgT(t)(cpam.reserves.text)}</ToneTag>]);
     }
   }
 

@@ -6,7 +6,8 @@ import { projectText } from '@/lib/integration-labels';
 import { getDb, schema as t } from '@/db';
 import { fmtQty, wasteEntryHref } from '@/lib/rules/environment';
 import type { ChangeEntry } from '@/lib/change-entry';
-import { cpamBasis, cpamDeadline, ettDeadline, fmtDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/lib/rules/event-deadlines';
+import { cpamBasis, cpamDeadline, deadlineMsg, ettDeadline, mpQuestionnaireDeadline, reservesDeadline } from '@/lib/rules/event-deadlines';
+import { composed, type Msg } from '@/i18n/msg';
 import {
   BENIGN_REGISTER_PATH, FIRST_AID_TITLE_FALLBACK, HEALTH_FILE_FIELD, HEALTH_LOG_FIELDS, advanceBlocker, analysisFilled, benignRegisterBlocker, cpamPending,
   declarationDuty, eventLockReason, injuryLabel, missingQualification, needsCpam, victimKindLabel, victimLabel, withoutHealth,
@@ -223,19 +224,20 @@ export type EventHistoryEntry = { id: number; kind: EventTransition; label: stri
  * (EVT-02) ; `duty` : qui déclare selon la victime (declarationDuty).
  */
 export type CpamState = {
-  declaredOn: string | null; dueOn: string | null; tone: Tone; label: string;
+  /** `label` : français (règles, essais) ; `text` : le même libellé à rendre dans la langue de la personne (msgT, VG-N01). */
+  declaredOn: string | null; dueOn: string | null; tone: Tone; label: string; text: Msg;
   waiver: { reason: string; by: string; on: string } | null;
-  reserves: { on: string | null; dueOn: string; tone: Tone; label: string } | null;
+  reserves: { on: string | null; dueOn: string; tone: Tone; label: string; text: Msg } | null;
   canWaive: boolean;
   duty: DeclarationDuty;
 } | null;
 
 type EventRow = typeof t.events.$inferSelect;
 
-const WAIVED_LABEL: Record<DeclarationDuty, string> = {
-  cpam: "Non déclarée par l'entreprise",
-  ett: "Déclaration par l'entreprise de travail temporaire",
-  employer: "Déclaration par l'employeur de la victime",
+const WAIVED_LABEL: Record<DeclarationDuty, ReturnType<typeof composed>> = {
+  cpam: composed('Not declared by the company'),
+  ett: composed('Declaration by the temporary work agency'),
+  employer: composed("Declaration by the victim's employer"),
 };
 
 function cpamState(e: EventRow, entry: { number: number; escalatedOn: Date | null } | null, site: { alsaceMoselle: boolean } | undefined, now: string, nameOf: (pid: string | null) => string): CpamState {
@@ -243,37 +245,37 @@ function cpamState(e: EventRow, entry: { number: number; escalatedOn: Date | nul
   const opts = { alsaceMoselle: !!site?.alsaceMoselle };
   const duty = declarationDuty(e);
   const base = { declaredOn: null, dueOn: null, waiver: null, reserves: null, canWaive: cpamPending(e, !!entry), duty };
-  if (e.injury === 'soins' && entry) return { ...base, tone: 'neutral', label: `Non requise · inscrit au registre des accidents bénins (n° ${entry.number})` };
+  if (e.injury === 'soins' && entry) return { ...base, tone: 'neutral', ...composed('Not required · entered in the register of minor accidents (no. {n})', { n: entry.number }) };
   if (e.cpamWaivedAt) {
-    return { ...base, tone: 'neutral', label: WAIVED_LABEL[duty], waiver: { reason: e.cpamWaiverReason ?? '', by: nameOf(e.cpamWaivedById), on: isoDay(e.cpamWaivedAt) } };
+    return { ...base, tone: 'neutral', ...WAIVED_LABEL[duty], waiver: { reason: e.cpamWaiverReason ?? '', by: nameOf(e.cpamWaivedById), on: isoDay(e.cpamWaivedAt) } };
   }
   if (e.cpamDeclaredOn) {
     const dueOn = reservesDeadline(e.cpamDeclaredOn, opts);
     const reserves = e.reservesOn
-      ? { on: e.reservesOn, dueOn, tone: 'ok' as Tone, label: `Réserves motivées adressées le ${fmtDate(e.reservesOn)}` }
+      ? { on: e.reservesOn, dueOn, tone: 'ok' as Tone, ...composed('Reasoned reservations sent on {date}', { date: fmtDate(e.reservesOn) }) }
       : now <= dueOn
-        ? { on: null, dueOn, tone: 'neutral' as Tone, label: `Réserves motivées possibles jusqu'au ${fmtDate(dueOn)} (10 jours francs)` }
-        : { on: null, dueOn, tone: 'neutral' as Tone, label: `Délai de réserves dépassé le ${fmtDate(dueOn)}` };
-    return { ...base, declaredOn: e.cpamDeclaredOn, tone: 'ok', label: `Déclarée le ${fmtDate(e.cpamDeclaredOn)}`, reserves };
+        ? { on: null, dueOn, tone: 'neutral' as Tone, ...composed('Reasoned reservations possible until {date} (10 clear days)', { date: fmtDate(dueOn) }) }
+        : { on: null, dueOn, tone: 'neutral' as Tone, ...composed('Reservation period passed on {date}', { date: fmtDate(dueOn) }) };
+    return { ...base, declaredOn: e.cpamDeclaredOn, tone: 'ok', ...composed('Declared on {date}', { date: fmtDate(e.cpamDeclaredOn) }), reserves };
   }
   if (duty === 'employer') {
-    return { ...base, tone: 'neutral', label: "Déclarée par l'employeur de la victime : à indiquer (motif) avant la clôture" };
+    return { ...base, tone: 'neutral', ...composed("Declared by the victim's employer: to state (reason) before closure") };
   }
   const due = duty === 'ett' ? ettDeadline(cpamBasis(e)) : cpamDeadline(cpamBasis(e, entry?.escalatedOn), opts);
   const tone: Tone = due.date < now ? 'danger' : 'warn';
   if (duty === 'ett') {
-    return { ...base, dueOn: due.date, tone, label: `ETT à informer ${fmtDeadline(due)} (copie CARSAT et inspection du travail) : elle déclare l'accident` };
+    return { ...base, dueOn: due.date, tone, ...composed('Temporary work agency to inform {deadline} (copy to CARSAT and labour inspectorate): it declares the accident', { deadline: deadlineMsg(due) }) };
   }
-  if (e.injury === 'soins') return { ...base, dueOn: due.date, tone, label: `Accident bénin : à inscrire au registre ou à déclarer ${fmtDeadline(due)}` };
-  return { ...base, dueOn: due.date, tone, label: `À déclarer ${fmtDeadline(due)}` };
+  if (e.injury === 'soins') return { ...base, dueOn: due.date, tone, ...composed('Minor accident: to enter in the register or to declare {deadline}', { deadline: deadlineMsg(due) }) };
+  return { ...base, dueOn: due.date, tone, ...composed('To declare {deadline}', { deadline: deadlineMsg(due) }) };
 }
 
 /** Questionnaire employeur d'une maladie professionnelle (R. 461-9 CSS) : retourné, à retourner (30 jours francs) ou non reçu. */
 export function mpQuestionnaireState(e: Pick<EventRow, 'mpQuestionnaireReceivedOn' | 'mpQuestionnaireReturnedOn'>, site: { alsaceMoselle: boolean } | undefined, now: string) {
-  if (e.mpQuestionnaireReturnedOn) return { dueOn: null, tone: 'ok' as Tone, label: `Retourné le ${fmtDate(e.mpQuestionnaireReturnedOn)}` };
-  if (!e.mpQuestionnaireReceivedOn) return { dueOn: null, tone: 'neutral' as Tone, label: 'Non reçu' };
+  if (e.mpQuestionnaireReturnedOn) return { dueOn: null, tone: 'ok' as Tone, ...composed('Returned on {date}', { date: fmtDate(e.mpQuestionnaireReturnedOn) }) };
+  if (!e.mpQuestionnaireReceivedOn) return { dueOn: null, tone: 'neutral' as Tone, ...composed('Not received') };
   const dueOn = mpQuestionnaireDeadline(e.mpQuestionnaireReceivedOn, { alsaceMoselle: !!site?.alsaceMoselle });
-  return { dueOn, tone: (dueOn < now ? 'danger' : 'warn') as Tone, label: `Reçu le ${fmtDate(e.mpQuestionnaireReceivedOn)} · à retourner au plus tard le ${fmtDate(dueOn)}` };
+  return { dueOn, tone: (dueOn < now ? 'danger' : 'warn') as Tone, ...composed('Received on {date} · to return by {due} at the latest', { date: fmtDate(e.mpQuestionnaireReceivedOn), due: fmtDate(dueOn) }) };
 }
 
 /**

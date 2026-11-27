@@ -32,6 +32,7 @@ import { today } from '@/lib/today';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
 import { getI18n, screenMetadata } from '@/i18n/server';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 export const generateMetadata = () => screenMetadata('risks');
@@ -301,7 +302,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                       : hrefWith('/risques', params, { gravite: String(c.g), probabilite: String(c.p) }))} />
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-400)' }}>
                     {RISK_LEVELS.map((l) => (
-                      <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: l.bg }} />{l.label}</span>
+                      <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: l.bg }} />{labelT(t)(l.label)}</span>
                     ))}
                   </div>
                 </div>
@@ -324,7 +325,7 @@ export default async function RisksPage({ searchParams }: PageProps<'/risques'>)
                     ))}
                   </div>
                   {toReview > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TONE.warn.fg }} title={RISK_FLAGS.toReview.hint}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: TONE.warn.fg }} title={labelT(t)(RISK_FLAGS.toReview.hint)}>
                       <Icon name="ph-arrows-clockwise" size={13} />{fill(toReview > 1 ? t('{n} residuals to re-rate') : t('{n} residual to re-rate'), { n: toReview })}
                     </div>
                   )}

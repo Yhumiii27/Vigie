@@ -10,6 +10,9 @@ import type { MyTalk } from '@/lib/data/safety-talks';
 import { MY_TALKS_ANCHOR } from '@/lib/rules/safety-talks';
 import { DGI_REGISTER_PATH } from '@/lib/rules/dgi';
 import { MyTalks } from './MyTalks';
+import { getI18n } from '@/i18n/server';
+import { labelT } from '@/i18n/labels';
+import { fill, type T } from '@/i18n/translate';
 
 const card = { display: 'grid', gap: 8, padding: 12, background: 'var(--color-surface)', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', color: 'inherit', textDecoration: 'none' } as const;
 const muted = { fontSize: 12, color: 'var(--color-neutral-500)' } as const;
@@ -28,11 +31,11 @@ function Section({ id, title, count, icon, more, children }: { id: string; title
 }
 
 /** Recyclage ou formation à prévoir (prévision HAB-09 de la seule ligne de la personne). */
-function renewalText(r: ForecastItem) {
-  if (r.state === 'r' || !r.expiresOn) return 'formation à suivre';
-  if (r.state === 'p') return 'prérequis à régulariser';
-  if (r.state === 'x') return `expiré depuis le ${fmtDate(r.expiresOn)}`;
-  return `recyclage avant le ${fmtDate(r.expiresOn)}`;
+function renewalText(r: ForecastItem, t: T) {
+  if (r.state === 'r' || !r.expiresOn) return t('training to take');
+  if (r.state === 'p') return t('prerequisite to put in order');
+  if (r.state === 'x') return fill(t('expired since {date}'), { date: fmtDate(r.expiresOn) });
+  return fill(t('renewal before {date}'), { date: fmtDate(r.expiresOn) });
 }
 
 const Empty = ({ children }: { children: ReactNode }) => (
@@ -43,46 +46,47 @@ const Empty = ({ children }: { children: ReactNode }) => (
  * Espace salarié mobile (EVT-22) : mes actions (consultation, fil et preuves dans la fiche), mes habilitations (ma ligne
  * de la matrice, recyclages à prévoir) et mes signalements. Les seules données de la personne connectée (loadMySpace).
  */
-export function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse = false }: {
+export async function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse = false }: {
   space: MySpace; reportHref: string; myReportsHref: string;
   /** CNF-09 : feuilles d'émargement des causeries de la personne. */
   talks?: MyTalk[];
   /** CNF-01 : membre du CSE, lien vers le registre des dangers graves et imminents. */
   cse?: boolean;
 }) {
+  const { t } = await getI18n();
   const { actions, skills, renewals, reports, skillsMessage } = space;
   const late = actions.filter((a) => a.late).length;
   return (
     <div style={{ padding: '14px 18px 40px', display: 'grid', gap: 22, fontFamily: 'var(--font-body)', fontSize: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Link href="/" className="vg-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, fontSize: 12.5 }}>
-          <i className="ph ph-caret-left" aria-hidden />Retour à Vigie
+          <i className="ph ph-caret-left" aria-hidden />{t('Back to Vigie')}
         </Link>
         <Link href={reportHref} className="btn btn-primary" style={{ minHeight: 44 }}>
-          <i className="ph ph-warning" style={{ fontSize: 16 }} aria-hidden />Signaler
+          <i className="ph ph-warning" style={{ fontSize: 16 }} aria-hidden />{t('Report#verb')}
         </Link>
       </div>
       <div style={{ display: 'grid', gap: 4 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, letterSpacing: '-.015em' }}>Mon espace</h1>
-        <span style={muted}>{space.name} · mes actions, mes habilitations et mes signalements</span>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 500, letterSpacing: '-.015em' }}>{t('My space')}</h1>
+        <span style={muted}>{space.name}{t(' · my actions, my qualifications and my reports')}</span>
       </div>
 
-      <Section id="mes-actions" title="Mes actions" icon="ph-list-checks"
-        count={actions.length ? `${actions.length} en cours${late ? ` · ${late} en retard` : ''}` : undefined}>
+      <Section id="mes-actions" title={t('My actions')} icon="ph-list-checks"
+        count={actions.length ? `${fill(t('{n} in progress'), { n: actions.length })}${late ? fill(t(' · {n} overdue'), { n: late }) : ''}` : undefined}>
         {actions.length === 0 ? (
-          <Empty>Aucune action en cours dont vous êtes responsable.</Empty>
+          <Empty>{t('No action in progress for which you are responsible.')}</Empty>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
             {actions.map((a) => (
               <li key={a.id}>
                 <Link href={a.href} style={card}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 8, ...muted }}>
-                    <span>{a.id}</span><span>·</span><span>échéance {fmtDate(a.dueOn)}</span>
-                    <ToneTag tone={a.tone} style={{ marginLeft: 'auto' }}>{a.statusLabel}</ToneTag>
+                    <span>{a.id}</span><span>·</span><span>{fill(t('due {date}'), { date: fmtDate(a.dueOn) })}</span>
+                    <ToneTag tone={a.tone} style={{ marginLeft: 'auto' }}>{labelT(t)(a.statusLabel)}</ToneTag>
                   </span>
                   <span style={{ fontSize: 14, lineHeight: 1.35, textWrap: 'pretty' }}>{a.label}</span>
                   <span style={{ ...muted, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    Commenter, joindre une preuve<i className="ph ph-caret-right" style={{ marginLeft: 'auto' }} aria-hidden />
+                    {t('Comment, attach evidence')}<i className="ph ph-caret-right" style={{ marginLeft: 'auto' }} aria-hidden />
                   </span>
                 </Link>
               </li>
@@ -91,27 +95,27 @@ export function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse 
         )}
       </Section>
 
-      <Section id="mes-habilitations" title="Mes habilitations" icon="ph-identification-badge"
-        count={skills ? `${skills.length} titre${skills.length > 1 ? 's' : ''}` : undefined}
-        more={skills && <Link href="/habilitations" className="vg-link" style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>Détail</Link>}>
+      <Section id="mes-habilitations" title={t('My qualifications')} icon="ph-identification-badge"
+        count={skills ? fill(skills.length > 1 ? t('{n} titles') : t('{n} title'), { n: skills.length }) : undefined}
+        more={skills && <Link href="/habilitations" className="vg-link" style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>{t('Detail#link')}</Link>}>
         {!skills ? (
-          <Empty>Vous n&apos;êtes pas suivi dans la matrice des habilitations.</Empty>
+          <Empty>{t('You are not followed in the qualifications matrix.')}</Empty>
         ) : (
           <>
             {skillsMessage && <div className="card" role="status" style={{ padding: 12, fontSize: 13 }}>{skillsMessage}</div>}
             {renewals.length > 0 && (
-              <div className="card" style={{ gap: 6, padding: 12 }} role="note" aria-label="Recyclages à prévoir">
-                <span style={{ fontSize: 13, color: 'var(--tone-warn-fg)' }}>À prévoir avec votre responsable</span>
+              <div className="card" style={{ gap: 6, padding: 12 }} role="note" aria-label={t('Renewals to plan')}>
+                <span style={{ fontSize: 13, color: 'var(--tone-warn-fg)' }}>{t('To plan with your manager')}</span>
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4, fontSize: 13 }}>
                   {renewals.map((r) => (
                     <li key={r.titleId}>
-                      {r.title} : {renewalText(r)}
+                      {r.title} : {renewalText(r, t)}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {skills.length === 0 ? <Empty>Aucun titre requis ni détenu.</Empty> : (
+            {skills.length === 0 ? <Empty>{t('No title required or held.')}</Empty> : (
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
                 {skills.map((s) => (
                   <li key={s.titleId} style={{ ...card, gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
@@ -119,7 +123,7 @@ export function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse 
                     <span style={{ display: 'grid', gap: 2 }}>
                       <span style={{ fontSize: 14 }}>{s.title}</span>
                       <span style={muted}>
-                        {SKILL_STATES[s.state].label}{s.expiresOn ? ` · échéance ${fmtDate(s.expiresOn)}` : s.state === 'r' ? '' : ' · sans échéance'}{!s.required ? ' · non requis' : ''}
+                        {labelT(t)(SKILL_STATES[s.state].label)}{s.expiresOn ? fill(t(' · due {date}'), { date: fmtDate(s.expiresOn) }) : s.state === 'r' ? '' : t(' · no expiry')}{!s.required ? t(' · not required') : ''}
                       </span>
                     </span>
                   </li>
@@ -131,25 +135,25 @@ export function MySpaceView({ space, reportHref, myReportsHref, talks = [], cse 
       </Section>
 
       {talks.length > 0 && (
-        <Section id={MY_TALKS_ANCHOR} title="Feuilles d'émargement" icon="ph-signature"
-          count={`${talks.filter((x) => !x.signedAt).length} à signer`}>
+        <Section id={MY_TALKS_ANCHOR} title={t('Attendance sheets')} icon="ph-signature"
+          count={fill(t('{n} to sign'), { n: talks.filter((x) => !x.signedAt).length })}>
           <MyTalks talks={talks} />
         </Section>
       )}
 
       {cse && (
-        <Section id="registre-dgi" title="Registre des dangers graves et imminents" icon="ph-siren">
+        <Section id="registre-dgi" title={t('Register of serious and imminent dangers')} icon="ph-siren">
           <Link href={DGI_REGISTER_PATH} style={{ ...card, gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center' }}>
-            <span style={{ fontSize: 14 }}>Consigner ou signer un avis (membres du CSE)</span>
+            <span style={{ fontSize: 14 }}>{t('Record or sign a notice (CSE members)')}</span>
             <i className="ph ph-caret-right" aria-hidden />
           </Link>
         </Section>
       )}
 
-      <Section id="mes-signalements" title="Mes signalements" icon="ph-warning"
-        count={reports.total ? `${reports.total} · ${reports.open} en cours` : undefined}>
+      <Section id="mes-signalements" title={t('My reports')} icon="ph-warning"
+        count={reports.total ? fill(t('{total} · {n} in progress'), { total: reports.total, n: reports.open }) : undefined}>
         <Link href={myReportsHref} style={{ ...card, gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center' }}>
-          <span style={{ fontSize: 14 }}>{reports.total ? 'Suivre mes signalements' : 'Aucun signalement nominatif'}</span>
+          <span style={{ fontSize: 14 }}>{reports.total ? t('Follow my reports') : t('No named report')}</span>
           <i className="ph ph-caret-right" aria-hidden />
         </Link>
       </Section>

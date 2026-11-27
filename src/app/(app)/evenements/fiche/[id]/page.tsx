@@ -9,6 +9,7 @@ import { loadEventChangeLog, loadEventDetail } from '@/lib/data/events';
 import { HEALTH_RESTRICTED, injuryLabel, readD8, readTree, readWhys } from '@/lib/rules/events';
 import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
+import { msgT } from '@/i18n/msg';
 import { labelT } from '@/i18n/labels';
 import { fill, type T } from '@/i18n/translate';
 import '../../../prevention/imprimer/print.css';
@@ -151,7 +152,7 @@ export default async function EventPrintPage({ params }: PageProps<'/evenements/
             [t('Victim'), occupational.victim], [t('Table#mp'), occupational.table ?? '—'], [t('Declared disease'), occupational.disease ?? '—'],
             [t('Initial medical certificate'), occupational.certificateOn ? fmtDate(occupational.certificateOn) : '—'],
             [t('Declaration received from the CPAM'), occupational.informedOn ? fmtDate(occupational.informedOn) : '—'],
-            [t('Employer questionnaire'), occupational.questionnaire.label],
+            [t('Employer questionnaire'), msgT(t)(occupational.questionnaire.text)],
           ]} />
         </Section>
       )}

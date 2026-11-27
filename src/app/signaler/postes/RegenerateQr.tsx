@@ -2,14 +2,17 @@
 
 import { ReasonButton } from '@/components/ReasonDialog';
 import { regenerateReportPost } from '@/server/events';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 /** « Régénérer le QR » d'un poste : nouvelle version signée, les étiquettes déjà imprimées ne fonctionnent plus. */
 export function RegenerateQr({ zoneId, name }: { zoneId: number; name: string }) {
+  const { t } = useI18n();
   return (
-    <ReasonButton label="Régénérer le QR" icon="ph-arrows-clockwise" className="btn btn-ghost vg-btn-sm no-print"
-      title={`Régénérer le QR code du poste « ${name} »`} kicker="QR code de poste"
-      action={regenerateReportPost} hidden={{ id: zoneId }} submitLabel="Régénérer" submitIcon="ph-arrows-clockwise"
-      message="Les étiquettes déjà imprimées pour ce poste n'ouvriront plus le formulaire de signalement sans compte. Imprimez puis collez la nouvelle étiquette au poste."
-      placeholder="Étiquette arrachée, QR code photographié et diffusé hors du site…" />
+    <ReasonButton label={t('Regenerate the QR')} icon="ph-arrows-clockwise" className="btn btn-ghost vg-btn-sm no-print"
+      title={fill(t('Regenerate the QR code of the post “{name}”'), { name })} kicker={t('Workstation QR code')}
+      action={regenerateReportPost} hidden={{ id: zoneId }} submitLabel={t('Regenerate')} submitIcon="ph-arrows-clockwise"
+      message={t('Labels already printed for this post will no longer open the reporting form without an account. Print then stick the new label at the post.')}
+      placeholder={t('Label torn off, QR code photographed and shared outside the site…')} />
   );
 }

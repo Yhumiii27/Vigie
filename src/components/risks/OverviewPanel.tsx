@@ -3,6 +3,7 @@ import { SegLinks, ToneTag } from '@/components/ui';
 import { RISK_ACTION_THRESHOLD, RISK_FLAGS, RISK_LEVELS, TONE, riskLevel } from '@/lib/domain';
 import type { DuerpOverview } from './overview';
 import { getI18n } from '@/i18n/server';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 // Vue d'ensemble du DUERP toutes unités (DUE-17) : matrice globale des unités du site sélectionné, synthèse par unité et
@@ -58,7 +59,7 @@ export async function OverviewPanel({ data, residual, brutHref, residualHref, un
           </table>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-400)' }}>
             {RISK_LEVELS.map((l) => (
-              <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: l.bg }} />{l.label}</span>
+              <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span aria-hidden style={{ width: 10, height: 10, borderRadius: 2, background: l.bg }} />{labelT(t)(l.label)}</span>
             ))}
           </div>
         </div>
@@ -93,7 +94,7 @@ export async function OverviewPanel({ data, residual, brutHref, residualHref, un
                   <td>{u.high}</td>
                   <td style={{ color: u.residualHigh ? TONE.danger.fg : undefined }}>{u.residualHigh}</td>
                   <td style={{ color: u.alerts ? TONE.danger.fg : undefined }}>{u.alerts}</td>
-                  <td>{u.count ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden className="vg-dot" style={{ width: 7, height: 7, background: RISK_LEVELS[u.top].dot }} />{RISK_LEVELS[u.top].label}</span> : '—'}</td>
+                  <td>{u.count ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden className="vg-dot" style={{ width: 7, height: 7, background: RISK_LEVELS[u.top].dot }} />{labelT(t)(RISK_LEVELS[u.top].label)}</span> : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -117,7 +118,7 @@ export async function OverviewPanel({ data, residual, brutHref, residualHref, un
                     <td><Link href={`/risques?risque=${r.id}`} className="vg-link" style={{ fontSize: 12.5 }}>{r.hazard}</Link>{r.situation && <div style={muted}>{r.situation}</div>}</td>
                     <td>{r.gross}</td>
                     <td style={{ color: r.residual >= RISK_ACTION_THRESHOLD ? TONE.danger.fg : undefined }}>{r.residual}</td>
-                    <td>{r.flag && r.flag !== 'toReview' ? <ToneTag tone={RISK_FLAGS[r.flag].tone} style={{ whiteSpace: 'nowrap' }}>{RISK_FLAGS[r.flag].label}</ToneTag> : '—'}</td>
+                    <td>{r.flag && r.flag !== 'toReview' ? <ToneTag tone={RISK_FLAGS[r.flag].tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(RISK_FLAGS[r.flag].label)}</ToneTag> : '—'}</td>
                   </tr>
                 ))}
               </tbody>

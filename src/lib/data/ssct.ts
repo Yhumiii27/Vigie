@@ -3,8 +3,8 @@ import { and, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import { computeActionStats } from '../action-stats';
 import { actionLabel } from '../action-rules';
-import { fmtDate, toParisLocal } from '../dates';
-import { PROGRAM_SHORT, canSeeHealth, isBlockingControlResult } from '../domain';
+import { toParisLocal } from '../dates';
+import { canSeeHealth, isBlockingControlResult } from '../domain';
 import { elapsedMonths } from '../objective-values';
 import { loadAllActions, loadControls, loadEvents, loadPeople, safetyRates, workforceAccident } from '../queries';
 import { ALL_SITES, getSession, inSite } from '../session';
@@ -95,8 +95,9 @@ export async function loadSsctReport(rawYear: string | undefined) {
   // 4. Programme annuel de prévention (L. 2312-27 2°) : programme de l'année écoulée et de l'année suivante.
   const programOf = (y: number) => {
     const p = programs.find((x) => x.year === y);
-    if (!p) return { year: y, label: `${PROGRAM_SHORT} ${y} non établi` };
-    return { year: y, label: p.frozenAt ? `${PROGRAM_SHORT} ${y} arrêté${p.cseConsultedOn ? ` · CSE consulté le ${fmtDate(p.cseConsultedOn)}` : ''}` : `${PROGRAM_SHORT} ${y} en préparation` };
+    // État du programme (libellé composé à l'affichage, dans la langue de la personne, VG-N01).
+    if (!p) return { year: y, state: 'none' as const, cseConsultedOn: null };
+    return { year: y, state: p.frozenAt ? 'frozen' as const : 'draft' as const, cseConsultedOn: p.frozenAt ? p.cseConsultedOn : null };
   };
 
   // 5. Prévention des entreprises extérieures, contrôles réglementaires et formations de l'année.

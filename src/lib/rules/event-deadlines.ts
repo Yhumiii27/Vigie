@@ -9,6 +9,7 @@
 
 import { CPAM_DELAY_HOURS, ETT_DELAY_HOURS, MP_QUESTIONNAIRE_DAYS, RESERVES_DELAY_DAYS } from '@/lib/domain';
 import { addDays, fmtDate, toParisLocal } from '@/lib/dates';
+import { msgFr, type Msg } from '@/i18n/msg';
 
 export type DeadlineOptions = { alsaceMoselle?: boolean };
 
@@ -126,12 +127,15 @@ export function mpQuestionnaireDeadline(receivedOn: string, opts: DeadlineOption
   return francDaysDeadline(receivedOn, MP_QUESTIONNAIRE_DAYS, opts);
 }
 
-/** « avant le 12/10/2026 à 15 h 00 », ou « avant la fin du 13/10/2026 » pour une échéance à minuit. */
-export function fmtDeadline(d: Deadline): string {
-  if (d.minutes >= DAY_MINUTES) return `avant la fin du ${fmtDate(d.date)}`;
+/** fmtDeadline en libellé composé, rendu dans la langue de la personne (VG-N01 ; même français que fmtDeadline). */
+export function deadlineMsg(d: Deadline): Msg {
+  if (d.minutes >= DAY_MINUTES) return { en: 'before the end of {date}', values: { date: fmtDate(d.date) } };
   const hh = String(Math.floor(d.minutes / 60)).padStart(2, '0'), mm = String(d.minutes % 60).padStart(2, '0');
-  return `avant le ${fmtDate(d.date)} à ${hh} h ${mm}`;
+  return { en: 'before {date} at {hh}:{mm}', values: { date: fmtDate(d.date), hh, mm } };
 }
+
+/** « avant le 12/10/2026 à 15 h 00 », ou « avant la fin du 13/10/2026 » pour une échéance à minuit (français de deadlineMsg). */
+export const fmtDeadline = (d: Deadline): string => msgFr(deadlineMsg(d));
 
 /**
  * Point de départ du délai de 48 h (heure de Paris) : connaissance d'un arrêt ou de soins médicaux après une inscription

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { REPORT_SW_PATH, REPORT_SW_SCOPE } from '@/lib/pwa';
+import { useI18n } from '@/i18n/client';
 
 /**
  * Enregistre le service worker du signalement installable (EVT-20), portée /signaler : page « hors ligne » quand le réseau
@@ -9,9 +10,11 @@ import { REPORT_SW_PATH, REPORT_SW_SCOPE } from '@/lib/pwa';
  * ailleurs, ou en cas d'échec, rien ne change : le formulaire fonctionne sans lui.
  */
 export function ReportWorker() {
+  // Langue de la page hors ligne passée au service worker (VG-N01) : il ne lit pas les cookies.
+  const { lang } = useI18n();
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
-    navigator.serviceWorker.register(REPORT_SW_PATH, { scope: REPORT_SW_SCOPE, updateViaCache: 'none' }).catch(() => {});
-  }, []);
+    navigator.serviceWorker.register(`${REPORT_SW_PATH}?lang=${lang}`, { scope: REPORT_SW_SCOPE, updateViaCache: 'none' }).catch(() => {});
+  }, [lang]);
   return null;
 }

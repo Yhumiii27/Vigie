@@ -16,6 +16,7 @@ import {
 } from '@/server/risks';
 import { fmtEuro } from '@/lib/rules/risk-format';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
@@ -109,7 +110,7 @@ export function ProgramPanel({ data, yearLinks, canApprove, showPilot, showHisto
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="card-title" style={{ fontSize: 15 }}>{PROGRAM_SHORT} {year}</span>
               {program
-                ? <ToneTag tone={PROGRAM_STATES[program.state].tone}>{PROGRAM_STATES[program.state].label}</ToneTag>
+                ? <ToneTag tone={PROGRAM_STATES[program.state].tone}>{labelT(t)(PROGRAM_STATES[program.state].label)}</ToneTag>
                 : <ToneTag tone="neutral">{t('Not established')}</ToneTag>}
             </div>
           </div>

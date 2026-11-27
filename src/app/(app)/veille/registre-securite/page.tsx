@@ -6,6 +6,7 @@ import { guard } from '@/lib/guard';
 import { loadSafetyRegisterPrint } from '@/lib/data/watch';
 import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
 
@@ -71,7 +72,7 @@ export default async function SafetyRegisterPrintPage() {
               <tbody>
                 {s.controls.flatMap((c) => {
                   const head = `${c.equipment}${c.common ? t(' (all sites)') : ''}`;
-                  const kind = `${c.controlType}${isControlCategory(c.category) && c.category !== 'reglementaire' ? ` · ${CONTROL_CATEGORIES[c.category].short}` : ''} · ${fill(t('every {n} months'), { n: c.period })}`;
+                  const kind = `${c.controlType}${isControlCategory(c.category) && c.category !== 'reglementaire' ? ` · ${labelT(t)(CONTROL_CATEGORIES[c.category].short)}` : ''} · ${fill(t('every {n} months'), { n: c.period })}`;
                   if (!c.records.length) {
                     return [<tr key={`c${c.id}`}><td>{head}</td><td>{kind}</td><td colSpan={4} className="pp-muted">{fill(t('No inspection recorded in Vigie · next on {date} ({status})'), { date: fmtDate(c.next), status: c.status })}</td></tr>];
                   }

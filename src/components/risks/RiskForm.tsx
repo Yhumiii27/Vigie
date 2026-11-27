@@ -8,6 +8,7 @@ import type { RiskView, WorkUnitView } from '@/lib/data/risks';
 import { saveRisk } from '@/server/risks';
 import { hazardSuggestions } from '@/lib/hazard-families';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 const GRAVITY: [string, string][] = [1, 2, 3, 4].map((n) => [String(n), SEVERITY[n]]);
@@ -25,13 +26,14 @@ export function Cotation({ g, p, style }: { g: number; p: number; style?: CSSPro
 /** Cotation calculée en direct dans le formulaire, avec le libellé du niveau. */
 function LiveCotation({ label, g, p, hint }: { label: string; g: number; p: number; hint?: string }) {
   const id = useId();
+  const { t } = useI18n();
   const level = RISK_LEVELS[riskLevel(g * p)];
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <output id={id} aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 10px', borderRadius: 'var(--radius-md)', background: level.bg, fontSize: 13 }}>
         <span style={{ fontWeight: 500 }}>G{g} × P{p} = {g * p}</span>
-        <span style={{ color: 'var(--color-neutral-300)', fontSize: 12 }}>{level.label.replace(/\s.*$/, '')}</span>
+        <span style={{ color: 'var(--color-neutral-300)', fontSize: 12 }}>{labelT(t)(level.label).replace(/\s.*$/, '')}</span>
       </output>
       {hint && <span className="vg-field-hint" style={{ color: 'var(--tone-danger-fg)' }}>{hint}</span>}
     </div>

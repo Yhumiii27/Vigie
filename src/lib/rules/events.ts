@@ -416,8 +416,6 @@ export function reportQuery(sp: Record<string, string | string[] | undefined>): 
 
 /** Antériorité admise de la date des faits saisie dans le formulaire terrain : 30 jours avant l'envoi. */
 export const REPORT_OCCURRED_MAX_DAYS = 30;
-/** Libellé du champ facultatif du formulaire terrain (vide : l'heure d'envoi fait foi). */
-export const REPORT_OCCURRED_LABEL = 'Date et heure des faits';
 
 /**
  * Refus de la date et de l'heure des faits d'un signalement terrain (heure de Paris), ou null : ni postérieure à l'envoi

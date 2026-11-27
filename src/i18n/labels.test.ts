@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_DOMAINS, ACTION_PRIORITIES, ACTION_RISK_LEVELS, ACTION_SOURCES, AUDIT_KINDS, AVANCEMENT, BENIGN_CAREGIVER_KINDS, D8_STEPS, ENV_ASPECTS,
   ENV_MEDIA, EVENT_DISMISSED, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, FINDING_KINDS, FOLLOW_REASONS, METHODS, NC_DISPOSITIONS, NC_ORIGINS,
-  SEVERITY, VERIFY_METHODS, VICTIM_KINDS,
+  SEVERITY, VERIFY_METHODS, VICTIM_KINDS, RISK_LEVELS, RISK_FLAGS, PROGRAM_STATES, DUERP_ACCESS_CHANNELS, REQUIREMENT_EVAL, REQUIREMENT_LINKS,
+  CONTROL_RESULTS, CONTROL_CATEGORIES, SAFETY_NOTICE_KINDS, CHANGE_KINDS, CHANGE_STATUS, SKILL_STATES,
 } from '@/lib/domain';
 import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT, INJURIES } from '@/lib/rules/events';
 import { BSD_STATUS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS } from '@/lib/rules/environment';
@@ -37,6 +38,18 @@ const TABLES: Record<string, readonly string[]> = {
   BSD_STATUS: Object.values(BSD_STATUS).map((x) => x.label),
   TREATMENT_CODES: TREATMENT_CODES.map(([, label]) => label),
   TREATMENT_QUALIFICATIONS: Object.values(TREATMENT_QUALIFICATIONS),
+  RISK_LEVELS: RISK_LEVELS.map((x) => x.label),
+  RISK_FLAGS: Object.values(RISK_FLAGS).flatMap((x) => [x.label, x.hint]),
+  PROGRAM_STATES: Object.values(PROGRAM_STATES).map((x) => x.label),
+  DUERP_ACCESS_CHANNELS: Object.values(DUERP_ACCESS_CHANNELS),
+  REQUIREMENT_EVAL: Object.values(REQUIREMENT_EVAL).map((x) => x.label),
+  REQUIREMENT_LINKS: Object.values(REQUIREMENT_LINKS).map((x) => x.label),
+  CONTROL_RESULTS: Object.values(CONTROL_RESULTS).map((x) => x.label),
+  CONTROL_CATEGORIES: Object.values(CONTROL_CATEGORIES).flatMap((x) => [x.label, x.short]),
+  SAFETY_NOTICE_KINDS: Object.values(SAFETY_NOTICE_KINDS).map((x) => x.label),
+  CHANGE_KINDS: Object.values(CHANGE_KINDS).map((x) => x.label),
+  CHANGE_STATUS: Object.values(CHANGE_STATUS).map((x) => x.label),
+  SKILL_STATES: Object.values(SKILL_STATES).map((x) => x.label),
 };
 
 describe('libellés des tables de src/lib (VG-N01)', () => {

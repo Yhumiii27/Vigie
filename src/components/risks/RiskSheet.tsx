@@ -18,6 +18,7 @@ import type { ArchiveInfo, LinkedAction, MeasureOptions, RiskView, RisksData, Wo
 import { archiveRisk, confirmResidual, linkRiskMeasure, moveRisk, removeRiskMeasure, restoreRisk } from '@/server/risks';
 import { Cotation, RiskFields } from './RiskForm';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill, type T } from '@/i18n/translate';
 
 export type RiskSheetView = 'sheet' | 'edit' | 'newAction' | 'link' | 'archive' | 'restore';
@@ -170,9 +171,9 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
       )}
       {flag && (
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE[flag.tone].bg }}>
-          <ToneTag tone={flag.tone} style={{ flexShrink: 0 }}>{flag.label}</ToneTag>
+          <ToneTag tone={flag.tone} style={{ flexShrink: 0 }}>{labelT(t)(flag.label)}</ToneTag>
           <span style={{ fontSize: 12.5, color: TONE[flag.tone].fg, textWrap: 'pretty' }}>
-            {flag.hint}{risk.flag === 'toReview' && risk.lastClosedOn ? fill(t(' Last verification on {date}.'), { date: fmtDate(risk.lastClosedOn) }) : ''}
+            {labelT(t)(flag.hint)}{risk.flag === 'toReview' && risk.lastClosedOn ? fill(t(' Last verification on {date}.'), { date: fmtDate(risk.lastClosedOn) }) : ''}
           </span>
         </div>
       )}
