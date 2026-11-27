@@ -24,7 +24,8 @@ import {
   cancelProcessSafetyStudy, liftStudyReserve, markStudyReserve, reopenProcessSafetyStudy, saveProcessSafetyStudy, validateProcessSafetyStudy,
 } from '@/server/process-safety';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Études de sécurité des procédés (VG-01 à VG-05, méthode DIG-PRODI) : vue ?vue=etudes de l'écran « Évaluation des risques »,
 // fiche ?etude=<référence> (VG-04) avec ses recommandations (actions QSE). Lecture : rôles de l'écran sauf le Salarié ;
@@ -33,8 +34,8 @@ import { fill } from '@/i18n/translate';
 /** Listes du formulaire ; projets : keystone.pub_projets (D02), `projectsMessage` si la source est indisponible. */
 type Opts = { sites: readonly Option[]; people: readonly Option[]; projects: readonly Option[]; projectsMessage: string | null };
 
-const MILESTONE_OPTIONS = STUDY_MILESTONE_KEYS.map((m) => [m, `${STUDY_MILESTONES[m].label} — ${STUDY_MILESTONES[m].hint}`] as const);
-const CONCLUSION_OPTIONS = STUDY_CONCLUSION_KEYS.map((c) => [c, STUDY_CONCLUSIONS[c].label] as const);
+const MILESTONE_OPTIONS = (t: T) => STUDY_MILESTONE_KEYS.map((m) => [m, `${labelT(t)(STUDY_MILESTONES[m].label)} — ${labelT(t)(STUDY_MILESTONES[m].hint)}`] as const);
+const CONCLUSION_OPTIONS = (t: T) => STUDY_CONCLUSION_KEYS.map((c) => [c, labelT(t)(STUDY_CONCLUSIONS[c].label)] as const);
 
 export function ProcessSafetyPanel({ rows, cancelled, canManage, options, actionOptions, today, showSite, versions, defaultSite, initialId, closeHref }: {
   rows: StudyView[]; cancelled: StudyView[]; canManage: boolean; options: Opts; actionOptions: ActionFormOptions; today: string; showSite: boolean;
@@ -80,17 +81,17 @@ export function ProcessSafetyPanel({ rows, cancelled, canManage, options, action
             {list.map((r) => (
               <tr key={r.id} {...rowOpener(() => setSelId(r.id))} data-obsolete={r.cancelled ? true : undefined}>
                 <td>
-                  <span style={{ fontWeight: 500 }}>{r.id}</span> · {r.typeLabel}
+                  <span style={{ fontWeight: 500 }}>{r.id}</span> · {labelT(t)(r.typeLabel)}
                   {showSite && <div style={{ ...muted, marginTop: 2 }}>{r.siteLabel}</div>}
                 </td>
                 <td>{r.capexCode ?? '—'}{r.projectCode && <div style={{ ...muted, marginTop: 2 }}>{fill(t('Project {code}'), { code: r.projectCode })}</div>}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{r.milestoneLabel}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.milestoneLabel)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {fmtDate(r.sessionOn)}
                   {r.sessionOverdue && <div style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{t('Session past')}</div>}
                 </td>
                 <td>
-                  <ToneTag tone={r.statusTone}>{r.statusLabel}</ToneTag>
+                  <ToneTag tone={r.statusTone}>{labelT(t)(r.statusLabel)}</ToneTag>
                   {r.conclusionLabel && <div style={{ ...muted, marginTop: 2 }}>{r.conclusionLabel}</div>}
                 </td>
                 <td><Counts r={r} /></td>
@@ -99,7 +100,7 @@ export function ProcessSafetyPanel({ rows, cancelled, canManage, options, action
           </tbody>
         </table>
       </div>
-      <Dialog open={!!sel} onClose={close} width={760} kicker={sel ? fill(t('Safety study · {site}'), { site: sel.siteLabel }) : undefined} title={sel ? `${sel.id} · ${sel.typeLabel} ${sel.capexCode ?? sel.projectCode ?? ''}` : ''}>
+      <Dialog open={!!sel} onClose={close} width={760} kicker={sel ? fill(t('Safety study · {site}'), { site: sel.siteLabel }) : undefined} title={sel ? `${sel.id} · ${labelT(t)(sel.typeLabel)} ${sel.capexCode ?? sel.projectCode ?? ''}` : ''}>
         {sel && <StudyDetail key={sel.id} s={sel} canManage={canManage} options={options} actionOptions={actionOptions} today={today} version={versions[sel.id]} onClose={close} />}
       </Dialog>
     </div>
@@ -139,8 +140,8 @@ function StudyDetail({ s, canManage, options, actionOptions, today, version, onC
         [t('Site'), s.siteLabel],
         [t('CAPEX'), s.capexCode ?? '—'],
         !!s.projectCode && [t('Keystone project'), s.projectCode],
-        [t('Milestone'), `${s.milestoneLabel} — ${STUDY_MILESTONES[s.milestone].hint}`],
-        [t('Status'), <ToneTag key="s" tone={s.statusTone}>{s.statusLabel}</ToneTag>],
+        [t('Milestone'), `${labelT(t)(s.milestoneLabel)} — ${labelT(t)(STUDY_MILESTONES[s.milestone].hint)}`],
+        [t('Status'), <ToneTag key="s" tone={s.statusTone}>{labelT(t)(s.statusLabel)}</ToneTag>],
         [t('Session'), `${fmtDate(s.sessionOn)}${s.sessionOverdue ? t(' — past, study still planned') : ''}`],
         !!s.validatedOn && [t('Validated on'), fmtDate(s.validatedOn)],
         !!s.conclusion && [t('Conclusion'), <ToneTag key="c" tone={STUDY_CONCLUSIONS[s.conclusion].tone}>{s.conclusionLabel}</ToneTag>],
@@ -164,7 +165,7 @@ function StudyDetail({ s, canManage, options, actionOptions, today, version, onC
           {editable && (
             <span style={{ marginLeft: 'auto' }}>
               <NewActionButton options={actionOptions} label={t('New recommendation')} className="btn btn-secondary vg-btn-sm"
-                defaults={{ link: `safetystudy:${s.id}`, linkLabel: `${s.id} · ${s.typeLabel} ${s.capexCode ?? s.projectCode ?? ''}`, source: 'hazop', lockSource: true, siteId: s.siteId, domain: 'securite' }} />
+                defaults={{ link: `safetystudy:${s.id}`, linkLabel: `${s.id} · ${labelT(t)(s.typeLabel)} ${s.capexCode ?? s.projectCode ?? ''}`, source: 'hazop', lockSource: true, siteId: s.siteId, domain: 'securite' }} />
             </span>
           )}
         </div>
@@ -180,7 +181,7 @@ function StudyDetail({ s, canManage, options, actionOptions, today, version, onC
                     <td>{a.readable ? a.label : <span style={muted}>{t('Action of another scope')}</span>}</td>
                     <td>{a.pilot || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{a.dueOn ? fmtDate(a.dueOn) : '—'}</td>
-                    <td>{a.statusLabel ? <ToneTag tone={a.statusTone}>{a.statusLabel}</ToneTag> : '—'}</td>
+                    <td>{a.statusLabel ? <ToneTag tone={a.statusTone}>{labelT(t)(a.statusLabel)}</ToneTag> : '—'}</td>
                     <td>
                       <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         {a.blocking ? <ToneTag tone={a.closed ? 'neutral' : 'warn'}>{a.closed ? t('Blocking (lifted)') : t('Blocking')}</ToneTag> : <span style={muted}>{t('Not blocking')}</span>}
@@ -226,7 +227,7 @@ function StudyDetail({ s, canManage, options, actionOptions, today, version, onC
               <Input name="validatedOn" type="date" defaultValue={today} min={s.sessionOn} max={today} />
             </Field>
             <Field name="conclusion" label={t('Conclusion')}>
-              <Select name="conclusion" options={CONCLUSION_OPTIONS} defaultValue="" placeholder={t('Choose…')} />
+              <Select name="conclusion" options={CONCLUSION_OPTIONS(t)} defaultValue="" placeholder={t('Choose…')} />
             </Field>
           </FormRow>
           <Field name="reportRef" label={t('Report (Codex reference)')} hint={t('Optional. E.g. NOT-CPX-APM-2026-01-002.')}>
@@ -250,7 +251,7 @@ function StudyForm({ s, options, defaultSite, today, version, onDone, onCancel }
   const sites = s ? withCurrent(options.sites, s.siteId, s.siteLabel) : options.sites;
   const people = s ? withCurrent(options.people, s.facilitatorId, fill(t('{name} — left the workforce'), { name: s.facilitator || s.facilitatorId || '' })) : options.people;
   const [milestone, setMilestone] = useState<StudyMilestone>(s?.milestone ?? 'HS2');
-  const types = typesOfMilestone(milestone).map((k) => [k, STUDY_TYPES[k].label] as const);
+  const types = typesOfMilestone(milestone).map((k) => [k, labelT(t)(STUDY_TYPES[k].label)] as const);
   const validated = s?.storedStatus === 'validee';
   return (
     <ActionForm action={saveProcessSafetyStudy} hidden={{ id: s?.id, version: s ? version : undefined }}
@@ -265,7 +266,7 @@ function StudyForm({ s, options, defaultSite, today, version, onDone, onCancel }
       </FormRow>
       <FormRow>
         <Field name="milestone" label={t('Milestone')}>
-          <Select name="milestone" options={MILESTONE_OPTIONS} value={milestone} onChange={(e) => setMilestone(e.target.value as StudyMilestone)} />
+          <Select name="milestone" options={MILESTONE_OPTIONS(t)} value={milestone} onChange={(e) => setMilestone(e.target.value as StudyMilestone)} />
         </Field>
         <Field name="type" label={t('Study type')}>
           <Select key={milestone} name="type" options={types} defaultValue={s && s.milestone === milestone ? s.type : types[0]?.[0]} />

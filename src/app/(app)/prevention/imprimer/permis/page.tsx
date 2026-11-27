@@ -11,6 +11,7 @@ import { getSession } from '@/lib/session';
 import '../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -110,7 +111,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
                   {permits.map((p) => (
                     <tr key={p.id}>
                       <td className="pp-nowrap">{p.id}</td>
-                      <td className="pp-nowrap">{PERMIT_TYPES[p.type].short}</td>
+                      <td className="pp-nowrap">{labelT(t)(PERMIT_TYPES[p.type].short)}</td>
                       <td>{p.location}</td>
                       <td>{p.description}</td>
                       <td>{p.contractor ?? t('Internal')}<span className="pp-muted" style={{ display: 'block' }}>{p.performer}</span></td>
@@ -122,7 +123,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
                         {p.issuer ?? '—'}
                         {p.deliveredLabel && <span className="pp-muted" style={{ display: 'block' }}>{fill(t('on {date}'), { date: p.deliveredLabel })}</span>}
                       </td>
-                      <td className="pp-nowrap">{p.stateLabel}</td>
+                      <td className="pp-nowrap">{labelT(t)(p.stateLabel)}</td>
                       <td>
                         {p.closedLabel ?? '—'}
                         {p.cancelReason && <span className="pp-muted" style={{ display: 'block' }}>{p.cancelReason}</span>}

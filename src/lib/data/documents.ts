@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled, type Msg } from '@/i18n/msg';
 import { cache } from 'react';
 import { isNotNull } from 'drizzle-orm';
 import { getDb, schema as t, type DbOrTx } from '@/db';
@@ -328,7 +329,7 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
     return {
       todo: [{
         kind: 'Revue documentaire', key: 'documents-codex-indisponible', who: lead.who, ownerIds: lead.ownerIds, href: '/documents', siteId: null,
-        date: now, tone: 'warn', title: 'Documents de Codex indisponibles : revues et circuits de validation non suivis',
+        date: now, tone: 'warn', ...titled('Documents of Codex unavailable: reviews and approval workflows not followed'),
       }],
     };
   }
@@ -337,12 +338,15 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
     const lead = leads.forSite(r.siteId);
     const ownerTo = r.ownerId ? { ownerIds: [r.ownerId], who: r.owner } : { ownerIds: lead.ownerIds, who: lead.who };
     if (r.nextReviewOn && (r.overdue || r.dueSoon)) {
-      const title = r.overdue ? `${r.id} · ${r.title} — revue dépassée depuis le ${fmtDayMonth(r.nextReviewOn)}` : `${r.id} · revue périodique « ${r.title} »`;
-      const progress = r.circuit ? ` · révision ${r.circuit.revision ?? ''} en validation` : r.revWorking ? ` · révision ${r.revWorking} en rédaction`
-        : r.openActions.length ? ` · action ${r.openActions[0].id} en cours` : '';
+      const head: Msg = r.overdue
+        ? { en: '{id} · {title} — review overdue since {date}', values: { id: r.id, title: r.title, date: fmtDayMonth(r.nextReviewOn) } }
+        : { en: '{id} · periodic review “{title}”', values: { id: r.id, title: r.title } };
+      const progress: Msg | string = r.circuit ? { en: ' · revision {rev} in approval', values: { rev: r.circuit.revision ?? '' } }
+        : r.revWorking ? { en: ' · revision {rev} being drafted', values: { rev: r.revWorking } }
+          : r.openActions.length ? { en: ' · action {id} in progress', values: { id: r.openActions[0].id } } : '';
       todo.push({
         date: r.overdue ? now : r.nextReviewOn, dueOn: r.nextReviewOn, kind: 'Revue documentaire', tone: r.overdue ? 'danger' : 'warn', overdue: r.overdue,
-        title: `${title}${progress}`, key: `revue-documentaire|${r.id}`, ...ownerTo, siteId: r.siteId, href: documentHref(r.id),
+        ...titled('{head}{progress}', { head, progress }), key: `revue-documentaire|${r.id}`, ...ownerTo, siteId: r.siteId, href: documentHref(r.id),
       });
     }
     if (r.circuit) {
@@ -353,7 +357,7 @@ export const loadDocumentSignals = cache(async (): Promise<{ badge?: number; tod
       const due = r.circuit.due ?? r.circuit.submittedOn ?? now;
       todo.push({
         date: r.circuit.overdue ? now : due, dueOn: due, kind: 'Validation documentaire', tone: r.circuit.overdue ? 'danger' : 'warn', overdue: r.circuit.overdue,
-        title: `${r.id} · révision ${r.circuit.revision ?? ''} à valider dans Codex${step ? ` (${lcfirst(step.label)})` : ''}`,
+        ...titled('{id} · revision {rev} to approve in Codex{step}', { id: r.id, rev: r.circuit.revision ?? '', step: step ? ` (${lcfirst(step.label)})` : '' }),
         key: `validation-documentaire|${r.id}|${r.circuit.revision ?? ''}`, ...to, siteId: r.siteId, href: documentHref(r.id),
       });
     }

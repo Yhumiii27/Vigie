@@ -15,6 +15,7 @@ import type { DocumentRow, LinkedAction } from '@/lib/data/documents';
 import { documentActionDefaults } from './action-defaults';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 const H6 = ({ children }: { children: ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 
@@ -28,8 +29,9 @@ function Meta({ label, children, wide }: { label: string; children: ReactNode; w
 }
 
 function ActionLink({ action }: { action: LinkedAction }) {
+  const { t } = useI18n();
   return (
-    <Link href={actionHref(action.id)} className="vg-link" aria-label={`${action.id} · ${action.label} · ${action.statusLabel}`}
+    <Link href={actionHref(action.id)} className="vg-link" aria-label={`${action.id} · ${action.label} · ${labelT(t)(action.statusLabel)}`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
       <Dot color={TONE[action.tone].dot} size={6} />{action.id}
     </Link>
@@ -84,7 +86,7 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
   return (
     <div style={{ display: 'grid', gap: 16, marginTop: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <ToneTag tone={doc.statusTone}>{doc.statusLabel}</ToneTag>
+        <ToneTag tone={doc.statusTone}>{labelT(t)(doc.statusLabel)}</ToneTag>
         {inForce && <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{fill(t('Revision {rev} in force'), { rev: inForce.letter })}{inForce.inForceAt ? fill(t(' since {date}'), { date: fmtDate(inForce.inForceAt) }) : ''}</span>}
         {canManage && open && (
           <span style={{ fontSize: 12, color: open.status === 'in_review' ? TONE.warn.dot : 'var(--color-neutral-400)' }}>
@@ -101,7 +103,7 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)', background: TONE.neutral.bg }}>
           <Icon name="ph-prohibit" size={14} style={{ color: 'var(--color-neutral-400)', flex: 'none', alignSelf: 'center' }} />
           <span style={{ fontSize: 12.5, color: 'var(--color-neutral-300)', textWrap: 'pretty' }}>
-            {doc.statusLabel}{doc.withdrawnOn ? fill(t(' since {date}'), { date: fmtDate(doc.withdrawnOn) }) : ''}{t(' in Codex: no longer apply.')}
+            {labelT(t)(doc.statusLabel)}{doc.withdrawnOn ? fill(t(' since {date}'), { date: fmtDate(doc.withdrawnOn) }) : ''}{t(' in Codex: no longer apply.')}
           </span>
         </div>
       )}
@@ -134,7 +136,7 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px' }}>
           <Meta label={t('Reference')}>{doc.id}{doc.aliases.length > 0 && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)' }}>{fill(t('Formerly {ids}'), { ids: doc.aliases.join(', ') })}</span>}</Meta>
-          <Meta label={t('Type')}>{doc.typeLabel}{doc.subtype ? ` · ${doc.subtype}` : ''}</Meta>
+          <Meta label={t('Type')}>{labelT(t)(doc.typeLabel)}{doc.subtype ? ` · ${doc.subtype}` : ''}</Meta>
           <Meta label={t('Process')}>{doc.processLabel}</Meta>
           <Meta label={t('Owner#document')}>{doc.owner}</Meta>
           <Meta label={t('Confidentiality')}>{doc.confLabel}</Meta>
@@ -195,7 +197,7 @@ export function DocumentPanel({ doc, canManage, actionForm, suggestedDueOn }: {
               {doc.revisions.map((r) => (
                 <tr key={r.letter} style={r.status === 'superseded' || r.status === 'cancelled' ? { color: 'var(--color-neutral-400)' } : undefined}>
                   <td style={{ fontWeight: 500 }}>{r.letter}</td>
-                  <td><ToneTag tone={r.tone} style={{ whiteSpace: 'nowrap' }}>{r.statusLabel}</ToneTag></td>
+                  <td><ToneTag tone={r.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.statusLabel)}</ToneTag></td>
                   <td style={{ minWidth: 220, textWrap: 'pretty' }}>{r.comment || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.author ?? '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.approvedAt ? fmtDate(r.approvedAt) : '—'}</td>

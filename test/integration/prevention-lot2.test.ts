@@ -156,6 +156,11 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect(await loadPreventionCompliance()).toEqual({
       gapCount: 3, currentGapCount: 2, pastGapCount: 1, tone: 'danger', href: '/prevention',
       label: '2 interventions sans plan signé · 1 écart passé sur 12 mois',
+      // VG-N01 : libellé composé, dont le français est `label`.
+      text: {
+        en: '{current} · {past}',
+        values: { current: { en: '{n} works without a signed plan', values: { n: 2 } }, past: { en: '{n} past gap over 12 months', values: { n: 1 } } },
+      },
     });
     expect((await planView('PP-2026-008'))?.startGap).toEqual({ kind: 'signe_apres', label: "plan signé après le début de l'intervention", past: true, signedOn: '2026-04-14' });
     expect((await planView('PP-2026-013'))?.startGap).toMatchObject({ kind: 'non_signe', past: false }); // écart en cours
@@ -180,6 +185,11 @@ describe('PRV-01 : écarts R. 4512-6 passés, indicateurs seulement', () => {
     expect(await loadPreventionCompliance()).toEqual({
       gapCount: 4, currentGapCount: 2, pastGapCount: 2, tone: 'danger', href: '/prevention',
       label: '2 interventions sans plan signé · 2 écarts passés sur 12 mois',
+      // VG-N01 : libellé composé, dont le français est `label`.
+      text: {
+        en: '{current} · {past}',
+        values: { current: { en: '{n} works without a signed plan', values: { n: 2 } }, past: { en: '{n} past gaps over 12 months', values: { n: 2 } } },
+      },
     });
     const signals = await loadPreventionSignals();
     expect(signals.badge).toBe(badge);

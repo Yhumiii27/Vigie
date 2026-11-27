@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -77,7 +78,7 @@ export const loadChangeSignals = cache(async (): Promise<{ todo: TodoItem[] }> =
     if (v.status === 'demandee') {
       const to = leads.forSite(v.siteId);
       todo.push({
-        date: v.createdOn, dueOn: v.createdOn, kind: 'Gestion des changements', tone: 'warn', title: `${v.id} · ${v.title} — demande de changement à évaluer`,
+        date: v.createdOn, dueOn: v.createdOn, kind: 'Gestion des changements', tone: 'warn', ...titled('{id} · {title} — change request to assess', { id: v.id, title: v.title }),
         key: `changement|${v.id}|demandee`, who: to.who, ownerIds: to.ownerIds, siteId: v.siteId, href: href(v.id),
       });
     } else if (v.status === 'acceptee' && v.plannedOn && v.plannedOn <= horizon) {
@@ -85,7 +86,9 @@ export const loadChangeSignals = cache(async (): Promise<{ todo: TodoItem[] }> =
       const to = pilot && !hasLeft(pilot, now) ? { who: pilot.name, ownerIds: [pilot.id] } : leads.forSite(v.siteId);
       todo.push({
         date: v.late ? now : v.plannedOn, dueOn: v.plannedOn, kind: 'Gestion des changements', tone: v.late ? 'danger' : 'warn', overdue: v.late,
-        title: `${v.id} · ${v.title} — ${v.late ? `mise en œuvre prévue le ${fmtDate(v.plannedOn)}, à constater` : `mise en œuvre prévue le ${fmtDate(v.plannedOn)}`}`,
+        ...(v.late
+          ? titled('{id} · {title} — implementation planned on {date}, to record', { id: v.id, title: v.title, date: fmtDate(v.plannedOn) })
+          : titled('{id} · {title} — implementation planned on {date}', { id: v.id, title: v.title, date: fmtDate(v.plannedOn) })),
         key: `changement|${v.id}|acceptee`, who: to.who, ownerIds: to.ownerIds, siteId: v.siteId, href: href(v.id),
       });
     }

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Segments, Toolbar } from '@/components/Segments';
 import { PageHeader } from '@/components/PageHeader';
-import { firstMinuteReason, sevesoLabel } from '@/lib/rules/prevention';
+import { firstMinuteReasonMsg, sevesoLabel } from '@/lib/rules/prevention';
 import { SiteMapScreen } from '@/components/sitemap/SiteMapScreen';
 import { isRealDate } from '@/lib/rules/sitemap';
 import { Icon, ToneTag } from '@/components/ui';
@@ -11,6 +11,8 @@ import { guard } from '@/lib/guard';
 import { loadSitemap } from '@/lib/data/sitemap';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { msgT } from '@/i18n/msg';
+import { labelT } from '@/i18n/labels';
 
 const TITLE = 'Site map and co-activity';
 export async function generateMetadata(): Promise<Metadata> {
@@ -50,7 +52,7 @@ export default async function SiteMapPage({ searchParams }: Props) {
         <Toolbar end={(
           <>
             {(rule.seveso || rule.ppFromFirstMinute) && (
-              <span title={rule.ppFromFirstMinute ? fill(t('{reason} of an external company.'), { reason: firstMinuteReason(rule) }) : sevesoLabel(rule.seveso)}>
+              <span title={rule.ppFromFirstMinute ? fill(t('{reason} of an external company.'), { reason: msgT(t)(firstMinuteReasonMsg(rule)) }) : labelT(t)(sevesoLabel(rule.seveso))}>
                 <ToneTag tone={rule.seveso === 'seuil_haut' ? 'danger' : 'warn'}>
                   {rule.seveso === 'seuil_haut' ? t('Upper-tier Seveso') : rule.seveso === 'seuil_bas' ? t('Lower-tier Seveso') : t('Internal rule')}
                   {rule.ppFromFirstMinute ? t(' · prevention plan from the 1st minute') : ''}

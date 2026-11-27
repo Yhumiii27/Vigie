@@ -26,6 +26,7 @@ import { SELF_ASSESSMENT_VIEW, fmtDelta, isAssessmentStandard, rateTone, selfAss
 import { currentSiteId } from '@/lib/session';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export const generateMetadata = () => screenMetadata('audits');
 
@@ -106,7 +107,7 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const typeNav = (
     <SegLinks size={11} pad="3px 8px" options={[
       { href: typeHref(), label: t('All types#filter'), on: !auditType },
-      ...AUDIT_KIND_KEYS.filter((k) => plan.some((p) => p.auditKind === k)).map((k) => ({ href: typeHref(k), label: AUDIT_KINDS[k].short, on: auditType === k })),
+      ...AUDIT_KIND_KEYS.filter((k) => plan.some((p) => p.auditKind === k)).map((k) => ({ href: typeHref(k), label: labelT(t)(AUDIT_KINDS[k].short), on: auditType === k })),
     ]} />
   );
   const yearNav = yearOptions.length > 1 && (

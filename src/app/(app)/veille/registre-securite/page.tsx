@@ -54,7 +54,7 @@ export default async function SafetyRegisterPrintPage() {
                 {s.notices.map((n) => (
                   <tr key={n.id}>
                     <td className="pp-nowrap">{fmtDate(n.receivedOn)}</td>
-                    <td>{n.kindLabel}</td>
+                    <td>{labelT(t)(n.kindLabel)}</td>
                     <td>{n.authority}{n.reference ? ` · ${n.reference}` : ''}</td>
                     <td className="pp-text">{n.text}{n.control ? ` (${n.control})` : ''}</td>
                     <td className="pp-nowrap">{n.dueOn ? fmtDate(n.dueOn) : '—'}</td>

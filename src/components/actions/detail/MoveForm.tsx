@@ -13,6 +13,7 @@ import { moveAction } from '@/server/plan-ui';
 import { defaultMoveTarget, moveFields } from './form-helpers';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export function MoveForm({ detail, from, today, verifyDefault, onDone, onCancel }: {
   detail: ActionDetailView; from: Avancement; today: string; verifyDefault: string; onDone: (s: FormState) => void; onCancel: () => void;
@@ -20,11 +21,11 @@ export function MoveForm({ detail, from, today, verifyDefault, onDone, onCancel 
   const { t } = useI18n();
   const [to, setTo] = useState<Avancement | ''>(defaultMoveTarget(from));
   const f = moveFields(from, to, detail);
-  const targets = moveTargets(from).map((s) => [s, AVANCEMENT[s].label] as const);
+  const targets = moveTargets(from).map((s) => [s, labelT(t)(AVANCEMENT[s].label)] as const);
   return (
     <ActionForm action={moveAction} hidden={{ id: detail.id, from }} submitLabel={t('Save the progress')} submitIcon="ph-arrows-clockwise"
       onDone={onDone} onCancel={onCancel}>
-      <Field name="to" label={t('New progress')} hint={fill(t('Current: {status}.'), { status: AVANCEMENT[from].label })}>
+      <Field name="to" label={t('New progress')} hint={fill(t('Current: {status}.'), { status: labelT(t)(AVANCEMENT[from].label) })}>
         <Select name="to" options={targets} value={to} placeholder={t('Choose…')} required autoFocus onChange={(e) => setTo(e.target.value as Avancement | '')} />
       </Field>
       {f.notice && <p className="vg-step-note">{f.notice}</p>}

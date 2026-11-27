@@ -1,4 +1,6 @@
 import 'server-only';
+import { labelMsg } from '@/i18n/labels';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
@@ -123,12 +125,12 @@ export const loadSiteSignals = cache(async (): Promise<{ badge?: number; todo: T
     todo: [
       ...mine.filter((s) => !leads.lead(s.id)).map((s) => ({
         date: now, kind: 'Site', tone: 'warn', key: `site-lead|${s.id}`, ownerIds, siteId: s.id,
-        title: `${s.label} — responsable QHSE à désigner (Gérer les sites…)`, who: 'Animateur QHSE / Direction',
+        ...titled('{site} — QHSE manager to appoint (Manage sites…)', { site: s.label }), who: 'Animateur QHSE / Direction',
       } satisfies TodoItem)),
       // D14 : site encore suivi par Vigie mais fermé dans Matrix (ou retiré de sa liste) — « ne plus suivre » à décider.
       ...mine.filter((s) => s.matrixState === 'ferme' || s.matrixState === 'absent').map((s) => ({
         date: now, kind: 'Site', tone: 'warn', key: `site-matrix|${s.id}|${s.matrixState}`, ownerIds, siteId: s.id,
-        title: `${s.label} — ${MATRIX_SITE_STATES[s.matrixState as MatrixSiteState].label.toLowerCase()} : ne plus suivre ? (Gérer les sites…)`,
+        ...titled('{site} — {state}: stop following? (Manage sites…)', { site: s.label, state: { ...labelMsg(MATRIX_SITE_STATES[s.matrixState as MatrixSiteState].label), lower: true } }),
         who: 'Animateur QHSE / Direction',
       } satisfies TodoItem)),
     ],

@@ -1,6 +1,9 @@
-// Moteur de coactivité de la carte du site (pur, partagé serveur / client, sans dépendance).
+// Moteur de coactivité de la carte du site (pur, partagé serveur / client).
 // Coordonnées normalisées : x ∈ [0, 1] sur la largeur du plan, y ∈ [0, hauteur / largeur] ;
-// une unité vaut `metersPerUnit` mètres (largeur réelle représentée par le plan).
+// une unité vaut `metersPerUnit` mètres (largeur réelle représentée par le plan). Seule dépendance : les libellés composés
+// de src/i18n (VG-N01, modules purs).
+import { msgFr, type Msg } from '@/i18n/msg';
+import { labelMsg } from '@/i18n/labels';
 
 export type Pt = [number, number];
 export type Geometry = { type: 'point'; at: Pt } | { type: 'polygon'; points: Pt[] };
@@ -60,6 +63,8 @@ export type ConflictReason = {
   code: ReasonCode;
   /** « Même zone », « Proximité (12 m) », « Voie d'accès commune », « Traversée de zone de travail ». */
   label: string;
+  /** `label` composé (VG-N01), rendu par msgT à l'affichage ; `label` reste le français recopié dans les fiches. */
+  labelText: Msg;
   /** Zone ou voie concernée, avec précisions : « Voie de livraison · véhicules des deux équipes ». */
   detail: string;
   /** Nom de la zone ou de la voie concernée. */
@@ -84,6 +89,8 @@ export type Conflict = {
   b: number;
   /** Libellés distincts des motifs, dans l'ordre de gravité. */
   title: string;
+  /** Mêmes libellés composés (VG-N01), à joindre par « · » à l'affichage. */
+  titleText: Msg[];
   reasons: ConflictReason[];
   zoneIds: number[];
   routeIds: number[];
@@ -93,6 +100,11 @@ export type Conflict = {
   focus: Pt;
   /** Mesures recommandées : mesures de terrain, puis suites à donner aux plans de prévention (mise à jour, signatures). */
   measures: string[];
+  /**
+   * Mêmes mesures composées (VG-N01), pour l'affichage seulement : `measures`, `fieldMeasures` et `description` restent le
+   * français recopié dans les fiches enregistrées (action, risques d'interférence du plan).
+   */
+  measureTexts: Msg[];
   /** Mesures de terrain seules (reprises dans les risques d'interférence du plan, indépendantes de son état de signature). */
   fieldMeasures: string[];
   /** Plans de prévention des entreprises extérieures concernées. */
@@ -408,7 +420,7 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
       // (1) Même zone
       if (za && zb && za.id === zb.id) {
         const sensitive = HAZARD_ZONES.has(za.kind);
-        reasons.push({ code: 'same_zone', label: 'Même zone', detail: za.name, subject: za.name, note: '', tone: hazardous(a) || hazardous(b) || sensitive ? 'danger' : 'warn', zoneId: za.id });
+        reasons.push({ code: 'same_zone', label: 'Même zone', labelText: { en: 'Same zone' }, detail: za.name, subject: za.name, note: '', tone: hazardous(a) || hazardous(b) || sensitive ? 'danger' : 'warn', zoneId: za.id });
         measures.add('balisage').add('horaires').add('information');
         if (a.vehicles || b.vehicles) measures.add('signaleur');
         if (hotWork) measures.add('feu');
@@ -422,13 +434,13 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
             const m = Math.round(meters);
             const sensitive = (za && HAZARD_ZONES.has(za.kind)) || (zb && HAZARD_ZONES.has(zb.kind));
             const where = [za?.name, zb?.name].filter((n, k, all): n is string => !!n && all.indexOf(n) === k).join(' / ');
-            reasons.push({ code: 'proximity', label: `Proximité (${m} m)`, detail: where, subject: where, note: '', tone: (hazardous(a) && hazardous(b)) || sensitive ? 'danger' : 'warn', meters: m, ...(zb ? { zoneId: zb.id } : za ? { zoneId: za.id } : {}) });
+            reasons.push({ code: 'proximity', label: `Proximité (${m} m)`, labelText: { en: 'Proximity ({m} m)', values: { m } }, detail: where, subject: where, note: '', tone: (hazardous(a) && hazardous(b)) || sensitive ? 'danger' : 'warn', meters: m, ...(zb ? { zoneId: zb.id } : za ? { zoneId: za.id } : {}) });
             measures.add('balisage').add('information');
             if (hotWork) measures.add('feu');
             if (sensitive) measures.add('atex');
           }
         } else if (!mpu && za && zb && shapeDistance({ kind: 'polygon', points: za.polygon }, { kind: 'polygon', points: zb.polygon }) < 1e-3) {
-          reasons.push({ code: 'proximity', label: 'Proximité (zones contiguës)', detail: `${za.name} / ${zb.name}`, subject: `${za.name} / ${zb.name}`, note: '', tone: hazardous(a) && hazardous(b) ? 'danger' : 'warn', zoneId: zb.id });
+          reasons.push({ code: 'proximity', label: 'Proximité (zones contiguës)', labelText: { en: 'Proximity (adjacent zones)' }, detail: `${za.name} / ${zb.name}`, subject: `${za.name} / ${zb.name}`, note: '', tone: hazardous(a) && hazardous(b) ? 'danger' : 'warn', zoneId: zb.id });
           measures.add('balisage').add('information');
         }
       }
@@ -441,7 +453,7 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
         const danger = (a.vehicles && b.vehicles) || (anyVehicle && (r.kind === 'mixte' || r.kind === 'pietons'));
         const note = a.vehicles && b.vehicles ? 'véhicules des deux équipes'
           : anyVehicle ? `véhicules ou engins sur une ${ROUTE_KIND_PHRASE[r.kind] ?? 'voie partagée'}` : '';
-        reasons.push({ code: 'shared_route', label: "Voie d'accès commune", detail: note ? `${r.name} · ${note}` : r.name, subject: r.name, note, tone: danger ? 'danger' : 'warn', routeId: r.id });
+        reasons.push({ code: 'shared_route', label: "Voie d'accès commune", labelText: { en: 'Shared access route' }, detail: note ? `${r.name} · ${note}` : r.name, subject: r.name, note, tone: danger ? 'danger' : 'warn', routeId: r.id });
         measures.add('circulation').add('horaires').add('information');
         if (anyVehicle) measures.add('signaleur');
       }
@@ -455,7 +467,7 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
           const area = crosses(r, other);
           if (!area) continue;
           const vehicles = user.vehicles || r.kind === 'vehicules' || r.kind === 'engins';
-          reasons.push({ code: 'zone_crossing', label: 'Traversée de zone de travail', detail: `${r.name} (${teamName(user)}) traverse ${area}`, subject: r.name, note: `empruntée par ${teamName(user)}, traverse ${area}`, tone: vehicles ? 'danger' : 'warn', routeId: r.id, ...(other.zoneId != null ? { zoneId: other.zoneId } : {}) });
+          reasons.push({ code: 'zone_crossing', label: 'Traversée de zone de travail', labelText: { en: 'Crossing of a work area' }, detail: `${r.name} (${teamName(user)}) traverse ${area}`, subject: r.name, note: `empruntée par ${teamName(user)}, traverse ${area}`, tone: vehicles ? 'danger' : 'warn', routeId: r.id, ...(other.zoneId != null ? { zoneId: other.zoneId } : {}) });
           measures.add('consignation').add('balisage');
           if (vehicles) measures.add('signaleur');
         }
@@ -485,16 +497,23 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
       const unsigned = [...new Set(externals.filter(lacksSignedPlan).map((x) => x.preventionPlanId!))];
       const basis = input.firstMinuteBasis || null;
       const fieldMeasures: string[] = MEASURE_ORDER.filter((k) => measures.has(k)).map((k) => MEASURES[k]);
-      const measureList = [...fieldMeasures];
-      if (planIds.length) measureList.push(`Mise à jour des plans de prévention concernés (${planIds.join(', ')})`);
+      // Mesures composées (VG-N01) : leur français (msgFr) est le texte recopié dans les fiches, mot pour mot celui d'avant.
+      const measureTexts: Msg[] = MEASURE_ORDER.filter((k) => measures.has(k)).map((k) => labelMsg(MEASURES[k]));
+      const basisText: Msg | null = basis ? { ...labelMsg(basis), lower: true } : null;
+      if (planIds.length) measureTexts.push({ en: 'Update of the prevention plans concerned ({ids})', values: { ids: planIds.join(', ') } });
       if (unsigned.length) {
-        measureList.push(`${unsigned.length > 1 ? 'Plans' : 'Plan'} ${unsigned.join(', ')} à faire signer par les deux entreprises avant toute intervention (${basis ? `${lcfirst(basis)} : plan écrit et signé dès la première minute` : 'plan obligatoire, R. 4512-7'})`);
+        const why: Msg = basisText ? { en: '{basis}: written and signed plan from the first minute', values: { basis: basisText } } : { en: 'mandatory plan, R. 4512-7' };
+        measureTexts.push(unsigned.length > 1
+          ? { en: 'Plans {ids} to have signed by both companies before any work ({why})', values: { ids: unsigned.join(', '), why } }
+          : { en: 'Plan {ids} to have signed by both companies before any work ({why})', values: { ids: unsigned.join(', '), why } });
       }
       if (withoutPlan.length) {
-        measureList.push(basis
-          ? `Plan de prévention écrit et signé à établir avant toute intervention (${withoutPlan.map(teamName).join(', ')}) : ${lcfirst(basis)}, dès la première minute`
-          : `Plan de prévention à établir avec ${withoutPlan.map(teamName).join(', ')}`);
+        const teams = withoutPlan.map(teamName).join(', ');
+        measureTexts.push(basisText
+          ? { en: 'Written and signed prevention plan to draw up before any work ({teams}): {basis}, from the first minute', values: { teams, basis: basisText } }
+          : { en: 'Prevention plan to draw up with {teams}', values: { teams } });
       }
+      const measureList = measureTexts.map(msgFr);
 
       const phrases = unique.map((r) => {
         if (r.code === 'same_zone') return `même zone (${r.detail})`;
@@ -513,12 +532,14 @@ export function detectConflicts(input: CoInput, date: string): Conflict[] {
         a: a.id,
         b: b.id,
         title: [...new Set(unique.map((r) => r.label))].join(' · '),
+        titleText: unique.filter((r, k) => unique.findIndex((x) => x.label === r.label) === k).map((r) => r.labelText),
         reasons: unique,
         zoneIds,
         routeIds,
         place: places.join(', '),
         focus,
         measures: measureList,
+        measureTexts,
         fieldMeasures,
         planIds,
         description,

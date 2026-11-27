@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { and, asc, eq, gt, gte, inArray, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -130,7 +131,7 @@ export const loadReportPostSignals = cache(async (): Promise<{ todo: TodoItem[] 
       const to = leads.forSite(z.siteId);
       return {
         date: now, kind: 'QR code de poste', tone: 'danger', overdue: true, key: `report-ceiling|${z.id}|${z.qrVersion}`,
-        title: `${z.name} (${shortLabel(z.siteLabel)}) — plafond de signalements sans compte atteint : régénérer le QR code s'il circule hors du site`,
+        ...titled('{zone} ({site}) — ceiling of reports without an account reached: regenerate the QR code if it circulates outside the site', { zone: z.name, site: shortLabel(z.siteLabel) }),
         href: `/signaler/postes?site=${encodeURIComponent(z.siteId)}`, who: to.who, ownerIds: to.ownerIds, siteId: z.siteId,
       } satisfies TodoItem;
     }),

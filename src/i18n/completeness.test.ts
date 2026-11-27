@@ -19,9 +19,9 @@ const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true 
 // Aussi les modules qui reçoivent le traducteur en paramètre (`t: T`, ex. le rapport d'audit PDF et l'export CSV de src/lib).
 const translating = [...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, 'norma/charte/ds'))].filter((f) => /\b(useI18n|getI18n)\(|\bt: T\b/.test(readFileSync(f, 'utf8')));
 const LITERAL = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1\s*\)/g;
-// Libellés composés par src/lib (src/i18n/msg.ts) : chaîne source de composed('…') et de { en: '…' }.
+// Libellés composés par src/lib (src/i18n/msg.ts) : chaîne source de composed('…'), de titled('…') et de { en: '…' }.
 const composing = files(path.join(ROOT, 'src')).filter((f) => /from '@\/i18n\/msg'/.test(readFileSync(f, 'utf8')));
-const COMPOSED = /\b(?:composed\(\s*|en:\s*)(['"])((?:\\.|(?!\1).)*)\1/g;
+const COMPOSED = /\b(?:composed\(\s*|titled\(\s*|en:\s*)(['"])((?:\\.|(?!\1).)*)\1/g;
 const composedLiterals = composing.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(COMPOSED)].map((m) => ({ file: path.relative(ROOT, f), text: m[2].replace(/\\(['"])/g, '$1') })));
 const literals = translating.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(LITERAL)].map((m) => ({ file: path.relative(ROOT, f), text: m[2].replace(/\\(['"])/g, '$1') })));
 

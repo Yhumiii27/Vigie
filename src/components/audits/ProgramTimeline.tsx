@@ -24,6 +24,7 @@ import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditAct
 import styles from './audits.module.css';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Opts = ActionFormOptions;
 
@@ -465,7 +466,7 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
       {!review && (
         // D08-5 : type d'audit (la revue de direction est reconnue par ses mots, jamais choisie ici).
         <Field name="auditKind" label={t('Audit type')}>
-          <Select name="auditKind" options={CHOOSABLE_AUDIT_KINDS.map((k) => [k, AUDIT_KINDS[k].label] as const)}
+          <Select name="auditKind" options={CHOOSABLE_AUDIT_KINDS.map((k) => [k, labelT(t)(AUDIT_KINDS[k].label)] as const)}
             defaultValue={item && item.auditKind !== 'revue_direction' ? item.auditKind : inferAuditKind({ track: isNew ? newTrack : trackChoice, label, detail })} />
         </Field>
       )}
@@ -645,7 +646,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
   const st = PLAN_ITEM_STATES[item.state];
   const rows: [string, ReactNode][] = [
     [t('Nature'), item.kind],
-    [t('Audit type'), AUDIT_KINDS[item.auditKind]?.label ?? item.auditKind],
+    [t('Audit type'), labelT(t)(AUDIT_KINDS[item.auditKind]?.label ?? item.auditKind)],
     [t('State'), <ToneTag key="s" tone={st.tone}>{st.label}</ToneTag>],
     [t('Planned date'), item.plannedOn ? fmtDate(item.plannedOn) : monthLabel(item.month, item.year)],
     ...(item.postponedFrom ? [[t('Initially'), firstPlanned(item.postponedFrom)] as [string, ReactNode]] : []),
@@ -662,7 +663,7 @@ function PlanItemDetail({ item, findings, certLabel, onLeave }: { item: PlanItem
     ] as [string, ReactNode][]),
     ...(item.unplanned ? [[t('Programme'), t('Unplanned audit')] as [string, ReactNode]] : []),
     ...(certLabel ? [[t('Standard'), certLabel] as [string, ReactNode]] : []),
-    ...(item.review ? [[t('Review#management'), <ToneTag key="r" tone={item.review.statusTone}>{item.review.statusLabel}</ToneTag>] as [string, ReactNode]] : []),
+    ...(item.review ? [[t('Review#management'), <ToneTag key="r" tone={item.review.statusTone}>{labelT(t)(item.review.statusLabel)}</ToneTag>] as [string, ReactNode]] : []),
     [t('Action'), item.actionId ? <ActionLink key="a" action={item.action} id={item.actionId} /> : '—'],
   ];
   return (

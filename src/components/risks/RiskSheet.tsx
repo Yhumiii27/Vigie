@@ -242,7 +242,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
             {risk.events.map((e) => (
               <li key={e.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                 <Link href={`/evenements?sel=${encodeURIComponent(e.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{e.id}</Link>
-                <ToneTag tone={EVENT_TYPES[e.type as EventType]?.tone ?? 'neutral'}>{e.typeLabel}</ToneTag>
+                <ToneTag tone={EVENT_TYPES[e.type as EventType]?.tone ?? 'neutral'}>{labelT(t)(e.typeLabel)}</ToneTag>
                 <span style={{ flex: 1, minWidth: 160 }}>{e.title}</span>
                 <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</span>
                 <span style={{ color: e.closed ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>{e.step}</span>
@@ -328,7 +328,7 @@ function MeasuresSection({ risk, unit, editable, options }: { risk: RiskView; un
             <li key={m.id} style={{ display: 'grid', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                 <i className={`ph ${MEASURE_LINK_KINDS[m.kind].icon}`} style={{ fontSize: 13, color: 'var(--color-neutral-400)' }} aria-hidden />
-                <span className="vg-sr-only">{fill(t('{label}: '), { label: MEASURE_LINK_KINDS[m.kind].label })}</span>
+                <span className="vg-sr-only">{fill(t('{label}: '), { label: labelT(t)(MEASURE_LINK_KINDS[m.kind].label) })}</span>
                 {m.href ? <Link href={m.href} className="vg-link" style={{ fontSize: 12.5, flex: 1, minWidth: 160 }}>{m.label}</Link> : <span style={{ flex: 1, minWidth: 160 }}>{m.label}</span>}
                 <ToneTag tone={m.tone}>{m.valid ? m.state : fill(t('No longer valid · {state}'), { state: m.state })}</ToneTag>
                 {editable && removing !== m.id && (
@@ -357,9 +357,9 @@ function MeasuresSection({ risk, unit, editable, options }: { risk: RiskView; un
         <div className="vg-inset" style={{ padding: '10px 12px' }}>
           <ActionForm action={linkRiskMeasure} hidden={{ riskId: risk.id }} onDone={() => setAdding(false)} onCancel={() => setAdding(false)} submitLabel={t('Link the measure')} submitIcon="ph-link">
             <Field name="kind" label={t('Item')}>
-              <Select name="kind" options={MEASURE_LINK_KIND_KEYS.map((k) => [k, MEASURE_LINK_KINDS[k].label] as const)} value={kind} onChange={(e) => setKind(e.target.value as MeasureLinkKind)} />
+              <Select name="kind" options={MEASURE_LINK_KIND_KEYS.map((k) => [k, labelT(t)(MEASURE_LINK_KINDS[k].label)] as const)} value={kind} onChange={(e) => setKind(e.target.value as MeasureLinkKind)} />
             </Field>
-            <Field name="targetId" label={MEASURE_LINK_KINDS[kind].label}
+            <Field name="targetId" label={labelT(t)(MEASURE_LINK_KINDS[kind].label)}
               hint={t('Flagged when it is no longer valid: inspection overdue or unfavourable, document without a version in force, qualification expired for an employee of the site.')}>
               <Select key={kind} name="targetId" options={choices} defaultValue="" placeholder={choices.length ? t('Choose…') : t('No item available')} />
             </Field>

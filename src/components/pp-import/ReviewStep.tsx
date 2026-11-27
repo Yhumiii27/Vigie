@@ -16,6 +16,7 @@ import { CheckMark, fileSize, muted, plural } from './parts';
 import s from './pp-import.module.css';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Props = {
   data: ImportScreenData;
@@ -148,7 +149,7 @@ export function ReviewStep({ data, draft, sections, files, format, templateId, t
             {firstMinute && site ? (
               // Fondement de la règle propre au site : Seveso seuil haut ou bas, ou règle interne.
               <Notice tone="accent" icon="ph-shield-check">
-                {fill(t('{site}: written prevention plan'), { site: site.label })} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}).'), { basis: lcfirst(ruleBasis(site)) })}
+                {fill(t('{site}: written prevention plan'), { site: site.label })} <strong style={{ fontWeight: 500 }}>{t('required')}</strong> {fill(t('from the first minute of the intervention ({basis}).'), { basis: lcfirst(labelT(t)(ruleBasis(site))) })}
                 {legalText ? ` ${fill(t('Legal threshold R. 4512-7 also reached ({reasons}).'), { reasons: legalText })}` : ''}
               </Notice>
             ) : (
@@ -173,7 +174,7 @@ export function ReviewStep({ data, draft, sections, files, format, templateId, t
               <TextArea name="measures" rows={4} defaultValue={draft.measures} maxLength={4000} />
             </Field>
 
-            <SectionTitle aside={<ToneTag tone={PLAN_STATUS[status].tone}>{fill(t('Status at creation: {status}'), { status: PLAN_STATUS[status].label })}</ToneTag>}>{t('Signatures')}</SectionTitle>
+            <SectionTitle aside={<ToneTag tone={PLAN_STATUS[status].tone}>{fill(t('Status at creation: {status}'), { status: labelT(t)(PLAN_STATUS[status].label) })}</ToneTag>}>{t('Signatures')}</SectionTitle>
             <FormRow>
               <Field name="signedEuOn" label={t('Host company — signed on')} hint={draft.hints.signedEuOn}>
                 <Input name="signedEuOn" type="date" value={signedEuOn} max={data.today} onChange={(e) => setSignedEuOn(e.target.value)} />

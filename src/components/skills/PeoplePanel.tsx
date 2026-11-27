@@ -11,6 +11,7 @@ import type { DepartedRow, PeopleAdmin, PeopleAdminRow } from '@/lib/data/people
 import { attachPerson, reassignResponsibilities, refreshFromCursus } from '@/server/people';
 import { fmtDate } from '@/lib/dates';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 // Personnes lues dans Cursus (D01, décision CV-10) : bouton « Actualiser depuis Cursus » de l'écran Habilitations et vue
@@ -102,7 +103,7 @@ export function PeoplePanel({ admin, siteLabels, canReassign }: { admin: PeopleA
             interim: fill(n.interim > 1 ? t('{n} temporary workers') : t('{n} temporary worker'), { n: n.interim }),
             external: fill(n.external > 1 ? t('{n} employees of external companies') : t('{n} employee of external companies'), { n: n.external }),
           })}
-          {run ? fill(t(' · last read on {date}: {status}'), { date: fmtParisDateTime(new Date(run.at)), status: SYNC_STATUSES[run.status as SyncStatus]?.label.toLowerCase() ?? run.status })
+          {run ? fill(t(' · last read on {date}: {status}'), { date: fmtParisDateTime(new Date(run.at)), status: SYNC_STATUSES[run.status as SyncStatus] ? labelT(t)(SYNC_STATUSES[run.status as SyncStatus].label).toLowerCase() : run.status })
             + (run.status === 'ok' ? fill(t(', {added} taken over, {updated} updated, {removed} absent'), { added: run.added, updated: run.updated, removed: run.removed }) : '') : t(' · never read')}.
         </p>
         {admin.message && <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--tone-warn-fg)' }}>{admin.message}</p>}

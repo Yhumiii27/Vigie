@@ -4,7 +4,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadCounters } from '@/lib/data/counters';
 import { loadTodo, loadVisibleTodo } from '@/lib/data/todo';
-import { ROLE_KEYS } from '@/lib/domain';
+import { ROLE_KEYS, type TodoItem } from '@/lib/domain';
+import { msgFr } from '@/i18n/msg';
 import { actAs, freezeClock, freshDemoDatabase } from '../helpers';
 
 // QUA-17 : les échéances et les badges ne changent pas avec l'optimisation de leurs chargements (filtrage SQL par périmètre
@@ -15,6 +16,13 @@ import { actAs, freezeClock, freshDemoDatabase } from '../helpers';
 // en clair). VIGIE_GOLDEN_UPDATE=1 la réécrit (changement volontaire, à justifier).
 
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
+// VG-N01 : l'intitulé composé (titleText) n'est qu'un rendu de `title` dans la langue de la personne ; l'empreinte porte
+// sur l'échéance sans lui (le français, la clé et tout le reste restent ceux de la référence), et chaque intitulé composé
+// doit rendre exactement `title` en français.
+const comparable = (items: TodoItem[]) => items.map(({ titleText, ...rest }) => {
+  if (titleText) expect(msgFr(titleText), rest.title).toBe(rest.title);
+  return rest;
+});
 const GOLDEN = new URL('../fixtures/todo-golden.json', import.meta.url);
 freshDemoDatabase();
 // Heure figée : l'état des permis dépend de l'heure (referenceNow).
@@ -27,7 +35,7 @@ describe('Échéances et badges : équivalence (QUA-17)', () => {
       for (const site of ['site_a', 'site_b', 'all']) {
         actAs(role, site);
         const [todo, visible, counters] = [await loadTodo(), await loadVisibleTodo(), await loadCounters()];
-        out[`${role}|${site}`] = { todo: todo.length, visible: visible.length, badges: counters.badges, todoHash: hash(todo), visibleHash: hash(visible) };
+        out[`${role}|${site}`] = { todo: todo.length, visible: visible.length, badges: counters.badges, todoHash: hash(comparable(todo)), visibleHash: hash(comparable(visible)) };
       }
     }
     const actual = JSON.parse(JSON.stringify(out));

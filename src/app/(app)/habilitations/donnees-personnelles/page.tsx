@@ -12,6 +12,7 @@ import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -88,7 +89,7 @@ export default async function PersonalDataPage({ searchParams }: PageProps<'/hab
               <dt>{t('Home site')}{src}</dt><dd>{id.site}</dd>
               <dt>{t('Employee number')}{id.fromCursus ? ' (Cursus)' : ''}</dt><dd>{id.matricule ?? '—'}</dd>
               {id.fromCursus && <><dt>{t('Site employee number')} (Cursus)</dt><dd>{id.siteMatricule ?? '—'}</dd></>}
-              {id.fromCursus && <><dt>{t('Category')} (Cursus)</dt><dd>{id.category ? PERSON_CATEGORIES[id.category as PersonCategory]?.label ?? id.category : '—'}</dd></>}
+              {id.fromCursus && <><dt>{t('Category')} (Cursus)</dt><dd>{id.category ? labelT(t)(PERSON_CATEGORIES[id.category as PersonCategory]?.label ?? id.category) : '—'}</dd></>}
               {id.fromCursus && <><dt>{t('Agency or company')} (Cursus)</dt><dd>{id.company ?? '—'}</dd></>}
               {id.fromCursus && <><dt>{t('E-mail address')} (Cursus)</dt><dd>{id.cursusEmail ?? '—'}</dd></>}
               <dt>{t('E-mail address (Microsoft account)')}</dt><dd>{id.email ?? '—'}</dd>

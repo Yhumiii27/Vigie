@@ -16,14 +16,14 @@ import { cancelChangeRequest, completeChangeRequest, decideChangeRequest, saveCh
 import { RadioSeg } from './parts';
 import { useI18n } from '@/i18n/client';
 import { labelT } from '@/i18n/labels';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
 
 // Gestion des changements (CNF-11, ISO 9001 §6.3 et §8.5.6, ISO 45001 §8.1.3) : demandes de changement, effets évalués,
 // décision du service QHSE, mise en œuvre constatée. Lecture : lecteurs de l'écran Audits ; saisie : animateur QHSE et
 // direction (canEdit(role, 'audits')).
 
 type Opts = { people: readonly Option[]; sites: readonly Option[] };
-const KIND_OPTIONS = CHANGE_KIND_KEYS.map((k) => [k, CHANGE_KINDS[k].label] as const);
+const KIND_OPTIONS = (t: T) => CHANGE_KIND_KEYS.map((k) => [k, labelT(t)(CHANGE_KINDS[k].label)] as const);
 
 export function ChangesCard({ rows, canEdit, canApprove, options, versions, today, initialId, closeHref }: {
   rows: ChangeView[]; canEdit: boolean; canApprove: boolean; options: Opts; versions: Record<string, string>; today: string;
@@ -181,7 +181,7 @@ function ChangeForm({ c, options, version, onDone, onCancel }: { c?: ChangeView;
         <Input name="title" defaultValue={c?.title ?? ''} maxLength={160} autoFocus={!c} />
       </Field>
       <FormRow>
-        <Field name="kind" label={t('Nature')}><Select name="kind" options={KIND_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.kind ?? 'procede'} /></Field>
+        <Field name="kind" label={t('Nature')}><Select name="kind" options={KIND_OPTIONS(t).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.kind ?? 'procede'} /></Field>
         <Field name="siteId" label={t('Site')}><Select name="siteId" options={sites} defaultValue={c ? c.siteId ?? 'all' : sites[0]?.[0] ?? ''} /></Field>
       </FormRow>
       <Field name="description" label={t('Description')}><TextArea name="description" rows={3} maxLength={2000} defaultValue={c?.description ?? ''} /></Field>

@@ -11,6 +11,8 @@ import { loadPrevention } from '@/lib/data/prevention';
 import '../../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/plan/[id]'>): Promise<Metadata> {
   const [{ id }, { t }] = await Promise.all([params, getI18n()]);
@@ -32,7 +34,7 @@ async function ContentBlock({ plan, field }: { plan: PlanView; field: (typeof PL
   const value = plan[field.key];
   return (
     <div className="pp-sub">
-      <h3>{field.label} <span className="pp-ref">· {field.ref}</span></h3>
+      <h3>{labelT(t)(field.label)} <span className="pp-ref">· {field.ref}</span></h3>
       {value ? <p className="pp-text">{value}</p> : <p className="pp-empty">{t('Not entered.')}</p>}
     </div>
   );
@@ -115,7 +117,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
         <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · {t('Prevention plan')}</div>
         <div className="pp-head-row">
           <h1>{plan.id} · {plan.title}</h1>
-          <span className="tag tag-neutral">{plan.statusLabel}</span>
+          <span className="tag tag-neutral">{labelT(t)(plan.statusLabel)}</span>
         </div>
         <div className="pp-muted" style={{ fontSize: 12.5 }}>
           {t('French Labour Code, articles R. 4512-6 to R. 4512-12')} · {fill(t('printed on {date}'), { date: fmtDate(today()) })}
@@ -160,7 +162,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
           [t('Period'), fill(t('from {from} to {to}'), { from: fmtDate(plan.startOn), to: fmtDate(plan.endOn) })],
           [t('Hours over 12 months'), `${plan.estimatedHours} h`],
           [t('Dangerous work'), plan.dangerousWork ? t('Yes (order of 19 March 1993)') : t('No')],
-          [t('Written plan'), plan.mandatory ? `${t('Required')} · ${plan.mandatoryReason}` : t('Not required (less than 400 h over 12 months, no dangerous work)')],
+          [t('Written plan'), plan.mandatory ? `${t('Required')} · ${msgT(t)(plan.mandatoryReasonText)}` : t('Not required (less than 400 h over 12 months, no dangerous work)')],
           [t('Keystone project'), plan.keystoneProject ?? '—'],
         ]} />
       </Section>
@@ -185,7 +187,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
         {PLAN_CONTENT.filter((f) => f.group === 'measures').map((f) => <ContentBlock key={f.key} plan={plan} field={f} />)}
       </Section>
 
-      <Section num={6} title={`${PLAN_CONTENT_GROUPS.sir.label} (${PLAN_CONTENT_GROUPS.sir.ref})`}>
+      <Section num={6} title={`${labelT(t)(PLAN_CONTENT_GROUPS.sir.label)} (${PLAN_CONTENT_GROUPS.sir.ref})`}>
         {PLAN_CONTENT.filter((f) => f.group === 'sir').map((f) => <ContentBlock key={f.key} plan={plan} field={f} />)}
       </Section>
 
@@ -197,7 +199,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
               <thead><tr><th>{t('Ref.')}</th><th>{t('Type')}</th><th>{t('Validity')}</th><th>{t('Status')}</th></tr></thead>
               <tbody>
                 {plan.permits.map((p) => (
-                  <tr key={p.id}><td className="pp-nowrap">{p.id}</td><td>{PERMIT_TYPES[p.type].label}</td><td className="pp-nowrap">{p.validity}</td><td>{p.stateLabel}</td></tr>
+                  <tr key={p.id}><td className="pp-nowrap">{p.id}</td><td>{labelT(t)(PERMIT_TYPES[p.type].label)}</td><td className="pp-nowrap">{p.validity}</td><td>{labelT(t)(p.stateLabel)}</td></tr>
                 ))}
               </tbody>
             </table>

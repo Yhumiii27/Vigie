@@ -1,4 +1,5 @@
 import 'server-only';
+import { composed, titled, type Msg } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -492,7 +493,6 @@ export type EnvironmentData = Awaited<ReturnType<typeof loadEnvironment>>;
 
 // ─── Signaux (échéances, notifications, badge) ───────────────────────────────
 
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 
 /** Lien vers le registre filtré, sur l'année concernée. */
 const registerHref = (year: number, currentYear: number, vue: string) =>
@@ -538,7 +538,9 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
   for (const { siteId, site, year, rows } of bySiteYear(entries.filter((e) => e.missingBsd), siteOrder)) {
     todo.push({
       date: now, kind: 'Déchets', tone: 'danger', overdue: true, count: rows.length, ...owner, siteId,
-      title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD manquant', 'BSD manquants')} · ${short(site)}`,
+      ...(rows.length > 1
+        ? titled('Waste register {year} · {n} missing tracking forms · {site}', { year, n: rows.length, site: short(site) })
+        : titled('Waste register {year} · {n} missing tracking form · {site}', { year, n: rows.length, site: short(site) })),
       href: one(rows) ?? registerHref(year, currentYear, 'bsd-manquants'),
     });
   }
@@ -547,7 +549,9 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
     const oldest = rows.reduce((a, b) => (a.removedOn <= b.removedOn ? a : b));
     todo.push({
       date: addDays(oldest.removedOn, BSD_STALE_DAYS), dueOn: addDays(oldest.removedOn, BSD_STALE_DAYS), kind: 'Déchets', tone: 'warn', overdue: true, count: rows.length, ...owner, siteId,
-      title: `Registre des déchets ${year} · ${plural(rows.length, 'BSD non finalisé', 'BSD non finalisés')} plus de ${BSD_STALE_DAYS} j après l'enlèvement · ${short(site)}`,
+      ...(rows.length > 1
+        ? titled('Waste register {year} · {n} tracking forms not finalised more than {days} d after the removal · {site}', { year, n: rows.length, days: BSD_STALE_DAYS, site: short(site) })
+        : titled('Waste register {year} · {n} tracking form not finalised more than {days} d after the removal · {site}', { year, n: rows.length, days: BSD_STALE_DAYS, site: short(site) })),
       href: one(rows) ?? registerHref(year, currentYear, 'bsd-en-attente'),
     });
   }
@@ -557,7 +561,9 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
   for (const { siteId, site, year, rows } of bySiteYear(entries.filter((e) => e.gaps.length && e.year >= fromYear), siteOrder)) {
     todo.push({
       date: now, kind: 'Déchets', tone: 'warn', count: 0, ...owner, siteId,
-      title: `Registre des déchets ${year} · ${plural(rows.length, 'enlèvement aux mentions incomplètes', 'enlèvements aux mentions incomplètes')} · ${short(site)}`,
+      ...(rows.length > 1
+        ? titled('Waste register {year} · {n} removals with incomplete entries · {site}', { year, n: rows.length, site: short(site) })
+        : titled('Waste register {year} · {n} removal with incomplete entries · {site}', { year, n: rows.length, site: short(site) })),
       href: one(rows) ?? registerHref(year, currentYear, 'mentions-incompletes'),
     });
   }
@@ -589,7 +595,7 @@ export const loadEnvironmentSignals = cache(async (): Promise<{ badge?: number; 
 // ─── Indicateurs calculés de la veille (VEI-12) ─────────────────────────────
 
 /** Indicateur calculé d'une exigence de veille rattachée aux déchets (même forme que RequirementIndicator de la veille). */
-export type WasteIndicator = { label: string; tone: Tone; href: string; gap: boolean };
+export type WasteIndicator = { label: string; text?: Msg; tone: Tone; href: string; gap: boolean };
 
 /**
  * Indicateurs des exigences rattachées au registre des déchets (VEI-12), sur tout le périmètre de la personne (l'exigence
@@ -597,6 +603,9 @@ export type WasteIndicator = { label: string; tone: Tone; href: string; gap: boo
  * dangereux sans bordereau, en écart ; bordereaux non finalisés à surveiller ; `waste_register` (R. 541-43, arrêté du
  * 31 mai 2021) — enlèvements aux mentions incomplètes depuis 2022, en écart. Jamais stockés.
  */
+/** Libellé composé d'un nombre (singulier jusqu'à 1, comme `plural`) : `{ label, text }` de src/i18n/msg.ts. */
+const counted = (n: number, one: string, many: string, values?: Record<string, string | number>) => (n > 1 ? composed(many, { n, ...values }) : composed(one, { n, ...values }));
+
 export const loadWasteIndicators = cache(async (): Promise<{ bsd: WasteIndicator; register: WasteIndicator }> => {
   const { now, entries } = await loadEnvironmentBase('perimeter');
   const currentYear = +now.slice(0, 4);
@@ -608,13 +617,13 @@ export const loadWasteIndicators = cache(async (): Promise<{ bsd: WasteIndicator
   const hazardous = entries.filter((e) => e.hazardous && e.year === currentYear).length;
   return {
     bsd: missing.length
-      ? { label: plural(missing.length, 'enlèvement de déchets dangereux sans BSD', 'enlèvements de déchets dangereux sans BSD'), tone: 'danger', gap: true, href: registerHref(yearOf(missing), currentYear, 'bsd-manquants') }
+      ? { ...counted(missing.length, '{n} hazardous waste removal without a tracking form', '{n} hazardous waste removals without a tracking form'), tone: 'danger', gap: true, href: registerHref(yearOf(missing), currentYear, 'bsd-manquants') }
       : stale.length
-        ? { label: `Aucun BSD manquant · ${plural(stale.length, `bordereau non finalisé après ${BSD_STALE_DAYS} j`, `bordereaux non finalisés après ${BSD_STALE_DAYS} j`)}`, tone: 'warn', gap: false, href: registerHref(yearOf(stale), currentYear, 'bsd-en-attente') }
-        : { label: `Aucun BSD manquant · ${plural(hazardous, `enlèvement de déchets dangereux en ${currentYear}`, `enlèvements de déchets dangereux en ${currentYear}`)}`, tone: 'ok', gap: false, href: '/environnement' },
+        ? { ...counted(stale.length, 'No missing tracking form · {n} form not finalised after {days} d', 'No missing tracking form · {n} forms not finalised after {days} d', { days: BSD_STALE_DAYS }), tone: 'warn', gap: false, href: registerHref(yearOf(stale), currentYear, 'bsd-en-attente') }
+        : { ...counted(hazardous, 'No missing tracking form · {n} hazardous waste removal in {year}', 'No missing tracking form · {n} hazardous waste removals in {year}', { year: currentYear }), tone: 'ok', gap: false, href: '/environnement' },
     register: incomplete.length
-      ? { label: plural(incomplete.length, 'enlèvement aux mentions incomplètes (arrêté du 31 mai 2021)', 'enlèvements aux mentions incomplètes (arrêté du 31 mai 2021)'), tone: 'danger', gap: true, href: registerHref(yearOf(incomplete), currentYear, 'mentions-incompletes') }
-      : { label: `Registre tenu · ${plural(entries.filter((e) => e.year === currentYear).length, `enlèvement inscrit en ${currentYear}`, `enlèvements inscrits en ${currentYear}`)}, mentions complètes`, tone: 'ok', gap: false, href: '/environnement' },
+      ? { ...counted(incomplete.length, '{n} removal with incomplete entries (order of 31 May 2021)', '{n} removals with incomplete entries (order of 31 May 2021)'), tone: 'danger', gap: true, href: registerHref(yearOf(incomplete), currentYear, 'mentions-incompletes') }
+      : { ...counted(entries.filter((e) => e.year === currentYear).length, 'Register kept · {n} removal entered in {year}, complete entries', 'Register kept · {n} removals entered in {year}, complete entries', { year: currentYear }), tone: 'ok', gap: false, href: '/environnement' },
   };
 });
 

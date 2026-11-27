@@ -70,6 +70,8 @@ describe('unitRiskTodos : alertes des unités au responsable QHSE du site de l�
     expect(find('Atelier A')).toEqual([{
       kind: RISK_TODO_KIND, who: '[A. Leroy]', ownerIds: ['lead-a'], siteId: 'site_a', date: '2026-10-09', tone: 'danger', overdue: true, count: 2,
       title: 'Atelier A · 2 risques ≥ 8 sans action de réduction', href: '/risques?unite=atelier',
+      // VG-N01 : intitulé composé, dont le français est `title`.
+      titleText: { en: '{unit} · {n} risks ≥ {threshold} without a reduction action', values: { unit: 'Atelier A', n: 2, threshold: 8 } },
     }]);
     expect(find('Zone B')).toEqual([
       expect.objectContaining({ who: '[B. Morel]', ownerIds: ['lead-b'], siteId: 'site_b', count: 1, title: 'Zone B · 1 risque au résiduel encore ≥ 8', href: '/risques?risque=4' }),

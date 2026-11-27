@@ -23,6 +23,7 @@ import { entryActionDefaults } from './action-defaults';
 import { withCurrent } from '@/lib/form-options';
 import { fill, type T } from '@/i18n/translate';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 
 export type StreamOption = Pick<StreamView,
   | 'id' | 'label' | 'ewcCode' | 'hazardous' | 'unit' | 'collector' | 'destination' | 'treatmentCode' | 'channel' | 'site' | 'siteId'
@@ -31,7 +32,7 @@ export type StreamOption = Pick<StreamView,
 /** Filière proposée pour un nouvel enlèvement : en service (DOC-09) et sur un site en service (DOC-20). */
 const offeredStream = (s: StreamOption) => !s.archived && !s.siteArchived;
 
-const BSD_OPTIONS = BSD_STATUS_KEYS.map((k) => [k, BSD_STATUS[k].label] as const);
+const BSD_OPTIONS = (t: T) => BSD_STATUS_KEYS.map((k) => [k, labelT(t)(BSD_STATUS[k].label)] as const);
 const QUALIFICATION_OPTIONS = QUALIFICATION_KEYS.map((k) => [k, TREATMENT_QUALIFICATIONS[k]] as const);
 const RECEIPT_HINT = 'Receipt of the waste transport declaration (R. 541-50); “Exempted” if not subject.';
 const NO_CARRIER: Carrier = { siret: null, address: null, receipt: null };
@@ -348,7 +349,7 @@ function EntryForm({ entry, streams: allStreams, today, showSite, transporters, 
             style={{ textTransform: 'uppercase' }} />
         </Field>
         <Field name="bsdStatus" label={t('Slip status')} hint={bsd.trim() ? t('Issued by default.') : undefined}>
-          <Select name="bsdStatus" options={BSD_OPTIONS} placeholder="—" value={bsdStatus} onChange={(e) => setBsdStatus(e.target.value)} disabled={!bsd.trim()} />
+          <Select name="bsdStatus" options={BSD_OPTIONS(t)} placeholder="—" value={bsdStatus} onChange={(e) => setBsdStatus(e.target.value)} disabled={!bsd.trim()} />
         </Field>
       </FormRow>
       {/* DOC-12 : refus total ou partiel par l'installation de destination. */}

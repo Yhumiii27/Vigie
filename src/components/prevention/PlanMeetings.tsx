@@ -11,6 +11,7 @@ import { MEETING_PERIOD_MAX_DAYS, MEETING_PERIOD_MIN_DAYS, PLAN_MEETING_KINDS, P
 import { SectionTitle, muted } from './parts';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 const KIND_OPTIONS = PLAN_MEETING_KIND_KEYS.map((k) => [k, PLAN_MEETING_KINDS[k]] as const);
 
@@ -42,7 +43,7 @@ export function PlanMeetings({ plan, editable, today }: { plan: PlanView; editab
           {plan.meetings.map((m) => (
             <li key={m.id} style={{ display: 'grid', gap: 3, fontSize: 12.5 }}>
               <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline', textDecoration: m.cancelled ? 'line-through' : undefined }}>
-                <strong style={{ fontWeight: 500 }}>{fmtDate(m.heldOn)}</strong>{m.kindLabel}
+                <strong style={{ fontWeight: 500 }}>{fmtDate(m.heldOn)}</strong>{labelT(t)(m.kindLabel)}
                 <span style={muted}>{m.participants}</span>
               </span>
               {m.notes && <span style={{ color: 'var(--color-neutral-300)', whiteSpace: 'pre-line', textWrap: 'pretty' }}>{m.notes}</span>}

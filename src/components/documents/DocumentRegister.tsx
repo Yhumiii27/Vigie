@@ -12,6 +12,7 @@ import type { DocumentRow, UnavailableDoc } from '@/lib/data/documents';
 import { DocumentPanel } from './DocumentPanel';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Props = {
   /** Documents du site sélectionné (la fiche reste ouverte même si un filtre masque la ligne). */
@@ -99,7 +100,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                     </button>
                   </td>
                   <td style={{ fontWeight: 500, minWidth: 200, textWrap: 'pretty' }}>{d.title}</td>
-                  <td style={{ color: muted, whiteSpace: 'nowrap' }}>{d.typeLabel}{d.subtype ? <span style={{ display: 'block', fontSize: 11 }}>{d.subtype}</span> : null}</td>
+                  <td style={{ color: muted, whiteSpace: 'nowrap' }}>{labelT(t)(d.typeLabel)}{d.subtype ? <span style={{ display: 'block', fontSize: 11 }}>{d.subtype}</span> : null}</td>
                   <td style={{ color: muted, whiteSpace: 'nowrap' }}>{d.processLabel}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {d.revInForce ? <span style={{ fontWeight: 500 }}>{d.revInForce}</span> : <span className="vg-muted">—</span>}
@@ -109,7 +110,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
                       </span>
                     )}
                   </td>
-                  <td><ToneTag tone={d.statusTone} style={{ whiteSpace: 'nowrap' }}>{d.statusLabel}</ToneTag></td>
+                  <td><ToneTag tone={d.statusTone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(d.statusLabel)}</ToneTag></td>
                   <td style={{ whiteSpace: 'nowrap' }}>{d.owner}</td>
                   <td style={{ whiteSpace: 'nowrap', color: d.overdue ? TONE.danger.dot : d.dueSoon ? TONE.warn.dot : 'var(--color-neutral-300)' }}>
                     {d.nextReviewOn ? fmtDate(d.nextReviewOn) : '—'}
@@ -125,7 +126,7 @@ export function DocumentRegister({ docs, shownIds, toolbar, emptyText, canManage
       </div>
 
       <Dialog open={!!doc} onClose={() => open(null)} width={900} title={doc?.title ?? ''}
-        kicker={doc ? `${doc.id} · ${doc.typeLabel} · ${doc.processLabel}` : undefined}>
+        kicker={doc ? `${doc.id} · ${labelT(t)(doc.typeLabel)} · ${doc.processLabel}` : undefined}>
         {doc && <DocumentPanel key={doc.id} doc={doc} canManage={canManage} actionForm={actionForm} suggestedDueOn={suggestedDueOn} />}
       </Dialog>
     </>

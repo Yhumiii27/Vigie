@@ -12,6 +12,7 @@ import {
   capitalize, dossierFindingActions, evalCount, fmtNum, fmtPct, followUpAside, fromMonth, plural, sectionCounter,
 } from './dossier-parts';
 import { DEFAULT_LANG, fill, makeT, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /**
  * Contenu du dossier : calculé (préparatoire), figé à la saisie du compte rendu (dossier de séance), figé au visa
@@ -72,7 +73,7 @@ export function DossierView({ page, role, notice, t = makeT(DEFAULT_LANG) }: {
           <nav aria-label={t('Other reviews')} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, fontSize: 12 }}>
             <span className="rd-muted">{t('Other reviews:')}</span>
             {others.map((o) => (
-              <a key={o.id} href={`/revue-de-direction?revue=${o.id}`} className="rd-link" title={o.statusLabel}>{o.kindShort} {fmtDate(o.reviewOn)}</a>
+              <a key={o.id} href={`/revue-de-direction?revue=${o.id}`} className="rd-link" title={labelT(t)(o.statusLabel)}>{o.kindShort} {fmtDate(o.reviewOn)}</a>
             ))}
           </nav>
         )}
@@ -724,7 +725,7 @@ export function DossierView({ page, role, notice, t = makeT(DEFAULT_LANG) }: {
             <tbody>
               {d.decisions.map((x) => (
                 <tr key={x.id}>
-                  <td><ToneTag tone={x.cancelled ? 'neutral' : x.tone} style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</ToneTag></td>
+                  <td><ToneTag tone={x.cancelled ? 'neutral' : x.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(x.kindLabel)}</ToneTag></td>
                   <td>
                     {/* AUD-36 : décision abandonnée après la séance, barrée avec son motif. */}
                     <span style={x.cancelled ? { textDecoration: 'line-through' } : undefined}>{x.text}</span>
@@ -802,7 +803,7 @@ function FindingGroups({ groups, role, t }: { groups: { label: string; findings:
                       const list = dossierFindingActions(f);
                       return (
                         <tr key={f.id}>
-                          <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{f.kindLabel}</ToneTag></td>
+                          <td><ToneTag tone={f.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(f.kindLabel)}</ToneTag></td>
                           <td>{f.text}{f.clause && <span className="rd-muted"> · {f.clause}</span>}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>
                             {list.length ? list.map((x, i) => <div key={x.id}>{i > 0 && <span className="vg-sr-only">, </span>}<Ref href={x.action?.href} role={role}>{x.id}</Ref></div>)

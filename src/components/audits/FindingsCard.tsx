@@ -21,12 +21,13 @@ import type { PlanFormOptions } from './ProgramTimeline';
 import styles from './audits.module.css';
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Opts = ActionFormOptions;
 type Editing = { id: number | null } | null;
 
-const KIND_OPTIONS = FINDING_KEYS.map((k) => [k, FINDING_KINDS[k].label, TONE[FINDING_KINDS[k].tone].dot] as const);
+const KIND_OPTIONS = (t: T) => FINDING_KEYS.map((k) => [k, labelT(t)(FINDING_KINDS[k].label), TONE[FINDING_KINDS[k].tone].dot] as const);
 
 /** Clé du groupe de constats : élément du programme, sinon libellé libre (même règle que readAudits). */
 const groupKey = (planItemId: number | null, audit: string) => (planItemId != null ? `p${planItemId}` : `l${audit}`);
@@ -143,12 +144,12 @@ export function FindingsCard({ groups, cancelled, auditOptions, canEdit, canCrea
             {t('Nature')}
             <select className="input" style={{ fontSize: 12, padding: '4px 8px', width: 'auto' }} value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="">{t('Any')}</option>
-              {FINDING_KEYS.map((k) => <option key={k} value={k}>{FINDING_KINDS[k].label}</option>)}
+              {FINDING_KEYS.map((k) => <option key={k} value={k}>{labelT(t)(FINDING_KINDS[k].label)}</option>)}
             </select>
           </label>
           {kind && (
             <button type="button" className="vg-chip is-on" onClick={() => setKind('')}>
-              {FINDING_KINDS[kind].label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only">{t(': remove this filter')}</span>
+              {labelT(t)(FINDING_KINDS[kind].label)}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only">{t(': remove this filter')}</span>
             </button>
           )}
         </div>
@@ -349,7 +350,7 @@ export function FindingForm({ finding, defaultPlanItemId, defaultAudit, audits, 
         </Field>
       </FormRow>
       <Field name="kind" label={t('Finding type')}>
-        <RadioSeg name="kind" options={KIND_OPTIONS} defaultValue={finding?.kind ?? 'ecart_mineur'} />
+        <RadioSeg name="kind" options={KIND_OPTIONS(t)} defaultValue={finding?.kind ?? 'ecart_mineur'} />
       </Field>
       <Field name="text" label={t('Finding')}>
         <TextArea name="text" defaultValue={finding?.text} rows={3} autoFocus />

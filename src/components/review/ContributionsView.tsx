@@ -13,6 +13,7 @@ import styles from './review.module.css';
 import { SaveStatus, safeCall } from '@/components/feedback';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 const muted = { fontSize: 11.5, color: 'var(--color-neutral-500)' } as const;
 
@@ -58,7 +59,7 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
       <CardHead title={fill(t('{kind} of {date}'), { kind: r.kind, date: fmtDate(r.reviewOn) })} aside={(
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Aside>{r.involvementLabel} · {fill(t('{done}/{total} items provided'), { done: provided, total: r.progress.total })}</Aside>
-          <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap' }}>{r.statusLabel}</ToneTag>
+          <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.statusLabel)}</ToneTag>
         </span>
       )} />
 
@@ -108,7 +109,7 @@ function ReviewEntry({ review: r, now, userId, focused }: { review: MyContributi
               <div className="vg-h6">{t('Decisions and objectives')}</div>
               {rec.decisions.map((d) => (
                 <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline' }}>
-                  <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
+                  <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{labelT(t)(d.kindLabel)}</ToneTag>
                   <span style={d.cancelled ? { textDecoration: 'line-through' } : undefined}>{d.text}</span>
                   {d.cancelled && <><span /><span style={muted}>{fill(t('Abandoned on {date} · reason: {reason}'), { date: fmtDate(d.cancelled.on), reason: d.cancelled.reason })}</span></>}
                   <span />

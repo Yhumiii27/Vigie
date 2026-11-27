@@ -1,4 +1,6 @@
 import 'server-only';
+import { composed, titled, type Msg } from '@/i18n/msg';
+import { labelMsg } from '@/i18n/labels';
 import { cache } from 'react';
 import { and, asc, desc, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -37,7 +39,12 @@ const NEEDS_ACTION = new Set<string>(REQUIREMENT_NEEDS_ACTION);
 const equipShort = (e: string) => e.split(' — ')[0];
 
 /** VEI-05 : « action A-12 vérifiée » / « action A-12 abandonnée » (intitulé d'une boucle à fermer). */
-const loopLabel = (l: LoopBack) => `action ${l.actionId} ${l.abandoned ? 'abandonnée' : 'vérifiée'}`;
+const loopText = (l: LoopBack): Msg => (l.abandoned ? { en: 'action {id} abandoned', values: { id: l.actionId } } : { en: 'action {id} verified', values: { id: l.actionId } });
+
+/** Résultat bloquant d'un contrôle, en minuscules dans un intitulé (« — défavorable le 12/10 »). */
+const BLOCKING_RESULT_TEXT: Partial<Record<ControlResult, Msg>> = {
+  defavorable: { en: 'unfavourable#lower' }, arret: { en: 'shutdown#lower' }, hors_tolerance: { en: 'out of tolerance#lower' },
+};
 
 /** Jour (AAAA-MM-JJ, heure de Paris) d'un horodatage d'archivage ou d'annulation. */
 const dayOf = parisDay;
@@ -53,13 +60,14 @@ const traceLabel = (verb: string, at: Date | null, by: string, reason: string | 
  * État calculé d'une exigence rattachée à un autre écran (DUERP, plans de prévention), affiché à côté de
  * l'évaluation du pilote, qui reste manuelle. `gap` : l'indicateur appelle l'évaluation « Écart ».
  */
-export type RequirementIndicator = { label: string; tone: Tone; href: string; gap: boolean };
+/** Indicateur rattaché à une exigence : `label` = français (règles, essais), `text` = libellé composé à l'affichage (VG-N01). */
+export type RequirementIndicator = { label: string; text?: Msg; tone: Tone; href: string; gap: boolean };
 
 function duerpIndicator(d: DuerpStatus, horizonDays: number): RequirementIndicator {
-  if (!d.version || !d.nextUpdateOn) return { label: 'Aucune version du DUERP en vigueur', tone: 'danger', href: d.href, gap: true };
-  if (d.overdue) return { label: `DUERP ${d.version} · mise à jour annuelle dépassée depuis le ${fmtDate(d.nextUpdateOn)}`, tone: 'danger', href: d.href, gap: true };
+  if (!d.version || !d.nextUpdateOn) return { ...composed('No version of the DUERP in force'), tone: 'danger', href: d.href, gap: true };
+  if (d.overdue) return { ...composed('DUERP {version} · annual update overdue since {date}', { version: d.version, date: fmtDate(d.nextUpdateOn) }), tone: 'danger', href: d.href, gap: true };
   const soon = d.daysToUpdate != null && d.daysToUpdate <= horizonDays;
-  return { label: `DUERP ${d.version} en vigueur · mise à jour avant le ${fmtDate(d.nextUpdateOn)}`, tone: soon ? 'warn' : 'ok', href: d.href, gap: false };
+  return { ...composed('DUERP {version} in force · update before {date}', { version: d.version, date: fmtDate(d.nextUpdateOn) }), tone: soon ? 'warn' : 'ok', href: d.href, gap: false };
 }
 
 /**
@@ -353,7 +361,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const who = [c.organization, c.responsibleId ? people.get(c.responsibleId)?.name : ''].filter(Boolean).join(' · ');
     const title = `${c.controlType} · ${lcfirst(equipShort(c.equipment))}`;
     const base = { kind: 'Contrôle', who, href: `/veille?onglet=controles&controle=${c.id}`, ownerIds: c.responsibleId ? [c.responsibleId] : undefined, siteId: c.siteId };
-    if (s.days < 0) todo.push({ ...base, date: now, dueOn: c.nextOn, tone: 'danger', overdue: true, title: `${title} — dépassé depuis le ${fmtDayMonth(c.nextOn)}` });
+    if (s.days < 0) todo.push({ ...base, date: now, dueOn: c.nextOn, tone: 'danger', overdue: true, ...titled('{title} — overdue since {date}', { title, date: fmtDayMonth(c.nextOn) }) });
     else if (c.nextOn <= ctrlHorizon) todo.push({ ...base, date: c.nextOn, dueOn: c.nextOn, tone: 'warn', title });
     // VEI-11 : dernier contrôle défavorable ou mise à l'arrêt, tant qu'un nouveau contrôle favorable n'est pas enregistré.
     const lastRecord = records.find((r) => r.controlId === c.id);
@@ -361,12 +369,12 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     if (lastRecord && lastRecord.performedOn === c.lastOn && isBlockingControlResult(result)) {
       todo.push({
         ...base, date: now, dueOn: c.lastOn, tone: 'danger', overdue: true, key: `controle-resultat|${c.id}|${c.lastOn}`,
-        title: `${title} — ${CONTROL_RESULTS[result as ControlResult].label.toLowerCase()} le ${fmtDayMonth(c.lastOn)} : nouveau contrôle favorable attendu`,
+        ...titled('{title} — {result} on {date}: new favourable check expected', { title, result: BLOCKING_RESULT_TEXT[result as ControlResult] ?? CONTROL_RESULTS[result as ControlResult].label.toLowerCase(), date: fmtDayMonth(c.lastOn) }),
       });
     }
     // Réserves sans action de levée : même urgence qu'un écart sans action (VEI-02).
     if (c.reserves && !c.actionId) {
-      todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${title} — réserves « ${c.reserves} » sans action de levée` });
+      todo.push({ ...base, date: now, tone: 'danger', overdue: true, ...titled('{title} — reservations “{reserves}” without a lifting action', { title, reserves: c.reserves }) });
     }
     // VEI-05 : action de levée close, réserves toujours inscrites : enregistrer le contrôle de levée (ou une nouvelle
     // action) ; au responsable de l'équipement, à défaut au responsable QHSE du site.
@@ -376,7 +384,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
       todo.push({
         ...base, ...(to ? { who: [c.organization, to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds } : {}),
         date: now, tone: 'warn', key: `veille-boucle|controle|${c.id}|${loop.actionId}`,
-        title: `${title} — ${loopLabel(loop)} : réserves « ${c.reserves} » à lever`,
+        ...titled('{title} — {loop}: reservations “{reserves}” to lift', { title, loop: loopText(loop), reserves: c.reserves ?? '' }),
       });
     }
   });
@@ -397,7 +405,7 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
     const dated = r.linkedTo !== 'duerp' && !followed.has(r.id);
     const loop = requirementLoopBack({ evaluation: r.evaluation, actionId: r.actionId, archived: false }, r.actionId ? actionStatus.get(r.actionId) : null);
     if (NEEDS_ACTION.has(r.evaluation) && !r.actionId) {
-      todo.push({ ...base, date: now, tone: 'danger', overdue: true, title: `${r.text} — ${r.evaluation === 'analyse' ? "analyse d'écart sans action" : 'écart sans action'}` });
+      todo.push({ ...base, date: now, tone: 'danger', overdue: true, ...(r.evaluation === 'analyse' ? titled('{text} — gap analysis without action', { text: r.text }) : titled('{text} — gap without action', { text: r.text })) });
     } else if (loop) {
       // VEI-05 : action liée close, exigence toujours en écart : réévaluer (ou ouvrir une nouvelle action) ; au pilote de
       // l'exigence, à défaut au responsable QHSE (site de l'exigence, sinon responsables des sites).
@@ -405,14 +413,16 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
       todo.push({
         ...base, ...(to ? { who: to.who, ownerIds: to.ownerIds } : {}),
         date: now, tone: 'warn', key: `veille-boucle|exigence|${r.id}|${loop.actionId}`,
-        title: `${r.text} — ${loopLabel(loop)} : ${r.evaluation === 'analyse' ? "analyse d'écart" : 'écart'} à réévaluer`,
+        ...(r.evaluation === 'analyse'
+          ? titled('{text} — {loop}: gap analysis to reassess', { text: r.text, loop: loopText(loop) })
+          : titled('{text} — {loop}: gap to reassess', { text: r.text, loop: loopText(loop) })),
       });
     } else if (r.evaluation === 'a_evaluer') {
-      todo.push({ ...base, date: now, tone: 'warn', title: `${r.text} — conformité à évaluer` });
+      todo.push({ ...base, date: now, tone: 'warn', ...titled('{text} — compliance to assess', { text: r.text }) });
     } else if (dated && r.dueOn && r.dueOn < now && !compliant) {
-      todo.push({ ...base, date: now, dueOn: r.dueOn, tone: 'danger', overdue: true, count: 0, title: `${r.text} — date d'application dépassée depuis le ${fmtDayMonth(r.dueOn)}` });
+      todo.push({ ...base, date: now, dueOn: r.dueOn, tone: 'danger', overdue: true, count: 0, ...titled('{text} — application date passed since {date}', { text: r.text, date: fmtDayMonth(r.dueOn) }) });
     } else if (dated && r.dueOn && r.dueOn <= horizon && !compliant) {
-      todo.push({ ...base, date: r.dueOn, dueOn: r.dueOn, tone: 'warn', count: 0, title: `${r.text} — applicable le ${fmtDayMonth(r.dueOn)}` });
+      todo.push({ ...base, date: r.dueOn, dueOn: r.dueOn, tone: 'warn', count: 0, ...titled('{text} — applicable on {date}', { text: r.text, date: fmtDayMonth(r.dueOn) }) });
     } else if (r.lastEvaluatedOn) {
       // VEI-18 : périodicité propre à l'exigence ; « annuelle » pour 12 mois (intitulé et clé inchangés par défaut).
       const months = requirementReviewMonths(r);
@@ -421,7 +431,10 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
         const late = reviewOn < now;
         todo.push({
           ...base, date: late ? now : reviewOn, dueOn: reviewOn, tone: 'warn', overdue: late || undefined, count: 0,
-          title: `${r.text} — ${months === REQUIREMENT_REVIEW_MONTHS ? 'réévaluation annuelle' : `réévaluation (tous les ${months} mois)`}${late ? ` en retard depuis le ${fmtDayMonth(reviewOn)}` : ''}`,
+          ...titled(late ? '{text} — {review} overdue since {date}' : '{text} — {review}', {
+            text: r.text, date: fmtDayMonth(reviewOn),
+            review: months === REQUIREMENT_REVIEW_MONTHS ? { en: 'annual reassessment' } : { en: 'reassessment (every {months} months)', values: { months } },
+          }),
         });
       }
     }
@@ -436,20 +449,20 @@ export const loadWatchSignals = cache(async (): Promise<{ badge?: number; todo: 
   let noticeBadge = 0;
   notices.filter((n) => keep(n.siteId)).forEach((n) => {
     const to = leads.forSite(n.siteId);
-    const label = SAFETY_NOTICE_KINDS[n.kind as SafetyNoticeKind]?.label ?? 'Observation';
+    const label = labelMsg(SAFETY_NOTICE_KINDS[n.kind as SafetyNoticeKind]?.label ?? 'Observation');
     const base = {
       kind: 'Registre de sécurité', who: [n.authority, to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: n.siteId,
       href: `/veille?onglet=registre&observation=${n.id}`, key: `registre-securite|${n.id}`,
     };
-    const what = `${label} (${n.authority}) du ${fmtDayMonth(n.receivedOn)}`;
+    const what: Msg = { en: '{label} ({authority}) of {date}', values: { label, authority: n.authority, date: fmtDayMonth(n.receivedOn) } };
     if (n.dueOn && n.dueOn < now) {
       noticeBadge += 1;
-      todo.push({ ...base, date: now, dueOn: n.dueOn, tone: 'danger', overdue: true, title: `${what} — réponse en retard depuis le ${fmtDayMonth(n.dueOn)}` });
+      todo.push({ ...base, date: now, dueOn: n.dueOn, tone: 'danger', overdue: true, ...titled('{what} — answer overdue since {date}', { what, date: fmtDayMonth(n.dueOn) }) });
     } else if (n.dueOn && n.dueOn <= horizon) {
       noticeBadge += 1;
-      todo.push({ ...base, date: n.dueOn, dueOn: n.dueOn, tone: n.kind === 'mise_en_demeure' ? 'danger' : 'warn', title: `${what} — réponse attendue avant le ${fmtDayMonth(n.dueOn)}` });
+      todo.push({ ...base, date: n.dueOn, dueOn: n.dueOn, tone: n.kind === 'mise_en_demeure' ? 'danger' : 'warn', ...titled('{what} — answer expected before {date}', { what, date: fmtDayMonth(n.dueOn) }) });
     } else if (!n.dueOn) {
-      todo.push({ ...base, date: now, tone: 'warn', count: 0, title: `${what} — réponse à apporter` });
+      todo.push({ ...base, date: now, tone: 'warn', count: 0, ...titled('{what} — answer to give', { what }) });
     }
   });
 

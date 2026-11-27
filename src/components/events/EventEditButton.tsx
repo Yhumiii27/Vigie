@@ -15,7 +15,8 @@ import { MpFields, type MpValues } from './MpFields';
 import { MP_TITLE, hasNcDisposition, hasNcOrigin, mentionsInjury } from '@/lib/rules/events';
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** Champs modifiables d'un événement (données simples transmises par la page serveur ; `knownAt` à l'heure de Paris). */
 export type EditableEvent = {
@@ -48,7 +49,7 @@ export type EventFieldOptions = {
 };
 export type ZoneOption = { id: number; name: string; siteId: string };
 
-const TYPE_OPTIONS = EVENT_TYPE_KEYS.map((k) => [k, EVENT_TYPES[k].label] as const);
+const TYPE_OPTIONS = (t: T) => EVENT_TYPE_KEYS.map((k) => [k, labelT(t)(EVENT_TYPES[k].label)] as const);
 const SEVERITY_OPTIONS = [1, 2, 3, 4].map((g) => [String(g), SEVERITY[g]] as const);
 const NC_OPTIONS = NC_ORIGINS.map((o) => [o, o] as const);
 const ASPECT_OPTIONS = ENV_ASPECTS.map((o) => [o, o] as const);
@@ -151,9 +152,9 @@ export function EventFields(props: FieldsProps) {
   const str = (v: string | number | null | undefined) => (v == null ? '' : String(v));
   // Rôle non habilité : un accident du travail enregistré garde son type (requalification par l'animateur QHSE ou la direction).
   // Maladie professionnelle (EVT-09) : proposée aux rôles habilités à la création seulement ; elle garde ensuite son type.
-  const typeOptions = !health && !create && e.type === 'AT' ? TYPE_OPTIONS.filter(([k]) => k === 'AT')
-    : !create && e.type === 'MP' ? TYPE_OPTIONS.filter(([k]) => k === 'MP')
-      : TYPE_OPTIONS.filter(([k]) => (create && health) || !(HEALTH_EVENT_TYPES as readonly string[]).includes(k));
+  const typeOptions = !health && !create && e.type === 'AT' ? TYPE_OPTIONS(t).filter(([k]) => k === 'AT')
+    : !create && e.type === 'MP' ? TYPE_OPTIONS(t).filter(([k]) => k === 'MP')
+      : TYPE_OPTIONS(t).filter(([k]) => (create && health) || !(HEALTH_EVENT_TYPES as readonly string[]).includes(k));
 
   return (
     <ActionForm action={create ? createEvent : saveEvent} onDone={onDone} onCancel={onCancel} hidden={props.mode === 'edit' ? { id: props.event.id, version: props.event.version } : undefined}

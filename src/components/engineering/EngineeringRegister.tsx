@@ -14,6 +14,7 @@ import { searchWith } from '@/lib/url-state';
 import { EcoDetail, EcoForm, EcrDetail, EcrForm, type EngineeringOptions } from './EngineeringPanels';
 import { fill } from '@/i18n/translate';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 
 // Registre des modifications techniques (D12, lot 5 de M-02) : onglets « Ordres de modification » et « Demandes de
 // modification », tableau filtré par état, fiche en fenêtre modale portée par l'URL (?sel=<numéro>, lien profond de Codex
@@ -124,10 +125,10 @@ export function EngineeringRegister({ tab, ecos, ecrs, versions, today, qhse, sh
                       <button type="button" className="vg-text-btn" style={{ fontSize: 12.5 }} onClick={() => open(e.id)}>{e.id}</button>
                       {showSite && <div style={{ ...muted, marginTop: 2 }}>{e.siteLabel}</div>}
                     </td>
-                    <td style={{ minWidth: 220, textWrap: 'pretty' }}>{e.title}<div style={{ ...muted, marginTop: 2 }}>{e.sourceLabel} · {fmtDate(e.raisedOn)}</div></td>
-                    <td style={{ color: 'var(--color-neutral-400)' }}>{e.typeLabel}</td>
+                    <td style={{ minWidth: 220, textWrap: 'pretty' }}>{e.title}<div style={{ ...muted, marginTop: 2 }}>{labelT(t)(e.sourceLabel)} · {fmtDate(e.raisedOn)}</div></td>
+                    <td style={{ color: 'var(--color-neutral-400)' }}>{labelT(t)(e.typeLabel)}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{e.fromRevision || '—'} → {e.toRevision || '—'}</td>
-                    <td><ToneTag tone={e.tone}>{e.statusLabel}</ToneTag>{e.locked && <div style={{ ...muted, marginTop: 2 }}>{t('Approved, dispositions to decide')}</div>}</td>
+                    <td><ToneTag tone={e.tone}>{labelT(t)(e.statusLabel)}</ToneTag>{e.locked && <div style={{ ...muted, marginTop: 2 }}>{t('Approved, dispositions to decide')}</div>}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {e.approvals.map((a) => <span key={a.key} style={{ marginRight: 6 }}><ToneTag tone={a.tone} style={{ fontSize: 11 }}>{a.label.split(' ')[0]} · {a.decisionLabel}</ToneTag></span>)}
                     </td>
@@ -151,11 +152,11 @@ export function EngineeringRegister({ tab, ecos, ecrs, versions, today, qhse, sh
                       <button type="button" className="vg-text-btn" style={{ fontSize: 12.5 }} onClick={() => open(r.id)}>{r.id}</button>
                       {showSite && <div style={{ ...muted, marginTop: 2 }}>{r.siteLabel}</div>}
                     </td>
-                    <td style={{ minWidth: 220, textWrap: 'pretty' }}>{r.title}<div style={{ ...muted, marginTop: 2 }}>{r.kindLabel}</div></td>
+                    <td style={{ minWidth: 220, textWrap: 'pretty' }}>{r.title}<div style={{ ...muted, marginTop: 2 }}>{labelT(t)(r.kindLabel)}</div></td>
                     <td style={{ color: 'var(--color-neutral-400)' }}>{r.subjectLabel}<div style={{ ...muted, marginTop: 2 }}>{r.refLabel}</div></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.sourceLabel}<div style={{ ...muted, marginTop: 2 }}>{r.requester} · {fmtDate(r.createdOn)}</div></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.sourceLabel)}<div style={{ ...muted, marginTop: 2 }}>{r.requester} · {fmtDate(r.createdOn)}</div></td>
                     <td>
-                      <ToneTag tone={r.tone}>{r.statusLabel}</ToneTag>
+                      <ToneTag tone={r.tone}>{labelT(t)(r.statusLabel)}</ToneTag>
                       {r.overdue && <div style={{ fontSize: 11.5, color: 'var(--tone-danger-fg)' }}>{fill(t('Decision expected since {date}'), { date: fmtDate(r.dueOn) })}</div>}
                     </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.ecoId ?? '—'}</td>
@@ -168,13 +169,13 @@ export function EngineeringRegister({ tab, ecos, ecrs, versions, today, qhse, sh
       </div>
 
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        {fill(t('Stages of an order: {stages} (released automatically when the three approvals and the dispositions are obtained). States of a request: {states}.'), { stages: ECO_FLOW.map((s) => ECO_STATUSES[s].label).join(' → '), states: Object.values(ECR_STATUSES).map((s) => s.label).join(', ') })}
+        {fill(t('Stages of an order: {stages} (released automatically when the three approvals and the dispositions are obtained). States of a request: {states}.'), { stages: ECO_FLOW.map((s) => labelT(t)(ECO_STATUSES[s].label)).join(' → '), states: Object.values(ECR_STATUSES).map((s) => s.label).join(', ') })}
       </p>
 
-      <Dialog open={!!eco} onClose={() => open(null)} width={900} title={eco ? `${eco.id} · ${eco.title}` : ''} kicker={eco ? `${t('Change order')} · ${eco.typeLabel}` : undefined}>
+      <Dialog open={!!eco} onClose={() => open(null)} width={900} title={eco ? `${eco.id} · ${eco.title}` : ''} kicker={eco ? `${t('Change order')} · ${labelT(t)(eco.typeLabel)}` : undefined}>
         {eco && <EcoDetail key={eco.id} e={eco} qhse={qhse} options={options} actionOptions={actionOptions} today={today} version={versions[eco.id]} onClose={() => open(null)} />}
       </Dialog>
-      <Dialog open={!!ecr} onClose={() => open(null)} width={760} title={ecr ? `${ecr.id} · ${ecr.title}` : ''} kicker={ecr ? `${t('Change request#engineering')} · ${ecr.sourceLabel}` : undefined}>
+      <Dialog open={!!ecr} onClose={() => open(null)} width={760} title={ecr ? `${ecr.id} · ${ecr.title}` : ''} kicker={ecr ? `${t('Change request#engineering')} · ${labelT(t)(ecr.sourceLabel)}` : undefined}>
         {ecr && <EcrDetail key={ecr.id} r={ecr} qhse={qhse} options={options} version={versions[ecr.id]} onOpen={(id) => open(engineeringKind(id) ? id : null)} onClose={() => open(null)} />}
       </Dialog>
       {qhse && options && (

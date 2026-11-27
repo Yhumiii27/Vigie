@@ -32,6 +32,8 @@ import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
+import { msgT } from '@/i18n/msg';
+import { labelT } from '@/i18n/labels';
 
 export const generateMetadata = () => screenMetadata('prevention');
 
@@ -156,7 +158,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
               <Icon name={r.ppFromFirstMinute ? 'ph-shield-warning' : 'ph-scales'} size={16} style={{ color: r.ppFromFirstMinute ? 'var(--color-accent)' : 'var(--color-neutral-500)', flex: 'none' }} />
               <span style={{ fontSize: 12.5, flex: 1, minWidth: 220, textWrap: 'pretty' }}>
                 {d.siteRules.length > 1 && <span style={{ color: 'var(--color-neutral-400)' }}>{r.label} · </span>}
-                <span style={{ fontWeight: 500 }}>{r.classLabel}</span>
+                <span style={{ fontWeight: 500 }}>{labelT(t)(r.classLabel)}</span>
                 <span style={{ color: 'var(--color-neutral-300)' }}> · {r.ruleLabel}</span>
               </span>
               {approve && <SiteRuleButton site={r} />}
@@ -204,7 +206,7 @@ export default async function PreventionPage({ searchParams }: PageProps<'/preve
                   <div style={{ display: 'grid', gap: 2, flex: 1, minWidth: 240 }}>
                     <span style={{ fontSize: 12.5 }}><span style={{ fontWeight: 500 }}>{p.contractor}</span> — {lcfirst(p.title)}</span>
                     <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', textWrap: 'pretty' }}>
-                      {p.id} · {p.location} · {fill(t('since {start}, ends on {end}'), { start: fmtDate(p.startOn), end: fmtDate(p.endOn) })} · {p.mandatoryShort} · {missingLabel(p, t)}
+                      {p.id} · {p.location} · {fill(t('since {start}, ends on {end}'), { start: fmtDate(p.startOn), end: fmtDate(p.endOn) })} · {msgT(t)(p.mandatoryShortText)} · {missingLabel(p, t)}
                       {permits.length > 0 && fill(t(' · permits {list} on this plan'), { list: permits.map((x) => `${x.id} (${x.requested ? t('requested') : t('issued')})`).join(', ') })}
                     </span>
                   </div>

@@ -11,6 +11,7 @@ import { saveConsumptionMonth } from '@/server/environment';
 import { CONSUMPTION_KINDS, fmtDelta, fmtNum, monthInitial, monthLong, monthShort, type ConsumptionKind } from '@/lib/rules/environment';
 import { Note, muted, rowOpener, shortSite } from './parts';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 type Consumption = EnvironmentData['consumption'];
@@ -38,14 +39,14 @@ function KindChart({ k, year }: { k: KindSummary; year: number }) {
     <div className="card" style={{ gap: 10, minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
         <span className="card-title" style={{ fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Icon name={k.icon} size={15} style={{ color: 'var(--color-neutral-400)' }} />{k.label}
+          <Icon name={k.icon} size={15} style={{ color: 'var(--color-neutral-400)' }} />{labelT(t)(k.label)}
         </span>
         <span style={{ fontSize: 11, color: 'var(--color-neutral-500)', fontVariantNumeric: 'tabular-nums' }} aria-live="polite">
           {bar ? <>{monthShort(bar.month)} · <span style={{ color: 'var(--color-text)' }}>{bar.value != null ? `${fmtNum(bar.value)} ${k.unit}` : t('not entered#reading')}</span></> : k.unit}
         </span>
       </div>
       {hasData ? (
-        <div role="img" aria-label={fill(t('{kind}, last 12 months: {values}'), { kind: k.label, values: k.bars.map((b) => `${monthLong(b.month)} ${b.value != null ? `${fmtNum(b.value)} ${k.unit}` : t('not entered#reading')}`).join(' ; ') })}
+        <div role="img" aria-label={fill(t('{kind}, last 12 months: {values}'), { kind: labelT(t)(k.label), values: k.bars.map((b) => `${monthLong(b.month)} ${b.value != null ? `${fmtNum(b.value)} ${k.unit}` : t('not entered#reading')}`).join(' ; ') })}
           style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gap: 2, alignItems: 'end' }}
           onMouseLeave={() => setHover(null)}>
           {k.bars.map((b, i) => (
@@ -109,7 +110,7 @@ export function ConsumptionPanel({ data, year, canManage, sites, showSite }: {
                 <thead>
                   <tr>
                     <th>{t('Month')}</th>
-                    {CONSUMPTION_KINDS.map((k) => <th key={k.key} style={{ textAlign: 'right' }}>{k.label} ({k.unit})</th>)}
+                    {CONSUMPTION_KINDS.map((k) => <th key={k.key} style={{ textAlign: 'right' }}>{labelT(t)(k.label)} ({k.unit})</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +189,7 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
   const existing = valuesFor(records, siteId, month);
   const hasExisting = /^\d{4}-\d{2}$/.test(month) && CONSUMPTION_KINDS.some((k) => existing[k.key] !== '');
   const cleared = CONSUMPTION_KINDS.filter((k) => existing[k.key] !== '' && values[k.key].trim() === '');
-  const clearedNames = cleared.map((k) => k.label.toLowerCase());
+  const clearedNames = cleared.map((k) => labelT(t)(k.label).toLowerCase());
   const clearedList = clearedNames.length > 1 ? `${clearedNames.slice(0, -1).join(', ')}${t(' and ')}${clearedNames.at(-1)}` : clearedNames[0];
 
   const reload = (s: string, m: string) => {
@@ -209,7 +210,7 @@ function MonthForm({ records, sites, siteId: initialSite, month: initialMonth, m
       </FormRow>
       <FormRow cols={3}>
         {CONSUMPTION_KINDS.map((k) => (
-          <Field key={k.key} name={k.key} label={`${k.label} (${k.unit})`}>
+          <Field key={k.key} name={k.key} label={`${labelT(t)(k.label)} (${k.unit})`}>
             <Input name={k.key} type="number" min={0} step="any" inputMode="decimal" value={values[k.key]}
               onChange={(e) => setValues((v) => ({ ...v, [k.key]: e.target.value }))} placeholder="—" />
           </Field>

@@ -25,6 +25,8 @@ import { withCurrent } from '@/lib/form-options';
 import { PermitLockouts } from './PermitLockouts';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -73,7 +75,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
   const firstMinute = !!rule?.ppFromFirstMinute;
   // Plan signé exigé pour délivrer : entreprise extérieure sur un site « dès la première minute », ou permis de feu d'une entreprise extérieure.
   const planRequired = permitNeedsSignedPlan({ type, contractorId: contractorId || null }, rule);
-  const requiredWhy = firstMinute ? fill(t('{basis}, plan from the first minute'), { basis: lcfirst(ruleBasis(rule)) }) : t('fire permit: dangerous work, order of 19 March 1993');
+  const requiredWhy = firstMinute ? fill(t('{basis}, plan from the first minute'), { basis: lcfirst(labelT(t)(ruleBasis(rule))) }) : t('fire permit: dangerous work, order of 19 March 1993');
   const fromDay = validFrom.slice(0, 10), toDay = validTo.slice(0, 10);
   const candidates = planCandidates(options.plans, siteId, contractorId, fromDay, toDay);
   const selected = options.plans.find((p) => p.id === planId);
@@ -120,7 +122,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
           {PERMIT_TYPE_KEYS.map((k) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12, padding: '5px 11px', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: permit && permit.type !== k ? 0.45 : 1 }}>
               <input type="radio" name="type" value={k} checked={type === k} disabled={!!permit && permit.type !== k} onChange={() => switchType(k)} />
-              <Icon name={PERMIT_TYPES[k].icon} size={13} />{PERMIT_TYPES[k].label}
+              <Icon name={PERMIT_TYPES[k].icon} size={13} />{labelT(t)(PERMIT_TYPES[k].label)}
             </label>
           ))}
         </div>
@@ -315,8 +317,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-        <ToneTag tone={permit.tone}>{permit.stateLabel}{permit.watching ? t(' · watch') : ''}</ToneTag>
-        <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{permit.typeLabel}</span>
+        <ToneTag tone={permit.tone}>{labelT(t)(permit.stateLabel)}{permit.watching ? t(' · watch') : ''}</ToneTag>
+        <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{labelT(t)(permit.typeLabel)}</span>
         {permit.planGap && <ToneTag tone="danger">{permit.status === 'demande' ? t('Request without a signed plan · gap') : t('External company without a signed plan · gap')}</ToneTag>}
         {permit.planGapWith && <span style={muted}>{fill(t('counted with the plan {id}, in gap'), { id: permit.planGapWith })}</span>}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
@@ -341,8 +343,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
               {permit.planGap && <strong style={{ fontWeight: 500 }}>{t('Intervention of an external company without a signed prevention plan.')} </strong>}
               {permit.planIssue}{' '}
               {requested
-                ? (permit.ruleReason ? fill(t('Issue impossible ({reason}).'), { reason: lcfirst(permit.ruleReason) }) : t('Issue impossible as long as the plan is not in order.'))
-                : permit.ruleReason ? `${permit.ruleReason}.` : ''}
+                ? (permit.ruleReason ? fill(t('Issue impossible ({reason}).'), { reason: lcfirst(permit.ruleReasonText ? msgT(t)(permit.ruleReasonText) : permit.ruleReason) }) : t('Issue impossible as long as the plan is not in order.'))
+                : permit.ruleReasonText ? `${msgT(t)(permit.ruleReasonText)}.` : ''}
             </span>
             {permit.plan && permit.planIssueKind === 'unsigned' && (
               <Link href={`/prevention?plan=${encodeURIComponent(permit.plan.id)}`} scroll={false} onClick={onLeave} className="vg-link" style={{ justifySelf: 'start' }}>
@@ -390,7 +392,7 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
               <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
               <span style={{ flex: 1, minWidth: 180 }}>{a.label}</span>
               <span style={muted}>{a.pilot} · {a.due}</span>
-              <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
+              <ToneTag tone={a.tone}>{labelT(t)(a.statusLabel)}</ToneTag>
             </div>
           ))}
           {permit.plan && permit.planActions > 0 && (
@@ -517,7 +519,7 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
                     <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{p.id}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <Icon name={p.icon} size={14} style={{ color: p.type === 'feu' ? 'var(--tone-warn-dot)' : 'var(--color-accent)' }} />{PERMIT_TYPES[p.type].short}
+                        <Icon name={p.icon} size={14} style={{ color: p.type === 'feu' ? 'var(--tone-warn-dot)' : 'var(--color-accent)' }} />{labelT(t)(PERMIT_TYPES[p.type].short)}
                       </span>
                     </td>
                     <td style={{ color: 'var(--color-neutral-400)', minWidth: 150, maxWidth: 220, textWrap: 'pretty' }}>{p.location}</td>
@@ -537,7 +539,7 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
                     <td style={{ whiteSpace: 'nowrap', color: p.watching ? 'var(--tone-warn-fg)' : 'var(--color-neutral-300)' }}>{p.watchLabel ?? <span style={muted}>—</span>}</td>
                     <td style={{ whiteSpace: 'nowrap', color: p.allChecked ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{done}/{p.checklist.length}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <ToneTag tone={p.tone}>{p.stateLabel}{p.watching ? t(' · watch') : ''}</ToneTag>
+                      <ToneTag tone={p.tone}>{labelT(t)(p.stateLabel)}{p.watching ? t(' · watch') : ''}</ToneTag>
                       {p.planGap && (
                         <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}
                           title={p.planGapWith ? fill(t('Same intervention as the plan {id}, in gap: counted only once.'), { id: p.planGapWith }) : undefined}>

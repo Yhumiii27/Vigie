@@ -22,6 +22,8 @@ import { SaveStatus, safeCall } from '@/components/feedback';
 import { TipButton } from '@/components/Tip';
 import { useI18n } from '@/i18n/client';
 import { fill, type Lang } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 type DialogState =
   | { type: 'zone' | 'route'; id: number }
@@ -243,7 +245,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   if (dialog?.type === 'zone' || dialog?.type === 'zone-new') {
     const zone = dialog.type === 'zone' ? zones.find((z) => z.id === dialog.id) : undefined;
     dialogTitle = zone ? zone.name : t('New zone');
-    dialogKicker = zone ? `${t('Zone')} · ${ZONE_KINDS[zone.kind].label}` : t('Site map · zone');
+    dialogKicker = zone ? `${t('Zone')} · ${labelT(t)(ZONE_KINDS[zone.kind].label)}` : t('Site map · zone');
     const done = (id?: number) => { setDialog(null); setTool('select'); setSelection(id ? { kind: 'zone', id } : null); };
     dialogBody = canManage
       ? <ZoneForm siteId={site.id} zone={zone} points={dialog.type === 'zone-new' ? dialog.points : undefined} activityCount={zone ? countIn(zone.id) : 0}
@@ -252,7 +254,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   } else if (dialog?.type === 'route' || dialog?.type === 'route-new') {
     const route = dialog.type === 'route' ? routes.find((r) => r.id === dialog.id) : undefined;
     dialogTitle = route ? route.name : t('New traffic route');
-    dialogKicker = route ? `${t('Route')} · ${ROUTE_KINDS[route.kind].label}${route.shared ? t(' · shared route') : ''}` : t('Site map · traffic route');
+    dialogKicker = route ? `${t('Route')} · ${labelT(t)(ROUTE_KINDS[route.kind].label)}${route.shared ? t(' · shared route') : ''}` : t('Site map · traffic route');
     const done = (id?: number) => { setDialog(null); setTool('select'); setSelection(id ? { kind: 'route', id } : null); };
     dialogBody = canManage
       ? <RouteForm siteId={site.id} route={route} points={dialog.type === 'route-new' ? dialog.points : undefined} activityCount={route ? countOn(route.id) : 0} onDone={done} onCancel={closeDialog} />
@@ -468,10 +470,10 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                     <button type="button" className={styles.conflictHead} aria-pressed={on} onClick={() => focusConflict(c)}>
                       <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                         <ToneTag tone={c.tone}>{c.tone === 'danger' ? t('Hazard') : t('Caution')}</ToneTag>
-                        <span className="tag tag-neutral">{c.pairLabel}</span>
+                        <span className="tag tag-neutral">{labelT(t)(c.pairLabel)}</span>
                       </span>
                       <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, textWrap: 'pretty' }}>
-                        {c.title}{c.place && <span style={{ fontWeight: 400, color: 'var(--color-neutral-400)' }}> · {c.place}</span>}
+                        {c.titleText.map(msgT(t)).join(' · ')}{c.place && <span style={{ fontWeight: 400, color: 'var(--color-neutral-400)' }}> · {c.place}</span>}
                       </span>
                       <span style={{ display: 'grid', gap: 3 }}>
                         {[c.a, c.b].map((id) => {
@@ -488,7 +490,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                       {details.length > 0 && (
                         <span style={{ display: 'grid', gap: 2 }}>
                           {details.map((r) => (
-                            <span key={`${r.code}-${r.zoneId ?? ''}-${r.routeId ?? ''}`} style={{ fontSize: 11.5, color: TONE[r.tone].fg }}>{r.label} : {r.detail}</span>
+                            <span key={`${r.code}-${r.zoneId ?? ''}-${r.routeId ?? ''}`} style={{ fontSize: 11.5, color: TONE[r.tone].fg }}>{fill(t('{label}: {value}'), { label: msgT(t)(r.labelText), value: r.detail })}</span>
                           ))}
                         </span>
                       )}
@@ -496,7 +498,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                     </button>
                     <details>
                       <summary className={styles.summary}><i className="ph ph-caret-right" aria-hidden />{fill(t('Recommended measures ({n})'), { n: c.measures.length })}</summary>
-                      <ul className={styles.measures} style={{ marginTop: 4 }}>{c.measures.map((m) => <li key={m}>{m}</li>)}</ul>
+                      <ul className={styles.measures} style={{ marginTop: 4 }}>{c.measureTexts.map((m, i) => <li key={c.measures[i]}>{msgT(t)(m)}</li>)}</ul>
                     </details>
                     {canManage && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -520,10 +522,10 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                     <div key={c.key} className={styles.conflict}>
                       <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
                         <ToneTag tone="ok"><Icon name="ph-shield-check" size={11} style={{ marginRight: 4 }} />{t('Controlled#f')}</ToneTag>
-                        <span className="tag tag-neutral">{c.pairLabel}</span>
+                        <span className="tag tag-neutral">{labelT(t)(c.pairLabel)}</span>
                       </span>
                       <span style={{ fontSize: 12.5, textWrap: 'pretty' }}>
-                        {c.title}{c.place && <span style={{ color: 'var(--color-neutral-400)' }}> · {c.place}</span>}
+                        {c.titleText.map(msgT(t)).join(' · ')}{c.place && <span style={{ color: 'var(--color-neutral-400)' }}> · {c.place}</span>}
                       </span>
                       <span style={{ fontSize: 12, color: 'var(--color-neutral-300)' }}>
                         {[c.a, c.b].map((id) => byId.get(id)?.title).filter(Boolean).join(' · ')}
@@ -534,7 +536,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                       <span style={muted}>{fill(t('Controlled on {date} by {name}'), { date: fmtDate(ctl.on), name: ctl.by })}</span>
                       {canManage && (
                         <ReasonButton label={t('Lift the control')} icon="ph-arrow-counter-clockwise" className="vg-text-btn" style={{ justifySelf: 'start', fontSize: 11.5 }}
-                          title={t('Lift the control of the situation')} kicker={c.title} action={releaseConflictControl} hidden={{ id: ctl.id }}
+                          title={t('Lift the control of the situation')} kicker={c.titleText.map(msgT(t)).join(' · ')} action={releaseConflictControl} hidden={{ id: ctl.id }}
                           submitLabel={t('Lift the control')} message={t('The situation is flagged again as long as it is detected. The measure taken and the reason stay in the map’s history.')}
                           placeholder={t('E.g. marking removed, hours changed')} />
                       )}
@@ -637,7 +639,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                   onClick={() => { openTarget({ kind: 'zone', id: z.id }); mapRef.current?.centerOn(centroid(z.polygon), 1.6); }}>
                   <span style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5 }}>
                     <span style={{ width: 10, height: 10, borderRadius: 2, flex: 'none', background: `color-mix(in srgb, ${ZONE_KINDS[z.kind].color} 35%, transparent)`, border: `1px solid ${ZONE_KINDS[z.kind].color}` }} />
-                    {z.name}<span style={muted}>· {ZONE_KINDS[z.kind].label}</span>
+                    {z.name}<span style={muted}>· {labelT(t)(ZONE_KINDS[z.kind].label)}</span>
                   </span>
                 </button>
               ))}
@@ -670,7 +672,7 @@ function ControlConflictButton({ siteId, conflict, names }: { siteId: string; co
   const { t } = useI18n();
   return (
     <DialogButton label={t('Mark as controlled')} icon="ph-shield-check" className="btn btn-secondary vg-btn-sm" title={t('Co-activity situation controlled')}
-      kicker={`${conflict.title} · ${fmtDate(conflict.date)}`} width={500}>
+      kicker={`${conflict.titleText.map(msgT(t)).join(' · ')} · ${fmtDate(conflict.date)}`} width={500}>
       {(close) => (
         <ActionForm action={controlConflict} hidden={{ siteId, date: conflict.date, key: conflict.key }} onDone={close} onCancel={close}
           submitLabel={t('Mark as controlled')} submitIcon="ph-shield-check">

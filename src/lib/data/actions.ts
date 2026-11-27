@@ -1,4 +1,5 @@
 import 'server-only';
+import { titled } from '@/i18n/msg';
 import { cache } from 'react';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
@@ -530,15 +531,15 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
     const qhse = leads.forSite(a.siteId);
     const lead = { who: qhse.who, href, ownerIds: qhse.ownerIds, siteId: a.siteId };
     if (isLate(a, now) && !lateCarried.has(a.id)) {
-      todo.push({ ...pilot, date: now, dueOn: a.dueOn, kind: 'Action en retard', tone: 'danger', overdue: true, title: `${a.id} · ${label} — échéance dépassée depuis le ${fmtDayMonth(a.dueOn)}` });
+      todo.push({ ...pilot, date: now, dueOn: a.dueOn, kind: 'Action en retard', tone: 'danger', overdue: true, ...titled('{id} · {label} — due date passed since {date}', { id: a.id, label, date: fmtDayMonth(a.dueOn) }) });
     } else if (isOpenAvancement(a.status) && a.dueOn >= now && a.dueOn <= horizon && !planActions.has(a.id)) {
       todo.push({ ...pilot, date: a.dueOn, dueOn: a.dueOn, kind: 'Action', tone: 'accent', title: `${a.id} · ${label}` });
     }
     if (isVerificationDueSoon(a, now)) {
-      todo.push({ ...lead, date: a.verifyDueOn!, dueOn: a.verifyDueOn!, kind: VERIFY_KIND, tone: 'accent', title: `${a.id} · ${label} — vérification d'efficacité` });
+      todo.push({ ...lead, date: a.verifyDueOn!, dueOn: a.verifyDueOn!, kind: VERIFY_KIND, tone: 'accent', ...titled('{id} · {label} — effectiveness check', { id: a.id, label }) });
     }
     if (isVerificationLate(a, now)) {
-      todo.push({ ...lead, date: now, dueOn: a.verifyDueOn!, kind: VERIFY_KIND, tone: 'danger', overdue: true, title: `${a.id} · ${label} — vérification d'efficacité dépassée depuis le ${fmtDayMonth(a.verifyDueOn!)}` });
+      todo.push({ ...lead, date: now, dueOn: a.verifyDueOn!, kind: VERIFY_KIND, tone: 'danger', overdue: true, ...titled('{id} · {label} — effectiveness check overdue since {date}', { id: a.id, label, date: fmtDayMonth(a.verifyDueOn!) }) });
     }
     if (isToComplete(a)) toComplete.set(a.siteId, (toComplete.get(a.siteId) ?? 0) + 1);
   }
@@ -547,7 +548,9 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
     todo.push({
       date: now, kind: TO_COMPLETE_KIND, tone: 'warn', siteId, who: r.who, ownerIds: r.ownerIds, href: TO_COMPLETE_HREF, count: n,
       key: `${TO_COMPLETE_KIND}|${siteId ?? 'sans-site'}|${n}`,
-      title: `Plan d'actions · ${n} action${n > 1 ? 's' : ''} à compléter (champs obligatoires manquants)`,
+      ...(n > 1
+        ? titled('Action plan · {n} actions to complete (mandatory fields missing)', { n })
+        : titled('Action plan · {n} action to complete (mandatory fields missing)', { n })),
     });
   }
   for (const { a, eventId } of followUps) {
@@ -556,7 +559,7 @@ export const loadActionSignals = cache(async (): Promise<{ badge?: number; todo:
     const r = leads.forSite(ev.siteId);
     todo.push({
       date: now, kind: CLOSED_EVENT_KIND, tone: 'warn', siteId: ev.siteId, who: r.who, ownerIds: r.ownerIds, href: `/evenements?sel=${enc(ev.id)}`,
-      title: `${ev.id} · action de suite ${a.id} — décider d'une réouverture`,
+      ...titled('{event} · follow-up action {id} — decide on a reopening', { event: ev.id, id: a.id }),
     });
   }
   return { todo };

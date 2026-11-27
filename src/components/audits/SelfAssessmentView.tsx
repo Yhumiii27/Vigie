@@ -24,6 +24,7 @@ import {
 } from '@/server/self-assessment';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Auto-évaluation par référentiel (AUD-40) : vue « Auto-évaluation » de l'écran Audits. Liste des campagnes du site
 // sélectionné (et d'entreprise), fiche d'une campagne (synthèse par article, comparaison avec la précédente, évaluation de
@@ -44,7 +45,7 @@ function NewCampaignButton({ assessors, sites, today }: { assessors: readonly Op
         <ActionForm action={saveSelfAssessment} submitLabel={t('Open the campaign')} onCancel={close}
           onDone={(s) => { close(); if (s.id) router.push(selfAssessmentHref(s.id), { scroll: false }); }}>
           <FormRow>
-            <Field name="standard" label={t('Standard')}><Select name="standard" options={ASSESSMENT_STANDARD_KEYS.map((k) => [k, ASSESSMENT_STANDARDS[k].short] as const)} defaultValue="iso45001" /></Field>
+            <Field name="standard" label={t('Standard')}><Select name="standard" options={ASSESSMENT_STANDARD_KEYS.map((k) => [k, labelT(t)(ASSESSMENT_STANDARDS[k].short)] as const)} defaultValue="iso45001" /></Field>
             <Field name="siteId" label={t('Site')} hint={t('“All sites”: campaign for the whole company.')}><Select name="siteId" options={sites} /></Field>
           </FormRow>
           <FormRow>
@@ -75,7 +76,7 @@ function CampaignList({ rows, openId }: { rows: AssessmentSummary[]; openId?: st
               <td>{r.standardLabel}</td>
               <td>{r.site}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.assessedOn)}</td>
-              <td><ToneTag tone={r.statusTone as Tone}>{r.statusLabel}</ToneTag></td>
+              <td><ToneTag tone={r.statusTone as Tone}>{labelT(t)(r.statusLabel)}</ToneTag></td>
               <td><ToneTag tone={rateTone(r.synthesis.overall.rate)}>{pct(r.synthesis.overall.rate)}</ToneTag></td>
               <td>{r.previous ? <span>{fmtDelta(r.delta)} <span style={muted}>{fill(t('vs {id}'), { id: r.previous.id })}</span></span> : <span style={muted}>{t('First campaign')}</span>}</td>
             </tr>
@@ -132,7 +133,7 @@ function LineForm({ line, onDone }: { line: AssessmentLineView; onDone: () => vo
   return (
     <ActionForm action={saveAssessmentLine} hidden={{ lineId: line.id, version: line.version }} onDone={onDone} onCancel={onDone}>
       <Field name="level" label={t('Compliance level')}>
-        <Select name="level" options={CONFORMITY_LEVEL_KEYS.map((k) => [k, CONFORMITY_LEVELS[k].label] as const)} placeholder={t('To evaluate')} defaultValue={line.level ?? ''} />
+        <Select name="level" options={CONFORMITY_LEVEL_KEYS.map((k) => [k, labelT(t)(CONFORMITY_LEVELS[k].label)] as const)} placeholder={t('To evaluate')} defaultValue={line.level ?? ''} />
       </Field>
       <Field name="justification" label={t('Justification')} hint={t('Required for “Not applicable” and “Non-compliant”.')}>
         <TextArea name="justification" rows={2} maxLength={2000} defaultValue={line.justification} />
@@ -152,8 +153,8 @@ function LineRow({ detail, line, editable, canCreate, actionOptions }: { detail:
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <span className="tag tag-outline" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace' }}>{line.clause}</span>
         <span style={{ fontSize: 12.5, fontWeight: line.main ? 500 : 400, flex: 1, minWidth: 180 }}>{line.heading}</span>
-        <ToneTag tone={line.levelTone as Tone}>{line.levelLabel}</ToneTag>
-        {line.previousLevel && line.previousLevel !== line.level && <span style={muted}>{t('previous: ')}{CONFORMITY_LEVELS[line.previousLevel].label.toLowerCase()}</span>}
+        <ToneTag tone={line.levelTone as Tone}>{labelT(t)(line.levelLabel)}</ToneTag>
+        {line.previousLevel && line.previousLevel !== line.level && <span style={muted}>{t('previous: ')}{labelT(t)(CONFORMITY_LEVELS[line.previousLevel].label).toLowerCase()}</span>}
       </div>
       {(line.justification || line.finding) && (
         <div style={{ fontSize: 12, color: 'var(--color-neutral-300)', display: 'grid', gap: 2, textWrap: 'pretty' }}>
@@ -198,9 +199,9 @@ function CampaignSheet({ detail, canEdit, canCreate, assessors, actionOptions }:
   const pending = detail.synthesis.overall.counts.pending;
   return (
     <div className="card" style={{ gap: 12 }}>
-      <CardHead title={`${detail.id} · ${ASSESSMENT_STANDARDS[detail.standard].label}`} aside={
+      <CardHead title={`${detail.id} · ${labelT(t)(ASSESSMENT_STANDARDS[detail.standard].label)}`} aside={
         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <ToneTag tone={detail.statusTone as Tone}>{detail.statusLabel}</ToneTag>
+          <ToneTag tone={detail.statusTone as Tone}>{labelT(t)(detail.statusLabel)}</ToneTag>
           <a href={selfAssessmentPrintHref(detail.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />{t('Print')}</a>
           <Link href={selfAssessmentHref()} scroll={false} className="btn btn-ghost vg-btn-sm">{t('Close')}</Link>
         </span>
@@ -287,14 +288,14 @@ function Catalogue({ rows, canCatalogue }: { rows: CatalogueRow[]; canCatalogue:
         const list = rows.filter((r) => r.standard === std);
         return (
           <section key={std} style={{ display: 'grid', gap: 4 }}>
-            <h3 style={{ fontSize: 13, margin: '8px 0 0' }}>{ASSESSMENT_STANDARDS[std].label}</h3>
+            <h3 style={{ fontSize: 13, margin: '8px 0 0' }}>{labelT(t)(ASSESSMENT_STANDARDS[std].label)}</h3>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 2 }}>
               {list.map((r) => (
                 <li key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5, opacity: r.archived ? 0.7 : 1 }}>
                   <span className="tag tag-outline" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace' }}>{r.clause}</span>
                   <span style={{ flex: 1, minWidth: 160 }}>{r.heading}{r.archived && <span style={muted}>{fill(t(' · archived on {date}#f'), { date: fmtDate(r.archived.on) })}</span>}</span>
                   {canCatalogue && !r.archived && (
-                    <DialogButton label={t('Edit')} className="vg-text-btn" title={fill(t('Requirement {clause}'), { clause: r.clause })} kicker={ASSESSMENT_STANDARDS[std].short}>
+                    <DialogButton label={t('Edit')} className="vg-text-btn" title={fill(t('Requirement {clause}'), { clause: r.clause })} kicker={labelT(t)(ASSESSMENT_STANDARDS[std].short)}>
                       {(close) => (
                         <ActionForm action={saveAssessmentRequirement} hidden={{ id: r.id, version: r.version }} onDone={close} onCancel={close}>
                           <Field name="heading" label={t('Short heading')} hint={t('Written for Vigie: do not copy the text of the standard.')}><Input name="heading" maxLength={HEADING_MAX} defaultValue={r.heading} /></Field>
@@ -321,7 +322,7 @@ function Catalogue({ rows, canCatalogue }: { rows: CatalogueRow[]; canCatalogue:
           {(close) => (
             <ActionForm action={saveAssessmentRequirement} onDone={close} onCancel={close}>
               <FormRow>
-                <Field name="standard" label={t('Standard')}><Select name="standard" options={ASSESSMENT_STANDARD_KEYS.map((k) => [k, ASSESSMENT_STANDARDS[k].short] as const)} /></Field>
+                <Field name="standard" label={t('Standard')}><Select name="standard" options={ASSESSMENT_STANDARD_KEYS.map((k) => [k, labelT(t)(ASSESSMENT_STANDARDS[k].short)] as const)} /></Field>
                 <Field name="clause" label={t('Clause')} hint={t('E.g. 7.1.4')}><Input name="clause" maxLength={12} /></Field>
               </FormRow>
               <Field name="heading" label={t('Short heading')} hint={t('Written for Vigie: do not copy the text of the standard.')}><Input name="heading" maxLength={HEADING_MAX} /></Field>

@@ -17,6 +17,8 @@ import { CARD_IDS, cardAllowed } from '@/lib/dashboard-cards';
 import { canReadDgi } from '@/lib/rules/dgi';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 // TDB-17 : titre d'onglet de la page.
 export const generateMetadata = () => screenMetadata('dashboard');
@@ -134,9 +136,9 @@ export default async function DashboardPage() {
                     <div style={{ fontSize: 11, color: item.overdue ? TONE.danger.dot : 'var(--color-neutral-500)', textTransform: 'uppercase' }}>{fmtMonthAbbr(item.date)}</div>
                   </div>
                   <div style={{ display: 'grid', gap: 3, minWidth: 0 }}>
-                    <TodoLink item={{ key: item.key, href: item.href, elsewhere: item.elsewhere, read: item.read }} markRead style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{item.title}</TodoLink>
+                    <TodoLink item={{ key: item.key, href: item.href, elsewhere: item.elsewhere, read: item.read }} markRead style={{ fontSize: 12.5, color: 'var(--color-text)', textDecoration: 'none' }}>{item.titleText ? msgT(t)(item.titleText) : item.title}</TodoLink>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-neutral-500)' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Dot color={TONE[item.tone].dot} size={6} />{item.kind}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Dot color={TONE[item.tone].dot} size={6} />{labelT(t)(item.kind)}</span>
                       <span>{[item.who, item.siteLabel].filter(Boolean).join(' · ')}</span>
                     </div>
                   </div>
@@ -164,7 +166,7 @@ export default async function DashboardPage() {
                       <ClickRow key={e.id} href={href}>
                         <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}><Link href={href}>{e.id}</Link></td>
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDayMonth(e.occurredOn)}</td>
-                        <td><ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag></td>
+                        <td><ToneTag tone={e.typeTone}>{labelT(t)(e.typeLabel)}</ToneTag></td>
                         <td>{e.title}</td>
                         {/* TDB-15 : site du signalement en vue « Tous les sites ». */}
                         {!d.scoped && <td style={{ whiteSpace: 'nowrap' }}>{e.siteLabel}</td>}

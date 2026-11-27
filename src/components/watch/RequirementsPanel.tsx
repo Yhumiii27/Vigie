@@ -474,7 +474,7 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
         <Input name="legifranceUrl" type="url" defaultValue={r?.legifranceUrl ?? ''} placeholder="https://www.legifrance.gouv.fr/…" maxLength={500} />
       </Field>
       <Field name="linkedTo" label={t('Linked indicator')}
-        hint={isRequirementLink(r?.linkedTo) ? REQUIREMENT_LINKS[r.linkedTo].hint : t('Optional: the state of the requirement is then taken from an indicator computed by Vigie (one indicator per requirement in force).')}>
+        hint={isRequirementLink(r?.linkedTo) ? labelT(t)(REQUIREMENT_LINKS[r.linkedTo].hint) : t('Optional: the state of the requirement is then taken from an indicator computed by Vigie (one indicator per requirement in force).')}>
         <Select name="linkedTo" options={LINK_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} value={linkedTo} onChange={(e) => setLinkedTo(e.target.value)} placeholder={t('No indicator')} />
       </Field>
       {linkedTo === 'certification' && (

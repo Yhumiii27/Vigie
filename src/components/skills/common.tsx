@@ -9,6 +9,7 @@ import { SKILL_STATES, type SkillState } from '@/lib/domain';
 import type { ArchivedRecord, RenewalInfo, SkillCell, TrainingTitle } from '@/lib/data/skills';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Éléments partagés par les composants de l'écran Habilitations et formations.
 // Plan d'actions : aucun recyclage ni formation ne donne lieu à une action QSE (réponses du service QHSE du 15/10/2026,
@@ -73,7 +74,7 @@ export function RenewalLink({ renewal, showDue = true }: { renewal: RenewalInfo;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       <Link href={actionHref(renewal.id)} className="vg-link" style={{ fontSize: 12.5 }}>{renewal.id}</Link>
-      <ToneTag tone={renewal.tone} style={{ padding: '1px 7px' }}>{renewal.statusLabel}</ToneTag>
+      <ToneTag tone={renewal.tone} style={{ padding: '1px 7px' }}>{labelT(t)(renewal.statusLabel)}</ToneTag>
       {showDue && <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fill(t('target date {date}'), { date: fmtDate(renewal.dueOn) })} · {renewal.pilot}</span>}
     </span>
   );

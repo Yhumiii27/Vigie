@@ -1,5 +1,9 @@
+'use client';
+
 import Link from 'next/link';
 import { hrefWith } from '@/components/ui';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 
 type Option = readonly [string, string];
 
@@ -21,19 +25,20 @@ export function FilterBar({ path, base, fields, detail = [] }: {
   /** Paramètres de fiche ouverte (DETAIL_PARAMS) retirés quand un filtre change. */
   detail?: readonly string[];
 }) {
+  const { t } = useI18n();
   const values = Object.fromEntries(fields.map((f) => [f.name, f.value || undefined]));
   const params = { ...base, ...values };
   const reset = Object.fromEntries(detail.map((d) => [d, undefined]));
   const labelOf = (f: FilterField) => ('search' in f ? `« ${f.value} »` : f.options.find(([v]) => v === f.value)?.[1] ?? f.value);
   const chips = fields.filter((f) => f.value).map((f) => ({
-    key: f.name, label: `${f.label} : ${labelOf(f)}`, href: hrefWith(path, params, { ...reset, [f.name]: undefined }),
+    key: f.name, label: fill(t('{label}: {value}'), { label: f.label, value: labelOf(f) ?? '' }), href: hrefWith(path, params, { ...reset, [f.name]: undefined }),
   }));
   const active = chips.length > 0;
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <details className="vg-filters" open={active || undefined}>
         <summary className="vg-filters-summary">
-          <i className="ph ph-funnel" aria-hidden />Filtres{active ? ` · ${chips.length}` : ''}
+          <i className="ph ph-funnel" aria-hidden />{t('Filters')}{active ? ` · ${chips.length}` : ''}
         </summary>
         <form action={path} className="vg-filters-form">
           {Object.entries(base).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
@@ -44,15 +49,15 @@ export function FilterBar({ path, base, fields, detail = [] }: {
                 <input type="search" name={f.name} className="input" defaultValue={f.value ?? ''} placeholder={f.placeholder} maxLength={100} />
               ) : (
                 <select name={f.name} className="input" defaultValue={f.value ?? ''}>
-                  <option value="">{f.all ?? 'Tous'}</option>
+                  <option value="">{f.all ?? t('All#mplural')}</option>
                   {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               )}
             </label>
           ))}
           <div className="vg-filters-actions">
-            <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-check" style={{ fontSize: 13 }} aria-hidden />Filtrer</button>
-            {active && <Link href={hrefWith(path, base, reset)} scroll={false} className="vg-link">Réinitialiser</Link>}
+            <button type="submit" className="btn btn-secondary vg-btn-sm"><i className="ph ph-check" style={{ fontSize: 13 }} aria-hidden />{t('Filter#verb')}</button>
+            {active && <Link href={hrefWith(path, base, reset)} scroll={false} className="vg-link">{t('Reset')}</Link>}
           </div>
         </form>
       </details>
@@ -60,7 +65,7 @@ export function FilterBar({ path, base, fields, detail = [] }: {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {chips.map((c) => (
             <Link key={c.key} href={c.href} scroll={false} className="vg-chip is-on">
-              {c.label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only"> : retirer ce filtre</span>
+              {c.label}<i className="ph ph-x" style={{ fontSize: 11 }} aria-hidden /><span className="vg-sr-only">{t(': remove this filter')}</span>
             </Link>
           ))}
         </div>

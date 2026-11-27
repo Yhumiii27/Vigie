@@ -13,6 +13,7 @@ import type { EnvAction } from '@/lib/data/environment';
 import { fmtSiret, isEuVatNumber, isSiret, normalizeSiret } from '@/lib/siret';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** Listes du formulaire d'action : fournies au service QHSE seulement, seul à créer une action (ACT-22). */
 export type ActionOptions = ActionFormOptions;
@@ -68,7 +69,7 @@ export function LinkedActions({ actions, options, defaults, canAct, empty }: {
         <span style={muted}>{empty ?? t('No linked action.')}</span>
       ) : actions.map((a) => (
         <Link key={a.id} href={actionHref(a.id)} className="vg-link"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, minWidth: 0 }} title={`${a.statusLabel} · ${a.pilot} · ${fill(t('target date {date}'), { date: fmtDate(a.dueOn) })}`}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, minWidth: 0 }} title={`${labelT(t)(a.statusLabel)} · ${a.pilot} · ${fill(t('target date {date}'), { date: fmtDate(a.dueOn) })}`}>
           <Dot color={TONE[a.tone].dot} size={6} />
           <span style={{ whiteSpace: 'nowrap' }}>{a.id}</span>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-neutral-300)' }}>{a.label}</span>
