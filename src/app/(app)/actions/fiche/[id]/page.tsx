@@ -102,9 +102,9 @@ export default async function ActionPrintPage({ params }: PageProps<'/actions/fi
         ]} />
       </Section>
 
-      <Section num={4} title={t('Source')}>
+      <Section num={4} title={t('Source#origin')}>
         <Meta rows={[
-          [t('Source'), l(d.sourceLabel)],
+          [t('Source#origin'), l(d.sourceLabel)],
           ...(d.originRef ? [[t('Origin reference'), d.originRef] as [string, ReactNode]] : []),
           ...(d.follows ? [[t('Follow-up of'), `${d.follows.id}${d.follows.label ? ` · ${d.follows.label}` : ''} (${reason(FOLLOW_REASONS[d.follows.reason])})`] as [string, ReactNode]] : []),
           ...d.followUps.map((f) => [t('Followed up by'), `${f.id} · ${f.label} (${reason(FOLLOW_REASONS[f.reason])}) · ${l(f.statusLabel)}`] as [string, ReactNode]),

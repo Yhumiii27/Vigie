@@ -232,7 +232,7 @@ export const SKILLS_FR: Record<string, string> = {
   'E.g. return after the end of an assignment': 'Ex. retour après fin de mission',
   'Employee who left · view only': 'Salarié sorti · consultation seule',
   'Titles of {name}': 'Titres de {name}',
-  All: 'Tous',
+  'All#mplural': 'Tous',
   'Training or renewal planned': 'Formation ou recyclage planifié',
   'Search an employee, a job, a department…': 'Rechercher un salarié, un poste, un service…',
   'Search an employee': 'Rechercher un salarié',

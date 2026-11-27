@@ -107,7 +107,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
 
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
-    { key: undefined, label: t('All'), n: searched.length },
+    { key: undefined, label: t('All#mplural'), n: searched.length },
     ...(types.length > 1 ? [{ key: type, label: types.map((k) => EVENT_TYPES[k].label).join(' + '), n: types.reduce((n, k) => n + counts[k], 0) }] : []),
     ...typeKeys.map((k) => ({ key: k, label: EVENT_TYPES[k].label, n: counts[k] })),
   ];
@@ -172,8 +172,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
           </form>
           <div>
             <SegLinks options={[
-              tabLink('ouverts', t('Open'), inTab.ouverts.length),
-              tabLink('tous', t('All'), inTab.tous.length),
+              tabLink('ouverts', t('Open#plural'), inTab.ouverts.length),
+              tabLink('tous', t('All#mplural'), inTab.tous.length),
               tabLink('classes', t('Dismissed'), inTab.classes.length),
             ]} />
           </div>

@@ -17,7 +17,7 @@ import { fill } from '@/i18n/translate';
 
 type Filter = 'all' | 'vigie' | 'grid' | 'ignore' | 'checked';
 // Libellés : chaînes sources (VG-N01), rendues par t().
-const FILTERS: [Filter, string][] = [['all', 'All'], ['vigie', 'Vigie fields'], ['grid', 'Form grid'], ['ignore', 'Ignored#plural'], ['checked', 'Ticked boxes']];
+const FILTERS: [Filter, string][] = [['all', 'All#mplural'], ['vigie', 'Vigie fields'], ['grid', 'Form grid'], ['ignore', 'Ignored#plural'], ['checked', 'Ticked boxes']];
 
 /** Champs de Vigie à renseigner pour créer un plan (signalés s'ils ne sont alimentés par aucun champ). */
 const ESSENTIAL: PpTarget[] = ['contractorName', 'title', 'location', 'startOn', 'endOn', 'estimatedHours'];

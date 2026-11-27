@@ -194,7 +194,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
         {d.status === 'abandonnee' && d.cancelReason && <p className="vg-block-text">{fill(t('Reason: {reason}'), { reason: d.cancelReason })}</p>}
       </Block>
 
-      <Block title={t('Source')}>
+      <Block title={t('Source#origin')}>
         <div className="vg-source-line">
           <Icon name={d.sourceIcon} size={13} />
           <span>{labelT(t)(d.sourceLabel)}</span>

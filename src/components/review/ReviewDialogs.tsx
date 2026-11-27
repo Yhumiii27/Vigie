@@ -43,7 +43,7 @@ export function ItemForm({ reviewId, version, item, people, canDelete, onClose }
         <Field name="label" label={t('Review input item')} hint={t('E.g. Supplier performance, Internal audit results.')}>
           <Input name="label" defaultValue={item?.label} maxLength={160} autoFocus />
         </Field>
-        <Field name="source" label={t('Source')}
+        <Field name="source" label={t('Source#origin')}
           hint={auto ? t('Computed by Vigie: provided as soon as the data of the section exist in the file.') : t('Item handed in by a contributor, ticked on receipt.')}>
           <Select name="source" options={SOURCE_OPTIONS} defaultValue={item?.source ?? 'manuel'} onChange={(e) => setSource(e.target.value)} />
         </Field>

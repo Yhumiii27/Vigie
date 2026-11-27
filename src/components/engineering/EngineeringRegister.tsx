@@ -37,7 +37,7 @@ type Props = {
 
 type EcoFilter = 'ouverts' | 'approbation' | 'liberes' | 'tous';
 type EcrFilter = 'a_decider' | 'acceptees' | 'toutes';
-const ECO_FILTERS: [EcoFilter, string][] = [['ouverts', 'Open#plural'], ['approbation', 'In approval'], ['liberes', 'Released#plural'], ['tous', 'All']];
+const ECO_FILTERS: [EcoFilter, string][] = [['ouverts', 'Open#plural'], ['approbation', 'In approval'], ['liberes', 'Released#plural'], ['tous', 'All#mplural']];
 const ECR_FILTERS: [EcrFilter, string][] = [['a_decider', 'To decide'], ['acceptees', 'Accepted#fplural'], ['toutes', 'All#fplural']];
 
 const ecoMatch = (e: EcoView, f: EcoFilter) =>

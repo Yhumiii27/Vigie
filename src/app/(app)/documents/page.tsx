@@ -88,7 +88,7 @@ export default async function DocumentsPage({ searchParams }: PageProps<'/docume
           style={{ fontSize: 12.5, minHeight: 30, padding: '5px 10px 5px 30px' }} />
       </form>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {[{ key: undefined as string | undefined, label: t('All'), n: byType.length }, ...types.map(([k, label]) => ({ key: k, label, n: byType.filter((d) => d.typeCode === k).length }))].map((f) => (
+        {[{ key: undefined as string | undefined, label: t('All#mplural'), n: byType.length }, ...types.map(([k, label]) => ({ key: k, label, n: byType.filter((d) => d.typeCode === k).length }))].map((f) => (
           <Link key={f.label} href={hrefWith(PATH, params, { type: f.key })} scroll={false} className={`vg-chip${type === f.key ? ' is-on' : ''}`}>
             {f.label}<span style={{ opacity: 0.6 }}>{f.n}</span>
           </Link>
