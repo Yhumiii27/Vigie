@@ -385,7 +385,7 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
           return (
             <div key={c.key} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, flexWrap: 'wrap' }}>
               <span className="vg-dot" style={{ width: 7, height: 7, background: TONE[c.tone].dot, alignSelf: 'center' }} />
-              <span>{c.title}</span>
+              <span>{c.titleText.map(msgT(t)).join(' · ')}</span>
               <span style={muted}>{other ? fill(t('with “{title}”'), { title: other.title }) : t('with another activity')}{c.place ? ` · ${c.place}` : ''}</span>
             </div>
           );

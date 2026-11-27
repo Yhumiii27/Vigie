@@ -125,6 +125,20 @@ export const SHARED_FR: Record<string, string> = {
   '{rule} · from the first minute': '{rule} · dès la première minute',
   'any work': 'toute intervention',
 
+  // Coactivité (src/lib/rules/coactivity.ts : motifs et mesures composés, affichage seulement)
+  'Same zone': 'Même zone',
+  'Proximity ({m} m)': 'Proximité ({m} m)',
+  'Proximity (adjacent zones)': 'Proximité (zones contiguës)',
+  'Shared access route': "Voie d'accès commune",
+  'Crossing of a work area': 'Traversée de zone de travail',
+  'Update of the prevention plans concerned ({ids})': 'Mise à jour des plans de prévention concernés ({ids})',
+  '{basis}: written and signed plan from the first minute': '{basis} : plan écrit et signé dès la première minute',
+  'mandatory plan, R. 4512-7': 'plan obligatoire, R. 4512-7',
+  'Plans {ids} to have signed by both companies before any work ({why})': 'Plans {ids} à faire signer par les deux entreprises avant toute intervention ({why})',
+  'Plan {ids} to have signed by both companies before any work ({why})': 'Plan {ids} à faire signer par les deux entreprises avant toute intervention ({why})',
+  'Written and signed prevention plan to draw up before any work ({teams}): {basis}, from the first minute': 'Plan de prévention écrit et signé à établir avant toute intervention ({teams}) : {basis}, dès la première minute',
+  'Prevention plan to draw up with {teams}': 'Plan de prévention à établir avec {teams}',
+
   // Connecteurs, boîte de réception, file d'envoi (SitesManager)
   'Vigie reads the common registers in the views published by the other tools (read only). Sites and assignments are cached and read again every night; projects and suppliers are read at each entry.':
     'Vigie lit les référentiels communs dans les vues publiées par les autres outils (lecture seule). Les sites et les affectations sont gardés en cache et relus chaque nuit ; les projets et les fournisseurs sont lus à chaque saisie.',

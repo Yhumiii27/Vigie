@@ -413,6 +413,17 @@ export const LABEL_EN: Record<string, string> = {
   'Inspection du travail': 'Labour inspectorate',
   'CARSAT (prévention de la sécurité sociale)': 'CARSAT (social security prevention)',
   'Autre organisme habilité': 'Other authorised body',
+  // Coactivité de la carte du site (PAIR_LABEL, mesures recommandées de src/lib/rules/coactivity.ts)
+  'Coactivité EU / EE': 'Co-activity host / external company',
+  'Entre entreprises extérieures': 'Between external companies',
+  'Balisage et séparation physique des zones de travail': 'Marking and physical separation of the work areas',
+  'Plan de circulation et sens unique sur la voie commune': 'Traffic plan and one-way on the shared route',
+  'Horaires décalés pour les opérations incompatibles': 'Staggered hours for incompatible operations',
+  "Signaleur / guide pour les manœuvres de véhicules et d'engins": 'Banksman / guide for the manoeuvres of vehicles and machines',
+  "Consignation de la zone traversée (accès interdit pendant l'intervention, voie déviée)": 'Lockout of the crossed area (access forbidden during the work, route diverted)',
+  'Permis de feu : écarter les équipes voisines, écrans de protection et surveillance après travaux': 'Hot work permit: keep neighbouring teams away, protective screens and monitoring after the work',
+  "Zone ATEX / essais : aucune source d'inflammation, essais suspendus pendant l'intervention": 'ATEX / test area: no ignition source, tests suspended during the work',
+  'Information croisée des équipes (accueil sécurité, point de coactivité quotidien)': 'Cross-information of the teams (safety induction, daily co-activity meeting)',
   // Rôles (ROLE_KEYS)
   'Animateur QHSE': 'QHSE coordinator',
   Direction: 'Management#role',
