@@ -10,6 +10,7 @@ import { loadPrevention, type PermitView } from '@/lib/data/prevention';
 import '../../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/permis/[id]'>): Promise<Metadata> {
   const [{ id }, { t }] = await Promise.all([params, getI18n()]);
@@ -96,10 +97,10 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
       </div>
 
       <header className="pp-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · {permit.typeLabel}</div>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · {labelT(t)(permit.typeLabel)}</div>
         <div className="pp-head-row">
           <h1>{permit.id} · {permit.location}</h1>
-          <span className="tag tag-neutral">{permit.stateLabel}</span>
+          <span className="tag tag-neutral">{labelT(t)(permit.stateLabel)}</span>
         </div>
         <div className="pp-muted" style={{ fontSize: 12.5 }}>{permit.site} · {fill(t('printed on {date}'), { date: printedOn })}</div>
         <div className={`pp-banner${state.tone === 'neutral' ? '' : ` pp-banner-${state.tone}`}`}>{state.text}</div>
@@ -156,7 +157,7 @@ export default async function PermitPrintPage({ params }: PageProps<'/prevention
                   <td>{l.id} · {l.energyLabel}<div className="pp-muted">{l.equipment}</div></td>
                   <td>{l.points.map((p) => (p.device ? `${p.label} (${p.device})` : p.label)).join(' ; ')}</td>
                   <td>{l.applier} · {l.verifier}</td>
-                  <td>{l.statusLabel}{l.verifiedLabel ? <div className="pp-muted">{fill(t('verified on {date}'), { date: l.verifiedLabel })}</div> : null}{l.removedLabel ? <div className="pp-muted">{fill(t('removed on {date}'), { date: l.removedLabel })}</div> : null}</td>
+                  <td>{labelT(t)(l.statusLabel)}{l.verifiedLabel ? <div className="pp-muted">{fill(t('verified on {date}'), { date: l.verifiedLabel })}</div> : null}{l.removedLabel ? <div className="pp-muted">{fill(t('removed on {date}'), { date: l.removedLabel })}</div> : null}</td>
                 </tr>
               ))}
             </tbody>

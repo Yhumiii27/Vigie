@@ -40,7 +40,7 @@ function KanbanColumn({ column: c }: { column: KanbanColumnData }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, alignContent: 'start' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 2px 4px' }}>
-        <Dot color={TONE[c.tone].dot} /><span style={{ fontSize: 12, fontWeight: 500 }}>{c.label}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{c.cards.length}</span>
+        <Dot color={TONE[c.tone].dot} /><span style={{ fontSize: 12, fontWeight: 500 }}>{labelT(t)(c.label)}</span><span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{c.cards.length}</span>
       </div>
       {cards.map((a) => <KanbanCard key={a.id} a={a} step={c.key === 'en_cours' || c.key === 'en_retard'} />)}
       {hidden > 0 && (

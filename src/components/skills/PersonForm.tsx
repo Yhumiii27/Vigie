@@ -12,6 +12,7 @@ import { reinstatePerson, savePerson, setPersonLeft } from '@/server/skills';
 import { CURSUS_PEOPLE_NOTICE, PERSON_CATEGORIES, type PersonCategory } from '@/lib/integration-labels';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Props = {
   /** Fiche modifiée (D01, décision CV-10 : aucune création dans Vigie, les personnes viennent de Cursus). */
@@ -90,7 +91,7 @@ function CursusFacts({ person, siteLabel }: { person: Person; siteLabel: string 
         {person.siteMatricule && fact(t('Site employee number'), person.siteMatricule)}
         {fact(t('Job'), person.job)}
         {fact(t('Home site'), siteLabel)}
-        {fact(t('Category'), person.category ? PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category : null)}
+        {fact(t('Category'), person.category ? labelT(t)(PERSON_CATEGORIES[person.category as PersonCategory]?.label ?? person.category) : null)}
         {person.company && fact(t('Agency or company'), person.company)}
         {fact(t('E-mail published by Cursus'), person.cursusEmail)}
         {person.leftOn && fact(t('Departure from the workforce'), `${fmtDate(person.leftOn)}${person.leftReason ? ` · ${person.leftReason}` : ''}`)}

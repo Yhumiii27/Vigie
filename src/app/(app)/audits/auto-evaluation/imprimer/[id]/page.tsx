@@ -42,7 +42,7 @@ export default async function SelfAssessmentPrintPage({ params }: PageProps<'/au
         <dl className="pp-meta">
           <dt>{t('Date')}</dt><dd>{fmtDate(d.assessedOn)}</dd>
           <dt>{t('Assessor')}</dt><dd>{d.assessor}</dd>
-          <dt>{t('State')}</dt><dd>{d.statusLabel}{d.closedOn ? fill(t(' on {date}'), { date: fmtDate(d.closedOn) }) : ''}</dd>
+          <dt>{t('State')}</dt><dd>{labelT(t)(d.statusLabel)}{d.closedOn ? fill(t(' on {date}'), { date: fmtDate(d.closedOn) }) : ''}</dd>
           <dt>{t('Compliance')}</dt><dd>{pct(d.synthesis.overall.rate)}{d.previous ? fill(t(' ({delta} compared with {id} of {date})'), { delta: fmtDelta(d.delta), id: d.previous.id, date: fmtDate(d.previous.assessedOn) }) : ''}</dd>
           {d.scope && <><dt>{t('Scope')}</dt><dd>{d.scope}</dd></>}
         </dl>
@@ -73,7 +73,7 @@ export default async function SelfAssessmentPrintPage({ params }: PageProps<'/au
             {d.lines.map((l) => (
               <tr key={l.id}>
                 <td>{l.clause} · {l.heading}</td>
-                <td>{l.levelLabel}</td>
+                <td>{labelT(t)(l.levelLabel)}</td>
                 <td>{[l.justification, l.finding].filter(Boolean).join(' — ') || '—'}</td>
                 <td>{[l.files.length ? fill(l.files.length > 1 ? t('{n} pieces of evidence') : t('{n} piece of evidence'), { n: l.files.length }) : '', ...l.actions.map((a) => a.id)].filter(Boolean).join(', ') || '—'}</td>
               </tr>

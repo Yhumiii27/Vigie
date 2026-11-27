@@ -63,7 +63,7 @@ export function SafetyRegisterPanel({ rows, canManage, canApprove, options, toda
                   {fmtDate(r.receivedOn)}
                   {showSite && <div style={{ ...muted, marginTop: 2 }}>{r.siteLabel}</div>}
                 </td>
-                <td><ToneTag tone={r.cancelled ? 'neutral' : r.tone} style={{ whiteSpace: 'nowrap' }}>{r.kindLabel}</ToneTag></td>
+                <td><ToneTag tone={r.cancelled ? 'neutral' : r.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.kindLabel)}</ToneTag></td>
                 <td style={{ whiteSpace: 'nowrap' }}>{r.authority}{r.reference && <div style={{ ...muted, marginTop: 2 }}>{r.reference}</div>}</td>
                 <td style={{ color: 'var(--color-neutral-300)', maxWidth: 360, textWrap: 'pretty' }}>
                   {r.text}
@@ -77,7 +77,7 @@ export function SafetyRegisterPanel({ rows, canManage, canApprove, options, toda
         </table>
       </div>
       <Dialog open={!!sel} onClose={close} width={640} kicker={sel ? `${t('Safety register')} · ${sel.siteLabel}` : undefined}
-        title={sel ? `${sel.kindLabel} · ${sel.authority}` : ''}>
+        title={sel ? `${labelT(t)(sel.kindLabel)} · ${sel.authority}` : ''}>
         {sel && <NoticeDetail key={sel.id} n={sel} canManage={canManage} canApprove={canApprove} options={options} today={today} onClose={close} />}
       </Dialog>
     </div>
@@ -104,7 +104,7 @@ function NoticeDetail({ n, canManage, canApprove, options, today, onClose }: {
   return (
     <>
       <Facts items={[
-        [t('Nature'), <ToneTag key="k" tone={n.cancelled ? 'neutral' : n.tone}>{n.kindLabel}</ToneTag>],
+        [t('Nature'), <ToneTag key="k" tone={n.cancelled ? 'neutral' : n.tone}>{labelT(t)(n.kindLabel)}</ToneTag>],
         [t('Received on'), fmtDate(n.receivedOn)],
         [t('Issuer'), n.authority],
         !!n.reference && [t('Reference'), n.reference],
@@ -133,7 +133,7 @@ function NoticeDetail({ n, canManage, canApprove, options, today, onClose }: {
           </button>
           <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setView('modifier')}><i className="ph ph-pencil-simple" aria-hidden />{t('Edit')}</button>
           {canApprove && (
-            <ReasonButton label={t('Cancel the entry#wrong')} icon="ph-prohibit" title={t('Cancel the observation')} kicker={`${n.kindLabel} · ${n.authority}`}
+            <ReasonButton label={t('Cancel the entry#wrong')} icon="ph-prohibit" title={t('Cancel the observation')} kicker={`${labelT(t)(n.kindLabel)} · ${n.authority}`}
               action={cancelSafetyNotice} hidden={{ id: n.id }} submitLabel={t('Cancel the observation')} submitIcon="ph-prohibit"
               message={t('Wrong entry: the observation is never deleted; it stays in the register, struck through, with its reason, and leaves the deadlines.')}
               placeholder={t('E.g. duplicate, entered on the wrong site')} onDone={() => setNotice(t('Observation cancelled.'))} />

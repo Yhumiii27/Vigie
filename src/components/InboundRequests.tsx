@@ -6,6 +6,7 @@ import { ReasonButton } from './ReasonDialog';
 import { ToneTag } from './ui';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Demandes reçues des autres outils (D13, décision CV-08) : historique en lecture sur la fiche d'une NC, refus à prendre
 // en compte dans l'onglet « Connecteurs ». Composant du navigateur (traduction par useI18n), rendu par la fiche serveur et
@@ -30,7 +31,7 @@ export function InboundItem({ r, canAcknowledge, showTarget }: { r: InboundView;
     <li style={{ display: 'grid', gap: 2, fontSize: 12.5, padding: '6px 0', borderBottom: '1px solid var(--color-divider)' }}>
       <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <span>{showTarget ? `${r.targetRef} · ` : ''}{r.summary}</span>
-        <ToneTag tone={r.statusTone} style={{ fontSize: 11, marginLeft: 'auto' }}>{r.statusLabel}</ToneTag>
+        <ToneTag tone={r.statusTone} style={{ fontSize: 11, marginLeft: 'auto' }}>{labelT(t)(r.statusLabel)}</ToneTag>
       </span>
       {r.comment && <span style={{ color: 'var(--color-neutral-300)', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{r.comment}</span>}
       {r.result && (

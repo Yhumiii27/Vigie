@@ -76,7 +76,7 @@ function CampaignList({ rows, openId }: { rows: AssessmentSummary[]; openId?: st
               <td>{r.standardLabel}</td>
               <td>{r.site}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.assessedOn)}</td>
-              <td><ToneTag tone={r.statusTone as Tone}>{r.statusLabel}</ToneTag></td>
+              <td><ToneTag tone={r.statusTone as Tone}>{labelT(t)(r.statusLabel)}</ToneTag></td>
               <td><ToneTag tone={rateTone(r.synthesis.overall.rate)}>{pct(r.synthesis.overall.rate)}</ToneTag></td>
               <td>{r.previous ? <span>{fmtDelta(r.delta)} <span style={muted}>{fill(t('vs {id}'), { id: r.previous.id })}</span></span> : <span style={muted}>{t('First campaign')}</span>}</td>
             </tr>
@@ -153,7 +153,7 @@ function LineRow({ detail, line, editable, canCreate, actionOptions }: { detail:
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <span className="tag tag-outline" style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace' }}>{line.clause}</span>
         <span style={{ fontSize: 12.5, fontWeight: line.main ? 500 : 400, flex: 1, minWidth: 180 }}>{line.heading}</span>
-        <ToneTag tone={line.levelTone as Tone}>{line.levelLabel}</ToneTag>
+        <ToneTag tone={line.levelTone as Tone}>{labelT(t)(line.levelLabel)}</ToneTag>
         {line.previousLevel && line.previousLevel !== line.level && <span style={muted}>{t('previous: ')}{labelT(t)(CONFORMITY_LEVELS[line.previousLevel].label).toLowerCase()}</span>}
       </div>
       {(line.justification || line.finding) && (
@@ -201,7 +201,7 @@ function CampaignSheet({ detail, canEdit, canCreate, assessors, actionOptions }:
     <div className="card" style={{ gap: 12 }}>
       <CardHead title={`${detail.id} · ${labelT(t)(ASSESSMENT_STANDARDS[detail.standard].label)}`} aside={
         <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <ToneTag tone={detail.statusTone as Tone}>{detail.statusLabel}</ToneTag>
+          <ToneTag tone={detail.statusTone as Tone}>{labelT(t)(detail.statusLabel)}</ToneTag>
           <a href={selfAssessmentPrintHref(detail.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm"><Icon name="ph-printer" size={13} />{t('Print')}</a>
           <Link href={selfAssessmentHref()} scroll={false} className="btn btn-ghost vg-btn-sm">{t('Close')}</Link>
         </span>

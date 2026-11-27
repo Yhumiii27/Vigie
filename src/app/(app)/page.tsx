@@ -17,6 +17,7 @@ import { CARD_IDS, cardAllowed } from '@/lib/dashboard-cards';
 import { canReadDgi } from '@/lib/rules/dgi';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // TDB-17 : titre d'onglet de la page.
 export const generateMetadata = () => screenMetadata('dashboard');
@@ -164,7 +165,7 @@ export default async function DashboardPage() {
                       <ClickRow key={e.id} href={href}>
                         <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}><Link href={href}>{e.id}</Link></td>
                         <td style={{ whiteSpace: 'nowrap' }}>{fmtDayMonth(e.occurredOn)}</td>
-                        <td><ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag></td>
+                        <td><ToneTag tone={e.typeTone}>{labelT(t)(e.typeLabel)}</ToneTag></td>
                         <td>{e.title}</td>
                         {/* TDB-15 : site du signalement en vue « Tous les sites ». */}
                         {!d.scoped && <td style={{ whiteSpace: 'nowrap' }}>{e.siteLabel}</td>}

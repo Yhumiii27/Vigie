@@ -4,11 +4,19 @@ import {
   ENV_MEDIA, EVENT_DISMISSED, EVENT_STEPS, EVENT_TRANSITIONS, EVENT_TYPES, FINDING_KINDS, FOLLOW_REASONS, METHODS, NC_DISPOSITIONS, NC_ORIGINS,
   SEVERITY, VERIFY_METHODS, VICTIM_KINDS, RISK_LEVELS, RISK_FLAGS, PROGRAM_STATES, DUERP_ACCESS_CHANNELS, REQUIREMENT_EVAL, REQUIREMENT_LINKS,
   CONTROL_RESULTS, CONTROL_CATEGORIES, SAFETY_NOTICE_KINDS, CHANGE_KINDS, CHANGE_STATUS, SKILL_STATES, ROLE_KEYS, REVIEW_SOURCES, REVIEW_KINDS,
-  REVIEW_DECISION_KINDS, CONTEXT_KINDS, PLAN_ITEM_STATES, MEASURE_LINK_KINDS,
+  REVIEW_DECISION_KINDS, CONTEXT_KINDS, PLAN_ITEM_STATES, MEASURE_LINK_KINDS, REVIEW_STATUS, REVIEW_FOLLOW_UP, SKILL_FILTERS,
 } from '@/lib/domain';
+import { KANBAN_COLUMNS, VERIFIED_ALL_LABEL } from '@/lib/action-rules';
+import { ENTITY_FILE_KINDS } from '@/lib/entity-files';
+import { DGI_STATES } from '@/lib/rules/dgi';
+import { DOC_STATUS, REVISION_STATUS } from '@/lib/rules/documents';
+import { ECO_DECISIONS, ECR_STATUSES } from '@/lib/rules/engineering';
+import { LOCKOUT_STATUSES } from '@/lib/rules/lockouts';
+import { STUDY_STATUS } from '@/lib/rules/process-safety';
+import { INDUCTION_LABELS } from '@/lib/rules/workers';
 import { HEALTH_RESTRICTED, HEALTH_RESTRICTED_HINT, INJURIES } from '@/lib/rules/events';
-import { BSD_STATUS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS } from '@/lib/rules/environment';
-import { COMPANY_RULE_REASON, DANGEROUS_WORK_HINT, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, SEVESO_LEVELS, START_GAP_LABEL, ruleBasis, sevesoLabel } from '@/lib/rules/prevention';
+import { BSD_STATUS, CONSUMPTION_KINDS, TREATMENT_CODES, TREATMENT_QUALIFICATIONS } from '@/lib/rules/environment';
+import { PLAN_CONTENT, PLAN_CONTENT_GROUPS, COMPANY_RULE_REASON, DANGEROUS_WORK_HINT, PERMIT_STATE, PERMIT_TYPES, PLAN_STATUS, SEVESO_LEVELS, START_GAP_LABEL, ruleBasis, sevesoLabel } from '@/lib/rules/prevention';
 import { ROUTE_KINDS, TEAMS, ZONE_KINDS } from '@/lib/rules/sitemap';
 import { OBJECTIVE_INDICATORS } from '@/lib/objectives';
 import { ASSESSMENT_STANDARDS, CONFORMITY_LEVELS } from '@/lib/rules/self-assessment';
@@ -82,6 +90,14 @@ const TABLES: Record<string, readonly string[]> = {
     ...Object.values(EFFECTIVITY_DISPOSITIONS).map((x) => x.label),
   ],
   DASHBOARD_CARDS: [...Object.values(CARD_PERIODS).map((x) => x.label), ...Object.values(DASHBOARD_CARDS).flatMap((x) => [x.label, x.hint])],
+  OTHERS: [
+    ...Object.values(REVIEW_STATUS), ...Object.values(REVIEW_FOLLOW_UP), ...Object.values(KANBAN_COLUMNS), ...Object.values(SKILL_FILTERS),
+    ...Object.values(ENTITY_FILE_KINDS), ...Object.values(DGI_STATES), ...Object.values(DOC_STATUS), ...Object.values(REVISION_STATUS),
+    ...Object.values(ECO_DECISIONS), ...Object.values(ECR_STATUSES), ...CONSUMPTION_KINDS, ...Object.values(LOCKOUT_STATUSES),
+    ...Object.values(STUDY_STATUS), ...Object.values(INDUCTION_LABELS), ...Object.values(PLAN_CONTENT_GROUPS),
+  ].map((x) => (x as { label: string }).label),
+  VERIFIED_ALL_LABEL: [VERIFIED_ALL_LABEL],
+  PLAN_CONTENT: PLAN_CONTENT.flatMap((c) => [c.label, c.short, c.hint, c.placeholder]),
   CONNECTORS: [
     ...Object.values(SOURCES), ...Object.values(MATRIX_SITE_STATES), ...Object.values(CURSUS_TITLE_STATES), ...Object.values(CURSUS_PERSON_STATES),
     ...Object.values(PERSON_CATEGORIES), ...Object.values(SYNC_STATUSES), ...Object.values(INBOUND_STATUSES), ...Object.values(OUTBOUND_STATUSES),

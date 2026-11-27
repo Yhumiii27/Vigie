@@ -22,6 +22,7 @@ import styles from './review.module.css';
 import { SaveStatus, safeCall } from '@/components/feedback';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Editing =
   | { kind: 'item'; id: number | null }
@@ -106,7 +107,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           aside={review ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <Aside>{review.kindShort} {fmtDate(review.reviewOn)} · {fill(t('{done}/{total} items provided'), { done: provided, total: list.length })}</Aside>
-              <ToneTag tone={review.statusTone} style={{ whiteSpace: 'nowrap' }}>{review.statusLabel}</ToneTag>
+              <ToneTag tone={review.statusTone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(review.statusLabel)}</ToneTag>
             </span>
           ) : <Aside>{t('No review planned')}</Aside>} />
         {review?.status === 'annulee' && (
@@ -148,7 +149,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
           // Échéance de la revue au programme annuel (AUD-01).
           <div style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>
             {programme ? (
-              <>{t('In the programme: ')}<Link href={`/audits?annee=${programme.year}&element=${programme.id}`} scroll={false} className="vg-link">{programme.label}</Link> · {programme.stateLabel}</>
+              <>{t('In the programme: ')}<Link href={`/audits?annee=${programme.year}&element=${programme.id}`} scroll={false} className="vg-link">{programme.label}</Link> · {labelT(t)(programme.stateLabel)}</>
             ) : t('Outside the annual programme')}
           </div>
         )}
@@ -199,7 +200,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
             <div className="vg-h6">{t('Decisions and objectives')}</div>
             {decisions.map((d) => (
               <div key={d.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '2px 8px', alignItems: 'baseline', fontSize: 12.5 }}>
-                <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{d.kindLabel}</ToneTag>
+                <ToneTag tone={d.cancelled ? 'neutral' : d.tone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{labelT(t)(d.kindLabel)}</ToneTag>
                 {/* AUD-36 : décision abandonnée après la séance, barrée (consultation seule). */}
                 {d.cancelled ? <span style={{ textDecoration: 'line-through', color: 'var(--color-neutral-400)' }}>{d.text}</span> : edit ? (
                   <button type="button" className={styles.textBtn} onClick={() => setEditing({ kind: 'decision', id: d.id })} title={t('Edit')}>{d.text}</button>
@@ -302,7 +303,7 @@ export function ReviewPanel({ data, params, showCancelled, allSites }: {
                   {fmtDate(r.reviewOn)}
                 </Link>
                 <span style={{ color: 'var(--color-neutral-400)', minWidth: 64 }}>{r.kindShort}</span>
-                <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{r.statusLabel}</ToneTag>
+                <ToneTag tone={r.statusTone} style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{labelT(t)(r.statusLabel)}</ToneTag>
                 {!r.cancelled && flags.canDossier && (
                   <a href={`/revue-de-direction?revue=${r.id}`} target="_blank" rel="noopener" className="vg-link" style={{ marginLeft: 'auto' }}>
                     <i className="ph ph-file-text" style={{ fontSize: 12 }} aria-hidden /> {t('File#dossier')}

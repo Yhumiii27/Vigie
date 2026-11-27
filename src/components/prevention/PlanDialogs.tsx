@@ -29,6 +29,7 @@ import {
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** Pièces jointes acceptées sur un plan : PDF, images, Word. */
 const PLAN_FILE_ACCEPT = 'application/pdf,image/*,.doc,.docx';
@@ -49,11 +50,13 @@ function checkPicked(input: HTMLInputElement, maxFiles: number): string | null {
 
 /** Section de texte du contenu réglementaire (PRV-02) dans le formulaire du plan. */
 function ContentField({ field, plan }: { field: PlanContentField; plan?: PlanView }) {
+  const { t } = useI18n();
+  const label = labelT(t);
   return (
-    <Field name={field.key} label={<>{field.label} <span style={muted}>{field.ref}</span></>} hint={field.hint}>
+    <Field name={field.key} label={<>{label(field.label)} <span style={muted}>{field.ref}</span></>} hint={label(field.hint)}>
       {field.max <= 200
-        ? <Input name={field.key} defaultValue={plan?.[field.key] ?? ''} placeholder={field.placeholder} />
-        : <TextArea name={field.key} rows={2} defaultValue={plan?.[field.key] ?? ''} placeholder={field.placeholder} />}
+        ? <Input name={field.key} defaultValue={plan?.[field.key] ?? ''} placeholder={label(field.placeholder)} />
+        : <TextArea name={field.key} rows={2} defaultValue={plan?.[field.key] ?? ''} placeholder={label(field.placeholder)} />}
     </Field>
   );
 }
@@ -61,9 +64,10 @@ function ContentField({ field, plan }: { field: PlanContentField; plan?: PlanVie
 /** En-tête d'un bloc du contenu réglementaire : « Mesures du plan · R. 4512-8 ». */
 function ContentGroupTitle({ group, note }: { group: PlanContentGroup; note?: ReactNode }) {
   const g = PLAN_CONTENT_GROUPS[group];
+  const { t } = useI18n();
   return (
     <div style={{ display: 'grid', gap: 2, paddingTop: 4, borderTop: '1px solid var(--color-divider)' }}>
-      <span style={{ fontSize: 12.5, fontWeight: 500, paddingTop: 8 }}>{g.label} <span style={{ ...muted, fontWeight: 400 }}>· {g.ref}</span></span>
+      <span style={{ fontSize: 12.5, fontWeight: 500, paddingTop: 8 }}>{labelT(t)(g.label)} <span style={{ ...muted, fontWeight: 400 }}>· {g.ref}</span></span>
       {note && <span className="vg-field-hint" style={{ marginTop: 0 }}>{note}</span>}
     </div>
   );
@@ -364,7 +368,7 @@ function PlanContentView({ plan }: { plan: PlanView }) {
   return (
     <>
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.ee.ref}</span>}>{PLAN_CONTENT_GROUPS.ee.label}</SectionTitle>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.ee.ref}</span>}>{labelT(t)(PLAN_CONTENT_GROUPS.ee.label)}</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
           <div style={{ display: 'grid', gap: 2, alignContent: 'start' }}>
             <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{EE_HEADCOUNT.label}</span>
@@ -374,13 +378,13 @@ function PlanContentView({ plan }: { plan: PlanView }) {
         </div>
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.measures.ref}</span>}>{PLAN_CONTENT_GROUPS.measures.label}</SectionTitle>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.measures.ref}</span>}>{labelT(t)(PLAN_CONTENT_GROUPS.measures.label)}</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
           {contentOf('measures').map(section)}
         </div>
       </div>
       <div style={{ display: 'grid', gap: 6 }}>
-        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.sir.ref}</span>}>{PLAN_CONTENT_GROUPS.sir.label}</SectionTitle>
+        <SectionTitle aside={<span style={muted}>{PLAN_CONTENT_GROUPS.sir.ref}</span>}>{labelT(t)(PLAN_CONTENT_GROUPS.sir.label)}</SectionTitle>
         {contentOf('sir').map(section)}
       </div>
     </>
@@ -408,7 +412,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-        <ToneTag tone={plan.tone}>{plan.statusLabel}</ToneTag>
+        <ToneTag tone={plan.tone}>{labelT(t)(plan.statusLabel)}</ToneTag>
         {plan.mandatory
           ? <span title={plan.mandatoryReason} style={{ display: 'inline-flex' }}><ToneTag tone="accent">{t('Written plan required')} · {plan.mandatoryShort}</ToneTag></span>
           : <span className="tag tag-neutral">{t('Written plan not required')}</span>}
@@ -542,7 +546,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
                 <Icon name={PERMIT_TYPES[p.type].icon} size={14} style={{ color: 'var(--color-neutral-400)' }} />
                 <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
                 <span>{p.validity}</span>
-                <ToneTag tone={p.tone}>{p.stateLabel}</ToneTag>
+                <ToneTag tone={p.tone}>{labelT(t)(p.stateLabel)}</ToneTag>
                 {p.gap && <span style={{ fontSize: 11, color: 'var(--tone-danger-fg)' }}>{plan.missingSignature ? t('Gap · counted with this plan') : t('Gap · without a signed plan')}</span>}
                 {!p.gap && p.requested && !(plan.signedEuOn && plan.signedEeOn) && (plan.mandatory || p.type === 'feu') && <span style={muted}>{t('Issue blocked until the signatures')}</span>}
               </div>
@@ -560,7 +564,7 @@ function PlanSheet({ plan, options, canManage, onEdit, onCancelPlan, onDeleted }
               <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
               <span style={{ flex: 1, minWidth: 180 }}>{a.label}</span>
               <span style={muted}>{a.pilot} · {a.due}</span>
-              <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
+              <ToneTag tone={a.tone}>{labelT(t)(a.statusLabel)}</ToneTag>
             </div>
           ))}
         </div>
@@ -748,7 +752,7 @@ export function PlansTable({ plans, options, canManage, openId, emptyLabel }: { 
                     </span>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    <ToneTag tone={p.tone}>{p.statusLabel}</ToneTag>
+                    <ToneTag tone={p.tone}>{labelT(t)(p.statusLabel)}</ToneTag>
                     {p.missingSignature && <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}>{t('Gap · without a signed plan')}</span>}
                     {p.startGap?.past && (
                       <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-warn-fg)' }}>

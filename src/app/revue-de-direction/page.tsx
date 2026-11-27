@@ -10,6 +10,7 @@ import { firstParam, missingDetail } from '@/lib/url-state';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import './dossier.css';
+import { labelT } from '@/i18n/labels';
 
 // Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
 export async function generateMetadata(): Promise<Metadata> {
@@ -51,7 +52,7 @@ export default async function ReviewDossierPage({ searchParams }: PageProps<'/re
       <main className="rd-doc">
         <div className="rd-toolbar rd-noprint">
           <a href={`/audits?annee=${yearOf(review.reviewOn)}&revue=${review.id}#revue`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{t('Audits and certifications')}</a>
-          <ToneTag tone={review.statusTone} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i className="ph ph-x-circle" style={{ fontSize: 12 }} aria-hidden />{review.statusLabel}</ToneTag>
+          <ToneTag tone={review.statusTone} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><i className="ph ph-x-circle" style={{ fontSize: 12 }} aria-hidden />{labelT(t)(review.statusLabel)}</ToneTag>
         </div>
         <section className="rd-section">
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 500 }}>{fill(t('{kind} of {date} — cancelled'), { kind: cancel.kind, date: fmtDate(review.reviewOn) })}</h2>

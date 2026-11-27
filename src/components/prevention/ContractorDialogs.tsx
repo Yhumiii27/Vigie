@@ -15,6 +15,7 @@ import { Facts, Notice, SectionTitle, dropUrlParam, muted, rowOpener } from './p
 import { TipButton } from '@/components/Tip';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** D16 : fournisseurs de keystone.pub_fournisseurs proposés (sans les ateliers internes) ; `message` : source indisponible. */
 export type SupplierChoices = { options: Option[]; message: string | null };
@@ -89,7 +90,7 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
             <Link href={`/prevention?plan=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
             <span style={{ flex: 1, minWidth: 180 }}>{p.title}</span>
             <span style={muted}>{p.site} · {p.period}</span>
-            <ToneTag tone={p.tone}>{p.statusLabel}</ToneTag>
+            <ToneTag tone={p.tone}>{labelT(t)(p.statusLabel)}</ToneTag>
           </div>
         ))}
       </div>
@@ -101,9 +102,9 @@ function ContractorSheet({ contractor: c, canManage, onEdit, onArchive }: {
           <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
             <Icon name={p.icon} size={14} style={{ color: 'var(--color-neutral-400)' }} />
             <Link href={`/prevention?onglet=permis&permis=${encodeURIComponent(p.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{p.id}</Link>
-            <span style={{ flex: 1, minWidth: 140 }}>{p.typeLabel}</span>
+            <span style={{ flex: 1, minWidth: 140 }}>{labelT(t)(p.typeLabel)}</span>
             <span style={muted}>{p.validity}</span>
-            <ToneTag tone={p.tone}>{p.stateLabel}</ToneTag>
+            <ToneTag tone={p.tone}>{labelT(t)(p.stateLabel)}</ToneTag>
           </div>
         ))}
       </div>

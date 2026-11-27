@@ -10,6 +10,7 @@ import type { DgiNoticeView } from '@/lib/data/dgi';
 import { cancelDgiNotice, closeDgiNotice, recordDgiNotice, saveDgiMeasures, signDgiNotice } from '@/server/dgi';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Registre des dangers graves et imminents (CNF-01) : avis du site, du plus récent au plus ancien ; consignation et
 // signature par les membres du CSE, mesures de l'employeur, clôture et annulation motivée par l'animateur QHSE.
@@ -39,7 +40,7 @@ function DgiNoticeCard({ n, rights, open }: { n: DgiNoticeView; rights: Rights; 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline', textDecoration: n.cancelled ? 'line-through' : undefined }}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500 }}>{fill(t('Notice no. {n}'), { n: n.number })}</h3>
         <span>{fmtLocal(n.reportedAt, t)}</span>
-        <ToneTag tone={n.stateTone}>{n.stateLabel}</ToneTag>
+        <ToneTag tone={n.stateTone}>{labelT(t)(n.stateLabel)}</ToneTag>
       </div>
       <dl style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 190px) 1fr', gap: '4px 12px', margin: 0, fontSize: 12.5 }}>
         <dt style={muted}>{t('Workstation(s)')}</dt><dd style={{ margin: 0, whiteSpace: 'pre-line' }}>{n.workstations}</dd>

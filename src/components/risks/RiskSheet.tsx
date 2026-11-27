@@ -242,7 +242,7 @@ export function RiskSheet({ risk, unit, unitArchived = false, units, canManage, 
             {risk.events.map((e) => (
               <li key={e.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
                 <Link href={`/evenements?sel=${encodeURIComponent(e.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{e.id}</Link>
-                <ToneTag tone={EVENT_TYPES[e.type as EventType]?.tone ?? 'neutral'}>{e.typeLabel}</ToneTag>
+                <ToneTag tone={EVENT_TYPES[e.type as EventType]?.tone ?? 'neutral'}>{labelT(t)(e.typeLabel)}</ToneTag>
                 <span style={{ flex: 1, minWidth: 160 }}>{e.title}</span>
                 <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</span>
                 <span style={{ color: e.closed ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>{e.step}</span>

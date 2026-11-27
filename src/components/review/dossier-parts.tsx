@@ -5,6 +5,7 @@ import { REVIEW_FOLLOW_UP, TONE, canOpen, type Role } from '@/lib/domain';
 import type { DossierFinding, FollowUpRow } from '@/lib/data/review';
 import type { ActionBrief } from '@/lib/queries';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Traducteur `t` reçu du dossier (`getI18n()` de la page, français par défaut).
 // Éléments de mise en page du dossier de revue de direction (classes rd-* de src/app/revue-de-direction/dossier.css).
@@ -143,7 +144,7 @@ export function FollowUpTable({ rows, role, t }: { rows: FollowUpRow[]; role: Ro
           {rows.map((x) => (
             <tr key={x.key}>
               <td className="rd-muted" style={{ whiteSpace: 'nowrap' }}>{x.review}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>{x.kindLabel}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{labelT(t)(x.kindLabel)}</td>
               <td>{x.text}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{x.pilot}</td>
               <td style={{ whiteSpace: 'nowrap' }}>{x.dueOn ? fmtDate(x.dueOn) : '—'}</td>

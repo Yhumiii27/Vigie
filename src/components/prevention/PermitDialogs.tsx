@@ -316,8 +316,8 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-        <ToneTag tone={permit.tone}>{permit.stateLabel}{permit.watching ? t(' · watch') : ''}</ToneTag>
-        <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{permit.typeLabel}</span>
+        <ToneTag tone={permit.tone}>{labelT(t)(permit.stateLabel)}{permit.watching ? t(' · watch') : ''}</ToneTag>
+        <span className="tag tag-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name={permit.icon} size={12} />{labelT(t)(permit.typeLabel)}</span>
         {permit.planGap && <ToneTag tone="danger">{permit.status === 'demande' ? t('Request without a signed plan · gap') : t('External company without a signed plan · gap')}</ToneTag>}
         {permit.planGapWith && <span style={muted}>{fill(t('counted with the plan {id}, in gap'), { id: permit.planGapWith })}</span>}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
@@ -391,7 +391,7 @@ function PermitSheet({ permit, options, canManage, onEdit, onCancelPermit, onLea
               <Link href={actionHref(a.id)} className="vg-link" style={{ fontSize: 12.5 }}>{a.id}</Link>
               <span style={{ flex: 1, minWidth: 180 }}>{a.label}</span>
               <span style={muted}>{a.pilot} · {a.due}</span>
-              <ToneTag tone={a.tone}>{a.statusLabel}</ToneTag>
+              <ToneTag tone={a.tone}>{labelT(t)(a.statusLabel)}</ToneTag>
             </div>
           ))}
           {permit.plan && permit.planActions > 0 && (
@@ -538,7 +538,7 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
                     <td style={{ whiteSpace: 'nowrap', color: p.watching ? 'var(--tone-warn-fg)' : 'var(--color-neutral-300)' }}>{p.watchLabel ?? <span style={muted}>—</span>}</td>
                     <td style={{ whiteSpace: 'nowrap', color: p.allChecked ? 'var(--color-neutral-300)' : 'var(--tone-warn-fg)' }}>{done}/{p.checklist.length}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <ToneTag tone={p.tone}>{p.stateLabel}{p.watching ? t(' · watch') : ''}</ToneTag>
+                      <ToneTag tone={p.tone}>{labelT(t)(p.stateLabel)}{p.watching ? t(' · watch') : ''}</ToneTag>
                       {p.planGap && (
                         <span style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--tone-danger-fg)' }}
                           title={p.planGapWith ? fill(t('Same intervention as the plan {id}, in gap: counted only once.'), { id: p.planGapWith }) : undefined}>

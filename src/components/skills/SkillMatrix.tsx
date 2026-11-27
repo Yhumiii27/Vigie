@@ -391,7 +391,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
           <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
             {chips.map((c) => (
               <button key={c.key} type="button" className={`vg-chip${chip === c.key ? ' is-on' : ''}`} aria-pressed={chip === c.key} onClick={() => setChip(c.key)}>
-                {c.label}{chipCount[c.key] !== null && ` (${chipCount[c.key]})`}
+                {labelT(t)(c.label)}{chipCount[c.key] !== null && ` (${chipCount[c.key]})`}
               </button>
             ))}
           </span>

@@ -204,7 +204,7 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
                   </div>
                   <div style={{ fontSize: 12.5 }}>{e.title}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--color-neutral-500)' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}><Dot color={TONE[e.typeTone].dot} size={6} />{e.typeLabel}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}><Dot color={TONE[e.typeTone].dot} size={6} />{labelT(t)(e.typeLabel)}</span>
                     <span style={{ color: TONE[severityTone(e.severity)].dot, fontWeight: 500 }}>G{e.severity}</span>
                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.location}</span>
                   </div>
@@ -282,7 +282,7 @@ async function ReportCard({ detail, sites }: { detail: EventDetail; sites: FormO
     <div className="card" style={{ gap: 16, padding: '18px 20px', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
-        <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
+        <ToneTag tone={e.typeTone}>{labelT(t)(e.typeLabel)}</ToneTag>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? fill(t(' at {time}'), { time: e.occurredTime }) : ''} · {statusText(e, stepDates, t)}</span>
         {/* IMP-07 : fiche imprimable du déclarant (sans pilote, analyse ni historique). */}
         <a href={eventPrintHref(e.id)} target="_blank" rel="noreferrer" className="btn btn-ghost vg-btn-sm" style={{ marginLeft: 'auto' }}>
@@ -486,7 +486,7 @@ async function EventCard({ detail, log, inbound, options, actionOptions, qhse, c
     <div className="card" style={{ gap: 16, padding: '18px 20px', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{e.id}</span>
-        <ToneTag tone={e.typeTone}>{e.typeLabel}</ToneTag>
+        <ToneTag tone={e.typeTone}>{labelT(t)(e.typeLabel)}</ToneTag>
         {e.type === 'AT' && e.commute && <ToneTag tone="neutral">{t('Commute')}</ToneTag>}
         <span className="tag" style={{ background: sev.bg, color: sev.fg }}>{SEVERITY[e.severity]}</span>
         <span style={{ fontSize: 11.5, color: 'var(--color-neutral-500)' }}>{fmtDate(e.occurredOn)}{e.occurredTime ? fill(t(' at {time}'), { time: e.occurredTime }) : ''} · {statusText(e, stepDates, t)}</span>

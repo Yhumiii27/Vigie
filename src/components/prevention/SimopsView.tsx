@@ -5,6 +5,7 @@ import { addDays, fmtLong } from '@/lib/dates';
 import { simopsHref } from '@/lib/rules/simops';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Opérations simultanées (SIMOPS, PRV-22) : vue en lecture de l'écran Prévention, par zone de la carte et par heure.
 // Composant serveur (aucune saisie) : navigation par jour, liste accessible (pas de frise seulement visuelle).
@@ -51,13 +52,13 @@ export async function SimopsView({ data, today }: { data: SimopsData; today: str
                   <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: 120 }}>{o.slotLabel}</span>
                   <Link href={o.href} className="vg-link" style={{ fontSize: 12.5 }}>{o.ref}</Link>
                   <span style={{ flex: 1, minWidth: 180 }}>{o.label}</span>
-                  {o.stateLabel && <span className="tag tag-neutral">{o.stateLabel}</span>}
+                  {o.stateLabel && <span className="tag tag-neutral">{labelT(t)(o.stateLabel)}</span>}
                 </span>
                 {o.detail && <span style={muted}>{o.detail}</span>}
                 {o.lockouts.length > 0 && (
                   <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     <span style={muted}>{t('Lockouts:')}</span>
-                    {o.lockouts.map((l) => <ToneTag key={l.id} tone={l.tone}>{l.id} · {l.label} · {l.statusLabel}</ToneTag>)}
+                    {o.lockouts.map((l) => <ToneTag key={l.id} tone={l.tone}>{l.id} · {l.label} · {labelT(t)(l.statusLabel)}</ToneTag>)}
                   </span>
                 )}
                 {o.with.length > 0 && <span style={{ fontSize: 12, color: 'var(--tone-warn-fg)' }}>{fill(t('At the same time as {list}'), { list: o.with.join(', ') })}</span>}

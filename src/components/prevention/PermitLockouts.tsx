@@ -10,6 +10,7 @@ import { applyLockout, cancelLockout, removeLockout, saveLockout, verifyLockout 
 import { SectionTitle, muted, type PreventionOptions } from './parts';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /**
  * PRV-22 : consignations et isolations d'un permis (points d'isolement, poseur et vérificateur, pose, vérification et levée
@@ -54,7 +55,7 @@ function LockoutItem({ permit, l, canManage, people, plans }: { permit: PermitVi
       <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
         <strong style={{ fontWeight: 500 }}>{l.id}</strong>
         <span>{l.energyLabel} · {l.equipment}</span>
-        <ToneTag tone={l.tone}>{l.statusLabel}</ToneTag>
+        <ToneTag tone={l.tone}>{labelT(t)(l.statusLabel)}</ToneTag>
       </span>
       <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 1 }}>
         {l.points.map((p, i) => <li key={i}>{p.label}{p.device && <span style={muted}> · {p.device}</span>}</li>)}

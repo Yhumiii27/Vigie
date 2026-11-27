@@ -123,7 +123,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
                         {p.issuer ?? '—'}
                         {p.deliveredLabel && <span className="pp-muted" style={{ display: 'block' }}>{fill(t('on {date}'), { date: p.deliveredLabel })}</span>}
                       </td>
-                      <td className="pp-nowrap">{p.stateLabel}</td>
+                      <td className="pp-nowrap">{labelT(t)(p.stateLabel)}</td>
                       <td>
                         {p.closedLabel ?? '—'}
                         {p.cancelReason && <span className="pp-muted" style={{ display: 'block' }}>{p.cancelReason}</span>}
