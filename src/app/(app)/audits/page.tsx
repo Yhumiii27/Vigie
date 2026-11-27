@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CertificationCards } from '@/components/audits/CertificationCards';
 import { ContextCard } from '@/components/audits/ContextCard';
@@ -25,10 +24,10 @@ import { isQhse } from '@/lib/action-rules';
 import { latestAssessments, loadAssessmentCatalogue, loadSelfAssessments } from '@/lib/data/self-assessment';
 import { SELF_ASSESSMENT_VIEW, fmtDelta, isAssessmentStandard, rateTone, selfAssessmentHref } from '@/lib/rules/self-assessment';
 import { currentSiteId } from '@/lib/session';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.audits.title };
+export const generateMetadata = () => screenMetadata('audits');
 
 /** Vues de l'écran : programme et revue de direction, auto-évaluation par référentiel (AUD-40). */
 function ViewNav({ on, t }: { on: 'programme' | 'auto'; t: T }) {

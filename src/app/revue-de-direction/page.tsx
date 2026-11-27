@@ -12,7 +12,10 @@ import { fill } from '@/i18n/translate';
 import './dossier.css';
 
 // Manifeste du signalement installable (EVT-20) : pages /signaler seulement.
-export const metadata: Metadata = { title: 'Dossier de revue de direction', manifest: null };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { manifest: null, title: t('Management review file') };
+}
 
 // Dossier de la revue de direction (ISO 9001 §9.3), ouvert dans un nouvel onglet depuis /audits (?revue=<id>) :
 // préparatoire tant que la revue n'est pas clôturée, figé ensuite.

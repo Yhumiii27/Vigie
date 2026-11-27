@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { NewActionButton } from '@/components/ActionFormDialog';
 import { PageHeader } from '@/components/PageHeader';
@@ -17,10 +16,10 @@ import { guard } from '@/lib/guard';
 import { ALL_SITES } from '@/lib/session';
 import { loadActionDetail, loadActionFormOptions, loadActionPlan } from '@/lib/data/actions';
 import { loadActionStats } from '@/lib/data/action-stats';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.actions.title };
+export const generateMetadata = () => screenMetadata('actions');
 
 /** « Site de [Ville B] — zone d'essais » → « site de [Ville B] » (après « relève du »). */
 const lcSite = (label: string) => {

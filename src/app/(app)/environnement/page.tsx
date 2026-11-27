@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { newEventHref } from '@/lib/event-prefill';
 import { NewActionButton } from '@/components/ActionFormDialog';
@@ -24,10 +23,10 @@ import { loadFormOptions } from '@/lib/data/options';
 import { QHSE_ONLY_CREATE_MESSAGE, actionHref, canCreateAction } from '@/lib/action-rules';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ALL_SITES } from '@/lib/session';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.env.title };
+export const generateMetadata = () => screenMetadata('env');
 
 const PATH = '/environnement';
 const TABS = ['registre', 'filieres', 'consommations'] as const;

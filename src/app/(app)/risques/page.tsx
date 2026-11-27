@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { BackToList, DetailFocus } from '@/components/ListDetail';
@@ -32,10 +31,10 @@ import { ALL_SITES } from '@/lib/session';
 import { today } from '@/lib/today';
 import type { ActionFormOptions } from '@/lib/action-view';
 import { ARCHIVES, canonicalHref, missingDetail, wantsArchives } from '@/lib/url-state';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.risks.title };
+export const generateMetadata = () => screenMetadata('risks');
 
 /** Rôles en consultation : aucune liste de choix (ni liste du personnel) transmise à la page. */
 const NO_OPTIONS: Pick<FormOptions, 'people' | 'sites' | 'projects' | 'projectsMessage'> = { people: [], sites: [], projects: [], projectsMessage: null };

@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import { PageHeader } from '@/components/PageHeader';
 import { EngineeringRegister } from '@/components/engineering/EngineeringRegister';
 import { canCreateAction } from '@/lib/action-rules';
@@ -11,10 +10,10 @@ import { guard } from '@/lib/guard';
 import { ECR_TAB } from '@/lib/rules/engineering';
 import { currentSiteId } from '@/lib/session';
 import { firstParam } from '@/lib/url-state';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.engineering.title };
+export const generateMetadata = () => screenMetadata('engineering');
 
 const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });
 

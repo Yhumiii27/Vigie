@@ -5,6 +5,7 @@ import { EVENT_STEPS, SEVERITY } from '@/lib/domain';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import { EVENT_AGE_DAYS, INJURY_FILTERS, NO_PILOT, eventFilterParams, hasEventFilters, type EventFilters as Filters } from '@/lib/event-filters';
+import { labelT } from '@/i18n/labels';
 
 type Option = readonly [string, string];
 
@@ -29,7 +30,7 @@ export async function EventFilterBar({ filters, base, people, health, pilots }: 
   const chips: { key: string; label: string; href: string }[] = [
     filters.effectif ? { key: 'effectif', label: t('Workforce occupational accidents, excluding commuting'), href: without({ effectif: undefined }) } : null,
     filters.blessure ? { key: 'blessure', label: fill(t('Injury: {value}'), { value: INJURY_FILTERS.find(([k]) => k === filters.blessure)?.[1].toLowerCase() ?? '' }), href: without({ blessure: undefined }) } : null,
-    filters.etape != null ? { key: 'etape', label: fill(t('Stage: {value}'), { value: EVENT_STEPS[filters.etape] }), href: without({ etape: undefined }) } : null,
+    filters.etape != null ? { key: 'etape', label: fill(t('Stage: {value}'), { value: labelT(t)(EVENT_STEPS[filters.etape]) }), href: without({ etape: undefined }) } : null,
     filters.pilote ? { key: 'pilote', label: fill(t('Lead: {value}'), { value: pilotLabel(filters.pilote) }), href: without({ pilote: undefined }) } : null,
     filters.du || filters.au ? {
       key: 'periode', href: without({ du: undefined, au: undefined }),
@@ -53,7 +54,7 @@ export async function EventFilterBar({ filters, base, people, health, pilots }: 
             <span>{t('Stage')}</span>
             <select name="etape" className="input" defaultValue={filters.etape != null ? String(filters.etape) : ''}>
               <option value="">{t('Any')}</option>
-              {EVENT_STEPS.map((s, i) => <option key={s} value={String(i)}>{s}</option>)}
+              {EVENT_STEPS.map((s, i) => <option key={s} value={String(i)}>{labelT(t)(s)}</option>)}
             </select>
           </label>
           {pilots && (
@@ -70,7 +71,7 @@ export async function EventFilterBar({ filters, base, people, health, pilots }: 
             <span>{t('Severity')}</span>
             <select name="gravite" className="input" defaultValue={filters.gravite != null ? String(filters.gravite) : ''}>
               <option value="">{t('Any')}</option>
-              {[1, 2, 3, 4].map((g) => <option key={g} value={String(g)}>{SEVERITY[g]}</option>)}
+              {[1, 2, 3, 4].map((g) => <option key={g} value={String(g)}>{labelT(t)(SEVERITY[g])}</option>)}
             </select>
           </label>
           <label className="vg-filter-field">

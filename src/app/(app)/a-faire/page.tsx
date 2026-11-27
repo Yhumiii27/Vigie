@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarkAllReadButton } from '@/components/MarkAllReadButton';
 import { PageHeader } from '@/components/PageHeader';
@@ -8,12 +7,12 @@ import { fmtDay, fmtMonthAbbr } from '@/lib/dates';
 import { ALL_SITES, CONTROL_HORIZON_DAYS, SCREENS, TODO_HORIZON_DAYS, TONE, isEmployee } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadTodoPage } from '@/lib/data/dashboard';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { SCREEN_LABEL_EN } from '@/i18n/nav';
 import { fill } from '@/i18n/translate';
 
 // TDB-17 : titre d'onglet de la page.
-export const metadata: Metadata = { title: SCREENS.todo.title };
+export const generateMetadata = () => screenMetadata('todo');
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

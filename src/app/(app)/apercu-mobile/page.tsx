@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import { screenMetadata } from '@/i18n/server';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { IOSDevice } from '@/components/IOSDevice';
@@ -17,7 +17,7 @@ import { SCREENS, canManage } from '@/lib/domain';
 import { publicOrigin } from '@/lib/public-url';
 import { ALL_SITES, getSession } from '@/lib/session';
 
-export const metadata: Metadata = { title: SCREENS.mobile.title };
+export const generateMetadata = () => screenMetadata('mobile');
 
 const PATH = SCREENS.mobile.path;
 const MINE = `${PATH}?vue=mes-signalements`;

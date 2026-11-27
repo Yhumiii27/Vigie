@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
+import { makeT } from '@/i18n/translate';
 import { auditReportFileName, buildAuditReportPdf, winAnsi, wrapText } from './audit-report-pdf';
 
 describe('rapport d’audit en PDF (AUD-39)', () => {
@@ -32,5 +33,15 @@ describe('rapport d’audit en PDF (AUD-39)', () => {
     expect(doc.getPageCount()).toBeGreaterThan(1);
     expect(doc.getTitle()).toBe("Rapport d'audit AUD-2026-12");
     expect(auditReportFileName({ ref: 'AUD-2026-12', doneOn: '2026-09-15' })).toBe('rapport-audit-AUD-2026-12-2026-09-15.pdf');
+  });
+
+  it('en anglais selon la langue de la personne (VG-N01)', async () => {
+    const en = makeT('en');
+    const bytes = await buildAuditReportPdf({
+      ref: 'AUD-2026-12', title: 'Audit', kindLabel: 'ISO mock audit', track: 'Audits', site: 'Site A', doneOn: '2026-09-15', auditor: '', scope: null,
+      owner: '', findings: [], generatedOn: '2026-10-09', generatedBy: 'C. Lefèvre',
+    }, en);
+    expect((await PDFDocument.load(bytes)).getTitle()).toBe('Audit report AUD-2026-12');
+    expect(auditReportFileName({ ref: 'AUD-2026-12', doneOn: null }, en)).toBe('audit-report-AUD-2026-12.pdf');
   });
 });

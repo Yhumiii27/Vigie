@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getI18n } from '@/i18n/server';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
@@ -8,7 +9,10 @@ import { guard } from '@/lib/guard';
 import { loadSsctReport } from '@/lib/data/ssct';
 import '../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: 'Bilan annuel SSCT' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Annual OHS report') };
+}
 
 function Section({ num, title, children }: { num: number; title: string; children: ReactNode }) {
   return (

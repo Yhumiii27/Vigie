@@ -15,6 +15,8 @@ import { AUDITS_FR, AUDITS_SAME } from './screens/audits';
 import { DOCUMENTS_FR, DOCUMENTS_SAME } from './screens/documents';
 import { ENVIRONMENT_FR, ENVIRONMENT_SAME } from './screens/environment';
 import { ENGINEERING_FR, ENGINEERING_SAME } from './screens/engineering';
+import { PRINT_FR, PRINT_SAME } from './screens/print';
+import { LABELS_FR, LABELS_SAME } from './labels';
 // Français des composants communs « Mes tâches », « Mes approbations » et du tronc commun des menus (Norma 2.4, à reporter
 // par chaque outil ; COQUE.md § 2 bis) : repris tel quel de la copie de Norma.
 import { TACHES_FR } from '@norma/charte/ds/taches-fr';
@@ -34,6 +36,8 @@ export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
   documents: DOCUMENTS_FR,
   environment: ENVIRONMENT_FR,
   engineering: ENGINEERING_FR,
+  print: PRINT_FR,
+  labels: LABELS_FR,
 };
 
 const SHELL_FR: Record<string, string> = {
@@ -114,7 +118,7 @@ export function normaOverrides(): string[] {
 }
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...Object.keys(TACHES_FR).filter((en) => TACHES_FR[en] === en), ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...Object.keys(TACHES_FR).filter((en) => TACHES_FR[en] === en), ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME, ...PRINT_SAME, ...LABELS_SAME];
 
 /** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
 export function conflictingEntries(): string[] {

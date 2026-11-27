@@ -11,8 +11,8 @@ import { fill } from '@/i18n/translate';
 import '../../../../prevention/imprimer/print.css';
 
 export async function generateMetadata({ params }: PageProps<'/audits/auto-evaluation/imprimer/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Auto-évaluation ${decodeURIComponent(id)}` };
+  const [{ id }, { t }] = await Promise.all([params, getI18n()]);
+  return { title: fill(t('Self-assessment {id}'), { id: decodeURIComponent(id) }) };
 }
 
 const pct = (n: number | null) => (n == null ? '—' : `${n} %`);

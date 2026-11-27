@@ -16,7 +16,8 @@ const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true 
   return e.isDirectory() ? files(p) : /\.(ts|tsx)$/.test(e.name) && !/\.test\.ts$/.test(e.name) ? [p] : [];
 });
 // Composants de la coque commune (norma/charte/ds) compris : leurs chaînes passent par le dictionnaire de Vigie.
-const translating = [...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, 'norma/charte/ds'))].filter((f) => /\b(useI18n|getI18n)\(/.test(readFileSync(f, 'utf8')));
+// Aussi les modules qui reçoivent le traducteur en paramètre (`t: T`, ex. le rapport d'audit PDF et l'export CSV de src/lib).
+const translating = [...files(path.join(ROOT, 'src')), ...files(path.join(ROOT, 'norma/charte/ds'))].filter((f) => /\b(useI18n|getI18n)\(|\bt: T\b/.test(readFileSync(f, 'utf8')));
 const LITERAL = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1\s*\)/g;
 const literals = translating.flatMap((f) => [...readFileSync(f, 'utf8').matchAll(LITERAL)].map((m) => ({ file: path.relative(ROOT, f), text: m[2].replace(/\\(['"])/g, '$1') })));
 

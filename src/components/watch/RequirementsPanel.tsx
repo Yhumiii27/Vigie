@@ -24,6 +24,7 @@ import { requirementActionDefaults } from './action-defaults';
 import { ArchivedBanner, filesHint, Facts, FileError, Notice, ViewSwitch, checkPickedFiles, muted, rowOpener } from './parts';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** `applicableSites` (VEI-10) : sites proposés pour l'applicabilité d'une exigence — périmètre complet seulement, sinon vide. */
 type Opts = Pick<FormOptions, 'people' | 'sites'> & { applicableSites?: readonly Option[]; certifications?: readonly Option[] };
@@ -120,7 +121,7 @@ export function RequirementsPanel({ rows, archives = false, canManage, canApprov
                   {r.actionId ? (
                     <>
                       <Link href={actionHref(r.actionId)} className="vg-link">{r.actionId}</Link>
-                      {r.action && <div style={{ ...muted, marginTop: 2, color: r.action.late ? TONE.danger.dot : muted.color }}>{r.action.statusLabel}</div>}
+                      {r.action && <div style={{ ...muted, marginTop: 2, color: r.action.late ? TONE.danger.dot : muted.color }}>{labelT(t)(r.action.statusLabel)}</div>}
                     </>
                   ) : r.needsAction ? (
                     <span style={{ color: TONE.danger.dot }}>{t('To define')}</span>
@@ -404,7 +405,7 @@ function LinkedAction({ r, actions, canUnlink, showQhseNotice, onCreate, onEvalu
           {r.action && <span> · {r.action.label}</span>}
           {r.action && <span style={{ ...muted, display: 'block', color: r.action.late ? TONE.danger.dot : muted.color }}>{fill(t('Target date {date}'), { date: r.action.due })}</span>}
         </span>
-        {r.action && <ToneTag tone={r.action.tone} style={{ whiteSpace: 'nowrap' }}>{r.action.statusLabel}</ToneTag>}
+        {r.action && <ToneTag tone={r.action.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.action.statusLabel)}</ToneTag>}
         {canUnlink && !r.archived && <LinkActionButton link={link} current={r.actionId} />}
         {/* VEI-05 : action close, exigence toujours en écart : boucler par une nouvelle évaluation. */}
         {r.loopBack && (

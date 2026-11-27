@@ -34,6 +34,7 @@ import { VerifyForm } from './detail/VerifyForm';
 import { useActionRunner } from '@/components/feedback';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export type ActionDetailProps = {
   detail: ActionDetailView; rights: ActionRights; options: ActionFormOptions; currentUserId: string; today: string; verifyDefault: string;
@@ -176,7 +177,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
         <Facts rows={[
           [t('Opened on'), d.opened],
           [t('Owner'), <span key="p" className="vg-person"><span className="vg-avatar" style={{ width: 20, height: 20, fontSize: 11 }}>{d.pilotInitials}</span>{d.pilot}{d.pilotLeft && <span className="vg-muted">{t(' · left the workforce')}</span>}</span>],
-          [t('Priority'), d.priority ? <ToneTag key="pr" tone={ACTION_PRIORITIES[d.priority].tone}>{d.priorityLabel}</ToneTag> : t('To complete')],
+          [t('Priority'), d.priority ? <ToneTag key="pr" tone={ACTION_PRIORITIES[d.priority].tone}>{d.priorityLabel && labelT(t)(d.priorityLabel)}</ToneTag> : t('To complete')],
           [t('Domain'), d.domainLabel ?? t('To complete')],
           [t('Risk level'), d.riskLevelLabel ?? '—'],
           [t('Site'), d.site],
@@ -196,7 +197,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
       <Block title={t('Source#origin')}>
         <div className="vg-source-line">
           <Icon name={d.sourceIcon} size={13} />
-          <span>{d.sourceLabel}</span>
+          <span>{labelT(t)(d.sourceLabel)}</span>
           {d.source === null && d.legacyOriginLabel && <span className="vg-muted">{fill(t('· Vigie origin before migration: {origin}'), { origin: d.legacyOriginLabel })}</span>}
         </div>
         {d.originRef && <div className="vg-muted" style={{ fontSize: 12 }}>{fill(t('Origin reference: {ref}'), { ref: d.originRef })}</div>}
@@ -233,7 +234,7 @@ export function ActionDetail({ detail: d, rights, options, currentUserId, today,
             {t('Followed by ')}<Link href={actionHref(f.id)} className="vg-link">{f.id}</Link>
             <span>· {f.label}</span>
             <span className="vg-muted">({FOLLOW_REASONS[f.reason].toLowerCase()})</span>
-            <ToneTag tone={f.tone}>{f.statusLabel}</ToneTag>
+            <ToneTag tone={f.tone}>{labelT(t)(f.statusLabel)}</ToneTag>
           </div>
         ))}
       </Block>
@@ -305,7 +306,7 @@ function Meta({ d }: { d: ActionDetailView }) {
   return (
     <div className="vg-action-meta">
       <span>{d.id}</span>
-      <ToneTag tone={d.tone}>{d.statusLabel}</ToneTag>
+      <ToneTag tone={d.tone}>{labelT(t)(d.statusLabel)}</ToneTag>
       {d.late && <span>{AVANCEMENT[d.status].label}</span>}
       {d.toComplete && <ToneTag tone="warn">{t('To complete')}</ToneTag>}
       <span className="vg-action-label">{d.label}</span>

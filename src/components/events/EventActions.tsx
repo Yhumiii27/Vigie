@@ -11,6 +11,7 @@ import type { ActionDefaults, ActionFormOptions } from '@/lib/action-view';
 import { TONE, type Tone } from '@/lib/domain';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** Action liée à l'événement, telle que la fiche l'affiche (plan d'actions QSE : libellé court, avancement, priorité). */
 export type EventActionItem = {
@@ -72,7 +73,7 @@ export function EventActions({ eventId, items, options, canCreate, newDefaults, 
                 <td style={{ whiteSpace: 'nowrap', color: a.priority ? TONE[a.priority.tone].fg : 'var(--color-neutral-500)' }}>{a.priority?.label ?? '—'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{a.pilot}</td>
                 <td style={{ whiteSpace: 'nowrap', color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }}>{a.due}</td>
-                <td><span className="tag" style={{ background: TONE[a.tone].bg, color: TONE[a.tone].fg }}>{a.statusLabel}</span></td>
+                <td><span className="tag" style={{ background: TONE[a.tone].bg, color: TONE[a.tone].fg }}>{labelT(t)(a.statusLabel)}</span></td>
               </tr>
             ))}
           </tbody>
@@ -87,7 +88,7 @@ export function EventActions({ eventId, items, options, canCreate, newDefaults, 
         {editing?.edit && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--color-neutral-400)' }}>
-              <span className="tag" style={{ background: TONE[editing.tone].bg, color: TONE[editing.tone].fg }}>{editing.statusLabel}</span>
+              <span className="tag" style={{ background: TONE[editing.tone].bg, color: TONE[editing.tone].fg }}>{labelT(t)(editing.statusLabel)}</span>
               <span>{t('Progress, verification and the comment thread are on the action plan sheet.')}</span>
               <Link href={actionHref(editing.id)} className="vg-link" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{t('Open →')}</Link>
             </div>

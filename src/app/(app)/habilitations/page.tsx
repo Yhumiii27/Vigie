@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import { PageHeader } from '@/components/PageHeader';
 import { SkillAlerts } from '@/components/skills/SkillAlerts';
 import { SkillMatrix } from '@/components/skills/SkillMatrix';
@@ -17,10 +16,10 @@ import { loadSiteAdmin } from '@/lib/data/sites';
 import { loadSkillMatrix, loadTitleChoices } from '@/lib/data/skills';
 import { loadPeopleAdmin } from '@/lib/data/people';
 import { PeoplePanel } from '@/components/skills/PeoplePanel';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.skills.title };
+export const generateMetadata = () => screenMetadata('skills');
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 

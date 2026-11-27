@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClickRow } from '@/components/ClickRow';
 import { PageHeader } from '@/components/PageHeader';
@@ -16,11 +15,11 @@ import { DashboardCustomizer } from '@/components/dashboard/DashboardCustomizer'
 import { loadDashboardCards } from '@/lib/data/dashboard-cards';
 import { CARD_IDS, cardAllowed } from '@/lib/dashboard-cards';
 import { canReadDgi } from '@/lib/rules/dgi';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
 // TDB-17 : titre d'onglet de la page.
-export const metadata: Metadata = { title: SCREENS.dashboard.title };
+export const generateMetadata = () => screenMetadata('dashboard');
 
 export default async function DashboardPage() {
   const session = await guard('dashboard');

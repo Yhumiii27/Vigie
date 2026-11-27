@@ -4,6 +4,7 @@ import { TONE } from '@/lib/domain';
 import { ActionLink } from '../ActionPlanProvider';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 /** Vue « Par responsable » (spec § 16) : une carte par responsable, les plus chargés d'abord, ordre de la liste conservé. */
 export async function ByResponsable({ items }: { items: ActionListItem[] }) {
@@ -30,7 +31,7 @@ export async function ByResponsable({ items }: { items: ActionListItem[] }) {
                 <span style={{ color: 'var(--color-neutral-500)', fontSize: 11.5 }}>{a.id}</span>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</span>
                 <span style={{ fontSize: 12, textAlign: 'right', color: a.late ? TONE.danger.dot : 'var(--color-neutral-300)' }} title={t('Target date')}>{a.due}</span>
-                <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.statusLabel}</ToneTag>
+                <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(a.statusLabel)}</ToneTag>
               </ActionLink>
             ))}
           </div>

@@ -11,8 +11,8 @@ import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/causerie/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Feuille d'émargement ${decodeURIComponent(id)}` };
+  const [{ id }, { t }] = await Promise.all([params, getI18n()]);
+  return { title: fill(t('Attendance sheet {id}'), { id: decodeURIComponent(id) }) };
 }
 
 const fmtLocal = (local: string, t: T) => fill(t('{date} at {time}'), { date: fmtDate(local.slice(0, 10)), time: local.slice(11, 16) });

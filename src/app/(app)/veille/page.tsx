@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Segments, Toolbar } from '@/components/Segments';
@@ -21,10 +20,10 @@ import { FilterBar } from '@/components/FilterBar';
 import {
   SORT_DUE, controlChoices, filterControls, filterRequirements, hasListFilters, parseControlFilters, parseRequirementFilters, requirementChoices,
 } from '@/lib/watch-filters';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.watch.title };
+export const generateMetadata = () => screenMetadata('watch');
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const uniq = (values: string[]) => [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));

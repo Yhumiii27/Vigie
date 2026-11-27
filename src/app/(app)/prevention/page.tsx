@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Segments, Toolbar } from '@/components/Segments';
@@ -31,10 +30,10 @@ import { SIMOPS_VIEW, parseSimopsDay, simopsHref } from '@/lib/rules/simops';
 import { today } from '@/lib/today';
 import { loadGateHouse } from '@/lib/data/gate-house';
 import { GATE_HOUSE_PATH, GATE_HOUSE_VIEW, canReadGateHouse, parseHorizon } from '@/lib/rules/gate-house';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.prevention.title };
+export const generateMetadata = () => screenMetadata('prevention');
 
 const TABS = [['plans', 'Prevention plans'], ['permis', 'Permits'], ['entreprises', 'External companies']] as const;
 type Tab = (typeof TABS)[number][0];

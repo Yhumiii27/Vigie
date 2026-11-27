@@ -13,8 +13,8 @@ import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/plan/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Plan de prévention ${decodeURIComponent(id)}` };
+  const [{ id }, { t }] = await Promise.all([params, getI18n()]);
+  return { title: fill(t('Prevention plan {id}'), { id: decodeURIComponent(id) }) };
 }
 
 function Section({ num, title, children }: { num: number | string; title: string; children: ReactNode }) {

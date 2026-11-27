@@ -7,7 +7,10 @@ import { loadImportScreen } from './data';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: 'Importer un plan de prévention' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Import a prevention plan') };
+}
 
 // Props typées explicitement : les types de routes générés (PageProps<'/…'>) ne connaissent la route qu'après la génération par next dev / build.
 export default async function PreventionImportPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

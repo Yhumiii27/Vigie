@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getI18n } from '@/i18n/server';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { fmtEuro } from '@/lib/rules/risk-format';
@@ -9,7 +10,10 @@ import { loadPreventionProgram } from '@/lib/data/risks';
 import { today } from '@/lib/today';
 import '../../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: 'Programme annuel de prévention (PAPRIPACT)' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Annual prevention programme (PAPRIPACT)') };
+}
 
 const Meta = ({ rows }: { rows: [string, ReactNode][] }) => (
   <dl className="pp-meta">
