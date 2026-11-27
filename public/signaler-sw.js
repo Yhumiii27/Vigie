@@ -6,17 +6,39 @@
 
 const OFFLINE_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
+// Langue de la page hors ligne (VG-N01) : paramètre `lang` de l'adresse d'enregistrement (/signaler-sw.js?lang=en,
+// src/components/ReportWorker.tsx, d'après le cookie vigie-lang) ; le français par défaut. Le service worker ne lit pas
+// les cookies : la page change de langue au prochain enregistrement.
+const LANG = new URL(self.location.href).searchParams.get('lang') === 'en' ? 'en' : 'fr';
+const TEXTS = {
+  fr: {
+    title: 'Hors ligne · Vigie',
+    heading: 'Vous êtes hors ligne',
+    body: "Le formulaire de signalement ne peut pas s'ouvrir sans réseau. Vérifiez la connexion (Wi-Fi, données mobiles), puis réessayez.",
+    urgent: "En cas d'urgence, prévenez immédiatement votre responsable ou l'animateur QHSE.",
+    retry: 'Réessayer',
+  },
+  en: {
+    title: 'Offline · Vigie',
+    heading: 'You are offline',
+    body: 'The reporting form cannot open without a network. Check the connection (Wi-Fi, mobile data), then try again.',
+    urgent: 'In an emergency, alert your manager or the QHSE coordinator immediately.',
+    retry: 'Try again',
+  },
+};
+
 const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function offlinePage(url) {
   const retry = escapeHtml(new URL(url).pathname + new URL(url).search);
+  const tx = TEXTS[LANG];
   const body = `<!doctype html>
-<html lang="fr">
+<html lang="${LANG}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#161826">
-<title>Hors ligne · Vigie</title>
+<title>${escapeHtml(tx.title)}</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #161826; color: #e9e9ed;
@@ -33,10 +55,10 @@ function offlinePage(url) {
 <body>
 <main>
   <span class="icon" aria-hidden="true">!</span>
-  <h1>Vous êtes hors ligne</h1>
-  <p>Le formulaire de signalement ne peut pas s'ouvrir sans réseau. Vérifiez la connexion (Wi-Fi, données mobiles), puis réessayez.</p>
-  <p>En cas d'urgence, prévenez immédiatement votre responsable ou l'animateur QHSE.</p>
-  <a href="${retry}">Réessayer</a>
+  <h1>${escapeHtml(tx.heading)}</h1>
+  <p>${escapeHtml(tx.body)}</p>
+  <p>${escapeHtml(tx.urgent)}</p>
+  <a href="${retry}">${escapeHtml(tx.retry)}</a>
 </main>
 </body>
 </html>`;

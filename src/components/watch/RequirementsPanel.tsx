@@ -196,8 +196,8 @@ function RequirementDetail({ r, canManage, canApprove, options, actionOptions, l
         )],
         // VEI-07 : indicateur rattaché sans état calculé ici (registre et bordereaux des déchets : écran Environnement).
         !r.indicator && isRequirementLink(r.linkedTo) && [t('Linked indicator'), r.linkedTo.startsWith('waste')
-          ? <Link key="l" href="/environnement" className="vg-link" style={{ fontSize: 12.5 }}>{REQUIREMENT_LINKS[r.linkedTo].label}</Link>
-          : REQUIREMENT_LINKS[r.linkedTo].label],
+          ? <Link key="l" href="/environnement" className="vg-link" style={{ fontSize: 12.5 }}>{labelT(t)(REQUIREMENT_LINKS[r.linkedTo].label)}</Link>
+          : labelT(t)(REQUIREMENT_LINKS[r.linkedTo].label)],
         [t('Lead'), r.pilot || '—'],
         // VEI-10 : applicabilité par site et lien vers le texte.
         [t('Sites concerned'), r.siteLabels.length ? r.siteLabels.join(', ') : t('All sites')],
@@ -475,7 +475,7 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
       </Field>
       <Field name="linkedTo" label={t('Linked indicator')}
         hint={isRequirementLink(r?.linkedTo) ? REQUIREMENT_LINKS[r.linkedTo].hint : t('Optional: the state of the requirement is then taken from an indicator computed by Vigie (one indicator per requirement in force).')}>
-        <Select name="linkedTo" options={LINK_OPTIONS} value={linkedTo} onChange={(e) => setLinkedTo(e.target.value)} placeholder={t('No indicator')} />
+        <Select name="linkedTo" options={LINK_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} value={linkedTo} onChange={(e) => setLinkedTo(e.target.value)} placeholder={t('No indicator')} />
       </Field>
       {linkedTo === 'certification' && (
         <Field name="certificationId" label={t('Linked certification')} hint={t('One requirement in force per certification; state taken from the certificate status (Audits screen).')}>
@@ -508,7 +508,7 @@ function RequirementForm({ r, options, featured, onDone, onCancel }: {
       </FormRow>
       <FormRow>
         <Field name="evaluation" label={t('Evaluation')}>
-          <Select name="evaluation" options={EVAL_OPTIONS} defaultValue={r?.evaluation ?? 'a_evaluer'} />
+          <Select name="evaluation" options={EVAL_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={r?.evaluation ?? 'a_evaluer'} />
         </Field>
         <Field name="evaluationNote" label={t('Detail')} hint={t('Shown with the evaluation.')}>
           <Input name="evaluationNote" defaultValue={r?.evaluationNote ?? ''} placeholder={t('E.g. 2 interventions without a signed plan')} maxLength={160} />
@@ -563,7 +563,7 @@ function EvaluateForm({ r, today, initial, onDone, onCancel }: {
           {EVALS.map(([k, v]) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12, padding: '5px 10px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)' }}>
               <input type="radio" name="evaluation" value={k} checked={evaluation === k} onChange={() => setEvaluation(k)} />
-              <Dot color={TONE[v.tone].dot} />{v.label}
+              <Dot color={TONE[v.tone].dot} />{labelT(t)(v.label)}
             </label>
           ))}
         </div>

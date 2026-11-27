@@ -11,6 +11,7 @@ import { Cotation } from './RiskForm';
 import { RiskSheet, actionColor, riskSheetHeading, type RiskSheetView } from './RiskSheet';
 import { Tip, TipText } from '@/components/Tip';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 type Unit = Pick<WorkUnitView, 'id' | 'label' | 'site' | 'siteId' | 'originRef'>;
@@ -91,9 +92,9 @@ export function RiskTable({ rows, unit, units, canManage, actionsQhse = false, s
                       )}
                     </Tip>
                   ))}
-                  {r.flag === 'toDefine' && <TipText tip={RISK_FLAGS.toDefine.hint}><span style={{ color: TONE.danger.dot }}>{t('To be defined')}</span></TipText>}
-                  {r.flag === 'residualHigh' && <TipText tip={RISK_FLAGS.residualHigh.hint}><span style={{ color: TONE.danger.dot }}>{fill(t('Residual ≥ {n}'), { n: RISK_ACTION_THRESHOLD })}</span></TipText>}
-                  {r.flag === 'toReview' && <TipText tip={RISK_FLAGS.toReview.hint}><ToneTag tone="warn" style={{ fontSize: 11 }}>{t('To re-rate')}</ToneTag></TipText>}
+                  {r.flag === 'toDefine' && <TipText tip={labelT(t)(RISK_FLAGS.toDefine.hint)}><span style={{ color: TONE.danger.dot }}>{t('To be defined')}</span></TipText>}
+                  {r.flag === 'residualHigh' && <TipText tip={labelT(t)(RISK_FLAGS.residualHigh.hint)}><span style={{ color: TONE.danger.dot }}>{fill(t('Residual ≥ {n}'), { n: RISK_ACTION_THRESHOLD })}</span></TipText>}
+                  {r.flag === 'toReview' && <TipText tip={labelT(t)(RISK_FLAGS.toReview.hint)}><ToneTag tone="warn" style={{ fontSize: 11 }}>{t('To re-rate')}</ToneTag></TipText>}
                   {!r.actions.length && !r.flag && <span style={{ color: 'var(--vg-text-muted)' }}>—</span>}
                   {canManage && actionsQhse && (
                     <button type="button" className="vg-text-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}

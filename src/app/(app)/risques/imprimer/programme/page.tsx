@@ -8,6 +8,8 @@ import { PROGRAM_SHORT, PROGRAM_STATES } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadPreventionProgram } from '@/lib/data/risks';
 import { today } from '@/lib/today';
+import { labelT } from '@/i18n/labels';
+import { fill } from '@/i18n/translate';
 import '../../../prevention/imprimer/print.css';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,7 +27,8 @@ const Meta = ({ rows }: { rows: [string, ReactNode][] }) => (
 // périmètre), coût estimé, ressources et indicateur, avec une ligne de total. Jamais de pilotes ni d'historique.
 export default async function ProgramPrintPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await guard('risks');
-  const sp = await searchParams;
+  const [sp, { t }] = await Promise.all([searchParams, getI18n()]);
+  const lt = labelT(t);
   const now = today();
   const year = typeof sp.annee === 'string' && /^\d{4}$/.test(sp.annee) ? Number(sp.annee) : yearOf(now);
   const d = await loadPreventionProgram(year);
@@ -38,7 +41,7 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
         <a href={`/risques?programme=${year}`} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{PROGRAM_SHORT} {year}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="pp-muted" style={{ fontSize: 11.5 }}>{t('For a PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
@@ -46,30 +49,30 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
       <header className="pp-head">
         <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · {PROGRAM_SHORT} {year}</div>
         <div className="pp-head-row">
-          <h1>Programme annuel de prévention des risques professionnels et d&apos;amélioration des conditions de travail {year}</h1>
-          {program && <span className="tag tag-neutral">{PROGRAM_STATES[program.state].label}</span>}
+          <h1>{fill(t('Annual programme for the prevention of occupational risks and the improvement of working conditions {year}'), { year })}</h1>
+          {program && <span className="tag tag-neutral">{lt(PROGRAM_STATES[program.state].label)}</span>}
         </div>
-        <div className="pp-muted" style={{ fontSize: 12.5 }}>Code du travail, article L. 4121-3-1 · issu du document unique d&apos;évaluation des risques</div>
+        <div className="pp-muted" style={{ fontSize: 12.5 }}>{t('Labour code, article L. 4121-3-1 · drawn from the occupational risk assessment document')}</div>
         {program && (
           <Meta rows={[
-            ['Établissement', session.site.label],
-            ['DUERP d’origine', `Version ${program.duerpVersion}`],
-            ['Objet', program.comment || '—'],
-            ['CSE consulté le', program.cseConsultedOn ? fmtDate(program.cseConsultedOn) : 'À renseigner'],
-            ['Arrêté', program.frozenOn ? `le ${fmtDate(program.frozenOn)}${program.frozenBy ? ` par ${program.frozenBy}` : ''}` : 'Non (en préparation)'],
-            ['Édité le', fmtDate(now)],
+            [t('Establishment'), session.site.label],
+            [t('Original DUERP'), fill(t('Version {v}'), { v: program.duerpVersion })],
+            [t('Purpose'), program.comment || '—'],
+            [t('CSE consulted on'), program.cseConsultedOn ? fmtDate(program.cseConsultedOn) : t('To be filled in')],
+            [t('Adopted#programme'), program.frozenOn ? (program.frozenBy ? fill(t('on {date} by {name}'), { date: fmtDate(program.frozenOn), name: program.frozenBy }) : fill(t('on {date}'), { date: fmtDate(program.frozenOn) })) : t('No (in preparation)')],
+            [t('Printed on'), fmtDate(now)],
           ]} />
         )}
       </header>
 
       <section className="pp-section">
-        {!program ? <p className="pp-empty">Aucun programme établi pour {year}.</p> : (
+        {!program ? <p className="pp-empty">{fill(t('No programme established for {year}.'), { year })}</p> : (
           <>
-            <h2>Actions de prévention · {totals.count}</h2>
-            {lines.length === 0 ? <p className="pp-empty">Aucune action du programme sur ce site.</p> : (
+            <h2>{fill(t('Prevention actions · {n}'), { n: totals.count })}</h2>
+            {lines.length === 0 ? <p className="pp-empty">{t('No action of the programme on this site.')}</p> : (
               <table className="table pp-table">
                 <thead>
-                  <tr><th>Action</th><th>Risques du DUERP</th><th>Date cible</th><th>Avancement</th><th style={{ textAlign: 'right' }}>Coût estimé (HT)</th><th>Ressources</th><th>Indicateur</th></tr>
+                  <tr><th>{t('Action')}</th><th>{t('DUERP risks')}</th><th>{t('Target date')}</th><th>{t('Progress')}</th><th style={{ textAlign: 'right' }}>{t('Estimated cost (excl. VAT)')}</th><th>{t('Resources')}</th><th>{t('Indicator')}</th></tr>
                 </thead>
                 <tbody>
                   {lines.map((l) => (
@@ -81,8 +84,8 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
                       <td>{l.risks.length ? l.risks.map((r, i) => <div key={`${r.id ?? i}`}>{r.label} ({r.cotation})</div>) : '—'}</td>
                       <td className="pp-nowrap">{l.dueOn ? fmtDate(l.dueOn) : '—'}</td>
                       <td>
-                        {l.status}
-                        {l.frozenStatus != null && l.frozenStatus !== l.status && <span className="pp-muted" style={{ display: 'block' }}>à l&apos;arrêt : {l.frozenStatus}</span>}
+                        {lt(l.status)}
+                        {l.frozenStatus != null && l.frozenStatus !== l.status && <span className="pp-muted" style={{ display: 'block' }}>{fill(t('at adoption: {status}'), { status: lt(l.frozenStatus) })}</span>}
                       </td>
                       <td className="pp-nowrap" style={{ textAlign: 'right' }}>{l.estimatedCost != null ? fmtEuro(l.estimatedCost) : '—'}</td>
                       <td>{l.resources || '—'}</td>
@@ -91,8 +94,8 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
                   ))}
                   <tr>
                     <td colSpan={4} style={{ fontWeight: 500 }}>
-                      Total · {totals.count} action{totals.count > 1 ? 's' : ''}{totals.done ? ` · ${totals.done} vérifiée${totals.done > 1 ? 's' : ''}` : ''}
-                      {totals.count > totals.costed && <span className="pp-muted"> · {totals.count - totals.costed} sans coût estimé</span>}
+                      {fill(totals.count > 1 ? t('Total · {n} actions') : t('Total · {n} action'), { n: totals.count })}{totals.done ? fill(totals.done > 1 ? t(' · {n} verified#plural') : t(' · {n} verified#one'), { n: totals.done }) : ''}
+                      {totals.count > totals.costed && <span className="pp-muted">{fill(t(' · {n} without estimated cost'), { n: totals.count - totals.costed })}</span>}
                     </td>
                     <td className="pp-nowrap" style={{ textAlign: 'right', fontWeight: 500 }}>{fmtEuro(totals.cost)}</td>
                     <td colSpan={2} />
@@ -102,14 +105,16 @@ export default async function ProgramPrintPage({ searchParams }: { searchParams:
             )}
             {hiddenCount > 0 && (
               <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>
-                Programme commun à tous les sites : {hiddenCount} action{hiddenCount > 1 ? 's' : ''} d&apos;autres sites {hiddenCount > 1 ? 'ne figurent pas' : 'ne figure pas'} sur cette édition (site sélectionné : {session.site.label}).
+                {fill(hiddenCount > 1
+                  ? t('Programme common to all sites: {n} actions of other sites do not appear in this edition (site selected: {site}).')
+                  : t('Programme common to all sites: {n} action of other sites does not appear in this edition (site selected: {site}).'), { n: hiddenCount, site: session.site.label })}
               </p>
             )}
           </>
         )}
       </section>
 
-      <div className="pp-foot">Vigie · {PROGRAM_SHORT} {year} · {session.site.label} · édité le {fmtDate(now)}</div>
+      <div className="pp-foot">Vigie · {PROGRAM_SHORT} {year} · {session.site.label}{fill(t(' · printed on {date}'), { date: fmtDate(now) })}</div>
     </article>
   );
 }

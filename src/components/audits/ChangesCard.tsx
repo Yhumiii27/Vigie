@@ -15,6 +15,7 @@ import type { ChangeView } from '@/lib/data/changes';
 import { cancelChangeRequest, completeChangeRequest, decideChangeRequest, saveChangeRequest } from '@/server/changes';
 import { RadioSeg } from './parts';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 // Gestion des changements (CNF-11, ISO 9001 §6.3 et §8.5.6, ISO 45001 §8.1.3) : demandes de changement, effets évalués,
@@ -68,9 +69,9 @@ export function ChangesCard({ rows, canEdit, canApprove, options, versions, toda
               <tr key={r.id} {...rowOpener(() => setSelId(r.id))} data-obsolete={r.cancelled ? true : undefined}>
                 <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{r.id}</td>
                 <td>{r.title}<div style={{ ...muted, marginTop: 2 }}>{r.siteLabel}{r.pilot && ` · ${r.pilot}`}</div></td>
-                <td>{r.kindLabel}</td>
+                <td>{labelT(t)(r.kindLabel)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{r.done ? fill(t('on {date}'), { date: fmtDate(r.done.on) }) : r.plannedOn ? fill(t('planned on {date}#f'), { date: fmtDate(r.plannedOn) }) : '—'}</td>
-                <td><ToneTag tone={r.tone} style={{ whiteSpace: 'nowrap' }}>{r.statusLabel}</ToneTag></td>
+                <td><ToneTag tone={r.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(r.statusLabel)}</ToneTag></td>
               </tr>
             ))}
           </tbody>
@@ -100,8 +101,8 @@ function ChangeDetail({ c, canEdit, canApprove, options, version, today, onClose
   return (
     <>
       <Facts items={[
-        [t('State'), <ToneTag key="s" tone={c.tone}>{c.statusLabel}</ToneTag>],
-        [t('Nature'), c.kindLabel],
+        [t('State'), <ToneTag key="s" tone={c.tone}>{labelT(t)(c.statusLabel)}</ToneTag>],
+        [t('Nature'), labelT(t)(c.kindLabel)],
         [t('Site'), c.siteLabel],
         [t('Lead'), c.pilot || '—'],
         [t('Implementation planned'), c.plannedOn ? fmtDate(c.plannedOn) : '—'],
@@ -180,7 +181,7 @@ function ChangeForm({ c, options, version, onDone, onCancel }: { c?: ChangeView;
         <Input name="title" defaultValue={c?.title ?? ''} maxLength={160} autoFocus={!c} />
       </Field>
       <FormRow>
-        <Field name="kind" label={t('Nature')}><Select name="kind" options={KIND_OPTIONS} defaultValue={c?.kind ?? 'procede'} /></Field>
+        <Field name="kind" label={t('Nature')}><Select name="kind" options={KIND_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.kind ?? 'procede'} /></Field>
         <Field name="siteId" label={t('Site')}><Select name="siteId" options={sites} defaultValue={c ? c.siteId ?? 'all' : sites[0]?.[0] ?? ''} /></Field>
       </FormRow>
       <Field name="description" label={t('Description')}><TextArea name="description" rows={3} maxLength={2000} defaultValue={c?.description ?? ''} /></Field>

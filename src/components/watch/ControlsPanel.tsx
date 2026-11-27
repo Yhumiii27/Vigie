@@ -199,7 +199,7 @@ function ControlDetail({ c, initialView, canManage, canApprove, options, actionO
         [t('Status'), <ToneTag key="s" tone={c.tone} style={{ marginTop: 1 }}>{c.status}</ToneTag>],
         [t('Next'), <span key="n" style={{ color: c.tone === 'neutral' ? undefined : TONE[c.tone].dot }}>{c.next}</span>],
         [t('Last'), c.last],
-        [t('Nature'), isControlCategory(c.category) ? CONTROL_CATEGORIES[c.category].label : c.category],
+        [t('Nature'), isControlCategory(c.category) ? labelT(t)(CONTROL_CATEGORIES[c.category].label) : c.category],
         !!c.tolerance && [t('Tolerance'), c.tolerance],
         [t('Frequency'), fill(t('Every {period}'), { period: months(c.periodMonths, t) })],
         [t('Body'), c.organization],
@@ -452,7 +452,7 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
       </Field>
       <FormRow>
         <Field name="category" label={t('Nature')} hint={t('Calibration: monitoring and measuring equipment (ISO 9001 §7.1.5); an out-of-tolerance result opens a non-conformity.')}>
-          <Select name="category" options={CATEGORY_OPTIONS} defaultValue={c?.category ?? 'reglementaire'} />
+          <Select name="category" options={CATEGORY_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.category ?? 'reglementaire'} />
         </Field>
         <Field name="tolerance" label={t('Tolerance (calibration)')} hint={t('Maximum permissible error, accuracy class… Optional.')}>
           <Input name="tolerance" defaultValue={c?.tolerance ?? ''} placeholder="Ex. ± 0,02 mm" maxLength={120} />
@@ -539,7 +539,7 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
         hint={c.category === 'metrologie'
           ? t('Out of tolerance: the equipment is flagged until a new compliant calibration and a non-conformity is opened (validity of the earlier measurements to assess).')
           : t('Unfavourable or shut down: the equipment is flagged until a new favourable inspection.')}>
-        <Select name="result" options={resultOptions(c.category)} defaultValue="" placeholder={t('Choose…')} />
+        <Select name="result" options={resultOptions(c.category).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue="" placeholder={t('Choose…')} />
       </Field>
       <Field name="reserves" label={t('Reservations')}
         hint={t('Number and subject, e.g. “1 · limit switch to adjust”. Empty = no reservation.') + (c.actionId ? fill(t(' Different reservations unlink {id}, which stays in the action plan.'), { id: c.actionId }) : '')}>

@@ -13,6 +13,7 @@ import type { DuerpAccessRequestView } from '@/lib/data/risks';
 import { cancelDuerpAccessRequest, saveDuerpAccessRequest } from '@/server/risks';
 import { archivedLabel } from './RiskSheet';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 const KIND_OPTIONS = Object.entries(DUERP_REQUESTERS) as [string, string][];
@@ -62,7 +63,7 @@ function RequestFields({ request, versions, sites, defaultSiteId, today, current
           <Input name="communicatedOn" type="date" defaultValue={request?.communicatedOn ?? ''} max={today} />
         </Field>
         <Field name="channel" label={t('Method')} hint={t('“Consultation in Vigie”: formal provision, recorded here.')}>
-          <Select name="channel" options={CHANNEL_OPTIONS} defaultValue={request?.channel ?? ''} placeholder="—" />
+          <Select name="channel" options={CHANNEL_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as [string, string])} defaultValue={request?.channel ?? ''} placeholder="—" />
         </Field>
       </FormRow>
       <Field name="note" label={t('Note')}>
@@ -144,7 +145,7 @@ export function AccessRegister({ requests, versions, sites, showSite, defaultSit
                   ) : r.communicatedOn ? (
                     <>
                       <div style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.communicatedOn)}</div>
-                      {r.channelLabel && <div style={muted}>{r.channelLabel}</div>}
+                      {r.channelLabel && <div style={muted}>{labelT(t)(r.channelLabel)}</div>}
                     </>
                   ) : (
                     <ToneTag tone="warn">{t('Pending')}</ToneTag>

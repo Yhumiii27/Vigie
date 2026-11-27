@@ -4,9 +4,11 @@ import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { DuerpAccessNotice } from '@/components/risks/AccessNotice';
 import { fmtDate } from '@/lib/dates';
-import { RISK_ACTION_THRESHOLD, RISK_LEVELS } from '@/lib/domain';
+import { RISK_ACTION_THRESHOLD, RISK_LEVELS, riskLevel } from '@/lib/domain';
+import { labelT } from '@/i18n/labels';
+import { fill, type T } from '@/i18n/translate';
 import { guard } from '@/lib/guard';
-import { DUERP_RETENTION, levelName, loadDuerpPrint, loadDuerpVersion, type PrintAction, type RiskRecord } from '@/lib/data/risks';
+import { DUERP_RETENTION, loadDuerpPrint, loadDuerpVersion, type PrintAction, type RiskRecord } from '@/lib/data/risks';
 import { today } from '@/lib/today';
 import '../../prevention/imprimer/print.css';
 
@@ -24,12 +26,12 @@ const Meta = ({ rows }: { rows: [string, ReactNode][] }) => (
   </dl>
 );
 
-function Cotation({ g, p }: { g: number; p: number }) {
+function Cotation({ g, p, t }: { g: number; p: number; t: T }) {
   const n = g * p;
   return (
     <>
       <span className="pp-nowrap">G{g} × P{p} = {n}</span>
-      <span className="pp-muted" style={{ display: 'block' }}>{levelName(n)}</span>
+      <span className="pp-muted" style={{ display: 'block' }}>{labelT(t)(RISK_LEVELS[riskLevel(n)].label).replace(/\s.*$/, '')}</span>
     </>
   );
 }
@@ -42,7 +44,10 @@ const sitesOf = (units: Unit[]) => [...new Set(units.map((u) => u.site))].join('
 // (?version=n, unités du périmètre, références des actions seulement). Jamais de pilotes, d'événements liés ni d'historique.
 export default async function DuerpPrintPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await guard('risks');
-  const sp = await searchParams;
+  const [sp, { t }] = await Promise.all([searchParams, getI18n()]);
+  const lt = labelT(t);
+  // Durée de conservation (« 40 ans ») : valeur par défaut de Vigie, rendue par t() ; une valeur saisie s'affiche telle quelle.
+  const retention = (v?: string | null) => (!v || v === DUERP_RETENTION ? t('40 years') : v);
   const wanted = typeof sp.version === 'string' && sp.version ? sp.version : null;
   const archived = wanted ? await loadDuerpVersion(wanted) : null;
   const now = today();
@@ -50,47 +55,47 @@ export default async function DuerpPrintPage({ searchParams }: { searchParams: P
   let doc: PrintDoc | null = null;
   let empty: string | null = null;
   if (wanted && !archived) {
-    empty = `Version ${wanted} inconnue.`;
+    empty = fill(t('Version {v} unknown.'), { v: wanted });
   } else if (archived && !archived.current) {
     const { snapshot } = archived;
     if (!snapshot.risks) {
-      empty = `Version ${archived.version} archivée hors Vigie : aucun instantané n'est disponible dans l'application.`;
+      empty = fill(t('Version {v} archived outside Vigie: no snapshot is available in the application.'), { v: archived.version });
     } else {
       const units = snapshot.units ?? [...new Map(snapshot.risks.map((r) => [r.unitId, { id: r.unitId, label: r.unit, siteId: r.siteId, site: r.site }])).values()];
       doc = {
-        label: `Version ${archived.version} (archivée)`,
+        label: fill(t('Version {v} (archived)'), { v: archived.version }),
         units, risks: snapshot.risks, actionInfo: null,
         meta: [
-          ['Établissement', sitesOf(units)],
-          ['Version', `${archived.version} · archivée${archived.archivedOn ? ` le ${fmtDate(archived.archivedOn)}` : ''}`],
-          ['Mise à jour', fmtDate(archived.updatedOn)],
-          ['Validée par', archived.validatedBy || '—'],
-          ['CSE consulté le', archived.cseConsultedOn ? fmtDate(archived.cseConsultedOn) : '—'],
-          ['Conservation', `${DUERP_RETENTION} (R. 4121-4)`],
-          ['Objet', archived.comment || '—'],
-          ['Édité le', fmtDate(now)],
+          [t('Establishment'), sitesOf(units)],
+          [t('Version'), archived.archivedOn ? fill(t('{v} · archived on {date}'), { v: archived.version, date: fmtDate(archived.archivedOn) }) : fill(t('{v} · archived'), { v: archived.version })],
+          [t('Updated#date'), fmtDate(archived.updatedOn)],
+          [t('Validated by'), archived.validatedBy || '—'],
+          [t('CSE consulted on'), archived.cseConsultedOn ? fmtDate(archived.cseConsultedOn) : '—'],
+          [t('Retention'), `${retention(null)} (R. 4121-4)`],
+          [t('Purpose'), archived.comment || '—'],
+          [t('Printed on'), fmtDate(now)],
         ],
       };
     }
   } else {
     const d = await loadDuerpPrint();
     if (!d.version) {
-      empty = 'Aucune version du DUERP en vigueur.';
+      empty = t('No version of the DUERP in force.');
     } else {
       const v = d.version;
       doc = {
-        label: `Version ${v.version} (en vigueur)`,
+        label: fill(t('Version {v} (in force)'), { v: v.version }),
         units: d.units, risks: d.risks, actionInfo: d.actionInfo,
         meta: [
-          ['Établissement', d.siteLabel ?? sitesOf(d.units)],
-          ['Version', `${v.version} · en vigueur`],
-          ['Mise à jour', fmtDate(v.updatedOn)],
-          ['Prochaine mise à jour', fmtDate(v.nextUpdateOn)],
-          ['Validée par', v.validatedBy || '—'],
-          ['CSE consulté le', v.cseConsultedOn ? fmtDate(v.cseConsultedOn) : 'À renseigner'],
-          ['Conservation', `${v.retention || DUERP_RETENTION} (R. 4121-4)`],
-          ['Objet', v.comment || '—'],
-          ['Édité le', fmtDate(now)],
+          [t('Establishment'), d.siteLabel ?? sitesOf(d.units)],
+          [t('Version'), fill(t('{v} · in force'), { v: v.version })],
+          [t('Updated#date'), fmtDate(v.updatedOn)],
+          [t('Next update'), fmtDate(v.nextUpdateOn)],
+          [t('Validated by'), v.validatedBy || '—'],
+          [t('CSE consulted on'), v.cseConsultedOn ? fmtDate(v.cseConsultedOn) : t('To be filled in')],
+          [t('Retention'), `${retention(v.retention)} (R. 4121-4)`],
+          [t('Purpose'), v.comment || '—'],
+          [t('Printed on'), fmtDate(now)],
         ],
       };
     }
@@ -103,22 +108,22 @@ export default async function DuerpPrintPage({ searchParams }: { searchParams: P
     <article className="pp-doc">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href="/risques" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Évaluation des risques</a>
+        <a href="/risques" className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{t('Risk assessment')}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="pp-muted" style={{ fontSize: 11.5 }}>{t('For a PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
 
       <header className="pp-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · DUERP{doc ? ` · ${doc.label}` : ''}</div>
-        <h1>Document unique d&apos;évaluation des risques professionnels</h1>
-        <div className="pp-muted" style={{ fontSize: 12.5 }}>Code du travail, articles R. 4121-1 à R. 4121-4</div>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>{t('Vigie · DUERP')}{doc ? ` · ${doc.label}` : ''}</div>
+        <h1>{t('Occupational risk assessment document')}</h1>
+        <div className="pp-muted" style={{ fontSize: 12.5 }}>{t('Labour code, articles R. 4121-1 to R. 4121-4')}</div>
         {doc && <Meta rows={doc.meta} />}
       </header>
 
       <section className="pp-section">
-        <h2>Mise à disposition</h2>
+        <h2>{t('Availability')}</h2>
         <DuerpAccessNotice />
       </section>
 
@@ -127,44 +132,43 @@ export default async function DuerpPrintPage({ searchParams }: { searchParams: P
       ) : doc && (
         <>
           <section className="pp-section">
-            <h2>Méthode de cotation</h2>
+            <h2>{t('Rating method')}</h2>
             <p className="pp-text">
-              Cotation gravité (G1 à G4) × probabilité (P1 à P4), brute puis résiduelle après les mesures existantes. À partir de {RISK_ACTION_THRESHOLD}, une action
-              de réduction est obligatoire et suivie dans le plan d&apos;actions unique.
+              {fill(t('Rating severity (G1 to G4) × probability (P1 to P4), gross then residual after the existing measures. From {n}, a reduction action is mandatory and followed in the single action plan.'), { n: RISK_ACTION_THRESHOLD })}
             </p>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12 }}>
               {RISK_LEVELS.map((l) => (
                 <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: l.bg, border: '1px solid var(--color-divider)' }} />{l.label}
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: l.bg, border: '1px solid var(--color-divider)' }} />{lt(l.label)}
                 </span>
               ))}
             </div>
           </section>
 
-          {doc.units.length === 0 && <section className="pp-section"><p className="pp-empty">Aucune unité de travail sur ce site.</p></section>}
+          {doc.units.length === 0 && <section className="pp-section"><p className="pp-empty">{t('No work unit on this site.')}</p></section>}
           {doc.units.map((u, i) => {
             const rows = doc.risks.filter((r) => r.unitId === u.id);
             return (
               <section key={u.id} className="pp-section">
                 <h2><span className="pp-num">{i + 1}</span>{u.label}{multiSite ? ` · ${u.site}` : ''}</h2>
-                {rows.length === 0 ? <p className="pp-empty">Aucun risque évalué.</p> : (
+                {rows.length === 0 ? <p className="pp-empty">{t('No risk assessed.')}</p> : (
                   <table className="table pp-table">
-                    <thead><tr><th>Danger</th><th>Situation dangereuse</th><th>Brut</th><th>Mesures existantes</th><th>Résiduel</th><th>Actions de prévention</th></tr></thead>
+                    <thead><tr><th>{t('Hazard')}</th><th>{t('Hazardous situation')}</th><th>{t('Gross')}</th><th>{t('Existing measures')}</th><th>{t('Residual')}</th><th>{t('Prevention actions')}</th></tr></thead>
                     <tbody>
                       {rows.map((r, j) => (
                         <tr key={`${r.unitId}-${j}`}>
                           <td style={{ fontWeight: 500 }}>{r.hazard}</td>
                           <td>{r.situation}</td>
-                          <td><Cotation g={r.gravity} p={r.probability} /></td>
+                          <td><Cotation g={r.gravity} p={r.probability} t={t} /></td>
                           <td>{r.existingMeasures || '—'}</td>
-                          <td><Cotation g={r.residualGravity} p={r.residualProbability} /></td>
+                          <td><Cotation g={r.residualGravity} p={r.residualProbability} t={t} /></td>
                           <td>
                             {!r.actions.length ? '—' : info ? r.actions.map((id) => {
                               const a = info[id];
                               return (
                                 <div key={id} style={{ marginBottom: 3 }}>
                                   <span className="pp-nowrap">{id}</span>{a ? ` · ${a.title}` : ''}
-                                  {a && <span className="pp-muted" style={{ display: 'block' }}>date cible {fmtDate(a.dueOn)} · {a.status}</span>}
+                                  {a && <span className="pp-muted" style={{ display: 'block' }}>{fill(t('target date {date} · {status}'), { date: fmtDate(a.dueOn), status: lt(a.status) })}</span>}
                                 </div>
                               );
                             }) : <span className="pp-nowrap">{r.actions.join(', ')}</span>}
@@ -180,7 +184,7 @@ export default async function DuerpPrintPage({ searchParams }: { searchParams: P
         </>
       )}
 
-      <div className="pp-foot">Vigie · document unique{doc ? ` · ${doc.label.toLowerCase()}` : ''} · édité le {fmtDate(now)}</div>
+      <div className="pp-foot">{t('Vigie · single document')}{doc ? ` · ${doc.label.toLowerCase()}` : ''}{fill(t(' · printed on {date}'), { date: fmtDate(now) })}</div>
     </article>
   );
 }

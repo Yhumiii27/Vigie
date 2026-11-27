@@ -4,6 +4,7 @@ import { fmtDate } from '@/lib/dates';
 import { FieldGrid } from './FieldGrid';
 import { MedicalAttachments } from './MedicalAttachments';
 import { getI18n } from '@/i18n/server';
+import { msgT } from '@/i18n/msg';
 
 /**
  * Maladie professionnelle sur la fiche (EVT-09, rôles habilités seulement : le type n'est chargé que pour eux) : salarié
@@ -30,7 +31,7 @@ export async function OccupationalSection({ detail, canEdit = false }: { detail:
         [t('Disease declared'), mp.disease ?? '—'],
         [t('Initial medical certificate'), mp.certificateOn ? fmtDate(mp.certificateOn) : '—'],
         [t('Declaration received from the CPAM'), mp.informedOn ? fmtDate(mp.informedOn) : '—'],
-        [t('Employer questionnaire'), <ToneTag key="q" tone={mp.questionnaire.tone}>{mp.questionnaire.label}</ToneTag>],
+        [t('Employer questionnaire'), <ToneTag key="q" tone={mp.questionnaire.tone}>{msgT(t)(mp.questionnaire.text)}</ToneTag>],
       ]} />
       <MedicalAttachments eventId={e.id} files={medical} others={attachments} canEdit={canEdit && !lock} />
     </div>

@@ -8,6 +8,7 @@ import { guard } from '@/lib/guard';
 import { loadDatPrint } from '@/lib/data/events';
 import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
+import { msgT } from '@/i18n/msg';
 import { labelT } from '@/i18n/labels';
 import { fill, type T } from '@/i18n/translate';
 import '../../../prevention/imprimer/print.css';
@@ -114,8 +115,8 @@ export default async function DatPrintPage({ params }: PageProps<'/evenements/im
 
       <Section num={6} title={t('Declaration')}>
         <Meta rows={[
-          [t('CPAM declaration'), d.cpam?.label ?? '—'],
-          ...(d.cpam?.reserves ? [[t('Reasoned reservations'), d.cpam.reserves.label] as [string, ReactNode]] : []),
+          [t('CPAM declaration'), d.cpam ? msgT(t)(d.cpam.text) : '—'],
+          ...(d.cpam?.reserves ? [[t('Reasoned reservations'), msgT(t)(d.cpam.reserves.text)] as [string, ReactNode]] : []),
         ]} />
       </Section>
 

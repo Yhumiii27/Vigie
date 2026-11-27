@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from 'next';
+import { getI18n } from '@/i18n/server';
 import { MySpaceView } from '@/components/events/MySpaceView';
 import { reportQuery } from '@/lib/rules/events';
 import { loadMySpace } from '@/lib/data/my-space';
 import { loadMyTalks } from '@/lib/data/safety-talks';
 import { getSession } from '@/lib/session';
 
-export const metadata: Metadata = { title: 'Mon espace' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('My space') };
+}
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#161826' };
 
 // Espace salarié mobile (EVT-22) : mes actions, mes habilitations, mes signalements — tout rôle connecté, sur ses seules

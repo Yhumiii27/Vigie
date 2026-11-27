@@ -15,6 +15,7 @@ import type { SafetyNoticeView } from '@/lib/data/watch';
 import { answerSafetyNotice, cancelSafetyNotice, saveSafetyNotice } from '@/server/watch';
 import { Facts, Notice, muted, rowOpener } from './parts';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill } from '@/i18n/translate';
 
 // Registre de sécurité (VEI-15, L. 4711-1 et L. 4711-2) : observations et mises en demeure de l'inspection du travail, de
@@ -170,7 +171,7 @@ function NoticeForm({ n, options, defaultSite, today, onDone, onCancel }: {
     <ActionForm action={saveSafetyNotice} hidden={{ id: n?.id, version: n?.version }} onDone={onDone} onCancel={onCancel} submitLabel={n ? t('Save') : t('Record in the register')}>
       <FormRow>
         <Field name="kind" label={t('Nature')}>
-          <Select name="kind" options={KIND_OPTIONS} defaultValue={n?.kind ?? 'observation'} />
+          <Select name="kind" options={KIND_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={n?.kind ?? 'observation'} />
         </Field>
         <Field name="siteId" label={t('Site')}>
           <Select name="siteId" options={sites} value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder={t('Choose…')} />

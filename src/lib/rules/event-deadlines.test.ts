@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cpamBasis, cpamDeadline, easterSunday, ettDeadline, fmtDeadline, frenchHolidays, isExcludedDay, reservesDeadline } from './event-deadlines';
+import { msgT } from '@/i18n/msg';
+import { makeT } from '@/i18n/translate';
+import { cpamBasis, cpamDeadline, deadlineMsg, easterSunday, ettDeadline, fmtDeadline, frenchHolidays, isExcludedDay, reservesDeadline } from './event-deadlines';
 
 // Délais d'un accident du travail (EVT-03) : 48 h hors dimanches et jours fériés pour la déclaration CPAM (R. 441-3 CSS),
 // 10 jours francs pour les réserves motivées (R. 441-6), fériés d'Alsace-Moselle en option.
@@ -54,6 +56,9 @@ describe('déclaration CPAM : 48 h hors dimanches et jours fériés', () => {
     expect(fmtDeadline({ date: '2026-10-12', minutes: 900 })).toBe('avant le 12/10/2026 à 15 h 00');
     expect(fmtDeadline({ date: '2026-10-13', minutes: 545 })).toBe('avant le 13/10/2026 à 09 h 05');
     expect(fmtDeadline({ date: '2026-10-13', minutes: 1440 })).toBe('avant la fin du 13/10/2026');
+    // VG-N01 : même échéance en anglais.
+    expect(msgT(makeT('en'))(deadlineMsg({ date: '2026-10-12', minutes: 900 }))).toBe('before 12/10/2026 at 15:00');
+    expect(msgT(makeT('en'))(deadlineMsg({ date: '2026-10-13', minutes: 1440 }))).toBe('before the end of 13/10/2026');
   });
 });
 

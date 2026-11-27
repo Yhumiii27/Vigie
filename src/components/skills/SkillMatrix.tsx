@@ -21,6 +21,7 @@ import { CursusRefreshButton } from './PeoplePanel';
 import { lapseFor } from '@/lib/rules/skills';
 import { TitlesButton } from './TitlesManager';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 import { fill, type T } from '@/i18n/translate';
 
 /** Sites des formulaires du personnel (aucune liste du formulaire d'action : l'écran ne crée pas d'action QSE). */
@@ -105,7 +106,7 @@ function cellTip(c: SkillCell, t: T) {
   const action = !r ? '' : r.planned
     ? fill(c.state === 'r' ? t(' · training planned ({id})') : t(' · renewal planned ({id})'), { id: r.id })
     : fill(t(' · {kind} action {id} ({status})'), { kind: renewalNoun(c.state, t), id: r.id, status: lcfirst(r.statusLabel) });
-  return `${c.title.label} — ${s.label}${c.expiresOn && c.state !== 'n' ? fill(t(' · expiry {date}'), { date: fmtDate(c.expiresOn) }) : ''}${action}`;
+  return `${c.title.label} — ${labelT(t)(s.label)}${c.expiresOn && c.state !== 'n' ? fill(t(' · expiry {date}'), { date: fmtDate(c.expiresOn) }) : ''}${action}`;
 }
 
 
@@ -162,7 +163,7 @@ function CellView({ row, cell, canManage, today }: { row: SkillRow; cell: SkillC
       <div className="vg-inset" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
         <SkillDot state={cell.state} size={28} />
         <div style={{ display: 'grid', gap: 1, minWidth: 0 }}>
-          <span style={{ fontWeight: 500 }}>{s.label}</span>
+          <span style={{ fontWeight: 500 }}>{labelT(t)(s.label)}</span>
           <span style={{ fontSize: 12, color: 'var(--color-neutral-400)' }}>{stateDetail(cell, today, t)}</span>
         </div>
       </div>
@@ -354,7 +355,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--color-neutral-400)' }}>
         {(unavailable ? LEGEND_UNAVAILABLE : LEGEND).map((k) => (
           <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <SkillDot state={k} size={18} />{SKILL_STATES[k].label}
+            <SkillDot state={k} size={18} />{labelT(t)(SKILL_STATES[k].label)}
           </span>
         ))}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
