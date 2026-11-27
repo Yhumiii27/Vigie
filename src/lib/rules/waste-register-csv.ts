@@ -4,12 +4,20 @@
 // Module pur : lignes préparées par loadWasteRegisterCsv (src/lib/data/environment.ts).
 import { labelT } from '@/i18n/labels';
 import type { T } from '@/i18n/translate';
-import type { EntryView } from '@/lib/data/environment';
 import { fmtDate } from '@/lib/dates';
 import { toCsv } from '@/lib/csv';
-import { BSD_STATUS, toRegisterQuantity, treatmentLabel } from './environment';
+import { BSD_STATUS, toRegisterQuantity, treatmentLabel, type BsdStatus } from './environment';
 
-export function wasteRegisterCsv(rows: readonly EntryView[], t: T): string {
+/** Mentions d'un enlèvement que porte le registre (EntryView de src/lib/data/environment.ts les fournit). */
+export type WasteRegisterRow = {
+  removedOn: string; site: string; siteSiret: string | null; pickupAddress: string | null; stream: string; ewcCode: string; hazardous: boolean;
+  pop: boolean; quantity: number; unit: string; transporter: string; transporterSiret: string | null; transporterAddress: string | null;
+  transporterReceipt: string | null; bsdNumber: string | null; missingBsd: boolean; bsdStatus: BsdStatus | null; destination: string;
+  destinationSiret: string | null; destinationAddress: string | null; treatmentCode: string; qualificationLabel: string | null; channel: string;
+  gaps: string[]; notes: string | null;
+};
+
+export function wasteRegisterCsv(rows: readonly WasteRegisterRow[], t: T): string {
   const l = labelT(t);
   const yes = (b: boolean) => (b ? t('Yes') : t('No'));
   const headers = [
