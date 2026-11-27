@@ -2,7 +2,7 @@ import 'server-only';
 import { composed, titled, type Msg } from '@/i18n/msg';
 import { cache } from 'react';
 import {
-  PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, nextPeriodicMeeting, permitDays, permitState, toParisLocal,
+  fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, nextPeriodicMeeting, permitDays, permitState, toParisLocal,
   type PermitType,
 } from '@/lib/rules/prevention';
 import { addDays, fmtDate } from '../dates';

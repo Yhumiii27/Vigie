@@ -16,7 +16,7 @@ import { loadPeople, loadSiteRows } from '../queries';
 import {
   ECO_APPROVAL_DAYS, ECO_APPROVAL_KEYS, ECO_APPROVAL_KEY_LIST, ECO_DECISIONS, ECO_STATUSES, ECO_TYPES, ECR_DECISION_DAYS, ECR_KINDS, ECR_STATUSES,
   ECR_SUBJECTS, EFFECTIVITY_DISPOSITIONS, EFFECTIVITY_TARGETS, ENGINEERING_SOURCES, INTERCHANGEABILITY, INTERCHANGEABILITY_UNSET, canDecideApproval,
-  dispositionNeedsWork, ecoLocked, engineeringHref, pendingDispositions, proposeEffectivity, targetText,
+  dispositionNeedsWork, ecoLocked, engineeringHref, pendingDispositions, proposeEffectivity,
   type EcoApprovalKey, type EcoDecision, type EcoStatus, type EcoType, type EcrKind, type EcrStatus, type EcrSubject, type EffectivityDisposition,
   type EffectivityTarget, type EngineeringSource, type ProposedTarget,
 } from '../rules/engineering';
