@@ -6,6 +6,7 @@
 // texte saisi : seulement pour une valeur qui vient d'une de ces tables. Contexte `#…` en fin de chaîne source quand un même
 // anglais doit rendre deux libellés français différents.
 import type { T } from './translate';
+import type { Msg } from './msg';
 
 /** Libellé français d'une table → chaîne source anglaise. */
 export const LABEL_EN: Record<string, string> = {
@@ -356,6 +357,43 @@ export const LABEL_EN: Record<string, string> = {
   'suivi individuel renforcé': 'enhanced individual monitoring',
   'Intitulés des postes seulement : jamais de nom ni de donnée médicale.': 'Titles of the posts only: never a name nor medical data.',
   'Ex. Aucun poste': 'E.g. No post',
+  // Types d'échéance et de notification (TodoItem.kind, NOTIFICATION_KINDS, REMINDER_KIND, PLAN_TRACK_KINDS)
+  Action: 'Action#kind',
+  'Action en retard': 'Overdue action',
+  'Audit interne': 'Internal audit',
+  'Visite sécurité': 'Safety visit',
+  Certification: 'Certification',
+  "Constat d'audit": 'Audit finding',
+  Coactivité: 'Co-activity',
+  Consommations: 'Consumption',
+  Contrôle: 'Check#kind',
+  'Danger grave et imminent': 'Serious and imminent danger',
+  Document: 'Document',
+  'Déclaration AT à la CPAM': 'Accident declaration to the CPAM',
+  'Gestion des changements': 'Change management',
+  Habilitation: 'Authorisation',
+  'Inscription au registre des accidents bénins': 'Entry in the register of minor accidents',
+  Permis: 'Permit',
+  Personnel: 'Staff',
+  'Plan de prévention': 'Prevention plan',
+  'QR code de poste': 'Post QR code',
+  'Questionnaire maladie professionnelle': 'Occupational disease questionnaire',
+  'Registre de sécurité': 'Safety register',
+  'Signalement à qualifier': 'Report to qualify',
+  Site: 'Site',
+  'Validation documentaire': 'Document approval',
+  Veille: 'Regulatory watch#kind',
+  'Étude de sécurité': 'Safety study',
+  "Vérification d'efficacité": 'Effectiveness check',
+  'Demande de Keystone': 'Request from Keystone',
+  'Demande de Codex': 'Request from Codex',
+  'Action confiée': 'Action assigned',
+  'Commentaire du responsable': 'Comment of the owner',
+  'Preuve ajoutée': 'Evidence added',
+  'Suite de votre signalement': 'Follow-up of your report',
+  'Feuille d’émargement à signer': 'Attendance sheet to sign',
+  'Rappel du mercredi': 'Wednesday reminder',
+  Information: 'Information#kind',
   // Rôles (ROLE_KEYS)
   'Animateur QHSE': 'QHSE coordinator',
   Direction: 'Management#role',
@@ -568,6 +606,12 @@ export const LABEL_EN: Record<string, string> = {
   Envoyé: 'Sent',
   'Refusé par le destinataire': 'Refused by the recipient',
 };
+
+/**
+ * Libellé d'une table comme paramètre d'un libellé composé (src/i18n/msg.ts) : sa chaîne source anglaise, sinon le libellé
+ * lui-même (rendu tel quel). Son français (msgFr) est toujours le libellé de la table.
+ */
+export const labelMsg = (label: string): Msg => ({ en: Object.hasOwn(LABEL_EN, label) ? LABEL_EN[label] : label });
 
 /** Dictionnaire français des chaînes sources de LABEL_EN : LABEL_EN inversé (le français est le libellé de la table). */
 export const LABELS_FR: Record<string, string> = Object.fromEntries(Object.entries(LABEL_EN).map(([fr, en]) => [en, fr]));

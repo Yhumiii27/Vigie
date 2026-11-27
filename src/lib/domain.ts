@@ -1,6 +1,7 @@
 // Référentiels métier partagés (serveur et client).
 
 import { SKILL_SOON_DAYS } from './horizons';
+import type { Msg } from '@/i18n/msg';
 import { ACTION_AVANCEMENTS, OPEN_AVANCEMENTS, type ActionDomain, type ActionPriority, type Avancement, type FollowReason, type SourceKey, type VerifyMethod } from './action-keys';
 
 export type Tone = 'danger' | 'warn' | 'ok' | 'neutral' | 'accent';
@@ -741,6 +742,11 @@ export const SAFETY_WINDOW_MONTHS = 12;
 /** Échéance affichée dans « À traiter », la page À faire, les notifications et les badges. */
 export type TodoItem = {
   date: string; kind: string; tone: Tone; title: string; who: string;
+  /**
+   * Intitulé composé (src/i18n/msg.ts, VG-N01), rendu dans la langue de la personne ; `title` en garde le français, seul lu
+   * par les règles, la clé d'état lu (todoKey) et les essais. Absent : `title` s'affiche tel quel.
+   */
+  titleText?: Msg;
   /**
    * Site de l'élément (null : commun à tous les sites — version du DUERP, exigences, audits, revue). Les signaux sont
    * calculés sur tout le périmètre de la personne (TDB-05) ; visibleTodo le compare au site sélectionné.

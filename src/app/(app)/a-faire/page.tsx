@@ -10,6 +10,8 @@ import { loadTodoPage } from '@/lib/data/dashboard';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { SCREEN_LABEL_EN } from '@/i18n/nav';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
 
 // TDB-17 : titre d'onglet de la page.
 export const generateMetadata = () => screenMetadata('todo');
@@ -88,10 +90,10 @@ export default async function TodoPage({ searchParams }: PageProps<'/a-faire'>) 
                     </span>
                     <span style={{ display: 'grid', gap: 3, minWidth: 0 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--color-text)', fontWeight: item.read ? 400 : 500 }}>
-                        {!item.read && <span className="vg-unread"><span className="vg-sr-only">{t('Unread')}</span></span>}{item.title}
+                        {!item.read && <span className="vg-unread"><span className="vg-sr-only">{t('Unread')}</span></span>}{item.titleText ? msgT(t)(item.titleText) : item.title}
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', flexWrap: 'wrap' }}>
-                        <Dot color={TONE[item.tone].dot} size={6} />{[item.kind, item.who, screenLabel(item.screen), item.siteLabel].filter(Boolean).join(' · ')}
+                        <Dot color={TONE[item.tone].dot} size={6} />{[labelT(t)(item.kind), item.who, screenLabel(item.screen), item.siteLabel].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                   </TodoLink>

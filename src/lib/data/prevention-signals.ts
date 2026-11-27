@@ -1,4 +1,5 @@
 import 'server-only';
+import { composed, titled, type Msg } from '@/i18n/msg';
 import { cache } from 'react';
 import {
   PERMIT_TYPES, fmtLocalRange, isFullySigned, isMandatory, isPlanEnded, nextPeriodicMeeting, permitDays, permitState, toParisLocal,
@@ -7,7 +8,7 @@ import {
 import { addDays, fmtDate } from '../dates';
 import { byUrgency, type TodoItem, type Tone } from '../domain';
 import { TODO_HORIZON_DAYS } from '../horizons';
-import { gapSummary, loadRows, plural } from './prevention-rows';
+import { gapSummary, loadRows } from './prevention-rows';
 import { loadQhseLeads } from './leads';
 import { readPlanWorkers } from './plan-workers';
 import { lockoutSignal } from '@/lib/rules/lockouts';
@@ -21,17 +22,19 @@ import { lockoutSignal } from '@/lib/rules/lockouts';
  * les deux ; l'évaluation de conformité reste un jugement du pilote, affiché à côté.
  */
 export const loadPreventionCompliance = cache(async (): Promise<{
-  gapCount: number; currentGapCount: number; pastGapCount: number; label: string; tone: Tone; href: string;
+  gapCount: number; currentGapCount: number; pastGapCount: number; label: string; text: Msg; tone: Tone; href: string;
 }> => {
   const { gapCount: current, pastGapCount: past } = gapSummary(await loadRows('perimeter'));
-  const pastLabel = `${plural(past, 'écart passé', 'écarts passés')} sur 12 mois`;
+  const pastText: Msg = past > 1 ? { en: '{n} past gaps over 12 months', values: { n: past } } : { en: '{n} past gap over 12 months', values: { n: past } };
+  const currentText: Msg = current > 1 ? { en: '{n} works without a signed plan', values: { n: current } } : { en: '{n} work without a signed plan', values: { n: current } };
+  const { label, text } = current
+    ? (past ? composed('{current} · {past}', { current: currentText, past: pastText }) : composed('{current}', { current: currentText }))
+    : past ? composed('No work in progress without a signed plan · {past}', { past: pastText }) : composed('No R. 4512-6 gap over 12 months');
   return {
     gapCount: current + past,
     currentGapCount: current,
     pastGapCount: past,
-    label: current
-      ? `${plural(current, 'intervention sans plan signé', 'interventions sans plan signé')}${past ? ` · ${pastLabel}` : ''}`
-      : past ? `Aucune intervention en cours sans plan signé · ${pastLabel}` : 'Aucun écart R. 4512-6 sur 12 mois',
+    label, text,
     tone: current ? 'danger' : past ? 'warn' : 'ok',
     href: '/prevention',
   };
@@ -66,11 +69,11 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const kind = 'Plan de prévention';
     const siteId = p.siteId;
     if (gaps.planGaps.has(p.id)) {
-      todo.push({ date: now, dueOn: p.startOn, kind, tone: 'danger', title: `${p.id} · intervention en cours sans plan signé — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
+      todo.push({ date: now, dueOn: p.startOn, kind, tone: 'danger', ...titled('{id} · work in progress without a signed plan — {title}', { id: p.id, title: p.title }), who, href, ownerIds, siteId, overdue: true });
       return;
     }
     if (p.endOn < now) {
-      todo.push({ date: p.endOn, dueOn: p.endOn, kind, tone: 'warn', title: `${p.id} · période échue, plan à clore — ${p.title}`, who, href, ownerIds, siteId, overdue: true });
+      todo.push({ date: p.endOn, dueOn: p.endOn, kind, tone: 'warn', ...titled('{id} · period ended, plan to close — {title}', { id: p.id, title: p.title }), who, href, ownerIds, siteId, overdue: true });
       return;
     }
     // PRV-17 : inspection ou réunion périodique de coordination due (périodicité du plan) pendant l'intervention ;
@@ -80,15 +83,17 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
       const to = p.ownerId ? { who, ownerIds: [p.ownerId] } : { who: [contractorName(p.contractorId), leads.forSite(p.siteId).who].filter(Boolean).join(' · '), ownerIds: leads.forSite(p.siteId).ownerIds };
       todo.push({
         date: meeting.late ? now : meeting.dueOn, dueOn: meeting.dueOn, kind, tone: meeting.late ? 'danger' : 'warn', overdue: meeting.late || undefined,
-        title: `${p.id} · inspection ou réunion périodique de coordination ${meeting.late ? `en retard depuis le ${fmtDate(meeting.dueOn)}` : `avant le ${fmtDate(meeting.dueOn)}`} — ${p.title}`,
+        ...(meeting.late
+          ? titled('{id} · periodic coordination inspection or meeting overdue since {date} — {title}', { id: p.id, date: fmtDate(meeting.dueOn), title: p.title })
+          : titled('{id} · periodic coordination inspection or meeting before {date} — {title}', { id: p.id, date: fmtDate(meeting.dueOn), title: p.title })),
         href, ...to, siteId, key: `pp-reunion|${p.id}`,
       });
     }
     const toSignBeforeStart = p.startOn > now && p.startOn <= horizon && isMandatory(p, ruleOf(p.siteId)) && !isFullySigned(p);
     if (toSignBeforeStart) {
-      todo.push({ date: p.startOn, dueOn: p.startOn, kind, tone: 'warn', title: `${p.id} · plan à signer avant le démarrage — ${p.title}`, who, href, ownerIds, siteId });
+      todo.push({ date: p.startOn, dueOn: p.startOn, kind, tone: 'warn', ...titled('{id} · plan to sign before the start — {title}', { id: p.id, title: p.title }), who, href, ownerIds, siteId });
     } else if (!isFullySigned(p) && p.inspectionOn && p.inspectionOn > now && p.inspectionOn <= horizon) {
-      todo.push({ date: p.inspectionOn, dueOn: p.inspectionOn, kind, tone: 'neutral', title: `${p.id} · inspection commune prévue le ${fmtDate(p.inspectionOn)} — ${p.title}`, who, href, ownerIds, siteId });
+      todo.push({ date: p.inspectionOn, dueOn: p.inspectionOn, kind, tone: 'neutral', ...titled('{id} · joint inspection planned on {date} — {title}', { id: p.id, date: fmtDate(p.inspectionOn), title: p.title }), who, href, ownerIds, siteId });
     }
   });
   // PRV-23 : intervenants sans accueil sécurité à jour sur un plan en cours ou qui démarre sous l'horizon, au responsable QHSE
@@ -102,14 +107,16 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const started = p.startOn <= now;
     todo.push({
       date: started ? now : p.startOn, dueOn: p.startOn, kind: 'Plan de prévention', tone: started ? 'danger' : 'warn', overdue: started || undefined,
-      title: `${p.id} · ${plural(missing.length, 'intervenant sans accueil sécurité à jour', 'intervenants sans accueil sécurité à jour')} — ${p.title}`,
+      ...(missing.length > 1
+        ? titled('{id} · {n} workers without an up-to-date safety induction — {title}', { id: p.id, n: missing.length, title: p.title })
+        : titled('{id} · {n} worker without an up-to-date safety induction — {title}', { id: p.id, n: missing.length, title: p.title })),
       who: [contractorName(p.contractorId), to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: p.siteId,
       href: `/prevention?plan=${p.id}`, key: `pp-accueil|${p.id}`,
     });
   });
   permits.forEach((p) => {
     const type: PermitType = p.type === 'essai' ? 'essai' : 'feu';
-    const label = PERMIT_TYPES[type].label.toLowerCase();
+    const typeText: Msg = type === 'essai' ? { en: 'test permit#lower' } : { en: 'hot work permit#lower' };
     const who = [contractorName(p.contractorId), owner(p.issuerId)].filter(Boolean).join(' · ');
     const href = `/prevention?onglet=permis&permis=${p.id}`;
     const ownerIds = p.issuerId ? [p.issuerId] : undefined;
@@ -117,16 +124,16 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     // Permis en écart : compté à part, sauf s'il est rattaché à un plan déjà en écart (échéance du plan).
     if (gaps.permitGaps.has(p.id)) {
       if (!gaps.countedPermitGaps.has(p.id)) return;
-      const what = p.status === 'demande' ? `demande de ${label}` : label;
-      todo.push({ date: now, kind: 'Permis', tone: 'danger', title: `${p.id} · ${what} d'une entreprise extérieure sans plan de prévention signé — ${p.location}`, who, href, ownerIds, siteId, overdue: true });
+      const what: Msg = p.status === 'demande' ? { en: 'request for a {type}', values: { type: typeText } } : typeText;
+      todo.push({ date: now, kind: 'Permis', tone: 'danger', ...titled('{id} · {what} of an external company without a signed prevention plan — {location}', { id: p.id, what, location: p.location }), who, href, ownerIds, siteId, overdue: true });
       return;
     }
     if (permitState(p, nowMs) === 'expire') {
       todo.push({
         date: now, kind: 'Permis', tone: 'danger',
-        title: p.status === 'demande'
-          ? `${p.id} · demande de ${label} échue, jamais délivrée — ${p.location}`
-          : `${p.id} · ${label} expiré non clos — ${p.location}`,
+        ...(p.status === 'demande'
+          ? titled('{id} · request for a {type} ended, never delivered — {location}', { id: p.id, type: typeText, location: p.location })
+          : titled('{id} · {type} expired not closed — {location}', { id: p.id, type: typeText, location: p.location })),
         who, href, ownerIds, siteId, overdue: true,
       });
       return;
@@ -134,7 +141,7 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
     const { from } = permitDays(p);
     if (p.status === 'demande' && from <= horizon) {
       const validity = fmtLocalRange(toParisLocal(p.validFrom), toParisLocal(p.validTo));
-      todo.push({ date: from > now ? from : now, dueOn: from, kind: 'Permis', tone: 'warn', title: `${p.id} · ${label} à délivrer (validité ${validity}) — ${p.location}`, who, href, ownerIds, siteId });
+      todo.push({ date: from > now ? from : now, dueOn: from, kind: 'Permis', tone: 'warn', ...titled('{id} · {type} to deliver (validity {validity}) — {location}', { id: p.id, type: typeText, validity, location: p.location }), who, href, ownerIds, siteId });
     }
   });
 
@@ -152,9 +159,9 @@ export const loadPreventionSignals = cache(async (): Promise<{ badge: number; to
       const end = closedOn && closedOn < validEnd ? closedOn : validEnd;
       todo.push({
         date: now, dueOn: kind === 'verification' ? start : end, kind: 'Permis', tone: 'danger', overdue: true,
-        title: kind === 'verification'
-          ? `${l.id} · consignation non vérifiée, permis ${p.id} en cours de validité — ${l.equipment}`
-          : `${l.id} · consignation non levée à la fin du permis ${p.id} — ${l.equipment}`,
+        ...(kind === 'verification'
+          ? titled('{id} · lockout not verified, permit {permit} within its validity — {equipment}', { id: l.id, permit: p.id, equipment: l.equipment })
+          : titled('{id} · lockout not lifted at the end of the permit {permit} — {equipment}', { id: l.id, permit: p.id, equipment: l.equipment })),
         who: [contractorName(p.contractorId), to.who].filter(Boolean).join(' · '), ownerIds: to.ownerIds, siteId: p.siteId,
         href: `/prevention?onglet=permis&permis=${p.id}`, key: `consignation-${kind}|${l.id}`,
       });

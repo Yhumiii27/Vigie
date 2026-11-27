@@ -14,6 +14,15 @@ export const msgT = (t: T) => (m: Msg): string =>
 /** Libellé français d'un libellé composé (celui que gardent les règles et le serveur). */
 export const msgFr = msgT(makeT('fr'));
 
+/**
+ * Intitulé d'une échéance (TodoItem) : `title` = français (clé d'état lu, règles, essais), `titleText` = libellé composé
+ * rendu à l'affichage. À étaler dans l'échéance : `{ ...titled('{id} · plan to sign', { id }), … }`.
+ */
+export const titled = (en: string, values?: Msg['values']) => {
+  const titleText: Msg = { en, values };
+  return { title: msgFr(titleText), titleText };
+};
+
 /** Libellé composé avec son français : `{ label, text }` (label = français, text = à rendre par msgT). */
 export const composed = (en: string, values?: Msg['values']) => {
   const text: Msg = { en, values };
