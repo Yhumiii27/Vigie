@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
 import { TONE, type Tone } from '@/lib/domain';
+import { CloseLabel, MissingDefault } from './SharedText';
 
 export function Icon({ name, size = 14, style }: { name: string; size?: number; style?: CSSProperties }) {
   return <i className={`ph ${name}`} style={{ fontSize: size, ...style }} aria-hidden />;
@@ -49,23 +50,20 @@ export function ScrollX({ label, children }: { label: string; children: ReactNod
   return <div className="vg-scroll-x" role="region" aria-label={label} tabIndex={0} style={{ overflowX: 'auto' }}>{children}</div>;
 }
 
-/** Message commun d'un lien profond qui ne mène à aucun élément affichable (UX-13). */
-export const MISSING_TEXT = 'Élément introuvable ou hors du site sélectionné.';
-
 /**
  * Bandeau d'un lien profond (?sel=, ?action=, ?plan=…) qui ne correspond à rien d'affichable : élément supprimé, archivé,
  * hors du site sélectionné, hors du périmètre ou réservé à d'autres rôles (UX-13). Le même texte vaut pour « inexistant » et
  * « non autorisé » : il ne révèle jamais l'existence d'un élément hors périmètre ni d'une donnée de santé. Fermeture par un
  * lien (`closeHref`, page serveur) ou un bouton (`onClose`, fiche ouverte côté navigateur).
  */
-export function MissingNotice({ text = MISSING_TEXT, closeHref, onClose }: { text?: string; closeHref?: string; onClose?: () => void }) {
+export function MissingNotice({ text, closeHref, onClose }: { text?: string; closeHref?: string; onClose?: () => void }) {
   return (
     <div className="card vg-missing" role="status" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: '10px 14px', fontSize: 12.5 }}>
       <i className="ph ph-question" style={{ fontSize: 16, color: 'var(--color-neutral-500)' }} aria-hidden />
-      <span style={{ flex: 1 }}>{text}</span>
+      <span style={{ flex: 1 }}>{text ?? <MissingDefault />}</span>
       {onClose
-        ? <button type="button" className="vg-text-btn" onClick={onClose}>Fermer</button>
-        : closeHref && <Link href={closeHref} scroll={false} className="vg-link">Fermer</Link>}
+        ? <button type="button" className="vg-text-btn" onClick={onClose}><CloseLabel /></button>
+        : closeHref && <Link href={closeHref} scroll={false} className="vg-link"><CloseLabel /></Link>}
     </div>
   );
 }

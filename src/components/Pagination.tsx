@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 import { PAGE_SIZES, pageParams, type Page } from '@/lib/pagination';
 import { hrefWith } from '@/lib/url-state';
 
@@ -15,6 +19,7 @@ export function Pagination({ path, params, page, label, clear = [] }: {
   label: string;
   clear?: string[];
 }) {
+  const { t } = useI18n();
   if (page.total <= PAGE_SIZES[0]) return null;
   const cleared = Object.fromEntries(clear.map((k) => [k, undefined]));
   const to = (n: number, size = page.size) => hrefWith(path, params, { ...cleared, ...pageParams(n, size) });
@@ -22,20 +27,20 @@ export function Pagination({ path, params, page, label, clear = [] }: {
   const next = page.page < page.pages ? to(page.page + 1) : null;
   return (
     <nav className="vg-pager" aria-label={label}>
-      <span className="vg-pager-range">{page.from}–{page.to} sur {page.total}</span>
+      <span className="vg-pager-range">{fill(t('{from}–{to} of {total}'), { from: page.from, to: page.to, total: page.total })}</span>
       {page.pages > 1 && (
         <span className="vg-pager-steps">
           {prev
-            ? <Link href={prev} scroll={false} className="btn btn-ghost vg-btn-sm" rel="prev"><i className="ph ph-caret-left" aria-hidden />Précédent</Link>
-            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true"><i className="ph ph-caret-left" aria-hidden />Précédent</span>}
-          <span aria-current="page">Page {page.page} sur {page.pages}</span>
+            ? <Link href={prev} scroll={false} className="btn btn-ghost vg-btn-sm" rel="prev"><i className="ph ph-caret-left" aria-hidden />{t('Previous')}</Link>
+            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true"><i className="ph ph-caret-left" aria-hidden />{t('Previous')}</span>}
+          <span aria-current="page">{fill(t('Page {n} of {pages}'), { n: page.page, pages: page.pages })}</span>
           {next
-            ? <Link href={next} scroll={false} className="btn btn-ghost vg-btn-sm" rel="next">Suivant<i className="ph ph-caret-right" aria-hidden /></Link>
-            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true">Suivant<i className="ph ph-caret-right" aria-hidden /></span>}
+            ? <Link href={next} scroll={false} className="btn btn-ghost vg-btn-sm" rel="next">{t('Next')}<i className="ph ph-caret-right" aria-hidden /></Link>
+            : <span className="btn btn-ghost vg-btn-sm" aria-disabled="true">{t('Next')}<i className="ph ph-caret-right" aria-hidden /></span>}
         </span>
       )}
       <span className="vg-pager-sizes">
-        <span id={`${path.replace(/\W/g, '')}-taille`}>Par page</span>
+        <span id={`${path.replace(/\W/g, '')}-taille`}>{t('Per page')}</span>
         <span role="group" aria-labelledby={`${path.replace(/\W/g, '')}-taille`} style={{ display: 'inline-flex', gap: 2 }}>
           {PAGE_SIZES.map((n) => (
             <Link key={n} href={to(1, n)} scroll={false} className={`vg-chip${n === page.size ? ' is-on' : ''}`} aria-current={n === page.size ? 'true' : undefined}>{n}</Link>

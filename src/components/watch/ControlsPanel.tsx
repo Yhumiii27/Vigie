@@ -452,7 +452,7 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
       </Field>
       <FormRow>
         <Field name="category" label={t('Nature')} hint={t('Calibration: monitoring and measuring equipment (ISO 9001 §7.1.5); an out-of-tolerance result opens a non-conformity.')}>
-          <Select name="category" options={CATEGORY_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.category ?? 'reglementaire'} />
+          <Select name="category" options={CATEGORY_OPTIONS(t).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={c?.category ?? 'reglementaire'} />
         </Field>
         <Field name="tolerance" label={t('Tolerance (calibration)')} hint={t('Maximum permissible error, accuracy class… Optional.')}>
           <Input name="tolerance" defaultValue={c?.tolerance ?? ''} placeholder="Ex. ± 0,02 mm" maxLength={120} />
@@ -509,9 +509,9 @@ function ControlForm({ c, options, requirementOptions, defaultSite, suggestions,
   );
 }
 
-const CATEGORY_OPTIONS = CONTROL_CATEGORY_KEYS.map((k) => [k, CONTROL_CATEGORIES[k].label] as const);
+const CATEGORY_OPTIONS = (t: T) => CONTROL_CATEGORY_KEYS.map((k) => [k, labelT(t)(CONTROL_CATEGORIES[k].label)] as const);
 /** Résultats proposés selon la nature du contrôle (VEI-14 : « hors tolérance » pour un étalonnage seulement). */
-const resultOptions = (category: string) => controlResultsFor(category).map((k) => [k, CONTROL_RESULTS[k].label] as const);
+const resultOptions = (category: string, t: T) => controlResultsFor(category).map((k) => [k, labelT(t)(CONTROL_RESULTS[k].label)] as const);
 
 function RecordForm({ c, today, suggestions, onDone, onCancel }: {
   c: ControlView; today: string; suggestions: ControlSuggestions; onDone: (state: RecordControlState) => void; onCancel: () => void;
@@ -539,7 +539,7 @@ function RecordForm({ c, today, suggestions, onDone, onCancel }: {
         hint={c.category === 'metrologie'
           ? t('Out of tolerance: the equipment is flagged until a new compliant calibration and a non-conformity is opened (validity of the earlier measurements to assess).')
           : t('Unfavourable or shut down: the equipment is flagged until a new favourable inspection.')}>
-        <Select name="result" options={resultOptions(c.category).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue="" placeholder={t('Choose…')} />
+        <Select name="result" options={resultOptions(c.category, t).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue="" placeholder={t('Choose…')} />
       </Field>
       <Field name="reserves" label={t('Reservations')}
         hint={t('Number and subject, e.g. “1 · limit switch to adjust”. Empty = no reservation.') + (c.actionId ? fill(t(' Different reservations unlink {id}, which stays in the action plan.'), { id: c.actionId }) : '')}>

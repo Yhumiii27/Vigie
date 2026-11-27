@@ -11,6 +11,7 @@ import { loadPrevention } from '@/lib/data/prevention';
 import '../../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/plan/[id]'>): Promise<Metadata> {
   const [{ id }, { t }] = await Promise.all([params, getI18n()]);
@@ -197,7 +198,7 @@ export default async function PlanPrintPage({ params }: PageProps<'/prevention/i
               <thead><tr><th>{t('Ref.')}</th><th>{t('Type')}</th><th>{t('Validity')}</th><th>{t('Status')}</th></tr></thead>
               <tbody>
                 {plan.permits.map((p) => (
-                  <tr key={p.id}><td className="pp-nowrap">{p.id}</td><td>{PERMIT_TYPES[p.type].label}</td><td className="pp-nowrap">{p.validity}</td><td>{p.stateLabel}</td></tr>
+                  <tr key={p.id}><td className="pp-nowrap">{p.id}</td><td>{labelT(t)(PERMIT_TYPES[p.type].label)}</td><td className="pp-nowrap">{p.validity}</td><td>{p.stateLabel}</td></tr>
                 ))}
               </tbody>
             </table>

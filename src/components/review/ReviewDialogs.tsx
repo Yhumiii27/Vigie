@@ -15,11 +15,12 @@ import {
 import styles from './review.module.css';
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
-const SOURCE_OPTIONS = REVIEW_SOURCE_KEYS.map((k) => [k, REVIEW_SOURCES[k].label] as const);
-const KIND_OPTIONS = REVIEW_KIND_KEYS.map((k) => [k, REVIEW_KINDS[k].label] as const);
-const DECISION_OPTIONS = REVIEW_DECISION_KEYS.map((k) => [k, REVIEW_DECISION_KINDS[k].label] as const);
+const SOURCE_OPTIONS = (t: T) => REVIEW_SOURCE_KEYS.map((k) => [k, labelT(t)(REVIEW_SOURCES[k].label)] as const);
+const KIND_OPTIONS = (t: T) => REVIEW_KIND_KEYS.map((k) => [k, labelT(t)(REVIEW_KINDS[k].label)] as const);
+const DECISION_OPTIONS = (t: T) => REVIEW_DECISION_KEYS.map((k) => [k, labelT(t)(REVIEW_DECISION_KINDS[k].label)] as const);
 
 
 function Footer({ children }: { children: ReactNode }) {
@@ -45,7 +46,7 @@ export function ItemForm({ reviewId, version, item, people, canDelete, onClose }
         </Field>
         <Field name="source" label={t('Source#origin')}
           hint={auto ? t('Computed by Vigie: provided as soon as the data of the section exist in the file.') : t('Item handed in by a contributor, ticked on receipt.')}>
-          <Select name="source" options={SOURCE_OPTIONS} defaultValue={item?.source ?? 'manuel'} onChange={(e) => setSource(e.target.value)} />
+          <Select name="source" options={SOURCE_OPTIONS(t)} defaultValue={item?.source ?? 'manuel'} onChange={(e) => setSource(e.target.value)} />
         </Field>
         {!auto && (
           <>
@@ -85,7 +86,7 @@ export function DecisionForm({ reviewId, version, decision, people, canDelete, o
       <ActionForm action={saveReviewDecision} onDone={onClose} onCancel={onClose} submitLabel={decision ? t('Save') : t('Add')}
         hidden={{ id: decision?.id, reviewId: decision ? undefined : reviewId, version: decision ? version : undefined }}>
         <Field name="kind" label={t('Nature')}>
-          <Select name="kind" options={DECISION_OPTIONS} defaultValue={decision?.kind ?? 'decision'} />
+          <Select name="kind" options={DECISION_OPTIONS(t)} defaultValue={decision?.kind ?? 'decision'} />
         </Field>
         <Field name="text" label={t('Title')} hint={t('§9.3.3: improvement opportunities, changes to the system, resource needs.')}>
           <TextArea name="text" rows={3} maxLength={400} defaultValue={decision?.text} autoFocus />
@@ -158,7 +159,7 @@ export function HoldForm({ review, version, people, now, next, allSites, onClose
           <Input name="nextReviewOn" type="date" defaultValue={next.on} />
         </Field>
         <Field name="nextKind" label={t('Type of the next review')}>
-          <Select name="nextKind" options={KIND_OPTIONS} defaultValue={next.kind} />
+          <Select name="nextKind" options={KIND_OPTIONS(t)} defaultValue={next.kind} />
         </Field>
       </FormRow>
     </ActionForm>
@@ -178,7 +179,7 @@ export function CreateReviewForm({ nextOn, kind, copyFrom, copyLabel, onClose }:
           <Input name="reviewOn" type="date" defaultValue={nextOn} autoFocus />
         </Field>
         <Field name="kind" label={t('Type')}>
-          <Select name="kind" options={KIND_OPTIONS} defaultValue={kind} />
+          <Select name="kind" options={KIND_OPTIONS(t)} defaultValue={kind} />
         </Field>
       </FormRow>
       {copyFrom && copyLabel && <Checkbox name="copyItems" label={fill(t('Take over the checklist of the {review}'), { review: copyLabel.toLowerCase() })} defaultChecked />}

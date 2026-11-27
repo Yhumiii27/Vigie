@@ -25,6 +25,7 @@ import { withCurrent } from '@/lib/form-options';
 import { PermitLockouts } from './PermitLockouts';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 const preset = (type: PermitType): ChecklistItem[] => PERMIT_TYPES[type].checklist.map((label) => ({ label, checked: false }));
 
@@ -120,7 +121,7 @@ function PermitForm({ permit, options, onDone, onCancel }: { permit?: PermitView
           {PERMIT_TYPE_KEYS.map((k) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12, padding: '5px 11px', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: permit && permit.type !== k ? 0.45 : 1 }}>
               <input type="radio" name="type" value={k} checked={type === k} disabled={!!permit && permit.type !== k} onChange={() => switchType(k)} />
-              <Icon name={PERMIT_TYPES[k].icon} size={13} />{PERMIT_TYPES[k].label}
+              <Icon name={PERMIT_TYPES[k].icon} size={13} />{labelT(t)(PERMIT_TYPES[k].label)}
             </label>
           ))}
         </div>
@@ -517,7 +518,7 @@ export function PermitsTable({ permits, options, canManage, openId, emptyLabel }
                     <td style={{ color: 'var(--color-neutral-400)', whiteSpace: 'nowrap' }}>{p.id}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <Icon name={p.icon} size={14} style={{ color: p.type === 'feu' ? 'var(--tone-warn-dot)' : 'var(--color-accent)' }} />{PERMIT_TYPES[p.type].short}
+                        <Icon name={p.icon} size={14} style={{ color: p.type === 'feu' ? 'var(--tone-warn-dot)' : 'var(--color-accent)' }} />{labelT(t)(PERMIT_TYPES[p.type].short)}
                       </span>
                     </td>
                     <td style={{ color: 'var(--color-neutral-400)', minWidth: 150, maxWidth: 220, textWrap: 'pretty' }}>{p.location}</td>

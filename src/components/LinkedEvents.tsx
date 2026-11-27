@@ -1,23 +1,29 @@
+'use client';
+
 import Link from 'next/link';
 import { ToneTag } from '@/components/ui';
 import { fmtDate } from '@/lib/dates';
 import type { LinkedEvent } from '@/lib/data/linked-events';
+import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 
 /**
  * Événements rattachés à la fiche (EVT-14 : contrôle périodique, document maîtrisé), le plus récent d'abord ; lien vers la
  * fiche de l'événement pour les rôles qui ouvrent l'écran Événements. Sans donnée de santé (chargement : loadLinkedEvents).
  * `reportHref` (EVT-24) : « Signaler un événement » ouvre « Nouvel événement » prérempli depuis la fiche (encadrement).
  */
-export function LinkedEvents({ events, reportHref, empty = 'Aucun événement rattaché. Le rattachement se fait depuis la fiche de l’événement.' }: {
+export function LinkedEvents({ events, reportHref, empty }: {
   events: LinkedEvent[]; reportHref?: string | null; empty?: string;
 }) {
+  const { t } = useI18n();
+  const label = labelT(t);
   return (
     <section style={{ display: 'grid', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <h6 className="vg-h6">Événements liés{events.length ? <span style={{ color: 'var(--vg-text-muted)' }}> · {events.length}</span> : null}</h6>
+        <h6 className="vg-h6">{t('Linked events')}{events.length ? <span style={{ color: 'var(--vg-text-muted)' }}> · {events.length}</span> : null}</h6>
         {reportHref && (
           <Link href={reportHref} className="vg-link" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />Signaler un événement
+            <i className="ph ph-warning-diamond" style={{ fontSize: 13 }} aria-hidden />{t('Report an event')}
           </Link>
         )}
       </div>
@@ -26,15 +32,15 @@ export function LinkedEvents({ events, reportHref, empty = 'Aucun événement ra
           {events.map((e) => (
             <li key={e.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', fontSize: 12.5 }}>
               {e.href ? <Link href={e.href} className="vg-link" style={{ fontSize: 12.5 }}>{e.id}</Link> : <span>{e.id}</span>}
-              <ToneTag tone={e.tone}>{e.typeLabel}</ToneTag>
+              <ToneTag tone={e.tone}>{label(e.typeLabel)}</ToneTag>
               <span style={{ flex: 1, minWidth: 160 }}>{e.title}</span>
               <span style={{ color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>{fmtDate(e.occurredOn)}</span>
-              <span style={{ color: e.closed ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>{e.step}</span>
+              <span style={{ color: e.closed ? 'var(--color-neutral-500)' : 'var(--color-neutral-300)', whiteSpace: 'nowrap' }}>{label(e.step)}</span>
             </li>
           ))}
         </ul>
       ) : (
-        <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{empty}</div>
+        <div style={{ fontSize: 12, color: 'var(--color-neutral-500)' }}>{empty ?? t('No linked event. Linking is done from the event sheet.')}</div>
       )}
     </section>
   );

@@ -307,7 +307,7 @@ function Meta({ d }: { d: ActionDetailView }) {
     <div className="vg-action-meta">
       <span>{d.id}</span>
       <ToneTag tone={d.tone}>{labelT(t)(d.statusLabel)}</ToneTag>
-      {d.late && <span>{AVANCEMENT[d.status].label}</span>}
+      {d.late && <span>{labelT(t)(AVANCEMENT[d.status].label)}</span>}
       {d.toComplete && <ToneTag tone="warn">{t('To complete')}</ToneTag>}
       <span className="vg-action-label">{d.label}</span>
     </div>

@@ -11,9 +11,10 @@ import { withCurrent, type Option } from '@/lib/form-options';
 import { OBJECTIVE_INDICATORS, OBJECTIVE_INDICATOR_KEYS, fmtObjectiveTarget, fmtObjectiveValue } from '@/lib/objectives';
 import { archiveObjective, saveObjective } from '@/server/objectives';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
-const INDICATOR_OPTIONS = OBJECTIVE_INDICATOR_KEYS.map((k) => [k, OBJECTIVE_INDICATORS[k].label] as const);
+const INDICATOR_OPTIONS = (t: T) => OBJECTIVE_INDICATOR_KEYS.map((k) => [k, labelT(t)(OBJECTIVE_INDICATORS[k].label)] as const);
 
 type Opts = { people: readonly Option[]; sites: readonly Option[]; allSites: boolean };
 
@@ -28,7 +29,7 @@ function ObjectiveForm({ o, year, options, decisions, onDone }: { o?: ObjectiveV
         <Input name="label" defaultValue={o?.label ?? ''} maxLength={200} autoFocus />
       </Field>
       <Field name="indicator" label={t('Measured indicator')} hint={t('Value computed by Vigie from the data, never entered.')}>
-        <Select name="indicator" options={INDICATOR_OPTIONS} defaultValue={o?.indicator ?? ''} placeholder={t('Choose…')} />
+        <Select name="indicator" options={INDICATOR_OPTIONS(t)} defaultValue={o?.indicator ?? ''} placeholder={t('Choose…')} />
       </Field>
       <FormRow cols={3}>
         <Field name="target" label={t('Target')} hint={t('Ceiling (LTIFR, delays…) or threshold to reach (reports, effectiveness), depending on the indicator.')}>
@@ -91,7 +92,7 @@ export function ObjectivesCard({ data, canEdit, options }: { data: ObjectivesDat
                       {[o.site, o.pilot !== '—' ? o.pilot : null, o.reviewDecision ? fill(t('review: {decision}'), { decision: o.reviewDecision }) : null].filter(Boolean).join(' · ')}
                     </span>
                   </td>
-                  <td style={{ color: 'var(--color-neutral-300)' }}>{OBJECTIVE_INDICATORS[o.indicator].short}</td>
+                  <td style={{ color: 'var(--color-neutral-300)' }}>{labelT(t)(OBJECTIVE_INDICATORS[o.indicator].short)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtObjectiveTarget(o.indicator, o.target)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmtObjectiveValue(o.indicator, o.value)}</td>
                   <td><ToneTag tone={o.status.tone}>{o.status.label}</ToneTag></td>

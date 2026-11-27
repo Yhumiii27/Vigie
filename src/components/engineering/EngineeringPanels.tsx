@@ -24,6 +24,7 @@ import {
 } from '@/server/engineering';
 import { fill, type T } from '@/i18n/translate';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 
 // Fiches et formulaires des modifications techniques (D12, lot 5 de M-02) : ordre (ECO) avec approbations, effectivité,
 // demandes et actions liées ; demande (ECR) avec décision. Saisie : service QHSE ; décision d'une clé : QHSE ou approbateur
@@ -182,8 +183,8 @@ export function EcoDetail({ e, qhse, options, actionOptions, today, version, onC
       {manage && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {next && (
-            <ActionForm action={advanceEco} hidden={{ id: e.id, to: next, version }} submitLabel={fill(t('Move to “{stage}”'), { stage: ECO_STATUSES[next].label })} submitIcon="ph-arrow-right"
-              onDone={() => setNotice(fill(t('Order moved to the stage “{stage}”.'), { stage: ECO_STATUSES[next].label }))}>{null}</ActionForm>
+            <ActionForm action={advanceEco} hidden={{ id: e.id, to: next, version }} submitLabel={fill(t('Move to “{stage}”'), { stage: labelT(t)(ECO_STATUSES[next].label) })} submitIcon="ph-arrow-right"
+              onDone={() => setNotice(fill(t('Order moved to the stage “{stage}”.'), { stage: labelT(t)(ECO_STATUSES[next].label) }))}>{null}</ActionForm>
           )}
           {ecoEditable(e.status) && options && (
             <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setEditing(true)}><i className="ph ph-pencil-simple" aria-hidden />{t('Edit')}</button>
@@ -195,10 +196,10 @@ export function EcoDetail({ e, qhse, options, actionOptions, today, version, onC
           )}
         </div>
       )}
-      <Dialog open={!!deciding} onClose={() => setDeciding(null)} width={520} kicker={t('Approval of an order')} title={deciding ? `${ECO_APPROVAL_KEYS[deciding].label} · ${e.id}` : ''}>
+      <Dialog open={!!deciding} onClose={() => setDeciding(null)} width={520} kicker={t('Approval of an order')} title={deciding ? `${labelT(t)(ECO_APPROVAL_KEYS[deciding].label)} · ${e.id}` : ''}>
         {deciding && (
           <ActionForm action={decideEcoApproval} hidden={{ id: e.id, key: deciding, version }} submitLabel={t('Save the decision')}
-            onDone={() => { setNotice(fill(t('Decision “{key}” recorded.'), { key: ECO_APPROVAL_KEYS[deciding].label })); setDeciding(null); }} onCancel={() => setDeciding(null)}>
+            onDone={() => { setNotice(fill(t('Decision “{key}” recorded.'), { key: labelT(t)(ECO_APPROVAL_KEYS[deciding].label) })); setDeciding(null); }} onCancel={() => setDeciding(null)}>
             <Field name="decision" label={t('Decision')}>
               <Select name="decision" options={[['ok', t('Approved#m')], ['rejected', t('Refused (the order is rejected)')]]} defaultValue="ok" />
             </Field>
@@ -217,7 +218,7 @@ export function EcoDetail({ e, qhse, options, actionOptions, today, version, onC
 function TargetButton({ e, g, version, today, onDone }: { e: EcoView; g: TargetView; version?: string; today: string; onDone: (m: string) => void }) {
   const { t } = useI18n();
   const released = e.status === 'released';
-  const choices = EFFECTIVITY_DISPOSITION_KEYS.filter((k) => !EFFECTIVITY_DISPOSITIONS[k].machineOnly || g.targetType === 'machine').map((k) => [k, EFFECTIVITY_DISPOSITIONS[k].label] as const);
+  const choices = EFFECTIVITY_DISPOSITION_KEYS.filter((k) => !EFFECTIVITY_DISPOSITIONS[k].machineOnly || g.targetType === 'machine').map((k) => [k, labelT(t)(EFFECTIVITY_DISPOSITIONS[k].label)] as const);
   return (
     <DialogButton label="" ariaLabel={fill(t('Edit the target {label}'), { label: g.label })} tooltip={t('Edit the target')} icon="ph-pencil-simple" className="vg-text-btn" title={`${g.typeLabel} ${g.label}`} kicker={`${t('Effectivity')} · ${e.id}`} width={560}>
       {(done) => (
@@ -315,7 +316,7 @@ export function EcoForm({ e, options, defaultSite, prefill, version, onDone, onC
         const a = e?.approvals.find((x) => x.key === k);
         return (
           <FormRow key={k}>
-            <Field name={`approver_${k}`} label={`${t('Approver')} · ${ECO_APPROVAL_KEYS[k].short}`} hint={k === 'pm' ? t('Leaders of the projects concerned (text shown, published to Keystone).') : undefined}>
+            <Field name={`approver_${k}`} label={`${t('Approver')} · ${labelT(t)(ECO_APPROVAL_KEYS[k].short)}`} hint={k === 'pm' ? t('Leaders of the projects concerned (text shown, published to Keystone).') : undefined}>
               <Input name={`approver_${k}`} defaultValue={a?.approver ?? ECO_APPROVAL_KEYS[k].fallback} maxLength={200} disabled={a?.decision !== undefined && a.decision !== 'pending'} />
             </Field>
             <Field name={`approverId_${k}`} label={t('Person appointed in Vigie')} hint={t('They decide their key in Vigie.')}>

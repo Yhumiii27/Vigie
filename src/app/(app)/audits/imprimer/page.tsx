@@ -8,6 +8,7 @@ import { loadAuditProgramPrint } from '@/lib/data/audits';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getI18n();
@@ -61,7 +62,7 @@ export default async function AuditProgramPrintPage({ searchParams }: PageProps<
                   <td>{i.isReview ? '—' : i.auditorLabel || '—'}</td>
                   <td>{[i.scope, i.site].filter(Boolean).join(' · ')}</td>
                   <td>{i.owner || '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{PLAN_ITEM_STATES[i.state].label}{i.findingCount ? ` · ${fill(i.findingCount > 1 ? t('{n} findings') : t('{n} finding'), { n: i.findingCount })}` : ''}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{labelT(t)(PLAN_ITEM_STATES[i.state].label)}{i.findingCount ? ` · ${fill(i.findingCount > 1 ? t('{n} findings') : t('{n} finding'), { n: i.findingCount })}` : ''}</td>
                 </tr>
               ))}
             </tbody>

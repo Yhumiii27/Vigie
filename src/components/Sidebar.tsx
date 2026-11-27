@@ -12,6 +12,7 @@ import { NavSection as CoqueNavSection, NavSections, PageSearch, Sidebar as Coqu
 import { Icon } from './ui';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 import { navCookie } from '@/lib/nav-state';
 
 export type NavSection = { key: string; label: string; items: { key: string; href: string; label: string; icon: string; badge?: number }[] };
@@ -84,7 +85,7 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
           <span className="coque-avatar" aria-hidden>{user.initials}</span>
           <span className="coque-who">
             <span className="coque-who-name">{user.name}<span className="vg-sr-only">, </span></span>
-            <span className="coque-who-role">{role}</span>
+            <span className="coque-who-role">{labelT(t)(role)}</span>
           </span>
           <Icon name="ph-caret-up-down" size={12} style={{ marginLeft: 'auto', color: 'var(--color-neutral-500)' }} />
         </button>
@@ -94,7 +95,7 @@ export function Sidebar({ nav, site, sites, user, role, demo, roles, siteAdmin, 
             {roles.map((r) => (
               <button key={r} type="button" className={`vg-menu-item${r === role ? ' is-on' : ''}`} {...menuItemProps(r === role)}
                 onClick={() => chooseRole(r)}>
-                {r}
+                {labelT(t)(r)}
               </button>
             ))}
           </div>

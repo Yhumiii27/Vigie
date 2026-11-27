@@ -24,6 +24,7 @@ import { CHOOSABLE_AUDIT_KINDS, MONTH_OPTIONS, NEW_TRACK, REVIEW_TRACK, auditAct
 import styles from './audits.module.css';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Opts = ActionFormOptions;
 
@@ -465,7 +466,7 @@ function PlanItemForm({ year, item, track, month, unplanned = false, trackOption
       {!review && (
         // D08-5 : type d'audit (la revue de direction est reconnue par ses mots, jamais choisie ici).
         <Field name="auditKind" label={t('Audit type')}>
-          <Select name="auditKind" options={CHOOSABLE_AUDIT_KINDS.map((k) => [k, AUDIT_KINDS[k].label] as const)}
+          <Select name="auditKind" options={CHOOSABLE_AUDIT_KINDS.map((k) => [k, labelT(t)(AUDIT_KINDS[k].label)] as const)}
             defaultValue={item && item.auditKind !== 'revue_direction' ? item.auditKind : inferAuditKind({ track: isNew ? newTrack : trackChoice, label, detail })} />
         </Field>
       )}

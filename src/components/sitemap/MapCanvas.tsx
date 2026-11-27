@@ -11,6 +11,7 @@ import { ROUTE_KINDS, TEAMS, ZONE_KINDS, type ActivityView, type MapConfig, type
 import styles from './sitemap.module.css';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Carte : plan de fond + surcouche SVG en coordonnées normalisées (viewBox 0 0 1 aspect),
 // déplacement (glisser), zoom (molette, boutons), dessin des zones et voies, placement des activités.
@@ -351,11 +352,11 @@ export function MapCanvas(props: Props) {
     const tg = hover.target;
     if (tg.kind === 'zone') {
       const z = zones.find((x) => x.id === tg.id);
-      return z && <><strong>{z.name}</strong><span>{ZONE_KINDS[z.kind].label}{z.notes ? ` · ${truncate(z.notes, 90)}` : ''}</span></>;
+      return z && <><strong>{z.name}</strong><span>{labelT(t)(ZONE_KINDS[z.kind].label)}{z.notes ? ` · ${truncate(z.notes, 90)}` : ''}</span></>;
     }
     if (tg.kind === 'route') {
       const r = routes.find((x) => x.id === tg.id);
-      return r && <><strong>{r.name}</strong><span>{ROUTE_KINDS[r.kind].label}{r.shared ? t(' · shared route') : t(' · reserved route')}</span></>;
+      return r && <><strong>{r.name}</strong><span>{labelT(t)(ROUTE_KINDS[r.kind].label)}{r.shared ? t(' · shared route') : t(' · reserved route')}</span></>;
     }
     const a = activities.find((x) => x.id === tg.id);
     if (!a) return null;

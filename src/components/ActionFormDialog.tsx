@@ -24,6 +24,7 @@ import type { FormState } from '@/lib/forms';
 import { saveAction } from '@/server/plan';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export type { ActionDefaults } from '@/lib/action-view';
 
@@ -108,7 +109,7 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
     if (elementSite) setSiteId(defaultSiteId(sites, { elementSiteId: elementSite, siteId }));
   };
 
-  const sourceLabel = (k: string | null | undefined) => (k && k in ACTION_SOURCES ? ACTION_SOURCES[k as keyof typeof ACTION_SOURCES].label : k ?? '');
+  const sourceLabel = (k: string | null | undefined) => (k && k in ACTION_SOURCES ? labelT(t)(ACTION_SOURCES[k as keyof typeof ACTION_SOURCES].label) : k ?? '');
   const originHint = hasElement
     ? t('Optional: by default, the linked item’s reference.')
     : sourceHasElement(source) && picker ? t('Required without a linked item (e.g. letter, report, study no.).') : t('Required: letter, minutes, study no.…');
@@ -139,7 +140,7 @@ export function ActionFields({ options, defaults = {}, onDone, onCancel, legacyO
 
       <FormRow>
         <Field name="status" label={t('Progress')} hint={editing ? t('Changed with “Change the progress”.') : undefined}>
-          <ReadOnly id="status" value={AVANCEMENT[status].label} />
+          <ReadOnly id="status" value={labelT(t)(AVANCEMENT[status].label)} />
         </Field>
         <Field name="priority" label={t('Priority')}>
           <Select name="priority" options={PRIORITY_OPTIONS} defaultValue={defaults.priority ?? ''} placeholder={t('Choose…')} required />

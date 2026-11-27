@@ -11,6 +11,7 @@ import type { LinkedEvent, PlanChoice, ProcedureLink, SiteRuleView } from '@/lib
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Éléments partagés par les fenêtres de l'écran « Plans de prévention et permis ».
 
@@ -181,9 +182,9 @@ export function LinkedEvents({ events, reportHref, emptyLabel }: { events: Linke
       {events.map((e) => (
         <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, flexWrap: 'wrap' }}>
           <Link href={`/evenements?sel=${encodeURIComponent(e.id)}`} className="vg-link" style={{ fontSize: 12.5 }}>{e.id}</Link>
-          <span style={{ flex: 1, minWidth: 180 }}>{e.typeLabel} · {e.title}</span>
+          <span style={{ flex: 1, minWidth: 180 }}>{labelT(t)(e.typeLabel)} · {e.title}</span>
           <span style={muted}>{e.date}</span>
-          <ToneTag tone={e.tone}>{e.stepLabel}</ToneTag>
+          <ToneTag tone={e.tone}>{labelT(t)(e.stepLabel)}</ToneTag>
         </div>
       ))}
     </div>

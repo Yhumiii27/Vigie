@@ -9,16 +9,17 @@ import type { ContextData, ContextItemView } from '@/lib/data/context';
 import { CONTEXT_KINDS, CONTEXT_KIND_KEYS, type ContextKind } from '@/lib/domain';
 import { archiveContextItem, saveContextItem } from '@/server/context';
 import { useI18n } from '@/i18n/client';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
-const KIND_OPTIONS = CONTEXT_KIND_KEYS.map((k) => [k, `${CONTEXT_KINDS[k].label} (${CONTEXT_KINDS[k].clause})`] as const);
+const KIND_OPTIONS = (t: T) => CONTEXT_KIND_KEYS.map((k) => [k, `${labelT(t)(CONTEXT_KINDS[k].label)} (${CONTEXT_KINDS[k].clause})`] as const);
 
 function ContextForm({ item, kind, onDone }: { item?: ContextItemView; kind?: ContextKind; onDone: () => void }) {
   const { t } = useI18n();
   return (
     <ActionForm action={saveContextItem} hidden={{ id: item?.id, version: item?.version }} onDone={onDone} onCancel={onDone} submitLabel={item ? t('Save') : t('Add')}>
       <Field name="kind" label={t('Nature')}>
-        <Select name="kind" options={KIND_OPTIONS} defaultValue={item?.kind ?? kind ?? ''} placeholder={t('Choose…')} />
+        <Select name="kind" options={KIND_OPTIONS(t)} defaultValue={item?.kind ?? kind ?? ''} placeholder={t('Choose…')} />
       </Field>
       <Field name="label" label={t('Title')}>
         <Input name="label" defaultValue={item?.label ?? ''} maxLength={200} autoFocus />

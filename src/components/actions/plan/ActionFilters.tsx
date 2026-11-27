@@ -6,6 +6,7 @@ import { ACTION_AVANCEMENTS, ACTION_PRIORITIES, ACTION_SOURCES, AVANCEMENT, PRIO
 import type { Option } from '@/lib/form-options';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Barre de filtres de la vue générale (spec § 16) : vue, affichage (?etat=), avancement, responsable (dont « Mes
 // actions »), source, priorité, « À compléter », texte libre. Tout est porté par l'URL (actionFiltersParams + hrefWith),
@@ -56,7 +57,7 @@ async function ListFilters({ f, href, responsables, counts, employee, userName, 
 }) {
   const { t } = await getI18n();
   const avancement = shownAvancement(f);
-  const avancementLabel = avancement === 'ouvertes' ? t('open actions') : avancement === 'en_retard' ? t('overdue') : avancement ? AVANCEMENT[avancement].label : t('all');
+  const avancementLabel = avancement === 'ouvertes' ? t('open actions') : avancement === 'en_retard' ? t('overdue') : avancement ? labelT(t)(AVANCEMENT[avancement].label) : t('all');
   const responsable = f.mes ? userName : f.responsable ? responsables.find(([id]) => id === f.responsable)?.[1] ?? t('person who left') : null;
   const scope = PLAN_SCOPES.find(([k]) => k === f.etat) ?? PLAN_SCOPES[0];
   const filtered = hasFilters(f);
@@ -73,7 +74,7 @@ async function ListFilters({ f, href, responsables, counts, employee, userName, 
           { href: href({ avancement: undefined, retard: undefined }), label: t('All progress states'), on: !avancement },
           { href: href({ avancement: 'ouvertes', retard: undefined }), label: t('Open (To do → 80 %)'), on: avancement === 'ouvertes' },
           { href: href({ avancement: 'en_retard', retard: undefined }), label: t('Overdue'), on: avancement === 'en_retard' },
-          ...ACTION_AVANCEMENTS.filter((k) => k !== 'abandonnee').map((k) => ({ href: href({ avancement: k, retard: undefined }), label: AVANCEMENT[k].label, on: avancement === k })),
+          ...ACTION_AVANCEMENTS.filter((k) => k !== 'abandonnee').map((k) => ({ href: href({ avancement: k, retard: undefined }), label: labelT(t)(AVANCEMENT[k].label), on: avancement === k })),
         ]} />
       {!employee && (
         <>
@@ -88,15 +89,15 @@ async function ListFilters({ f, href, responsables, counts, employee, userName, 
           </Link>
         </>
       )}
-      <Filter label={fill(t('Source: {value}'), { value: f.source ? ACTION_SOURCES[f.source].label : t('any') })} icon="ph-funnel"
+      <Filter label={fill(t('Source: {value}'), { value: f.source ? labelT(t)(ACTION_SOURCES[f.source].label) : t('any') })} icon="ph-funnel"
         options={[
           { href: href({ source: undefined }), label: t('All sources'), on: !f.source },
-          ...SOURCE_KEYS.map((k) => ({ href: href({ source: k }), label: ACTION_SOURCES[k].label, on: f.source === k })),
+          ...SOURCE_KEYS.map((k) => ({ href: href({ source: k }), label: labelT(t)(ACTION_SOURCES[k].label), on: f.source === k })),
         ]} />
-      <Filter label={fill(t('Priority: {value}'), { value: f.priorite ? ACTION_PRIORITIES[f.priorite].label.toLowerCase() : t('any') })} icon="ph-flag"
+      <Filter label={fill(t('Priority: {value}'), { value: f.priorite ? labelT(t)(ACTION_PRIORITIES[f.priorite].label).toLowerCase() : t('any') })} icon="ph-flag"
         options={[
           { href: href({ priorite: undefined }), label: t('All priorities'), on: !f.priorite },
-          ...PRIORITY_KEYS.map((k) => ({ href: href({ priorite: k }), label: ACTION_PRIORITIES[k].label, on: f.priorite === k })),
+          ...PRIORITY_KEYS.map((k) => ({ href: href({ priorite: k }), label: labelT(t)(ACTION_PRIORITIES[k].label), on: f.priorite === k })),
         ]} />
       {!employee && (f.completer || counts.toComplete > 0) && (
         <Link href={href({ completer: f.completer ? undefined : '1' })} scroll={false}

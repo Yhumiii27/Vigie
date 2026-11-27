@@ -14,6 +14,7 @@ import { searchWith } from '@/lib/url-state';
 import { EcoDetail, EcoForm, EcrDetail, EcrForm, type EngineeringOptions } from './EngineeringPanels';
 import { fill } from '@/i18n/translate';
 import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
 
 // Registre des modifications techniques (D12, lot 5 de M-02) : onglets « Ordres de modification » et « Demandes de
 // modification », tableau filtré par état, fiche en fenêtre modale portée par l'URL (?sel=<numéro>, lien profond de Codex
@@ -168,7 +169,7 @@ export function EngineeringRegister({ tab, ecos, ecrs, versions, today, qhse, sh
       </div>
 
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-neutral-500)', textWrap: 'pretty' }}>
-        {fill(t('Stages of an order: {stages} (released automatically when the three approvals and the dispositions are obtained). States of a request: {states}.'), { stages: ECO_FLOW.map((s) => ECO_STATUSES[s].label).join(' → '), states: Object.values(ECR_STATUSES).map((s) => s.label).join(', ') })}
+        {fill(t('Stages of an order: {stages} (released automatically when the three approvals and the dispositions are obtained). States of a request: {states}.'), { stages: ECO_FLOW.map((s) => labelT(t)(ECO_STATUSES[s].label)).join(' → '), states: Object.values(ECR_STATUSES).map((s) => s.label).join(', ') })}
       </p>
 
       <Dialog open={!!eco} onClose={() => open(null)} width={900} title={eco ? `${eco.id} · ${eco.title}` : ''} kicker={eco ? `${t('Change order')} · ${eco.typeLabel}` : undefined}>

@@ -6,7 +6,7 @@ import { ReasonButton, ReasonForm } from './ReasonDialog';
 import { Dialog } from './Dialog';
 import { LazyChangeLog } from './LazyChangeLog';
 import { SEVESO_LEVELS } from '@/lib/rules/prevention';
-import { openItemsSummary, openTotal } from '@/lib/rules/site-transfer';
+import { openItemsMsgs, openTotal } from '@/lib/rules/site-transfer';
 import { archiveSite, restoreSite, saveSite } from '@/server/sites';
 import type { Option } from '@/lib/data/options';
 import type { SiteAdminRow } from '@/lib/data/sites';
@@ -21,6 +21,10 @@ import { InboundItem } from './InboundRequests';
 import { TipButton } from '@/components/Tip';
 import { ToneTag } from '@/components/ui';
 import { withCurrent } from '@/lib/form-options';
+import { useI18n } from '@/i18n/client';
+import { labelT } from '@/i18n/labels';
+import { msgT } from '@/i18n/msg';
+import { fill } from '@/i18n/translate';
 
 export type { SiteAdminRow };
 
@@ -36,25 +40,27 @@ export type SiteAdmin = { sites: SiteAdminRow[]; leadOptions: Option[]; matrix: 
 type View = 'list' | 'connectors' | { edit: SiteAdminRow | null } | { archive: SiteAdminRow };
 
 const fmt = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-const fmtTime = (iso: string) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtTime = (iso: string, lang = 'fr') => new Date(iso).toLocaleString(lang === 'en' ? 'en-GB' : 'fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const sevesoLabel = (v: string | null) => SEVESO_LEVELS.find(([k]) => k === v)?.[1];
 
 /** Choix du site de Matrix à suivre (création, amorçage) : sites actifs de matrix.pub_sites pas encore suivis. */
 export function MatrixSiteField({ matrix }: { matrix: MatrixChoices }) {
+  const { t } = useI18n();
   if (matrix.message) return <p className="vg-muted" role="status" style={{ fontSize: 12.5, margin: 0 }}>{matrix.message}</p>;
   return (
-    <Field name="code" label="Site de Matrix" hint="Référentiel commun des sites (Matrix) : libellé et ordre viennent de Matrix ; l’identifiant du site est son code.">
-      <Select name="code" options={matrix.choices} required placeholder={matrix.choices.length ? 'Choisir un site' : 'Tous les sites de Matrix sont déjà suivis'} />
+    <Field name="code" label={t('Matrix site')} hint={t('Common site register (Matrix): label and order come from Matrix; the site identifier is its code.')}>
+      <Select name="code" options={matrix.choices} required placeholder={matrix.choices.length ? t('Choose a site') : t('All the sites of Matrix are already followed')} />
     </Field>
   );
 }
 
 /** Champ « Responsable QHSE » d'un site (création, modification, amorçage) : vide = poste vacant. */
 export function QhseLeadField({ options, current }: { options: readonly Option[]; current?: Pick<SiteAdminRow, 'qhseLeadId' | 'qhseLead'> }) {
+  const { t } = useI18n();
   const list = withCurrent(options, current?.qhseLeadId, current?.qhseLead);
   return (
-    <Field name="qhseLeadId" label="Responsable QHSE" hint="Destinataire des alertes du site ; vacant : alertes aux animateurs QHSE.">
-      <Select name="qhseLeadId" options={[['', 'À désigner'], ...list]} defaultValue={current?.qhseLeadId ?? ''} />
+    <Field name="qhseLeadId" label={t('QHSE manager')} hint={t('Receives the alerts of the site; vacant: alerts to the QHSE coordinators.')}>
+      <Select name="qhseLeadId" options={[['', t('To be appointed')], ...list]} defaultValue={current?.qhseLeadId ?? ''} />
     </Field>
   );
 }
@@ -64,16 +70,18 @@ export function QhseLeadField({ options, current }: { options: readonly Option[]
  * « ne plus suivre » (archivage avec motif), réactivation ; onglet « Connecteurs » (lectures des autres outils).
  */
 export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, outbound, onClose }: SiteAdmin & { onClose: () => void }) {
+  const { t } = useI18n();
+  const label = labelT(t);
   const [view, setView] = useState<View>('list');
   const back = () => setView('list');
   const active = sites.filter((s) => !s.archivedOn);
   const archived = sites.filter((s) => s.archivedOn);
 
-  const title = view === 'list' ? 'Sites' : view === 'connectors' ? 'Connecteurs' : 'edit' in view ? (view.edit ? `Modifier « ${view.edit.label} »` : 'Suivre un site de Matrix')
-    : `Ne plus suivre « ${view.archive.label} »`;
+  const title = view === 'list' ? t('Sites') : view === 'connectors' ? t('Connectors') : 'edit' in view ? (view.edit ? fill(t('Edit “{label}”'), { label: view.edit.label }) : t('Follow a Matrix site'))
+    : fill(t('Stop following “{label}”'), { label: view.archive.label });
 
   return (
-    <Dialog open title={title} kicker="Administration" width={560} onClose={onClose}>
+    <Dialog open title={title} kicker={t('Administration')} width={560} onClose={onClose}>
       {view === 'list' && (
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ display: 'grid', gap: 2 }}>
@@ -82,28 +90,28 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                   {s.label}
                   <span className="tag tag-outline" style={{ fontSize: 11 }}>{s.id}</span>
-                  {s.matrixState && s.matrixState !== 'actif' && <ToneTag tone={MATRIX_SITE_STATES[s.matrixState].tone} style={{ fontSize: 11 }}>{MATRIX_SITE_STATES[s.matrixState].label}</ToneTag>}
-                  {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 11 }}>Seveso {sevesoLabel(s.seveso)!.toLowerCase()}</span>}
-                  {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 11 }} title="Droit local d'Alsace-Moselle">Alsace-Moselle</span>}
+                  {s.matrixState && s.matrixState !== 'actif' && <ToneTag tone={MATRIX_SITE_STATES[s.matrixState].tone} style={{ fontSize: 11 }}>{label(MATRIX_SITE_STATES[s.matrixState].label)}</ToneTag>}
+                  {sevesoLabel(s.seveso) && <span className="tag tag-outline" style={{ fontSize: 11 }}>{fill(t('Seveso {level}'), { level: label(sevesoLabel(s.seveso)!).toLowerCase() })}</span>}
+                  {s.alsaceMoselle && <span className="tag tag-outline" style={{ fontSize: 11 }} title={t('Local law of Alsace-Moselle')}>Alsace-Moselle</span>}
                   <span className="vg-muted" style={{ fontSize: 11, marginLeft: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    title="Responsable QHSE">{s.qhseLead ?? 'Responsable QHSE à désigner'}</span>
+                    title={t('QHSE manager')}>{s.qhseLead ?? t('QHSE manager to be appointed')}</span>
                 </span>
-                <button type="button" className="vg-text-btn" onClick={() => setView({ edit: s })}>Modifier</button>
-                <TipButton className="vg-text-btn" disabled={active.length <= 1} tip={active.length <= 1 ? 'Au moins un site doit rester actif.' : undefined}
-                  onClick={() => setView({ archive: s })}>Ne plus suivre</TipButton>
+                <button type="button" className="vg-text-btn" onClick={() => setView({ edit: s })}>{t('Edit')}</button>
+                <TipButton className="vg-text-btn" disabled={active.length <= 1} tip={active.length <= 1 ? t('At least one site must stay active.') : undefined}
+                  onClick={() => setView({ archive: s })}>{t('Stop following')}</TipButton>
               </div>
             ))}
           </div>
 
           {archived.length > 0 && (
             <div style={{ display: 'grid', gap: 4 }}>
-              <div className="vg-eyebrow">Archivés</div>
+              <div className="vg-eyebrow">{t('Archived#mplural')}</div>
               {archived.map((s) => (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderBottom: '1px solid var(--color-divider)' }}>
                   <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
                     <span style={{ fontSize: 13, color: 'var(--color-neutral-400)' }}>{s.label}</span>
                     <span className="vg-muted" style={{ fontSize: 11 }}>
-                      archivé le {fmt(s.archivedOn!)}{s.archivedBy ? ` par ${s.archivedBy}` : ''}{s.archiveReason ? ` · ${s.archiveReason}` : ''}
+                      {fill(t('archived on {date}#m'), { date: fmt(s.archivedOn!) })}{s.archivedBy ? fill(t(' by {name}'), { name: s.archivedBy }) : ''}{s.archiveReason ? ` · ${s.archiveReason}` : ''}
                     </span>
                   </span>
                   <RestoreButton siteId={s.id} />
@@ -113,13 +121,13 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span className="vg-muted" style={{ fontSize: 11.5 }}>Libellés et ordre : référentiel des sites de Matrix. Le classement Seveso et la règle « plan de prévention dès la première minute » se règlent sur l&apos;écran Prévention.</span>
+            <span className="vg-muted" style={{ fontSize: 11.5 }}>{t('Labels and order: site register of Matrix. The Seveso classification and the “prevention plan from the first minute” rule are set on the Prevention screen.')}</span>
             <span style={{ display: 'flex', gap: 8, flex: 'none' }}>
               <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setView('connectors')}>
-                <i className="ph ph-plugs-connected" style={{ fontSize: 14 }} aria-hidden />Connecteurs
+                <i className="ph ph-plugs-connected" style={{ fontSize: 14 }} aria-hidden />{t('Connectors')}
               </button>
               <button type="button" className="btn btn-secondary vg-btn-sm" onClick={() => setView({ edit: null })}>
-                <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />Suivre un site
+                <i className="ph ph-plus" style={{ fontSize: 14 }} aria-hidden />{t('Follow a site')}
               </button>
             </span>
           </div>
@@ -130,20 +138,20 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
 
       {view !== 'list' && view !== 'connectors' && 'edit' in view && (
         <ActionForm action={saveSite} hidden={{ id: view.edit?.id ?? '', alsaceMoselleField: '1' }} onDone={back} onCancel={back}
-          submitLabel={view.edit ? 'Enregistrer' : 'Suivre le site'}>
+          submitLabel={view.edit ? t('Save') : t('Follow the site')}>
           {view.edit ? (
             <FormRow>
-              <Field name="labelView" label="Libellé (Matrix)" hint="Lu dans le référentiel des sites de Matrix.">
+              <Field name="labelView" label={t('Label (Matrix)')} hint={t('Read in the site register of Matrix.')}>
                 <Input name="labelView" defaultValue={view.edit.label} readOnly data-vg-no-dirty />
               </Field>
-              <Field name="codeView" label="Code (Matrix)">
+              <Field name="codeView" label={t('Code (Matrix)')}>
                 <Input name="codeView" defaultValue={view.edit.id} readOnly data-vg-no-dirty />
               </Field>
             </FormRow>
           ) : <MatrixSiteField matrix={matrix} />}
           <QhseLeadField options={leadOptions} current={view.edit ?? undefined} />
-          <Field name="alsaceMoselle" label="Calendrier" hint="Délai de déclaration d'un accident du travail : le Vendredi saint et le 26 décembre y sont aussi fériés.">
-            <Checkbox name="alsaceMoselle" label="Droit local d'Alsace-Moselle (Bas-Rhin, Haut-Rhin, Moselle)" defaultChecked={view.edit?.alsaceMoselle ?? false} />
+          <Field name="alsaceMoselle" label={t('Calendar')} hint={t('Deadline to declare an occupational accident: Good Friday and 26 December are also public holidays there.')}>
+            <Checkbox name="alsaceMoselle" label={t('Local law of Alsace-Moselle (Bas-Rhin, Haut-Rhin, Moselle)')} defaultChecked={view.edit?.alsaceMoselle ?? false} />
           </Field>
         </ActionForm>
       )}
@@ -153,19 +161,19 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
       )}
 
       {view !== 'list' && view !== 'connectors' && 'archive' in view && (
-        <ReasonForm action={archiveSite} hidden={{ siteId: view.archive.id }} onDone={back} onCancel={back} submitLabel="Ne plus suivre" submitIcon="ph-archive"
+        <ReasonForm action={archiveSite} hidden={{ siteId: view.archive.id }} onDone={back} onCancel={back} submitLabel={t('Stop following')} submitIcon="ph-archive"
           before={openTotal(view.archive.openItems) > 0 && (
             // TDB-08 : avertissement avec le décompte et transfert en masse proposé (facultatif).
             <>
               <p role="status" style={{ margin: 0, fontSize: 12.5, color: 'var(--tone-warn-fg)', textWrap: 'pretty' }}>
-                Ce site porte encore {openItemsSummary(view.archive.openItems)}. Transférez-les vers un autre site, ou archivez sans transfert (ils restent rattachés au site archivé).
+                {fill(t('This site still holds {items}. Transfer them to another site, or archive without transfer (they stay attached to the archived site).'), { items: openItemsMsgs(view.archive.openItems).map(msgT(t)).join(', ') })}
               </p>
-              <Field name="transferTo" label="Transférer les éléments ouverts vers" hint="Facultatif · chaque élément transféré est journalisé avec le motif. Sélectionnez « Tous les sites » pour transférer.">
-                <Select name="transferTo" options={[['', 'Ne pas transférer'], ...active.filter((s) => s.id !== view.archive.id).map((s): [string, string] => [s.id, s.label])]} defaultValue="" />
+              <Field name="transferTo" label={t('Transfer the open items to')} hint={t('Optional · each transferred item is logged with the reason. Select “All sites” to transfer.')}>
+                <Select name="transferTo" options={[['', t('Do not transfer')], ...active.filter((s) => s.id !== view.archive.id).map((s): [string, string] => [s.id, s.label])]} defaultValue="" />
               </Field>
             </>
           )}
-          hint="Le site est archivé dans Vigie : il disparaît des sélecteurs ; ses données restent consultables sous « Tous les sites ». Rien n’est changé dans Matrix." placeholder="Site fermé, cédé, hors du périmètre QHSE…" />
+          hint={t('The site is archived in Vigie: it disappears from the selectors; its data can still be read under “All sites”. Nothing is changed in Matrix.')} placeholder={t('Site closed, sold, outside the QHSE scope…')} />
       )}
     </Dialog>
   );
@@ -173,21 +181,23 @@ export function SitesManager({ sites, leadOptions, matrix, connectors, inbound, 
 
 /** Réactivation d'un site archivé, avec motif (QUA-22). */
 function RestoreButton({ siteId }: { siteId: string }) {
+  const { t } = useI18n();
   return (
     <div style={{ flex: 'none' }}>
-      <ReasonButton action={restoreSite} hidden={{ siteId }} label="Réactiver" icon="ph-arrow-counter-clockwise" title="Réactiver le site" kicker="Gérer les sites"
-        submitLabel="Réactiver le site" message="Le site revient dans les sélecteurs et les formulaires." placeholder="Ex. reprise d'activité sur le site" />
+      <ReasonButton action={restoreSite} hidden={{ siteId }} label={t('Reactivate')} icon="ph-arrow-counter-clockwise" title={t('Reactivate the site')} kicker={t('Manage sites')}
+        submitLabel={t('Reactivate the site')} message={t('The site is back in the selectors and the forms.')} placeholder={t('E.g. activity resumed on the site')} />
     </div>
   );
 }
 
 /** Onglet « Connecteurs » (INT-01) : dernier passage de chaque source lue chez un autre outil ; « Actualiser » relit tout. */
 function Connectors({ rows, inbound, outbound, onBack }: { rows: ConnectorRow[]; inbound: InboundOverview; outbound: OutboundOverview; onBack: () => void }) {
+  const { t, lang } = useI18n();
+  const label = labelT(t);
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
-        Vigie lit les référentiels communs dans les vues publiées par les autres outils (lecture seule). Les sites et les affectations sont
-        gardés en cache et relus chaque nuit ; les projets et les fournisseurs sont lus à chaque saisie.
+        {t('Vigie reads the common registers in the views published by the other tools (read only). Sites and assignments are cached and read again every night; projects and suppliers are read at each entry.')}
       </p>
       <div style={{ display: 'grid', gap: 2 }}>
         {rows.map((r) => {
@@ -196,15 +206,15 @@ function Connectors({ rows, inbound, outbound, onBack }: { rows: ConnectorRow[];
           return (
             <div key={r.key} style={{ display: 'grid', gap: 2, padding: '7px 4px', borderBottom: '1px solid var(--color-divider)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                <span style={{ fontWeight: 500 }}>{src.label}</span>
-                <span className="vg-muted" style={{ fontSize: 11 }}>{src.tool} · {src.view}{src.cache ? ' · cache' : ''}</span>
-                <ToneTag tone={status?.tone ?? 'neutral'} style={{ fontSize: 11, marginLeft: 'auto' }}>{status?.label ?? 'Jamais lu'}</ToneTag>
+                <span style={{ fontWeight: 500 }}>{label(src.label)}</span>
+                <span className="vg-muted" style={{ fontSize: 11 }}>{src.tool} · {src.view}{src.cache ? ` · ${t('cache')}` : ''}</span>
+                <ToneTag tone={status?.tone ?? 'neutral'} style={{ fontSize: 11, marginLeft: 'auto' }}>{status ? label(status.label) : t('Never read')}</ToneTag>
               </span>
               {r.last && (
                 <span className="vg-muted" style={{ fontSize: 11 }}>
-                  Dernier passage le {fmtTime(r.last.at)} · {r.last.read} ligne(s) lue(s)
-                  {src.cache ? ` · ${r.last.added} ajoutée(s), ${r.last.updated} mise(s) à jour, ${r.last.removed} retirée(s)` : ''}
-                  {r.last.status !== 'ok' ? ` · dernière lecture réussie : ${r.lastOkAt ? fmtTime(r.lastOkAt) : 'jamais'}` : ''}
+                  {fill(t('Last run on {at} · {n} row(s) read'), { at: fmtTime(r.last.at, lang), n: r.last.read })}
+                  {src.cache ? fill(t(' · {added} added, {updated} updated, {removed} removed'), { added: r.last.added, updated: r.last.updated, removed: r.last.removed }) : ''}
+                  {r.last.status !== 'ok' ? fill(t(' · last successful read: {at}'), { at: r.lastOkAt ? fmtTime(r.lastOkAt, lang) : t('never') }) : ''}
                   {r.last.message ? ` · ${r.last.message}` : ''}
                 </span>
               )}
@@ -212,7 +222,7 @@ function Connectors({ rows, inbound, outbound, onBack }: { rows: ConnectorRow[];
           );
         })}
       </div>
-      <ActionForm action={refreshConnectors} onCancel={onBack} submitLabel="Actualiser" submitIcon="ph-arrows-clockwise">{null}</ActionForm>
+      <ActionForm action={refreshConnectors} onCancel={onBack} submitLabel={t('Refresh')} submitIcon="ph-arrows-clockwise">{null}</ActionForm>
       <InboundBox inbound={inbound} />
       <OutboxBox outbound={outbound} />
     </div>
@@ -224,68 +234,70 @@ function Connectors({ rows, inbound, outbound, onBack }: { rows: ConnectorRow[];
  * état, refus à prendre en compte ; « Traiter maintenant » sans attendre la tâche planifiée « Demandes reçues ».
  */
 function InboundBox({ inbound }: { inbound: InboundOverview }) {
+  const { t, lang } = useI18n();
+  const label = labelT(t);
   const { counts, rejected, lastReceivedAt } = inbound;
   return (
     <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
-      <h6 className="vg-h6">Boîte de réception (Keystone, Codex)</h6>
+      <h6 className="vg-h6">{t('Inbox (Keystone, Codex)')}</h6>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
-        Keystone signale l’avancement de ses NC de projet et de ses ordres de modification (vigie.pub_signaler_avancement_nc,
-        vigie.pub_signaler_avancement_eco), Codex crée ses demandes de modification (vigie.pub_creer_demande_modification) ; Vigie traite chaque demande
-        avec ses propres règles, toutes les 10 minutes.{lastReceivedAt ? ` Dernière demande reçue le ${fmtTime(lastReceivedAt)}.` : ' Aucune demande reçue.'}
+        {t('Keystone reports the progress of its project NCs and of its engineering change orders (vigie.pub_signaler_avancement_nc, vigie.pub_signaler_avancement_eco), Codex creates its change requests (vigie.pub_creer_demande_modification); Vigie processes each request with its own rules, every 10 minutes.')}
+        {lastReceivedAt ? fill(t(' Last request received on {at}.'), { at: fmtTime(lastReceivedAt, lang) }) : t(' No request received.')}
       </p>
       <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {(Object.keys(INBOUND_STATUSES) as (keyof typeof INBOUND_STATUSES)[]).map((k) => (
-          <ToneTag key={k} tone={counts[k] ? INBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{INBOUND_STATUSES[k].label} : {counts[k]}</ToneTag>
+          <ToneTag key={k} tone={counts[k] ? INBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{fill(t('{label}: {n}'), { label: label(INBOUND_STATUSES[k].label), n: counts[k] })}</ToneTag>
         ))}
       </span>
       {rejected.length > 0 && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Refus à prendre en compte">
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label={t('Refusals to take into account')}>
           {rejected.map((r) => <InboundItem key={r.id} r={r} canAcknowledge showTarget />)}
         </ul>
       )}
-      <ActionForm action={processInboundNow} submitLabel="Traiter maintenant" submitIcon="ph-tray-arrow-down">{null}</ActionForm>
+      <ActionForm action={processInboundNow} submitLabel={t('Process now')} submitIcon="ph-tray-arrow-down">{null}</ActionForm>
     </div>
   );
 }
 
-const fmtTimeOrDash = (iso: string | null) => (iso ? fmtTime(iso) : '—');
+const fmtTimeOrDash = (iso: string | null, lang = 'fr') => (iso ? fmtTime(iso, lang) : '—');
 
 /**
  * File d'envoi (D12, lot 5 de M-02) : décisions transmises aux autres outils (webhook de Codex), nombres par état,
  * messages à reprendre et refusés ; « Envoyer maintenant » sans attendre la tâche planifiée « Envois aux outils ».
  */
 function OutboxBox({ outbound }: { outbound: OutboundOverview }) {
+  const { t, lang } = useI18n();
+  const label = labelT(t);
   const { counts, failed, pending, lastSentAt } = outbound;
   const line = (m: OutboundOverview['failed'][number]) => (
     <li key={m.id} style={{ display: 'grid', gap: 2, fontSize: 12.5, padding: '6px 0', borderBottom: '1px solid var(--color-divider)' }}>
       <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <span>{OUTBOUND_TARGETS[m.target as OutboundTarget]?.label ?? m.target} · {m.entityId}</span>
-        <ToneTag tone={OUTBOUND_STATUSES[m.status].tone} style={{ fontSize: 11, marginLeft: 'auto' }}>{OUTBOUND_STATUSES[m.status].label}</ToneTag>
+        <ToneTag tone={OUTBOUND_STATUSES[m.status].tone} style={{ fontSize: 11, marginLeft: 'auto' }}>{label(OUTBOUND_STATUSES[m.status].label)}</ToneTag>
       </span>
       <span style={{ fontSize: 11, color: 'var(--vg-text-muted)' }}>
-        Message n° {m.id} · {m.attempts} tentative(s){m.lastError ? ` · ${m.lastError}` : ''}{m.nextAttemptAt ? ` · prochain essai ${fmtTimeOrDash(m.nextAttemptAt)}` : ''}
+        {fill(t('Message no. {id} · {n} attempt(s)'), { id: m.id, n: m.attempts })}{m.lastError ? ` · ${m.lastError}` : ''}{m.nextAttemptAt ? fill(t(' · next attempt {at}'), { at: fmtTimeOrDash(m.nextAttemptAt, lang) }) : ''}
       </span>
     </li>
   );
   return (
     <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--color-divider)' }}>
-      <h6 className="vg-h6">File d’envoi (Codex)</h6>
+      <h6 className="vg-h6">{t('Outbox (Codex)')}</h6>
       <p className="vg-muted" style={{ fontSize: 12, margin: 0 }}>
-        Les décisions sur les demandes de modification de Codex lui sont envoyées par son webhook (POST /api/integrations/vigie), toutes les
-        10 minutes, avec reprises espacées. Sans VIGIE_CODEX_URL et jeton ou secret du webhook, elles restent à envoyer.
-        {lastSentAt ? ` Dernier envoi le ${fmtTime(lastSentAt)}.` : ' Aucun envoi.'}
+        {t('The decisions on the change requests of Codex are sent to it by its webhook (POST /api/integrations/vigie), every 10 minutes, with spaced retries. Without VIGIE_CODEX_URL and the token or secret of the webhook, they stay to send.')}
+        {lastSentAt ? fill(t(' Last sending on {at}.'), { at: fmtTime(lastSentAt, lang) }) : t(' Nothing sent.')}
       </p>
       <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {(Object.keys(OUTBOUND_STATUSES) as (keyof typeof OUTBOUND_STATUSES)[]).map((k) => (
-          <ToneTag key={k} tone={counts[k] ? OUTBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{OUTBOUND_STATUSES[k].label} : {counts[k]}</ToneTag>
+          <ToneTag key={k} tone={counts[k] ? OUTBOUND_STATUSES[k].tone : 'neutral'} style={{ fontSize: 11 }}>{fill(t('{label}: {n}'), { label: label(OUTBOUND_STATUSES[k].label), n: counts[k] })}</ToneTag>
         ))}
       </span>
       {(pending.length > 0 || failed.length > 0) && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="Messages à reprendre ou refusés">
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label={t('Messages to retry or refused')}>
           {[...failed, ...pending].map(line)}
         </ul>
       )}
-      <ActionForm action={sendOutboundNow} submitLabel="Envoyer maintenant" submitIcon="ph-paper-plane-tilt">{null}</ActionForm>
+      <ActionForm action={sendOutboundNow} submitLabel={t('Send now')} submitIcon="ph-paper-plane-tilt">{null}</ActionForm>
     </div>
   );
 }

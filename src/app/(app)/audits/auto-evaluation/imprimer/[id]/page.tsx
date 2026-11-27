@@ -9,6 +9,7 @@ import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import '../../../../prevention/imprimer/print.css';
+import { labelT } from '@/i18n/labels';
 
 export async function generateMetadata({ params }: PageProps<'/audits/auto-evaluation/imprimer/[id]'>): Promise<Metadata> {
   const [{ id }, { t }] = await Promise.all([params, getI18n()]);
@@ -35,7 +36,7 @@ export default async function SelfAssessmentPrintPage({ params }: PageProps<'/au
       <header className="pp-head">
         <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>{t('Vigie · Audits')} · {d.id}</div>
         <div className="pp-head-row">
-          <h1>{t('Self-assessment')} · {ASSESSMENT_STANDARDS[d.standard].label}</h1>
+          <h1>{t('Self-assessment')} · {labelT(t)(ASSESSMENT_STANDARDS[d.standard].label)}</h1>
           <span className="pp-muted" style={{ fontSize: 12.5 }}>{d.site}</span>
         </div>
         <dl className="pp-meta">

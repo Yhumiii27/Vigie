@@ -22,6 +22,7 @@ import { SaveStatus, safeCall } from '@/components/feedback';
 import { TipButton } from '@/components/Tip';
 import { useI18n } from '@/i18n/client';
 import { fill, type Lang } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type DialogState =
   | { type: 'zone' | 'route'; id: number }
@@ -243,7 +244,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   if (dialog?.type === 'zone' || dialog?.type === 'zone-new') {
     const zone = dialog.type === 'zone' ? zones.find((z) => z.id === dialog.id) : undefined;
     dialogTitle = zone ? zone.name : t('New zone');
-    dialogKicker = zone ? `${t('Zone')} · ${ZONE_KINDS[zone.kind].label}` : t('Site map · zone');
+    dialogKicker = zone ? `${t('Zone')} · ${labelT(t)(ZONE_KINDS[zone.kind].label)}` : t('Site map · zone');
     const done = (id?: number) => { setDialog(null); setTool('select'); setSelection(id ? { kind: 'zone', id } : null); };
     dialogBody = canManage
       ? <ZoneForm siteId={site.id} zone={zone} points={dialog.type === 'zone-new' ? dialog.points : undefined} activityCount={zone ? countIn(zone.id) : 0}
@@ -252,7 +253,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
   } else if (dialog?.type === 'route' || dialog?.type === 'route-new') {
     const route = dialog.type === 'route' ? routes.find((r) => r.id === dialog.id) : undefined;
     dialogTitle = route ? route.name : t('New traffic route');
-    dialogKicker = route ? `${t('Route')} · ${ROUTE_KINDS[route.kind].label}${route.shared ? t(' · shared route') : ''}` : t('Site map · traffic route');
+    dialogKicker = route ? `${t('Route')} · ${labelT(t)(ROUTE_KINDS[route.kind].label)}${route.shared ? t(' · shared route') : ''}` : t('Site map · traffic route');
     const done = (id?: number) => { setDialog(null); setTool('select'); setSelection(id ? { kind: 'route', id } : null); };
     dialogBody = canManage
       ? <RouteForm siteId={site.id} route={route} points={dialog.type === 'route-new' ? dialog.points : undefined} activityCount={route ? countOn(route.id) : 0} onDone={done} onCancel={closeDialog} />
@@ -637,7 +638,7 @@ export function SiteMapScreen({ data, canManage, initialDate }: Props) {
                   onClick={() => { openTarget({ kind: 'zone', id: z.id }); mapRef.current?.centerOn(centroid(z.polygon), 1.6); }}>
                   <span style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5 }}>
                     <span style={{ width: 10, height: 10, borderRadius: 2, flex: 'none', background: `color-mix(in srgb, ${ZONE_KINDS[z.kind].color} 35%, transparent)`, border: `1px solid ${ZONE_KINDS[z.kind].color}` }} />
-                    {z.name}<span style={muted}>· {ZONE_KINDS[z.kind].label}</span>
+                    {z.name}<span style={muted}>· {labelT(t)(ZONE_KINDS[z.kind].label)}</span>
                   </span>
                 </button>
               ))}

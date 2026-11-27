@@ -16,7 +16,7 @@ import { answerSafetyNotice, cancelSafetyNotice, saveSafetyNotice } from '@/serv
 import { Facts, Notice, muted, rowOpener } from './parts';
 import { useI18n } from '@/i18n/client';
 import { labelT } from '@/i18n/labels';
-import { fill } from '@/i18n/translate';
+import { fill, type T } from '@/i18n/translate';
 
 // Registre de sécurité (VEI-15, L. 4711-1 et L. 4711-2) : observations et mises en demeure de l'inspection du travail, de
 // la CARSAT ou d'un organisme, avec le délai de réponse et la réponse apportée ; imprimé avec les vérifications du site
@@ -26,7 +26,7 @@ import { fill } from '@/i18n/translate';
 export type NoticeControlOption = readonly [string, string, string | null];
 type Opts = { sites: readonly Option[]; controls: readonly NoticeControlOption[] };
 
-const KIND_OPTIONS = SAFETY_NOTICE_KIND_KEYS.map((k) => [k, SAFETY_NOTICE_KINDS[k].label] as const);
+const KIND_OPTIONS = (t: T) => SAFETY_NOTICE_KIND_KEYS.map((k) => [k, labelT(t)(SAFETY_NOTICE_KINDS[k].label)] as const);
 
 export function SafetyRegisterPanel({ rows, canManage, canApprove, options, today, showSite, initialId, closeHref }: {
   rows: SafetyNoticeView[];
@@ -171,7 +171,7 @@ function NoticeForm({ n, options, defaultSite, today, onDone, onCancel }: {
     <ActionForm action={saveSafetyNotice} hidden={{ id: n?.id, version: n?.version }} onDone={onDone} onCancel={onCancel} submitLabel={n ? t('Save') : t('Record in the register')}>
       <FormRow>
         <Field name="kind" label={t('Nature')}>
-          <Select name="kind" options={KIND_OPTIONS.map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={n?.kind ?? 'observation'} />
+          <Select name="kind" options={KIND_OPTIONS(t).map(([k, l]) => [k, labelT(t)(l)] as const)} defaultValue={n?.kind ?? 'observation'} />
         </Field>
         <Field name="siteId" label={t('Site')}>
           <Select name="siteId" options={sites} value={siteId} onChange={(e) => setSiteId(e.target.value)} placeholder={t('Choose…')} />

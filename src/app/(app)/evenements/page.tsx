@@ -43,6 +43,7 @@ import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination
 import { Pagination } from '@/components/Pagination';
 import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 export const generateMetadata = () => screenMetadata('events');
 
@@ -108,8 +109,8 @@ export default async function EventsPage({ searchParams }: PageProps<'/evenement
   const counts = Object.fromEntries(typeKeys.map((k) => [k, searched.filter((e) => e.type === k).length]));
   const filters: { key: string | undefined; label: string; n: number }[] = [
     { key: undefined, label: t('All#mplural'), n: searched.length },
-    ...(types.length > 1 ? [{ key: type, label: types.map((k) => EVENT_TYPES[k].label).join(' + '), n: types.reduce((n, k) => n + counts[k], 0) }] : []),
-    ...typeKeys.map((k) => ({ key: k, label: EVENT_TYPES[k].label, n: counts[k] })),
+    ...(types.length > 1 ? [{ key: type, label: types.map((k) => labelT(t)(EVENT_TYPES[k].label)).join(' + '), n: types.reduce((n, k) => n + counts[k], 0) }] : []),
+    ...typeKeys.map((k) => ({ key: k, label: labelT(t)(EVENT_TYPES[k].label), n: counts[k] })),
   ];
   const openCount = events.filter(isOpen).length;
   const fieldOptions: EventFieldOptions = {

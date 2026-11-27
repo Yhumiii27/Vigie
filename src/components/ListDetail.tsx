@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect } from 'react';
+import { useI18n } from '@/i18n/client';
 
 // Liste puis fiche sur petit écran (UX-07) : conteneur `.vg-md` (data-focus="detail" quand une fiche est demandée par
 // l'URL), colonnes `.vg-md-list` et `.vg-md-detail` (src/app/vigie.css). Sur téléphone, la fiche remplace la liste, avec
@@ -22,10 +23,11 @@ export function DetailFocus() {
 }
 
 /** Lien « Retour à la liste », affiché sur téléphone seulement. */
-export function BackToList({ href, label = 'Retour à la liste' }: { href: string; label?: string }) {
+export function BackToList({ href, label }: { href: string; label?: string }) {
+  const { t } = useI18n();
   return (
     <Link href={href} className="vg-md-back vg-link">
-      <i className="ph ph-caret-left" aria-hidden />{label}
+      <i className="ph ph-caret-left" aria-hidden />{label ?? t('Back to the list')}
     </Link>
   );
 }

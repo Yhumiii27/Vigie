@@ -22,6 +22,7 @@ import styles from './sitemap.module.css';
 import { withCurrent } from '@/lib/form-options';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Fenêtres de la carte du site : zones, voies, activités, échelle et plan de fond.
 
@@ -79,7 +80,7 @@ export function ZoneForm({ siteId, zone, points, activityCount, qrHref, onDone, 
             <Input name="name" defaultValue={zone?.name} placeholder={t('E.g. Assembly workshop')} autoFocus />
           </Field>
           <Field name="kind" label={t('Type')}>
-            <Select name="kind" options={ZONE_KIND_KEYS.map((k) => [k, ZONE_KINDS[k].label] as const)} defaultValue={zone?.kind ?? 'atelier'} />
+            <Select name="kind" options={ZONE_KIND_KEYS.map((k) => [k, labelT(t)(ZONE_KINDS[k].label)] as const)} defaultValue={zone?.kind ?? 'atelier'} />
           </Field>
         </FormRow>
         <Field name="notes" label={t('Notes')} hint={t('Optional: equipment, access instructions, ATEX zoning…')}>
@@ -106,7 +107,7 @@ export function ZoneSheet({ zone, activityCount, qrHref }: { zone: ZoneView; act
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <Facts items={[
-        [t('Type'), ZONE_KINDS[zone.kind].label],
+        [t('Type'), labelT(t)(ZONE_KINDS[zone.kind].label)],
         [t('Linked activities'), String(activityCount)],
         zone.eventCount ? [t('Linked events#records'), String(zone.eventCount)] : null,
         zone.notes ? [t('Notes'), zone.notes] : null,
@@ -132,7 +133,7 @@ export function RouteForm({ siteId, route, points, activityCount, onDone, onCanc
             <Input name="name" defaultValue={route?.name} placeholder={t('E.g. Heavy goods vehicle delivery route')} autoFocus />
           </Field>
           <Field name="kind" label={t('Type')}>
-            <Select name="kind" options={ROUTE_KIND_KEYS.map((k) => [k, ROUTE_KINDS[k].label] as const)} defaultValue={route?.kind ?? 'vehicules'} />
+            <Select name="kind" options={ROUTE_KIND_KEYS.map((k) => [k, labelT(t)(ROUTE_KINDS[k].label)] as const)} defaultValue={route?.kind ?? 'vehicules'} />
           </Field>
         </FormRow>
         <div style={{ display: 'grid', gap: 4 }}>
@@ -156,7 +157,7 @@ export function RouteSheet({ route, activityCount }: { route: RouteView; activit
   const { t } = useI18n();
   return (
     <Facts items={[
-      [t('Type'), ROUTE_KINDS[route.kind].label],
+      [t('Type'), labelT(t)(ROUTE_KINDS[route.kind].label)],
       [t('Use'), route.shared ? t('Shared route') : t('Reserved route')],
       [t('Activities using it'), String(activityCount)],
       route.notes ? [t('Notes'), route.notes] : null,
@@ -218,7 +219,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
           {(['interne', 'externe'] as const).map((k) => (
             <label key={k} className="seg-opt" style={{ fontSize: 12.5, padding: '5px 10px' }}>
               <input type="radio" name="team" value={k} checked={team === k} onChange={() => setTeam(k)} />
-              <i className={`ph ${TEAMS[k].icon}`} style={{ fontSize: 14 }} aria-hidden />{TEAMS[k].label}
+              <i className={`ph ${TEAMS[k].icon}`} style={{ fontSize: 14 }} aria-hidden />{labelT(t)(TEAMS[k].label)}
             </label>
           ))}
         </div>
@@ -288,7 +289,7 @@ export function ActivityForm({ siteId, rule, activity, draft, zones, routes, cho
               <label key={r.id} className="vg-check">
                 <input type="checkbox" name="routeIds" value={r.id} defaultChecked={routeIds.has(r.id)} />
                 <span className="vg-check-box"><i className="ph ph-check" aria-hidden /></span>
-                <span>{r.name} <span style={muted}>· {ROUTE_KINDS[r.kind].label.toLowerCase()}{r.shared ? t(' · shared route') : ''}</span></span>
+                <span>{r.name} <span style={muted}>· {labelT(t)(ROUTE_KINDS[r.kind].label).toLowerCase()}{r.shared ? t(' · shared route') : ''}</span></span>
               </label>
             ))}
           </div>
@@ -328,7 +329,7 @@ export function ActivitySheet({ activity, zones, routes, conflicts, others, date
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        <ToneTag tone={activity.team === 'externe' ? 'warn' : 'accent'}><Icon name={TEAMS[activity.team].icon} size={12} style={{ marginRight: 4 }} />{TEAMS[activity.team].label}</ToneTag>
+        <ToneTag tone={activity.team === 'externe' ? 'warn' : 'accent'}><Icon name={TEAMS[activity.team].icon} size={12} style={{ marginRight: 4 }} />{labelT(t)(TEAMS[activity.team].label)}</ToneTag>
         {noPlan && <ToneTag tone={rule.ppFromFirstMinute ? 'danger' : 'warn'}>{t('Without a prevention plan')}</ToneTag>}
         {gap && <ToneTag tone="danger">{t(gap)}</ToneTag>}
         {!activity.geometry && <ToneTag tone="neutral">{zone ? t('Approximate position (zone)') : t('Without position')}</ToneTag>}

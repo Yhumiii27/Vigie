@@ -10,6 +10,7 @@ import {
 import { resetDashboardLayout, saveDashboardLayout } from '@/server/dashboard-layouts';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Éditeur du tableau de bord configurable (TDB-19) : choix des cartes dans le catalogue fermé, ordre par boutons « Monter » /
 // « Descendre » (jamais par glisser-déposer seulement), période et périmètre de chaque carte ; disposition personnelle, ou
@@ -53,7 +54,7 @@ function Editor({ initial, allowed, target, onDone }: { initial: readonly CardCo
                 {def.periods && (
                   <select className="input" aria-label={fill(t('Period of “{card}”'), { card: def.label })} value={c.period ?? 'annee'} style={{ fontSize: 12.5, padding: '4px 8px' }}
                     onChange={(e) => patch(i, { period: e.target.value as CardPeriod })}>
-                    {def.periods.map((p) => <option key={p} value={p}>{CARD_PERIODS[p].label}</option>)}
+                    {def.periods.map((p) => <option key={p} value={p}>{labelT(t)(CARD_PERIODS[p].label)}</option>)}
                   </select>
                 )}
                 {def.scoped && (
@@ -73,7 +74,7 @@ function Editor({ initial, allowed, target, onDone }: { initial: readonly CardCo
           <label htmlFor="vg-card-add" style={muted}>{t('Add a card')}</label>
           <select id="vg-card-add" className="input" value={adding} onChange={(e) => setAdding(e.target.value as CardId | '')} style={{ fontSize: 12.5, padding: '4px 8px', flex: 1, minWidth: 180 }}>
             <option value="">{t('Choose…')}</option>
-            {free.map((id) => <option key={id} value={id}>{DASHBOARD_CARDS[id].label}</option>)}
+            {free.map((id) => <option key={id} value={id}>{labelT(t)(DASHBOARD_CARDS[id].label)}</option>)}
           </select>
           <button type="button" className="btn btn-secondary vg-btn-sm" disabled={!adding} onClick={() => { if (adding) { setCards((l) => [...l, cardDefaults(adding)]); setAdding(''); } }}>
             {t('Add')}

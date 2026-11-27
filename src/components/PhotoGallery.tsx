@@ -1,6 +1,8 @@
 'use client';
 
 import { Dialog } from '@/components/Dialog';
+import { useI18n } from '@/i18n/client';
+import { fill } from '@/i18n/translate';
 import { fmtSize, type AttachmentItem } from '@/lib/attachments';
 
 /**
@@ -11,11 +13,12 @@ import { fmtSize, type AttachmentItem } from '@/lib/attachments';
 export function PhotoGallery({ photos, index, onIndex, onClose, kicker }: {
   photos: AttachmentItem[]; index: number | null; onIndex: (i: number) => void; onClose: () => void; kicker?: string;
 }) {
+  const { t } = useI18n();
   const open = index !== null && index >= 0 && index < photos.length;
   const photo = open ? photos[index] : null;
   const go = (step: number) => { if (open) onIndex((index + step + photos.length) % photos.length); };
   return (
-    <Dialog open={open} onClose={onClose} width={960} kicker={kicker ?? (open ? `Photo ${index + 1} sur ${photos.length}` : undefined)}
+    <Dialog open={open} onClose={onClose} width={960} kicker={kicker ?? (open ? fill(t('Photo {n} of {total}'), { n: index + 1, total: photos.length }) : undefined)}
       title={photo ? photo.name : ''}>
       {photo && (
         <div style={{ display: 'grid', gap: 10 }}
@@ -28,16 +31,16 @@ export function PhotoGallery({ photos, index, onIndex, onClose, kicker }: {
             {photos.length > 1 && (
               <>
                 <button type="button" className="btn btn-secondary" onClick={() => go(-1)} autoFocus style={{ minHeight: 40 }}>
-                  <i className="ph ph-caret-left" style={{ fontSize: 14 }} aria-hidden />Précédente
+                  <i className="ph ph-caret-left" style={{ fontSize: 14 }} aria-hidden />{t('Previous#f')}
                 </button>
                 <button type="button" className="btn btn-secondary" onClick={() => go(1)} style={{ minHeight: 40 }}>
-                  Suivante<i className="ph ph-caret-right" style={{ fontSize: 14 }} aria-hidden />
+                  {t('Next#f')}<i className="ph ph-caret-right" style={{ fontSize: 14 }} aria-hidden />
                 </button>
               </>
             )}
             <span style={{ fontSize: 12, color: 'var(--vg-text-muted)' }}>{fmtSize(photo.size)}</span>
             <a href={photo.url} target="_blank" rel="noopener" className="vg-link" style={{ marginLeft: 'auto', minHeight: 40, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <i className="ph ph-arrow-square-out" aria-hidden />Ouvrir l&apos;original
+              <i className="ph ph-arrow-square-out" aria-hidden />{t('Open the original')}
             </a>
           </div>
         </div>
