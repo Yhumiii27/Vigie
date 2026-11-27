@@ -29,7 +29,7 @@ export function readJournal(dir = MIGRATIONS_DIR): JournalEntry[] {
 //
 // PGlite (démonstration, application Mac, tests) : tables dans public, journal drizzle.__drizzle_migrations, migrations
 // appliquées par migrate() de Drizzle — inchangé, les bases existantes s'ouvrent toujours.
-// PostgreSQL (serveur commun EPC2I, décision M-01 ; rôle vigie_app) : tables, vues et journal dans le schéma vigie,
+// PostgreSQL (serveur commun Atrium, décision M-01 ; rôle vigie_app) : tables, vues et journal dans le schéma vigie,
 // créé par le socle (Matrix, infra/postgres/init/02-schemas.sql). Les migrations publiées restent intactes (décision du
 // 18/10/2026) : migrateServer() remplace, au moment de les appliquer, l'identifiant qualifié "public". par "vigie." ;
 // le reste (noms non qualifiés, requêtes Drizzle) résout dans vigie par le search_path du pool (src/db/index.ts).
@@ -45,7 +45,7 @@ export const DB_LAYOUT: Record<DbEngine, { tables: string; journal: string }> = 
 
 /**
  * Verrou consultatif des migrations sur le serveur (clé dérivée du nom du schéma : les clés sont communes à toute la
- * base epc2i, chaque outil dérive les siennes de son schéma). Pris avant de lire ou de créer le journal.
+ * base commune, chaque outil dérive les siennes de son schéma). Pris avant de lire ou de créer le journal.
  */
 export const MIGRATION_LOCK_SQL = `select pg_advisory_lock(hashtext('${SERVER_SCHEMA}.migrations'))`;
 export const MIGRATION_UNLOCK_SQL = `select pg_advisory_unlock(hashtext('${SERVER_SCHEMA}.migrations'))`;
@@ -57,7 +57,7 @@ export const toServerSchema = (statement: string) => statement.replaceAll('"publ
  * Applique à une base PostgreSQL (schéma vigie, search_path vigie) les migrations absentes du journal, dans une seule
  * transaction, avec la règle du migrator de Drizzle (dates « when » postérieures à la dernière appliquée). Même journal
  * que migrate() de Drizzle (id, hash, created_at), dans vigie.__drizzle_migrations, sans son CREATE SCHEMA : vigie_app
- * n'a pas le droit CREATE sur la base epc2i (« permission denied for database epc2i »). Le verrou de transaction
+ * n'a pas le droit CREATE sur la base commune (« permission denied for database <base> »). Le verrou de transaction
  * reprend la clé du verrou de session de src/db/index.ts (réentrant) : appelée seule (essai de migration, tests), la
  * fonction reste sûre face à une autre instance. `query` : un seul client (begin / commit). Rend le nombre de migrations
  * appliquées.

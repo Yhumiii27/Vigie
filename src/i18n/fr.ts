@@ -15,6 +15,9 @@ import { AUDITS_FR, AUDITS_SAME } from './screens/audits';
 import { DOCUMENTS_FR, DOCUMENTS_SAME } from './screens/documents';
 import { ENVIRONMENT_FR, ENVIRONMENT_SAME } from './screens/environment';
 import { ENGINEERING_FR, ENGINEERING_SAME } from './screens/engineering';
+// Français des composants communs « Mes tâches », « Mes approbations » et du tronc commun des menus (Norma 2.4, à reporter
+// par chaque outil ; COQUE.md § 2 bis) : repris tel quel de la copie de Norma.
+import { TACHES_FR } from '@norma/charte/ds/taches-fr';
 
 /** Dictionnaires des écrans repris, dans l'ordre de la reprise (une chaîne commune à deux écrans va dans COMMON_FR). */
 export const SCREEN_DICTIONARIES: Record<string, Record<string, string>> = {
@@ -94,10 +97,18 @@ const SHELL_FR: Record<string, string> = {
   'Regulatory watch and inspections': 'Veille réglementaire et contrôles',
 };
 
-export const FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
+const VIGIE_FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
+
+/**
+ * Entrées de Norma (TACHES_FR) que Vigie ne traduit pas déjà : la traduction de Vigie l'emporte sur une clé déjà prise
+ * (Action plan, Today, Source, Open, All types, All… : écarts à signaler dans Norma, COQUE.md § 2 bis).
+ */
+const NORMA_FR: Record<string, string> = Object.fromEntries(Object.entries(TACHES_FR).filter(([en]) => !(en in VIGIE_FR)));
+
+export const FR: Record<string, string> = { ...NORMA_FR, ...VIGIE_FR };
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...Object.keys(NORMA_FR).filter((en) => NORMA_FR[en] === en), ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
 
 /** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
 export function conflictingEntries(): string[] {

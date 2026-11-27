@@ -88,7 +88,7 @@ beforeAll(async () => {
   Object.assign(process.env, {
     VIGIE_DATA_DIR: 'memory://', VIGIE_PUBLIC_URL: APP, VIGIE_SESSION_SECRET: SECRET,
     ENTRA_CLIENT_ID: 'vigie', ENTRA_CLIENT_SECRET: 'secret-de-test', ENTRA_ISSUER: issuer,
-    VIGIE_SITE_GROUPS: 'grp-site_a:site_a,grp-site_b:site_b', VIGIE_EMAIL_DOMAINS: 'epc2i.example',
+    VIGIE_SITE_GROUPS: 'grp-site_a:site_a,grp-site_b:site_b', VIGIE_EMAIL_DOMAINS: 'atrium.example',
     VIGIE_ACCESS_FROM_CLAVIS: 'on',
   });
   delete process.env.ENTRA_TENANT_ID;
@@ -97,9 +97,9 @@ beforeAll(async () => {
   const db = await getDb();
   await db.insert(t.sites).values([{ id: 'site_a', label: 'Site A', sort: 1 }, { id: 'site_b', label: 'Site B', sort: 2 }]);
   await db.insert(t.people).values([
-    { id: 'tnguyen', name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', siteId: 'site_a', sort: 0 },
-    { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', siteId: 'site_a', sort: 1 },
-    { id: 'hmarchand', name: '[H. Marchand]', email: 'h.marchand@epc2i.example', siteId: 'site_a', sort: 2 },
+    { id: 'tnguyen', name: '[T. Nguyen]', email: 't.nguyen@atrium.example', siteId: 'site_a', sort: 0 },
+    { id: 'clefevre', name: '[C. Lefèvre]', email: 'c.lefevre@atrium.example', siteId: 'site_a', sort: 1 },
+    { id: 'hmarchand', name: '[H. Marchand]', email: 'h.marchand@atrium.example', siteId: 'site_a', sort: 2 },
   ]);
   await installClavisView();
 });

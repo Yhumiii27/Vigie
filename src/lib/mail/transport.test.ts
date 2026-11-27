@@ -10,7 +10,7 @@ let dir: string;
 beforeAll(async () => { dir = await mkdtemp(path.join(tmpdir(), 'vigie-mails-')); });
 afterAll(async () => { await rm(dir, { recursive: true, force: true }); });
 
-const message = (id: string): MailMessage => ({ id, to: 'c.lefevre@epc2i.fr', from: 'Vigie <vigie@localhost>', subject: 'Objet', text: 'Texte', html: '<p>Texte</p>' });
+const message = (id: string): MailMessage => ({ id, to: 'c.lefevre@atrium.example', from: 'Vigie <vigie@localhost>', subject: 'Objet', text: 'Texte', html: '<p>Texte</p>' });
 
 describe('fileTransport', () => {
   it('écrit <dossier>/<id>.json (dossier créé au besoin) : le message et sa date d’écriture, lisible du seul propriétaire', async () => {

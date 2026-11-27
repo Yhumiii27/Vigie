@@ -131,7 +131,7 @@ export function PersonForm({ person, version, sites, archivedSites, services, to
                 <Select name="siteId" options={siteOptions} defaultValue={siteId} placeholder={siteId ? undefined : t('Choose a site')} />
               </Field>
               <Field name="email" label={t('Work e-mail')} hint={t('Matches the record with the Microsoft account at the first sign-in.')}>
-                <Input name="email" type="email" defaultValue={person.email ?? ''} placeholder={t('E.g. j.dupont@epc2i.fr')} maxLength={254} autoComplete="off" />
+                <Input name="email" type="email" defaultValue={person.email ?? ''} placeholder={t('E.g. j.dupont@atrium.example')} maxLength={254} autoComplete="off" />
               </Field>
             </FormRow>
           </>

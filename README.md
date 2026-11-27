@@ -1,6 +1,6 @@
 # Vigie — pilotage QHSE
 
-Application web du système EPC2i : signalements terrain, plan d'actions unique, DUERP, habilitations, veille réglementaire, contrôles périodiques, audits et revue de direction, plans de prévention et permis, documents maîtrisés, environnement et déchets.
+Application web de la suite Atrium : signalements terrain, plan d'actions unique, DUERP, habilitations, veille réglementaire, contrôles périodiques, audits et revue de direction, plans de prévention et permis, documents maîtrisés, environnement et déchets.
 
 ## Démarrer
 
@@ -38,7 +38,7 @@ docker compose --profile https up -d --build   # ou Caddy sur 80/443 (VIGIE_DOMA
 curl -s http://127.0.0.1:3000/api/sante        # {"statut":"ok","base":"postgres",…}
 ```
 
-Hors démonstration (image Docker, ou `npm run build && npm start` sur un serveur Node.js 22) : aucun jeu de démonstration ni sélecteur de rôle ; `DATABASE_URL` choisit PostgreSQL, schéma `vigie` (serveur commun EPC2I : rôle `vigie_app` sur la base `epc2i`, mise en place dans `docs/EXPLOITATION.md` § 2 ; sinon PGlite dans `VIGIE_DATA_DIR`, schéma `public`) ; `VIGIE_PUBLIC_URL` est obligatoire, et l'authentification Microsoft Entra ID aussi (page « Configuration incomplète » tant qu'elle n'est pas configurée, jamais de rôle par défaut). Une base vide ouvre l'écran « Créer le premier site » (direction, animateur QHSE). Toutes les variables sont décrites dans `.env.example` et validées au démarrage par `src/lib/env.ts` : une valeur invalide arrête le serveur avec la liste des variables à corriger. Inscription de l'application dans Entra ID, reverse proxy, sauvegardes (`npm run db:backup`, `db:restore`, sauvegarde automatique avant migration), mises à jour (dont la reprise des liens d'origine des actions après la migration 0004 : `npm run db:reprise-liens`) et rotation des secrets : [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md).
+Hors démonstration (image Docker, ou `npm run build && npm start` sur un serveur Node.js 22) : aucun jeu de démonstration ni sélecteur de rôle ; `DATABASE_URL` choisit PostgreSQL, schéma `vigie` (serveur commun Atrium : rôle `vigie_app` sur la base commune, nom et hôte lus dans `DATABASE_URL`, mise en place dans `docs/EXPLOITATION.md` § 2 ; sinon PGlite dans `VIGIE_DATA_DIR`, schéma `public`) ; `VIGIE_PUBLIC_URL` est obligatoire, et l'authentification Microsoft Entra ID aussi (page « Configuration incomplète » tant qu'elle n'est pas configurée, jamais de rôle par défaut). Une base vide ouvre l'écran « Créer le premier site » (direction, animateur QHSE). Toutes les variables sont décrites dans `.env.example` et validées au démarrage par `src/lib/env.ts` : une valeur invalide arrête le serveur avec la liste des variables à corriger. Inscription de l'application dans Entra ID, reverse proxy, sauvegardes (`npm run db:backup`, `db:restore`, sauvegarde automatique avant migration), mises à jour (dont la reprise des liens d'origine des actions après la migration 0004 : `npm run db:reprise-liens`) et rotation des secrets : [`docs/EXPLOITATION.md`](docs/EXPLOITATION.md).
 
 Essai de la connexion sans tenant Entra : `node scripts/oidc-mock.mjs` (fournisseur OIDC factice) puis `scripts/e2e-auth.sh` (parcours complet avec curl ; prérequis en tête du script).
 

@@ -15,7 +15,7 @@
 // Comptes par défaut (DEFAULT_USERS ci-dessous) calqués sur le jeu de démonstration ; groupes d'exemple grp-site_a,
 // grp-site_b (VIGIE_SITE_GROUPS=grp-site_a:site_a,grp-site_b:site_b). GET /_mock/users les liste.
 // Revendications email et xms_edov (adresse vérifiée, vraie sauf « edov: false ») comme les revendications facultatives
-// d'Entra ; « noEmail: true » les retire (VIGIE_EMAIL_DOMAINS=epc2i.example pour les comptes par défaut).
+// d'Entra ; « noEmail: true » les retire (VIGIE_EMAIL_DOMAINS=atrium.example pour les comptes par défaut).
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -33,18 +33,18 @@ const BASE = `/${TENANT}`;
 
 /** Comptes : clé → revendications (assigned: false = utilisateur non affecté à l'application, erreur AADSTS50105). */
 const DEFAULT_USERS = {
-  animateur: { name: '[C. Lefèvre]', email: 'c.lefevre@epc2i.example', roles: ['Vigie.AnimateurQHSE'], groups: [] },
-  direction: { name: '[H. Marchand]', email: 'h.marchand@epc2i.example', roles: ['Vigie.Salarie', 'Vigie.Direction'], groups: [] },
-  chefservice: { name: '[S. Benali]', email: 'S.Benali@EPC2I.example', roles: ['Vigie.ChefService'], groups: [] },
-  salarie: { name: '[T. Nguyen]', email: 't.nguyen@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b'] },
-  essais: { name: '[A. Martin]', email: 'a.martin@epc2i.example', roles: ['Vigie.ChefProjet'], groups: [] },
-  nouveau: { name: 'Nina Rousseau', email: 'n.rousseau@epc2i.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b', 'grp-inconnu'] },
-  sansrole: { name: '[P. Roux]', email: 'p.roux@epc2i.example', roles: [], groups: [] },
-  parti: { name: '[Y. Lambert]', email: 'y.lambert@epc2i.example', roles: ['Vigie.Salarie'], groups: [] },
+  animateur: { name: '[C. Lefèvre]', email: 'c.lefevre@atrium.example', roles: ['Vigie.AnimateurQHSE'], groups: [] },
+  direction: { name: '[H. Marchand]', email: 'h.marchand@atrium.example', roles: ['Vigie.Salarie', 'Vigie.Direction'], groups: [] },
+  chefservice: { name: '[S. Benali]', email: 'S.Benali@ATRIUM.example', roles: ['Vigie.ChefService'], groups: [] },
+  salarie: { name: '[T. Nguyen]', email: 't.nguyen@atrium.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b'] },
+  essais: { name: '[A. Martin]', email: 'a.martin@atrium.example', roles: ['Vigie.ChefProjet'], groups: [] },
+  nouveau: { name: 'Nina Rousseau', email: 'n.rousseau@atrium.example', roles: ['Vigie.Salarie'], groups: ['grp-site_b', 'grp-inconnu'] },
+  sansrole: { name: '[P. Roux]', email: 'p.roux@atrium.example', roles: [], groups: [] },
+  parti: { name: '[Y. Lambert]', email: 'y.lambert@atrium.example', roles: ['Vigie.Salarie'], groups: [] },
   nonaffecte: { name: 'Externe Non Affecté', email: 'externe@autre.example', roles: [], groups: [], assigned: false },
   // Première connexion refusée (motif « adresse ») : adresse d'une fiche existante non vérifiée par Microsoft (xms_edov
-  // faux), ou adresse vérifiée d'un domaine hors de VIGIE_EMAIL_DOMAINS (epc2i.example dans les essais).
-  nonverifie: { name: 'Compte Adresse Non Vérifiée', email: 'm.girard@epc2i.example', edov: false, roles: ['Vigie.Salarie'], groups: [] },
+  // faux), ou adresse vérifiée d'un domaine hors de VIGIE_EMAIL_DOMAINS (atrium.example dans les essais).
+  nonverifie: { name: 'Compte Adresse Non Vérifiée', email: 'm.girard@atrium.example', edov: false, roles: ['Vigie.Salarie'], groups: [] },
   horsdomaine: { name: 'P. Durand (prestataire)', email: 'p.durand@prestataire.example', roles: ['Vigie.ChefProjet'], groups: [] },
 };
 const USERS = args.users ? JSON.parse(readFileSync(args.users, 'utf8')) : DEFAULT_USERS;

@@ -23,7 +23,7 @@ La méthode DIG-PRODI v4.0 du groupe bloque les jalons de décision d'un CAPEX d
 | `id` | référence « ES-001 » (`nextEntityReference(tx, 'process_safety_study', 'ES-', 3)`, dans la transaction de création, jamais réattribuée) |
 | `site_id` | site de Vigie de l'usine (obligatoire) |
 | `capex_code` | code CAPEX d'Arche (`CPX-APM-2026-01`), saisi ; contrainte `^CPX-[A-Z0-9][A-Z0-9-]{0,39}$` |
-| `keystone_project_code` | code du projet EPC2i (Keystone), saisi ; au moins un des deux codes (contrainte `process_safety_studies_link_check`) |
+| `keystone_project_code` | code du projet Keystone, saisi ; au moins un des deux codes (contrainte `process_safety_studies_link_check`) |
 | `milestone`, `type` | jalon et type, compatibles (contrainte `process_safety_studies_type_milestone_check`, règle `studyTypeError`) |
 | `status` | `planifiee`, `realisee`, `validee` (stocké) ; `annulee` est calculé d'après le triplet d'annulation |
 | `session_on` | séance prévue (planifiée) ou tenue |

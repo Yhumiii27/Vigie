@@ -4,7 +4,7 @@ import { SERVER_SCHEMA } from '@/db/migrations';
 
 // Mode PostgreSQL des tests d'intégration (QUA-04) : avec TEST_DATABASE_URL (serveur PostgreSQL, base d'administration,
 // ex. postgres://vigie@127.0.0.1:55433/postgres), chaque fichier de test/integration reçoit sa propre base vide, créée
-// avant le fichier (DATABASE_URL) puis supprimée après, avec son schéma vigie (comme le socle du serveur commun EPC2I :
+// avant le fichier (DATABASE_URL) puis supprimée après, avec son schéma vigie (comme le socle du serveur commun Atrium :
 // Vigie n'y crée jamais de schéma). Les fichiers de test restent inchangés : getDb() ouvre PostgreSQL au lieu de PGlite
 // en mémoire, applique les migrations dans le schéma vigie et, en démonstration, le jeu de démonstration.
 // Sans TEST_DATABASE_URL : PGlite en mémoire (VIGIE_DATA_DIR=memory://, posé par chaque fichier).

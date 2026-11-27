@@ -7,9 +7,9 @@ const followed = new Set(['site_a', 'site_b']);
 const label = (id: string | null) => (id ? `Site ${id}` : null);
 const local: CachedPerson = {
   name: '[T. Nguyen]', job: 'Monteur', siteId: 'site_a', leftOn: null, leftReason: null, cursusState: 'actif', category: 'salarie', company: null,
-  cursusEmail: 't.nguyen@epc2i.example', siteMatricule: null,
+  cursusEmail: 't.nguyen@atrium.example', siteMatricule: null,
 };
-const src: CursusPersonRow = { matricule: 'EMP-9001', name: '[T. Nguyen]', job: 'Monteur', siteCode: 'site_a', leftOn: null, category: 'salarie', company: null, email: 't.nguyen@epc2i.example' };
+const src: CursusPersonRow = { matricule: 'EMP-9001', name: '[T. Nguyen]', job: 'Monteur', siteCode: 'site_a', leftOn: null, category: 'salarie', company: null, email: 't.nguyen@atrium.example' };
 
 describe('cursusPersonSync', () => {
   it('rien à écrire quand la fiche suit Cursus', () => {
@@ -17,8 +17,8 @@ describe('cursusPersonSync', () => {
   });
 
   it('nom, poste et site repris ; site non suivi → aucun site ; journal sans donnée en clair pour l’e-mail', () => {
-    const r = cursusPersonSync(local, { ...src, name: '[T. Nguyen-Durand]', job: 'Chef d’équipe', siteCode: 'site_x', email: 'autre@epc2i.example' }, followed, label);
-    expect(r.patch).toEqual({ name: '[T. Nguyen-Durand]', job: 'Chef d’équipe', siteId: null, cursusEmail: 'autre@epc2i.example' });
+    const r = cursusPersonSync(local, { ...src, name: '[T. Nguyen-Durand]', job: 'Chef d’équipe', siteCode: 'site_x', email: 'autre@atrium.example' }, followed, label);
+    expect(r.patch).toEqual({ name: '[T. Nguyen-Durand]', job: 'Chef d’équipe', siteId: null, cursusEmail: 'autre@atrium.example' });
     expect(r.entries).toEqual([{ action: 'sync', summary: 'Fiche mise à jour depuis Cursus (référentiel du personnel)', details: [
       { field: 'Nom', from: '[T. Nguyen]', to: '[T. Nguyen-Durand]' }, { field: 'Poste', from: 'Monteur', to: 'Chef d’équipe' },
       { field: 'Site de rattachement', from: 'Site site_a', to: null }, { field: 'E-mail publié par Cursus', from: 'adresse publiée', to: 'adresse publiée' },
@@ -55,7 +55,7 @@ describe('cursusPersonSync', () => {
 
   it('première lecture : catégorie, entreprise et e-mail posés sans journal', () => {
     const r = cursusPersonSync({ ...local, cursusState: null, category: null, cursusEmail: null }, src, followed, label);
-    expect(r.patch).toEqual({ cursusState: 'actif', category: 'salarie', cursusEmail: 't.nguyen@epc2i.example' });
+    expect(r.patch).toEqual({ cursusState: 'actif', category: 'salarie', cursusEmail: 't.nguyen@atrium.example' });
     expect(r.entries).toEqual([]);
   });
 });
@@ -101,7 +101,7 @@ describe('création et rapprochement', () => {
   it('valeurs d’une nouvelle fiche', () => {
     expect(newCachedPerson({ ...src, category: 'interimaire', company: '[Agence]', siteCode: 'site_z', leftOn: '2026-10-01' }, followed)).toEqual({
       name: '[T. Nguyen]', job: 'Monteur', siteId: null, leftOn: '2026-10-01', leftReason: CURSUS_LEFT_REASON, cursusState: 'actif', category: 'interimaire',
-      company: '[Agence]', cursusEmail: 't.nguyen@epc2i.example', siteMatricule: null,
+      company: '[Agence]', cursusEmail: 't.nguyen@atrium.example', siteMatricule: null,
     });
     expect(newCachedPerson({ ...src, siteMatricule: 'I00101' }, followed).siteMatricule).toBe('I00101');
     expect(followedSite('site_b', followed)).toBe('site_b');

@@ -27,7 +27,7 @@
   color-scheme: dark;
 }
 
-/* Thème clair (Norma 1.0, cookie epc2i-theme, <html data-theme="light">) : les variables de Nocturne sont redéfinies par
+/* Thème clair (Norma 1.0, cookie atrium-theme, <html data-theme="light">) : les variables de Nocturne sont redéfinies par
    nocturne.css ; ici celles de Vigie (tons, texte tertiaire, accent actif, cotation), mesurées par src/lib/contrast.test.ts. */
 :root[data-theme="light"] {
   --tone-danger-fg: oklch(0.45 0.14 22);

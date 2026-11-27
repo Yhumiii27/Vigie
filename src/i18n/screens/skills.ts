@@ -105,7 +105,7 @@ export const SKILLS_FR: Record<string, string> = {
   'Choose a site': 'Choisir un site',
   'Work e-mail': 'E-mail professionnel',
   'Matches the record with the Microsoft account at the first sign-in.': 'Rapproche la fiche du compte Microsoft à la première connexion.',
-  'E.g. j.dupont@epc2i.fr': 'Ex. j.dupont@epc2i.fr',
+  'E.g. j.dupont@atrium.example': 'Ex. j.dupont@atrium.example',
   'Department#service': 'Service',
   'Attribute specific to Vigie (matrix filter).': 'Attribut propre à Vigie (filtre de la matrice).',
   'E.g. Assembly workshop': 'Ex. Atelier montage',

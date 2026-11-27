@@ -96,7 +96,7 @@ cp "$SCRIPT_DIR/Resources/Info.plist" "$PLIST"
 plutil -replace VigieProjectPath -string "$PROJECT_DIR" "$PLIST"
 plutil -replace VigieNodeDir -string "$NODE_DIR" "$PLIST"
 # Client du serveur central (PRD-14) : VIGIE_SERVER_URL=https://vigie.exemple.fr bash desktop-app/build.sh ;
-# sans elle, serveur local de démonstration (remplaçable ensuite par « defaults write com.epc2i.vigie VigieServerURL … »).
+# sans elle, serveur local de démonstration (remplaçable ensuite par « defaults write com.atrium.vigie VigieServerURL … »).
 if [ -n "${VIGIE_SERVER_URL:-}" ]; then
   plutil -replace VigieServerURL -string "$VIGIE_SERVER_URL" "$PLIST"
 fi
@@ -142,7 +142,7 @@ if pgrep -f "$RUNNING_PATTERN" >/dev/null 2>&1; then
     # Demande de fermeture comme avec ⌘Q (événement Apple), comprise par toutes les versions de Vigie,
     # qui arrête proprement le serveur lancé ; SIGTERM en dernier recours.
     echo "Vigie est ouvert : fermeture avant remplacement…"
-    osascript -e 'tell application id "com.epc2i.vigie" to quit' >/dev/null 2>&1 || true
+    osascript -e 'tell application id "com.atrium.vigie" to quit' >/dev/null 2>&1 || true
     for _ in $(seq 1 150); do
       pgrep -f "$RUNNING_PATTERN" >/dev/null 2>&1 || break
       sleep 0.1

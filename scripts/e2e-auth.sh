@@ -10,7 +10,7 @@
 #        ENTRA_TENANT_ID=vigie-test ENTRA_CLIENT_ID=vigie ENTRA_CLIENT_SECRET=secret-de-test
 #        ENTRA_ISSUER=http://127.0.0.1:55480/vigie-test/v2.0
 #        VIGIE_SITE_GROUPS=grp-site_a:site_a,grp-site_b:site_b
-#        VIGIE_EMAIL_DOMAINS=epc2i.example
+#        VIGIE_EMAIL_DOMAINS=atrium.example
 #
 # Usage : APP=http://localhost:3291 MOCK=http://127.0.0.1:55480 VIGIE_SESSION_SECRET=… \
 #         PSQL="psql postgres://vigie@127.0.0.1:5432/vigie" UPLOAD_DIR=/chemin/uploads scripts/e2e-auth.sh
@@ -127,7 +127,7 @@ check "chef de projet du site B : connexion" "$(login essais)" "200 /"
 check "chef de projet : cookie visant le site A → site B (rattachement)" "$(curl -s -b "$(jar essais)" -b 'vigie_site=site_a' "$APP/" -o "$WORK/e2.html"; selected_site "$WORK/e2.html")" "Site de [Ville B] — zone d'essais"
 check "nouvel utilisateur (salarié) : fiche créée, accueil du rôle" "$(login nouveau)" "200 /evenements"
 if [ -n "$PSQL" ]; then
-  check "nouvel utilisateur : site = premier site accordé, groupe inconnu ignoré" "$(sql "select site_id, last_role, email from people where entra_object_id is not null and name='Nina Rousseau'")" "site_b|Salarié|n.rousseau@epc2i.example"
+  check "nouvel utilisateur : site = premier site accordé, groupe inconnu ignoré" "$(sql "select site_id, last_role, email from people where entra_object_id is not null and name='Nina Rousseau'")" "site_b|Salarié|n.rousseau@atrium.example"
   check "nouvel utilisateur : création journalisée" "$(sql "select count(*) from change_log c join people p on p.id = c.entity_id where p.name='Nina Rousseau' and c.action='create'")" 1
 fi
 check "nouvel utilisateur : 2e connexion, même fiche" "$(login nouveau >/dev/null; sql "select count(*) from people where name='Nina Rousseau'" || echo 1)" 1

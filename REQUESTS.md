@@ -33,7 +33,7 @@ Format d'une entrée :
 ## [2026-11-01] Arche → Vigie — VG-01 à VG-05 : études de sécurité des procédés DIG-PRODI et vue `pub_etudes_securite`
 - Statut : FAITE
 - Demande : tenir dans Vigie les études de sécurité des procédés des CAPEX du groupe et les publier à Arche (réponse du responsable produit à la question CNF-12 à CNF-14 / INT-18 du `docs/RESTE-A-FAIRE.md` de Vigie : **les études sont tenues dans Vigie**) :
-  1. **VG-01** — études HazID (jalon HS 2), HazOp / AMDEC (HS 3), contrôle chantier (HS 4), PSSR avec la RSPDI (PSSR) et audit ASPD (HS 6), rattachées à un site (usine de la filiale) et à un CAPEX (`CPX-…`) ou un projet EPC2i : statut, date de séance, date de validation, conclusion, animateur, rapport (référence Codex), réserves bloquantes ;
+  1. **VG-01** — études HazID (jalon HS 2), HazOp / AMDEC (HS 3), contrôle chantier (HS 4), PSSR avec la RSPDI (PSSR) et audit ASPD (HS 6), rattachées à un site (usine de la filiale) et à un CAPEX (`CPX-…`) ou un projet Keystone : statut, date de séance, date de validation, conclusion, animateur, rapport (référence Codex), réserves bloquantes ;
   2. **VG-02** — leurs recommandations suivies comme actions QSE rattachées à l'étude et au CAPEX (source « HAZOP » existante, ou HAZID / PSSR à ajouter), avec échéance, levée et retard ;
   3. **VG-03** — les données de la publication `vigie.pub_etudes_securite` (contrat ci-dessous) : depuis la décision M-18 de Matrix (1er nov. 2026), c'est Matrix qui définit la vue sur les tables de Vigie et le lien de lecture d'`arche_app` (demande M-15 d'Arche à Matrix) ; Vigie tient les tables qui la portent ;
   4. **VG-04** — un lien profond vers la fiche d'une étude (avec ses actions), sur le modèle de `/actions?action=A-214` ;

@@ -11,7 +11,7 @@ import { loadMatrixSiteChoices, loadQhseLeadOptions, loadSiteAdmin } from '@/lib
 import { getSession } from '@/lib/session';
 import { cookies } from 'next/headers';
 import { getI18n } from '@/i18n/server';
-import { THEME_COOKIE, themeOf } from '@/lib/theme';
+import { themeFromCookies } from '@/lib/theme';
 import { NAV_COOKIE, navClosedOf } from '@/lib/nav-state';
 import { NAV_SECTION_EN, SCREEN_LABEL_EN } from '@/i18n/nav';
 
@@ -37,7 +37,7 @@ export default async function AppLayout({ children }: LayoutProps<'/'>) {
   // Libellés de navigation : chaînes sources anglaises traduites (VG-N01), le libellé français de domain.ts à défaut.
   const { t, lang } = await getI18n();
   const jar = await cookies();
-  const theme = themeOf(jar.get(THEME_COOKIE)?.value);
+  const theme = themeFromCookies((n) => jar.get(n)?.value);
   const closed = navClosedOf(jar.get(NAV_COOKIE)?.value);
   const tr = (en: string | undefined, fr: string) => (en ? t(en) : fr);
   const nav: NavSection[] = NAV.map((sec) => ({

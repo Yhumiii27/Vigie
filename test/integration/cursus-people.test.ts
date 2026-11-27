@@ -35,19 +35,19 @@ describe('rafraîchissement des personnes (cache de cursus.pub_salaries)', () =>
     const garnier = await byMatricule('EMP-9101');
     expect(garnier).toMatchObject({ name: '[D. Garnier]', siteMatricule: 'I00101', category: 'interimaire', company: '[Agence Intérim Ouest]', siteId: 'site_a', cursusState: 'actif', inSkillsMatrix: false });
     expect(await changeLog('person', garnier.id)).toMatchObject([{ action: 'create', byId: null, summary: 'Fiche reprise de Cursus (référentiel du personnel)' }]);
-    expect(await byMatricule('EMP-9001')).toMatchObject({ id: 'tnguyen', category: 'salarie', cursusEmail: 't.nguyen@epc2i.example', cursusState: 'actif', siteMatricule: null });
+    expect(await byMatricule('EMP-9001')).toMatchObject({ id: 'tnguyen', category: 'salarie', cursusEmail: 't.nguyen@atrium.example', cursusState: 'actif', siteMatricule: null });
     expect(await byMatricule('EMP-9202')).toMatchObject({ name: '[B. Morel]', siteMatricule: 'E00202', category: 'exterieur' });
     const run = await peopleRun();
     expect(run).toMatchObject({ status: 'ok', message: null });
     const runs = await (await db()).select().from(t.syncRuns);
-    expect(JSON.stringify(runs)).not.toMatch(/@epc2i/);
+    expect(JSON.stringify(runs)).not.toMatch(/@atrium/);
   });
 
   it('nom, poste, site, e-mail et sortie repris ; journal « Cursus » sans auteur, e-mail jamais en clair', async () => {
-    await exec(`update ${SALARIES} set nom = '[T. Nguyen-Durand]', poste = 'Chef d''équipe montage', site_code = 'site_b', email = 'tnd@epc2i.example' where matricule = 'EMP-9001'`);
+    await exec(`update ${SALARIES} set nom = '[T. Nguyen-Durand]', poste = 'Chef d''équipe montage', site_code = 'site_b', email = 'tnd@atrium.example' where matricule = 'EMP-9001'`);
     const r = (await refreshSharedReferences(await db())).find((x) => x.source === 'people');
     expect(r).toMatchObject({ status: 'ok', updated: 1, added: 0, removed: 0 });
-    expect(await person('tnguyen')).toMatchObject({ name: '[T. Nguyen-Durand]', job: "Chef d'équipe montage", siteId: 'site_b', cursusEmail: 'tnd@epc2i.example' });
+    expect(await person('tnguyen')).toMatchObject({ name: '[T. Nguyen-Durand]', job: "Chef d'équipe montage", siteId: 'site_b', cursusEmail: 'tnd@atrium.example' });
     const log = await lastLog('person', 'tnguyen');
     expect(log).toMatchObject({ action: 'sync', byId: null, summary: 'Fiche mise à jour depuis Cursus (référentiel du personnel)' });
     expect(JSON.stringify(log)).not.toContain('@');
@@ -189,7 +189,7 @@ describe('rattachement d’une fiche ancienne (sans matricule) à un salarié de
     const holder = await byMatricule('EMP-9014');
     expect(holder.id).not.toBe('nlegrand');
     expect(await attachPerson({}, form({ id: 'nlegrand', matricule: 'EMP-9014', reason: 'Compte Microsoft créé avant la reprise de Cursus' }))).toMatchObject({ ok: true, id: 'nlegrand' });
-    expect(await person('nlegrand')).toMatchObject({ matricule: 'EMP-9014', cursusState: 'actif', category: 'salarie', cursusEmail: 'n.legrand@epc2i.example', replacedById: null });
+    expect(await person('nlegrand')).toMatchObject({ matricule: 'EMP-9014', cursusState: 'actif', category: 'salarie', cursusEmail: 'n.legrand@atrium.example', replacedById: null });
     expect(await person(holder.id)).toMatchObject({ matricule: null, replacedById: 'nlegrand', leftOn: '2026-10-09' });
     expect(await lastLog('person', 'nlegrand')).toMatchObject({ action: 'link', byId: 'hmarchand', reason: 'Compte Microsoft créé avant la reprise de Cursus', summary: 'Fiche rattachée à Cursus (matricule EMP-9014)' });
     expect(await lastLog('person', holder.id)).toMatchObject({ action: 'archive', byId: 'hmarchand' });

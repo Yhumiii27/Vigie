@@ -240,7 +240,7 @@ export const events = pgTable('events', {
   ncDisposition: text('nc_disposition'),
   ncQuantity: numeric('nc_quantity', { precision: 12, scale: 2, mode: 'number' }),
   ncDispositionNote: text('nc_disposition_note'), // dérogation : accordée par (client, autorité) et conditions
-  // Partage avec Keystone (serveur commun EPC2I, Matrix partage/50-vigie.sql ; vue pub_non_conformites, migration 0009).
+  // Partage avec Keystone (serveur commun Atrium, Matrix partage/50-vigie.sql ; vue pub_non_conformites, migration 0009).
   // Colonnes prêtes, sans saisie dans Vigie à ce jour : code projet Keystone (D02, keystone.pub_projets.code, à la place
   // du texte libre keystone_project), volet NC de Keystone (D13), fournisseur Keystone (D16). Références croisées en
   // texte, sans clé étrangère vers un autre schéma (contrôle à la saisie, puis contrôle d'orphelins de Matrix).
@@ -634,7 +634,7 @@ export const emergencySituations = pgTable('emergency_situations', {
 ]);
 
 // Études de sécurité des procédés (VG-01 à VG-05, demande d'Arche du 01/11/2026, migration 0023 ; CNF-12 à CNF-14) : une
-// étude par jalon DIG-PRODI d'un CAPEX de filiale (code « CPX-… » d'Arche) ou d'un projet EPC2i (code Keystone), sur le site
+// étude par jalon DIG-PRODI d'un CAPEX de filiale (code « CPX-… » d'Arche) ou d'un projet Keystone (code Keystone), sur le site
 // de l'usine. Référence « ES-001 » (nextEntityReference). Statut stocké planifiee | realisee | validee ; « annulee » calculé
 // (annulation motivée, jamais supprimée). Validée : date de validation et conclusion obligatoires (contrainte). Animateur :
 // une personne (facilitator_id) ou un intervenant extérieur (facilitator_external). Rapport : référence Codex (texte).

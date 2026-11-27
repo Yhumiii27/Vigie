@@ -390,7 +390,7 @@ export const RISKS_FR: Record<string, string> = {
   '{n} blocking reservations': '{n} bloquantes',
   'Recommendation {id} marked as a blocking reservation.': 'Recommandation {id} marquée réserve bloquante.',
   CAPEX: 'CAPEX',
-  'EPC2i project': 'Projet EPC2i',
+  'Keystone project': 'Projet Keystone',
   ' — past, study still planned': ' — passée, étude encore planifiée',
   'Validated on': 'Validée le',
   Conclusion: 'Conclusion',

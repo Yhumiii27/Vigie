@@ -3,7 +3,7 @@
 //
 // Une sauvegarde est un fichier unique dans VIGIE_BACKUP_DIR : archive tar (manifest.json, base, pièces jointes),
 // chiffrée (AES-256-GCM, clé dérivée de VIGIE_UPLOAD_KEY) quand la clé est définie : vigie-<date>-<moteur>-<motif>.tar[.enc].
-// - PostgreSQL : pg_dump au format personnalisé (base.pgdump) du seul schéma vigie (serveur commun EPC2I : les autres
+// - PostgreSQL : pg_dump au format personnalisé (base.pgdump) du seul schéma vigie (serveur commun Atrium : les autres
 //   schémas appartiennent aux autres outils), restauré par pg_restore dans ce schéma, sans le recréer ;
 // - PGlite : copie du dossier de données (dumpDataDir, base-pglite.tar.gz), rechargée par loadDataDir.
 // Le manifeste porte l'empreinte (SHA-256) de la base et de chaque pièce jointe, contrôlées à l'extraction. Quand
