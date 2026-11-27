@@ -9,7 +9,10 @@ import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: 'Registre de sécurité' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Safety register') };
+}
 
 // Registre de sécurité consolidé par site (VEI-15, L. 4711-1 et L. 4711-2 du Code du travail) : vérifications
 // périodiques réalisées (résultats, organismes, réserves et observations) et observations ou mises en demeure de

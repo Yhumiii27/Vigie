@@ -12,7 +12,10 @@ import '../../prevention/imprimer/print.css';
 import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: 'Registre des accidents bénins' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Register of minor accidents') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 /** « AAAA-MM-JJTHH:mm » → « 07/09/2026 à 11:05 ». */

@@ -7,11 +7,14 @@ import { canSeeHealth } from '@/lib/domain';
 import { guard } from '@/lib/guard';
 import { loadDatPrint } from '@/lib/data/events';
 import { today } from '@/lib/today';
+import { getI18n } from '@/i18n/server';
+import { labelT } from '@/i18n/labels';
+import { fill, type T } from '@/i18n/translate';
 import '../../../prevention/imprimer/print.css';
 
 export async function generateMetadata({ params }: PageProps<'/evenements/imprimer/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Déclaration d'accident ${decodeURIComponent(id)}` };
+  const [{ id }, { t }] = await Promise.all([params, getI18n()]);
+  return { title: fill(t('Accident declaration {id}'), { id: decodeURIComponent(id) }) };
 }
 
 function Section({ num, title, children }: { num: number | string; title: string; children: ReactNode }) {
@@ -28,16 +31,19 @@ const Meta = ({ rows }: { rows: [string, ReactNode][] }) => (
     {rows.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{v ?? '—'}</dd></div>)}
   </dl>
 );
-const Text = ({ value, empty = 'Non renseigné.' }: { value: string | null; empty?: string }) =>
+const Text = ({ value, empty }: { value: string | null; empty: string }) =>
   (value ? <p className="pp-text">{value}</p> : <p className="pp-empty">{empty}</p>);
 /** « AAAA-MM-JJTHH:mm » → « 08/09/2026 à 16:10 ». */
-const fmtLocal = (local: string) => `${fmtDate(local.slice(0, 10))} à ${local.slice(11, 16)}`;
+const fmtLocal = (local: string, t: T) => fill(t('{date} at {time}'), { date: fmtDate(local.slice(0, 10)), time: local.slice(11, 16) });
 
 // Synthèse imprimable d'un accident du travail (EVT-10) : rubriques de la déclaration d'accident du travail à reporter sur
 // net-entreprises.fr (Cerfa 14463), puis feuille d'accident à remettre à la victime (Cerfa 11383, art. L. 441-5 CSS). Données
 // de santé : animateur QHSE et direction seulement (HEALTH_PAGES, src/lib/auth/route-access.ts), consultation tracée.
 export default async function DatPrintPage({ params }: PageProps<'/evenements/imprimer/[id]'>) {
   const session = await guard('events');
+  const { t } = await getI18n();
+  const l = labelT(t);
+  const notEntered = t('Not entered.');
   if (!canSeeHealth(session.role)) redirect('/evenements');
   const { id } = await params;
   const d = await loadDatPrint(decodeURIComponent(id));
@@ -48,95 +54,94 @@ export default async function DatPrintPage({ params }: PageProps<'/evenements/im
     <article className="pp-doc pp-doc-narrow">
       <div className="pp-toolbar pp-noprint">
         {/* Lien HTML simple (navigation complète) : la feuille print.css ne doit pas rester chargée dans l'application. */}
-        <a href={back} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />Événement {d.id}</a>
+        <a href={back} className="btn btn-ghost vg-btn-sm"><i className="ph ph-arrow-left" style={{ fontSize: 13 }} aria-hidden />{fill(t('Event {id}'), { id: d.id })}</a>
         <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-          <span className="pp-muted" style={{ fontSize: 11.5 }}>Pour le PDF : « Enregistrer au format PDF » dans la boîte d&apos;impression.</span>
+          <span className="pp-muted" style={{ fontSize: 11.5 }}>{t('For the PDF: “Save as PDF” in the print dialog.')}</span>
           <PrintButton />
         </span>
       </div>
 
       <header className="pp-head">
-        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>Vigie · Accident du travail · document confidentiel (données de santé)</div>
+        <div className="vg-eyebrow" style={{ color: 'var(--color-accent)' }}>{t('Vigie · Work accident · confidential document (health data)')}</div>
         <div className="pp-head-row">
-          <h1>{d.id} · Déclaration d&apos;accident {d.commute ? 'de trajet' : 'du travail'}</h1>
+          <h1>{d.id} · {d.commute ? t('Commuting accident declaration') : t('Work accident declaration')}</h1>
         </div>
         <div className="pp-muted" style={{ fontSize: 12.5 }}>
-          Synthèse des rubriques à reporter sur net-entreprises.fr (formulaire Cerfa 14463) · code de la sécurité sociale, art. L. 441-2 et R. 441-3 · éditée le {fmtDate(today())}
+          {fill(t('Summary of the items to enter on net-entreprises.fr (Cerfa form 14463) · social security code, art. L. 441-2 and R. 441-3 · printed on {date}'), { date: fmtDate(today()) })}
         </div>
         {d.duty !== 'cpam' && (
           <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>
             {d.duty === 'ett'
-              ? "Victime intérimaire : l'entreprise de travail temporaire déclare l'accident ; cette synthèse sert à l'informer (R. 412-2)."
-              : "Victime extérieure : son employeur déclare l'accident ; cette synthèse sert à l'informer."}
+              ? t('Temporary worker victim: the temporary work agency declares the accident; this summary is used to inform it (R. 412-2).')
+              : t('External victim: their employer declares the accident; this summary is used to inform them.')}
           </p>
         )}
       </header>
 
-      <Section num={1} title="Employeur · établissement">
-        <Meta rows={[['Établissement', d.site.label], ['SIRET', d.site.siret ?? 'À renseigner (Gérer les sites)']]} />
+      <Section num={1} title={t('Employer · establishment')}>
+        <Meta rows={[[t('Establishment'), d.site.label], ['SIRET', d.site.siret ?? t('To fill in (Manage sites)')]]} />
       </Section>
 
-      <Section num={2} title="Victime">
-        <Meta rows={[['Nom', d.victim.label], ['Statut', d.victim.kind], ['Emploi', d.victim.job ?? '—'], ...(d.victim.company ? [['Entreprise', d.victim.company] as [string, ReactNode]] : [])]} />
+      <Section num={2} title={t('Victim')}>
+        <Meta rows={[[t('Name'), d.victim.label], [t('Status'), l(d.victim.kind)], [t('Job#dat'), d.victim.job ?? '—'], ...(d.victim.company ? [[t('Company'), d.victim.company] as [string, ReactNode]] : [])]} />
       </Section>
 
-      <Section num={3} title="Accident">
+      <Section num={3} title={t('Accident')}>
         <Meta rows={[
-          ['Date et heure', `${fmtDate(d.occurredOn)}${d.occurredTime ? ` à ${d.occurredTime}` : ''}`],
-          ['Nature', d.commute ? 'Accident de trajet (L. 411-2)' : 'Accident du travail (L. 411-1)'],
-          ['Lieu', d.location],
-          ['Horaire de travail ce jour-là', d.workSchedule ?? '—'],
-          ["Connu de l'employeur le", `${fmtLocal(d.knownAt)}${d.knownIsDefault ? ' (enregistrement dans Vigie)' : ''}`],
-          ['Objet ou matériel en cause', d.equipment ?? '—'],
+          [t('Date and time'), d.occurredTime ? fill(t('{date} at {time}'), { date: fmtDate(d.occurredOn), time: d.occurredTime }) : fmtDate(d.occurredOn)],
+          [t('Nature'), d.commute ? t('Commuting accident (L. 411-2)') : t('Work accident (L. 411-1)')],
+          [t('Location'), d.location],
+          [t('Working hours that day'), d.workSchedule ?? '—'],
+          [t('Known to the employer on'), `${fmtLocal(d.knownAt, t)}${d.knownIsDefault ? t(' (recorded in Vigie)') : ''}`],
+          [t('Object or equipment involved'), d.equipment ?? '—'],
         ]} />
-        <div className="pp-sub"><h3>Activité de la victime au moment de l&apos;accident</h3><Text value={d.activity} /></div>
-        <div className="pp-sub"><h3>Circonstances détaillées</h3><Text value={d.circumstances} /></div>
+        <div className="pp-sub"><h3>{t('Activity of the victim at the time of the accident')}</h3><Text value={d.activity} empty={notEntered} /></div>
+        <div className="pp-sub"><h3>{t('Detailed circumstances')}</h3><Text value={d.circumstances} empty={notEntered} /></div>
       </Section>
 
-      <Section num={4} title="Lésions et soins">
+      <Section num={4} title={t('Lesions and care')}>
         <Meta rows={[
-          ['Nature des lésions', d.lesionNature ?? '—'], ['Siège des lésions', d.lesionSite ?? '—'],
-          ['Conséquences', d.lostDays != null ? `${d.injury} · ${d.lostDays} j perdu${d.lostDays > 1 ? 's' : ''}` : d.injury],
+          [t('Nature of the lesions'), d.lesionNature ?? '—'], [t('Site of the lesions'), d.lesionSite ?? '—'],
+          [t('Consequences'), d.lostDays != null ? `${l(d.injury)} · ${fill(d.lostDays > 1 ? t('{n} days lost') : t('{n} day lost'), { n: d.lostDays })}` : l(d.injury)],
         ]} />
-        <div className="pp-sub"><h3>Soins dispensés</h3><Text value={d.careGiven} /></div>
+        <div className="pp-sub"><h3>{t('Care given')}</h3><Text value={d.careGiven} empty={notEntered} /></div>
       </Section>
 
-      <Section num={5} title="Témoins et tiers">
-        <div className="pp-sub"><h3>Témoins</h3><Text value={d.witnesses} empty="Aucun témoin indiqué." /></div>
-        <div className="pp-sub"><h3>Tiers impliqué</h3><Text value={d.thirdParty} empty="Aucun." /></div>
+      <Section num={5} title={t('Witnesses and third parties')}>
+        <div className="pp-sub"><h3>{t('Witnesses')}</h3><Text value={d.witnesses} empty={t('No witness given.')} /></div>
+        <div className="pp-sub"><h3>{t('Third party involved')}</h3><Text value={d.thirdParty} empty={t('None.#m')} /></div>
       </Section>
 
-      <Section num={6} title="Déclaration">
+      <Section num={6} title={t('Declaration')}>
         <Meta rows={[
-          ['Déclaration CPAM', d.cpam?.label ?? '—'],
-          ...(d.cpam?.reserves ? [['Réserves motivées', d.cpam.reserves.label] as [string, ReactNode]] : []),
+          [t('CPAM declaration'), d.cpam?.label ?? '—'],
+          ...(d.cpam?.reserves ? [[t('Reasoned reservations'), d.cpam.reserves.label] as [string, ReactNode]] : []),
         ]} />
       </Section>
 
       <section className="pp-section" style={{ breakBefore: 'page' }}>
-        <h2><span className="pp-num">7</span>Feuille d&apos;accident du travail · à remettre à la victime</h2>
+        <h2><span className="pp-num">7</span>{t('Work accident sheet · to hand to the victim')}</h2>
         <p className="pp-muted" style={{ margin: 0, fontSize: 12 }}>
-          L&apos;employeur remet à la victime la feuille d&apos;accident (Cerfa 11383), qui lui donne droit à la gratuité des soins liés à
-          l&apos;accident (art. L. 441-5 du code de la sécurité sociale). Reportez ces mentions sur le formulaire officiel.
+          {t('The employer hands the victim the accident sheet (Cerfa 11383), which entitles them to free care related to the accident (art. L. 441-5 of the social security code). Copy these items onto the official form.')}
         </p>
         <Meta rows={[
-          ['Victime', d.victim.label],
-          ['Employeur', `${d.site.label}${d.site.siret ? ` · SIRET ${d.site.siret}` : ''}`],
-          ["Date de l'accident", fmtDate(d.occurredOn)],
-          ['Référence interne', d.id],
+          [t('Victim'), d.victim.label],
+          [t('Employer'), `${d.site.label}${d.site.siret ? ` · SIRET ${d.site.siret}` : ''}`],
+          [t('Date of the accident'), fmtDate(d.occurredOn)],
+          [t('Internal reference'), d.id],
         ]} />
         <div className="pp-sign">
           <div>
-            <span className="pp-sign-title">Remise de la feuille d&apos;accident</span>
-            {['Remise le', 'Par (nom et qualité)', 'Signature'].map((l) => <span key={l} className="pp-blank">{l}</span>)}
+            <span className="pp-sign-title">{t('Handing over of the accident sheet')}</span>
+            {[t('Handed over on'), t('By (name and position)'), t('Signature')].map((x) => <span key={x} className="pp-blank">{x}</span>)}
           </div>
           <div>
-            <span className="pp-sign-title">Victime</span>
-            {['Reçue le', 'Signature'].map((l) => <span key={l} className="pp-blank">{l}</span>)}
+            <span className="pp-sign-title">{t('Victim')}</span>
+            {[t('Received on#f'), t('Signature')].map((x, i) => <span key={`${i}-${x}`} className="pp-blank">{x}</span>)}
           </div>
         </div>
       </section>
-      <p className="pp-foot">Document confidentiel : données de santé réservées à l&apos;animateur QHSE et à la direction.</p>
+      <p className="pp-foot">{t('Confidential document: health data reserved to the QHSE coordinator and management.')}</p>
     </article>
   );
 }

@@ -9,7 +9,10 @@ import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: "Programme annuel d'audit" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Annual audit programme') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 

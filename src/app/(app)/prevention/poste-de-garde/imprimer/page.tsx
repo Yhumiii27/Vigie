@@ -11,7 +11,10 @@ import '../../imprimer/print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: 'Liste du poste de garde' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Gatehouse list') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 

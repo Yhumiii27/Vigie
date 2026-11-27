@@ -8,6 +8,7 @@ import { TONE, type Tone } from '@/lib/domain';
 import { ActionLink } from './ActionPlanProvider';
 import { useI18n } from '@/i18n/client';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 const MAX_CARDS = 8;
 
@@ -64,15 +65,15 @@ function KanbanCard({ a, step }: { a: ActionListItem; step: boolean }) {
     <ActionLink id={a.id} className="card elev-sm vg-kcard" style={{ gap: 7, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--color-neutral-500)', minWidth: 0 }}>
         <Icon name={a.sourceIcon} size={12} style={{ flex: 'none' }} />
-        <span style={{ whiteSpace: 'nowrap' }}>{a.sourceLabel}</span>
+        <span style={{ whiteSpace: 'nowrap' }}>{labelT(t)(a.sourceLabel)}</span>
         {a.originRef && <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {a.originRef}</span>}
         <span style={{ marginLeft: 'auto', flex: 'none', color: 'var(--vg-text-muted)' }}>{a.id}</span>
       </div>
       <div style={{ fontSize: 12.5, textWrap: 'pretty' }}>{a.label}</div>
       {(step || a.toComplete || a.priorityLabel) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11, color: 'var(--color-neutral-400)' }}>
-          {step && <span title={t('Progress')}>{a.avancement}</span>}
-          {a.priorityLabel && <span>{step ? '· ' : ''}{a.priorityLabel}</span>}
+          {step && <span title={t('Progress')}>{labelT(t)(a.avancement)}</span>}
+          {a.priorityLabel && <span>{step ? '· ' : ''}{labelT(t)(a.priorityLabel)}</span>}
           {a.toComplete && <span style={{ color: TONE.warn.dot }}>{step || a.priorityLabel ? '· ' : ''}{t('To complete')}</span>}
         </div>
       )}

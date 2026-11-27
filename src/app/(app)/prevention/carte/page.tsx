@@ -13,7 +13,10 @@ import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
 const TITLE = 'Site map and co-activity';
-export const metadata: Metadata = { title: 'Carte du site et coactivité' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Site map and co-activity') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' && v ? v : undefined);
 const plural = (n: number, one: string, many: string) => fill(n > 1 ? many : one, { n });

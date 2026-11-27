@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import { PageHeader } from '@/components/PageHeader';
 import { ContributionsView } from '@/components/review/ContributionsView';
 import { SCREENS } from '@/lib/domain';
@@ -6,10 +5,10 @@ import { guard } from '@/lib/guard';
 import { loadMyContributions } from '@/lib/data/review';
 import { MissingNotice } from '@/components/ui';
 import { missingDetail } from '@/lib/url-state';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.contributions.title };
+export const generateMetadata = () => screenMetadata('contributions');
 
 /**
  * « Mes contributions à la revue de direction » (AUD-04), ouvert à tous les rôles : éléments de la check-list attendus de

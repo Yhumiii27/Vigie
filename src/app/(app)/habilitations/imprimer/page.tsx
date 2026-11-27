@@ -10,7 +10,10 @@ import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 import '../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: 'Plan de formation · recyclages à prévoir' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Training plan · refresher courses to plan') };
+}
 
 // Plan de formation imprimable (HAB-09) : recyclages et formations à prévoir sur 12 mois, par mois et par titre, pour le
 // site sélectionné (le Salarié : ses seuls titres, comme la matrice). Calculé à l'affichage, jamais stocké ; géré par le

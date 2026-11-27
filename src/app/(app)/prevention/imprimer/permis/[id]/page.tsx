@@ -12,8 +12,8 @@ import { getI18n } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
 export async function generateMetadata({ params }: PageProps<'/prevention/imprimer/permis/[id]'>): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Permis ${decodeURIComponent(id)}` };
+  const [{ id }, { t }] = await Promise.all([params, getI18n()]);
+  return { title: fill(t('Permit {id}'), { id: decodeURIComponent(id) }) };
 }
 
 function Section({ num, title, aside, children }: { num: number; title: string; aside?: ReactNode; children: ReactNode }) {

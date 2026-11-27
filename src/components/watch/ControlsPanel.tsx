@@ -28,6 +28,7 @@ import { ArchivedBanner, Facts, FileError, Notice, ViewSwitch, checkPickedFiles,
 import { TipButton } from '@/components/Tip';
 import { useI18n } from '@/i18n/client';
 import { fill, type T } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 type Opts = Pick<FormOptions, 'people' | 'sites'>;
 /**
@@ -128,7 +129,7 @@ export function ControlsPanel({ rows, filter, canManage, canApprove, options, ac
                   {c.actionId ? (
                     <div style={{ marginTop: 2 }}>
                       <Link href={actionHref(c.actionId)} className="vg-link" style={{ fontSize: 11 }}>{c.actionId}</Link>
-                      {c.action && <span style={{ ...muted, color: c.action.late ? TONE.danger.dot : muted.color }}> · {c.action.statusLabel}</span>}
+                      {c.action && <span style={{ ...muted, color: c.action.late ? TONE.danger.dot : muted.color }}> · {labelT(t)(c.action.statusLabel)}</span>}
                     </div>
                   ) : c.reserves && canManage && !c.archived ? (
                     <div style={{ ...muted, marginTop: 2, color: TONE.danger.dot }}>{t('Action to define')}</div>
@@ -292,7 +293,7 @@ function FollowUp({ c, today, actionOptions, linkActions, editable, creating, se
           {c.action && <span> · {c.action.label}</span>}
           {c.action && <span style={{ ...muted, display: 'block', color: c.action.late ? TONE.danger.dot : muted.color }}>{fill(t('Target date {date}'), { date: c.action.due })}</span>}
         </span>
-        {c.action && <ToneTag tone={c.action.tone} style={{ whiteSpace: 'nowrap' }}>{c.action.statusLabel}</ToneTag>}
+        {c.action && <ToneTag tone={c.action.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(c.action.statusLabel)}</ToneTag>}
         {linkActions && <LinkActionButton link={link} current={c.actionId} />}
         {/* VEI-05 : action de levée close, réserves toujours inscrites : boucler par un contrôle sans réserve. */}
         {c.loopBack && (

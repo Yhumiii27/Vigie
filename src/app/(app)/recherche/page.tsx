@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import { screenMetadata } from '@/i18n/server';
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
 import { SCREENS } from '@/lib/domain';
@@ -6,7 +6,7 @@ import { guard } from '@/lib/guard';
 import { loadSearch } from '@/lib/data/search';
 import { SEARCH_LIMIT, SEARCH_MIN, SEARCH_PATH, parseSearchQuery } from '@/lib/rules/search';
 
-export const metadata: Metadata = { title: SCREENS.search.title };
+export const generateMetadata = () => screenMetadata('search');
 
 // Recherche globale (TDB-18) : /recherche?q=, ouverte à tout rôle connecté ; résultats groupés par module, chaque module
 // filtré comme son propre écran (site sélectionné, périmètre, droits ; src/lib/data/search.ts).

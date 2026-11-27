@@ -12,7 +12,10 @@ import '../print.css';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: 'Registre des permis de feu et d’essai' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Register of hot work and test permits') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);

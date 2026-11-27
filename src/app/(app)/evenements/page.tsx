@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { ChangeLogList } from '@/components/ChangeLog';
@@ -42,10 +41,10 @@ import { eventView, isOpen, loadPeople } from '@/lib/queries';
 import { loadEventInbound } from '@/lib/data/inbound';
 import { pageParams, paginate, parsePage, parsePageSize } from '@/lib/pagination';
 import { Pagination } from '@/components/Pagination';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill, type T } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.events.title };
+export const generateMetadata = () => screenMetadata('events');
 
 const H6 = ({ children }: { children: React.ReactNode }) => <h6 className="vg-h6">{children}</h6>;
 

@@ -1,11 +1,13 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { fill, makeT, type T } from '@/i18n/translate';
 
 // Rapport d'audit en PDF (AUD-39, réponse du service QHSE du 09/11/2026 : pas d'envoi, mais un PDF téléchargeable une fois
 // l'audit enregistré). Construit côté serveur avec pdf-lib (dépendance existante) et les polices standard du format PDF
 // (Helvetica) : aucune police à télécharger ni à embarquer. Ces polices ne couvrent que le jeu WinAnsi (Latin-1 et quelques
 // signes : œ, €, guillemets, tirets, points de suspension) — tout le français y figure ; un autre caractère est remplacé
 // (winAnsi) plutôt que de faire échouer le document. Module pur (sans session ni base) : données préparées par
-// loadAuditReport (src/lib/data/audits.ts), servi par /audits/rapport/<id>.
+// loadAuditReport (src/lib/data/audits.ts), servi par /audits/rapport/<id>. Textes en chaînes sources anglaises traduites par
+// `t` (langue de la personne, cookie vigie-lang ; français par défaut) ; les libellés et données arrivent déjà traduits.
 
 export type AuditReportAction = { id: string; title: string | null; status: string | null };
 export type AuditReportFinding = {
@@ -84,9 +86,9 @@ const ACCENT = rgb(0.13, 0.36, 0.55);
 const MUTED = rgb(0.35, 0.35, 0.35);
 
 /** Rapport d'audit en PDF (octets du fichier). */
-export async function buildAuditReportPdf(r: AuditReportData): Promise<Uint8Array> {
+export async function buildAuditReportPdf(r: AuditReportData, t: T = makeT('fr')): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  pdf.setTitle(winAnsi(`Rapport d'audit ${r.ref}`));
+  pdf.setTitle(winAnsi(fill(t('Audit report {ref}'), { ref: r.ref })));
   pdf.setSubject(winAnsi(r.title));
   pdf.setProducer('Vigie QHSE');
   pdf.setCreator('Vigie QHSE');
@@ -114,16 +116,16 @@ export async function buildAuditReportPdf(r: AuditReportData): Promise<Uint8Arra
     y -= 10;
   };
 
-  write('Vigie · Audits et certifications', { size: 9, color: ACCENT, gap: 2 });
-  write("Rapport d'audit", { font: bold, size: 18, gap: 4 });
+  write(t('Vigie · Audits and certifications'), { size: 9, color: ACCENT, gap: 2 });
+  write(t('Audit report'), { font: bold, size: 18, gap: 4 });
   write(r.title, { font: bold, size: 12, gap: 8 });
   rule();
   const facts: [string, string][] = [
-    ['Référence', r.ref], ["Type d'audit", r.kindLabel], ['Ligne du programme', r.track], ['Site', r.site],
-    ['Réalisé le', fr(r.doneOn)], ['Auditeur', r.auditor || '—'], ['Responsable', r.owner || '—'], ...(r.scope ? [['Périmètre', r.scope] as [string, string]] : []),
+    [t('Reference'), r.ref], [t('Audit type'), r.kindLabel], [t('Programme line'), r.track], [t('Site'), r.site],
+    [t('Carried out on'), fr(r.doneOn)], [t('Auditor'), r.auditor || '—'], [t('Owner'), r.owner || '—'], ...(r.scope ? [[t('Scope'), r.scope] as [string, string]] : []),
   ];
   for (const [k, v] of facts) {
-    const label = winAnsi(`${k} : `);
+    const label = winAnsi(fill(t('{label}: '), { label: k }));
     if (y - 10 < MARGIN + 20) newPage();
     page.drawText(label, { x: MARGIN, y: y - 10, size: 10, font: bold });
     const lines = wrapText(v, width - 130, (s) => regular.widthOfTextAtSize(s, 10));
@@ -135,14 +137,14 @@ export async function buildAuditReportPdf(r: AuditReportData): Promise<Uint8Arra
   }
   y -= 6;
   rule();
-  write(`Constats (${r.findings.length})`, { font: bold, size: 13, gap: 4 });
-  if (!r.findings.length) write('Aucun constat enregistré pour cet audit.', { color: MUTED });
+  write(fill(t('Findings ({n})'), { n: r.findings.length }), { font: bold, size: 13, gap: 4 });
+  if (!r.findings.length) write(t('No finding recorded for this audit.'), { color: MUTED });
   r.findings.forEach((f, i) => {
-    write(`${i + 1}. ${f.kindLabel}${f.clause ? ` · ${f.clause}` : ''}${f.foundOn ? ` · constaté le ${fr(f.foundOn)}` : ''}`, { font: bold, size: 10.5, gap: 1 });
+    write(`${i + 1}. ${f.kindLabel}${f.clause ? ` · ${f.clause}` : ''}${f.foundOn ? fill(t(' · found on {date}'), { date: fr(f.foundOn) }) : ''}`, { font: bold, size: 10.5, gap: 1 });
     write(f.text, { indent: 12, gap: 2 });
-    if (f.responseDueOn) write(`Réponse attendue au plus tard le ${fr(f.responseDueOn)}`, { indent: 12, size: 9, color: MUTED });
+    if (f.responseDueOn) write(fill(t('Response expected by {date} at the latest'), { date: fr(f.responseDueOn) }), { indent: 12, size: 9, color: MUTED });
     if (f.actions.length) {
-      write('Actions :', { indent: 12, size: 9, font: bold });
+      write(fill(t('{label}: '), { label: t('Actions') }).trimEnd(), { indent: 12, size: 9, font: bold });
       for (const a of f.actions) write(`${a.id}${a.title ? ` · ${a.title}` : ''}${a.status ? ` (${a.status})` : ''}`, { indent: 24, size: 9 });
     }
     y -= 6;
@@ -150,14 +152,14 @@ export async function buildAuditReportPdf(r: AuditReportData): Promise<Uint8Arra
   // Pied de page : édition et pagination.
   const pages = pdf.getPages();
   pages.forEach((p, i) => {
-    const foot = winAnsi(`Vigie · rapport d'audit ${r.ref} · édité le ${fr(r.generatedOn)} par ${r.generatedBy} · page ${i + 1}/${pages.length}`);
+    const foot = winAnsi(fill(t('Vigie · audit report {ref} · printed on {date} by {name} · page {page}/{pages}'), { ref: r.ref, date: fr(r.generatedOn), name: r.generatedBy, page: i + 1, pages: pages.length }));
     p.drawText(foot, { x: MARGIN, y: MARGIN - 20, size: 8, font: regular, color: MUTED });
   });
   return pdf.save();
 }
 
 /** Nom du fichier téléchargé : « rapport-audit-<référence>-<date>.pdf » (caractères sûrs seulement). */
-export function auditReportFileName(r: Pick<AuditReportData, 'ref' | 'doneOn'>): string {
+export function auditReportFileName(r: Pick<AuditReportData, 'ref' | 'doneOn'>, t: T = makeT('fr')): string {
   const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
-  return `rapport-audit-${slug(r.ref)}${r.doneOn ? `-${r.doneOn}` : ''}.pdf`;
+  return `${t('audit-report#file')}-${slug(r.ref)}${r.doneOn ? `-${r.doneOn}` : ''}.pdf`;
 }

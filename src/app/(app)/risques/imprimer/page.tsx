@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getI18n } from '@/i18n/server';
 import type { ReactNode } from 'react';
 import { PrintButton } from '@/components/PrintButton';
 import { DuerpAccessNotice } from '@/components/risks/AccessNotice';
@@ -9,7 +10,10 @@ import { DUERP_RETENTION, levelName, loadDuerpPrint, loadDuerpVersion, type Prin
 import { today } from '@/lib/today';
 import '../../prevention/imprimer/print.css';
 
-export const metadata: Metadata = { title: "Document unique d'évaluation des risques professionnels" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Occupational risk assessment document') };
+}
 
 type Unit = { id: string; label: string; siteId: string | null; site: string };
 type PrintDoc = { meta: [string, ReactNode][]; units: Unit[]; risks: RiskRecord[]; actionInfo: Record<string, PrintAction> | null; label: string };

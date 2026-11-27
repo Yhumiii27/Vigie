@@ -1,4 +1,3 @@
-import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageHeader } from '@/components/PageHeader';
 import { hrefWith } from '@/components/ui';
@@ -14,10 +13,10 @@ import { loadDocuments, matchesSearch, type DocumentRow } from '@/lib/data/docum
 import { loadFormOptions } from '@/lib/data/options';
 import { lcfirst } from '@/lib/queries';
 import { currentSiteId } from '@/lib/session';
-import { getI18n } from '@/i18n/server';
+import { getI18n, screenMetadata } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: SCREENS.docs.title };
+export const generateMetadata = () => screenMetadata('docs');
 
 const PATH = '/documents';
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);

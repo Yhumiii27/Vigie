@@ -10,7 +10,10 @@ import { today } from '@/lib/today';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
 
-export const metadata: Metadata = { title: 'Registre des dangers graves et imminents' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t('Register of serious and imminent dangers') };
+}
 
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined);
 

@@ -4,12 +4,12 @@ import { asc, isNotNull } from 'drizzle-orm';
 import { getDb, schema as t } from '@/db';
 import {
   BSD_PENDING, BSD_STALE_DAYS, BSD_STATUS, BSD_STATUS_KEYS, CONSUMPTION_KINDS, READING_DUE_DAY, REGISTER_MENTIONS_FROM, entryRef, fmtQty, isBsdStatus,
-  isHazardousCode, isRecovery, monthLong, monthShort, qualificationLabel, registerGaps, resolveMentions, shiftMonth, streamGaps, toRegisterQuantity, toTonnes,
+  isHazardousCode, isRecovery, monthLong, monthShort, qualificationLabel, registerGaps, resolveMentions, shiftMonth, streamGaps, toTonnes,
   treatmentLabel, type BsdStatus, type ConsumptionKind,
   wasteEntryHref,
 } from '@/lib/rules/environment';
 import { hrefWith } from '@/lib/url-state';
-import { addDays, daysBetween, fmtDate, fmtDayMonth, parisDay } from '../dates';
+import { addDays, daysBetween, fmtDayMonth, parisDay } from '../dates';
 import { today } from '@/lib/today';
 import type { ActionDefaults } from '../action-view';
 import { EVENT_STEPS, ORIGIN_REF_MAX, REQUIREMENT_EVAL, isClosedActionStatus, severityTone, type TodoItem, type Tone } from '../domain';
@@ -18,7 +18,9 @@ import { currentSiteId, siteFilter, type SiteScope } from '../session';
 import { loadQhseLeads } from './leads';
 import { loadEntityFiles } from './entity-files';
 import type { AttachmentItem } from '../attachments';
-import { fileSlug, toCsv } from '@/lib/csv';
+import { fileSlug } from '@/lib/csv';
+import { wasteRegisterCsv } from '@/lib/rules/waste-register-csv';
+import { makeT, type T } from '@/i18n/translate';
 import { entityVersions } from '@/server/versions';
 
 // ─── Environnement et déchets ───────────────────────────────────────────────
@@ -619,35 +621,14 @@ export const loadWasteIndicators = cache(async (): Promise<{ bsd: WasteIndicator
 // ─── Export du registre (CSV) ───────────────────────────────────────────────
 
 /** Colonnes du registre, dans l'ordre des mentions de l'arrêté du 31 mai 2021 (art. 2). */
-const CSV_HEADERS = [
-  "Date d'expédition (enlèvement)", 'Établissement', "SIRET de l'établissement", 'Adresse de prise en charge', 'Dénomination usuelle du déchet',
-  'Code déchet', 'Dangereux', 'POP', 'Quantité', 'Unité', 'Quantité (t ou m³)', 'Unité du registre',
-  'Transporteur', 'SIRET du transporteur', 'Adresse du transporteur', 'N° de récépissé du transporteur',
-  'N° de bordereau (BSD)', 'Statut du bordereau',
-  'Installation de destination', "SIRET de l'installation", "Adresse de l'installation",
-  'Code de traitement', 'Opération de traitement', 'Qualification du traitement final', 'Filière de traitement',
-  'Mentions manquantes', 'Observations',
-];
-
 /** Registre chronologique de l'année (site sélectionné) : CSV UTF-8 avec BOM, séparateur « ; ». */
-export async function loadWasteRegisterCsv(year: number) {
+export async function loadWasteRegisterCsv(year: number, tr: T = makeT('fr')) {
   const { site, siteLabel, entries } = await loadEnvironmentBase();
   const rows = entries.filter((e) => e.year === year).sort((a, b) => a.removedOn.localeCompare(b.removedOn) || a.id - b.id);
-  const lines = [CSV_HEADERS, ...rows.map((e) => {
-    const register = toRegisterQuantity(e.quantity, e.unit);
-    return [
-      fmtDate(e.removedOn), e.site, e.siteSiret ?? '', e.pickupAddress ?? '', e.stream,
-      e.ewcCode, e.hazardous ? 'Oui' : 'Non', e.pop ? 'Oui' : 'Non', e.quantity, e.unit, register?.quantity ?? '', register?.unit ?? '',
-      e.transporter, e.transporterSiret ?? '', e.transporterAddress ?? '', e.transporterReceipt ?? '',
-      e.bsdNumber ?? (e.missingBsd ? 'MANQUANT' : ''), e.bsdStatus ? BSD_STATUS[e.bsdStatus].label : '',
-      e.destination, e.destinationSiret ?? '', e.destinationAddress ?? '',
-      e.treatmentCode, treatmentLabel(e.treatmentCode), e.qualificationLabel ?? '', e.channel,
-      e.gaps.join(' · '), e.notes ?? '',
-    ];
-  })];
-  const scope = site ? fileSlug((siteLabel.get(site) ?? site).split(' — ')[0], 'tous-sites') : 'tous-sites';
+  const allSites = tr('all-sites#file');
+  const scope = site ? fileSlug((siteLabel.get(site) ?? site).split(' — ')[0], allSites) : allSites;
   return {
-    csv: toCsv(lines),
-    fileName: `registre-dechets_${year}_${scope}.csv`,
+    csv: wasteRegisterCsv(rows, tr),
+    fileName: `${tr('waste-register#file')}_${year}_${scope}.csv`,
   };
 }

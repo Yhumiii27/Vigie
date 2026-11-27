@@ -6,6 +6,7 @@ import { fmtDecimal } from '@/lib/forms';
 import { ActionLink, ActionTableRow } from '../ActionPlanProvider';
 import { getI18n } from '@/i18n/server';
 import { fill } from '@/i18n/translate';
+import { labelT } from '@/i18n/labels';
 
 // Vue Liste (vue générale par défaut, spec § 16) : N°, Date, Responsable, Avancement (retard signalé), Priorité, Date
 // cible, Source, Domaine, libellé, Site ; pied : pointage et coûts des actions affichées. Vue des Abandonnées : motif et
@@ -25,10 +26,11 @@ async function NumberCell({ a }: { a: ActionListItem }) {
   );
 }
 
-function SourceCell({ a }: { a: ActionListItem }) {
+async function SourceCell({ a }: { a: ActionListItem }) {
+  const { t } = await getI18n();
   return (
     <td style={{ ...MUTED, maxWidth: 220 }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: a.source ? undefined : TONE.warn.dot }}><Icon name={a.sourceIcon} size={12} />{a.sourceLabel}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: a.source ? undefined : TONE.warn.dot }}><Icon name={a.sourceIcon} size={12} />{labelT(t)(a.sourceLabel)}</span>
       {a.originRef && <span style={{ display: 'block', fontSize: 11, color: 'var(--vg-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.originRef}</span>}
     </td>
   );
@@ -78,8 +80,8 @@ export async function ActionList({ items, totals, filtered }: { items: ActionLis
                 <td style={MUTED}>{a.opened}</td>
                 <ResponsableCell a={a} />
                 <td>
-                  <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{a.statusLabel}</ToneTag>
-                  {a.late && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', marginTop: 2 }}>{a.avancement}</span>}
+                  <ToneTag tone={a.tone} style={{ whiteSpace: 'nowrap' }}>{labelT(t)(a.statusLabel)}</ToneTag>
+                  {a.late && <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)', marginTop: 2 }}>{labelT(t)(a.avancement)}</span>}
                 </td>
                 <td style={MUTED}>{a.priorityLabel ?? '—'}</td>
                 <DueCell a={a} />
