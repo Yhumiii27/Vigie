@@ -31,7 +31,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
   const permits = d.permits
     .filter((p) => filter.states.includes(p.state) && (!type || p.type === type) && (!period || inPeriod(p, period)))
     .sort((a, b) => a.validFrom.localeCompare(b.validFrom) || a.id.localeCompare(b.id, 'fr', { numeric: true }));
-  const typeLabel = t(PERMIT_TYPE_FILTERS.find((f) => f.key === type)?.label ?? 'All types');
+  const typeLabel = t(PERMIT_TYPE_FILTERS.find((f) => f.key === type)?.label ?? 'All types#filter');
   const periodLabel = period?.label ?? t('all periods');
   // Années proposées : celles des permis du site (début et fin de validité) et l'année en cours.
   const now = today();
@@ -76,7 +76,7 @@ export default async function PermitRegisterPage({ searchParams }: PageProps<'/p
         <label>
           {t('Month')}
           <select name="mois" className="input" defaultValue={period?.mois ?? ''}>
-            <option value="">{t('All')}</option>
+            <option value="">{t('All#mplural')}</option>
             {MONTHS.map((m) => <option key={m} value={String(m)}>{monthName(m)}</option>)}
           </select>
         </label>

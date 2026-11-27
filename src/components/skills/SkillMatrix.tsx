@@ -343,7 +343,7 @@ export function SkillMatrix({ titles, versions, archivedTitles, rows, others, de
   const setChip = (c: Chip) => replaceFilters({ etat: SCOPE_OF[c] });
   const setService = (v: string) => replaceFilters({ service: v });
   const chipCount: Record<Chip, number | null> = { tous: null, a_traiter: treat.length, sortis: departed.length };
-  const chips: { key: Chip; label: string }[] = [{ key: 'tous', label: t('All') }, ...SKILL_FILTERS.filter((f) => f.key !== 'sortis' || canManage)];
+  const chips: { key: Chip; label: string }[] = [{ key: 'tous', label: t('All#mplural') }, ...SKILL_FILTERS.filter((f) => f.key !== 'sortis' || canManage)];
 
   const cellName = row && cell ? `${cell.title.label} — ${row.person.name}` : '';
   const unavailable = rows.some((r) => r.cells.some((c) => c.state === 'u'));

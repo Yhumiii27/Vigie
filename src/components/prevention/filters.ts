@@ -23,18 +23,18 @@ export const PLAN_FILTERS: ListFilter<PlanPhase>[] = [
   { key: 'a-clore', label: 'To close', states: ['a_clore'], empty: 'No plan to close on this site.', optional: true },
   { key: 'clos', label: 'Closed#plural', states: ['clos'], empty: 'No closed plan on this site.' },
   { key: 'annules', label: 'Cancelled#plural', states: ['annule'], empty: 'No cancelled plan on this site.', optional: true },
-  { key: 'tous', label: 'All', states: ['en_cours', 'a_venir', 'a_clore', 'clos'], empty: 'No prevention plan on this site.' },
+  { key: 'tous', label: 'All#mplural', states: ['en_cours', 'a_venir', 'a_clore', 'clos'], empty: 'No prevention plan on this site.' },
 ];
 
 // « Ouverts » : tout ce qui reste à traiter (demandes, permis délivrés ou en cours, expirés non clos). « Tous » exclut les annulés.
 export const PERMIT_FILTERS: ListFilter<PermitState>[] = [
-  { key: 'ouverts', label: 'Open', states: ['demande', 'delivre', 'en_cours', 'expire'], empty: 'No open permit on this site.' },
+  { key: 'ouverts', label: 'Open#plural', states: ['demande', 'delivre', 'en_cours', 'expire'], empty: 'No open permit on this site.' },
   { key: 'actifs', label: 'Active#plural', states: ['delivre', 'en_cours'], empty: 'No permit issued or in progress on this site.' },
   { key: 'demandes', label: 'Requests', states: ['demande'], empty: 'No permit request to issue on this site.' },
   { key: 'expires', label: 'Expired#plural', states: ['expire'], empty: 'No expired permit left open on this site.', optional: true },
   { key: 'clos', label: 'Closed#plural', states: ['clos'], empty: 'No closed permit on this site.' },
   { key: 'annules', label: 'Cancelled#plural', states: ['annule'], empty: 'No cancelled permit on this site.', optional: true },
-  { key: 'tous', label: 'All', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos'], empty: 'No permit on this site.' },
+  { key: 'tous', label: 'All#mplural', states: ['demande', 'delivre', 'en_cours', 'expire', 'clos'], empty: 'No permit on this site.' },
 ];
 
 /** Registre imprimable : filtres de l'onglet Permis, plus tous les permis annulés compris (l'écran reste inchangé). */
@@ -45,7 +45,7 @@ export const REGISTER_FILTERS: ListFilter<PermitState>[] = [
 
 /** ?type= : tous types (sans paramètre), permis de feu, permis d'essai. */
 export const PERMIT_TYPE_FILTERS: { key: PermitType | null; label: string }[] = [
-  { key: null, label: 'All types' },
+  { key: null, label: 'All types#filter' },
   { key: 'feu', label: 'Fire' },
   { key: 'essai', label: 'Test' },
 ];

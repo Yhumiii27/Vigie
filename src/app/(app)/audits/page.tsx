@@ -106,7 +106,7 @@ export default async function AuditsPage({ searchParams }: PageProps<'/audits'>)
   const typeHref = (k?: string) => `/audits?annee=${year}${k ? `&type=${k}` : ''}`;
   const typeNav = (
     <SegLinks size={11} pad="3px 8px" options={[
-      { href: typeHref(), label: t('All types'), on: !auditType },
+      { href: typeHref(), label: t('All types#filter'), on: !auditType },
       ...AUDIT_KIND_KEYS.filter((k) => plan.some((p) => p.auditKind === k)).map((k) => ({ href: typeHref(k), label: AUDIT_KINDS[k].short, on: auditType === k })),
     ]} />
   );

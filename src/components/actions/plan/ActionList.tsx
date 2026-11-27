@@ -69,7 +69,7 @@ export async function ActionList({ items, totals, filtered }: { items: ActionLis
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 1100 }}>
           <thead>
-            <tr><th>{t('No.')}</th><th>{t('Date')}</th><th>{t('Owner')}</th><th>{t('Progress')}</th><th>{t('Priority')}</th><th>{t('Target date')}</th><th>{t('Source')}</th><th>{t('Domain')}</th><th>{t('Action')}</th><th>{t('Site')}</th></tr>
+            <tr><th>{t('No.')}</th><th>{t('Date')}</th><th>{t('Owner')}</th><th>{t('Progress')}</th><th>{t('Priority')}</th><th>{t('Target date')}</th><th>{t('Source#origin')}</th><th>{t('Domain')}</th><th>{t('Action')}</th><th>{t('Site')}</th></tr>
           </thead>
           <tbody>
             {items.map((a) => (
@@ -120,7 +120,7 @@ export async function AbandonedList({ items, filtered }: { items: ActionListItem
     <div className="card" style={{ padding: '6px 14px 10px' }}>
       <div style={{ overflowX: 'auto' }}>
         <table className="table" style={{ fontSize: 12.5, minWidth: 900 }}>
-          <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source')}</th><th>{t('Owner')}</th><th>{t('Site')}</th><th>{t('Abandoned on')}</th><th>{t('Reason')}</th></tr></thead>
+          <thead><tr><th>{t('No.')}</th><th>{t('Action')}</th><th>{t('Source#origin')}</th><th>{t('Owner')}</th><th>{t('Site')}</th><th>{t('Abandoned on')}</th><th>{t('Reason')}</th></tr></thead>
           <tbody>
             {items.map((a) => (
               <ActionTableRow key={a.id} id={a.id}>

@@ -60,7 +60,7 @@ export async function EventFilterBar({ filters, base, people, health, pilots }: 
             <label className="vg-filter-field">
               <span>{t('Lead')}</span>
               <select name="pilote" className="input" defaultValue={filters.pilote ?? ''}>
-                <option value="">{t('All')}</option>
+                <option value="">{t('All#mplural')}</option>
                 <option value={NO_PILOT}>{t('No lead')}</option>
                 {people.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>

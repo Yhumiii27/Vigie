@@ -45,7 +45,7 @@ const SHELL_FR: Record<string, string> = {
   Dashboard: 'Tableau de bord',
   'To do': 'À faire',
   'Reports and events': 'Signalements et événements',
-  'Action plan': "Plan d'actions",
+  'Action plan#screen': "Plan d'actions",
   'Prevention plans and permits': 'Plans de prévention et permis',
   'Risk assessment': 'Évaluation des risques',
   'Qualifications and training': 'Habilitations et formations',
@@ -100,15 +100,21 @@ const SHELL_FR: Record<string, string> = {
 const VIGIE_FR: Record<string, string> = Object.assign({}, SHELL_FR, ...Object.values(SCREEN_DICTIONARIES));
 
 /**
- * Entrées de Norma (TACHES_FR) que Vigie ne traduit pas déjà : la traduction de Vigie l'emporte sur une clé déjà prise
- * (Action plan, Today, Source, Open, All types, All… : écarts à signaler dans Norma, COQUE.md § 2 bis).
+ * Entrées de Norma (TACHES_FR) : leur traduction l'emporte, pour que le tronc commun des menus, « Mes tâches » et « Mes
+ * approbations » se lisent comme dans les autres outils (COQUE.md § 2 bis). Un écran de Vigie qui garde son propre mot
+ * pour une même chaîne anglaise passe par un contexte (`'Open#plural'` « Ouverts », `'All#mplural'` « Tous »,
+ * `'Source#origin'`, `'Today#button'`, `'All types#filter'`, `'Action plan#screen'`) ; `normaOverrides` (test) refuse
+ * une clé de Norma traduite autrement par un dictionnaire de Vigie.
  */
-const NORMA_FR: Record<string, string> = Object.fromEntries(Object.entries(TACHES_FR).filter(([en]) => !(en in VIGIE_FR)));
+export const FR: Record<string, string> = { ...VIGIE_FR, ...TACHES_FR };
 
-export const FR: Record<string, string> = { ...NORMA_FR, ...VIGIE_FR };
+/** Clés de Norma traduites autrement par un dictionnaire de Vigie (completeness.test.ts exige une liste vide). */
+export function normaOverrides(): string[] {
+  return Object.entries(TACHES_FR).filter(([en, fr]) => en in VIGIE_FR && VIGIE_FR[en] !== fr).map(([en, fr]) => `${en} : ${VIGIE_FR[en]} ≠ ${fr}`);
+}
 
 /** Chaînes identiques en français et en anglais, relues (noms propres, sigles). */
-export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...Object.keys(NORMA_FR).filter((en) => NORMA_FR[en] === en), ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
+export const SAME_IN_FRENCH: readonly string[] = ['Menu', 'Actions', ...Object.keys(TACHES_FR).filter((en) => TACHES_FR[en] === en), ...COMMON_SAME, ...EVENTS_SAME, ...ACTIONS_SAME, ...RISKS_SAME, ...PREVENTION_SAME, ...SKILLS_SAME, ...WATCH_SAME, ...AUDITS_SAME, ...DOCUMENTS_SAME, ...ENVIRONMENT_SAME, ...ENGINEERING_SAME];
 
 /** Chaînes définies dans deux dictionnaires avec des traductions différentes (completeness.test.ts les refuse). */
 export function conflictingEntries(): string[] {
